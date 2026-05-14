@@ -1,18 +1,35 @@
+"""
+DriftTurnPipeline — Drift 空闲时间链路顶层抽象。
+
+设计对齐主动链路的 ProactiveTurnPipeline.run() 和被动链路的 PassiveTurnPipeline.run()：
+通过 run() 一个方法可见全链路。
+
+┌─ tick trigger (no content available)
+│  └─ DriftTurnPipeline.run()
+│     ├─ 1. Scan      扫描可用 skills，过滤 MCP 未满足的
+│     ├─ 2. Prepare   构建 tool registry 与初始 messages
+│     ├─ 3. Execute   LLM 工具调用循环（drift steps）
+│     └─ 4. Finish    记录退出状态
+└─ done
+
+段之间通过 AgentTickContext 传递状态，每段各司其职，不跨段直接访问对方内部实现。
+"""
+
 from __future__ import annotations
 
+import inspect
 import json
 import logging
-import inspect
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
+from agent.persona import AKASHIC_IDENTITY, PERSONALITY_RULES
 from agent.prompting import (
     PromptSectionRender,
     build_context_frame_content,
     build_context_frame_message,
 )
-from agent.persona import AKASHIC_IDENTITY, PERSONALITY_RULES
 from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
 from agent.tool_hooks.base import ToolHook
 from proactive_v2.context import AgentTickContext
@@ -25,34 +42,83 @@ from proactive_v2.drift_tools import (
 if TYPE_CHECKING:
     from core.memory.markdown import MemoryProfileApi
 
-
 LlmFn = Callable[[list[dict], list[dict], str | dict, bool], Awaitable[dict | None]]
 StepRecorder = Callable[[AgentTickContext, str, str, str, dict[str, Any], str], None]
 logger = logging.getLogger(__name__)
 
 
+# ── Pipeline 依赖容器 ─────────────────────────────────────────────────────
+
 @dataclass
-class DriftRunner:
+class DriftTurnPipelineDeps:
     store: DriftStateStore
     tool_deps: DriftToolDeps
     max_steps: int = 20
     step_recorder: StepRecorder | None = None
     tool_hooks: list[ToolHook] = field(default_factory=list)
 
-    def __post_init__(self) -> None:
-        self._tool_executor = ToolExecutor(self.tool_hooks)
 
+# ── 主 Pipeline ─────────────────────────────────────────────────────────
+
+# Drift 空闲时间链路核心入口，串起 Scan → Prepare → Execute → Finish 四段。
+#
+# ┌─ tick trigger (no content)
+# │  └─ DriftTurnPipeline.run
+# │     ├─ 1. Scan ── _scan_skills
+# │     │  └─ store.scan_skills → MCP 过滤 → 空则 skip
+# │     ├─ 2. Prepare ── _prepare
+# │     │  └─ 设置 ctx drift flags → build_drift_tool_registry → 构建 messages
+# │     ├─ 3. Execute ── _execute_loop
+# │     │  └─ while steps < max_steps: llm_fn → tool execute → append → record
+# │     │     message_push 后约束 schema 为 write_file/edit_file/finish_drift
+# │     └─ 4. Finish ── _finish
+# │        └─ 记录退出状态日志
+# └─ done
+
+class DriftTurnPipeline:
+
+    def __init__(self, deps: DriftTurnPipelineDeps) -> None:
+        self._store = deps.store
+        self._tool_deps = deps.tool_deps
+        self._max_steps = deps.max_steps
+        self.step_recorder = deps.step_recorder
+        self._tool_executor = ToolExecutor(deps.tool_hooks)
+
+    # ── 入口 ──────────────────────────────────────────────────────────
+
+    # 核心方法：处理一次 drift tick，串起 Scan → Prepare → Execute → Finish 四段链路。
     async def run(self, ctx: AgentTickContext, llm_fn: LlmFn | None) -> bool:
+        # 1. llm_fn 为空 → 无法进入 Execute，直接退出。
         if llm_fn is None:
             logger.info("[drift] skip: llm_fn is None")
             return False
-        skills = self.store.scan_skills()
+
+        # 2. Scan — 扫描可用 skills，过滤 MCP 不满足的，空则 skip。
+        skills = self._scan_skills()
         if not skills:
-            logger.info("[drift] skip: no available drift skills")
             return False
 
-        # 过滤掉 requires_mcp 未满足的 skill
-        shared = self.tool_deps.shared_tools
+        # 3. Prepare — 构建 tool registry 与初始 messages。
+        tools, messages, mounted_tool_names = self._prepare(ctx, skills)
+
+        # 4. Execute — LLM 工具调用循环。
+        await self._execute_loop(ctx, llm_fn, tools, messages, mounted_tool_names)
+
+        # 5. Finish — 记录退出。
+        self._finish(ctx)
+        return True
+
+    # ── 1. Scan ───────────────────────────────────────────────────────
+
+    def _scan_skills(self) -> list[SkillMeta]:
+        """扫描可用 skills，过滤掉 requires_mcp 未满足的。"""
+
+        skills = self._store.scan_skills()
+        if not skills:
+            logger.info("[drift] skip: no available drift skills")
+            return []
+
+        shared = self._tool_deps.shared_tools
         connected_servers = shared.get_mcp_server_names() if shared else set()
         skills = [
             s for s in skills
@@ -60,38 +126,75 @@ class DriftRunner:
         ]
         if not skills:
             logger.info("[drift] skip: all skills require unavailable MCP servers")
-            return False
+            return []
 
         logger.info(
             "[drift] enter: skills=%d max_steps=%d drift_dir=%s",
             len(skills),
-            self.max_steps,
-            self.store.drift_dir,
+            self._max_steps,
+            self._store.drift_dir,
         )
+        return skills
 
+    # ── 2. Prepare ────────────────────────────────────────────────────
+
+    def _prepare(
+        self,
+        ctx: AgentTickContext,
+        skills: list[SkillMeta],
+    ) -> tuple[Any, list[dict], set[str]]:
+        """设置 ctx drift 标志、构建 tool registry 与初始 messages。"""
+
+        # 2.1 设置 ctx 标志位。
         ctx.drift_entered = True
         ctx.drift_finished = False
         ctx.drift_message_sent = False
 
+        # 2.2 构建 drift tool registry。
         mounted_tool_names: set[str] = set()
         tools = build_drift_tool_registry(
-            ctx=ctx, deps=self.tool_deps, mounted_tool_names=mounted_tool_names,
+            ctx=ctx,
+            deps=self._tool_deps,
+            mounted_tool_names=mounted_tool_names,
         )
-        base_schemas = tools.get_schemas()
 
+        # 2.3 确定 MCP 已连接 server 列表。
+        shared = self._tool_deps.shared_tools
+        connected_servers = shared.get_mcp_server_names() if shared else set()
+
+        # 2.4 构建初始 messages。
         messages: list[dict] = [
             {"role": "system", "content": self._build_system_prompt()},
             self._build_runtime_context_message(skills, connected_servers),
         ]
+
+        return tools, messages, mounted_tool_names
+
+    # ── 3. Execute ────────────────────────────────────────────────────
+
+    async def _execute_loop(
+        self,
+        ctx: AgentTickContext,
+        llm_fn: LlmFn,
+        tools: Any,
+        messages: list[dict],
+        mounted_tool_names: set[str],
+    ) -> None:
+        """LLM 工具调用循环：调模型 → 执行工具 → 追加 messages → 重复。"""
+
+        shared = self._tool_deps.shared_tools
+        base_schemas = tools.get_schemas()
         steps = 0
 
-        while steps < self.max_steps and not ctx.drift_finished:
+        while steps < self._max_steps and not ctx.drift_finished:
             tool_choice: str | dict = "required"
             schemas = list(base_schemas)
-            # 拼接已挂载 MCP 工具的 schema
+
+            # 3.1 拼接已挂载 MCP 工具的 schema。
             if mounted_tool_names and shared:
                 schemas += shared.get_schemas(names=mounted_tool_names)
 
+            # 3.2 message_push 后约束工具集。
             if ctx.drift_message_sent:
                 allowed_after_send = {"write_file", "edit_file", "finish_drift"}
                 schemas = [
@@ -99,21 +202,23 @@ class DriftRunner:
                     if s["function"]["name"] in allowed_after_send
                 ]
                 logger.info(
-                    "[drift] message_push already used, restricting schema to write_file/edit_file/finish_drift"
+                    "[drift] message_push already used, "
+                    "restricting schema to write_file/edit_file/finish_drift"
                 )
 
+            # 3.3 调 LLM 拿工具调用。
             if "disable_thinking" in inspect.signature(llm_fn).parameters:
                 tool_call = await cast(Any, llm_fn)(
-                    messages,
-                    schemas,
-                    tool_choice,
+                    messages, schemas, tool_choice,
                     disable_thinking=True,
                 )
             else:
                 tool_call = await cast(Any, llm_fn)(messages, schemas, tool_choice)
+
             if tool_call is None:
                 logger.warning("[drift] llm returned no tool call at step=%d", steps)
                 break
+
             tool_name = tool_call.get("name", "")
             tool_args = tool_call.get("input", {})
             logger.info(
@@ -125,15 +230,15 @@ class DriftRunner:
             steps += 1
             ctx.steps_taken += 1
 
-            # 双路分发：本地 drift registry → shared registry (mounted MCP tools)
+            # 3.4 双路分发：本地 drift registry → shared registry（mounted MCP tools）。
             if tools.has_tool(tool_name):
                 exec_fn = tools.execute
             elif tool_name in mounted_tool_names and shared:
                 exec_fn = shared.execute
             else:
-                # 未知工具，走本地 registry 让它返回错误
                 exec_fn = tools.execute
 
+            # 3.5 执行工具。
             result = await self._tool_executor.execute(
                 ToolExecutionRequest(
                     call_id=str(tool_call.get("id") or f"drift_{steps}"),
@@ -144,6 +249,8 @@ class DriftRunner:
                 ),
                 exec_fn,
             )
+
+            # 3.6 错误处理。
             if result.status == "error":
                 logger.warning("[drift] tool executor error at step=%d: %s", steps, result.output)
                 if self.step_recorder is not None:
@@ -156,6 +263,8 @@ class DriftRunner:
                         str(result.output),
                     )
                 break
+
+            # 3.7 记录步骤。
             if self.step_recorder is not None:
                 self.step_recorder(
                     ctx,
@@ -165,12 +274,15 @@ class DriftRunner:
                     tool_args,
                     str(result.output),
                 )
+
             logger.info(
                 "[drift] step=%d tool=%s result=%s",
                 steps,
                 tool_name,
                 str(result.output)[:300],
             )
+
+            # 3.8 追加 tool messages 到对话历史。
             self._append_tool_messages(
                 messages,
                 tool_name=tool_name,
@@ -178,23 +290,30 @@ class DriftRunner:
                 tool_call_id=str(tool_call.get("id") or f"drift_{steps}"),
                 result=str(result.output),
             )
+
+    # ── 4. Finish ──────────────────────────────────────────────────────
+
+    def _finish(self, ctx: AgentTickContext) -> None:
+        """记录 drift 退出状态。"""
         logger.info(
-            "[drift] exit: finished=%s message_sent=%s steps=%d",
+            "[drift] exit: finished=%s message_sent=%s",
             ctx.drift_finished,
             ctx.drift_message_sent,
-            steps,
         )
-        return True
+
+    # ── Prompt 构建 ────────────────────────────────────────────────────
 
     def _build_runtime_context_message(
         self,
         skills: list[SkillMeta],
         connected_servers: set[str] | None = None,
     ) -> dict[str, str]:
+        """构建 runtime context frame，包含记忆、skill 列表、近期 run 记录。"""
+
         memory_text = ""
         recent_context_text = ""
-        if self.tool_deps.memory is not None:
-            memory = cast("MemoryProfileApi", self.tool_deps.memory)
+        if self._tool_deps.memory is not None:
+            memory = cast("MemoryProfileApi", self._tool_deps.memory)
             try:
                 raw = str(memory.read_long_term() or "").strip()
                 if raw:
@@ -222,7 +341,7 @@ class DriftRunner:
         skill_block = "\n".join(lines) if lines else "- (none)"
 
         recent_rows = []
-        for row in self.store.load_drift().get("recent_runs", [])[-5:][::-1]:
+        for row in self._store.load_drift().get("recent_runs", [])[-5:][::-1]:
             run_at = str(row.get("run_at") or "")
             try:
                 dt = datetime.fromisoformat(run_at).astimezone(timezone.utc)
@@ -236,11 +355,10 @@ class DriftRunner:
             )
         recent_block = "\n".join(recent_rows) if recent_rows else "- (none)"
 
-        drift_note = str(self.store.load_drift().get("note") or "")[:150]
+        drift_note = str(self._store.load_drift().get("note") or "")[:150]
 
-        # 动态生成可挂载 MCP server 目录（只列 server 名和工具数，不展开工具名）
         mcp_block = ""
-        shared = self.tool_deps.shared_tools
+        shared = self._tool_deps.shared_tools
         if connected_servers and shared:
             mcp_lines = []
             for srv in sorted(connected_servers):
@@ -255,7 +373,7 @@ class DriftRunner:
         sections = [
             PromptSectionRender(
                 name="drift_runtime_state",
-                content=f"【Drift 工作区绝对路径】\n{self.store.drift_dir}",
+                content=f"【Drift 工作区绝对路径】\n{self._store.drift_dir}",
                 is_static=False,
             ),
             PromptSectionRender(
@@ -332,6 +450,8 @@ class DriftRunner:
             "fetch_messages, search_messages, shell, message_push, finish_drift；"
             "若 context frame 里列出了可挂载外部能力，可用 mount_server 挂载。"
         )
+
+    # ── 工具消息追加 ────────────────────────────────────────────────────
 
     @staticmethod
     def _append_tool_messages(
