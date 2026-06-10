@@ -7,11 +7,14 @@ Akasha RAR（Ripple Activation & Recall）引擎的纯算法层。
 
 from __future__ import annotations
 
+import json
 import math
 import struct
 import sqlite3
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 import numpy as np
 
@@ -27,6 +30,15 @@ STRENGTH_CAP = 3.0
 STDP_CAUSAL_EDGE_GAIN = 1.0
 STDP_ACAUSAL_EDGE_GAIN = 0.35
 STDP_COACTIVE_EDGE_GAIN = 1.0
+REINFORCE_MEMORY_TOOL = "reinforce_memory"
+DEFAULT_REINFORCE_BOOST = 3.0
+# Heterosynaptic 可塑性（Chistiakova & Volgushev 2013, J Neurosci 33:15915）：
+# 纯 Hebbian/STDP 数学上必然 runaway → hub。唯一能在同一时间尺度上稳住它的，是对
+# *非活动*突触的、依赖权重的反向改变。原算法只有 homosynaptic（只动本轮共激活的边），
+# 缺的就是这一项。规则：节点本轮被强化时，其余非活动出边各自 ×(1-β)（Δw ∝ w）。
+# β 是机制常数：promiscuous hub 活动次数多 → 罕被重强化的边被反复 ×(1-β) 磨到≈0；
+# 真正反复共激活的边扛得住；低活动典型节点几乎不动（activity-dependent）。
+HETERO_DEPRESSION_RATE = 0.05
 # 新事件初始 strength：编码即峰值（Ebbinghaus / ACT-R / early-LTP）
 # initial_strength = STRENGTH_CAP × (BASE + SALIENCE_BONUS · σ)
 INITIAL_STRENGTH_BASE = 0.70
@@ -38,6 +50,72 @@ def initial_strength(salience: float) -> float:
     """新节点 encoding 时的 strength。高显著度事件起步更接近 cap。"""
     s = max(0.0, min(1.0, salience))
     return STRENGTH_CAP * (INITIAL_STRENGTH_BASE + INITIAL_STRENGTH_SALIENCE_BONUS * s)
+
+
+def reinforce_boost_from_payload(
+    extra: object,
+    tool_chain: object,
+) -> float:
+    return max(
+        reinforce_boost_from_extra(extra),
+        reinforce_boost_from_tool_chain(tool_chain),
+    )
+
+
+def reinforce_boost_from_extra(extra: object) -> float:
+    parsed = _json_value(extra)
+    if not isinstance(parsed, dict):
+        return 1.0
+    mark = cast("dict[object, object]", parsed).get("akasha_reinforce")
+    if not mark:
+        return 1.0
+    if isinstance(mark, dict):
+        value = cast("dict[object, object]", mark).get("boost", DEFAULT_REINFORCE_BOOST)
+        return _coerce_reinforce_boost(value)
+    return DEFAULT_REINFORCE_BOOST
+
+
+def reinforce_boost_from_tool_chain(tool_chain: object) -> float:
+    groups_raw = _json_value(tool_chain)
+    if not isinstance(groups_raw, list):
+        return 1.0
+    boost = 1.0
+    groups = cast("list[object]", groups_raw)
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        calls_raw = cast("dict[object, object]", group).get("calls")
+        if not isinstance(calls_raw, list):
+            continue
+        calls = cast("list[object]", calls_raw)
+        for call in calls:
+            if not isinstance(call, dict):
+                continue
+            if cast("dict[object, object]", call).get("name") == REINFORCE_MEMORY_TOOL:
+                boost = max(boost, DEFAULT_REINFORCE_BOOST)
+    return boost
+
+
+def _json_value(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    if not value.strip():
+        return {}
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+
+
+def _coerce_reinforce_boost(value: object) -> float:
+    if isinstance(value, bool):
+        return DEFAULT_REINFORCE_BOOST
+    if isinstance(value, (int, float, str)):
+        try:
+            return float(value)
+        except ValueError:
+            return DEFAULT_REINFORCE_BOOST
+    return DEFAULT_REINFORCE_BOOST
 ASSISTANT_ONLY_PENALTY = 0.12
 FAN_PENALTY_POWER = 0.10
 ACTIVATION_THRESHOLD = 0.22
@@ -93,10 +171,12 @@ def build_idf_table(
     sconn = sqlite3.connect(sessions_db_path)
     df: dict[str, int] = defaultdict(int)
     n_docs = 0
+    cut_for_search = cast("Callable[[str], Iterable[object]]", getattr(jieba, "cut_for_search"))
     for (content,) in sconn.execute("SELECT content FROM messages"):
         n_docs += 1
         seen: set[str] = set()
-        for w in jieba.cut_for_search(content or ""):
+        for raw_word in cut_for_search(str(content or "")):
+            w = str(raw_word)
             cleaned = "".join(
                 ch for ch in w.strip()
                 if ch.isalnum() or "一" <= ch <= "鿿"
@@ -110,25 +190,25 @@ def build_idf_table(
     for tok, freq in df.items():
         idf[tok] = math.log((n_docs + 1) / (freq + 1)) + 1
 
-    target_conn.execute("""
+    _ = target_conn.execute("""
         CREATE TABLE IF NOT EXISTS fts_token_idf (
             token TEXT PRIMARY KEY,
             df INTEGER NOT NULL,
             idf REAL NOT NULL
         )
     """)
-    target_conn.execute("""
+    _ = target_conn.execute("""
         CREATE TABLE IF NOT EXISTS fts_token_idf_meta (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )
     """)
-    target_conn.execute("DELETE FROM fts_token_idf")
-    target_conn.executemany(
+    _ = target_conn.execute("DELETE FROM fts_token_idf")
+    _ = target_conn.executemany(
         "INSERT INTO fts_token_idf VALUES (?, ?, ?)",
         [(t, df[t], idf[t]) for t in df],
     )
-    target_conn.execute(
+    _ = target_conn.execute(
         "INSERT OR REPLACE INTO fts_token_idf_meta VALUES ('n_docs', ?)",
         (str(n_docs),),
     )
@@ -283,16 +363,29 @@ def activation_edge_updates(
     current_key: str,
     candidates: list[AkashaCandidate],
     ts: float,
+    gain_boost: float = 1.0,
 ) -> list[EdgeUpdate]:
+    # gain_boost>1：reinforce 增强（纯加法）。把当前轮(被用户纠正/强调时的正确表述)
+    # 绑入上下文的边加厚，让它成为该情境的强吸引子；a 由竞争+heterosynaptic 相对回落。
+    # 定向：boost 只乘到"真正相关"的候选(高 direct)，不焐厚 hub/跨session 候选，
+    # 避免溢出到邻簇(实测未定向 boost 会把 hub/cross 一起拉高)。
     updates: list[EdgeUpdate] = []
     key_to_score = {item.key: item.score for item in candidates}
+
+    def _boost(item: AkashaCandidate) -> float:
+        if gain_boost <= 1.0:
+            return 1.0
+        relevance = max(0.0, min(1.0, item.direct / 0.6))  # 越相关越受益,外围/hub≈不受影响
+        return 1.0 + (gain_boost - 1.0) * relevance
+
     for item in candidates:
         edge_strength = key_to_score.get(item.key, 1.0)
+        b = _boost(item)
         updates.append(
-            EdgeUpdate(item.key, current_key, edge_strength * STDP_CAUSAL_EDGE_GAIN, ts)
+            EdgeUpdate(item.key, current_key, edge_strength * STDP_CAUSAL_EDGE_GAIN * b, ts)
         )
         updates.append(
-            EdgeUpdate(current_key, item.key, edge_strength * STDP_ACAUSAL_EDGE_GAIN, ts)
+            EdgeUpdate(current_key, item.key, edge_strength * STDP_ACAUSAL_EDGE_GAIN * b, ts)
         )
     for left_index, left in enumerate(candidates):
         for right in candidates[left_index + 1:]:
@@ -301,6 +394,29 @@ def activation_edge_updates(
             updates.append(EdgeUpdate(left.key, right.key, edge_strength, ts))
             updates.append(EdgeUpdate(right.key, left.key, edge_strength, ts))
     return updates
+
+
+def heterosynaptic_depression(
+    edge_updates: list[EdgeUpdate],
+    out_neighbors: Callable[[str], dict[str, float]],
+) -> list[tuple[str, str, float]]:
+    """对本轮被强化节点的*非活动*出边做权重相关压抑，返回 (src, dst, new_weight) 绝对值。
+
+    out_neighbors(src) 给出 src 当前出边 {dst: weight}（潜在权重，由 store 提供视图）。
+    非活动 = 本轮没在 (src, ·) 上发生强化的 dst。Δw = -β·w → new = w·(1-β)。
+    只压抑、不新建、不删除；权重相关使强者更耐磨、promiscuous 弱边随节点活动累积被磨平。
+    """
+    active_by_src: dict[str, set[str]] = {}
+    for update in edge_updates:
+        active_by_src.setdefault(update.src_key, set()).add(update.dst_key)
+    factor = 1.0 - HETERO_DEPRESSION_RATE
+    sets: list[tuple[str, str, float]] = []
+    for src_key, active_dsts in active_by_src.items():
+        for dst_key, weight in out_neighbors(src_key).items():
+            if dst_key in active_dsts:
+                continue
+            sets.append((src_key, dst_key, weight * factor))
+    return sets
 
 
 @dataclass(frozen=True)
@@ -403,7 +519,7 @@ def parse_ts_unix(value: str) -> float:
 
 def message_id_to_key_from_db(cursor: sqlite3.Cursor, message_id: str) -> str:
     """从 messages 表反查 message id 对应的 turn key。"""
-    cursor.execute(
+    _ = cursor.execute(
         "SELECT session_key, seq, role FROM messages WHERE id = ?",
         (message_id,),
     )
@@ -435,7 +551,7 @@ def has_user_turn(cursor: sqlite3.Cursor | None, key: str) -> bool:
     if parsed is None:
         return False
     session_key, seq = parsed
-    cursor.execute(
+    _ = cursor.execute(
         "SELECT 1 FROM messages WHERE session_key = ? AND seq = ? AND role = 'user' LIMIT 1",
         (session_key, seq),
     )
@@ -448,12 +564,12 @@ def get_turn_context(cursor: sqlite3.Cursor, key: str) -> tuple[str, str]:
     if parsed is None:
         return "", ""
     session_key, seq = parsed
-    cursor.execute(
+    _ = cursor.execute(
         "SELECT content FROM messages WHERE session_key = ? AND seq = ? AND role = 'user'",
         (session_key, seq),
     )
     user_row = cursor.fetchone()
-    cursor.execute(
+    _ = cursor.execute(
         "SELECT content FROM messages WHERE session_key = ? AND seq = ? AND role = 'assistant'",
         (session_key, seq + 1),
     )
@@ -469,11 +585,13 @@ def get_turn_context(cursor: sqlite3.Cursor, key: str) -> tuple[str, str]:
     return user_text, assistant_text
 
 
-def load_state(path: str) -> tuple[dict[str, AkashaNode], dict[tuple[str, str], float], dict[str, tuple]]:
+def load_state(
+    path: str,
+) -> tuple[dict[str, AkashaNode], dict[tuple[str, str], float], dict[str, tuple[int, int]]]:
     """从 sidecar DB 加载全部节点、边和激活统计。"""
     db = sqlite3.connect(path)
     cursor = db.cursor()
-    cursor.execute(
+    _ = cursor.execute(
         """
         SELECT key, anchor_id, session_key, turn_seq, first_ts_unix, salience,
                strength, resource, recall_count, last_activated_ts,
@@ -509,10 +627,10 @@ def load_state(path: str) -> tuple[dict[str, AkashaNode], dict[tuple[str, str], 
             emb_count=emb_count,
         )
 
-    cursor.execute("SELECT src_key, dst_key, weight FROM akasha_edges")
+    _ = cursor.execute("SELECT src_key, dst_key, weight FROM akasha_edges")
     edges = {(str(src_key), str(dst_key)): float(weight) for src_key, dst_key, weight in cursor.fetchall()}
 
-    cursor.execute(
+    _ = cursor.execute(
         """
         SELECT activated_key, COUNT(*) AS c, MAX(seq) AS last_seq
         FROM akasha_activation_events
@@ -643,7 +761,7 @@ def dense_message_candidates(
             for message_id, score in zip(message_ids, np.dot(matrix, query_norm))
         ]
     else:
-        scored = []
+        scored: list[tuple[str, float]] = []
         for message_id, embedding in message_embeddings.items():
             if embedding.size != query_norm.size:
                 continue
@@ -715,7 +833,8 @@ def get_jieba_keywords(text: str) -> str:
         _consider(m.group(), 5.0)
 
     # 2. jieba \u5207\u8bcd
-    tokens = list(jieba.lcut(text))
+    lcut = cast("Callable[[str], list[object]]", getattr(jieba, "lcut"))
+    tokens = [str(token) for token in lcut(text)]
     cleaned_tokens: list[str] = []
     for w in tokens:
         c = "".join(ch for ch in w if "\u4e00" <= ch <= "\u9fff")
@@ -769,7 +888,7 @@ def seed_pool(
         if fts_query:
             # 用 BM25 排序拿 top K（bm25() 返回负值，越小越匹配）
             try:
-                source_cursor.execute(
+                _ = source_cursor.execute(
                     """
                     SELECT rowid, bm25(messages_fts) AS rank
                     FROM messages_fts
@@ -782,7 +901,7 @@ def seed_pool(
                 rows = source_cursor.fetchall()
             except sqlite3.OperationalError:
                 # FTS5 不支持 bm25 时退回旧行为
-                source_cursor.execute(
+                _ = source_cursor.execute(
                     "SELECT rowid, 0 FROM messages_fts WHERE content MATCH ? LIMIT ?",
                     (fts_query, FTS_TOP_K),
                 )
@@ -790,7 +909,7 @@ def seed_pool(
             if rows:
                 rowid_to_rank = {int(r[0]): float(r[1] or 0.0) for r in rows}
                 placeholders = ",".join("?" for _ in rowid_to_rank)
-                source_cursor.execute(
+                _ = source_cursor.execute(
                     f"SELECT session_key, seq, role, rowid FROM messages WHERE rowid IN ({placeholders})",
                     list(rowid_to_rank.keys()),
                 )
