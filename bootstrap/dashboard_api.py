@@ -6,7 +6,6 @@ from pathlib import Path, PureWindowsPath
 import importlib.util
 import logging
 import json
-import re
 import sqlite3
 import sys
 import threading
@@ -770,7 +769,15 @@ def create_dashboard_app(
     app = FastAPI(title="Akashic Dashboard API", lifespan=lifespan)
     app.state.memory_admin = memory_admin
     app.state.memory_store = memory_store or MemoryStore(workspace)
-    app.mount("/assets", StaticFiles(directory=static_dir), name="dashboard-assets")
+    # Vite build output is gitignored, so a fresh clone (or CI) may lack it. Keep
+    # the directory present and mount without a dir check so app creation never
+    # depends on the build having run; dashboard_index() reports if it's missing.
+    static_dir.mkdir(parents=True, exist_ok=True)
+    app.mount(
+        "/assets",
+        StaticFiles(directory=static_dir, check_dir=False),
+        name="dashboard-assets",
+    )
 
     # Compile TypeScript plugin panels and mount plugin routes
     if plugins_root.is_dir():
@@ -787,13 +794,18 @@ def create_dashboard_app(
                     _load_plugin_dashboard(app, _plugin_dir, workspace)
                 )
 
+    # Vite emits index.html with content-hashed asset URLs under /assets, so it
+    # is served verbatim — no manual cache-busting needed.
     @app.get("/")
     def dashboard_index() -> Response:
-        html = (static_dir / "index.html").read_text(encoding="utf-8")
-        app_v = str(int((static_dir / "app.js").stat().st_mtime_ns))
-        css_v = str(int((static_dir / "styles.css").stat().st_mtime_ns))
-        html = re.sub(r'(/assets/styles\.css)(\?[^"]*)?', rf'\1?v={css_v}', html)
-        html = re.sub(r'(/assets/app\.js)(\?[^"]*)?', rf'\1?v={app_v}', html)
+        index_file = static_dir / "index.html"
+        if not index_file.exists():
+            return Response(
+                content="Dashboard 前端尚未构建，请先运行 `npm run build`。",
+                media_type="text/plain; charset=utf-8",
+                status_code=503,
+            )
+        html = index_file.read_text(encoding="utf-8")
         return Response(content=html, media_type="text/html")
 
     @app.get("/api/dashboard/plugins")

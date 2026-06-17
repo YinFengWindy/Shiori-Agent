@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import "./styles.css";
 import { api, asPageResult, pageCount } from "./api";
 import {
   encodePath,
@@ -15,6 +16,7 @@ import {
   stripMarkdown,
 } from "./format";
 import { attachJsonViewers, installDashboardGlobals, jvPlaceholder, loadPluginAssets } from "./pluginRuntime";
+import { exposeRuntime } from "./design/runtime";
 import { PluginDetail, PluginMain } from "./PluginDetail";
 import type {
   DashboardColumn,
@@ -31,8 +33,6 @@ import type {
   SortOrder,
   ViewMode,
 } from "./types";
-
-type NavOpen = Record<string, boolean>;
 
 // Creates a PluginDispatch bound to the given plugin + latest state getter.
 function makeDispatch(
@@ -109,7 +109,6 @@ function makeDispatch(
 
 function App(): React.ReactElement {
   const [viewMode, setViewMode] = useState<ViewMode>("sessions");
-  const [navOpen, setNavOpen] = useState<NavOpen>({ sessions: false, proactive: false });
   const [plugins, setPlugins] = useState<PluginConfig[]>([]);
   const [pluginState, setPluginState] = useState<Record<string, PluginState>>({});
   const [sessions, setSessions] = useState<SessionRow[]>([]);
@@ -266,6 +265,7 @@ function App(): React.ReactElement {
         },
       });
     });
+    exposeRuntime();
     void loadPluginAssets();
   }, []);
 
@@ -296,7 +296,6 @@ function App(): React.ReactElement {
 
   const focusView = useCallback((next: ViewMode): void => {
     setViewMode(next);
-    setNavOpen((current) => ({ ...current, [next]: true }));
   }, []);
 
   const selectView = (next: ViewMode): void => {
@@ -308,14 +307,6 @@ function App(): React.ReactElement {
         await loadProactivePanel();
       } else await loadPluginPanel(next.slice(7));
     });
-  };
-
-  const toggleNav = (kind: ViewMode): void => {
-    if (viewMode !== kind) {
-      selectView(kind);
-      return;
-    }
-    setNavOpen((current) => ({ ...current, [kind]: !current[kind] }));
   };
 
   const sort = (scope: "messages" | "proactive", key: string): void => {
@@ -390,7 +381,7 @@ function App(): React.ReactElement {
       && currentPluginState
       && currentDispatch
       && currentPluginLayout === "workbench"
-      && currentPlugin.renderMain,
+      && (currentPlugin.renderMain || currentPlugin.Main),
   );
 
   return (
@@ -434,65 +425,82 @@ function App(): React.ReactElement {
 
       <main className={`workspace${isPluginWorkbench ? " plugin-workbench-mode" : ""}`}>
         <aside className="sessions-pane">
-          <div className="pane-head">
+          {/* Section switcher: flat tabs, not accordions — the active section's
+              content is always shown in the body below (no expand-on-entry). */}
+          <div className="section-switcher">
             <div className="pane-kicker">Explorer</div>
-            <div className="pane-title">
-              {currentPlugin && currentPluginState
-                ? (currentPlugin.countTitle ? currentPlugin.countTitle(currentPluginState.total) : `${currentPluginState.total} 条记录`)
-                : `${sessions.length} 个会话`}
-            </div>
-          </div>
-          <div className="filters-stack">
-            <label className="search search-small">
-              <span>⌕</span>
-              <input type="text" placeholder="过滤 session" value={sessionSearch} onChange={(event) => setSessionSearch(event.target.value.trim())} />
-            </label>
-            <select value={sessionChannel} onChange={(event) => setSessionChannel(event.target.value)}>
-              <option value="">全部 channel</option>
-              {channels.map((channel) => <option key={channel} value={channel}>{channel}</option>)}
-            </select>
-          </div>
-          <nav className="explorer-nav">
-            <NavGroup label="Sessions" count={totalMessages || totalSessionMessages(sessions)} active={viewMode === "sessions"} open={!!navOpen.sessions} onToggle={() => toggleNav("sessions")}>
-              <button className={`all-messages-row ${viewMode === "sessions" && !activeSessionKey ? "active" : ""}`} type="button" onClick={() => {
-                setActiveSessionKey(null);
-                setActiveSession(null);
-                setActiveMessage(null);
-                setMessagePage(1);
-                selectView("sessions");
-              }}>
-                <span>全部消息</span><strong>{sessions.length}</strong>
+            <button type="button" className={`section-tab ${viewMode === "sessions" ? "active" : ""}`} onClick={() => {
+              setActiveSessionKey(null);
+              setActiveSession(null);
+              setActiveMessage(null);
+              setMessagePage(1);
+              selectView("sessions");
+            }}>
+              <span className="section-tab-label">Sessions</span>
+              <span className="section-tab-count">{sessions.length}</span>
+            </button>
+            <button type="button" className={`section-tab ${viewMode === "proactive" ? "active" : ""}`} onClick={() => { setProactiveSection("all"); setProactivePage(1); selectView("proactive"); }}>
+              <span className="section-tab-label">Proactive</span>
+              <span className="section-tab-count">{proactiveOverview?.counts.tick_logs ?? proactiveTotal}</span>
+            </button>
+            {plugins.filter((p) => !hiddenPlugins[p.id]).map((plugin) => (
+              <button key={plugin.id} type="button" className={`section-tab ${viewMode === `plugin:${plugin.id}` ? "active" : ""}`} onClick={() => selectView(`plugin:${plugin.id}`)}>
+                <span className="section-tab-label">{plugin.label}</span>
+                <span className="section-tab-count">{pluginState[plugin.id]?.total ?? 0}</span>
               </button>
-              <div className="session-list">
-                {sessions.map((session) => (
-                  <button key={session.key} className={`session-item ${activeSessionKey === session.key ? "active" : ""}`} type="button" onClick={() => {
-                    setActiveSessionKey(session.key);
-                    setActiveSession(session);
+            ))}
+          </div>
+
+          <div className="explorer-body">
+            {viewMode === "sessions" && (
+              <>
+                <div className="filters-stack">
+                  <label className="search search-small">
+                    <span>⌕</span>
+                    <input type="text" placeholder="过滤 session" value={sessionSearch} onChange={(event) => setSessionSearch(event.target.value.trim())} />
+                  </label>
+                  <select value={sessionChannel} onChange={(event) => setSessionChannel(event.target.value)}>
+                    <option value="">全部 channel</option>
+                    {channels.map((channel) => <option key={channel} value={channel}>{channel}</option>)}
+                  </select>
+                </div>
+                <div className="session-list">
+                  <button className={`all-messages-row ${!activeSessionKey ? "active" : ""}`} type="button" onClick={() => {
+                    setActiveSessionKey(null);
+                    setActiveSession(null);
                     setActiveMessage(null);
                     setMessagePage(1);
                     selectView("sessions");
                   }}>
-                    <div className="nav-item-row">
-                      <span className="nav-type-dot memory-type-profile" />
-                      <span className="nav-item-name mono">{formatSessionKeyForTable(session.key)}</span>
-                      <span className="nav-item-count">{session.message_count}</span>
-                    </div>
-                    <div className="nav-item-desc">{relativeTime(session.updated_at)}</div>
+                    <span>全部消息</span><strong>{sessions.length}</strong>
                   </button>
-                ))}
-              </div>
-            </NavGroup>
-            <NavGroup label="Proactive" count={proactiveOverview?.counts.tick_logs ?? proactiveTotal} active={viewMode === "proactive"} open={!!navOpen.proactive} onToggle={() => toggleNav("proactive")}>
-              <button className={`all-messages-row ${proactiveSection === "all" && viewMode === "proactive" ? "active" : ""}`} type="button" onClick={() => { setProactiveSection("all"); setProactivePage(1); selectView("proactive"); }}>
-                <span>{proactiveSectionLabel("all")}</span><strong>{proactiveSectionCount("all", proactiveOverview)}</strong>
-              </button>
+                  {sessions.map((session) => (
+                    <button key={session.key} className={`session-item ${activeSessionKey === session.key ? "active" : ""}`} type="button" onClick={() => {
+                      setActiveSessionKey(session.key);
+                      setActiveSession(session);
+                      setActiveMessage(null);
+                      setMessagePage(1);
+                      selectView("sessions");
+                    }}>
+                      <div className="nav-item-row">
+                        <span className="nav-type-dot memory-type-profile" />
+                        <span className="nav-item-name mono">{formatSessionKeyForTable(session.key)}</span>
+                        <span className="nav-item-count">{session.message_count}</span>
+                      </div>
+                      <div className="nav-item-desc">{relativeTime(session.updated_at)}</div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {viewMode === "proactive" && (
               <div className="proactive-quick-list">
+                <button className={`all-messages-row ${proactiveSection === "all" ? "active" : ""}`} type="button" onClick={() => { setProactiveSection("all"); setProactivePage(1); selectView("proactive"); }}>
+                  <span>{proactiveSectionLabel("all")}</span><strong>{proactiveSectionCount("all", proactiveOverview)}</strong>
+                </button>
                 {["drift", "proactive", "reply", "skip", "busy", "cooldown", "presence"].map((section) => (
-                  <button key={section} className={`proactive-quick-item ${proactiveSection === section ? "active" : ""}`} type="button" onClick={() => {
-                    setProactiveSection(section);
-                    setProactivePage(1);
-                    selectView("proactive");
-                  }}>
+                  <button key={section} className={`proactive-quick-item ${proactiveSection === section ? "active" : ""}`} type="button" onClick={() => { setProactiveSection(section); setProactivePage(1); selectView("proactive"); }}>
                     <div className="nav-item-row">
                       <span className="nav-item-name">{proactiveSectionLabel(section)}</span>
                       <span className="nav-item-count">{proactiveSectionCount(section, proactiveOverview)}</span>
@@ -500,41 +508,18 @@ function App(): React.ReactElement {
                   </button>
                 ))}
               </div>
-            </NavGroup>
-            {plugins.some((p) => !hiddenPlugins[p.id]) && (
-              <div className="nav-section-divider">
-                <span>Plugins</span>
-              </div>
             )}
-            {plugins.filter((p) => !hiddenPlugins[p.id]).map((plugin) => {
-              const pState = pluginState[plugin.id];
-              const pDispatch = pState
-                ? makeDispatch(
-                    plugin,
-                    () => pluginState[plugin.id] ?? null,
-                    (updater) => setPluginState((c) => ({ ...c, [plugin.id]: updater(c[plugin.id]) })),
-                    () => selectView(`plugin:${plugin.id}`),
-                  )
-                : undefined;
-              const isActive = viewMode === `plugin:${plugin.id}`;
-              return (
-                <NavGroup key={plugin.id} label={plugin.label} count={pState?.total ?? 0} active={isActive} open={!!navOpen[`plugin:${plugin.id}`]} onToggle={() => toggleNav(`plugin:${plugin.id}`)}>
-                  {plugin.renderNavBody && pState && pDispatch
-                    ? <PluginNavBody
-                        plugin={plugin}
-                        pluginId={plugin.id}
-                        state={pState}
-                        onSetState={(updater) => setPluginState((c) => ({ ...c, [plugin.id]: updater(c[plugin.id]) }))}
-                        onActivate={() => focusView(`plugin:${plugin.id}`)}
-                      />
-                    : <button className={`all-messages-row ${isActive ? "active" : ""}`} type="button" onClick={() => selectView(`plugin:${plugin.id}`)}>
-                        <span>{plugin.label}</span><strong>{pState?.total ?? 0}</strong>
-                      </button>
-                  }
-                </NavGroup>
-              );
-            })}
-          </nav>
+
+            {viewMode.startsWith("plugin:") && currentPlugin && currentPluginState && currentPlugin.renderNavBody && (
+              <PluginNavBody
+                plugin={currentPlugin}
+                pluginId={currentPlugin.id}
+                state={currentPluginState}
+                onSetState={(updater) => setPluginState((c) => ({ ...c, [currentPlugin.id]: updater(c[currentPlugin.id]) }))}
+                onActivate={() => focusView(`plugin:${currentPlugin.id}`)}
+              />
+            )}
+          </div>
         </aside>
 
         {isPluginWorkbench && currentPlugin && currentDispatch ? (
@@ -759,21 +744,6 @@ function Chip(props: { label: string; value: string; onClear(): void }): React.R
   return <div className="active-session-chip"><span>{props.label}</span><code>{props.value}</code><button type="button" onClick={props.onClear}>×</button></div>;
 }
 
-function NavGroup(props: { label: string; count: number; active: boolean; open: boolean; onToggle(): void; children: React.ReactNode }): React.ReactElement {
-  return (
-    <section className={`nav-group${props.active ? " active" : ""}${props.open ? " open" : ""}`}>
-      <button className="nav-group-toggle" type="button" onClick={props.onToggle}>
-        <span className="nav-group-caret">▸</span>
-        <span className="nav-group-label">{props.label}</span>
-        <span className="nav-group-count">{props.count}</span>
-      </button>
-      <div className={`nav-group-body${props.open ? " open" : ""}`}>
-        <div className="nav-group-body-inner">{props.children}</div>
-      </div>
-    </section>
-  );
-}
-
 function TableHead(props: {
   viewMode: ViewMode;
   plugin: PluginConfig | null;
@@ -874,7 +844,7 @@ function Rows(props: {
     <div className="cell-session mono" title={item.session_key}>{formatSessionKeyForTable(item.session_key)}</div>
     <div className="cell-seq mono">#{item.seq}</div>
     <div className="content-preview">{stripMarkdown(item.content)}</div>
-    <div className="cell-time mono">{shortTs(item.ts)}</div>
+    <div className="cell-time mono">{shortTs(item.timestamp)}</div>
     <div><span className={`role-pill ${roleClass(item.role)}`}>{item.role}</span></div>
     <div />
   </div>)}</>;
@@ -916,7 +886,7 @@ function DetailPane(props: {
       <div className="detail-toolbar"><div><div className="detail-title">消息详情</div><div className="detail-subtext">{message.session_key} · #{message.seq}</div></div></div>
       <div className="detail-grid">
         {detailRow("role", <span className={`role-pill ${roleClass(message.role)}`}>{message.role}</span>)}
-        {detailRow("time", <code>{message.ts}</code>)}
+        {detailRow("time", <code>{message.timestamp}</code>)}
         {detailRow("id", <code>{message.id}</code>)}
       </div>
       <div className="detail-block"><div className="detail-label">Content</div><div className="detail-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} /></div>
@@ -989,9 +959,6 @@ function tableMeta(viewMode: ViewMode, totalMessages: number, proactiveTotal: nu
   return `共 ${totalMessages} 条`;
 }
 
-function totalSessionMessages(sessions: SessionRow[]): number {
-  return sessions.reduce((sum, session) => sum + (session.message_count || 0), 0);
-}
 
 function proactiveSectionCount(section: string, overview: ProactiveOverview | null): number {
   if (!overview) return 0;
