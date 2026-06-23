@@ -27,6 +27,7 @@ from agent.prompting import (
     PromptSectionRender,
     build_context_frame_message,
 )
+from agent.plugins.role_prompt import build_role_system_section
 from agent.skills import SkillsLoader
 from prompts.agent import (
     build_agent_static_identity_prompt,
@@ -287,7 +288,15 @@ class ContextBuilder:
         *,
         system_sections_top: list[PromptSectionRender] | None = None,
         system_sections_bottom: list[PromptSectionRender] | None = None,
+        session_metadata: dict[str, Any] | None = None,
     ) -> ContextRenderResult:
+        merged_top = list(system_sections_top or [])
+        role_section = build_role_system_section(
+            workspace=self.workspace,
+            session_metadata=session_metadata,
+        )
+        if role_section is not None:
+            merged_top.insert(0, role_section)
         turn_injection_context = self.build_turn_injection_context(
             turn_injection_prompt=request.turn_injection_prompt
         )
@@ -302,7 +311,7 @@ class ContextBuilder:
             retrieved_memory_block=request.retrieved_memory_block,
             disabled_sections=request.disabled_sections,
             turn_injection_context=turn_injection_context,
-            system_sections_top=system_sections_top,
+            system_sections_top=merged_top,
             system_sections_bottom=system_sections_bottom,
         )
         self._last_debug_breakdown = assembled.debug_breakdown

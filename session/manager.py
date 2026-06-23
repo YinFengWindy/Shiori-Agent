@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 _TOOL_RESULT_CHAR_BUDGET = 10000
 _PROACTIVE_HISTORY_CHAR_BUDGET = 360
 _PROACTIVE_META_HISTORY_CHAR_BUDGET = 1200
+_ROLE_SESSION_PREFIX = "desktop:role:"
 
 
 def _truncate_tool_result(content: object) -> str:
@@ -323,6 +324,78 @@ class SessionManager:
     def peek_next_message_id(self, session_key: str) -> str:
         next_seq = self._store.next_seq(session_key)
         return f"{session_key}:{next_seq}"
+
+    def role_session_key(self, role_id: str) -> str:
+        clean_role_id = str(role_id).strip()
+        if not clean_role_id:
+            raise ValueError("role_id 不能为空")
+        return f"{_ROLE_SESSION_PREFIX}{clean_role_id}"
+
+    def open_role_session(
+        self,
+        role_id: str,
+        *,
+        role_name: str | None = None,
+    ) -> Session:
+        session_key = self.role_session_key(role_id)
+        session = self.get_or_create(session_key)
+        if session.metadata.get("role_id") != role_id:
+            session.metadata["role_id"] = role_id
+        if role_name:
+            session.metadata["role_name"] = str(role_name)
+        self.save(session)
+        return session
+
+    def update_role_session_display_state(
+        self,
+        role_id: str,
+        *,
+        active_illustration: str | None = None,
+    ) -> Session:
+        session = self.get_or_create(self.role_session_key(role_id))
+        if active_illustration is None:
+            session.metadata.pop("active_illustration", None)
+        else:
+            session.metadata["active_illustration"] = str(active_illustration)
+        self.save(session)
+        return session
+
+    def delete_role_session(self, role_id: str) -> bool:
+        session_key = self.role_session_key(role_id)
+        self.invalidate(session_key)
+        return self._store.delete_session(session_key, cascade=True)
+
+    def sync_role_session_metadata(
+        self,
+        role_id: str,
+        *,
+        role_name: str,
+        role_prompt: str,
+        valid_illustrations: list[str] | None = None,
+    ) -> Session:
+        session = self.get_or_create(self.role_session_key(role_id))
+        session.metadata["role_id"] = role_id
+        session.metadata["role_name"] = role_name
+        session.metadata["role_prompt"] = role_prompt
+        if valid_illustrations is not None:
+            active = str(session.metadata.get("active_illustration") or "").strip()
+            if active and active not in valid_illustrations:
+                session.metadata.pop("active_illustration", None)
+        self.save(session)
+        return session
+
+    def normalize_role_session_display_state(
+        self,
+        role_id: str,
+        *,
+        valid_illustrations: list[str],
+    ) -> Session:
+        session = self.get_or_create(self.role_session_key(role_id))
+        active = str(session.metadata.get("active_illustration") or "").strip()
+        if active and active not in valid_illustrations:
+            session.metadata.pop("active_illustration", None)
+        self.save(session)
+        return session
 
     def _load(self, key: str) -> Session | None:
         meta = self._store.get_session_meta(key)

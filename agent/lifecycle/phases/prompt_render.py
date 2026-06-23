@@ -98,6 +98,7 @@ class _RenderPromptModule:
             ),
             system_sections_top=ctx.system_sections_top,
             system_sections_bottom=ctx.system_sections_bottom,
+            session_metadata=getattr(frame.input.state.session, "metadata", {}),
         )
         messages = list(rendered.messages)
         if ctx.extra_hints:

@@ -1,0 +1,525 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
+from bus.event_bus import EventBus
+from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
+from core.roles import RoleStore
+from desktop_bridge import DesktopBridgeServer, DesktopBridgeService
+from session.manager import SessionManager
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    session_manager = SessionManager(tmp_path)
+    event_bus = EventBus()
+
+    async def _process_direct(
+        content: str,
+        *,
+        session_key: str,
+        channel: str,
+        chat_id: str,
+        stream_events: bool,
+        **kwargs,
+    ) -> str:
+        assert session_key == f"desktop:role:{role_id}"
+        assert channel == "desktop"
+        assert chat_id == f"desktop:role:{role_id}"
+        assert stream_events is True
+        session = session_manager.get_or_create(session_key)
+        session.add_message("user", content)
+        session.add_message("assistant", "hello")
+        await session_manager.save_async(session)
+        await event_bus.observe(
+            StreamDeltaReady(
+                session_key=session_key,
+                channel=channel,
+                chat_id=chat_id,
+                content_delta="hel",
+            )
+        )
+        await event_bus.observe(
+            TurnCommitted(
+                session_key=session_key,
+                channel=channel,
+                chat_id=chat_id,
+                input_message=content,
+                persisted_user_message=content,
+                assistant_response="hello",
+                tools_used=[],
+                thinking=None,
+            )
+        )
+        return "hello"
+
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=event_bus,
+    )
+    emitted: list[dict] = []
+
+    created = await service.handle(
+        {
+            "id": "1",
+            "method": "roles.create",
+            "payload": {
+                "name": "Mira",
+                "description": "desktop role",
+                "system_prompt": "you are mira",
+            },
+        },
+        emit_event=emitted.append,
+    )
+    role_id = created.payload["role"]["id"]
+
+    opened = await service.handle(
+        {
+            "id": "2",
+            "method": "session.openByRole",
+            "payload": {"role_id": role_id},
+        },
+        emit_event=emitted.append,
+    )
+    assert opened.payload["session"]["key"] == f"desktop:role:{role_id}"
+    assert opened.payload["session"]["created_at"]
+    assert opened.payload["session"]["updated_at"]
+    assert opened.payload["session"]["last_consolidated"] == 0
+    assert opened.payload["session"]["messages"] == []
+
+    response = await service.handle(
+        {
+            "id": "3",
+            "method": "chat.send",
+            "payload": {"role_id": role_id, "content": "hi"},
+        },
+        emit_event=emitted.append,
+    )
+
+    assert response.error is None
+    assert response.payload["session"]["key"] == f"desktop:role:{role_id}"
+    assert [item["role"] for item in response.payload["session"]["messages"]] == ["user", "assistant"]
+    methods = [item["method"] for item in emitted]
+    assert methods == ["session.updated", "chat.delta", "chat.done", "session.updated"]
+    delta_event = next(item for item in emitted if item["method"] == "chat.delta")
+    done_event = next(item for item in emitted if item["method"] == "chat.done")
+    assert delta_event["payload"]["content_delta"] == "hel"
+    assert done_event["payload"]["reply"] == "hello"
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_returns_role_not_found(tmp_path: Path):
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "chat.send",
+            "payload": {"role_id": "missing", "content": "hi"},
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert response.error is not None
+    assert response.error.code == "role_not_found"
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_chat_listeners_are_removed_after_send(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    event_bus = EventBus()
+
+    async def _process_direct(**kwargs) -> str:
+        session = session_manager.get_or_create("desktop:role:mira")
+        session.add_message("user", "hi")
+        session.add_message("assistant", "hello")
+        await session_manager.save_async(session)
+        await event_bus.observe(
+            TurnCommitted(
+                session_key="desktop:role:mira",
+                channel="desktop",
+                chat_id="desktop:role:mira",
+                input_message="hi",
+                persisted_user_message="hi",
+                assistant_response="hello",
+                tools_used=[],
+                thinking=None,
+            )
+        )
+        return "hello"
+
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=event_bus,
+    )
+
+    await service.handle(
+        {
+            "id": "1",
+            "method": "chat.send",
+            "payload": {"role_id": role.id, "content": "hi"},
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert event_bus._handlers.get(StreamDeltaReady, []) == []
+    assert event_bus._handlers.get(TurnCommitted, []) == []
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_server_streams_requests_and_responses(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    session_manager = SessionManager(tmp_path)
+    event_bus = EventBus()
+    runtime = SimpleNamespace(
+        session_manager=SimpleNamespace(workspace=tmp_path, open_role_session=session_manager.open_role_session),
+        loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
+        event_bus=event_bus,
+    )
+    server = DesktopBridgeServer(runtime)
+
+    lines = iter(
+        [
+            json.dumps({"id": "1", "method": "health", "payload": {}}),
+            "",
+        ]
+    )
+    writes: list[dict] = []
+
+    async def _read_line():
+        try:
+            return next(lines)
+        except StopIteration:
+            return None
+
+    async def _write_payload(payload: dict):
+        writes.append(payload)
+
+    await server.serve_streams(read_line=_read_line, write_payload=_write_payload)
+
+    assert writes == [
+        {
+            "id": "1",
+            "type": "response",
+            "method": "health",
+            "payload": {"ok": True},
+            "error": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_updates_role_display_state(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "session.updateDisplayState",
+            "payload": {
+                "role_id": role.id,
+                "active_illustration": "roles/assets/mira/illustration-1.png",
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert response.error is None
+    assert response.payload["session"]["metadata"]["active_illustration"] == "roles/assets/mira/illustration-1.png"
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_open_role_emits_session_updated(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+    emitted: list[dict] = []
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "session.openByRole",
+            "payload": {"role_id": role.id},
+        },
+        emit_event=emitted.append,
+    )
+
+    assert response.error is None
+    assert emitted[0]["method"] == "session.updated"
+    assert emitted[0]["payload"]["session"]["key"] == "desktop:role:mira"
+    assert emitted[0]["payload"]["session"]["metadata"]["role_name"] == "Mira"
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_role_create_and_update_copy_assets(tmp_path: Path):
+    avatar = tmp_path / "avatar.png"
+    avatar.write_bytes(b"avatar")
+    ill1 = tmp_path / "ill-1.png"
+    ill1.write_bytes(b"ill-1")
+    ill2 = tmp_path / "ill-2.png"
+    ill2.write_bytes(b"ill-2")
+
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+
+    created = await service.handle(
+        {
+            "id": "1",
+            "method": "roles.create",
+            "payload": {
+                "name": "Mira",
+                "description": "desktop role",
+                "system_prompt": "you are mira",
+                "avatar_source": str(avatar),
+                "illustration_sources": [str(ill1)],
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert created.error is None
+    role = created.payload["role"]
+    avatar_abs = Path(role["avatar_abs"])
+    illustration_abs = Path(role["illustrations_abs"][0])
+    assert avatar_abs.read_bytes() == b"avatar"
+    assert illustration_abs.read_bytes() == b"ill-1"
+
+    updated = await service.handle(
+        {
+            "id": "2",
+            "method": "roles.update",
+            "payload": {
+                "role_id": role["id"],
+                "avatar_source": str(avatar),
+                "illustration_sources": [str(ill2)],
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert updated.error is None
+    updated_role = updated.payload["role"]
+    assert Path(updated_role["avatar_abs"]).read_bytes() == b"avatar"
+    assert len(updated_role["illustrations_abs"]) == 2
+    assert Path(updated_role["illustrations_abs"][1]).read_bytes() == b"ill-2"
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_chat_cancel_uses_interrupt_controller(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    loop = SimpleNamespace(
+        process_direct=AsyncMock(),
+        request_interrupt=lambda session_key, sender="", command="/stop": SimpleNamespace(
+            status="interrupted",
+            session_key=session_key,
+            message="cancelled",
+        ),
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=loop,
+        event_bus=EventBus(),
+    )
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "chat.cancel",
+            "payload": {"role_id": role.id},
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert response.error is None
+    assert response.payload["status"] == "interrupted"
+    assert response.payload["session_key"] == "desktop:role:mira"
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_normalizes_stale_active_illustration_on_role_update(tmp_path: Path):
+    image = tmp_path / "ill-1.png"
+    image.write_bytes(b"img")
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+        illustration_sources=[image],
+    )
+    session_manager = SessionManager(tmp_path)
+    session_manager.update_role_session_display_state(
+        role.id,
+        active_illustration="illustration-old.png",
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "roles.update",
+            "payload": {
+                "role_id": role.id,
+                "clear_illustrations": True,
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert response.error is None
+    session = session_manager.get_or_create("desktop:role:mira")
+    assert "active_illustration" not in session.metadata
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_syncs_role_metadata_into_session_on_open_and_update(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+
+    opened = await service.handle(
+        {
+            "id": "1",
+            "method": "session.openByRole",
+            "payload": {"role_id": role.id},
+        },
+        emit_event=lambda payload: None,
+    )
+    assert opened.error is None
+    assert opened.payload["session"]["metadata"]["role_name"] == "Mira"
+    assert opened.payload["session"]["metadata"]["role_prompt"] == "you are mira"
+
+    updated = await service.handle(
+        {
+            "id": "2",
+            "method": "roles.update",
+            "payload": {
+                "role_id": role.id,
+                "name": "Mira Prime",
+                "system_prompt": "you are still mira",
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+    assert updated.error is None
+    session = session_manager.get_or_create("desktop:role:mira")
+    assert session.metadata["role_name"] == "Mira Prime"
+    assert session.metadata["role_prompt"] == "you are still mira"
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_role_delete_removes_role_session(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    session_manager.open_role_session(role.id, role_name=role.name)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "roles.delete",
+            "payload": {"role_id": role.id},
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert response.error is None
+    assert response.payload["deleted"] is True
+    assert response.payload["session_deleted"] is True
+    assert session_manager._store.get_session_meta("desktop:role:mira") is None

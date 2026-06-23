@@ -26,7 +26,7 @@ from infra.channels.group_filter import DefaultGroupFilter, strip_at_segments
 from memory2.models import MemoryItem
 from proactive_v2.anyaction import AnyActionGate, QuotaStore
 from proactive_v2.memory_sampler import sample_memory_chunks, split_memory_chunks
-from bootstrap.app import AppRuntime
+from bootstrap.app import AppRuntime, DESKTOP_RUNTIME_FEATURES
 from bootstrap.providers import build_providers, build_vl_provider
 from bus.event_bus import EventBus
 
@@ -713,14 +713,23 @@ async def test_app_runtime_start_passes_markdown_store_to_memory_optimizer(
         markdown=SimpleNamespace(store=markdown_store),
         aclose=AsyncMock(),
     )
+    async def _loop_task() -> None:
+        return None
+
+    async def _bus_task() -> None:
+        return None
+
+    async def _scheduler_task() -> None:
+        return None
+
     core = SimpleNamespace(
-        loop=SimpleNamespace(run=lambda: "loop-task"),
-        bus=SimpleNamespace(dispatch_outbound=lambda: "bus-task"),
+        loop=SimpleNamespace(run=_loop_task, stop=MagicMock()),
+        bus=SimpleNamespace(dispatch_outbound=_bus_task, stop=MagicMock()),
         event_bus=EventBus(),
         tools=MagicMock(),
         push_tool=MagicMock(),
         session_manager=MagicMock(),
-        scheduler=SimpleNamespace(run=lambda: "scheduler-task"),
+        scheduler=SimpleNamespace(run=_scheduler_task, stop=MagicMock()),
         provider=MagicMock(),
         light_provider=MagicMock(),
         mcp_registry=MagicMock(),
@@ -770,6 +779,83 @@ async def test_app_runtime_start_passes_markdown_store_to_memory_optimizer(
     build_memory_optimizer_task.assert_called_once()
     assert build_memory_optimizer_task.call_args.kwargs["memory_store"] is markdown_store
     assert app.dashboard_server.manual_memory_optimizer is memory_optimizer
+
+
+@pytest.mark.asyncio
+async def test_app_runtime_desktop_mode_disables_dashboard_and_message_channels(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    memory_runtime = SimpleNamespace(
+        engine=MagicMock(name="engine"),
+        markdown=SimpleNamespace(store=MagicMock(name="markdown_store")),
+        aclose=AsyncMock(),
+    )
+    async def _loop_task() -> None:
+        return None
+
+    async def _bus_task() -> None:
+        return None
+
+    async def _scheduler_task() -> None:
+        return None
+
+    core = SimpleNamespace(
+        loop=SimpleNamespace(run=_loop_task, stop=MagicMock()),
+        bus=SimpleNamespace(dispatch_outbound=_bus_task, stop=MagicMock()),
+        event_bus=EventBus(),
+        tools=MagicMock(),
+        push_tool=MagicMock(),
+        session_manager=MagicMock(),
+        scheduler=SimpleNamespace(run=_scheduler_task, stop=MagicMock()),
+        provider=MagicMock(),
+        light_provider=MagicMock(),
+        mcp_registry=MagicMock(),
+        memory_runtime=memory_runtime,
+        presence=MagicMock(),
+        peer_process_manager=None,
+        peer_poller=None,
+        start=AsyncMock(),
+        stop=AsyncMock(),
+    )
+    observed: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "bootstrap.app.build_core_runtime", lambda *args, **kwargs: core
+    )
+
+    async def _fake_start_channels(*args, **kwargs):
+        observed["start_ipc"] = kwargs["start_ipc"]
+        observed["enable_message_channels"] = kwargs["enable_message_channels"]
+        return (
+            None,
+            SimpleNamespace(start_all=AsyncMock(), stop_all=AsyncMock()),
+        )
+
+    monkeypatch.setattr("bootstrap.app.start_channels", _fake_start_channels)
+    monkeypatch.setattr(
+        "bootstrap.app.build_memory_optimizer_task",
+        MagicMock(return_value=([], None)),
+    )
+    monkeypatch.setattr(
+        "bootstrap.app.build_proactive_runtime",
+        MagicMock(return_value=([], None)),
+    )
+
+    def _unexpected_dashboard(**kwargs):
+        raise AssertionError("desktop mode should not build dashboard server")
+
+    monkeypatch.setattr("bootstrap.app.build_dashboard_server", _unexpected_dashboard)
+
+    app = AppRuntime(
+        config=cast(Any, SimpleNamespace()),
+        workspace=tmp_path,
+        features=DESKTOP_RUNTIME_FEATURES,
+    )
+    await app.start()
+
+    assert observed["start_ipc"] is True
+    assert observed["enable_message_channels"] is False
+    assert app.dashboard_server is None
 
 
 @pytest.mark.asyncio

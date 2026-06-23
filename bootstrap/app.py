@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -15,25 +16,44 @@ from bootstrap.proactive import build_memory_optimizer_task, build_proactive_run
 from bootstrap.providers import build_providers
 from bootstrap.tools import CoreRuntime, build_core_runtime
 from bus.event_bus import EventBus
+def configure_logging_stream(stream) -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+        datefmt="%H:%M:%S",
+        stream=stream,
+        force=True,
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("telegram").setLevel(logging.WARNING)
+    logging.getLogger("apscheduler").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+
+
 from core.net.http import (
     SharedHttpResources,
     clear_default_shared_http_resources,
     configure_default_shared_http_resources,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-    datefmt="%H:%M:%S",
-    stream=sys.stdout,
-    force=True,
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("telegram").setLevel(logging.WARNING)
-logging.getLogger("apscheduler").setLevel(logging.WARNING)
-logging.getLogger("openai").setLevel(logging.WARNING)
+configure_logging_stream(sys.stdout)
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RuntimeFeatures:
+    start_ipc: bool = True
+    enable_message_channels: bool = True
+    enable_dashboard: bool = True
+    enable_proactive: bool = True
+
+
+SERVICE_RUNTIME_FEATURES = RuntimeFeatures()
+DESKTOP_RUNTIME_FEATURES = RuntimeFeatures(
+    enable_message_channels=False,
+    enable_dashboard=False,
+)
 
 
 async def _run_cleanup_steps(*steps: tuple[str, Callable[[], Awaitable[None]]]) -> None:
@@ -54,9 +74,16 @@ async def _noop_async() -> None:
 
 
 class AppRuntime:
-    def __init__(self, config: Config, workspace: Path) -> None:
+    def __init__(
+        self,
+        config: Config,
+        workspace: Path,
+        *,
+        features: RuntimeFeatures = SERVICE_RUNTIME_FEATURES,
+    ) -> None:
         self.config = config
         self.workspace = workspace
+        self.features = features
         self.http_resources = SharedHttpResources()
         self.ipc = None
         self.channel_host: ChannelHost | None = None
@@ -78,7 +105,7 @@ class AppRuntime:
         self.peer_poller = None
         self.dashboard_server = None
         self.dashboard_task: asyncio.Task[None] | None = None
-        self.tasks: list[Awaitable[None]] = []
+        self._background_tasks: list[asyncio.Task[None]] = []
         self._memory_optimizer = None
         self._shutdown = False
         self._started = False
@@ -125,46 +152,59 @@ class AppRuntime:
                 ),
                 interrupt_controller=self.agent_loop,
                 plugin_channels=plugin_manager.channels if plugin_manager else None,
+                start_ipc=self.features.start_ipc,
+                enable_message_channels=self.features.enable_message_channels,
             )
             await self.channel_host.start_all()
 
-            self.tasks = [
-                self.agent_loop.run(),
-                self.bus.dispatch_outbound(),
-                self.scheduler.run(),
+            self._background_tasks = [
+                asyncio.create_task(self.agent_loop.run(), name="agent_loop"),
+                asyncio.create_task(
+                    self.bus.dispatch_outbound(),
+                    name="bus_dispatch_outbound",
+                ),
+                asyncio.create_task(self.scheduler.run(), name="scheduler"),
             ]
             optimizer_tasks, self._memory_optimizer = build_memory_optimizer_task(
                 self.config,
                 provider=self.provider,
                 memory_store=self.memory_runtime.markdown.store,
             )
-            self.tasks.extend(optimizer_tasks)
-            self.dashboard_server = build_dashboard_server(
-                workspace=self.workspace,
-                manual_consolidator=self.agent_loop,
-                manual_memory_optimizer=self._memory_optimizer,
-                memory_admin=self.memory_runtime.engine,
-                memory_store=self.memory_runtime.markdown.store,
+            self._background_tasks.extend(
+                asyncio.create_task(task, name=f"memory_optimizer:{index}")
+                for index, task in enumerate(optimizer_tasks)
             )
-            self.dashboard_task = asyncio.create_task(
-                self.dashboard_server.serve(),
-                name="dashboard_server",
-            )
-            proactive_tasks, self.proactive_loop = build_proactive_runtime(
-                self.config,
-                self.workspace,
-                session_manager=self.session_manager,
-                provider=self.provider,
-                light_provider=self.light_provider,
-                push_tool=self.push_tool,
-                memory_store=self.memory_runtime,
-                presence=self.presence,
-                agent_loop=self.agent_loop,
-                tool_hooks=list(plugin_manager.tool_hooks) if plugin_manager else None,
-            )
-            self.tasks.extend(proactive_tasks)
-            if self.proactive_loop is not None:
-                self.ipc.set_proactive_loop(self.proactive_loop)
+            if self.features.enable_dashboard:
+                self.dashboard_server = build_dashboard_server(
+                    workspace=self.workspace,
+                    manual_consolidator=self.agent_loop,
+                    manual_memory_optimizer=self._memory_optimizer,
+                    memory_admin=self.memory_runtime.engine,
+                    memory_store=self.memory_runtime.markdown.store,
+                )
+                self.dashboard_task = asyncio.create_task(
+                    self.dashboard_server.serve(),
+                    name="dashboard_server",
+                )
+            if self.features.enable_proactive:
+                proactive_tasks, self.proactive_loop = build_proactive_runtime(
+                    self.config,
+                    self.workspace,
+                    session_manager=self.session_manager,
+                    provider=self.provider,
+                    light_provider=self.light_provider,
+                    push_tool=self.push_tool,
+                    memory_store=self.memory_runtime,
+                    presence=self.presence,
+                    agent_loop=self.agent_loop,
+                    tool_hooks=list(plugin_manager.tool_hooks) if plugin_manager else None,
+                )
+                self._background_tasks.extend(
+                    asyncio.create_task(task, name=f"proactive:{index}")
+                    for index, task in enumerate(proactive_tasks)
+                )
+                if self.proactive_loop is not None and self.ipc is not None:
+                    self.ipc.set_proactive_loop(self.proactive_loop)
 
             self._started = True
         except Exception:
@@ -174,7 +214,8 @@ class AppRuntime:
     async def run(self) -> None:
         try:
             await self.start()
-            await asyncio.gather(*self.tasks)
+            if self._background_tasks:
+                await asyncio.gather(*self._background_tasks)
         finally:
             await self.shutdown()
 
@@ -183,6 +224,12 @@ class AppRuntime:
             return
         self._shutdown = True
         try:
+            if self.agent_loop is not None:
+                self.agent_loop.stop()
+            if self.bus is not None:
+                self.bus.stop()
+            if self.scheduler is not None:
+                self.scheduler.stop()
             if self.dashboard_server is not None:
                 self.dashboard_server.should_exit = True
             if self.dashboard_task is not None:
@@ -190,6 +237,16 @@ class AppRuntime:
                     await self.dashboard_task
                 except asyncio.CancelledError:
                     pass
+            for task in self._background_tasks:
+                if task.done():
+                    continue
+                task.cancel()
+            for task in self._background_tasks:
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            self._background_tasks = []
             await _run_cleanup_steps(
                 ("core.stop", self.core.stop if self.core else _noop_async),
                 ("ipc.stop", self.ipc.stop if self.ipc else _noop_async),
@@ -207,5 +264,14 @@ class AppRuntime:
             clear_default_shared_http_resources(self.http_resources)
 
 
-def build_app_runtime(config: Config, workspace: Path | None = None) -> AppRuntime:
-    return AppRuntime(config, workspace or (Path.home() / ".akashic" / "workspace"))
+def build_app_runtime(
+    config: Config,
+    workspace: Path | None = None,
+    *,
+    features: RuntimeFeatures = SERVICE_RUNTIME_FEATURES,
+) -> AppRuntime:
+    return AppRuntime(
+        config,
+        workspace or (Path.home() / ".akashic" / "workspace"),
+        features=features,
+    )

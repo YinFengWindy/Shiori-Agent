@@ -30,6 +30,21 @@ class EventBus:
         handlers = self._handlers.setdefault(cast(type[object], event_type), [])
         handlers.append(cast(Handler[object], handler))
 
+    def off(
+        self,
+        event_type: type[E],
+        handler: Handler[E],
+    ) -> None:
+        handlers = self._handlers.get(cast(type[object], event_type))
+        if not handlers:
+            return
+        raw_handler = cast(Handler[object], handler)
+        self._handlers[cast(type[object], event_type)] = [
+            item for item in handlers if item is not raw_handler
+        ]
+        if not self._handlers[cast(type[object], event_type)]:
+            self._handlers.pop(cast(type[object], event_type), None)
+
     async def emit(
         self,
         event: E,

@@ -629,6 +629,28 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert "read_image_vision" in text_media_content
     assert "image_url" not in text_media_content
 
+    from core.roles import RoleStore
+
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="你现在要用更温柔的风格说话。",
+    )
+    role_messages = builder.render(
+        ContextRequest(
+            history=[],
+            current_message="hello",
+            skill_names=["extra"],
+            message_timestamp=now,
+        ),
+        session_metadata={"role_id": "mira"},
+    ).messages
+    role_prompt = role_messages[0]["content"]
+    assert "## Active Role: Mira" in role_prompt
+    assert "你现在要用更温柔的风格说话。" in role_prompt
+
 
 def test_context_builder_reproduces_temporal_conflict_baseline(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -797,11 +819,155 @@ async def test_loop_trigger_and_main_entry_cover_paths(
     module.connect_cli("config.toml")
 
     runtime = SimpleNamespace(run=AsyncMock())
+    core_runtime = SimpleNamespace(start=AsyncMock(), stop=AsyncMock())
+    bridge_server = SimpleNamespace(serve_stdio=AsyncMock())
     monkeypatch.setattr(
         module.Config,
         "load",
         classmethod(lambda cls, path="config.toml": SimpleNamespace()),
     )
-    monkeypatch.setattr(module, "build_app_runtime", lambda config, workspace: runtime)
+    monkeypatch.setattr(
+        module,
+        "build_app_runtime",
+        lambda config, workspace, *, features=module.SERVICE_RUNTIME_FEATURES: runtime,
+    )
+    monkeypatch.setattr(module, "build_core_runtime", lambda config, workspace, http_resources: core_runtime)
+    monkeypatch.setattr(module, "DesktopBridgeServer", lambda runtime: bridge_server)
     await module.serve("config.toml")
     runtime.run.assert_awaited_once()
+    await module.serve_bridge("config.toml")
+    core_runtime.start.assert_awaited_once()
+    bridge_server.serve_stdio.assert_awaited_once()
+    core_runtime.stop.assert_awaited_once()
+
+
+def test_main_dashboard_entry_prints_deprecation_notice(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    import main as module
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("[llm]\nprovider='openai'\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        module.Config,
+        "load",
+        classmethod(lambda cls, path="config.toml": SimpleNamespace()),
+    )
+    monkeypatch.setattr(
+        "bootstrap.providers.build_providers",
+        lambda config: (MagicMock(), MagicMock(), MagicMock()),
+    )
+    monkeypatch.setattr(
+        "bootstrap.memory.build_memory_admin_runtime",
+        lambda **kwargs: SimpleNamespace(
+            engine=MagicMock(),
+            aclose=AsyncMock(),
+        ),
+    )
+    monkeypatch.setattr("bootstrap.dashboard_api.run_dashboard_api", MagicMock())
+    monkeypatch.setenv("AKASHIC_ENABLE_LEGACY_DASHBOARD", "1")
+
+    old_argv = sys.argv
+    try:
+        sys.argv = ["main.py", "dashboard", "--allow-legacy-dashboard", "--config", str(config_path)]
+        with pytest.raises(SystemExit) as exc:
+            runpy.run_module("main", run_name="__main__")
+    finally:
+        sys.argv = old_argv
+
+    assert exc.value.code == 0
+    output = capsys.readouterr().out
+    assert "[deprecated]" in output
+    assert "desktop:start" in output
+
+
+def test_main_dashboard_entry_requires_legacy_flag(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("[llm]\nprovider='openai'\n", encoding="utf-8")
+
+    old_argv = sys.argv
+    try:
+        sys.argv = ["main.py", "dashboard", "--config", str(config_path)]
+        with pytest.raises(SystemExit) as exc:
+            runpy.run_module("main", run_name="__main__")
+    finally:
+        sys.argv = old_argv
+
+    assert exc.value.code == 2
+    output = capsys.readouterr().out
+    assert "--allow-legacy-dashboard" in output
+
+
+def test_main_dashboard_entry_requires_internal_env_gate(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("[llm]\nprovider='openai'\n", encoding="utf-8")
+
+    old_argv = sys.argv
+    try:
+        sys.argv = [
+            "main.py",
+            "dashboard",
+            "--allow-legacy-dashboard",
+            "--config",
+            str(config_path),
+        ]
+        with pytest.raises(SystemExit) as exc:
+            runpy.run_module("main", run_name="__main__")
+    finally:
+        sys.argv = old_argv
+
+    assert exc.value.code == 3
+    output = capsys.readouterr().out
+    assert "AKASHIC_ENABLE_LEGACY_DASHBOARD=1" in output
+
+
+def test_main_desktop_entry_prints_deprecation_notice_and_uses_bridge(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    def _fake_asyncio_run(coro):
+        coro.close()
+        return None
+
+    monkeypatch.setattr("asyncio.run", _fake_asyncio_run)
+
+    old_argv = sys.argv
+    try:
+        sys.argv = ["main.py", "desktop"]
+        with pytest.raises(SystemExit) as exc:
+            runpy.run_module("main", run_name="__main__")
+    finally:
+        sys.argv = old_argv
+
+    assert exc.value.code == 0
+    output = capsys.readouterr().out
+    assert "[deprecated]" in output
+    assert "desktop:start" in output
+    assert "main.py bridge" in output
+
+
+def test_repository_entrypoints_are_desktop_first():
+    repo_root = Path(__file__).resolve().parents[1]
+    package_json = json.loads((repo_root / "package.json").read_text(encoding="utf-8"))
+    scripts = package_json["scripts"]
+
+    assert scripts["start"] == "npm run desktop:start"
+    assert scripts["dev"] == "npm run desktop:start"
+    assert "dashboard:dev" not in scripts
+    assert "dashboard:build" not in scripts
+    assert "build:dashboard" not in scripts
+    assert "build:dashboard:watch" not in scripts
+
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    assert "npm run dashboard:dev" not in readme
+    assert "npm run dashboard:build" not in readme
+    assert "main.py dashboard" not in readme

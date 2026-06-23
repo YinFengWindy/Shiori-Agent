@@ -9,18 +9,27 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import signal
 import sys
 from contextlib import suppress
 from pathlib import Path
 
 from agent.config import Config
-from bootstrap.app import build_app_runtime
+from bootstrap.app import (
+    DESKTOP_RUNTIME_FEATURES,
+    SERVICE_RUNTIME_FEATURES,
+    RuntimeFeatures,
+    build_app_runtime,
+    configure_logging_stream,
+)
 from bootstrap.dashboard_api import run_dashboard_api
 from bootstrap.init_workspace import InitSummary, init_workspace
 from bootstrap.memory import build_memory_admin_runtime
 from bootstrap.providers import build_providers
+from bootstrap.tools import build_core_runtime
 from core.net.http import SharedHttpResources
+from desktop_bridge import DesktopBridgeServer
 
 
 def _default_workspace() -> Path:
@@ -55,6 +64,10 @@ def _print_init_summary(summary: InitSummary) -> None:
         print("\n下一步：")
         for step in summary.next_steps:
             print(f"  {step}")
+
+
+def _legacy_dashboard_enabled() -> bool:
+    return os.environ.get("AKASHIC_ENABLE_LEGACY_DASHBOARD") == "1"
 
 
 def connect_cli(config_path: str = "config.toml") -> None:
@@ -94,14 +107,38 @@ async def inspect_modules(
         await http_resources.aclose()
 
 
+async def serve_bridge(
+    config_path: str = "config.toml",
+    workspace: Path | None = None,
+) -> None:
+    configure_logging_stream(sys.stderr)
+    config = Config.load(config_path)
+    http_resources = SharedHttpResources()
+    runtime = build_core_runtime(
+        config,
+        workspace or _default_workspace(),
+        http_resources,
+    )
+    try:
+        await runtime.start()
+        server = DesktopBridgeServer(runtime)
+        await server.serve_stdio()
+    finally:
+        await runtime.stop()
+        await http_resources.aclose()
+
+
 async def serve(
     config_path: str = "config.toml",
     workspace: Path | None = None,
+    *,
+    features: RuntimeFeatures = SERVICE_RUNTIME_FEATURES,
 ) -> None:
     config = Config.load(config_path)
     runtime = build_app_runtime(
         config,
         workspace=workspace or _default_workspace(),
+        features=features,
     )
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
@@ -188,7 +225,23 @@ if __name__ == "__main__":
         asyncio.run(serve(config_path, workspace))
         sys.exit(0)
 
+    if args and args[0] == "desktop":
+        print("[deprecated] `python main.py desktop` 已进入兼容维护模式；请优先使用 `npm run desktop:start`，如需仅启动桌面后端请使用 `python main.py bridge`。")
+        asyncio.run(serve_bridge(config_path, workspace))
+        sys.exit(0)
+
+    if args and args[0] == "bridge":
+        asyncio.run(serve_bridge(config_path, workspace))
+        sys.exit(0)
+
     if args and args[0] == "dashboard":
+        print("[deprecated] `python main.py dashboard` 已进入兼容维护模式；桌面端请优先使用 `npm run desktop:start`。")
+        if "--allow-legacy-dashboard" not in args:
+            print("如确需继续使用旧 Dashboard，请显式添加 `--allow-legacy-dashboard`。")
+            sys.exit(2)
+        if not _legacy_dashboard_enabled():
+            print("旧 Dashboard 现仅保留给内部兼容调试路径，请改用桌面端；如需内部调试，请设置 `AKASHIC_ENABLE_LEGACY_DASHBOARD=1`。")
+            sys.exit(3)
         config = Config.load(config_path)
         dashboard_workspace = workspace or _default_workspace()
         http_resources = SharedHttpResources()

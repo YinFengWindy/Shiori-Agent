@@ -25,16 +25,20 @@ async def start_channels(
     bot_commands: list[tuple[str, str]] | None = None,
     interrupt_controller: InterruptController | None = None,
     plugin_channels: list[Channel] | None = None,
-) -> tuple[object, ChannelHost]:
+    start_ipc: bool = True,
+    enable_message_channels: bool = True,
+) -> tuple[object | None, ChannelHost]:
     from infra.channels.ipc_server import IPCServerChannel
 
-    ipc = IPCServerChannel(
-        bus,
-        config.channels.socket,
-        default_session_key=config.channels.cli_session_key,
-    )
-    await ipc.start()
-    print(f"Agent 已启动  |  CLI 连接地址: {config.channels.socket}")
+    ipc: object | None = None
+    if start_ipc:
+        ipc = IPCServerChannel(
+            bus,
+            config.channels.socket,
+            default_session_key=config.channels.cli_session_key,
+        )
+        await ipc.start()
+        print(f"Agent 已启动  |  CLI 连接地址: {config.channels.socket}")
 
     attachment_store = AttachmentStore()
 
@@ -52,6 +56,8 @@ async def start_channels(
         )
 
     host = ChannelHost(_ctx_factory)
+    if not enable_message_channels:
+        return ipc, host
 
     if config.channels.telegram and config.channels.telegram.token:
         from infra.channels.telegram_channel import TelegramChannel

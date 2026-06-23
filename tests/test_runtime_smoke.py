@@ -4,6 +4,7 @@ import sys
 import types
 from pathlib import Path
 from typing import cast, Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -188,6 +189,31 @@ async def test_serve_smoke_loads_config_and_runs_shutdown(monkeypatch, tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_serve_desktop_mode_passes_runtime_features(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.toml"
+    socket_path = tmp_path / "akashic.sock"
+    _write_config(config_path, socket_path)
+    observed: dict[str, object] = {}
+
+    runtime = types.SimpleNamespace(run=AsyncMock())
+
+    def _fake_build_app_runtime(config, workspace, *, features):
+        observed["features"] = features
+        observed["workspace"] = workspace
+        return runtime
+
+    monkeypatch.setattr(main, "build_app_runtime", _fake_build_app_runtime)
+
+    await main.serve(
+        str(config_path),
+        features=bootstrap_app.DESKTOP_RUNTIME_FEATURES,
+    )
+
+    assert observed["features"] == bootstrap_app.DESKTOP_RUNTIME_FEATURES
+    runtime.run.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_run_cleanup_steps_continues_after_failure():
     calls: list[str] = []
 
@@ -261,6 +287,8 @@ def test_init_workspace_creates_expected_assets(tmp_path):
     assert (workspace / "proactive.db").exists()
     assert (workspace / "skills").is_dir()
     assert (workspace / "drift" / "skills").is_dir()
+    assert (workspace / "roles" / "roles.json").exists()
+    assert (workspace / "roles" / "assets").is_dir()
     assert any(path == config_path for path in summary.created)
 
 
@@ -517,3 +545,68 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
     assert ipc is not None
     assert host.channels == []
     assert starts == ["ipc"]
+
+
+@pytest.mark.asyncio
+async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
+    monkeypatch,
+    tmp_path,
+):
+    starts: list[str] = []
+
+    fake_ipc_server = types.ModuleType("infra.channels.ipc_server")
+    fake_telegram_channel = types.ModuleType("infra.channels.telegram_channel")
+    fake_qq_channel = types.ModuleType("infra.channels.qq_channel")
+
+    class _IPCServerChannel:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("desktop mode should not construct IPCServerChannel")
+
+    class _TelegramChannel:
+        def __init__(self, **kwargs):
+            starts.append("telegram.init")
+
+    class _QQChannel:
+        def __init__(self, **kwargs):
+            starts.append("qq.init")
+
+    fake_ipc_server.IPCServerChannel = _IPCServerChannel  # type: ignore[attr-defined]
+    fake_telegram_channel.TelegramChannel = _TelegramChannel  # type: ignore[attr-defined]
+    fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "infra.channels.ipc_server", fake_ipc_server)
+    monkeypatch.setitem(sys.modules, "infra.channels.telegram_channel", fake_telegram_channel)
+    monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
+
+    config = Config(
+        provider="openai",
+        model="m",
+        api_key="k",
+        system_prompt="s",
+        channels=ChannelsConfig(
+            telegram=TelegramChannelConfig(token="tg-token", allow_from=["1"]),
+            qq=QQChannelConfig(
+                bot_uin="10001",
+                allow_from=["2"],
+                groups=[QQGroupConfig(group_id="3")],
+            ),
+            socket=str(tmp_path / "sock"),
+        ),
+    )
+    resources = SharedHttpResources()
+    try:
+        ipc, host = await start_channels(
+            config,
+            bus=cast(Any, object()),
+            session_manager=cast(Any, object()),
+            push_tool=cast(Any, object()),
+            http_resources=resources,
+            event_bus=EventBus(),
+            start_ipc=False,
+            enable_message_channels=False,
+        )
+    finally:
+        await resources.aclose()
+
+    assert ipc is None
+    assert host.channels == []
+    assert starts == []

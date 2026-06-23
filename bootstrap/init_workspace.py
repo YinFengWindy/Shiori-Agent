@@ -31,6 +31,7 @@ _JSON_FILES: dict[str, object] = {
     "schedules.json": [],
     "proactive_sources.json": {"sources": []},
     "memes/manifest.json": {"categories": {}},
+    "roles/roles.json": {"version": 1, "roles": []},
 }
 
 _DIRECTORIES: tuple[str, ...] = (
@@ -38,6 +39,7 @@ _DIRECTORIES: tuple[str, ...] = (
     "skills",
     "drift/skills",
     "mcp",
+    "roles/assets",
 )
 
 

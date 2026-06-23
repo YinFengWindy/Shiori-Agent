@@ -84,6 +84,10 @@ async def test_session_manager_and_proactive_loop_cover_paths(tmp_path: Path):
     await manager.append_messages(session, [{"role": "user", "content": "next"}])
     assert manager.list_sessions()
     assert manager.get_channel_metadata("telegram")[0]["chat_id"] == "1"
+    role_session = manager.open_role_session("mira", role_name="Mira")
+    assert role_session.key == "desktop:role:mira"
+    assert role_session.metadata["role_id"] == "mira"
+    assert role_session.metadata["role_name"] == "Mira"
     manager.invalidate("telegram:1")
 
     loop = ProactiveLoop.__new__(ProactiveLoop)
