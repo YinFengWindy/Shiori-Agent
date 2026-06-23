@@ -6,5 +6,15 @@
     "rootDir": "./src",
     "types": ["node"]
   },
-  "include": ["src/main.ts", "src/bridgeClient.ts", "src/shared.ts", "src/electron-shim.d.ts"]
+  "include": [
+    "src/main.ts",
+    "src/bridgeClient.ts",
+    "src/bridgeLifecycle.ts",
+    "src/ipc.ts",
+    "src/paths.ts",
+    "src/shared.ts",
+    "src/smoke.ts",
+    "src/window.ts",
+    "src/electron-shim.d.ts"
+  ]
 }

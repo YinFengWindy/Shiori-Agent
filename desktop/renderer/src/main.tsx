@@ -1,99 +1,36 @@
-import React, { startTransition, useEffect, useRef, useState } from "react";
+import type React from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { WindowControlAction } from "../../src/shared";
+import { ChatSurface } from "./chat/ChatSurface";
+import { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel";
+import { RoleEditor } from "./roles/RoleEditor";
+import { RoleSidebar } from "./roles/RoleSidebar";
+import { toFileUrl } from "./shared/format";
+import type { EventLog, NewRoleFormState, RoleFormState, RoleRecord, SessionPayload } from "./shared/types";
+import { TitleBar } from "./shell/TitleBar";
 import "./styles.css";
 
-type RoleRecord = {
-  id: string;
-  name: string;
-  description: string;
-  system_prompt: string;
-  avatar: string | null;
-  avatar_abs: string | null;
-  illustrations: string[];
-  illustrations_abs: string[];
-  created_at: string;
-  updated_at: string;
-};
-
-type SessionMessage = {
-  id?: string;
-  role: string;
-  content: string;
-  timestamp?: string;
-  reasoning_content?: string | null;
-};
-
-type SessionPayload = {
-  key: string;
-  created_at: string;
-  updated_at: string;
-  last_consolidated: number;
-  metadata: Record<string, unknown>;
-  messages: SessionMessage[];
-};
-
-type EventLog = {
-  method: string;
-  payload: Record<string, unknown>;
-};
-
-const menuItems = ["文件", "编辑", "视图", "帮助"] as const;
 const sidebarMinWidth = 360;
 const sidebarMaxWidth = 720;
 const sidebarDefaultWidth = 360;
 const sidebarAutoCollapseWindowWidth = 980;
 
-function TitleBar({
-  sidebarCollapsed,
-  onToggleSidebar,
-}: {
-  sidebarCollapsed: boolean;
-  onToggleSidebar: () => void;
-}) {
-  function controlWindow(action: WindowControlAction) {
-    void window.miraDesktop.windowControl(action);
-  }
+function createEmptyRoleForm(): RoleFormState {
+  return {
+    name: "",
+    description: "",
+    systemPrompt: "",
+    avatarSource: "",
+    illustrationSources: [],
+  };
+}
 
-  return (
-    <header className="titlebar">
-      <div className="titlebar-left">
-        <button
-          className="titlebar-icon titlebar-sidebar"
-          type="button"
-          aria-label="Sidebar"
-          aria-expanded={!sidebarCollapsed}
-          onClick={onToggleSidebar}
-        >
-          <span />
-        </button>
-        <button className="titlebar-icon titlebar-back" type="button" aria-label="Back" disabled>
-          <span />
-        </button>
-        <button className="titlebar-icon titlebar-forward" type="button" aria-label="Forward" disabled>
-          <span />
-        </button>
-        <nav className="titlebar-menu" aria-label="Application menu">
-          {menuItems.map((item) => (
-            <button key={item} className="titlebar-menu-item" type="button">
-              {item}
-            </button>
-          ))}
-        </nav>
-      </div>
-      <div className="window-controls">
-        <button className="window-control" type="button" aria-label="Minimize" onClick={() => controlWindow("minimize")}>
-          <span className="window-minimize" />
-        </button>
-        <button className="window-control" type="button" aria-label="Maximize" onClick={() => controlWindow("toggleMaximize")}>
-          <span className="window-maximize" />
-        </button>
-        <button className="window-control window-control-close" type="button" aria-label="Close" onClick={() => controlWindow("close")}>
-          <span className="window-close" />
-        </button>
-      </div>
-    </header>
-  );
+function createEmptyNewRoleForm(): NewRoleFormState {
+  return {
+    name: "",
+    description: "",
+    systemPrompt: "",
+  };
 }
 
 function App(): React.ReactElement {
@@ -117,18 +54,8 @@ function App(): React.ReactElement {
   const [activeIllustration, setActiveIllustration] = useState("");
   const [clearAvatar, setClearAvatar] = useState(false);
   const [clearIllustrations, setClearIllustrations] = useState(false);
-  const [roleForm, setRoleForm] = useState({
-    name: "",
-    description: "",
-    systemPrompt: "",
-    avatarSource: "",
-    illustrationSources: [] as string[],
-  });
-  const [newRoleForm, setNewRoleForm] = useState({
-    name: "",
-    description: "",
-    systemPrompt: "",
-  });
+  const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
+  const [newRoleForm, setNewRoleForm] = useState(createEmptyNewRoleForm);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
 
   function toggleSidebar(): void {
@@ -512,7 +439,7 @@ function App(): React.ReactElement {
       return;
     }
     const role = res.payload.role as RoleRecord;
-    setNewRoleForm({ name: "", description: "", systemPrompt: "" });
+    setNewRoleForm(createEmptyNewRoleForm());
     const nextRoles = await loadRolesFromBridge();
     setNotice("Role created.");
     await openRole(role.id, nextRoles?.find((item) => item.id === role.id) ?? role);
@@ -620,9 +547,7 @@ function App(): React.ReactElement {
         ? roleForm.illustrationSources
         : (activeRole?.illustrations_abs ?? []));
   const visibleIllustration = activeIllustration || previewIllustrations[0] || "";
-  const visibleIllustrationUrl = visibleIllustration
-    ? `file:///${visibleIllustration.replace(/\\/g, "/").replace(/"/g, "%22")}`
-    : "";
+  const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
 
   useEffect(() => {
     if (previewIllustrations.length === 0) {
@@ -635,13 +560,6 @@ function App(): React.ReactElement {
       setActiveIllustration(previewIllustrations[0] ?? "");
     }
   }, [previewIllustrations, activeIllustration]);
-
-  function formatTimestamp(value?: string): string {
-    if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    return date.toLocaleString();
-  }
 
   function resetRoleForm(): void {
     if (!activeRole) return;
@@ -666,262 +584,61 @@ function App(): React.ReactElement {
           gridTemplateColumns: sidebarCollapsed ? "minmax(0, 1fr)" : `${sidebarWidth}px minmax(0, 1fr)`,
         }}
       >
-        <aside className="role-pane">
-          <div className="sidebar-top">
-            <button className="sidebar-entry" type="button" onClick={() => setShowNewRoleComposer((value) => !value)}>
-              <span className="sidebar-entry-icon sidebar-entry-new" aria-hidden="true" />
-              <span>新对话</span>
-            </button>
-            <button className="sidebar-entry" type="button">
-              <span className="sidebar-entry-icon sidebar-entry-search" aria-hidden="true" />
-              <span>搜索</span>
-            </button>
-            <button className="sidebar-entry" type="button" onClick={() => setShowRoleEditor((value) => !value)} disabled={!activeRoleId}>
-              <span className="sidebar-entry-icon sidebar-entry-role" aria-hidden="true" />
-              <span>角色</span>
-            </button>
-            {showNewRoleComposer ? (
-              <div className="create-form">
-                <input
-                  data-testid="new-role-name"
-                  value={newRoleForm.name}
-                  onChange={(event) => setNewRoleForm((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="New role name"
-                />
-                <input
-                  data-testid="new-role-description"
-                  value={newRoleForm.description}
-                  onChange={(event) => setNewRoleForm((current) => ({ ...current, description: event.target.value }))}
-                  placeholder="Short description"
-                />
-                <textarea
-                  data-testid="new-role-prompt"
-                  className="compact-prompt"
-                  value={newRoleForm.systemPrompt}
-                  onChange={(event) => setNewRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
-                  placeholder="Role system prompt"
-                />
-                <button data-testid="create-role-button" className="primary-btn" type="button" onClick={() => void createRole()} disabled={creating || !bridgeReady}>
-                  {creating ? "Creating..." : "Create Role"}
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <div className="role-list" data-testid="role-list">
-            {roles.length ? roles.map((role) => (
-              <button
-                key={role.id}
-                data-testid={`role-card-${role.id}`}
-                className={`role-card${role.id === activeRoleId ? " active" : ""}`}
-                type="button"
-                disabled={!bridgeReady}
-                onClick={() => void openRole(role.id)}
-              >
-                {role.avatar_abs ? (
-                  <img
-                    className="role-avatar"
-                    src={`file:///${role.avatar_abs.replace(/\\/g, "/")}`}
-                    alt={`${role.name} avatar`}
-                  />
-                ) : (
-                  <span className="role-avatar role-avatar-fallback">{role.name.slice(0, 1).toUpperCase()}</span>
-                )}
-                <span className="role-name">{role.name}</span>
-              </button>
-            )) : (
-              <div className="empty-card">No roles yet.</div>
-            )}
-          </div>
-          <div
-            className="sidebar-resize-handle"
-            role="separator"
-            aria-label="Resize sidebar"
-            aria-orientation="vertical"
-            onPointerDown={beginSidebarResize}
-          />
-        </aside>
+        <RoleSidebar
+          roles={roles}
+          activeRoleId={activeRoleId}
+          bridgeReady={bridgeReady}
+          creating={creating}
+          showNewRoleComposer={showNewRoleComposer}
+          newRoleForm={newRoleForm}
+          onToggleNewRoleComposer={() => setShowNewRoleComposer((value) => !value)}
+          onToggleRoleEditor={() => setShowRoleEditor((value) => !value)}
+          onUpdateNewRoleForm={setNewRoleForm}
+          onCreateRole={() => void createRole()}
+          onOpenRole={(roleId) => void openRole(roleId)}
+          onBeginResize={beginSidebarResize}
+        />
         <main className="chat-pane">
-          <section className="chat-surface">
-            <header className="chat-header" data-testid="session-hero">
-              {activeRole?.avatar_abs ? (
-                <img
-                  className="chat-header-avatar"
-                  src={`file:///${activeRole.avatar_abs.replace(/\\/g, "/")}`}
-                  alt={`${activeRole.name} avatar`}
-                />
-              ) : (
-                <span className="chat-header-avatar chat-header-avatar-fallback">
-                  {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "M"}
-                </span>
-              )}
-              <div className="chat-header-title">{activeRole ? activeRole.name : "Select a role"}</div>
-            </header>
-            <section
-              className="conversation-panel"
-              style={visibleIllustrationUrl ? {
-                backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.82)), url("${visibleIllustrationUrl}")`,
-              } : undefined}
-            >
-              {notice ? <div className="notice-chip">{notice}</div> : null}
-              <div className="conversation-list">
-                {activeSession?.messages.length ? activeSession.messages.map((message, index) => (
-                  <article key={`${message.id ?? message.role}-${index}`} className={`bubble bubble-${message.role}`}>
-                    <div className="bubble-role">{message.role}</div>
-                    <div className="bubble-content">{message.content}</div>
-                    {message.timestamp ? <div className="bubble-time">{formatTimestamp(message.timestamp)}</div> : null}
-                  </article>
-                )) : (
-                  <div className="empty-card">No messages yet. Send the first message to this role.</div>
-                )}
-                <div ref={conversationEndRef} />
-              </div>
-              <div className="composer-wrap">
-                <div className="composer">
-                  <textarea
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    placeholder="Type a message for this role..."
-                  />
-                  <div className="composer-actions">
-                    <button className="composer-tool-btn" type="button" aria-label="Add attachment">
-                      <span />
-                    </button>
-                    <div className="composer-spacer" />
-                    <button className="ghost-btn composer-cancel" type="button" onClick={() => void cancelMessage()} disabled={!activeRoleId || !sending || !bridgeReady}>
-                      Cancel
-                    </button>
-                    <button className="send-btn" type="button" aria-label="Send message" onClick={() => void sendMessage()} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
-                      <span />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </section>
-        {showRoleEditor ? (
-          <section className="role-editor">
-            <div className="panel-head">
-              <h3>Role Editor</h3>
-              {roleFormDirty ? <span className="dirty-chip">Unsaved changes</span> : null}
-            </div>
-            {activeRole ? (
-              <div className="editor-form">
-                <label>
-                  <span>Name</span>
-                  <input
-                    data-testid="edit-role-name"
-                    value={roleForm.name}
-                    onChange={(event) => setRoleForm((current) => ({ ...current, name: event.target.value }))}
-                  />
-                </label>
-                <label>
-                  <span>Description</span>
-                  <input
-                    data-testid="edit-role-description"
-                    value={roleForm.description}
-                    onChange={(event) => setRoleForm((current) => ({ ...current, description: event.target.value }))}
-                  />
-                </label>
-                <label>
-                  <span>System Prompt</span>
-                  <textarea
-                    data-testid="edit-role-prompt"
-                    className="role-prompt"
-                    value={roleForm.systemPrompt}
-                    onChange={(event) => setRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
-                  />
-                </label>
-                <div className="asset-actions">
-                  <button data-testid="pick-avatar-button" className="ghost-btn" type="button" onClick={() => void pickAvatar()} disabled={!bridgeReady}>
-                    Pick Avatar
-                  </button>
-                  <button data-testid="pick-illustrations-button" className="ghost-btn" type="button" onClick={() => void pickIllustrations()} disabled={!bridgeReady}>
-                    Pick Illustrations
-                  </button>
-                  <button data-testid="clear-avatar-button" className="ghost-btn" type="button" onClick={clearAvatarSelection} disabled={!bridgeReady}>
-                    Clear Avatar
-                  </button>
-                  <button data-testid="clear-illustrations-button" className="ghost-btn" type="button" onClick={clearIllustrationsSelection} disabled={!bridgeReady}>
-                    Clear Illustrations
-                  </button>
-                  <button className="ghost-btn danger" type="button" onClick={() => void deleteRole()} disabled={!bridgeReady}>
-                    Delete Role
-                  </button>
-                </div>
-                {previewAvatar ? (
-                  <img
-                    className="editor-avatar"
-                    src={`file:///${previewAvatar.replace(/\\/g, "/")}`}
-                    alt={`${activeRole.name} avatar`}
-                  />
-                ) : null}
-                {previewIllustrations.length ? (
-                  <div className="illustration-strip">
-                    {previewIllustrations.map((path) => (
-                      <button
-                        key={path}
-                        type="button"
-                        className={`illustration-thumb${path === activeIllustration ? " active" : ""}`}
-                        onClick={() => {
-                          setActiveIllustration(path);
-                          if (activeRoleId) {
-                            void rememberIllustration(activeRoleId, path);
-                          }
-                        }}
-                      >
-                        <img src={`file:///${path.replace(/\\/g, "/")}`} alt="illustration thumb" />
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                {roleForm.avatarSource ? <div className="asset-preview">Avatar: {roleForm.avatarSource}</div> : null}
-                {roleForm.illustrationSources.length ? (
-                  <div className="asset-preview">
-                    Illustrations:
-                    <ul>
-                      {roleForm.illustrationSources.map((item) => <li key={item}>{item}</li>)}
-                    </ul>
-                  </div>
-                ) : null}
-                <div className="editor-actions">
-                  <button className="ghost-btn" type="button" onClick={resetRoleForm} disabled={!roleFormDirty}>
-                    Reset
-                  </button>
-                  <button data-testid="save-role-button" className="primary-btn" type="button" onClick={() => void saveRole()} disabled={savingRole || !activeRoleId || !roleFormDirty || !bridgeReady}>
-                    {savingRole ? "Saving..." : "Save Role"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="empty-card">Select a role to edit its prompt and local artwork.</div>
-            )}
-          </section>
-        ) : null}
-        {showDiagnostics ? (
-          <section className="event-panel">
-            <div className="panel-head">
-              <h3>Bridge Events</h3>
-              {error ? <span className="error-chip">{error}</span> : null}
-            </div>
-            <div className="event-list">
-              {events.length ? events.map((event, index) => (
-                <article key={`${event.method}-${index}`} className="event-row">
-                  <div className="event-method">{event.method}</div>
-                  <pre>{JSON.stringify(event.payload, null, 2)}</pre>
-                </article>
-              )) : (
-                <div className="empty-card">No events yet.</div>
-              )}
-            </div>
-          </section>
-        ) : error ? (
-          <section className="event-panel collapsed-diagnostics">
-            <div className="panel-head">
-              <h3>Diagnostics</h3>
-              <span className="error-chip">{error}</span>
-            </div>
-          </section>
-        ) : null}
+          <ChatSurface
+            activeRole={activeRole}
+            activeRoleId={activeRoleId}
+            activeSession={activeSession}
+            bridgeReady={bridgeReady}
+            conversationEndRef={conversationEndRef}
+            draft={draft}
+            notice={notice}
+            sending={sending}
+            visibleIllustrationUrl={visibleIllustrationUrl}
+            onCancelMessage={() => void cancelMessage()}
+            onSendMessage={() => void sendMessage()}
+            onUpdateDraft={setDraft}
+          />
+          {showRoleEditor ? (
+            <RoleEditor
+              activeRole={activeRole}
+              activeRoleId={activeRoleId}
+              activeIllustration={activeIllustration}
+              bridgeReady={bridgeReady}
+              clearAvatar={clearAvatar}
+              clearIllustrations={clearIllustrations}
+              previewAvatar={previewAvatar}
+              previewIllustrations={previewIllustrations}
+              roleForm={roleForm}
+              roleFormDirty={roleFormDirty}
+              savingRole={savingRole}
+              onUpdateRoleForm={setRoleForm}
+              onSetActiveIllustration={setActiveIllustration}
+              onRememberIllustration={(roleId, illustration) => void rememberIllustration(roleId, illustration)}
+              onPickAvatar={() => void pickAvatar()}
+              onPickIllustrations={() => void pickIllustrations()}
+              onClearAvatar={clearAvatarSelection}
+              onClearIllustrations={clearIllustrationsSelection}
+              onDeleteRole={() => void deleteRole()}
+              onResetRoleForm={resetRoleForm}
+              onSaveRole={() => void saveRole()}
+            />
+          ) : null}
+          <DiagnosticsPanel error={error} events={events} expanded={showDiagnostics} />
         </main>
       </div>
     </div>
