@@ -10,6 +10,7 @@
   --accent-deep: #8a3211;
   --stroke: rgba(76, 48, 24, 0.14);
   --shadow: 0 28px 60px rgba(75, 43, 18, 0.12);
+  --titlebar-height: 48px;
   font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
 }
 
@@ -32,7 +33,7 @@ button {
 
 .app-frame {
   display: grid;
-  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-rows: var(--titlebar-height) minmax(0, 1fr);
   min-height: 100vh;
   overflow: hidden;
 }
@@ -42,7 +43,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 48px;
+  height: var(--titlebar-height);
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   background: #f3f3f3;
   color: #747474;
@@ -124,11 +125,11 @@ button {
 }
 
 .titlebar-menu-item {
-  min-width: 54px;
-  height: 36px;
-  padding: 0 12px;
+  min-width: 50px;
+  height: 32px;
+  padding: 0 10px;
   border-radius: 6px;
-  font-size: 16px;
+  font-size: 14px;
   letter-spacing: 0;
   cursor: default;
 }
@@ -147,7 +148,7 @@ button {
   display: grid;
   place-items: center;
   width: 48px;
-  height: 48px;
+  height: var(--titlebar-height);
   padding: 0;
 }
 
