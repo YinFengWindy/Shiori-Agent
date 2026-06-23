@@ -517,6 +517,7 @@ button {
 .chat-surface {
   display: grid;
   grid-template-rows: 64px minmax(0, 1fr);
+  height: 100%;
   min-height: 0;
   background: #ffffff;
 }
@@ -572,8 +573,10 @@ button {
 
 .conversation-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) 162px;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
   background: #ffffff;
   background-position: center;
   background-repeat: no-repeat;
@@ -603,6 +606,7 @@ button {
   display: grid;
   align-content: start;
   gap: 12px;
+  min-height: 0;
   overflow: auto;
   padding: 28px clamp(24px, 9vw, 132px) 20px;
   scrollbar-color: #e7e1d7 transparent;
@@ -672,14 +676,27 @@ button {
   gap: 12px;
 }
 
+.composer-wrap {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+  padding: 0 24px 22px;
+}
+
 .composer {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  flex: 0 0 auto;
   gap: 12px;
   width: 1100px;
-  max-width: calc(100% - 48px);
+  min-width: 1100px;
   height: 140px;
-  margin: 0 auto 22px;
+  min-height: 140px;
+  max-height: 140px;
+  margin: 0;
   border: 1px solid #e4e4e4;
   border-radius: 24px;
   padding: 18px 18px 14px;

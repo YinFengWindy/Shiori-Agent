@@ -14,7 +14,7 @@ const bridge = new DesktopBridgeClient();
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1320,
+    width: 1520,
     height: 860,
     minWidth: 980,
     minHeight: 680,
@@ -180,6 +180,31 @@ function createWindow() {
               : "";
             if (!backgroundImage.includes("file:///") || !backgroundImage.includes("illustration-")) {
               return { ok: false, reason: "chat-illustration-background-missing", backgroundImage };
+            }
+            const composer = document.querySelector(".composer");
+            const composerWrap = document.querySelector(".composer-wrap");
+            if (!composer || !composerWrap || !conversationPanel) {
+              return { ok: false, reason: "composer-layout-missing" };
+            }
+            const composerRect = composer.getBoundingClientRect();
+            const composerWrapRect = composerWrap.getBoundingClientRect();
+            const conversationRect = conversationPanel.getBoundingClientRect();
+            if (Math.abs(composerRect.width - 1100) > 1 || Math.abs(composerRect.height - 140) > 1) {
+              return {
+                ok: false,
+                reason: "composer-size-mismatch",
+                width: composerRect.width,
+                height: composerRect.height,
+              };
+            }
+            if (Math.abs(composerWrapRect.bottom - conversationRect.bottom) > 1 || Math.abs(composerRect.bottom - (conversationRect.bottom - 22)) > 1) {
+              return {
+                ok: false,
+                reason: "composer-not-bottom-fixed",
+                composerBottom: composerRect.bottom,
+                wrapBottom: composerWrapRect.bottom,
+                conversationBottom: conversationRect.bottom,
+              };
             }
             const roleAButton = findRoleButtonByName(roleAName);
             if (!roleAButton) {

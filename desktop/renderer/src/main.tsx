@@ -697,23 +697,25 @@ function App(): React.ReactElement {
                 )}
                 <div ref={conversationEndRef} />
               </div>
-              <div className="composer">
-                <textarea
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  placeholder="Type a message for this role..."
-                />
-                <div className="composer-actions">
-                  <button className="composer-tool-btn" type="button" aria-label="Add attachment">
-                    <span />
-                  </button>
-                  <div className="composer-spacer" />
-                  <button className="ghost-btn composer-cancel" type="button" onClick={() => void cancelMessage()} disabled={!activeRoleId || !sending || !bridgeReady}>
-                    Cancel
-                  </button>
-                  <button className="send-btn" type="button" aria-label="Send message" onClick={() => void sendMessage()} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
-                    <span />
-                  </button>
+              <div className="composer-wrap">
+                <div className="composer">
+                  <textarea
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    placeholder="Type a message for this role..."
+                  />
+                  <div className="composer-actions">
+                    <button className="composer-tool-btn" type="button" aria-label="Add attachment">
+                      <span />
+                    </button>
+                    <div className="composer-spacer" />
+                    <button className="ghost-btn composer-cancel" type="button" onClick={() => void cancelMessage()} disabled={!activeRoleId || !sending || !bridgeReady}>
+                      Cancel
+                    </button>
+                    <button className="send-btn" type="button" aria-label="Send message" onClick={() => void sendMessage()} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
+                      <span />
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
