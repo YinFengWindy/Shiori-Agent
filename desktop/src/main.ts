@@ -16,7 +16,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1320,
     height: 860,
-    minWidth: 980,
+    minWidth: 520,
     minHeight: 680,
     frame: false,
     backgroundColor: "#f4efe6",
@@ -233,6 +233,80 @@ function createWindow() {
             return { ok: false, reason: "role-switch-failed", hero: hero.textContent || "" };
           })();
         `);
+        if (result?.ok === true) {
+          win.setSize(900, 760);
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          const narrowResult = await win.webContents.executeJavaScript(`
+            (() => {
+              const rolePane = document.querySelector(".role-pane");
+              const chatPane = document.querySelector(".chat-pane");
+              const composer = document.querySelector(".composer");
+              if (!rolePane || !chatPane || !composer) {
+                return { ok: false, reason: "narrow-layout-elements-missing" };
+              }
+              const roleDisplay = getComputedStyle(rolePane).display;
+              const chatRect = chatPane.getBoundingClientRect();
+              const composerRect = composer.getBoundingClientRect();
+              const expectedComposerCenter = chatRect.left + chatRect.width / 2;
+              const actualComposerCenter = composerRect.left + composerRect.width / 2;
+              if (roleDisplay !== "none") {
+                return { ok: false, reason: "role-pane-not-collapsed", roleDisplay };
+              }
+              if (chatRect.left > 1 || Math.abs(chatRect.width - window.innerWidth) > 2) {
+                return {
+                  ok: false,
+                  reason: "chat-pane-not-full-width",
+                  chatLeft: chatRect.left,
+                  chatWidth: chatRect.width,
+                  windowWidth: window.innerWidth,
+                };
+              }
+              if (Math.abs(composerRect.width - 550) > 1 || Math.abs(actualComposerCenter - expectedComposerCenter) > 1) {
+                return {
+                  ok: false,
+                  reason: "narrow-composer-not-centered",
+                  composerWidth: composerRect.width,
+                  centerOffset: actualComposerCenter - expectedComposerCenter,
+                };
+              }
+              return { ok: true };
+            })();
+          `);
+          if (narrowResult?.ok !== true) {
+            console.log(`[desktop-ui-smoke] ${JSON.stringify(narrowResult)}`);
+            app.exit(1);
+            return;
+          }
+          win.setSize(540, 760);
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          const compactResult = await win.webContents.executeJavaScript(`
+            (() => {
+              const composer = document.querySelector(".composer");
+              const composerWrap = document.querySelector(".composer-wrap");
+              if (!composer || !composerWrap) {
+                return { ok: false, reason: "compact-layout-elements-missing" };
+              }
+              const composerRect = composer.getBoundingClientRect();
+              const wrapRect = composerWrap.getBoundingClientRect();
+              const expectedWidth = Math.max(0, wrapRect.width - 48);
+              if (composerRect.width >= 550 || Math.abs(composerRect.width - expectedWidth) > 2) {
+                return {
+                  ok: false,
+                  reason: "compact-composer-not-shrunk",
+                  composerWidth: composerRect.width,
+                  expectedWidth,
+                  wrapWidth: wrapRect.width,
+                };
+              }
+              return { ok: true };
+            })();
+          `);
+          if (compactResult?.ok !== true) {
+            console.log(`[desktop-ui-smoke] ${JSON.stringify(compactResult)}`);
+            app.exit(1);
+            return;
+          }
+        }
         console.log(`[desktop-ui-smoke] ${JSON.stringify(result)}`);
         app.exit(result?.ok ? 0 : 1);
       } catch (error) {

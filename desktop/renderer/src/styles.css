@@ -981,14 +981,13 @@ pre {
   color: var(--muted);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1180px) {
   .desktop-shell {
     grid-template-columns: 1fr;
   }
 
   .role-pane {
-    border-right: 0;
-    border-bottom: 0;
+    display: none;
   }
 
   .chat-pane {
