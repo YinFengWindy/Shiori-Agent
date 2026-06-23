@@ -97,17 +97,18 @@ button {
 .titlebar-sidebar span::before {
   content: "";
   position: absolute;
-  top: 2px;
-  bottom: 2px;
-  left: 5px;
+  top: 1.5px;
+  bottom: 1.5px;
+  left: 3px;
   width: 1.3px;
+  border-radius: 999px;
   background: currentColor;
 }
 
 .titlebar-back span,
 .titlebar-forward span {
   position: relative;
-  width: 14px;
+  width: 15px;
   height: 12px;
 }
 
@@ -115,40 +116,40 @@ button {
 .titlebar-forward span::before {
   content: "";
   position: absolute;
-  top: 6px;
+  top: 5.5px;
   width: 13px;
-  height: 1.5px;
+  height: 1.4px;
   border-radius: 999px;
   background: currentColor;
 }
 
 .titlebar-back span::before {
-  left: 1px;
+  left: 2px;
 }
 
 .titlebar-forward span::before {
-  right: 1px;
+  right: 2px;
 }
 
 .titlebar-back span::after,
 .titlebar-forward span::after {
   content: "";
   position: absolute;
-  top: 3px;
-  width: 7px;
-  height: 7px;
-  border-bottom: 1.5px solid currentColor;
-  border-left: 1.5px solid currentColor;
+  top: 2.5px;
+  width: 6px;
+  height: 6px;
+  border-top: 1.4px solid currentColor;
+  border-left: 1.4px solid currentColor;
 }
 
 .titlebar-back span::after {
-  left: 1px;
-  transform: rotate(45deg);
+  left: 1.5px;
+  transform: rotate(-45deg);
 }
 
 .titlebar-forward span::after {
-  right: 1px;
-  transform: rotate(225deg);
+  right: 1.5px;
+  transform: rotate(135deg);
 }
 
 .titlebar-menu {
