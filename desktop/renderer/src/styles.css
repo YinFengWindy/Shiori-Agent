@@ -239,13 +239,23 @@ button {
 
 .desktop-shell {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 360px minmax(0, 1fr);
   min-height: 0;
   background: transparent;
   overflow: hidden;
 }
 
+.desktop-shell.sidebar-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.desktop-shell.sidebar-collapsed .role-pane {
+  display: none;
+}
+
 .role-pane {
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 18px;
@@ -253,6 +263,21 @@ button {
   overflow: hidden;
   padding: 18px 18px 18px 20px;
   background: transparent;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:focus-visible {
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .role-list {
@@ -979,18 +1004,4 @@ pre {
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--muted);
-}
-
-@media (max-width: 1180px) {
-  .desktop-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .role-pane {
-    display: none;
-  }
-
-  .chat-pane {
-    grid-template-columns: 1fr;
-  }
 }

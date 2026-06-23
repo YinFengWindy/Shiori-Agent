@@ -234,7 +234,60 @@ function createWindow() {
           })();
         `);
         if (result?.ok === true) {
+          const resizeResult = await win.webContents.executeJavaScript(`
+            (async () => {
+              const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+              const shell = document.querySelector(".desktop-shell");
+              const rolePane = document.querySelector(".role-pane");
+              const handle = document.querySelector(".sidebar-resize-handle");
+              const toggle = document.querySelector(".titlebar-sidebar");
+              const chatPane = document.querySelector(".chat-pane");
+              if (!shell || !rolePane || !handle || !toggle || !chatPane) {
+                return { ok: false, reason: "sidebar-resize-elements-missing" };
+              }
+              const dragTo = (x) => {
+                handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, clientX: rolePane.getBoundingClientRect().right, pointerId: 1 }));
+                window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, cancelable: true, clientX: x, pointerId: 1 }));
+                window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, clientX: x, pointerId: 1 }));
+              };
+              dragTo(720);
+              await sleep(50);
+              let roleRect = rolePane.getBoundingClientRect();
+              if (Math.abs(roleRect.width - 720) > 1) {
+                return { ok: false, reason: "sidebar-max-resize-mismatch", width: roleRect.width };
+              }
+              dragTo(360);
+              await sleep(50);
+              roleRect = rolePane.getBoundingClientRect();
+              if (Math.abs(roleRect.width - 360) > 1) {
+                return { ok: false, reason: "sidebar-min-resize-mismatch", width: roleRect.width };
+              }
+              dragTo(340);
+              await sleep(50);
+              if (getComputedStyle(rolePane).display !== "none") {
+                return { ok: false, reason: "sidebar-drag-collapse-missing", display: getComputedStyle(rolePane).display };
+              }
+              toggle.click();
+              await sleep(50);
+              roleRect = rolePane.getBoundingClientRect();
+              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 360) > 1) {
+                return {
+                  ok: false,
+                  reason: "sidebar-toggle-expand-failed",
+                  display: getComputedStyle(rolePane).display,
+                  width: roleRect.width,
+                };
+              }
+              return { ok: true };
+            })();
+          `);
+          if (resizeResult?.ok !== true) {
+            console.log(`[desktop-ui-smoke] ${JSON.stringify(resizeResult)}`);
+            app.exit(1);
+            return;
+          }
           win.setSize(900, 760);
+          await win.webContents.executeJavaScript(`window.dispatchEvent(new Event("resize"));`);
           await new Promise((resolve) => setTimeout(resolve, 150));
           const narrowResult = await win.webContents.executeJavaScript(`
             (() => {
@@ -278,6 +331,7 @@ function createWindow() {
             return;
           }
           win.setSize(540, 760);
+          await win.webContents.executeJavaScript(`window.dispatchEvent(new Event("resize"));`);
           await new Promise((resolve) => setTimeout(resolve, 150));
           const compactResult = await win.webContents.executeJavaScript(`
             (() => {

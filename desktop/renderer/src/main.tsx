@@ -39,8 +39,18 @@ type EventLog = {
 };
 
 const menuItems = ["文件", "编辑", "视图", "帮助"] as const;
+const sidebarMinWidth = 360;
+const sidebarMaxWidth = 720;
+const sidebarDefaultWidth = 360;
+const sidebarAutoCollapseWindowWidth = 980;
 
-function TitleBar() {
+function TitleBar({
+  sidebarCollapsed,
+  onToggleSidebar,
+}: {
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
+}) {
   function controlWindow(action: WindowControlAction) {
     void window.miraDesktop.windowControl(action);
   }
@@ -48,7 +58,13 @@ function TitleBar() {
   return (
     <header className="titlebar">
       <div className="titlebar-left">
-        <button className="titlebar-icon titlebar-sidebar" type="button" aria-label="Sidebar">
+        <button
+          className="titlebar-icon titlebar-sidebar"
+          type="button"
+          aria-label="Sidebar"
+          aria-expanded={!sidebarCollapsed}
+          onClick={onToggleSidebar}
+        >
           <span />
         </button>
         <button className="titlebar-icon titlebar-back" type="button" aria-label="Back" disabled>
@@ -95,6 +111,9 @@ function App(): React.ReactElement {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showRoleEditor, setShowRoleEditor] = useState(false);
   const [showNewRoleComposer, setShowNewRoleComposer] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(sidebarDefaultWidth);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [resizingSidebar, setResizingSidebar] = useState(false);
   const [activeIllustration, setActiveIllustration] = useState("");
   const [clearAvatar, setClearAvatar] = useState(false);
   const [clearIllustrations, setClearIllustrations] = useState(false);
@@ -111,6 +130,41 @@ function App(): React.ReactElement {
     systemPrompt: "",
   });
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
+
+  function toggleSidebar(): void {
+    if (sidebarCollapsed) {
+      setSidebarWidth((current) => Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, current)));
+      setSidebarCollapsed(false);
+      return;
+    }
+    setSidebarCollapsed(true);
+  }
+
+  function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    setResizingSidebar(true);
+
+    function stopResize(): void {
+      setResizingSidebar(false);
+      window.removeEventListener("pointermove", resize);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+    }
+
+    function resize(moveEvent: PointerEvent): void {
+      if (moveEvent.clientX < sidebarMinWidth) {
+        setSidebarCollapsed(true);
+        stopResize();
+        return;
+      }
+      setSidebarCollapsed(false);
+      setSidebarWidth(Math.min(sidebarMaxWidth, moveEvent.clientX));
+    }
+
+    window.addEventListener("pointermove", resize);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+  }
 
   function chooseIllustration(
     role: RoleRecord | null,
@@ -168,6 +222,18 @@ function App(): React.ReactElement {
       window.localStorage.removeItem("miraDesktop.activeIllustration");
     }
   }, [activeIllustration]);
+
+  useEffect(() => {
+    function collapseSidebarForNarrowWindow(): void {
+      if (window.innerWidth < sidebarAutoCollapseWindowWidth) {
+        setSidebarCollapsed(true);
+      }
+    }
+
+    collapseSidebarForNarrowWindow();
+    window.addEventListener("resize", collapseSidebarForNarrowWindow);
+    return () => window.removeEventListener("resize", collapseSidebarForNarrowWindow);
+  }, []);
 
   async function rememberIllustration(roleId: string, illustration: string): Promise<void> {
     await window.miraDesktop.invoke({
@@ -593,8 +659,13 @@ function App(): React.ReactElement {
 
   return (
     <div className="app-frame">
-      <TitleBar />
-      <div className="desktop-shell">
+      <TitleBar sidebarCollapsed={sidebarCollapsed} onToggleSidebar={toggleSidebar} />
+      <div
+        className={`desktop-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${resizingSidebar ? " sidebar-resizing" : ""}`}
+        style={{
+          gridTemplateColumns: sidebarCollapsed ? "minmax(0, 1fr)" : `${sidebarWidth}px minmax(0, 1fr)`,
+        }}
+      >
         <aside className="role-pane">
           <div className="sidebar-top">
             <button className="sidebar-entry" type="button" onClick={() => setShowNewRoleComposer((value) => !value)}>
@@ -661,6 +732,13 @@ function App(): React.ReactElement {
               <div className="empty-card">No roles yet.</div>
             )}
           </div>
+          <div
+            className="sidebar-resize-handle"
+            role="separator"
+            aria-label="Resize sidebar"
+            aria-orientation="vertical"
+            onPointerDown={beginSidebarResize}
+          />
         </aside>
         <main className="chat-pane">
           <section className="chat-surface">
