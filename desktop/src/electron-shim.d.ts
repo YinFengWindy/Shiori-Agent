@@ -6,6 +6,7 @@ declare module "electron" {
     height?: number;
     minWidth?: number;
     minHeight?: number;
+    frame?: boolean;
     backgroundColor?: string;
     webPreferences?: {
       preload?: string;
@@ -17,6 +18,11 @@ declare module "electron" {
 
   export interface BrowserWindowInstance {
     loadFile(path: string): Promise<void>;
+    minimize(): void;
+    maximize(): void;
+    unmaximize(): void;
+    isMaximized(): boolean;
+    close(): void;
     webContents: {
       send(channel: string, payload: unknown): void;
       on(event: string, handler: (...args: unknown[]) => void): void;

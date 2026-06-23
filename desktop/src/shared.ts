@@ -23,12 +23,17 @@ export type BridgeEvent = {
   payload: Record<string, unknown>;
 };
 
+/** Window chrome actions exposed through the preload bridge. */
+export type WindowControlAction = "minimize" | "toggleMaximize" | "close";
+
 export type DesktopApi = {
   invoke(request: Omit<BridgeRequest, "id">): Promise<BridgeResponse>;
   onEvent(listener: (event: BridgeEvent) => void): () => void;
   pickImages(options?: { multiple?: boolean }): Promise<string[]>;
   bridgeStatus(): Promise<{ running: boolean; lastError: string | null }>;
   restartBridge(): Promise<{ ok: boolean; running: boolean; lastError: string | null }>;
+  /** Controls the custom frameless Electron window chrome. */
+  windowControl(action: WindowControlAction): Promise<void>;
   smoke(): Promise<{
     status: { running: boolean; lastError: string | null };
     health: BridgeResponse;

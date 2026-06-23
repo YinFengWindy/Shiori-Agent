@@ -1,5 +1,6 @@
 import React, { startTransition, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import type { WindowControlAction } from "../../src/shared";
 import "./styles.css";
 
 type RoleRecord = {
@@ -36,6 +37,48 @@ type EventLog = {
   method: string;
   payload: Record<string, unknown>;
 };
+
+const menuItems = ["文件", "编辑", "视图", "帮助"] as const;
+
+function TitleBar() {
+  function controlWindow(action: WindowControlAction) {
+    void window.miraDesktop.windowControl(action);
+  }
+
+  return (
+    <header className="titlebar">
+      <div className="titlebar-left">
+        <button className="titlebar-icon titlebar-sidebar" type="button" aria-label="Sidebar">
+          <span />
+        </button>
+        <button className="titlebar-icon titlebar-back" type="button" aria-label="Back" disabled>
+          <span />
+        </button>
+        <button className="titlebar-icon titlebar-forward" type="button" aria-label="Forward" disabled>
+          <span />
+        </button>
+        <nav className="titlebar-menu" aria-label="Application menu">
+          {menuItems.map((item) => (
+            <button key={item} className="titlebar-menu-item" type="button">
+              {item}
+            </button>
+          ))}
+        </nav>
+      </div>
+      <div className="window-controls">
+        <button className="window-control" type="button" aria-label="Minimize" onClick={() => controlWindow("minimize")}>
+          <span className="window-minimize" />
+        </button>
+        <button className="window-control" type="button" aria-label="Maximize" onClick={() => controlWindow("toggleMaximize")}>
+          <span className="window-maximize" />
+        </button>
+        <button className="window-control window-control-close" type="button" aria-label="Close" onClick={() => controlWindow("close")}>
+          <span className="window-close" />
+        </button>
+      </div>
+    </header>
+  );
+}
 
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
@@ -544,8 +587,10 @@ function App(): React.ReactElement {
   }
 
   return (
-    <div className="desktop-shell">
-      <aside className="role-pane">
+    <div className="app-frame">
+      <TitleBar />
+      <div className="desktop-shell">
+        <aside className="role-pane">
         <div className="brand-block">
           <div className="brand-kicker">Mira Desktop</div>
           <h1>Role Library</h1>
@@ -615,8 +660,8 @@ function App(): React.ReactElement {
             <div className="empty-card">No roles yet. Create one to start a dedicated conversation.</div>
           )}
         </div>
-      </aside>
-      <main className="chat-pane">
+        </aside>
+        <main className="chat-pane">
         <section className="hero">
           <div className="hero-panel" data-testid="session-hero">
             <div className="hero-kicker">Role Chat</div>
@@ -801,7 +846,8 @@ function App(): React.ReactElement {
             </div>
           </section>
         ) : null}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

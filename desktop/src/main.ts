@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 import type { IpcMainInvokeEvent } from "electron";
+import type { WindowControlAction } from "./shared.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, "..");
@@ -17,6 +18,7 @@ function createWindow() {
     height: 860,
     minWidth: 980,
     minHeight: 680,
+    frame: false,
     backgroundColor: "#f4efe6",
     webPreferences: {
       preload: resolve(here, "preload.js"),
@@ -250,6 +252,27 @@ app.whenReady().then(() => {
         running: false,
         lastError: String(error),
       };
+    }
+  });
+  ipcMain.handle("desktop:window-control", (_event: IpcMainInvokeEvent, action: WindowControlAction) => {
+    const [window] = BrowserWindow.getAllWindows();
+    if (!window) {
+      return;
+    }
+    if (action === "minimize") {
+      window.minimize();
+      return;
+    }
+    if (action === "toggleMaximize") {
+      if (window.isMaximized()) {
+        window.unmaximize();
+        return;
+      }
+      window.maximize();
+      return;
+    }
+    if (action === "close") {
+      window.close();
     }
   });
   ipcMain.handle("desktop:pick-images", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {

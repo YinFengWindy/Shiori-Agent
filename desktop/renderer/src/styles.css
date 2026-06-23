@@ -30,10 +30,179 @@ button {
   font: inherit;
 }
 
+.app-frame {
+  display: grid;
+  grid-template-rows: 48px minmax(0, 1fr);
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.titlebar {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: #f3f3f3;
+  color: #747474;
+  user-select: none;
+}
+
+.titlebar-left,
+.window-controls,
+.titlebar-menu {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.titlebar-left {
+  gap: 12px;
+  padding-left: 8px;
+}
+
+.titlebar-icon,
+.titlebar-menu-item,
+.window-control {
+  -webkit-app-region: no-drag;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.titlebar-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+}
+
+.titlebar-icon:disabled {
+  color: #b8b8b8;
+}
+
+.titlebar-sidebar span {
+  position: relative;
+  width: 18px;
+  height: 16px;
+  border: 1.5px solid currentColor;
+  border-radius: 5px;
+}
+
+.titlebar-sidebar span::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 5px;
+  width: 1.5px;
+  background: currentColor;
+}
+
+.titlebar-back span,
+.titlebar-forward span {
+  width: 12px;
+  height: 12px;
+  border-bottom: 1.7px solid currentColor;
+  border-left: 1.7px solid currentColor;
+}
+
+.titlebar-back span {
+  transform: rotate(45deg);
+}
+
+.titlebar-forward span {
+  transform: rotate(225deg);
+}
+
+.titlebar-menu {
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.titlebar-menu-item {
+  min-width: 54px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 16px;
+  letter-spacing: 0;
+  cursor: default;
+}
+
+.titlebar-icon:not(:disabled):hover,
+.titlebar-menu-item:hover,
+.window-control:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.window-controls {
+  margin-left: auto;
+}
+
+.window-control {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+}
+
+.window-control-close:hover {
+  background: #c42b1c;
+  color: white;
+}
+
+.window-minimize,
+.window-maximize,
+.window-close {
+  position: relative;
+  width: 12px;
+  height: 12px;
+}
+
+.window-minimize::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 1.5px;
+  background: currentColor;
+}
+
+.window-maximize {
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+
+.window-close::before,
+.window-close::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: -1px;
+  width: 1.5px;
+  height: 15px;
+  background: currentColor;
+}
+
+.window-close::before {
+  transform: rotate(45deg);
+}
+
+.window-close::after {
+  transform: rotate(-45deg);
+}
+
 .desktop-shell {
   display: grid;
   grid-template-columns: 320px 1fr;
-  min-height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .role-pane {
