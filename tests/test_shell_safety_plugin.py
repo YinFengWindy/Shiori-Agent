@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -37,7 +38,7 @@ def _run(coro: Any) -> Any:
 def _make_plugin_root(tmp_path: Path) -> Path:
     root = tmp_path / "plugins"
     root.mkdir()
-    (root / "shell_safety").symlink_to(PLUGIN_DIR, target_is_directory=True)
+    shutil.copytree(PLUGIN_DIR, root / "shell_safety")
     return root
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+from agent.core.passive_turn import get_session_metadata
 from agent.core.runtime_support import AgentLoopRunner, PromptRenderRunner, TurnRunResult
 from agent.lifecycle.types import PromptRenderInput
 from agent.looping.ports import SessionServices
@@ -89,6 +90,7 @@ async def process_spawn_completion_event(
             retrieved_memory_block="",
             disabled_sections=set(),
             turn_injection_prompt="",
+            session_metadata=get_session_metadata(session),
         )
     )
     initial_messages = prompt_render.messages

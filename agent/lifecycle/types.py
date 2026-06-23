@@ -91,6 +91,7 @@ class PromptRenderInput:
     disabled_sections: set[str]
     turn_injection_prompt: str
     extra_hints: list[str] | None = None
+    session_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
 
 
 @dataclass
@@ -108,6 +109,7 @@ class PromptRenderCtx:
     retrieved_memory_block: str
     disabled_sections: set[str]
     turn_injection_prompt: str
+    session_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
     extra_hints: list[str] = field(default_factory=_empty_str_list)
     # writable
     system_sections_top: list[PromptSectionRender] = field(

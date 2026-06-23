@@ -693,9 +693,7 @@ class DefaultContextStore(ContextStore):
                     channel=msg.context_channel,
                     chat_id=msg.context_chat_id,
                     history=history_messages,
-                    session_metadata=(
-                        session.metadata if isinstance(session.metadata, dict) else {}
-                    ),
+                    session_metadata=get_session_metadata(session),
                     timestamp=msg.timestamp,
                 )
             )
@@ -987,6 +985,7 @@ class DefaultReasoner(Reasoner):
                     disabled_sections=plan["disabled_sections"],
                     turn_injection_prompt=turn_injection_prompt,
                     extra_hints=extra_hints,
+                    session_metadata=get_session_metadata(session),
                 )
             )
             initial_messages = prompt_render.messages
@@ -1943,6 +1942,11 @@ def get_history_since_consolidated(
         )
     except TypeError:
         return session.get_history(max_messages=memory_window)
+
+
+def get_session_metadata(session: object) -> dict[str, Any]:
+    metadata = getattr(session, "metadata", None)
+    return metadata if isinstance(metadata, dict) else {}
 
 
 def extract_model_facing_turn(

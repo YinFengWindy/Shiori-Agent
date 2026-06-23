@@ -54,6 +54,7 @@ class _BuildPromptRenderCtxModule:
             retrieved_memory_block=input.retrieved_memory_block,
             disabled_sections=set(input.disabled_sections),
             turn_injection_prompt=input.turn_injection_prompt,
+            session_metadata=dict(input.session_metadata),
             extra_hints=list(input.extra_hints or []),
         )
         return frame
@@ -98,7 +99,7 @@ class _RenderPromptModule:
             ),
             system_sections_top=ctx.system_sections_top,
             system_sections_bottom=ctx.system_sections_bottom,
-            session_metadata=getattr(frame.input.state.session, "metadata", {}),
+            session_metadata=ctx.session_metadata,
         )
         messages = list(rendered.messages)
         if ctx.extra_hints:
