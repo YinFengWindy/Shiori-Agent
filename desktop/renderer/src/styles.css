@@ -516,7 +516,7 @@ button {
 
 .chat-surface {
   display: grid;
-  grid-template-rows: 64px minmax(0, 1fr);
+  grid-template-rows: 65px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   background: #ffffff;
@@ -573,7 +573,7 @@ button {
 
 .conversation-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) 162px;
+  grid-template-rows: auto minmax(0, 1fr) 92px;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -690,16 +690,15 @@ button {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   flex: 0 0 auto;
-  gap: 12px;
-  width: 1100px;
-  min-width: 1100px;
-  height: 140px;
-  min-height: 140px;
-  max-height: 140px;
+  gap: 6px;
+  width: min(550px, 100%);
+  height: 70px;
+  min-height: 70px;
+  max-height: 70px;
   margin: 0;
   border: 1px solid #e4e4e4;
-  border-radius: 24px;
-  padding: 18px 18px 14px;
+  border-radius: 18px;
+  padding: 10px 12px 8px;
   background: #ffffff;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.08);
 }
@@ -707,7 +706,7 @@ button {
 .composer-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .composer-spacer {
@@ -724,8 +723,8 @@ button {
 }
 
 .composer-tool-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   background: transparent;
   color: #8a8a8a;
@@ -765,11 +764,16 @@ button {
 }
 
 .send-btn {
-  width: 42px;
-  height: 42px;
+  width: 30px;
+  height: 30px;
   border-radius: 999px;
   background: #1f1f1f;
   color: #ffffff;
+}
+
+.composer-cancel {
+  padding: 6px 12px;
+  font-size: 13px;
 }
 
 .send-btn:disabled {
@@ -837,8 +841,8 @@ textarea {
   outline: none;
   resize: none;
   color: #1f1f1f;
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .role-prompt {

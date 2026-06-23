@@ -14,7 +14,7 @@ const bridge = new DesktopBridgeClient();
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1520,
+    width: 1320,
     height: 860,
     minWidth: 980,
     minHeight: 680,
@@ -183,13 +183,22 @@ function createWindow() {
             }
             const composer = document.querySelector(".composer");
             const composerWrap = document.querySelector(".composer-wrap");
-            if (!composer || !composerWrap || !conversationPanel) {
+            const chatHeader = document.querySelector(".chat-header");
+            if (!composer || !composerWrap || !conversationPanel || !chatHeader) {
               return { ok: false, reason: "composer-layout-missing" };
             }
             const composerRect = composer.getBoundingClientRect();
             const composerWrapRect = composerWrap.getBoundingClientRect();
             const conversationRect = conversationPanel.getBoundingClientRect();
-            if (Math.abs(composerRect.width - 1100) > 1 || Math.abs(composerRect.height - 140) > 1) {
+            const chatHeaderRect = chatHeader.getBoundingClientRect();
+            if (Math.abs(chatHeaderRect.height - 65) > 1) {
+              return {
+                ok: false,
+                reason: "chat-header-height-mismatch",
+                height: chatHeaderRect.height,
+              };
+            }
+            if (Math.abs(composerRect.width - 550) > 1 || Math.abs(composerRect.height - 70) > 1) {
               return {
                 ok: false,
                 reason: "composer-size-mismatch",
