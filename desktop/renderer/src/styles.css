@@ -11,6 +11,7 @@
   --stroke: rgba(76, 48, 24, 0.14);
   --shadow: 0 28px 60px rgba(75, 43, 18, 0.12);
   --titlebar-height: 30px;
+  --app-bg: linear-gradient(135deg, #f9f2e6 0%, #f9f0f0 52%, #f9f1ee 100%);
   font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
 }
 
@@ -21,9 +22,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.65), transparent 28%),
-    linear-gradient(135deg, #f6ecdc 0%, #ead8c1 52%, #e4c9a8 100%);
+  background: var(--app-bg);
   color: var(--text);
 }
 
@@ -35,6 +34,7 @@ button {
   display: grid;
   grid-template-rows: var(--titlebar-height) minmax(0, 1fr);
   min-height: 100vh;
+  background: var(--app-bg);
   overflow: hidden;
 }
 
@@ -44,8 +44,7 @@ button {
   align-items: center;
   justify-content: space-between;
   height: var(--titlebar-height);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background: #f3f3f3;
+  background: transparent;
   color: #747474;
   user-select: none;
 }
@@ -88,9 +87,9 @@ button {
 
 .titlebar-sidebar span {
   position: relative;
-  width: 14px;
-  height: 13px;
-  border: 1.3px solid currentColor;
+  width: 12px;
+  height: 11px;
+  border: 1.2px solid currentColor;
   border-radius: 4px;
 }
 
@@ -99,8 +98,8 @@ button {
   position: absolute;
   top: 1.5px;
   bottom: 1.5px;
-  left: 3px;
-  width: 1.3px;
+  left: 2.5px;
+  width: 1.2px;
   border-radius: 999px;
   background: currentColor;
 }
@@ -108,17 +107,17 @@ button {
 .titlebar-back span,
 .titlebar-forward span {
   position: relative;
-  width: 15px;
-  height: 12px;
+  width: 13px;
+  height: 10px;
 }
 
 .titlebar-back span::before,
 .titlebar-forward span::before {
   content: "";
   position: absolute;
-  top: 5.5px;
-  width: 13px;
-  height: 1.4px;
+  top: 4.5px;
+  width: 11px;
+  height: 1.3px;
   border-radius: 999px;
   background: currentColor;
 }
@@ -136,10 +135,10 @@ button {
   content: "";
   position: absolute;
   top: 2.5px;
-  width: 6px;
-  height: 6px;
-  border-top: 1.4px solid currentColor;
-  border-left: 1.4px solid currentColor;
+  width: 5px;
+  height: 5px;
+  border-top: 1.3px solid currentColor;
+  border-left: 1.3px solid currentColor;
 }
 
 .titlebar-back span::after {
@@ -162,7 +161,7 @@ button {
   height: 24px;
   padding: 0 8px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0;
   cursor: default;
 }
@@ -236,14 +235,13 @@ button {
   display: grid;
   grid-template-columns: 320px 1fr;
   min-height: 0;
+  background: transparent;
   overflow: hidden;
 }
 
 .role-pane {
   padding: 24px;
-  border-right: 1px solid var(--stroke);
-  background: linear-gradient(180deg, rgba(255, 248, 239, 0.86), rgba(245, 231, 212, 0.96));
-  backdrop-filter: blur(20px);
+  background: transparent;
 }
 
 .brand-block h1,
@@ -346,6 +344,7 @@ button {
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
   gap: 20px;
   padding: 24px;
+  background: transparent;
 }
 
 .hero {
@@ -606,7 +605,7 @@ pre {
 
   .role-pane {
     border-right: 0;
-    border-bottom: 1px solid var(--stroke);
+    border-bottom: 0;
   }
 
   .chat-pane {
