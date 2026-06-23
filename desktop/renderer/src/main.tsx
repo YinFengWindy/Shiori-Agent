@@ -553,6 +553,7 @@ function App(): React.ReactElement {
     : (roleForm.illustrationSources.length
         ? roleForm.illustrationSources
         : (activeRole?.illustrations_abs ?? []));
+  const visibleIllustration = activeIllustration || previewIllustrations[0] || "";
 
   useEffect(() => {
     if (previewIllustrations.length === 0) {
@@ -659,66 +660,63 @@ function App(): React.ReactElement {
           </div>
         </aside>
         <main className="chat-pane">
-        <section className="hero">
-          <div className="hero-panel" data-testid="session-hero">
-            <div className="hero-kicker">Role Chat</div>
-            <h2>{activeRole ? activeRole.name : "Select a role"}</h2>
-            <p>{activeRole ? activeRole.system_prompt : "Pick a role from the library to open its dedicated chat session."}</p>
-            {activeSession ? <div className="session-meta">Session: {activeSession.key}</div> : null}
-            {activeRole?.description ? <div className="session-meta">Role note: {activeRole.description}</div> : null}
-            {activeSession?.messages.length ? (
-              <div className="session-meta">Messages: {activeSession.messages.length}</div>
-            ) : null}
-            {activeSession?.updated_at ? (
-              <div className="session-meta">Updated: {formatTimestamp(activeSession.updated_at)}</div>
-            ) : null}
-            {activeIllustration ? (
-              <img
-                className="hero-illustration"
-                src={`file:///${activeIllustration.replace(/\\/g, "/")}`}
-                alt="role illustration"
-              />
-            ) : null}
-          </div>
-        </section>
-        <section className="conversation-panel">
-          <div className="panel-head">
-            <h3>Conversation</h3>
-            <div className="conversation-tools">
-              <button className="ghost-btn" type="button" onClick={() => void refreshSession()} disabled={!activeRoleId || !bridgeReady}>
-                Refresh Session
-              </button>
-            </div>
-          </div>
-          {notice ? <div className="notice-chip">{notice}</div> : null}
-          <div className="conversation-list">
-            {activeSession?.messages.length ? activeSession.messages.map((message, index) => (
-              <article key={`${message.id ?? message.role}-${index}`} className={`bubble bubble-${message.role}`}>
-                <div className="bubble-role">{message.role}</div>
-                <div className="bubble-content">{message.content}</div>
-                {message.timestamp ? <div className="bubble-time">{formatTimestamp(message.timestamp)}</div> : null}
-              </article>
-            )) : (
-              <div className="empty-card">No messages yet. Send the first message to this role.</div>
-            )}
-            <div ref={conversationEndRef} />
-          </div>
-          <div className="composer">
-            <textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Type a message for this role..."
-            />
-            <div className="composer-actions">
-              <button className="primary-btn" type="button" onClick={() => void sendMessage()} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
-                {sending ? "Sending..." : "Send"}
-              </button>
-              <button className="ghost-btn" type="button" onClick={() => void cancelMessage()} disabled={!activeRoleId || !sending || !bridgeReady}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </section>
+          <section className="chat-surface">
+            <header className="chat-header" data-testid="session-hero">
+              {activeRole?.avatar_abs ? (
+                <img
+                  className="chat-header-avatar"
+                  src={`file:///${activeRole.avatar_abs.replace(/\\/g, "/")}`}
+                  alt={`${activeRole.name} avatar`}
+                />
+              ) : (
+                <span className="chat-header-avatar chat-header-avatar-fallback">
+                  {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "M"}
+                </span>
+              )}
+              <div className="chat-header-title">{activeRole ? activeRole.name : "Select a role"}</div>
+              {visibleIllustration ? (
+                <img
+                  className="hero-illustration chat-header-illustration"
+                  src={`file:///${visibleIllustration.replace(/\\/g, "/")}`}
+                  alt="role illustration"
+                />
+              ) : null}
+            </header>
+            <section className="conversation-panel">
+              {notice ? <div className="notice-chip">{notice}</div> : null}
+              <div className="conversation-list">
+                {activeSession?.messages.length ? activeSession.messages.map((message, index) => (
+                  <article key={`${message.id ?? message.role}-${index}`} className={`bubble bubble-${message.role}`}>
+                    <div className="bubble-role">{message.role}</div>
+                    <div className="bubble-content">{message.content}</div>
+                    {message.timestamp ? <div className="bubble-time">{formatTimestamp(message.timestamp)}</div> : null}
+                  </article>
+                )) : (
+                  <div className="empty-card">No messages yet. Send the first message to this role.</div>
+                )}
+                <div ref={conversationEndRef} />
+              </div>
+              <div className="composer">
+                <textarea
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="Type a message for this role..."
+                />
+                <div className="composer-actions">
+                  <button className="composer-tool-btn" type="button" aria-label="Add attachment">
+                    <span />
+                  </button>
+                  <div className="composer-spacer" />
+                  <button className="ghost-btn composer-cancel" type="button" onClick={() => void cancelMessage()} disabled={!activeRoleId || !sending || !bridgeReady}>
+                    Cancel
+                  </button>
+                  <button className="send-btn" type="button" aria-label="Send message" onClick={() => void sendMessage()} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
+                    <span />
+                  </button>
+                </div>
+              </div>
+            </section>
+          </section>
         {showRoleEditor ? (
           <section className="role-editor">
             <div className="panel-head">

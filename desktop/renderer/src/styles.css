@@ -505,38 +505,68 @@ button {
 }
 
 .chat-pane {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
-  padding: 24px;
-  background: transparent;
+  padding: 0;
+  background: #ffffff;
 }
 
-.hero {
-  grid-column: 1 / -1;
+.chat-surface {
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr);
+  min-height: 0;
+  background: #ffffff;
 }
 
-.hero-panel {
-  padding: 28px;
-  background:
-    linear-gradient(135deg, rgba(255, 248, 238, 0.95), rgba(255, 232, 207, 0.92)),
-    radial-gradient(circle at top right, rgba(202, 93, 46, 0.22), transparent 35%);
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border-bottom: 1px solid #ededed;
+  padding: 0 24px;
+  background: #ffffff;
 }
 
-.hero-panel p {
-  max-width: 680px;
-  color: var(--muted);
-  line-height: 1.55;
+.chat-header-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  object-fit: cover;
 }
 
-.hero-illustration {
-  margin-top: 18px;
-  width: min(100%, 360px);
-  border-radius: 18px;
-  border: 1px solid var(--stroke);
-  box-shadow: var(--shadow);
+.chat-header-avatar-fallback {
+  background: #f6f6f6;
+  color: #333333;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.chat-header-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1f1f1f;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.chat-header-illustration {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border: 1px solid #ededed;
+  border-radius: 10px;
+  object-fit: cover;
 }
 
 .event-panel {
@@ -549,12 +579,30 @@ button {
   grid-template-rows: auto;
 }
 
-.conversation-panel,
-.role-editor {
+.conversation-panel {
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  background: #ffffff;
+}
+
+.role-editor {
+  position: absolute;
+  top: 80px;
+  right: 24px;
+  bottom: 24px;
+  z-index: 3;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(420px, calc(100% - 48px));
   min-height: 0;
   gap: 12px;
+  overflow: auto;
+  border: 1px solid #ededed;
+  border-radius: 18px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
 }
 
 .conversation-list {
@@ -562,7 +610,7 @@ button {
   align-content: start;
   gap: 12px;
   overflow: auto;
-  padding-right: 6px;
+  padding: 28px clamp(24px, 9vw, 132px) 20px;
   scrollbar-color: #e7e1d7 transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
@@ -625,15 +673,127 @@ button {
   color: var(--muted);
 }
 
-.composer,
 .editor-form {
   display: grid;
   gap: 12px;
 }
 
+.composer {
+  display: grid;
+  gap: 12px;
+  width: min(100% - 48px, 1100px);
+  margin: 0 auto 22px;
+  border: 1px solid #e4e4e4;
+  border-radius: 24px;
+  padding: 18px 18px 14px;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.08);
+}
+
 .composer-actions {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
+}
+
+.composer-spacer {
+  flex: 1 1 auto;
+}
+
+.composer-tool-btn,
+.send-btn {
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.composer-tool-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: transparent;
+  color: #8a8a8a;
+}
+
+.composer-tool-btn:hover,
+.composer-tool-btn:focus-visible {
+  background: #f5f5f5;
+}
+
+.composer-tool-btn span {
+  position: relative;
+  width: 16px;
+  height: 16px;
+}
+
+.composer-tool-btn span::before,
+.composer-tool-btn span::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+  border-radius: 999px;
+}
+
+.composer-tool-btn span::before {
+  left: 7px;
+  top: 1px;
+  width: 1.5px;
+  height: 14px;
+}
+
+.composer-tool-btn span::after {
+  left: 1px;
+  top: 7px;
+  width: 14px;
+  height: 1.5px;
+}
+
+.send-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: #1f1f1f;
+  color: #ffffff;
+}
+
+.send-btn:disabled {
+  cursor: default;
+  opacity: 0.36;
+}
+
+.send-btn span {
+  position: relative;
+  width: 16px;
+  height: 18px;
+}
+
+.send-btn span::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 3px;
+  width: 2px;
+  height: 13px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.send-btn span::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.composer-cancel:disabled {
+  display: none;
 }
 
 textarea,
@@ -650,6 +810,20 @@ input {
 textarea {
   min-height: 96px;
   resize: vertical;
+}
+
+.composer textarea {
+  min-height: 64px;
+  max-height: 180px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  outline: none;
+  resize: none;
+  color: #1f1f1f;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .role-prompt {
