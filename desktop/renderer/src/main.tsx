@@ -554,6 +554,9 @@ function App(): React.ReactElement {
         ? roleForm.illustrationSources
         : (activeRole?.illustrations_abs ?? []));
   const visibleIllustration = activeIllustration || previewIllustrations[0] || "";
+  const visibleIllustrationUrl = visibleIllustration
+    ? `file:///${visibleIllustration.replace(/\\/g, "/").replace(/"/g, "%22")}`
+    : "";
 
   useEffect(() => {
     if (previewIllustrations.length === 0) {
@@ -674,15 +677,13 @@ function App(): React.ReactElement {
                 </span>
               )}
               <div className="chat-header-title">{activeRole ? activeRole.name : "Select a role"}</div>
-              {visibleIllustration ? (
-                <img
-                  className="hero-illustration chat-header-illustration"
-                  src={`file:///${visibleIllustration.replace(/\\/g, "/")}`}
-                  alt="role illustration"
-                />
-              ) : null}
             </header>
-            <section className="conversation-panel">
+            <section
+              className="conversation-panel"
+              style={visibleIllustrationUrl ? {
+                backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.82)), url("${visibleIllustrationUrl}")`,
+              } : undefined}
+            >
               {notice ? <div className="notice-chip">{notice}</div> : null}
               <div className="conversation-list">
                 {activeSession?.messages.length ? activeSession.messages.map((message, index) => (

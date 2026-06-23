@@ -164,9 +164,22 @@ function createWindow() {
             if (!hero.textContent || !hero.textContent.includes(roleBEditedName)) {
               return { ok: false, reason: "edited-role-not-reflected", hero: hero.textContent || "" };
             }
-            const heroImage = document.querySelector(".hero-illustration");
-            if (!heroImage) {
-              return { ok: false, reason: "hero-illustration-missing-after-upload" };
+            let conversationPanel = null;
+            for (let i = 0; i < 40; i++) {
+              conversationPanel = document.querySelector(".conversation-panel");
+              const backgroundImage = conversationPanel
+                ? getComputedStyle(conversationPanel).backgroundImage
+                : "";
+              if (backgroundImage.includes("file:///") && backgroundImage.includes("illustration-")) {
+                break;
+              }
+              await sleep(100);
+            }
+            const backgroundImage = conversationPanel
+              ? getComputedStyle(conversationPanel).backgroundImage
+              : "";
+            if (!backgroundImage.includes("file:///") || !backgroundImage.includes("illustration-")) {
+              return { ok: false, reason: "chat-illustration-background-missing", backgroundImage };
             }
             const roleAButton = findRoleButtonByName(roleAName);
             if (!roleAButton) {
