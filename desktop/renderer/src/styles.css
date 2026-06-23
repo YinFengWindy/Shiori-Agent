@@ -11,7 +11,7 @@
   --stroke: rgba(76, 48, 24, 0.14);
   --shadow: 0 28px 60px rgba(75, 43, 18, 0.12);
   --titlebar-height: 30px;
-  --app-bg: linear-gradient(135deg, #f9f2e6 0%, #f9f0f0 52%, #f9f1ee 100%);
+  --app-bg: linear-gradient(45deg, #f9f2e6 0%, #f9f0f0 52%, #f9f1ee 100%);
   font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
 }
 
@@ -251,7 +251,7 @@ button {
   overflow-y: auto;
   padding: 24px;
   background: transparent;
-  scrollbar-color: rgba(202, 93, 46, 0.48) transparent;
+  scrollbar-color: #e7e1d7 transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
@@ -267,7 +267,7 @@ button {
 .role-pane::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   border-radius: 999px;
-  background: rgba(202, 93, 46, 0.5);
+  background: #e7e1d7;
   background-clip: padding-box;
 }
 
@@ -430,7 +430,7 @@ button {
   gap: 12px;
   overflow: auto;
   padding-right: 6px;
-  scrollbar-color: rgba(143, 91, 120, 0.5) transparent;
+  scrollbar-color: #e7e1d7 transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
@@ -446,7 +446,7 @@ button {
 .conversation-list::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   border-radius: 999px;
-  background: rgba(143, 91, 120, 0.52);
+  background: #e7e1d7;
   background-clip: padding-box;
 }
 
