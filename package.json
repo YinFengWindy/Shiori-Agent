@@ -10,6 +10,7 @@
     "build:watch": "node scripts/build-plugins.mjs --watch",
     "smoke": "npm run desktop:smoke:all",
     "desktop:build": "npm run build:desktop",
+    "desktop:dev": "npm --prefix desktop run dev",
     "desktop:smoke:all": "npm --prefix desktop run smoke",
     "desktop:smoke:ui": "npm --prefix desktop run smoke:desktop-ui",
     "desktop:smoke:restart": "npm --prefix desktop run smoke:restart",

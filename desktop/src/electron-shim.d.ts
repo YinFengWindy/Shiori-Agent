@@ -18,6 +18,7 @@ declare module "electron" {
 
   export interface BrowserWindowInstance {
     loadFile(path: string): Promise<void>;
+    loadURL(url: string): Promise<void>;
     minimize(): void;
     maximize(): void;
     unmaximize(): void;
@@ -38,6 +39,7 @@ declare module "electron" {
   export const app: {
     whenReady(): Promise<void>;
     on(event: string, handler: (...args: unknown[]) => void): void;
+    setPath(name: string, path: string): void;
     quit(): void;
     exit(code?: number): void;
   };

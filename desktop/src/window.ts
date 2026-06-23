@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron";
 import { attachWindowSmokeHandlers } from "./smoke.js";
-import { preloadScript, rendererDist } from "./paths.js";
+import { preloadScript, rendererDevServerUrl, rendererDist } from "./paths.js";
 
 /** Creates the desktop shell window and wires renderer smoke hooks when requested. */
 export function createDesktopWindow(): BrowserWindow {
@@ -28,7 +28,11 @@ export function createDesktopWindow(): BrowserWindow {
       console.error(`[desktop-ui-load-fail] ${errorCode} ${errorDescription}`);
     }
   });
-  void win.loadFile(rendererDist);
+  if (rendererDevServerUrl) {
+    void win.loadURL(rendererDevServerUrl);
+  } else {
+    void win.loadFile(rendererDist);
+  }
   attachWindowSmokeHandlers(win);
   return win;
 }

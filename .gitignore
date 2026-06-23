@@ -20,6 +20,7 @@ node_modules/
 package-lock.json
 frontend/dashboard/static/
 desktop/node_modules/
+desktop/.dev-user-data/
 desktop/dist/
 desktop/renderer-dist/
 

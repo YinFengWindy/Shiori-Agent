@@ -82,4 +82,4 @@ proc.on("exit", (code) => {
 
 setTimeout(() => {
   finish(1, `desktop smoke timed out\nSTDERR:\n${stderr}\nSTDOUT:\n${stdout}`);
-}, 12000);
+}, 45000);

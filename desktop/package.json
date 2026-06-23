@@ -8,6 +8,7 @@
     "build:main": "tsc -p tsconfig.main.json",
     "build:preload": "tsc -p tsconfig.preload.json",
     "build:renderer": "vite build --config renderer/vite.config.ts",
+    "dev": "npm run build:main && npm run build:preload && node scripts/dev.mjs",
     "dev:renderer": "vite --config renderer/vite.config.ts",
     "smoke": "npm run build && npm run smoke:bridge && npm run smoke:host && npm run smoke:desktop",
     "smoke:bridge": "node scripts/smoke-bridge.mjs",
