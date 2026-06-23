@@ -94,6 +94,7 @@ function App(): React.ReactElement {
   const [sending, setSending] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showRoleEditor, setShowRoleEditor] = useState(false);
+  const [showNewRoleComposer, setShowNewRoleComposer] = useState(false);
   const [activeIllustration, setActiveIllustration] = useState("");
   const [clearAvatar, setClearAvatar] = useState(false);
   const [clearIllustrations, setClearIllustrations] = useState(false);
@@ -591,75 +592,71 @@ function App(): React.ReactElement {
       <TitleBar />
       <div className="desktop-shell">
         <aside className="role-pane">
-        <div className="brand-block">
-          <div className="brand-kicker">Mira Desktop</div>
-          <h1>Role Library</h1>
-          <p>
-            Bridge status:
-            {" "}
-            <strong className={`health-badge health-${health}`}>{health}</strong>
-          </p>
-          <button className="ghost-btn" type="button" onClick={() => void refreshBridge()}>
-            Refresh Bridge
-          </button>
-          <button className="ghost-btn" type="button" onClick={() => void restartBridge()} disabled={health === "connecting"}>
-            Restart Bridge
-          </button>
-          <button className="ghost-btn" type="button" onClick={() => setShowDiagnostics((value) => !value)}>
-            {showDiagnostics ? "Hide Diagnostics" : "Show Diagnostics"}
-          </button>
-          <button className="ghost-btn" type="button" onClick={() => setShowRoleEditor((value) => !value)} disabled={!activeRoleId}>
-            {showRoleEditor ? "Hide Role Editor" : "Edit Role"}
-          </button>
-          <div className="create-form">
-            <input
-              data-testid="new-role-name"
-              value={newRoleForm.name}
-              onChange={(event) => setNewRoleForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder="New role name"
-            />
-            <input
-              data-testid="new-role-description"
-              value={newRoleForm.description}
-              onChange={(event) => setNewRoleForm((current) => ({ ...current, description: event.target.value }))}
-              placeholder="Short description"
-            />
-            <textarea
-              data-testid="new-role-prompt"
-              className="compact-prompt"
-              value={newRoleForm.systemPrompt}
-              onChange={(event) => setNewRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
-              placeholder="Role system prompt"
-            />
-          </div>
-          <button data-testid="create-role-button" className="primary-btn" type="button" onClick={() => void createRole()} disabled={creating || !bridgeReady}>
-            {creating ? "Creating..." : "Create Role"}
-          </button>
-        </div>
-        <div className="role-list" data-testid="role-list">
-          {roles.length ? roles.map((role) => (
-            <button
-              key={role.id}
-              data-testid={`role-card-${role.id}`}
-              className={`role-card${role.id === activeRoleId ? " active" : ""}`}
-              type="button"
-              disabled={!bridgeReady}
-              onClick={() => void openRole(role.id)}
-            >
-              {role.avatar_abs ? (
-                <img
-                  className="role-avatar"
-                  src={`file:///${role.avatar_abs.replace(/\\/g, "/")}`}
-                  alt={`${role.name} avatar`}
-                />
-              ) : null}
-              <div className="role-name">{role.name}</div>
-              <div className="role-desc">{role.description || "No description yet."}</div>
+          <div className="sidebar-top">
+            <button className="sidebar-entry" type="button" onClick={() => setShowNewRoleComposer((value) => !value)}>
+              <span className="sidebar-entry-icon sidebar-entry-new" aria-hidden="true" />
+              <span>新对话</span>
             </button>
-          )) : (
-            <div className="empty-card">No roles yet. Create one to start a dedicated conversation.</div>
-          )}
-        </div>
+            <button className="sidebar-entry" type="button">
+              <span className="sidebar-entry-icon sidebar-entry-search" aria-hidden="true" />
+              <span>搜索</span>
+            </button>
+            <button className="sidebar-entry" type="button" onClick={() => setShowRoleEditor((value) => !value)} disabled={!activeRoleId}>
+              <span className="sidebar-entry-icon sidebar-entry-role" aria-hidden="true" />
+              <span>角色</span>
+            </button>
+            {showNewRoleComposer ? (
+              <div className="create-form">
+                <input
+                  data-testid="new-role-name"
+                  value={newRoleForm.name}
+                  onChange={(event) => setNewRoleForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="New role name"
+                />
+                <input
+                  data-testid="new-role-description"
+                  value={newRoleForm.description}
+                  onChange={(event) => setNewRoleForm((current) => ({ ...current, description: event.target.value }))}
+                  placeholder="Short description"
+                />
+                <textarea
+                  data-testid="new-role-prompt"
+                  className="compact-prompt"
+                  value={newRoleForm.systemPrompt}
+                  onChange={(event) => setNewRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
+                  placeholder="Role system prompt"
+                />
+                <button data-testid="create-role-button" className="primary-btn" type="button" onClick={() => void createRole()} disabled={creating || !bridgeReady}>
+                  {creating ? "Creating..." : "Create Role"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <div className="role-list" data-testid="role-list">
+            {roles.length ? roles.map((role) => (
+              <button
+                key={role.id}
+                data-testid={`role-card-${role.id}`}
+                className={`role-card${role.id === activeRoleId ? " active" : ""}`}
+                type="button"
+                disabled={!bridgeReady}
+                onClick={() => void openRole(role.id)}
+              >
+                {role.avatar_abs ? (
+                  <img
+                    className="role-avatar"
+                    src={`file:///${role.avatar_abs.replace(/\\/g, "/")}`}
+                    alt={`${role.name} avatar`}
+                  />
+                ) : (
+                  <span className="role-avatar role-avatar-fallback">{role.name.slice(0, 1).toUpperCase()}</span>
+                )}
+                <span className="role-name">{role.name}</span>
+              </button>
+            )) : (
+              <div className="empty-card">No roles yet.</div>
+            )}
+          </div>
         </aside>
         <main className="chat-pane">
         <section className="hero">

@@ -71,6 +71,9 @@ function createWindow() {
               button.click();
               return true;
             };
+            if (!clickByText("新对话")) {
+              return { ok: false, reason: "new-chat-entry-missing" };
+            }
             let name, desc, prompt, create, hero;
             for (let i = 0; i < 40; i++) {
               name = document.querySelector('[data-testid="new-role-name"]');
@@ -122,7 +125,7 @@ function createWindow() {
             if (!hero.textContent || !hero.textContent.includes(roleBName)) {
               return { ok: false, reason: "second-role-not-opened", hero: hero.textContent || "" };
             }
-            if (!clickByText("Edit Role")) {
+            if (!clickByText("角色")) {
               return { ok: false, reason: "edit-role-toggle-missing" };
             }
             let editName, editDesc, editPrompt, saveRoleButton, pickAvatarButton, pickIllustrationsButton;

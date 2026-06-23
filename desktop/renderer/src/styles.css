@@ -246,53 +246,59 @@ button {
 }
 
 .role-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 18px 18px 18px 20px;
+  background: transparent;
+}
+
+.role-list {
+  display: grid;
+  align-content: start;
+  gap: 6px;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 24px;
-  background: transparent;
+  padding-right: 2px;
   scrollbar-color: #e7e1d7 transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
 
-.role-pane::-webkit-scrollbar {
+.role-list::-webkit-scrollbar {
   width: 10px;
 }
 
-.role-pane::-webkit-scrollbar-track {
+.role-list::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.role-pane::-webkit-scrollbar-thumb {
+.role-list::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   border-radius: 999px;
   background: #e7e1d7;
   background-clip: padding-box;
 }
 
-.role-pane::-webkit-scrollbar-thumb:hover {
+.role-list::-webkit-scrollbar-thumb:hover {
   background: rgba(202, 93, 46, 0.68);
   background-clip: padding-box;
 }
 
-.brand-block h1,
 .hero-panel h2,
 .panel-head h3 {
   margin: 0;
   font-family: Georgia, "Times New Roman", serif;
 }
 
-.brand-kicker,
 .hero-kicker {
   font-size: 12px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent-deep);
-}
-
-.brand-block p {
-  color: var(--muted);
 }
 
 .health-badge {
@@ -320,17 +326,15 @@ button {
 .create-form {
   display: grid;
   gap: 10px;
-  margin: 18px 0 14px;
+  margin-top: 12px;
 }
 
-.role-list,
 .event-list {
   display: grid;
   gap: 12px;
   margin-top: 20px;
 }
 
-.role-card,
 .empty-card,
 .hero-panel,
 .event-row {
@@ -340,17 +344,125 @@ button {
   box-shadow: var(--shadow);
 }
 
-.role-card {
+.sidebar-top {
+  display: grid;
+  gap: 4px;
+}
+
+.sidebar-entry {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 8px;
+  background: transparent;
+  color: #3f3f3f;
+  cursor: pointer;
+  font-size: 16px;
   text-align: left;
-  padding: 16px;
+}
+
+.sidebar-entry:hover,
+.sidebar-entry:focus-visible {
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.sidebar-entry:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.sidebar-entry-icon {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 20px;
+  color: #3f3f3f;
+}
+
+.sidebar-entry-new::before {
+  content: "";
+  position: absolute;
+  inset: 3px 4px 4px 3px;
+  border: 1.6px solid currentColor;
+  border-radius: 5px;
+}
+
+.sidebar-entry-new::after {
+  content: "";
+  position: absolute;
+  right: 1px;
+  top: 2px;
+  width: 9px;
+  height: 1.6px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(-45deg);
+  transform-origin: center;
+}
+
+.sidebar-entry-search::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 11px;
+  height: 11px;
+  border: 1.6px solid currentColor;
+  border-radius: 999px;
+}
+
+.sidebar-entry-search::after {
+  content: "";
+  position: absolute;
+  right: 2px;
+  bottom: 3px;
+  width: 8px;
+  height: 1.6px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(45deg);
+  transform-origin: center;
+}
+
+.sidebar-entry-role::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background:
+    radial-gradient(circle at 3px 3px, transparent 0 2.1px, currentColor 2.2px 3.4px, transparent 3.5px),
+    radial-gradient(circle at 11px 3px, transparent 0 2.1px, currentColor 2.2px 3.4px, transparent 3.5px),
+    radial-gradient(circle at 3px 11px, transparent 0 2.1px, currentColor 2.2px 3.4px, transparent 3.5px),
+    radial-gradient(circle at 11px 11px, transparent 0 2.1px, currentColor 2.2px 3.4px, transparent 3.5px);
+}
+
+.role-card {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #404040;
+  text-align: left;
+  padding: 6px 8px;
   cursor: pointer;
 }
 
 .role-card.active {
-  border-color: rgba(202, 93, 46, 0.45);
+  background: rgba(255, 255, 255, 0.52);
 }
 
-.role-avatar,
+.role-card:hover,
+.role-card:focus-visible {
+  background: rgba(255, 255, 255, 0.42);
+}
+
 .editor-avatar {
   display: block;
   width: 72px;
@@ -361,7 +473,28 @@ button {
   border: 1px solid var(--stroke);
 }
 
+.role-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(76, 48, 24, 0.12);
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.role-avatar-fallback {
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--accent-deep);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .role-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 700;
 }
 
