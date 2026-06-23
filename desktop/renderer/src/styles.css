@@ -88,10 +88,10 @@ button {
 
 .titlebar-sidebar span {
   position: relative;
-  width: 18px;
-  height: 16px;
-  border: 1.4px solid currentColor;
-  border-radius: 5px;
+  width: 14px;
+  height: 13px;
+  border: 1.3px solid currentColor;
+  border-radius: 4px;
 }
 
 .titlebar-sidebar span::before {
@@ -99,35 +99,35 @@ button {
   position: absolute;
   top: 2px;
   bottom: 2px;
-  left: 6px;
-  width: 1.4px;
+  left: 5px;
+  width: 1.3px;
   background: currentColor;
 }
 
 .titlebar-back span,
 .titlebar-forward span {
   position: relative;
-  width: 17px;
-  height: 15px;
+  width: 14px;
+  height: 12px;
 }
 
 .titlebar-back span::before,
 .titlebar-forward span::before {
   content: "";
   position: absolute;
-  top: 7px;
-  width: 15px;
-  height: 1.6px;
+  top: 6px;
+  width: 13px;
+  height: 1.5px;
   border-radius: 999px;
   background: currentColor;
 }
 
 .titlebar-back span::before {
-  left: 2px;
+  left: 1px;
 }
 
 .titlebar-forward span::before {
-  right: 2px;
+  right: 1px;
 }
 
 .titlebar-back span::after,
@@ -135,19 +135,19 @@ button {
   content: "";
   position: absolute;
   top: 3px;
-  width: 8px;
-  height: 8px;
-  border-bottom: 1.6px solid currentColor;
-  border-left: 1.6px solid currentColor;
+  width: 7px;
+  height: 7px;
+  border-bottom: 1.5px solid currentColor;
+  border-left: 1.5px solid currentColor;
 }
 
 .titlebar-back span::after {
-  left: 2px;
+  left: 1px;
   transform: rotate(45deg);
 }
 
 .titlebar-forward span::after {
-  right: 2px;
+  right: 1px;
   transform: rotate(225deg);
 }
 
@@ -161,7 +161,7 @@ button {
   height: 24px;
   padding: 0 8px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0;
   cursor: default;
 }
