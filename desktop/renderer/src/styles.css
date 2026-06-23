@@ -10,7 +10,7 @@
   --accent-deep: #8a3211;
   --stroke: rgba(76, 48, 24, 0.14);
   --shadow: 0 28px 60px rgba(75, 43, 18, 0.12);
-  --titlebar-height: 48px;
+  --titlebar-height: 30px;
   font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
 }
 
@@ -59,8 +59,8 @@ button {
 }
 
 .titlebar-left {
-  gap: 12px;
-  padding-left: 8px;
+  gap: 8px;
+  padding-left: 6px;
 }
 
 .titlebar-icon,
@@ -75,8 +75,8 @@ button {
 .titlebar-icon {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border-radius: 6px;
 }
@@ -87,8 +87,8 @@ button {
 
 .titlebar-sidebar span {
   position: relative;
-  width: 18px;
-  height: 16px;
+  width: 16px;
+  height: 14px;
   border: 1.5px solid currentColor;
   border-radius: 5px;
 }
@@ -105,8 +105,8 @@ button {
 
 .titlebar-back span,
 .titlebar-forward span {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-bottom: 1.7px solid currentColor;
   border-left: 1.7px solid currentColor;
 }
@@ -120,16 +120,16 @@ button {
 }
 
 .titlebar-menu {
-  gap: 4px;
+  gap: 2px;
   margin-left: 2px;
 }
 
 .titlebar-menu-item {
-  min-width: 50px;
-  height: 32px;
-  padding: 0 10px;
+  min-width: 44px;
+  height: 24px;
+  padding: 0 8px;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 13px;
   letter-spacing: 0;
   cursor: default;
 }
@@ -147,7 +147,7 @@ button {
 .window-control {
   display: grid;
   place-items: center;
-  width: 48px;
+  width: 46px;
   height: var(--titlebar-height);
   padding: 0;
 }
@@ -161,8 +161,8 @@ button {
 .window-maximize,
 .window-close {
   position: relative;
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
 }
 
 .window-minimize::before {
