@@ -3,11 +3,11 @@ import { cx } from "../shared/styles";
 
 const menuItems = ["文件", "编辑", "视图", "帮助"] as const;
 const titlebarIconClass =
-  "[-webkit-app-region:no-drag] m-0 grid h-[calc(var(--titlebar-height)_-_4px)] w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-inherit disabled:text-[#b8b8b8] enabled:hover:bg-black/5";
+  "[-webkit-app-region:no-drag] m-0 grid h-[calc(var(--titlebar-height)_+_1px)] w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-inherit disabled:text-[#b8b8b8] enabled:hover:bg-black/5";
 const titlebarArrowClass =
   "relative h-2.5 w-[13px] before:absolute before:top-[4.5px] before:h-[1.3px] before:w-[11px] before:rounded-full before:bg-current before:content-[''] after:absolute after:top-[2.5px] after:h-[5px] after:w-[5px] after:border-l-[1.3px] after:border-t-[1.3px] after:border-current after:content-['']";
 const windowControlClass =
-  "[-webkit-app-region:no-drag] m-0 grid h-[calc(var(--titlebar-height)_-_4px)] w-[46px] place-items-center border-0 bg-transparent p-0 text-inherit hover:bg-black/5";
+  "[-webkit-app-region:no-drag] m-0 grid h-[calc(var(--titlebar-height)_+_1px)] w-[46px] place-items-center border-0 bg-transparent p-0 text-inherit hover:bg-black/5";
 
 /** Renders the frameless desktop title bar and window controls. */
 export function TitleBar({
@@ -22,7 +22,7 @@ export function TitleBar({
   }
 
   return (
-    <header className="titlebar [-webkit-app-region:drag] flex h-[var(--titlebar-height)] select-none items-center justify-between bg-transparent text-[#747474]">
+    <header className="titlebar [-webkit-app-region:drag] flex h-[calc(var(--titlebar-height)+5px)] select-none items-center justify-between bg-transparent text-[#747474]">
       <div className="titlebar-left flex h-full items-center gap-0 pl-0.5">
         <button
           className={cx("titlebar-icon titlebar-sidebar", titlebarIconClass)}

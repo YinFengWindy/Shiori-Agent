@@ -33,8 +33,8 @@ export default {
         editor: "0 20px 60px rgba(0, 0, 0, 0.12)",
       },
       gridTemplateRows: {
-        app: "var(--titlebar-height) minmax(0, 1fr)",
-        chat: "60px minmax(0, 1fr)",
+        app: "calc(var(--titlebar-height) + 5px) minmax(0, 1fr)",
+        chat: "55px minmax(0, 1fr)",
         conversation: "auto minmax(0, 1fr) auto",
       },
     },
