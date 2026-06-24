@@ -5,11 +5,11 @@
 @layer base {
   :root {
     color-scheme: light;
-    --bg: #efe6d6;
-    --bg-soft: #f7f1e7;
-    --chat-bg: #fbf7f0;
-    --panel: rgba(255, 250, 242, 0.86);
-    --panel-strong: #fff7ee;
+    --bg: #d7e4ff;
+    --bg-soft: #eef1ff;
+    --chat-bg: rgba(247, 248, 255, 0.86);
+    --panel: rgba(248, 248, 255, 0.84);
+    --panel-strong: rgba(255, 255, 255, 0.9);
     --text: #1f1a15;
     --muted: #766554;
     --accent: #ca5d2e;
@@ -18,10 +18,11 @@
     --shadow: 0 28px 60px rgba(75, 43, 18, 0.12);
     --titlebar-height: 30px;
     --app-bg:
-      radial-gradient(circle at 0% 0%, rgba(249, 221, 231, 0.88) 0%, rgba(249, 221, 231, 0.34) 24%, transparent 48%),
-      radial-gradient(circle at 78% 16%, rgba(255, 243, 204, 0.72) 0%, rgba(255, 243, 204, 0.2) 28%, transparent 54%),
-      radial-gradient(circle at 100% 100%, rgba(246, 227, 234, 0.78) 0%, rgba(246, 227, 234, 0.16) 30%, transparent 58%),
-      linear-gradient(135deg, #fdf8ee 0%, #fbf1e6 34%, #f7e7ee 72%, #f8efea 100%);
+      radial-gradient(circle at 0% 0%, rgba(104, 171, 255, 0.78) 0%, rgba(104, 171, 255, 0.34) 24%, transparent 50%),
+      radial-gradient(circle at 48% 18%, rgba(173, 124, 255, 0.72) 0%, rgba(173, 124, 255, 0.24) 22%, transparent 46%),
+      radial-gradient(circle at 84% 12%, rgba(255, 226, 236, 0.88) 0%, rgba(255, 226, 236, 0.32) 18%, transparent 42%),
+      radial-gradient(circle at 92% 84%, rgba(101, 225, 255, 0.74) 0%, rgba(101, 225, 255, 0.2) 18%, transparent 40%),
+      linear-gradient(135deg, #d9e5ff 0%, #d2dcff 24%, #d8c7ff 56%, #f1d8ea 82%, #cdefff 100%);
     font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
   }
 
