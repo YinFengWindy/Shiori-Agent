@@ -17,7 +17,11 @@
     --stroke: rgba(76, 48, 24, 0.14);
     --shadow: 0 28px 60px rgba(75, 43, 18, 0.12);
     --titlebar-height: 30px;
-    --app-bg: linear-gradient(135deg, #fbeef2 0%, #fcf2ea 18%, #f8e8ee 58%, #f7e7ee 82%, #f9f0eb 100%);
+    --app-bg:
+      radial-gradient(circle at 0% 0%, rgba(249, 221, 231, 0.88) 0%, rgba(249, 221, 231, 0.34) 24%, transparent 48%),
+      radial-gradient(circle at 78% 16%, rgba(255, 243, 204, 0.72) 0%, rgba(255, 243, 204, 0.2) 28%, transparent 54%),
+      radial-gradient(circle at 100% 100%, rgba(246, 227, 234, 0.78) 0%, rgba(246, 227, 234, 0.16) 30%, transparent 58%),
+      linear-gradient(135deg, #fdf8ee 0%, #fbf1e6 34%, #f7e7ee 72%, #f8efea 100%);
     font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
   }
 
