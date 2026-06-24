@@ -63,7 +63,7 @@ export function RoleEditor({
     "ghost-btn danger cursor-pointer rounded-full border border-[rgba(143,43,24,0.22)] bg-[rgba(255,248,239,0.88)] px-[18px] py-3 text-[#8f2b18] disabled:cursor-default disabled:opacity-50";
 
   return (
-    <section className="role-editor scrollbar-soft scrollbar-soft-muted absolute bottom-6 right-6 top-20 z-[3] grid min-h-0 w-[min(420px,calc(100%-48px))] grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-auto rounded-[18px] border border-[#ededed] bg-white/95 p-[18px] shadow-editor">
+    <section className="role-editor scrollbar-soft scrollbar-soft-muted absolute bottom-6 right-6 top-20 z-[3] grid min-h-0 w-[calc(100%_-_48px)] max-w-[420px] grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-auto rounded-[18px] border border-[#ededed] bg-white/95 p-[18px] shadow-editor">
       <div className={panelHeadClass}>
         <h3 className={panelTitleClass}>Role Editor</h3>
         {roleFormDirty ? <span className="dirty-chip rounded-full border border-[rgba(138,91,17,0.18)] bg-[rgba(138,91,17,0.08)] px-3 py-2 text-xs text-[#8a5b11]">Unsaved changes</span> : null}
