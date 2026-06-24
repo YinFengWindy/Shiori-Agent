@@ -18,7 +18,7 @@
     "desktop:smoke": "npm --prefix desktop run build && npm --prefix desktop run smoke:desktop",
     "desktop:start": "npm --prefix desktop run start:built",
     "desktop:typecheck": "npm --prefix desktop run typecheck",
-    "dev": "npm run desktop:start",
+    "dev": "npm run desktop:dev",
     "lint": "eslint \"frontend/dashboard/src/**/*.{ts,tsx}\" \"plugins/**/*.ts\" \"types/**/*.d.ts\"",
     "typecheck": "tsc --noEmit"
   },
