@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { IpcMainInvokeEvent } from "electron";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
@@ -63,10 +63,11 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     if (process.env.MIRA_DESKTOP_PICK_IMAGES_FIXTURE === "1") {
       const fixtureDir = resolve(desktopRoot, ".smoke-fixtures");
       mkdirSync(fixtureDir, { recursive: true });
-      const avatarPath = resolve(fixtureDir, "avatar-smoke.png");
-      const illustrationPath = resolve(fixtureDir, "illustration-smoke.png");
-      writeFileSync(avatarPath, "avatar-smoke", { encoding: "utf8" });
-      writeFileSync(illustrationPath, "illustration-smoke", { encoding: "utf8" });
+      const sourceImagePath = resolve(desktopRoot, "..", "assets", "akashic-qq.jpg");
+      const avatarPath = resolve(fixtureDir, "avatar-smoke.jpg");
+      const illustrationPath = resolve(fixtureDir, "illustration-smoke.jpg");
+      copyFileSync(sourceImagePath, avatarPath);
+      copyFileSync(sourceImagePath, illustrationPath);
       return options?.multiple ? [avatarPath, illustrationPath] : [avatarPath];
     }
     const result = await dialog.showOpenDialog({
