@@ -1,6 +1,8 @@
 """Shared fixtures and test bootstrap helpers."""
 
 import asyncio
+import inspect
+import os
 import sys
 import types
 from datetime import datetime, timezone, timedelta
@@ -8,6 +10,12 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+VENV_SITE_PACKAGES = REPO_ROOT / ".venv" / "Lib" / "site-packages"
+if VENV_SITE_PACKAGES.exists():
+    sys.path.insert(0, str(VENV_SITE_PACKAGES))
+os.environ.setdefault("PYTHONPATH", str(VENV_SITE_PACKAGES))
 
 # Provide a lightweight openai stub in test env so imports do not fail
 # when optional runtime dependency is absent.
@@ -150,6 +158,24 @@ if "telegramify_markdown.converter" not in sys.modules:
     sys.modules["telegramify_markdown.converter"] = converter_stub
     sys.modules["telegramify_markdown.entity"] = entity_stub
 
+if "json_repair" not in sys.modules:
+    json_repair_stub = types.ModuleType("json_repair")
+
+    def repair_json(text, *args, **kwargs):
+        return text
+
+    json_repair_stub.repair_json = repair_json
+    sys.modules["json_repair"] = json_repair_stub
+
+if "uvicorn" not in sys.modules:
+    uvicorn_stub = types.ModuleType("uvicorn")
+
+    def run(*args, **kwargs):
+        raise RuntimeError("uvicorn stub: run() not expected in tests")
+
+    uvicorn_stub.run = run
+    sys.modules["uvicorn"] = uvicorn_stub
+
 from agent.scheduler import LatencyTracker, SchedulerService, ScheduledJob
 
 
@@ -234,3 +260,15 @@ async def drain_tasks():
             await asyncio.gather(*still_pending, return_exceptions=True)
         if done:
             await asyncio.gather(*done, return_exceptions=True)
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_pyfunc_call(pyfuncitem):
+    if "asyncio" not in pyfuncitem.keywords:
+        return None
+    test_func = pyfuncitem.obj
+    if not inspect.iscoroutinefunction(test_func):
+        return None
+    kwargs = {name: pyfuncitem.funcargs[name] for name in pyfuncitem._fixtureinfo.argnames}
+    asyncio.run(test_func(**kwargs))
+    return True
