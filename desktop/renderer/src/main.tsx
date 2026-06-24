@@ -58,6 +58,7 @@ function App(): React.ReactElement {
   const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
   const [newRoleForm, setNewRoleForm] = useState(createEmptyNewRoleForm);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
+  const openRoleRequestIdRef = useRef(0);
 
   function toggleSidebar(): void {
     if (sidebarCollapsed) {
@@ -338,11 +339,16 @@ function App(): React.ReactElement {
   }
 
   async function openRole(roleId: string, roleOverride: RoleRecord | null = null): Promise<void> {
+    const requestId = openRoleRequestIdRef.current + 1;
+    openRoleRequestIdRef.current = requestId;
     setActiveRoleId(roleId);
     const res = await window.miraDesktop.invoke({
       method: "session.openByRole",
       payload: { role_id: roleId },
     });
+    if (openRoleRequestIdRef.current !== requestId) {
+      return;
+    }
     if (res.error) {
       setError(res.error.message);
       return;
