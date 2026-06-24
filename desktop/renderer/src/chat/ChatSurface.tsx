@@ -61,7 +61,7 @@ export function ChatSurface({
             {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "M"}
           </span>
         )}
-        <div className="chat-header-title min-w-0 flex-1 truncate text-sm font-semibold text-[#1f1f1f]">{activeRole ? activeRole.name : "Select a role"}</div>
+        <div className="chat-header-title min-w-0 flex-1 truncate text-xs font-semibold text-[#1f1f1f]">{activeRole ? activeRole.name : "Select a role"}</div>
       </header>
       <section
         className="conversation-panel grid h-full min-h-0 grid-rows-conversation overflow-hidden bg-white bg-contain bg-center bg-no-repeat"
