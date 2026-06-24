@@ -8,6 +8,10 @@ export function toFileUrl(path: string): string {
     return encodeURIComponent(segment);
   });
 
+  if (/^[A-Za-z]:/.test(normalized)) {
+    return `file:///${encodedSegments.join("/")}`;
+  }
+
   if (normalized.startsWith("//")) {
     return `file://${encodedSegments.slice(2).join("/")}`;
   }
