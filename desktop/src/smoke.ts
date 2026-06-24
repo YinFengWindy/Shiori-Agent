@@ -149,8 +149,12 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             const composer = document.querySelector(".composer");
             const composerWrap = document.querySelector(".composer-wrap");
             const chatHeader = document.querySelector(".chat-header");
+            const composerTextarea = composer?.querySelector("textarea");
             if (!composer || !composerWrap || !conversationPanel || !chatHeader) {
               return { ok: false, reason: "composer-layout-missing" };
+            }
+            if (!composerTextarea) {
+              return { ok: false, reason: "composer-textarea-missing" };
             }
             const composerRect = composer.getBoundingClientRect();
             const composerWrapRect = composerWrap.getBoundingClientRect();
@@ -163,7 +167,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 height: chatHeaderRect.height,
               };
             }
-            if (Math.abs(composerRect.width - 550) > 1 || Math.abs(composerRect.height - 70) > 1) {
+            if (Math.abs(composerRect.width - 550) > 1 || composerRect.height < 60) {
               return {
                 ok: false,
                 reason: "composer-size-mismatch",
@@ -178,6 +182,36 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 composerBottom: composerRect.bottom,
                 wrapBottom: composerWrapRect.bottom,
                 conversationBottom: conversationRect.bottom,
+              };
+            }
+            const beforeHeight = composerRect.height;
+            const longDraft = Array.from({ length: 12 }, (_, index) => "smoke line " + index).join("\\n");
+            setFieldValue(composerTextarea, longDraft);
+            await sleep(100);
+            const expandedComposerRect = composer.getBoundingClientRect();
+            const textareaOverflowY = getComputedStyle(composerTextarea).overflowY;
+            if (expandedComposerRect.height <= beforeHeight + 20) {
+              return {
+                ok: false,
+                reason: "composer-did-not-expand",
+                beforeHeight,
+                afterHeight: expandedComposerRect.height,
+              };
+            }
+            if (composerTextarea.scrollHeight > composerTextarea.clientHeight + 1) {
+              return {
+                ok: false,
+                reason: "composer-textarea-scrollbar-visible",
+                scrollHeight: composerTextarea.scrollHeight,
+                clientHeight: composerTextarea.clientHeight,
+                overflowY: textareaOverflowY,
+              };
+            }
+            if (textareaOverflowY !== "hidden") {
+              return {
+                ok: false,
+                reason: "composer-textarea-overflow-not-hidden",
+                overflowY: textareaOverflowY,
               };
             }
             const roleAButton = findRoleButtonByName(roleAName);

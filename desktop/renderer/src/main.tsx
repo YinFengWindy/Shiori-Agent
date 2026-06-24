@@ -6,6 +6,7 @@ import { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel";
 import { RoleEditor } from "./roles/RoleEditor";
 import { RoleSidebar } from "./roles/RoleSidebar";
 import { toFileUrl } from "./shared/format";
+import { cx } from "./shared/styles";
 import type { EventLog, NewRoleFormState, RoleFormState, RoleRecord, SessionPayload } from "./shared/types";
 import { TitleBar } from "./shell/TitleBar";
 import "./styles.css";
@@ -576,10 +577,13 @@ function App(): React.ReactElement {
   }
 
   return (
-    <div className="app-frame">
+    <div className="app-frame grid h-screen grid-rows-app overflow-hidden bg-[var(--app-bg)]">
       <TitleBar sidebarCollapsed={sidebarCollapsed} onToggleSidebar={toggleSidebar} />
       <div
-        className={`desktop-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${resizingSidebar ? " sidebar-resizing" : ""}`}
+        className={cx(
+          "desktop-shell grid min-h-0 overflow-hidden bg-transparent",
+          resizingSidebar && "sidebar-resizing cursor-col-resize select-none",
+        )}
         style={{
           gridTemplateColumns: sidebarCollapsed ? "minmax(0, 1fr)" : `${sidebarWidth}px minmax(0, 1fr)`,
         }}
@@ -588,6 +592,7 @@ function App(): React.ReactElement {
           roles={roles}
           activeRoleId={activeRoleId}
           bridgeReady={bridgeReady}
+          collapsed={sidebarCollapsed}
           creating={creating}
           showNewRoleComposer={showNewRoleComposer}
           newRoleForm={newRoleForm}
@@ -598,7 +603,7 @@ function App(): React.ReactElement {
           onOpenRole={(roleId) => void openRole(roleId)}
           onBeginResize={beginSidebarResize}
         />
-        <main className="chat-pane">
+        <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden bg-white">
           <ChatSurface
             activeRole={activeRole}
             activeRoleId={activeRoleId}
