@@ -49,7 +49,7 @@ export function ChatSurface({
 
   return (
     <section className="chat-surface grid h-full min-h-0 grid-rows-chat bg-white">
-      <header className="chat-header flex min-w-0 items-center gap-3 border-b border-[#ededed] bg-white px-6" data-testid="session-hero">
+      <header className="chat-header flex min-w-0 items-center gap-3 border-b-[3px] border-[#ded7cb] bg-white px-6" data-testid="session-hero">
         {activeRole?.avatar_abs ? (
           <img
             className={headerAvatarClass}

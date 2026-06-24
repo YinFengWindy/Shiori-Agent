@@ -663,7 +663,7 @@ function App(): React.ReactElement {
           onOpenRole={(roleId) => void openRole(roleId)}
           onBeginResize={beginSidebarResize}
         />
-        <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-[16px] bg-white shadow-[0_18px_42px_rgba(75,43,18,0.12)] ring-1 ring-black/5">
+        <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-[16px] border-l-[3px] border-t-[3px] border-[#ded7cb] bg-white">
           <ChatSurface
             activeRole={activeRole}
             activeRoleId={activeRoleId}
