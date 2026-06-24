@@ -94,7 +94,12 @@ export function ChatSurface({
                     </span>
                   )
                 ) : null}
-                <div className={cx("message-body min-w-0 text-xs leading-5 text-[#1f1f1f]", message.role === "user" && "items-end")}>
+                <div className={cx("message-body flex min-w-0 flex-col text-xs leading-5 text-[#1f1f1f]", message.role === "user" && "items-end")}>
+                  {message.role !== "user" ? (
+                    <div className="message-author mb-1 text-[11px] font-medium leading-none text-[#b9b9b9]">
+                      {activeRole?.name || "Agent"}
+                    </div>
+                  ) : null}
                   <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
                   {message.timestamp ? (
                     <div className="message-time mt-1 text-[11px] text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100">
