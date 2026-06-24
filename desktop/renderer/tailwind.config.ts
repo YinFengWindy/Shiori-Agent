@@ -34,7 +34,7 @@ export default {
       },
       gridTemplateRows: {
         app: "var(--titlebar-height) minmax(0, 1fr)",
-        chat: "65px minmax(0, 1fr)",
+        chat: "70px minmax(0, 1fr)",
         conversation: "auto minmax(0, 1fr) auto",
       },
     },

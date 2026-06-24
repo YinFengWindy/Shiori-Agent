@@ -174,6 +174,34 @@ function App(): React.ReactElement {
     });
   }
 
+  /** Loads the authoritative session for a role without mutating renderer state. */
+  async function fetchRoleSession(roleId: string): Promise<{
+    error: string | null;
+    session: SessionPayload | null;
+  }> {
+    try {
+      const res = await window.miraDesktop.invoke({
+        method: "session.openByRole",
+        payload: { role_id: roleId },
+      });
+      if (res.error) {
+        return {
+          error: res.error.message,
+          session: null,
+        };
+      }
+      return {
+        error: null,
+        session: res.payload.session as SessionPayload,
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        session: null,
+      };
+    }
+  }
+
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 2200);
@@ -341,19 +369,16 @@ function App(): React.ReactElement {
   async function openRole(roleId: string, roleOverride: RoleRecord | null = null): Promise<void> {
     const requestId = openRoleRequestIdRef.current + 1;
     openRoleRequestIdRef.current = requestId;
-    setActiveRoleId(roleId);
-    const res = await window.miraDesktop.invoke({
-      method: "session.openByRole",
-      payload: { role_id: roleId },
-    });
+    const { error: sessionError, session } = await fetchRoleSession(roleId);
     if (openRoleRequestIdRef.current !== requestId) {
       return;
     }
-    if (res.error) {
-      setError(res.error.message);
+    if (!session) {
+      setError(sessionError ?? "failed to open role session");
       return;
     }
-    setActiveSession(res.payload.session as SessionPayload);
+    setActiveRoleId(roleId);
+    setActiveSession(session);
     setError("");
     const role = roleOverride ?? roles.find((item) => item.id === roleId) ?? null;
     if (role) {
@@ -372,7 +397,7 @@ function App(): React.ReactElement {
       setActiveIllustration(
         chooseIllustration(
           role,
-          res.payload.session as SessionPayload,
+          session,
           savedIllustration,
         ),
       );
@@ -383,30 +408,59 @@ function App(): React.ReactElement {
 
   async function sendMessage(): Promise<void> {
     const content = draft.trim();
-    if (!content || !activeRoleId) return;
+    const roleId = activeRoleId;
+    const previousSession = activeSession;
+    const sessionKey = activeSession?.key ?? "";
+    if (!content || !roleId || !sessionKey) return;
     setSending(true);
     setError("");
     setDraft("");
     setActiveSession((current) =>
-      current
+      current?.key === sessionKey
         ? {
             ...current,
             messages: [...current.messages, { role: "user", content }],
           }
         : current,
     );
-    const res = await window.miraDesktop.invoke({
-      method: "chat.send",
-      payload: { role_id: activeRoleId, content },
-    });
-    if (res.error) {
+    try {
+      const res = await window.miraDesktop.invoke({
+        method: "chat.send",
+        payload: { role_id: roleId, content },
+      });
+      if (res.error) {
+        const { session: recoveredSession } = await fetchRoleSession(roleId);
+        if (recoveredSession) {
+          setActiveSession((current) =>
+            current?.key === sessionKey ? recoveredSession : current,
+          );
+        } else if (previousSession) {
+          setActiveSession((current) =>
+            current?.key === sessionKey ? previousSession : current,
+          );
+        }
+        setError(res.error.message);
+        return;
+      }
+      const nextSession = res.payload.session as SessionPayload;
+      setActiveSession((current) =>
+        current?.key === nextSession.key ? nextSession : current,
+      );
+    } catch (error) {
+      const { session: recoveredSession } = await fetchRoleSession(roleId);
+      if (recoveredSession) {
+        setActiveSession((current) =>
+          current?.key === sessionKey ? recoveredSession : current,
+        );
+      } else if (previousSession) {
+        setActiveSession((current) =>
+          current?.key === sessionKey ? previousSession : current,
+        );
+      }
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
       setSending(false);
-      setError(res.error.message);
-      return;
     }
-    setActiveSession(res.payload.session as SessionPayload);
-    setError("");
-    setSending(false);
   }
 
   async function cancelMessage(): Promise<void> {
@@ -609,7 +663,7 @@ function App(): React.ReactElement {
           onOpenRole={(roleId) => void openRole(roleId)}
           onBeginResize={beginSidebarResize}
         />
-        <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden bg-white">
+        <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-[24px] bg-white">
           <ChatSurface
             activeRole={activeRole}
             activeRoleId={activeRoleId}
