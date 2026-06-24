@@ -45,11 +45,12 @@ export function ChatSurface({
 
   const headerAvatarClass =
     "chat-header-avatar grid h-[34px] w-[34px] flex-none place-items-center rounded-full border border-black/10 object-cover";
-  const bubbleClass = "bubble max-w-[82%] rounded-[18px] border border-stroke bg-panel px-4 py-3.5";
+  const agentAvatarClass =
+    "message-avatar grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-black/10 bg-[#f6f6f6] object-cover";
 
   return (
     <section className="chat-surface grid h-full min-h-0 grid-rows-chat bg-white">
-      <header className="chat-header flex min-w-0 items-center gap-3 border-b border-[#ded7cb] bg-white px-6" data-testid="session-hero">
+      <header className="chat-header flex min-w-0 items-center gap-3 border-b border-[#ded7cb] bg-white pl-[23px] pr-6" data-testid="session-hero">
         {activeRole?.avatar_abs ? (
           <img
             className={headerAvatarClass}
@@ -75,16 +76,33 @@ export function ChatSurface({
             <article
               key={`${message.id ?? message.role}-${index}`}
               className={cx(
-                bubbleClass,
-                `bubble-${message.role}`,
-                message.role === "user"
-                  ? "justify-self-end bg-gradient-to-br from-[rgba(202,93,46,0.18)] to-[rgba(255,245,236,0.92)]"
-                  : "justify-self-start",
+                "group max-w-[82%]",
+                message.role === "user" ? "ml-auto text-right" : "mr-auto",
               )}
             >
-              <div className="bubble-role mb-1.5 text-[11px] uppercase tracking-[0.08em] text-accent-deep">{message.role}</div>
-              <div className="bubble-content text-xs leading-5">{message.content}</div>
-              {message.timestamp ? <div className="bubble-time mt-2 text-[11px] text-muted">{formatTimestamp(message.timestamp)}</div> : null}
+              <div className={cx("message-row flex items-start gap-3", message.role === "user" && "flex-row-reverse")}>
+                {message.role !== "user" ? (
+                  activeRole?.avatar_abs ? (
+                    <img
+                      className={agentAvatarClass}
+                      src={toFileUrl(activeRole.avatar_abs)}
+                      alt={`${activeRole.name} avatar`}
+                    />
+                  ) : (
+                    <span className={cx(agentAvatarClass, "text-xs font-bold text-accent-deep")}>
+                      {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "A"}
+                    </span>
+                  )
+                ) : null}
+                <div className={cx("message-body min-w-0 text-xs leading-5 text-[#1f1f1f]", message.role === "user" && "items-end")}>
+                  <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
+                  {message.timestamp ? (
+                    <div className="message-time mt-1 text-[11px] text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                      {formatTimestamp(message.timestamp)}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </article>
           )) : (
             <div className={cx("empty-card", cardClass, "p-4")}>No messages yet. Send the first message to this role.</div>
