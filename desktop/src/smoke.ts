@@ -160,7 +160,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             const composerWrapRect = composerWrap.getBoundingClientRect();
             const conversationRect = conversationPanel.getBoundingClientRect();
             const chatHeaderRect = chatHeader.getBoundingClientRect();
-            if (Math.abs(chatHeaderRect.height - 55) > 1) {
+            if (Math.abs(chatHeaderRect.height - 60) > 1) {
               return {
                 ok: false,
                 reason: "chat-header-height-mismatch",
