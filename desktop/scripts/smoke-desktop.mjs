@@ -4,11 +4,11 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, "..");
-const electronExe = resolve(desktopRoot, "node_modules", "electron", "dist", "electron.exe");
+const devScript = resolve(here, "dev.mjs");
 
 const proc = spawn(
-  electronExe,
-  ["."],
+  process.execPath,
+  [devScript],
   {
     cwd: desktopRoot,
     stdio: ["ignore", "pipe", "pipe"],
