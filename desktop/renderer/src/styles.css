@@ -17,7 +17,7 @@
     --stroke: rgba(76, 48, 24, 0.14);
     --shadow: 0 28px 60px rgba(75, 43, 18, 0.12);
     --titlebar-height: 30px;
-    --app-bg: linear-gradient(135deg, #f6e8b8 0%, #f7ecd7 24%, #f5dee8 68%, #f7ece5 100%);
+    --app-bg: linear-gradient(135deg, #fbf4d8 0%, #faf2e3 24%, #f6e6ec 68%, #f8efe8 100%);
     font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
   }
 
