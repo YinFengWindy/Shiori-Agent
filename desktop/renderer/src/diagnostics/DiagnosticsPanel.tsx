@@ -1,5 +1,5 @@
 import type { EventLog } from "../shared/types";
-import { cardClass, cx, panelHeadClass, panelTitleClass } from "../shared/styles";
+import { bodyTextClass, cardClass, cx, panelHeadClass, panelTitleClass } from "../shared/styles";
 
 type DiagnosticsPanelProps = {
   error: string;
@@ -16,7 +16,7 @@ export function DiagnosticsPanel({ error, events, expanded }: DiagnosticsPanelPr
           <h3 className={panelTitleClass}>Bridge Events</h3>
           {error ? <span className="error-chip rounded-full border border-[rgba(138,50,17,0.18)] bg-[rgba(138,50,17,0.1)] px-3 py-2 text-accent-deep">{error}</span> : null}
         </div>
-        <div className="event-list mt-5 grid content-start gap-3">
+        <div className={cx("event-list mt-5 grid content-start gap-3", bodyTextClass)}>
           {events.length ? events.map((event, index) => (
             <article key={`${event.method}-${index}`} className={cx("event-row", cardClass, "p-4")}>
               <div className="event-method mb-2 font-bold text-accent-deep">{event.method}</div>

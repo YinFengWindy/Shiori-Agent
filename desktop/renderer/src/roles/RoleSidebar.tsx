@@ -1,6 +1,6 @@
 import type React from "react";
 import { toFileUrl } from "../shared/format";
-import { cardClass, cx, inputClass, primaryButtonClass, textareaClass } from "../shared/styles";
+import { bodyTextClass, cardClass, cx, inputClass, primaryButtonClass, textareaClass } from "../shared/styles";
 import type { NewRoleFormState, RoleRecord } from "../shared/types";
 
 type RoleSidebarProps = {
@@ -36,7 +36,7 @@ export function RoleSidebar({
   onBeginResize,
 }: RoleSidebarProps) {
   const sidebarEntryClass =
-    "sidebar-entry grid min-h-[42px] grid-cols-[24px_1fr] items-center gap-3 rounded-[10px] border-0 bg-transparent px-2 py-0 text-left text-base text-[#3f3f3f] hover:bg-white/40 focus-visible:bg-white/40 disabled:cursor-default disabled:opacity-[0.45]";
+    "sidebar-entry grid min-h-[42px] grid-cols-[24px_1fr] items-center gap-3 rounded-[10px] border-0 bg-transparent px-2 py-0 text-left text-sm text-[#3f3f3f] hover:bg-white/40 focus-visible:bg-white/40 disabled:cursor-default disabled:opacity-[0.45]";
   const roleCardClass =
     "role-card grid min-h-11 grid-cols-[32px_1fr] items-center gap-2.5 rounded-[10px] border-0 bg-transparent px-2 py-1.5 text-left text-[#404040] hover:bg-white/40 focus-visible:bg-white/40 disabled:cursor-default disabled:opacity-60";
   const roleAvatarClass =
@@ -91,13 +91,13 @@ export function RoleSidebar({
               onChange={(event) => onUpdateNewRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
               placeholder="Role system prompt"
             />
-            <button data-testid="create-role-button" className={cx("primary-btn", primaryButtonClass)} type="button" onClick={onCreateRole} disabled={creating || !bridgeReady}>
+            <button data-testid="create-role-button" className={cx("primary-btn text-sm", primaryButtonClass)} type="button" onClick={onCreateRole} disabled={creating || !bridgeReady}>
               {creating ? "Creating..." : "Create Role"}
             </button>
           </div>
         ) : null}
       </div>
-      <div className="role-list scrollbar-soft scrollbar-soft-accent grid min-h-0 content-start gap-1.5 overflow-x-hidden overflow-y-auto pr-0.5" data-testid="role-list">
+      <div className={cx("role-list scrollbar-soft scrollbar-soft-accent grid min-h-0 content-start gap-1.5 overflow-x-hidden overflow-y-auto pr-0.5", bodyTextClass)} data-testid="role-list">
         {roles.length ? roles.map((role) => (
           <button
             key={role.id}
@@ -116,7 +116,7 @@ export function RoleSidebar({
             ) : (
               <span className={cx(roleAvatarClass, "role-avatar-fallback bg-white/55 text-sm font-bold text-accent-deep")}>{role.name.slice(0, 1).toUpperCase()}</span>
             )}
-            <span className="role-name min-w-0 truncate font-bold">{role.name}</span>
+            <span className="role-name min-w-0 truncate font-semibold">{role.name}</span>
           </button>
         )) : (
           <div className={cx("empty-card", cardClass, "p-4")}>No roles yet.</div>

@@ -6,6 +6,9 @@ export function cx(...classes: Array<string | false | null | undefined>) {
 /** Shared card surface used by empty states and diagnostic rows. */
 export const cardClass = "rounded-[18px] border border-stroke bg-panel";
 
+/** Shared small-body text class for non-titlebar desktop content. */
+export const bodyTextClass = "text-xs leading-5";
+
 /** Shared input styling for form controls outside the chat composer. */
 export const inputClass =
   "w-full rounded-md border border-stroke bg-[rgba(255,252,246,0.95)] px-3.5 py-3 text-text transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";

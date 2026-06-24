@@ -1,7 +1,7 @@
 import type React from "react";
 import { useLayoutEffect, useRef } from "react";
 import { formatTimestamp, toFileUrl } from "../shared/format";
-import { cardClass, cx, ghostButtonClass } from "../shared/styles";
+import { bodyTextClass, cardClass, cx, ghostButtonClass } from "../shared/styles";
 import type { RoleRecord, SessionPayload } from "../shared/types";
 
 type ChatSurfaceProps = {
@@ -70,7 +70,7 @@ export function ChatSurface({
         } : undefined}
       >
         {notice ? <div className="notice-chip rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
-        <div className="conversation-list scrollbar-soft scrollbar-soft-muted grid min-h-0 content-start gap-3 overflow-auto px-6 pb-5 pt-7 md:px-12 lg:px-20 xl:px-[132px]">
+        <div className={cx("conversation-list scrollbar-soft scrollbar-soft-muted grid min-h-0 content-start gap-3 overflow-auto px-6 pb-5 pt-7 md:px-12 lg:px-20 xl:px-[132px]", bodyTextClass)}>
           {activeSession?.messages.length ? activeSession.messages.map((message, index) => (
             <article
               key={`${message.id ?? message.role}-${index}`}
@@ -82,9 +82,9 @@ export function ChatSurface({
                   : "justify-self-start",
               )}
             >
-              <div className="bubble-role mb-1.5 text-xs uppercase tracking-[0.08em] text-accent-deep">{message.role}</div>
-              <div className="bubble-content">{message.content}</div>
-              {message.timestamp ? <div className="bubble-time mt-2 text-xs text-muted">{formatTimestamp(message.timestamp)}</div> : null}
+              <div className="bubble-role mb-1.5 text-[11px] uppercase tracking-[0.08em] text-accent-deep">{message.role}</div>
+              <div className="bubble-content text-xs leading-5">{message.content}</div>
+              {message.timestamp ? <div className="bubble-time mt-2 text-[11px] text-muted">{formatTimestamp(message.timestamp)}</div> : null}
             </article>
           )) : (
             <div className={cx("empty-card", cardClass, "p-4")}>No messages yet. Send the first message to this role.</div>
@@ -95,7 +95,7 @@ export function ChatSurface({
           <div className="composer grid w-full max-w-[550px] flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#e4e4e4] bg-white px-3 pb-2 pt-2.5">
             <textarea
               ref={textareaRef}
-              className="min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-[13px] leading-[1.35] text-[#1f1f1f] outline-none"
+              className="min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-xs leading-5 text-[#1f1f1f] outline-none"
               rows={1}
               value={draft}
               onChange={(event) => onUpdateDraft(event.target.value)}
@@ -106,7 +106,7 @@ export function ChatSurface({
                 <span className="relative h-4 w-4 before:absolute before:left-[7px] before:top-px before:h-3.5 before:w-[1.5px] before:rounded-full before:bg-current before:content-[''] after:absolute after:left-px after:top-[7px] after:h-[1.5px] after:w-3.5 after:rounded-full after:bg-current after:content-['']" />
               </button>
               <div className="composer-spacer flex-1" />
-              <button className={cx("ghost-btn composer-cancel px-3 py-1.5 text-[13px] disabled:hidden", ghostButtonClass)} type="button" onClick={onCancelMessage} disabled={!activeRoleId || !sending || !bridgeReady}>
+              <button className={cx("ghost-btn composer-cancel px-3 py-1.5 text-xs disabled:hidden", ghostButtonClass)} type="button" onClick={onCancelMessage} disabled={!activeRoleId || !sending || !bridgeReady}>
                 Cancel
               </button>
               <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="Send message" onClick={onSendMessage} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>

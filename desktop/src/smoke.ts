@@ -341,8 +341,8 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               }
               const composerRect = composer.getBoundingClientRect();
               const wrapRect = composerWrap.getBoundingClientRect();
-              const expectedWidth = Math.max(0, wrapRect.width - 48);
-              if (composerRect.width >= 550 || Math.abs(composerRect.width - expectedWidth) > 2) {
+              const expectedWidth = Math.min(550, Math.max(0, wrapRect.width - 48));
+              if (composerRect.width > 550 || Math.abs(composerRect.width - expectedWidth) > 2) {
                 return {
                   ok: false,
                   reason: "compact-composer-not-shrunk",

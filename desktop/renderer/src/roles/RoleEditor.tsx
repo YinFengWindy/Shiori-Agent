@@ -1,6 +1,7 @@
 import type React from "react";
 import { toFileUrl } from "../shared/format";
 import {
+  bodyTextClass,
   cardClass,
   cx,
   ghostButtonClass,
@@ -58,7 +59,7 @@ export function RoleEditor({
   onResetRoleForm,
   onSaveRole,
 }: RoleEditorProps) {
-  const labelClass = "grid gap-1.5 text-sm text-text";
+  const labelClass = cx("grid gap-1.5 text-xs text-text", bodyTextClass);
   const ghostDangerButtonClass =
     "ghost-btn danger cursor-pointer rounded-full border border-[rgba(143,43,24,0.22)] bg-[rgba(255,248,239,0.88)] px-[18px] py-3 text-[#8f2b18] disabled:cursor-default disabled:opacity-50";
 
@@ -156,7 +157,7 @@ export function RoleEditor({
             <button className={cx("ghost-btn", ghostButtonClass)} type="button" onClick={onResetRoleForm} disabled={!roleFormDirty}>
               Reset
             </button>
-            <button data-testid="save-role-button" className={cx("primary-btn", primaryButtonClass)} type="button" onClick={onSaveRole} disabled={savingRole || !activeRoleId || !roleFormDirty || !bridgeReady}>
+            <button data-testid="save-role-button" className={cx("primary-btn text-sm", primaryButtonClass)} type="button" onClick={onSaveRole} disabled={savingRole || !activeRoleId || !roleFormDirty || !bridgeReady}>
               {savingRole ? "Saving..." : "Save Role"}
             </button>
           </div>
