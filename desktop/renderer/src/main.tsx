@@ -59,6 +59,33 @@ function App(): React.ReactElement {
   const [newRoleForm, setNewRoleForm] = useState(createEmptyNewRoleForm);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
+  const activeRoleIdRef = useRef("");
+  const roleFormRef = useRef<RoleFormState>(createEmptyRoleForm());
+  const newRoleFormRef = useRef<NewRoleFormState>(createEmptyNewRoleForm());
+
+  useEffect(() => {
+    roleFormRef.current = roleForm;
+  }, [roleForm]);
+
+  useEffect(() => {
+    newRoleFormRef.current = newRoleForm;
+  }, [newRoleForm]);
+
+  function updateRoleForm(next: React.SetStateAction<RoleFormState>): void {
+    const resolved = typeof next === "function"
+      ? next(roleFormRef.current)
+      : next;
+    roleFormRef.current = resolved;
+    setRoleForm(resolved);
+  }
+
+  function updateNewRoleForm(next: React.SetStateAction<NewRoleFormState>): void {
+    const resolved = typeof next === "function"
+      ? next(newRoleFormRef.current)
+      : next;
+    newRoleFormRef.current = resolved;
+    setNewRoleForm(resolved);
+  }
 
   function toggleSidebar(): void {
     if (sidebarCollapsed) {
@@ -142,6 +169,7 @@ function App(): React.ReactElement {
     } else {
       window.localStorage.removeItem("miraDesktop.activeRoleId");
     }
+    activeRoleIdRef.current = activeRoleId;
   }, [activeRoleId]);
 
   useEffect(() => {
@@ -298,7 +326,7 @@ function App(): React.ReactElement {
         return;
       }
       const preferredRoleId =
-        nextRoles.find((item) => item.id === activeRoleId)?.id ??
+        nextRoles.find((item) => item.id === activeRoleIdRef.current)?.id ??
         nextRoles.find((item) => item.id === window.localStorage.getItem("miraDesktop.activeRoleId"))?.id ??
         nextRoles[0]?.id;
       if (preferredRoleId) {
@@ -336,8 +364,9 @@ function App(): React.ReactElement {
     if (!nextRoles) {
       return;
     }
-    if (activeRoleId) {
-      const activeRole = nextRoles.find((item) => item.id === activeRoleId) ?? null;
+    const currentRoleId = activeRoleIdRef.current;
+    if (currentRoleId) {
+      const activeRole = nextRoles.find((item) => item.id === currentRoleId) ?? null;
       if (activeRole) {
         await openRole(activeRole.id, activeRole);
       } else if (nextRoles[0]) {
@@ -377,12 +406,16 @@ function App(): React.ReactElement {
       setError(sessionError ?? "failed to open role session");
       return;
     }
+    const latestRoles = await loadRolesFromBridge();
+    if (openRoleRequestIdRef.current !== requestId) {
+      return;
+    }
     setActiveRoleId(roleId);
     setActiveSession(session);
     setError("");
-    const role = roleOverride ?? roles.find((item) => item.id === roleId) ?? null;
+    const role = roleOverride ?? latestRoles?.find((item) => item.id === roleId) ?? roles.find((item) => item.id === roleId) ?? null;
     if (role) {
-      setRoleForm({
+      updateRoleForm({
         name: role.name,
         description: role.description,
         systemPrompt: role.system_prompt,
@@ -478,8 +511,8 @@ function App(): React.ReactElement {
   }
 
   async function createRole(): Promise<void> {
-    const name = newRoleForm.name.trim();
-    const systemPrompt = newRoleForm.systemPrompt.trim();
+    const name = newRoleFormRef.current.name.trim();
+    const systemPrompt = newRoleFormRef.current.systemPrompt.trim();
     if (!name || !systemPrompt) {
       setError("Role name and system prompt are required.");
       return;
@@ -490,7 +523,7 @@ function App(): React.ReactElement {
       method: "roles.create",
       payload: {
         name,
-        description: newRoleForm.description,
+        description: newRoleFormRef.current.description,
         system_prompt: systemPrompt,
       },
     });
@@ -500,8 +533,9 @@ function App(): React.ReactElement {
       return;
     }
     const role = res.payload.role as RoleRecord;
-    setNewRoleForm(createEmptyNewRoleForm());
+    updateNewRoleForm(createEmptyNewRoleForm());
     const nextRoles = await loadRolesFromBridge();
+    activeRoleIdRef.current = role.id;
     setNotice("Role created.");
     await openRole(role.id, nextRoles?.find((item) => item.id === role.id) ?? role);
   }
@@ -510,15 +544,16 @@ function App(): React.ReactElement {
     if (!activeRoleId) return;
     setSavingRole(true);
     setError("");
+    const nextRoleForm = roleFormRef.current;
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
         role_id: activeRoleId,
-        name: roleForm.name,
-        description: roleForm.description,
-        system_prompt: roleForm.systemPrompt,
-        avatar_source: roleForm.avatarSource || undefined,
-        illustration_sources: roleForm.illustrationSources,
+        name: nextRoleForm.name,
+        description: nextRoleForm.description,
+        system_prompt: nextRoleForm.systemPrompt,
+        avatar_source: nextRoleForm.avatarSource || undefined,
+        illustration_sources: nextRoleForm.illustrationSources,
         clear_avatar: clearAvatar,
         clear_illustrations: clearIllustrations,
       },
@@ -530,7 +565,7 @@ function App(): React.ReactElement {
     }
     const updated = res.payload.role as RoleRecord;
     const nextRoles = await loadRolesFromBridge();
-    setRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [] }));
+    updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [] }));
     setClearAvatar(false);
     setClearIllustrations(false);
     setNotice("Role saved.");
@@ -562,24 +597,24 @@ function App(): React.ReactElement {
     const files = await window.miraDesktop.pickImages({ multiple: false });
     if (!files[0]) return;
     setClearAvatar(false);
-    setRoleForm((current) => ({ ...current, avatarSource: files[0] }));
+    updateRoleForm((current) => ({ ...current, avatarSource: files[0] }));
   }
 
   async function pickIllustrations(): Promise<void> {
     const files = await window.miraDesktop.pickImages({ multiple: true });
     if (!files.length) return;
     setClearIllustrations(false);
-    setRoleForm((current) => ({ ...current, illustrationSources: files }));
+    updateRoleForm((current) => ({ ...current, illustrationSources: files }));
   }
 
   function clearAvatarSelection(): void {
     setClearAvatar(true);
-    setRoleForm((current) => ({ ...current, avatarSource: "" }));
+    updateRoleForm((current) => ({ ...current, avatarSource: "" }));
   }
 
   function clearIllustrationsSelection(): void {
     setClearIllustrations(true);
-    setRoleForm((current) => ({ ...current, illustrationSources: [] }));
+    updateRoleForm((current) => ({ ...current, illustrationSources: [] }));
     setActiveIllustration("");
   }
 
@@ -624,7 +659,7 @@ function App(): React.ReactElement {
 
   function resetRoleForm(): void {
     if (!activeRole) return;
-    setRoleForm({
+    updateRoleForm({
       name: activeRole.name,
       description: activeRole.description,
       systemPrompt: activeRole.system_prompt,
@@ -658,7 +693,7 @@ function App(): React.ReactElement {
           newRoleForm={newRoleForm}
           onToggleNewRoleComposer={() => setShowNewRoleComposer((value) => !value)}
           onToggleRoleEditor={() => setShowRoleEditor((value) => !value)}
-          onUpdateNewRoleForm={setNewRoleForm}
+          onUpdateNewRoleForm={updateNewRoleForm}
           onCreateRole={() => void createRole()}
           onOpenRole={(roleId) => void openRole(roleId)}
           onBeginResize={beginSidebarResize}
@@ -691,7 +726,7 @@ function App(): React.ReactElement {
               roleForm={roleForm}
               roleFormDirty={roleFormDirty}
               savingRole={savingRole}
-              onUpdateRoleForm={setRoleForm}
+              onUpdateRoleForm={updateRoleForm}
               onSetActiveIllustration={setActiveIllustration}
               onRememberIllustration={(roleId, illustration) => void rememberIllustration(roleId, illustration)}
               onPickAvatar={() => void pickAvatar()}
