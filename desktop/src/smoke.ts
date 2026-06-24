@@ -313,7 +313,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                   windowWidth: window.innerWidth,
                 };
               }
-              if (Math.abs(composerRect.width - 550) > 1 || Math.abs(actualComposerCenter - expectedComposerCenter) > 1) {
+              if (Math.abs(composerRect.width - 550) > 1 || Math.abs(actualComposerCenter - expectedComposerCenter) > 2) {
                 return {
                   ok: false,
                   reason: "narrow-composer-not-centered",

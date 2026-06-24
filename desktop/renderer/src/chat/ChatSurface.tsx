@@ -45,11 +45,11 @@ export function ChatSurface({
 
   const headerAvatarClass =
     "chat-header-avatar grid h-[34px] w-[34px] flex-none place-items-center rounded-full border border-black/10 object-cover";
-  const bubbleClass = "bubble max-w-[82%] rounded-[18px] border border-stroke bg-panel px-4 py-3.5 shadow-panel";
+  const bubbleClass = "bubble max-w-[82%] rounded-[18px] border border-stroke bg-panel px-4 py-3.5";
 
   return (
     <section className="chat-surface grid h-full min-h-0 grid-rows-chat bg-white">
-      <header className="chat-header flex min-w-0 items-center gap-3 border-b-[3px] border-[#ded7cb] bg-white px-6" data-testid="session-hero">
+      <header className="chat-header flex min-w-0 items-center gap-3 border-b border-[#ded7cb] bg-white px-6" data-testid="session-hero">
         {activeRole?.avatar_abs ? (
           <img
             className={headerAvatarClass}
@@ -92,7 +92,7 @@ export function ChatSurface({
           <div ref={conversationEndRef} />
         </div>
         <div className="composer-wrap flex min-h-0 min-w-0 items-end justify-center overflow-visible px-6 pb-[22px]">
-          <div className="composer grid w-full max-w-[550px] flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#e4e4e4] bg-white px-3 pb-2 pt-2.5 shadow-composer">
+          <div className="composer grid w-full max-w-[550px] flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#e4e4e4] bg-white px-3 pb-2 pt-2.5">
             <textarea
               ref={textareaRef}
               className="min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-[13px] leading-[1.35] text-[#1f1f1f] outline-none"

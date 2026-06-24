@@ -4,7 +4,7 @@ export function cx(...classes: Array<string | false | null | undefined>) {
 }
 
 /** Shared card surface used by empty states and diagnostic rows. */
-export const cardClass = "rounded-[18px] border border-stroke bg-panel shadow-panel";
+export const cardClass = "rounded-[18px] border border-stroke bg-panel";
 
 /** Shared input styling for form controls outside the chat composer. */
 export const inputClass =
