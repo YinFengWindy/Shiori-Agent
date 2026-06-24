@@ -73,11 +73,11 @@ export function ChatSurface({
         {notice ? <div className="notice-chip rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
         <div className={cx("conversation-list scrollbar-soft scrollbar-soft-muted grid min-h-0 content-start gap-3 overflow-auto px-6 pb-5 pt-7 md:px-12 lg:px-20 xl:px-[132px]", bodyTextClass)}>
           {activeSession?.messages.length ? activeSession.messages.map((message, index) => (
-            <article
+              <article
               key={`${message.id ?? message.role}-${index}`}
               className={cx(
                 "group max-w-[82%]",
-                message.role === "user" ? "ml-auto text-right" : "mr-auto",
+                message.role === "user" ? "ml-auto translate-x-[2px] text-right" : "mr-auto -translate-x-[2px]",
               )}
             >
               <div className={cx("message-row flex items-start gap-3", message.role === "user" && "flex-row-reverse")}>
