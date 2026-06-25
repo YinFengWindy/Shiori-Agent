@@ -1,7 +1,7 @@
 import type React from "react";
 import { useLayoutEffect, useRef } from "react";
 import { formatTimestamp, toFileUrl } from "../shared/format";
-import { bodyTextClass, cx, ghostButtonClass } from "../shared/styles";
+import { cx, ghostButtonClass } from "../shared/styles";
 import type { RoleRecord, SessionPayload } from "../shared/types";
 
 type ChatSurfaceProps = {
@@ -47,6 +47,8 @@ export function ChatSurface({
     "chat-header-avatar grid h-[34px] w-[34px] flex-none place-items-center rounded-full border border-black/10 object-cover";
   const agentAvatarClass =
     "message-avatar grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-black/10 bg-[#f6f6f6] object-cover";
+  const chatBodyClass = "text-sm leading-6";
+  const chatMinorTextClass = "text-[12px]";
 
   return (
     <section className="chat-surface grid h-full min-h-0 grid-rows-chat bg-[var(--chat-bg)]">
@@ -58,11 +60,11 @@ export function ChatSurface({
             alt={`${activeRole.name} avatar`}
           />
         ) : (
-          <span className={cx(headerAvatarClass, "chat-header-avatar-fallback bg-[#f6f6f6] text-xs font-bold text-[#333333]")}>
+          <span className={cx(headerAvatarClass, "chat-header-avatar-fallback bg-[#f6f6f6] text-sm font-bold text-[#333333]")}>
             {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "M"}
           </span>
         )}
-        <div className="chat-header-title min-w-0 flex-1 truncate text-xs font-semibold text-[#1f1f1f]">{activeRole ? activeRole.name : "Select a role"}</div>
+        <div className="chat-header-title min-w-0 flex-1 truncate text-sm font-semibold text-[#1f1f1f]">{activeRole ? activeRole.name : "Select a role"}</div>
       </header>
       <section
         className="conversation-panel grid h-full min-h-0 grid-rows-conversation overflow-hidden bg-[var(--chat-bg)] bg-contain bg-center bg-no-repeat"
@@ -71,9 +73,9 @@ export function ChatSurface({
         } : undefined}
       >
         {notice ? <div className="notice-chip rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
-        <div className={cx("conversation-list scrollbar-soft scrollbar-soft-muted grid min-h-0 content-start gap-3 overflow-auto px-6 pb-5 pt-7 md:px-12 lg:px-20 xl:px-[132px]", bodyTextClass)}>
+        <div className={cx("conversation-list scrollbar-soft scrollbar-soft-muted grid min-h-0 content-start gap-3 overflow-auto px-6 pb-5 pt-7 md:px-12 lg:px-20 xl:px-[132px]", chatBodyClass)}>
           {activeSession?.messages.map((message, index) => (
-              <article
+            <article
               key={`${message.id ?? message.role}-${index}`}
               className={cx(
                 "group max-w-[82%]",
@@ -94,15 +96,15 @@ export function ChatSurface({
                     </span>
                   )
                 ) : null}
-                <div className={cx("message-body flex min-w-0 flex-col text-xs leading-5 text-[#1f1f1f]", message.role === "user" && "items-end")}>
+                <div className={cx("message-body flex min-w-0 flex-col text-sm leading-6 text-[#1f1f1f]", message.role === "user" && "items-end")}>
                   {message.role !== "user" ? (
-                    <div className="message-author mb-1 text-[11px] font-medium leading-none text-[#b9b9b9]">
+                    <div className={cx("message-author mb-1 font-medium leading-none text-[#b9b9b9]", chatMinorTextClass)}>
                       {activeRole?.name || "Agent"}
                     </div>
                   ) : null}
                   <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
                   {message.timestamp ? (
-                    <div className="message-time mt-1 text-[11px] text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                    <div className={cx("message-time mt-1 text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100", chatMinorTextClass)}>
                       {formatTimestamp(message.timestamp)}
                     </div>
                   ) : null}
@@ -116,7 +118,7 @@ export function ChatSurface({
           <div className="composer grid w-full max-w-[550px] flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#e4e4e4] bg-white px-3 pb-2 pt-2.5">
             <textarea
               ref={textareaRef}
-              className="min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-xs leading-5 text-[#1f1f1f] outline-none"
+              className="min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-6 text-[#1f1f1f] outline-none"
               rows={1}
               value={draft}
               onChange={(event) => onUpdateDraft(event.target.value)}
@@ -127,7 +129,7 @@ export function ChatSurface({
                 <span className="relative h-4 w-4 before:absolute before:left-[7px] before:top-px before:h-3.5 before:w-[1.5px] before:rounded-full before:bg-current before:content-[''] after:absolute after:left-px after:top-[7px] after:h-[1.5px] after:w-3.5 after:rounded-full after:bg-current after:content-['']" />
               </button>
               <div className="composer-spacer flex-1" />
-              <button className={cx("ghost-btn composer-cancel px-3 py-1.5 text-xs disabled:hidden", ghostButtonClass)} type="button" onClick={onCancelMessage} disabled={!activeRoleId || !sending || !bridgeReady}>
+              <button className={cx("ghost-btn composer-cancel px-3 py-1.5 text-sm disabled:hidden", ghostButtonClass)} type="button" onClick={onCancelMessage} disabled={!activeRoleId || !sending || !bridgeReady}>
                 Cancel
               </button>
               <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="Send message" onClick={onSendMessage} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
