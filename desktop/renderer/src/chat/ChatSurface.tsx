@@ -52,11 +52,11 @@ export function ChatSurface({
   const chatContentTrackClass = "mx-auto w-full max-w-[860px] px-5 md:px-6";
   const composerTrackClass = "mx-auto w-full max-w-[700px] px-5 md:px-6";
   const messageBubbleClass =
-    "message-bubble w-fit max-w-full rounded-[14px] border border-[#e1e1e1] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
+    "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
 
   return (
     <section className="chat-surface grid h-full min-h-0 grid-rows-chat bg-[var(--chat-bg)]">
-      <header className="chat-header flex min-w-0 items-center gap-3 border-b border-[#ececec] bg-[var(--chat-bg)] pl-[23px] pr-6" data-testid="session-hero">
+      <header className="chat-header flex min-w-0 items-center gap-3 border-b border-[#E4E4E4] bg-[var(--chat-bg)] pl-[23px] pr-6" data-testid="session-hero">
         {activeRole?.avatar_abs ? (
           <img
             className={headerAvatarClass}
@@ -127,7 +127,7 @@ export function ChatSurface({
         </div>
         <div className="composer-wrap absolute inset-x-0 bottom-10 z-[2] flex min-w-0 justify-center overflow-visible">
           <div className={composerTrackClass}>
-            <div className="composer grid w-full flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#e4e4e4] bg-[#FFFEFF] px-3 pb-2 pt-2.5">
+            <div className="composer grid w-full flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#E4E4E4] bg-[#FFFEFF] px-3 pb-2 pt-2.5">
               <textarea
                 ref={textareaRef}
                 className="min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-6 text-[#1f1f1f] outline-none"
