@@ -49,6 +49,8 @@ export function ChatSurface({
     "message-avatar grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-black/10 bg-[#f6f6f6] object-cover";
   const chatBodyClass = "text-sm leading-6";
   const chatMinorTextClass = "text-[12px]";
+  const messageBubbleClass =
+    "message-bubble inline-block max-w-full rounded-[16px] border border-[#e1e1e1] bg-white px-4 py-3 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
 
   return (
     <section className="chat-surface grid h-full min-h-0 grid-rows-chat bg-[var(--chat-bg)]">
@@ -95,14 +97,16 @@ export function ChatSurface({
                       {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "A"}
                     </span>
                   )
-                ) : null}
+                  ) : null}
                 <div className={cx("message-body flex min-w-0 flex-col text-sm leading-6 text-[#1f1f1f]", message.role === "user" && "items-end")}>
                   {message.role !== "user" ? (
                     <div className={cx("message-author mb-1 font-medium leading-none text-[#b9b9b9]", chatMinorTextClass)}>
                       {activeRole?.name || "Agent"}
                     </div>
                   ) : null}
-                  <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
+                  <div className={messageBubbleClass}>
+                    <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
+                  </div>
                   {message.timestamp ? (
                     <div className={cx("message-time mt-1 text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100", chatMinorTextClass)}>
                       {formatTimestamp(message.timestamp)}
