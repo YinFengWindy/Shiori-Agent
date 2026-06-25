@@ -71,16 +71,12 @@ export function ChatSurface({
       </header>
       <section className="conversation-panel relative grid h-full min-h-0 grid-rows-conversation overflow-hidden bg-[var(--chat-bg)]">
         {visibleIllustrationUrl ? (
-          <div className="pointer-events-none absolute inset-0 z-0">
-            <div className={cx("h-full", chatContentTrackClass)}>
-              <div
-                className="h-full w-full bg-contain bg-center bg-no-repeat"
-                style={{
-                  backgroundImage: `url("${visibleIllustrationUrl}")`,
-                }}
-              />
-            </div>
-          </div>
+          <div
+            className="pointer-events-none absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `url("${visibleIllustrationUrl}")`,
+            }}
+          />
         ) : null}
         {notice ? <div className="notice-chip relative z-[1] rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
         <div className={cx("conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] min-h-0 overflow-auto pb-5 pt-7", chatBodyClass)}>
