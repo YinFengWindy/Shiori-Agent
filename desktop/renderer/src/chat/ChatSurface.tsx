@@ -49,7 +49,7 @@ export function ChatSurface({
     "message-avatar grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-black/10 bg-[#f6f6f6] object-cover";
   const chatBodyClass = "text-sm leading-6";
   const chatMinorTextClass = "text-[12px]";
-  const chatContentTrackClass = "mx-auto w-full max-w-[720px] px-6 md:px-8";
+  const chatContentTrackClass = "mx-auto w-full max-w-[860px] px-5 md:px-6";
   const messageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[#e1e1e1] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
 
