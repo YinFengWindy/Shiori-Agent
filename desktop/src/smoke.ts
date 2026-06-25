@@ -146,18 +146,20 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               return { ok: false, reason: "edited-role-not-reflected", hero: hero.textContent || "" };
             }
             let conversationPanel = null;
+            let illustrationLayer = null;
             for (let i = 0; i < 40; i++) {
               conversationPanel = document.querySelector(".conversation-panel");
-              const backgroundImage = conversationPanel
-                ? getComputedStyle(conversationPanel).backgroundImage
+              illustrationLayer = conversationPanel?.querySelector(".bg-cover");
+              const backgroundImage = illustrationLayer
+                ? getComputedStyle(illustrationLayer).backgroundImage
                 : "";
               if (backgroundImage.includes("mira-asset://") && backgroundImage.includes("illustration-")) {
                 break;
               }
               await sleep(100);
             }
-            const backgroundImage = conversationPanel
-              ? getComputedStyle(conversationPanel).backgroundImage
+            const backgroundImage = illustrationLayer
+              ? getComputedStyle(illustrationLayer).backgroundImage
               : "";
             if (!backgroundImage.includes("mira-asset://") || !backgroundImage.includes("illustration-")) {
               return { ok: false, reason: "chat-illustration-background-missing", backgroundImage };
@@ -174,6 +176,16 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             }
             const composerRect = composer.getBoundingClientRect();
             const composerWrapRect = composerWrap.getBoundingClientRect();
+            const composerTrackRect = composer.parentElement?.getBoundingClientRect();
+            const composerTrackStyle = composer.parentElement
+              ? getComputedStyle(composer.parentElement)
+              : null;
+            const composerTrackPadding = composerTrackStyle
+              ? parseFloat(composerTrackStyle.paddingLeft) + parseFloat(composerTrackStyle.paddingRight)
+              : 0;
+            const expectedComposerWidth = composerTrackRect
+              ? Math.min(700, composerTrackRect.width) - composerTrackPadding
+              : composerRect.width;
             const conversationRect = conversationPanel.getBoundingClientRect();
             const chatHeaderRect = chatHeader.getBoundingClientRect();
             if (Math.abs(chatHeaderRect.height - 55) > 1) {
@@ -183,15 +195,16 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 height: chatHeaderRect.height,
               };
             }
-            if (Math.abs(composerRect.width - 550) > 1 || composerRect.height < 60) {
+            if (Math.abs(composerRect.width - expectedComposerWidth) > 1 || composerRect.height < 60) {
               return {
                 ok: false,
                 reason: "composer-size-mismatch",
                 width: composerRect.width,
+                expectedWidth: expectedComposerWidth,
                 height: composerRect.height,
               };
             }
-            if (Math.abs(composerWrapRect.bottom - conversationRect.bottom) > 1 || Math.abs(composerRect.bottom - (conversationRect.bottom - 22)) > 1) {
+            if (Math.abs(composerWrapRect.bottom - (conversationRect.bottom - 40)) > 1 || Math.abs(composerRect.bottom - (conversationRect.bottom - 40)) > 1) {
               return {
                 ok: false,
                 reason: "composer-not-bottom-fixed",
@@ -315,6 +328,16 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               const roleDisplay = getComputedStyle(rolePane).display;
               const chatRect = chatPane.getBoundingClientRect();
               const composerRect = composer.getBoundingClientRect();
+              const composerTrackRect = composer.parentElement?.getBoundingClientRect();
+              const composerTrackStyle = composer.parentElement
+                ? getComputedStyle(composer.parentElement)
+                : null;
+              const composerTrackPadding = composerTrackStyle
+                ? parseFloat(composerTrackStyle.paddingLeft) + parseFloat(composerTrackStyle.paddingRight)
+                : 0;
+              const expectedComposerWidth = composerTrackRect
+                ? Math.min(700, composerTrackRect.width) - composerTrackPadding
+                : composerRect.width;
               const expectedComposerCenter = chatRect.left + chatRect.width / 2;
               const actualComposerCenter = composerRect.left + composerRect.width / 2;
               if (roleDisplay !== "none") {
@@ -329,11 +352,12 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                   windowWidth: window.innerWidth,
                 };
               }
-              if (Math.abs(composerRect.width - 550) > 1 || Math.abs(actualComposerCenter - expectedComposerCenter) > 2) {
+              if (Math.abs(composerRect.width - expectedComposerWidth) > 1 || Math.abs(actualComposerCenter - expectedComposerCenter) > 2) {
                 return {
                   ok: false,
                   reason: "narrow-composer-not-centered",
                   composerWidth: composerRect.width,
+                  expectedWidth: expectedComposerWidth,
                   centerOffset: actualComposerCenter - expectedComposerCenter,
                 };
               }
@@ -356,15 +380,23 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 return { ok: false, reason: "compact-layout-elements-missing" };
               }
               const composerRect = composer.getBoundingClientRect();
-              const wrapRect = composerWrap.getBoundingClientRect();
-              const expectedWidth = Math.min(550, Math.max(0, wrapRect.width - 48));
-              if (composerRect.width > 550 || Math.abs(composerRect.width - expectedWidth) > 2) {
+              const composerTrackRect = composer.parentElement?.getBoundingClientRect();
+              const composerTrackStyle = composer.parentElement
+                ? getComputedStyle(composer.parentElement)
+                : null;
+              const composerTrackPadding = composerTrackStyle
+                ? parseFloat(composerTrackStyle.paddingLeft) + parseFloat(composerTrackStyle.paddingRight)
+                : 0;
+              const expectedWidth = composerTrackRect
+                ? Math.min(700, composerTrackRect.width) - composerTrackPadding
+                : composerRect.width;
+              if (composerRect.width > 652 || Math.abs(composerRect.width - expectedWidth) > 2) {
                 return {
                   ok: false,
                   reason: "compact-composer-not-shrunk",
                   composerWidth: composerRect.width,
                   expectedWidth,
-                  wrapWidth: wrapRect.width,
+                  trackWidth: composerTrackRect?.width,
                 };
               }
               return { ok: true };

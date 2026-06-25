@@ -127,7 +127,7 @@ export function ChatSurface({
         </div>
         <div className="composer-wrap absolute inset-x-0 bottom-10 z-[2] flex min-w-0 justify-center overflow-visible">
           <div className={composerTrackClass}>
-            <div className="composer grid w-full flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#e4e4e4] bg-white px-3 pb-2 pt-2.5">
+            <div className="composer grid w-full flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#e4e4e4] bg-[#FFFEFF] px-3 pb-2 pt-2.5">
               <textarea
                 ref={textareaRef}
                 className="min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-6 text-[#1f1f1f] outline-none"
@@ -142,7 +142,10 @@ export function ChatSurface({
                   Cancel
                 </button>
                 <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="Send message" onClick={onSendMessage} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
-                  <span className="relative h-[18px] w-4 before:absolute before:left-[7px] before:top-[3px] before:h-[13px] before:w-0.5 before:rounded-full before:bg-current before:content-[''] after:absolute after:left-[3px] after:top-0.5 after:h-2 after:w-2 after:rotate-45 after:border-l-2 after:border-t-2 after:border-current after:content-['']" />
+                  <svg className="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 19V5" />
+                    <path d="M5 12l7-7 7 7" />
+                  </svg>
                 </button>
               </div>
             </div>
