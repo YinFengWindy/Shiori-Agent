@@ -50,6 +50,7 @@ export function ChatSurface({
   const chatBodyClass = "text-sm leading-6";
   const chatMinorTextClass = "text-[12px]";
   const chatContentTrackClass = "mx-auto w-full max-w-[860px] px-5 md:px-6";
+  const composerTrackClass = "mx-auto w-full max-w-[700px] px-5 md:px-6";
   const messageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[#e1e1e1] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
 
@@ -124,8 +125,8 @@ export function ChatSurface({
             <div ref={conversationEndRef} />
           </div>
         </div>
-        <div className="composer-wrap relative z-[1] min-h-0 min-w-0 overflow-visible pb-[22px]">
-          <div className={chatContentTrackClass}>
+        <div className="composer-wrap relative z-[1] flex min-h-0 min-w-0 items-end justify-center overflow-visible pb-[22px]">
+          <div className={composerTrackClass}>
             <div className="composer grid w-full flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#e4e4e4] bg-white px-3 pb-2 pt-2.5">
               <textarea
                 ref={textareaRef}
