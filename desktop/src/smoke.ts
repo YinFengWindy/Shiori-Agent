@@ -146,20 +146,20 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               return { ok: false, reason: "edited-role-not-reflected", hero: hero.textContent || "" };
             }
             let conversationPanel = null;
-            let illustrationLayer = null;
+            let conversationList = null;
             for (let i = 0; i < 40; i++) {
               conversationPanel = document.querySelector(".conversation-panel");
-              illustrationLayer = conversationPanel?.querySelector(".bg-cover");
-              const backgroundImage = illustrationLayer
-                ? getComputedStyle(illustrationLayer).backgroundImage
+              conversationList = conversationPanel?.querySelector(".conversation-list");
+              const backgroundImage = conversationList
+                ? getComputedStyle(conversationList).backgroundImage
                 : "";
               if (backgroundImage.includes("mira-asset://") && backgroundImage.includes("illustration-")) {
                 break;
               }
               await sleep(100);
             }
-            const backgroundImage = illustrationLayer
-              ? getComputedStyle(illustrationLayer).backgroundImage
+            const backgroundImage = conversationList
+              ? getComputedStyle(conversationList).backgroundImage
               : "";
             if (!backgroundImage.includes("mira-asset://") || !backgroundImage.includes("illustration-")) {
               return { ok: false, reason: "chat-illustration-background-missing", backgroundImage };

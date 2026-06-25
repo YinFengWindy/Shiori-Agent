@@ -71,16 +71,16 @@ export function ChatSurface({
         <div className="chat-header-title min-w-0 flex-1 truncate text-sm font-semibold text-[#1f1f1f]">{activeRole ? activeRole.name : "Select a role"}</div>
       </header>
       <section className="conversation-panel relative h-full min-h-0 overflow-hidden bg-[var(--chat-bg)]">
-        {visibleIllustrationUrl ? (
-          <div
-            className="pointer-events-none absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-            style={{
-              backgroundImage: `url("${visibleIllustrationUrl}")`,
-            }}
-          />
-        ) : null}
         {notice ? <div className="notice-chip absolute left-1/2 top-4 z-[2] -translate-x-1/2 rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
-        <div className={cx("conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] h-full min-h-0 overflow-auto pb-5 pt-7", chatBodyClass)}>
+        <div
+          className={cx(
+            "conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] h-full min-h-0 overflow-auto bg-cover bg-center bg-no-repeat bg-local pb-5 pt-7",
+            chatBodyClass,
+          )}
+          style={visibleIllustrationUrl ? {
+            backgroundImage: `url("${visibleIllustrationUrl}")`,
+          } : undefined}
+        >
           <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
             {activeSession?.messages.map((message, index) => (
               <article
