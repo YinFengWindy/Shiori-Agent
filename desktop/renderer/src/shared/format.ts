@@ -1,22 +1,6 @@
-/** Converts an absolute Windows or POSIX path into a renderer-safe file URL. */
+/** Converts an absolute Windows or POSIX path into a renderer-safe asset URL. */
 export function toFileUrl(path: string): string {
-  const normalized = path.replace(/\\/g, "/");
-  const encodedSegments = normalized.split("/").map((segment, index) => {
-    if (index === 0 && /^[A-Za-z]:$/.test(segment)) {
-      return segment;
-    }
-    return encodeURIComponent(segment);
-  });
-
-  if (/^[A-Za-z]:/.test(normalized)) {
-    return `file:///${encodedSegments.join("/")}`;
-  }
-
-  if (normalized.startsWith("//")) {
-    return `file://${encodedSegments.slice(2).join("/")}`;
-  }
-
-  return `file://${encodedSegments.join("/")}`;
+  return `mira-asset://local?path=${encodeURIComponent(path)}`;
 }
 
 /** Formats bridge timestamps for compact display in chat bubbles. */

@@ -113,9 +113,25 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             setFieldValue(editDesc, "ui smoke role B edited");
             setFieldValue(editPrompt, "you are ui smoke role B edited");
             pickAvatarButton.click();
-            await sleep(150);
+            for (let i = 0; i < 40; i++) {
+              await sleep(100);
+              if ((document.body.textContent || "").includes("avatar-smoke")) {
+                break;
+              }
+            }
+            if (!(document.body.textContent || "").includes("avatar-smoke")) {
+              return { ok: false, reason: "avatar-selection-not-reflected" };
+            }
             pickIllustrationsButton.click();
-            await sleep(150);
+            for (let i = 0; i < 40; i++) {
+              await sleep(100);
+              if ((document.body.textContent || "").includes("illustration-smoke")) {
+                break;
+              }
+            }
+            if (!(document.body.textContent || "").includes("illustration-smoke")) {
+              return { ok: false, reason: "illustration-selection-not-reflected" };
+            }
             if (saveRoleButton.disabled) {
               return { ok: false, reason: "save-role-disabled-after-edit" };
             }
@@ -135,7 +151,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               const backgroundImage = conversationPanel
                 ? getComputedStyle(conversationPanel).backgroundImage
                 : "";
-              if (backgroundImage.includes("file:///") && backgroundImage.includes("illustration-")) {
+              if (backgroundImage.includes("mira-asset://") && backgroundImage.includes("illustration-")) {
                 break;
               }
               await sleep(100);
@@ -143,7 +159,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             const backgroundImage = conversationPanel
               ? getComputedStyle(conversationPanel).backgroundImage
               : "";
-            if (!backgroundImage.includes("file:///") || !backgroundImage.includes("illustration-")) {
+            if (!backgroundImage.includes("mira-asset://") || !backgroundImage.includes("illustration-")) {
               return { ok: false, reason: "chat-illustration-background-missing", backgroundImage };
             }
             const composer = document.querySelector(".composer");

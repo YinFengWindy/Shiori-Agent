@@ -1,6 +1,13 @@
 declare module "electron" {
   export type IpcMainInvokeEvent = unknown;
 
+  export type Privileges = {
+    standard?: boolean;
+    secure?: boolean;
+    supportFetchAPI?: boolean;
+    corsEnabled?: boolean;
+  };
+
   export interface BrowserWindowOptions {
     width?: number;
     height?: number;
@@ -42,6 +49,11 @@ declare module "electron" {
     setPath(name: string, path: string): void;
     quit(): void;
     exit(code?: number): void;
+  };
+
+  export const protocol: {
+    registerSchemesAsPrivileged(customSchemes: Array<{ scheme: string; privileges?: Privileges }>): void;
+    handle(scheme: string, handler: (request: { url: string }) => Promise<Response> | Response): void;
   };
 
   export const dialog: {
