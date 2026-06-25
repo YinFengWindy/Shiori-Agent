@@ -70,7 +70,7 @@ export function ChatSurface({
         )}
         <div className="chat-header-title min-w-0 flex-1 truncate text-sm font-semibold text-[#1f1f1f]">{activeRole ? activeRole.name : "Select a role"}</div>
       </header>
-      <section className="conversation-panel relative grid h-full min-h-0 grid-rows-conversation overflow-hidden bg-[var(--chat-bg)]">
+      <section className="conversation-panel relative h-full min-h-0 overflow-hidden bg-[var(--chat-bg)]">
         {visibleIllustrationUrl ? (
           <div
             className="pointer-events-none absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
@@ -79,8 +79,8 @@ export function ChatSurface({
             }}
           />
         ) : null}
-        {notice ? <div className="notice-chip relative z-[1] rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
-        <div className={cx("conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] min-h-0 overflow-auto pb-5 pt-7", chatBodyClass)}>
+        {notice ? <div className="notice-chip absolute left-1/2 top-4 z-[2] -translate-x-1/2 rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
+        <div className={cx("conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] h-full min-h-0 overflow-auto pb-5 pt-7", chatBodyClass)}>
           <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
             {activeSession?.messages.map((message, index) => (
               <article
@@ -122,10 +122,10 @@ export function ChatSurface({
                 </div>
               </article>
             ))}
-            <div ref={conversationEndRef} />
+            <div ref={conversationEndRef} className="h-40" />
           </div>
         </div>
-        <div className="composer-wrap relative z-[1] flex min-h-0 min-w-0 items-end justify-center overflow-visible pb-14">
+        <div className="composer-wrap absolute inset-x-0 bottom-10 z-[2] flex min-w-0 justify-center overflow-visible">
           <div className={composerTrackClass}>
             <div className="composer grid w-full flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#e4e4e4] bg-white px-3 pb-2 pt-2.5">
               <textarea
