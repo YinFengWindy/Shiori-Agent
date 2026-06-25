@@ -5,11 +5,11 @@
 @layer base {
   :root {
     color-scheme: light;
-    --bg: #efe6d6;
-    --bg-soft: #f7f1e7;
-    --chat-bg: #fbf7f0;
-    --panel: rgba(255, 250, 242, 0.86);
-    --panel-strong: #fff7ee;
+    --bg: #eff4f9;
+    --bg-soft: #f6f9fc;
+    --chat-bg: #ffffff;
+    --panel: rgba(255, 255, 255, 0.92);
+    --panel-strong: #ffffff;
     --text: #1f1a15;
     --muted: #766554;
     --accent: #ca5d2e;
@@ -17,7 +17,7 @@
     --stroke: rgba(76, 48, 24, 0.14);
     --shadow: 0 28px 60px rgba(75, 43, 18, 0.12);
     --titlebar-height: 30px;
-    --app-bg: linear-gradient(135deg, #f9f2e6 0%, #f9f0f0 52%, #f9f1ee 100%);
+    --app-bg: #eff4f9;
     font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
   }
 
