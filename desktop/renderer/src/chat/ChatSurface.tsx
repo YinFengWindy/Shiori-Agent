@@ -125,7 +125,7 @@ export function ChatSurface({
             <div ref={conversationEndRef} />
           </div>
         </div>
-        <div className="composer-wrap relative z-[1] flex min-h-0 min-w-0 items-end justify-center overflow-visible pb-[22px]">
+        <div className="composer-wrap relative z-[1] flex min-h-0 min-w-0 items-end justify-center overflow-visible pb-8">
           <div className={composerTrackClass}>
             <div className="composer grid w-full flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#e4e4e4] bg-white px-3 pb-2 pt-2.5">
               <textarea
@@ -137,9 +137,6 @@ export function ChatSurface({
                 placeholder="Type a message for this role..."
               />
               <div className="composer-actions flex items-center gap-2">
-                <button className="composer-tool-btn grid h-7 w-7 cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0 text-[#8a8a8a] hover:bg-[#f5f5f5] focus-visible:bg-[#f5f5f5]" type="button" aria-label="Add attachment">
-                  <span className="relative h-4 w-4 before:absolute before:left-[7px] before:top-px before:h-3.5 before:w-[1.5px] before:rounded-full before:bg-current before:content-[''] after:absolute after:left-px after:top-[7px] after:h-[1.5px] after:w-3.5 after:rounded-full after:bg-current after:content-['']" />
-                </button>
                 <div className="composer-spacer flex-1" />
                 <button className={cx("ghost-btn composer-cancel px-3 py-1.5 text-sm disabled:hidden", ghostButtonClass)} type="button" onClick={onCancelMessage} disabled={!activeRoleId || !sending || !bridgeReady}>
                   Cancel
