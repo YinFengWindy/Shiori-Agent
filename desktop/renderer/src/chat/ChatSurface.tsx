@@ -67,7 +67,7 @@ export function ChatSurface({
       <section
         className="conversation-panel grid h-full min-h-0 grid-rows-conversation overflow-hidden bg-[var(--chat-bg)] bg-contain bg-center bg-no-repeat"
         style={visibleIllustrationUrl ? {
-          backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.84)), url("${visibleIllustrationUrl}")`,
+          backgroundImage: `url("${visibleIllustrationUrl}")`,
         } : undefined}
       >
         {notice ? <div className="notice-chip rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
