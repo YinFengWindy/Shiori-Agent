@@ -1,7 +1,7 @@
 import type React from "react";
 import { useLayoutEffect, useRef } from "react";
 import { formatTimestamp, toFileUrl } from "../shared/format";
-import { bodyTextClass, cardClass, cx, ghostButtonClass } from "../shared/styles";
+import { bodyTextClass, cx, ghostButtonClass } from "../shared/styles";
 import type { RoleRecord, SessionPayload } from "../shared/types";
 
 type ChatSurfaceProps = {
@@ -72,7 +72,7 @@ export function ChatSurface({
       >
         {notice ? <div className="notice-chip rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
         <div className={cx("conversation-list scrollbar-soft scrollbar-soft-muted grid min-h-0 content-start gap-3 overflow-auto px-6 pb-5 pt-7 md:px-12 lg:px-20 xl:px-[132px]", bodyTextClass)}>
-          {activeSession?.messages.length ? activeSession.messages.map((message, index) => (
+          {activeSession?.messages.map((message, index) => (
               <article
               key={`${message.id ?? message.role}-${index}`}
               className={cx(
@@ -109,9 +109,7 @@ export function ChatSurface({
                 </div>
               </div>
             </article>
-          )) : (
-            <div className={cx("empty-card", cardClass, "p-4")}>No messages yet. Send the first message to this role.</div>
-          )}
+          ))}
           <div ref={conversationEndRef} />
         </div>
         <div className="composer-wrap flex min-h-0 min-w-0 items-end justify-center overflow-visible px-6 pb-[22px]">
