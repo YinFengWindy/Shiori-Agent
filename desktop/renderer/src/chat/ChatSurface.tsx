@@ -50,7 +50,7 @@ export function ChatSurface({
   const chatBodyClass = "text-sm leading-6";
   const chatMinorTextClass = "text-[12px]";
   const messageBubbleClass =
-    "message-bubble inline-block max-w-full rounded-[16px] border border-[#e1e1e1] bg-white px-4 py-3 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
+    "message-bubble w-fit max-w-full rounded-[14px] border border-[#e1e1e1] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
 
   return (
     <section className="chat-surface grid h-full min-h-0 grid-rows-chat bg-[var(--chat-bg)]">
