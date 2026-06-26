@@ -230,6 +230,26 @@ function App(): React.ReactElement {
     }
   }
 
+  /** Appends a visible error bubble into the active chat flow. */
+  function appendSessionErrorMessage(sessionKey: string, message: string): void {
+    const content = message.trim();
+    if (!content) return;
+    setActiveSession((current) => {
+      if (!current || current.key !== sessionKey) return current;
+      return {
+        ...current,
+        messages: [
+          ...current.messages,
+          {
+            role: "error",
+            content,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      };
+    });
+  }
+
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 2200);
@@ -277,12 +297,15 @@ function App(): React.ReactElement {
 
         if (event.method === "chat.done") {
           setSending(false);
-          setNotice("Reply completed.");
+          return;
         }
 
         if (event.method === "chat.error") {
           setSending(false);
-          setError(String(event.payload.message ?? "chat failed"));
+          const message = String(event.payload.message ?? "chat failed");
+          setError(message);
+          appendSessionErrorMessage(activeSession.key, message);
+          return;
         }
 
         if (event.method === "bridge.exit") {
@@ -474,6 +497,7 @@ function App(): React.ReactElement {
           );
         }
         setError(res.error.message);
+        appendSessionErrorMessage(sessionKey, res.error.message);
         return;
       }
       const nextSession = res.payload.session as SessionPayload;
@@ -492,7 +516,9 @@ function App(): React.ReactElement {
           current?.key === sessionKey ? previousSession : current,
         );
       }
-      setError(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setError(message);
+      appendSessionErrorMessage(sessionKey, message);
     }
   }
 

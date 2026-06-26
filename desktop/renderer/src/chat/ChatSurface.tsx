@@ -102,16 +102,24 @@ export function ChatSurface({
           )}
         >
           <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
-            {activeSession?.messages.map((message, index) => (
+            {activeSession?.messages.map((message, index) => {
+              const isUser = message.role === "user";
+              const isError = message.role === "error";
+              const authorLabel = isError ? "系统提示" : (activeRole?.name || "Agent");
+              const bubbleClass = isError
+                ? "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(176,58,58,0.22)] bg-[rgba(255,244,244,0.96)] px-3.5 py-2.5 text-left text-[#8f2d2d] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                : messageBubbleClass;
+
+              return (
               <article
                 key={`${message.id ?? message.role}-${index}`}
                 className={cx(
                   "group max-w-[82%]",
-                  message.role === "user" ? "ml-auto translate-x-[2px] text-right" : "mr-auto -translate-x-[2px]",
+                  isUser ? "ml-auto translate-x-[2px] text-right" : "mr-auto -translate-x-[2px]",
                 )}
               >
-                <div className={cx("message-row flex items-start gap-3", message.role === "user" && "flex-row-reverse")}>
-                  {message.role !== "user" ? (
+                <div className={cx("message-row flex items-start gap-3", isUser && "flex-row-reverse")}>
+                  {!isUser ? (
                     activeRole?.avatar_abs ? (
                       <img
                         className={agentAvatarClass}
@@ -124,13 +132,13 @@ export function ChatSurface({
                       </span>
                     )
                   ) : null}
-                  <div className={cx("message-body flex min-w-0 flex-col text-sm leading-6 text-[#1f1f1f]", message.role === "user" && "items-end")}>
-                    {message.role !== "user" ? (
+                  <div className={cx("message-body flex min-w-0 flex-col text-sm leading-6 text-[#1f1f1f]", isUser && "items-end")}>
+                    {!isUser ? (
                       <div className={cx("message-author mb-1 font-medium leading-none text-[#b9b9b9]", chatMinorTextClass)}>
-                        {activeRole?.name || "Agent"}
+                        {authorLabel}
                       </div>
                     ) : null}
-                    <div className={messageBubbleClass}>
+                    <div className={bubbleClass}>
                       <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
                     </div>
                     {message.timestamp ? (
@@ -141,7 +149,8 @@ export function ChatSurface({
                   </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
             <div ref={conversationEndRef} className="h-40" />
           </div>
         </div>

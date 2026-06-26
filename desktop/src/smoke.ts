@@ -298,6 +298,13 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 hero: hero.textContent || "",
               };
             }
+            const replyCompletedVisible = (document.body.textContent || "").includes("Reply completed.");
+            if (replyCompletedVisible) {
+              return {
+                ok: false,
+                reason: "reply-completed-notice-still-visible",
+              };
+            }
             setFieldValue(composerTextarea, "keep composing");
             await sleep(50);
             const ctrlEnterDispatched = composerTextarea.dispatchEvent(new KeyboardEvent("keydown", {
