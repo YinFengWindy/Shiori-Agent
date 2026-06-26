@@ -739,7 +739,6 @@ function App(): React.ReactElement {
         canGoBack={canGoBack}
         canGoForward={canGoForward}
         canRefreshSession={Boolean(activeRoleId)}
-        showDiagnostics={showDiagnostics}
         canEditRole={Boolean(activeRoleId)}
         onToggleSidebar={toggleSidebar}
         onGoBack={() => void navigateRoleHistory("back")}
@@ -747,7 +746,6 @@ function App(): React.ReactElement {
         onRefreshSession={() => void refreshSession()}
         onCreateRole={() => setShowNewRoleComposer(true)}
         onEditRole={() => setShowRoleEditor(true)}
-        onToggleDiagnostics={() => setShowDiagnostics((value) => !value)}
         onRefreshBridge={() => void refreshBridge()}
         onRestartBridge={() => void restartBridge()}
       />

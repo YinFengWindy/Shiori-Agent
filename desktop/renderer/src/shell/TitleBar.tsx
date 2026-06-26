@@ -21,7 +21,6 @@ export function TitleBar({
   canGoBack,
   canGoForward,
   canRefreshSession,
-  showDiagnostics,
   canEditRole,
   onToggleSidebar,
   onGoBack,
@@ -29,7 +28,6 @@ export function TitleBar({
   onRefreshSession,
   onCreateRole,
   onEditRole,
-  onToggleDiagnostics,
   onRefreshBridge,
   onRestartBridge,
 }: {
@@ -37,7 +35,6 @@ export function TitleBar({
   canGoBack: boolean;
   canGoForward: boolean;
   canRefreshSession: boolean;
-  showDiagnostics: boolean;
   canEditRole: boolean;
   onToggleSidebar: () => void;
   onGoBack: () => void;
@@ -45,7 +42,6 @@ export function TitleBar({
   onRefreshSession: () => void;
   onCreateRole: () => void;
   onEditRole: () => void;
-  onToggleDiagnostics: () => void;
   onRefreshBridge: () => void;
   onRestartBridge: () => void;
 }) {
@@ -89,13 +85,11 @@ export function TitleBar({
   const menuActions: Record<typeof menuItems[number], MenuItem[]> = {
     文件: [
       { label: "新对话", onSelect: onCreateRole },
-      { label: "刷新会话", onSelect: onRefreshSession, disabled: !canRefreshSession },
     ],
     编辑: [
       { label: "编辑当前角色", onSelect: onEditRole, disabled: !canEditRole },
     ],
     视图: [
-      { label: showDiagnostics ? "隐藏诊断" : "显示诊断", onSelect: onToggleDiagnostics },
       { label: sidebarCollapsed ? "展开侧边栏" : "收起侧边栏", onSelect: onToggleSidebar },
     ],
     帮助: [
@@ -123,7 +117,7 @@ export function TitleBar({
           <span className={cx(titlebarArrowClass, "before:right-0.5 after:right-[1.5px] after:rotate-[135deg]")} />
         </button>
         <button className={cx("titlebar-icon titlebar-refresh", titlebarIconClass)} type="button" aria-label="Refresh session" onClick={onRefreshSession} disabled={!canRefreshSession}>
-          <span className="relative h-[12px] w-[12px] rounded-full border-[1.3px] border-current border-r-transparent before:absolute before:right-[-0.5px] before:top-[-1.5px] before:h-0 before:w-0 before:border-b-[4px] before:border-l-[4px] before:border-r-0 before:border-t-[4px] before:border-b-transparent before:border-l-current before:border-t-transparent before:content-['']" />
+          <span className="relative h-[13px] w-[13px] before:absolute before:inset-[1px] before:rounded-full before:border-[1.3px] before:border-current before:border-r-transparent before:content-[''] after:absolute after:right-[0.5px] after:top-[1px] after:h-[4px] after:w-[4px] after:rotate-45 after:border-r-[1.3px] after:border-t-[1.3px] after:border-current after:content-['']" />
         </button>
         <nav className="titlebar-menu ml-0.5 flex h-full items-center gap-0" aria-label="Application menu">
           {menuItems.map((item) => (
@@ -141,11 +135,11 @@ export function TitleBar({
                 {item}
               </button>
               {openMenu === item ? (
-                <div className="titlebar-dropdown [-webkit-app-region:no-drag] absolute left-0 top-[calc(100%+4px)] z-20 min-w-[148px] rounded-md border border-[#e4e4e4] bg-white/95 p-1 shadow-[0_10px_28px_rgba(0,0,0,0.12)] backdrop-blur">
+                <div className="titlebar-dropdown [-webkit-app-region:no-drag] absolute left-0 top-[calc(100%+4px)] z-20 min-w-[148px] rounded-md border border-[#e4e4e4] bg-white p-1 shadow-[0_10px_28px_rgba(0,0,0,0.12)]">
                   {menuActions[item].map((menuAction) => (
                     <button
                       key={menuAction.label}
-                      className="grid h-8 w-full cursor-default place-items-start rounded-[6px] border-0 bg-transparent px-2 text-left text-[13px] text-[#4b4b4b] hover:bg-black/5 disabled:cursor-default disabled:text-[#b8b8b8] disabled:hover:bg-transparent"
+                      className="grid h-7 w-full cursor-default place-items-center rounded-[6px] border-0 bg-transparent px-2 text-center text-[12px] text-[#4b4b4b] hover:bg-black/5 disabled:cursor-default disabled:text-[#b8b8b8] disabled:hover:bg-transparent"
                       type="button"
                       disabled={menuAction.disabled}
                       onClick={() => selectMenuItem(menuAction.onSelect)}
