@@ -149,7 +149,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             let conversationIllustration = null;
             for (let i = 0; i < 40; i++) {
               conversationPanel = document.querySelector(".conversation-panel");
-              conversationIllustration = conversationPanel?.querySelector(".conversation-illustration-image");
+              conversationIllustration = document.querySelector(".chat-surface .conversation-illustration-image");
               const backgroundImage = conversationIllustration
                 ? getComputedStyle(conversationIllustration).backgroundImage
                 : "";

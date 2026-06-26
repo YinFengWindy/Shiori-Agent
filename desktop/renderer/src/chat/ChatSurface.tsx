@@ -56,8 +56,20 @@ export function ChatSurface({
   const hasIllustration = Boolean(visibleIllustrationUrl);
 
   return (
-    <section className="chat-surface grid h-full min-h-0 grid-rows-chat bg-[var(--chat-bg)]">
-      <header className="chat-header flex min-w-0 items-center gap-3 border-b border-[#E4E4E4] bg-[var(--chat-bg)] pl-[23px] pr-6" data-testid="session-hero">
+    <section className="chat-surface relative grid h-full min-h-0 grid-rows-chat overflow-hidden bg-[var(--chat-bg)]">
+      {hasIllustration ? (
+        <div
+          className="conversation-illustration pointer-events-none absolute inset-0 z-0 overflow-hidden"
+          aria-hidden="true"
+        >
+          <div
+            className="conversation-illustration-image absolute inset-0 bg-cover bg-center bg-no-repeat opacity-[0.96]"
+            style={{ backgroundImage: `url("${visibleIllustrationUrl}")` }}
+          />
+          <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.96)_0%,rgba(255,255,255,0.92)_32%,rgba(255,255,255,0.72)_56%,rgba(255,255,255,0.32)_76%,rgba(255,255,255,0.08)_100%)]" />
+        </div>
+      ) : null}
+      <header className="chat-header relative z-[1] flex min-w-0 items-center gap-3 border-b border-[#E4E4E4] bg-[rgba(255,255,255,0.55)] pl-[23px] pr-6 backdrop-blur-[3px]" data-testid="session-hero">
         {activeRole?.avatar_abs ? (
           <img
             className={headerAvatarClass}
@@ -71,31 +83,15 @@ export function ChatSurface({
         )}
         <div className="chat-header-title min-w-0 flex-1 truncate text-sm font-semibold text-[#1f1f1f]">{activeRole ? activeRole.name : "Select a role"}</div>
       </header>
-      <section className="conversation-panel relative h-full min-h-0 overflow-hidden bg-[var(--chat-bg)]">
+      <section className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent">
         {notice ? <div className="notice-chip absolute left-1/2 top-4 z-[2] -translate-x-1/2 rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
-        {hasIllustration ? (
-          <div
-            className="conversation-illustration pointer-events-none absolute inset-0 z-0 overflow-hidden"
-            aria-hidden="true"
-          >
-            <div
-              className="absolute inset-0 scale-[1.06] bg-cover bg-center bg-no-repeat opacity-[0.22] blur-xl"
-              style={{ backgroundImage: `url("${visibleIllustrationUrl}")` }}
-            />
-            <div
-              className="conversation-illustration-image absolute inset-x-4 inset-y-0 bg-contain bg-center bg-no-repeat opacity-[0.96]"
-              style={{ backgroundImage: `url("${visibleIllustrationUrl}")` }}
-            />
-            <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.94)_34%,rgba(255,255,255,0.78)_56%,rgba(255,255,255,0.38)_76%,rgba(255,255,255,0.12)_100%)]" />
-          </div>
-        ) : null}
         <div
           className={cx(
             "conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] h-full min-h-0 overflow-auto pb-5 pt-7",
             chatBodyClass,
           )}
         >
-          <div className={cx("grid content-start gap-3 pr-[min(16vw,140px)]", chatContentTrackClass)}>
+          <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
             {activeSession?.messages.map((message, index) => (
               <article
                 key={`${message.id ?? message.role}-${index}`}
