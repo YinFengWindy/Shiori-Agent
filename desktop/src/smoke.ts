@@ -256,6 +256,22 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 reason: "composer-enter-not-intercepted",
               };
             }
+            const sendingHeaderSeen = (hero.textContent || "").includes("正在输入中...");
+            if (!sendingHeaderSeen) {
+              return {
+                ok: false,
+                reason: "chat-header-did-not-show-typing-state",
+                hero: hero.textContent || "",
+              };
+            }
+            const cancelStillVisible = Array.from(document.querySelectorAll("button"))
+              .some((button) => (button.textContent || "").trim() === "Cancel");
+            if (cancelStillVisible) {
+              return {
+                ok: false,
+                reason: "composer-cancel-still-visible-during-send",
+              };
+            }
             for (let i = 0; i < 40; i++) {
               await sleep(100);
               if (composerTextarea.value === "") {
@@ -267,6 +283,19 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 ok: false,
                 reason: "composer-enter-did-not-send",
                 value: composerTextarea.value,
+              };
+            }
+            for (let i = 0; i < 40; i++) {
+              await sleep(100);
+              if ((hero.textContent || "").includes(roleBEditedName)) {
+                break;
+              }
+            }
+            if (!(hero.textContent || "").includes(roleBEditedName)) {
+              return {
+                ok: false,
+                reason: "chat-header-did-not-reset-after-reply",
+                hero: hero.textContent || "",
               };
             }
             setFieldValue(composerTextarea, "keep composing");

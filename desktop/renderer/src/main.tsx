@@ -462,6 +462,7 @@ function App(): React.ReactElement {
         payload: { role_id: roleId, content },
       });
       if (res.error) {
+        setSending(false);
         const { session: recoveredSession } = await fetchRoleSession(roleId);
         if (recoveredSession) {
           setActiveSession((current) =>
@@ -480,6 +481,7 @@ function App(): React.ReactElement {
         current?.key === nextSession.key ? nextSession : current,
       );
     } catch (error) {
+      setSending(false);
       const { session: recoveredSession } = await fetchRoleSession(roleId);
       if (recoveredSession) {
         setActiveSession((current) =>
@@ -491,23 +493,7 @@ function App(): React.ReactElement {
         );
       }
       setError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setSending(false);
     }
-  }
-
-  async function cancelMessage(): Promise<void> {
-    if (!activeRoleId) return;
-    const res = await window.miraDesktop.invoke({
-      method: "chat.cancel",
-      payload: { role_id: activeRoleId },
-    });
-    if (res.error) {
-      setError(res.error.message);
-      return;
-    }
-    setSending(false);
-    setNotice(String(res.payload.message ?? "Cancelled."));
   }
 
   async function createRole(): Promise<void> {
@@ -644,6 +630,7 @@ function App(): React.ReactElement {
         : (activeRole?.illustrations_abs ?? []));
   const visibleIllustration = activeIllustration || previewIllustrations[0] || "";
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
+  const headerTitle = sending && activeRole ? "正在输入中..." : (activeRole ? activeRole.name : "Select a role");
 
   useEffect(() => {
     if (previewIllustrations.length === 0) {
@@ -706,10 +693,10 @@ function App(): React.ReactElement {
             bridgeReady={bridgeReady}
             conversationEndRef={conversationEndRef}
             draft={draft}
+            headerTitle={headerTitle}
             notice={notice}
             sending={sending}
             visibleIllustrationUrl={visibleIllustrationUrl}
-            onCancelMessage={() => void cancelMessage()}
             onSendMessage={() => void sendMessage()}
             onUpdateDraft={setDraft}
           />

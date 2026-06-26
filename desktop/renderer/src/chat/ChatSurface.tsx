@@ -11,10 +11,10 @@ type ChatSurfaceProps = {
   bridgeReady: boolean;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   draft: string;
+  headerTitle: string;
   notice: string;
   sending: boolean;
   visibleIllustrationUrl: string;
-  onCancelMessage: () => void;
   onSendMessage: () => void;
   onUpdateDraft: (value: string) => void;
 };
@@ -27,10 +27,10 @@ export function ChatSurface({
   bridgeReady,
   conversationEndRef,
   draft,
+  headerTitle,
   notice,
   sending,
   visibleIllustrationUrl,
-  onCancelMessage,
   onSendMessage,
   onUpdateDraft,
 }: ChatSurfaceProps) {
@@ -91,7 +91,7 @@ export function ChatSurface({
             {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "M"}
           </span>
         )}
-        <div className="chat-header-title min-w-0 flex-1 truncate text-sm font-semibold text-[#1f1f1f]">{activeRole ? activeRole.name : "Select a role"}</div>
+        <div className="chat-header-title min-w-0 flex-1 truncate text-sm font-semibold text-[#1f1f1f]">{headerTitle}</div>
       </header>
       <section className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent">
         {notice ? <div className="notice-chip absolute left-1/2 top-4 z-[2] -translate-x-1/2 rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
@@ -159,9 +159,7 @@ export function ChatSurface({
               />
               <div className="composer-actions flex items-center gap-2">
                 <div className="composer-spacer flex-1" />
-                <button className={cx("ghost-btn composer-cancel px-3 py-1.5 text-sm disabled:hidden", ghostButtonClass)} type="button" onClick={onCancelMessage} disabled={!activeRoleId || !sending || !bridgeReady}>
-                  Cancel
-                </button>
+                {sending ? <div className="composer-status px-1 text-[12px] text-[#6f6f6f]">正在输入中...</div> : null}
                 <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="Send message" onClick={onSendMessage} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
                   <svg className="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M12 19V5" />
