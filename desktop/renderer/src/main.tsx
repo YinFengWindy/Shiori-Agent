@@ -60,8 +60,12 @@ function App(): React.ReactElement {
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
   const activeRoleIdRef = useRef("");
+  const roleHistoryRef = useRef<string[]>([]);
+  const roleHistoryIndexRef = useRef(-1);
   const roleFormRef = useRef<RoleFormState>(createEmptyRoleForm());
   const newRoleFormRef = useRef<NewRoleFormState>(createEmptyNewRoleForm());
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
 
   useEffect(() => {
     roleFormRef.current = roleForm;
@@ -200,6 +204,29 @@ function App(): React.ReactElement {
         active_illustration: illustration,
       },
     });
+  }
+
+  function syncRoleHistoryState(): void {
+    setCanGoBack(roleHistoryIndexRef.current > 0);
+    setCanGoForward(
+      roleHistoryIndexRef.current >= 0
+      && roleHistoryIndexRef.current < roleHistoryRef.current.length - 1,
+    );
+  }
+
+  function pushRoleHistory(roleId: string): void {
+    if (!roleId) return;
+    const nextHistory = roleHistoryRef.current.slice(0, roleHistoryIndexRef.current + 1);
+    if (nextHistory[nextHistory.length - 1] === roleId) {
+      roleHistoryRef.current = nextHistory;
+      roleHistoryIndexRef.current = nextHistory.length - 1;
+      syncRoleHistoryState();
+      return;
+    }
+    nextHistory.push(roleId);
+    roleHistoryRef.current = nextHistory;
+    roleHistoryIndexRef.current = nextHistory.length - 1;
+    syncRoleHistoryState();
   }
 
   /** Loads the authoritative session for a role without mutating renderer state. */
@@ -354,7 +381,7 @@ function App(): React.ReactElement {
         nextRoles[0]?.id;
       if (preferredRoleId) {
         const preferredRole = nextRoles.find((item) => item.id === preferredRoleId) ?? null;
-        void openRole(preferredRoleId, preferredRole);
+        void openRole(preferredRoleId, preferredRole, { recordHistory: false });
       }
     }
 
@@ -366,7 +393,7 @@ function App(): React.ReactElement {
 
   async function refreshSession(): Promise<void> {
     if (!activeRoleId) return;
-    await openRole(activeRoleId);
+    await openRole(activeRoleId, null, { recordHistory: false });
     setNotice("Session refreshed.");
   }
 
@@ -391,16 +418,16 @@ function App(): React.ReactElement {
     if (currentRoleId) {
       const activeRole = nextRoles.find((item) => item.id === currentRoleId) ?? null;
       if (activeRole) {
-        await openRole(activeRole.id, activeRole);
+        await openRole(activeRole.id, activeRole, { recordHistory: false });
       } else if (nextRoles[0]) {
-        await openRole(nextRoles[0].id, nextRoles[0]);
+        await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
       } else {
         setActiveRoleId("");
         setActiveSession(null);
         setActiveIllustration("");
       }
     } else if (nextRoles[0]) {
-      await openRole(nextRoles[0].id, nextRoles[0]);
+      await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
     }
     setNotice("Bridge refreshed.");
   }
@@ -418,7 +445,11 @@ function App(): React.ReactElement {
     await refreshBridge();
   }
 
-  async function openRole(roleId: string, roleOverride: RoleRecord | null = null): Promise<void> {
+  async function openRole(
+    roleId: string,
+    roleOverride: RoleRecord | null = null,
+    options?: { recordHistory?: boolean },
+  ): Promise<void> {
     const requestId = openRoleRequestIdRef.current + 1;
     openRoleRequestIdRef.current = requestId;
     const { error: sessionError, session } = await fetchRoleSession(roleId);
@@ -459,6 +490,9 @@ function App(): React.ReactElement {
       );
     } else {
       setActiveIllustration("");
+    }
+    if (options?.recordHistory !== false) {
+      pushRoleHistory(roleId);
     }
   }
 
@@ -549,7 +583,7 @@ function App(): React.ReactElement {
     const nextRoles = await loadRolesFromBridge();
     activeRoleIdRef.current = role.id;
     setNotice("Role created.");
-    await openRole(role.id, nextRoles?.find((item) => item.id === role.id) ?? role);
+    await openRole(role.id, nextRoles?.find((item) => item.id === role.id) ?? role, { recordHistory: true });
   }
 
   async function saveRole(): Promise<void> {
@@ -581,11 +615,12 @@ function App(): React.ReactElement {
     setClearAvatar(false);
     setClearIllustrations(false);
     setNotice("Role saved.");
-    await openRole(updated.id, nextRoles?.find((item) => item.id === updated.id) ?? updated);
+    await openRole(updated.id, nextRoles?.find((item) => item.id === updated.id) ?? updated, { recordHistory: false });
   }
 
   async function deleteRole(): Promise<void> {
     if (!activeRoleId) return;
+    const deletingRoleId = activeRoleId;
     setError("");
     const res = await window.miraDesktop.invoke({
       method: "roles.delete",
@@ -599,9 +634,12 @@ function App(): React.ReactElement {
     setActiveRoleId("");
     setActiveSession(null);
     setActiveIllustration("");
+    roleHistoryRef.current = roleHistoryRef.current.filter((item) => item !== deletingRoleId);
+    roleHistoryIndexRef.current = roleHistoryRef.current.length - 1;
+    syncRoleHistoryState();
     setNotice("Role deleted.");
     if (nextRoles[0]) {
-      await openRole(nextRoles[0].id, nextRoles[0]);
+      await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
     }
   }
 
@@ -628,6 +666,16 @@ function App(): React.ReactElement {
     setClearIllustrations(true);
     updateRoleForm((current) => ({ ...current, illustrationSources: [] }));
     setActiveIllustration("");
+  }
+
+  async function navigateRoleHistory(direction: "back" | "forward"): Promise<void> {
+    const delta = direction === "back" ? -1 : 1;
+    const nextIndex = roleHistoryIndexRef.current + delta;
+    const nextRoleId = roleHistoryRef.current[nextIndex];
+    if (!nextRoleId) return;
+    roleHistoryIndexRef.current = nextIndex;
+    syncRoleHistoryState();
+    await openRole(nextRoleId, null, { recordHistory: false });
   }
 
   const activeRole = roles.find((role) => role.id === activeRoleId) ?? null;
@@ -686,7 +734,23 @@ function App(): React.ReactElement {
 
   return (
     <div className="app-frame grid h-screen grid-rows-app overflow-hidden bg-[var(--app-bg)]">
-      <TitleBar sidebarCollapsed={sidebarCollapsed} onToggleSidebar={toggleSidebar} />
+      <TitleBar
+        sidebarCollapsed={sidebarCollapsed}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        canRefreshSession={Boolean(activeRoleId)}
+        showDiagnostics={showDiagnostics}
+        canEditRole={Boolean(activeRoleId)}
+        onToggleSidebar={toggleSidebar}
+        onGoBack={() => void navigateRoleHistory("back")}
+        onGoForward={() => void navigateRoleHistory("forward")}
+        onRefreshSession={() => void refreshSession()}
+        onCreateRole={() => setShowNewRoleComposer(true)}
+        onEditRole={() => setShowRoleEditor(true)}
+        onToggleDiagnostics={() => setShowDiagnostics((value) => !value)}
+        onRefreshBridge={() => void refreshBridge()}
+        onRestartBridge={() => void restartBridge()}
+      />
       <div
         className={cx(
           "desktop-shell grid min-h-0 overflow-hidden bg-transparent",
@@ -708,7 +772,7 @@ function App(): React.ReactElement {
           onToggleRoleEditor={() => setShowRoleEditor((value) => !value)}
           onUpdateNewRoleForm={updateNewRoleForm}
           onCreateRole={() => void createRole()}
-          onOpenRole={(roleId) => void openRole(roleId)}
+          onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
           onBeginResize={beginSidebarResize}
         />
         <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-[16px] border-b border-l border-t border-[#E4E4E4] bg-[var(--chat-bg)]">

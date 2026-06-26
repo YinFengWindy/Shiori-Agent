@@ -1,7 +1,13 @@
+import { useEffect, useRef, useState } from "react";
 import type { WindowControlAction } from "../../../src/shared";
 import { cx } from "../shared/styles";
 
 const menuItems = ["文件", "编辑", "视图", "帮助"] as const;
+type MenuItem = {
+  label: string;
+  onSelect: () => void;
+  disabled?: boolean;
+};
 const titlebarIconClass =
   "[-webkit-app-region:no-drag] m-0 grid h-[calc(var(--titlebar-height)_+_1px)] w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-inherit disabled:text-[#b8b8b8] enabled:hover:bg-black/5";
 const titlebarArrowClass =
@@ -12,17 +18,94 @@ const windowControlClass =
 /** Renders the frameless desktop title bar and window controls. */
 export function TitleBar({
   sidebarCollapsed,
+  canGoBack,
+  canGoForward,
+  canRefreshSession,
+  showDiagnostics,
+  canEditRole,
   onToggleSidebar,
+  onGoBack,
+  onGoForward,
+  onRefreshSession,
+  onCreateRole,
+  onEditRole,
+  onToggleDiagnostics,
+  onRefreshBridge,
+  onRestartBridge,
 }: {
   sidebarCollapsed: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  canRefreshSession: boolean;
+  showDiagnostics: boolean;
+  canEditRole: boolean;
   onToggleSidebar: () => void;
+  onGoBack: () => void;
+  onGoForward: () => void;
+  onRefreshSession: () => void;
+  onCreateRole: () => void;
+  onEditRole: () => void;
+  onToggleDiagnostics: () => void;
+  onRefreshBridge: () => void;
+  onRestartBridge: () => void;
 }) {
+  const [openMenu, setOpenMenu] = useState<typeof menuItems[number] | null>(null);
+  const rootRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent): void {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent): void {
+      if (event.key === "Escape") {
+        setOpenMenu(null);
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
   function controlWindow(action: WindowControlAction) {
     void window.miraDesktop.windowControl(action);
   }
 
+  function toggleMenu(menu: typeof menuItems[number]): void {
+    setOpenMenu((current) => (current === menu ? null : menu));
+  }
+
+  function selectMenuItem(action: () => void): void {
+    setOpenMenu(null);
+    action();
+  }
+
+  const menuActions: Record<typeof menuItems[number], MenuItem[]> = {
+    文件: [
+      { label: "新对话", onSelect: onCreateRole },
+      { label: "刷新会话", onSelect: onRefreshSession, disabled: !canRefreshSession },
+    ],
+    编辑: [
+      { label: "编辑当前角色", onSelect: onEditRole, disabled: !canEditRole },
+    ],
+    视图: [
+      { label: showDiagnostics ? "隐藏诊断" : "显示诊断", onSelect: onToggleDiagnostics },
+      { label: sidebarCollapsed ? "展开侧边栏" : "收起侧边栏", onSelect: onToggleSidebar },
+    ],
+    帮助: [
+      { label: "刷新 Bridge", onSelect: onRefreshBridge },
+      { label: "重启 Bridge", onSelect: onRestartBridge },
+    ],
+  };
+
   return (
-    <header className="titlebar [-webkit-app-region:drag] flex h-[calc(var(--titlebar-height)+5px)] select-none items-center justify-between bg-transparent text-[#747474]">
+    <header ref={rootRef} className="titlebar [-webkit-app-region:drag] flex h-[calc(var(--titlebar-height)+5px)] select-none items-center justify-between bg-transparent text-[#747474]">
       <div className="titlebar-left flex h-full items-center gap-0 pl-0.5">
         <button
           className={cx("titlebar-icon titlebar-sidebar", titlebarIconClass)}
@@ -33,21 +116,46 @@ export function TitleBar({
         >
           <span className="relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:bottom-[1.5px] before:left-[2.5px] before:top-[1.5px] before:w-[1.2px] before:rounded-full before:bg-current before:content-['']" />
         </button>
-        <button className={cx("titlebar-icon titlebar-back", titlebarIconClass)} type="button" aria-label="Back" disabled>
+        <button className={cx("titlebar-icon titlebar-back", titlebarIconClass)} type="button" aria-label="Back" onClick={onGoBack} disabled={!canGoBack}>
           <span className={cx(titlebarArrowClass, "before:left-0.5 after:left-[1.5px] after:-rotate-45")} />
         </button>
-        <button className={cx("titlebar-icon titlebar-forward", titlebarIconClass)} type="button" aria-label="Forward" disabled>
+        <button className={cx("titlebar-icon titlebar-forward", titlebarIconClass)} type="button" aria-label="Forward" onClick={onGoForward} disabled={!canGoForward}>
           <span className={cx(titlebarArrowClass, "before:right-0.5 after:right-[1.5px] after:rotate-[135deg]")} />
+        </button>
+        <button className={cx("titlebar-icon titlebar-refresh", titlebarIconClass)} type="button" aria-label="Refresh session" onClick={onRefreshSession} disabled={!canRefreshSession}>
+          <span className="relative h-[12px] w-[12px] rounded-full border-[1.3px] border-current border-r-transparent before:absolute before:right-[-0.5px] before:top-[-1.5px] before:h-0 before:w-0 before:border-b-[4px] before:border-l-[4px] before:border-r-0 before:border-t-[4px] before:border-b-transparent before:border-l-current before:border-t-transparent before:content-['']" />
         </button>
         <nav className="titlebar-menu ml-0.5 flex h-full items-center gap-0" aria-label="Application menu">
           {menuItems.map((item) => (
-            <button
-              key={item}
-              className="titlebar-menu-item [-webkit-app-region:no-drag] m-0 h-6 min-w-11 cursor-default rounded-md border-0 bg-transparent px-2 text-[13px] tracking-normal text-inherit hover:bg-black/5"
-              type="button"
-            >
-              {item}
-            </button>
+            <div key={item} className="titlebar-menu-entry relative">
+              <button
+                className={cx(
+                  "titlebar-menu-item [-webkit-app-region:no-drag] m-0 h-6 min-w-11 rounded-md border-0 bg-transparent px-2 text-[13px] tracking-normal text-inherit hover:bg-black/5",
+                  openMenu === item ? "bg-black/5" : "cursor-default",
+                )}
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={openMenu === item}
+                onClick={() => toggleMenu(item)}
+              >
+                {item}
+              </button>
+              {openMenu === item ? (
+                <div className="titlebar-dropdown [-webkit-app-region:no-drag] absolute left-0 top-[calc(100%+4px)] z-20 min-w-[148px] rounded-md border border-[#e4e4e4] bg-white/95 p-1 shadow-[0_10px_28px_rgba(0,0,0,0.12)] backdrop-blur">
+                  {menuActions[item].map((menuAction) => (
+                    <button
+                      key={menuAction.label}
+                      className="grid h-8 w-full cursor-default place-items-start rounded-[6px] border-0 bg-transparent px-2 text-left text-[13px] text-[#4b4b4b] hover:bg-black/5 disabled:cursor-default disabled:text-[#b8b8b8] disabled:hover:bg-transparent"
+                      type="button"
+                      disabled={menuAction.disabled}
+                      onClick={() => selectMenuItem(menuAction.onSelect)}
+                    >
+                      {menuAction.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ))}
         </nav>
       </div>

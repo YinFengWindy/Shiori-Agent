@@ -58,6 +58,24 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 html: document.body.innerHTML.slice(0, 800),
               };
             }
+            const titlebarRefresh = document.querySelector(".titlebar-refresh");
+            const titlebarHelp = Array.from(document.querySelectorAll(".titlebar-menu-item"))
+              .find((item) => (item.textContent || "").trim() === "帮助");
+            if (!titlebarRefresh || !titlebarHelp) {
+              return {
+                ok: false,
+                reason: "titlebar-actions-missing",
+              };
+            }
+            titlebarHelp.click();
+            await sleep(50);
+            if (!(document.body.textContent || "").includes("重启 Bridge")) {
+              return {
+                ok: false,
+                reason: "titlebar-help-menu-missing-actions",
+              };
+            }
+            titlebarHelp.click();
             for (let i = 0; i < 40; i++) {
               if (!create.disabled) {
                 break;
