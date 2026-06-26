@@ -135,7 +135,7 @@ export function TitleBar({
                 {item}
               </button>
               {openMenu === item ? (
-                <div className="titlebar-dropdown [-webkit-app-region:no-drag] absolute left-0 top-[calc(100%+4px)] z-20 min-w-max rounded-md border border-[#e4e4e4] bg-white p-1 shadow-[0_10px_28px_rgba(0,0,0,0.12)]">
+                <div className="titlebar-dropdown [-webkit-app-region:no-drag] absolute left-0 top-[calc(100%+2px)] z-20 min-w-max rounded-md border border-[#e4e4e4] bg-white p-1 shadow-[0_10px_28px_rgba(0,0,0,0.12)]">
                   {menuActions[item].map((menuAction) => (
                     <button
                       key={menuAction.label}
