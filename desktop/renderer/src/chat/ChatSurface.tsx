@@ -53,6 +53,7 @@ export function ChatSurface({
   const composerTrackClass = "mx-auto w-full max-w-[700px] px-5 md:px-6";
   const messageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
+  const hasIllustration = Boolean(visibleIllustrationUrl);
 
   return (
     <section className="chat-surface grid h-full min-h-0 grid-rows-chat bg-[var(--chat-bg)]">
@@ -72,14 +73,23 @@ export function ChatSurface({
       </header>
       <section className="conversation-panel relative h-full min-h-0 overflow-hidden bg-[var(--chat-bg)]">
         {notice ? <div className="notice-chip absolute left-1/2 top-4 z-[2] -translate-x-1/2 rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[rgba(26,106,58,0.08)] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
+        {hasIllustration ? (
+          <div
+            className="conversation-illustration pointer-events-none absolute inset-0 z-0 overflow-hidden"
+            aria-hidden="true"
+          >
+            <div
+              className="conversation-illustration-image absolute inset-y-0 right-0 w-[min(44%,420px)] bg-contain bg-right bg-no-repeat opacity-[0.92]"
+              style={{ backgroundImage: `url("${visibleIllustrationUrl}")` }}
+            />
+            <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.96)_0%,rgba(255,255,255,0.9)_48%,rgba(255,255,255,0.58)_72%,rgba(255,255,255,0.2)_100%)]" />
+          </div>
+        ) : null}
         <div
           className={cx(
-            "conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] h-full min-h-0 overflow-auto bg-cover bg-center bg-no-repeat bg-local pb-5 pt-7",
+            "conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] h-full min-h-0 overflow-auto pb-5 pt-7",
             chatBodyClass,
           )}
-          style={visibleIllustrationUrl ? {
-            backgroundImage: `url("${visibleIllustrationUrl}")`,
-          } : undefined}
         >
           <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
             {activeSession?.messages.map((message, index) => (
