@@ -55,6 +55,16 @@ export function ChatSurface({
     "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
   const hasIllustration = Boolean(visibleIllustrationUrl);
 
+  const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter") return;
+    if (event.ctrlKey || event.shiftKey) return;
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+
+    event.preventDefault();
+    if (!activeRoleId || !draft.trim() || sending || !bridgeReady) return;
+    onSendMessage();
+  };
+
   return (
     <section className="chat-surface relative grid h-full min-h-0 grid-rows-chat overflow-hidden bg-[var(--chat-bg)]">
       {hasIllustration ? (
@@ -144,6 +154,7 @@ export function ChatSurface({
                 rows={1}
                 value={draft}
                 onChange={(event) => onUpdateDraft(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
                 placeholder="Type a message for this role..."
               />
               <div className="composer-actions flex items-center gap-2">

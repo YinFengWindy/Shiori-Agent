@@ -243,6 +243,46 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 overflowY: textareaOverflowY,
               };
             }
+            setFieldValue(composerTextarea, "send via enter");
+            await sleep(50);
+            const plainEnterDispatched = composerTextarea.dispatchEvent(new KeyboardEvent("keydown", {
+              key: "Enter",
+              bubbles: true,
+              cancelable: true,
+            }));
+            if (plainEnterDispatched !== false) {
+              return {
+                ok: false,
+                reason: "composer-enter-not-intercepted",
+              };
+            }
+            for (let i = 0; i < 40; i++) {
+              await sleep(100);
+              if (composerTextarea.value === "") {
+                break;
+              }
+            }
+            if (composerTextarea.value !== "") {
+              return {
+                ok: false,
+                reason: "composer-enter-did-not-send",
+                value: composerTextarea.value,
+              };
+            }
+            setFieldValue(composerTextarea, "keep composing");
+            await sleep(50);
+            const ctrlEnterDispatched = composerTextarea.dispatchEvent(new KeyboardEvent("keydown", {
+              key: "Enter",
+              ctrlKey: true,
+              bubbles: true,
+              cancelable: true,
+            }));
+            if (ctrlEnterDispatched !== true) {
+              return {
+                ok: false,
+                reason: "composer-ctrl-enter-was-blocked",
+              };
+            }
             const roleAButton = findRoleButtonByName(roleAName);
             if (!roleAButton) {
               return { ok: false, reason: "missing-role-a-button", count: findRoleButtons().length };
