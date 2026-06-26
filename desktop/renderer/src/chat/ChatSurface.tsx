@@ -168,7 +168,6 @@ export function ChatSurface({
               />
               <div className="composer-actions flex items-center gap-2">
                 <div className="composer-spacer flex-1" />
-                {sending ? <div className="composer-status px-1 text-[12px] text-[#6f6f6f]">正在输入中...</div> : null}
                 <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="Send message" onClick={onSendMessage} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
                   <svg className="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M12 19V5" />

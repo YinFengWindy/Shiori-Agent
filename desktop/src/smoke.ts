@@ -272,6 +272,13 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 reason: "composer-cancel-still-visible-during-send",
               };
             }
+            const composerStatusVisible = Boolean(document.querySelector(".composer-status"));
+            if (composerStatusVisible) {
+              return {
+                ok: false,
+                reason: "composer-typing-status-still-visible",
+              };
+            }
             for (let i = 0; i < 40; i++) {
               await sleep(100);
               if (composerTextarea.value === "") {
