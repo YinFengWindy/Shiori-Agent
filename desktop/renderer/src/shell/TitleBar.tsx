@@ -135,11 +135,11 @@ export function TitleBar({
                 {item}
               </button>
               {openMenu === item ? (
-                <div className="titlebar-dropdown [-webkit-app-region:no-drag] absolute left-0 top-[calc(100%+2px)] z-20 min-w-max rounded-md border border-[#e4e4e4] bg-white p-1 shadow-[0_10px_28px_rgba(0,0,0,0.12)]">
+                <div className="titlebar-dropdown [-webkit-app-region:no-drag] absolute left-0 top-[calc(100%+2px)] z-20 min-w-max rounded-[7px] border border-[#e7e7e7] bg-white p-[3px] shadow-[0_6px_18px_rgba(0,0,0,0.08)]">
                   {menuActions[item].map((menuAction) => (
                     <button
                       key={menuAction.label}
-                      className="grid h-7 w-full cursor-default place-items-start rounded-[6px] border-0 bg-transparent px-2.5 text-left text-[12px] text-[#4b4b4b] whitespace-nowrap hover:bg-black/5 disabled:cursor-default disabled:text-[#b8b8b8] disabled:hover:bg-transparent"
+                      className="grid h-[26px] w-full cursor-default place-items-start rounded-[5px] border-0 bg-transparent px-2.5 text-left text-[12px] text-[#4b4b4b] whitespace-nowrap hover:bg-black/4 disabled:cursor-default disabled:text-[#b8b8b8] disabled:hover:bg-transparent"
                       type="button"
                       disabled={menuAction.disabled}
                       onClick={() => selectMenuItem(menuAction.onSelect)}
