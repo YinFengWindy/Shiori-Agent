@@ -139,7 +139,7 @@ export function TitleBar({
                   {menuActions[item].map((menuAction) => (
                     <button
                       key={menuAction.label}
-                      className="grid h-7 w-full cursor-default place-items-start rounded-[5px] border-0 bg-transparent px-2.5 text-left text-[12px] text-[#4b4b4b] whitespace-nowrap hover:bg-[#f0f0f0] disabled:cursor-default disabled:text-[#b8b8b8] disabled:hover:bg-transparent"
+                      className="flex h-7 w-full items-center justify-start rounded-[5px] border-0 bg-transparent px-2.5 text-left text-[12px] leading-none text-[#4b4b4b] whitespace-nowrap hover:bg-[#f0f0f0] disabled:cursor-default disabled:text-[#b8b8b8] disabled:hover:bg-transparent"
                       type="button"
                       disabled={menuAction.disabled}
                       onClick={() => selectMenuItem(menuAction.onSelect)}
