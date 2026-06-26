@@ -79,10 +79,10 @@ export function ChatSurface({
             aria-hidden="true"
           >
             <div
-              className="conversation-illustration-image absolute inset-y-0 right-0 w-[min(44%,420px)] bg-contain bg-right bg-no-repeat opacity-[0.92]"
+              className="conversation-illustration-image absolute inset-0 bg-cover bg-[center_right] bg-no-repeat opacity-[0.96]"
               style={{ backgroundImage: `url("${visibleIllustrationUrl}")` }}
             />
-            <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.96)_0%,rgba(255,255,255,0.9)_48%,rgba(255,255,255,0.58)_72%,rgba(255,255,255,0.2)_100%)]" />
+            <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.94)_34%,rgba(255,255,255,0.78)_56%,rgba(255,255,255,0.38)_76%,rgba(255,255,255,0.12)_100%)]" />
           </div>
         ) : null}
         <div
@@ -91,7 +91,7 @@ export function ChatSurface({
             chatBodyClass,
           )}
         >
-          <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
+          <div className={cx("grid content-start gap-3 pr-[min(24vw,220px)]", chatContentTrackClass)}>
             {activeSession?.messages.map((message, index) => (
               <article
                 key={`${message.id ?? message.role}-${index}`}
