@@ -75,8 +75,10 @@ function App(): React.ReactElement {
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
   const activeRoleIdRef = useRef("");
+  const activeSessionRef = useRef<SessionPayload | null>(null);
   const roleHistoryRef = useRef<string[]>([]);
   const roleHistoryIndexRef = useRef(-1);
+  const draftRef = useRef("");
   const roleFormRef = useRef<RoleFormState>(createEmptyRoleForm());
   const newRoleFormRef = useRef<NewRoleFormState>(createEmptyNewRoleForm());
   const [canGoBack, setCanGoBack] = useState(false);
@@ -89,6 +91,14 @@ function App(): React.ReactElement {
   useEffect(() => {
     newRoleFormRef.current = newRoleForm;
   }, [newRoleForm]);
+
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
   function updateRoleForm(next: React.SetStateAction<RoleFormState>): void {
     const resolved = typeof next === "function"
@@ -600,15 +610,16 @@ function App(): React.ReactElement {
     setMainView({ kind: "role-detail", roleId });
   }
 
-  async function sendMessage(): Promise<void> {
-    const content = draft.trim();
-    const roleId = activeRoleId;
-    const previousSession = activeSession;
-    const sessionKey = activeSession?.key ?? "";
+  async function sendMessage(contentOverride?: string): Promise<void> {
+    const content = (contentOverride ?? draftRef.current).trim();
+    const roleId = activeRoleIdRef.current;
+    const previousSession = activeSessionRef.current;
+    const sessionKey = previousSession?.key ?? "";
     if (!content || !roleId || !sessionKey) return;
     setSending(true);
     setError("");
     setDraft("");
+    draftRef.current = "";
     setActiveSession((current) =>
       current?.key === sessionKey
         ? {

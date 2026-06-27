@@ -16,7 +16,7 @@ type ChatSurfaceProps = {
   notice: string;
   sending: boolean;
   visibleIllustrationUrl: string;
-  onSendMessage: () => void;
+  onSendMessage: (contentOverride?: string) => void;
   onUpdateDraft: (value: string) => void;
 };
 
@@ -63,8 +63,8 @@ export function ChatSurface({
     if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
 
     event.preventDefault();
-    if (!activeRoleId || !draft.trim() || sending || !bridgeReady) return;
-    onSendMessage();
+    if (!activeRoleId || !event.currentTarget.value.trim() || sending || !bridgeReady) return;
+    onSendMessage(event.currentTarget.value);
   };
 
   return (
@@ -174,7 +174,7 @@ export function ChatSurface({
               />
               <div className="composer-actions flex items-center gap-2">
                 <div className="composer-spacer flex-1" />
-                <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="Send message" onClick={onSendMessage} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
+                <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="Send message" onClick={() => onSendMessage(textareaRef.current?.value)} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
                   <svg className="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M12 19V5" />
                     <path d="M5 12l7-7 7 7" />
