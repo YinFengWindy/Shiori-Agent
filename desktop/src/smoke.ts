@@ -129,15 +129,32 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             if (!clickByText("角色")) {
               return { ok: false, reason: "edit-role-toggle-missing" };
             }
+            let roleManagementPage;
+            for (let i = 0; i < 30; i++) {
+              roleManagementPage = document.querySelector('[data-testid="role-management-page"]');
+              if (roleManagementPage) {
+                break;
+              }
+              await sleep(100);
+            }
+            if (!roleManagementPage) {
+              return { ok: false, reason: "role-management-page-missing" };
+            }
+            const roleDetailEntry = document.querySelector('[data-testid^="role-management-card-"] button:last-child');
+            if (!roleDetailEntry) {
+              return { ok: false, reason: "role-detail-entry-missing" };
+            }
+            roleDetailEntry.click();
             let editName, editDesc, editPrompt, saveRoleButton, pickAvatarButton, pickIllustrationsButton;
             for (let i = 0; i < 40; i++) {
+              const roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
               editName = document.querySelector('[data-testid="edit-role-name"]');
               editDesc = document.querySelector('[data-testid="edit-role-description"]');
               editPrompt = document.querySelector('[data-testid="edit-role-prompt"]');
               saveRoleButton = document.querySelector('[data-testid="save-role-button"]');
               pickAvatarButton = document.querySelector('[data-testid="pick-avatar-button"]');
               pickIllustrationsButton = document.querySelector('[data-testid="pick-illustrations-button"]');
-              if (editName && editDesc && editPrompt && saveRoleButton && pickAvatarButton && pickIllustrationsButton) {
+              if (roleDetailPage && editName && editDesc && editPrompt && saveRoleButton && pickAvatarButton && pickIllustrationsButton) {
                 break;
               }
               await sleep(100);

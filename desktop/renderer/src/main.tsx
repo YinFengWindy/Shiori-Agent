@@ -3,12 +3,13 @@ import { startTransition, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ChatSurface } from "./chat/ChatSurface";
 import { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel";
-import { RoleEditor } from "./roles/RoleEditor";
+import { RoleDetailPage } from "./roles/RoleDetailPage";
+import { RoleManagementPage } from "./roles/RoleManagementPage";
 import { RoleSearchDialog } from "./roles/RoleSearchDialog";
 import { RoleSidebar } from "./roles/RoleSidebar";
 import { toFileUrl } from "./shared/format";
 import { cx } from "./shared/styles";
-import type { EventLog, NewRoleFormState, RoleFormState, RoleRecord, RoleSearchResult, SessionPayload } from "./shared/types";
+import type { AppMainView, EventLog, NewRoleFormState, RoleFormState, RoleRecord, RoleSearchResult, SessionPayload } from "./shared/types";
 import { TitleBar } from "./shell/TitleBar";
 import "./styles.css";
 
@@ -55,7 +56,6 @@ function App(): React.ReactElement {
   const [savingRole, setSavingRole] = useState(false);
   const [sending, setSending] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [showRoleEditor, setShowRoleEditor] = useState(false);
   const [showNewRoleComposer, setShowNewRoleComposer] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,6 +63,7 @@ function App(): React.ReactElement {
   const [searchIndex, setSearchIndex] = useState<SearchableSessionRecord[]>([]);
   const [pendingSearchTarget, setPendingSearchTarget] = useState<RoleSearchResult | null>(null);
   const [highlightedMessageKey, setHighlightedMessageKey] = useState("");
+  const [mainView, setMainView] = useState<AppMainView>({ kind: "chat" });
   const [sidebarWidth, setSidebarWidth] = useState(sidebarDefaultWidth);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [resizingSidebar, setResizingSidebar] = useState(false);
@@ -577,7 +578,6 @@ function App(): React.ReactElement {
       });
       setClearAvatar(false);
       setClearIllustrations(false);
-      setShowRoleEditor(false);
       const savedIllustration =
         window.localStorage.getItem("miraDesktop.activeIllustration") ?? "";
       setActiveIllustration(
@@ -593,6 +593,11 @@ function App(): React.ReactElement {
     if (options?.recordHistory !== false) {
       pushRoleHistory(roleId);
     }
+  }
+
+  async function openRoleDetail(roleId: string): Promise<void> {
+    await openRole(roleId, null, { recordHistory: false });
+    setMainView({ kind: "role-detail", roleId });
   }
 
   async function sendMessage(): Promise<void> {
@@ -679,10 +684,12 @@ function App(): React.ReactElement {
     }
     const role = res.payload.role as RoleRecord;
     updateNewRoleForm(createEmptyNewRoleForm());
+    setShowNewRoleComposer(false);
     const nextRoles = await loadRolesFromBridge();
     activeRoleIdRef.current = role.id;
     setNotice("Role created.");
     await openRole(role.id, nextRoles?.find((item) => item.id === role.id) ?? role, { recordHistory: true });
+    setMainView({ kind: "role-detail", roleId: role.id });
   }
 
   async function saveRole(): Promise<void> {
@@ -715,6 +722,7 @@ function App(): React.ReactElement {
     setClearIllustrations(false);
     setNotice("Role saved.");
     await openRole(updated.id, nextRoles?.find((item) => item.id === updated.id) ?? updated, { recordHistory: false });
+    setMainView({ kind: "role-detail", roleId: updated.id });
   }
 
   async function deleteRole(): Promise<void> {
@@ -739,7 +747,10 @@ function App(): React.ReactElement {
     setNotice("Role deleted.");
     if (nextRoles[0]) {
       await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
+      setMainView({ kind: "roles-list" });
+      return;
     }
+    setMainView({ kind: "roles-list" });
   }
 
   async function pickAvatar(): Promise<void> {
@@ -819,13 +830,15 @@ function App(): React.ReactElement {
   })();
 
   const activeRole = roles.find((role) => role.id === activeRoleId) ?? null;
+  const detailRoleId = mainView.kind === "role-detail" ? mainView.roleId : activeRoleId;
+  const detailRole = roles.find((role) => role.id === detailRoleId) ?? null;
   const bridgeReady = health === "online";
   const roleFormDirty = Boolean(
-    activeRole
+    detailRole
       && (
-        roleForm.name !== activeRole.name
-        || roleForm.description !== activeRole.description
-        || roleForm.systemPrompt !== activeRole.system_prompt
+        roleForm.name !== detailRole.name
+        || roleForm.description !== detailRole.description
+        || roleForm.systemPrompt !== detailRole.system_prompt
         || Boolean(roleForm.avatarSource)
         || roleForm.illustrationSources.length > 0
         || clearAvatar
@@ -835,13 +848,13 @@ function App(): React.ReactElement {
 
   const previewAvatar = clearAvatar
     ? null
-    : (roleForm.avatarSource || activeRole?.avatar_abs || null);
+    : (roleForm.avatarSource || detailRole?.avatar_abs || null);
 
   const previewIllustrations = clearIllustrations
     ? []
     : (roleForm.illustrationSources.length
         ? roleForm.illustrationSources
-        : (activeRole?.illustrations_abs ?? []));
+        : (detailRole?.illustrations_abs ?? []));
   const visibleIllustration = activeIllustration || previewIllustrations[0] || "";
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
   const headerTitle = sending && activeRole ? "正在输入中..." : (activeRole ? activeRole.name : "Select a role");
@@ -859,11 +872,11 @@ function App(): React.ReactElement {
   }, [previewIllustrations, activeIllustration]);
 
   function resetRoleForm(): void {
-    if (!activeRole) return;
+    if (!detailRole) return;
     updateRoleForm({
-      name: activeRole.name,
-      description: activeRole.description,
-      systemPrompt: activeRole.system_prompt,
+      name: detailRole.name,
+      description: detailRole.description,
+      systemPrompt: detailRole.system_prompt,
       avatarSource: "",
       illustrationSources: [],
     });
@@ -885,7 +898,7 @@ function App(): React.ReactElement {
         onGoForward={() => void navigateRoleHistory("forward")}
         onRefreshSession={() => void refreshSession()}
         onCreateRole={() => setShowNewRoleComposer(true)}
-        onEditRole={() => setShowRoleEditor(true)}
+        onEditRole={() => setMainView(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
         onRefreshBridge={() => void refreshBridge()}
         onRestartBridge={() => void restartBridge()}
       />
@@ -907,32 +920,48 @@ function App(): React.ReactElement {
           showNewRoleComposer={showNewRoleComposer}
           newRoleForm={newRoleForm}
           onOpenSearch={() => setShowSearchDialog(true)}
-          onToggleRoleEditor={() => setShowRoleEditor((value) => !value)}
+          onToggleRoleEditor={() => setMainView({ kind: "roles-list" })}
           onUpdateNewRoleForm={updateNewRoleForm}
           onCreateRole={() => void createRole()}
           onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
           onBeginResize={beginSidebarResize}
         />
         <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-[16px] border-b border-l border-t border-[#E4E4E4] bg-[var(--chat-bg)]">
-          <ChatSurface
-            activeRole={activeRole}
-            activeRoleId={activeRoleId}
-            activeSession={activeSession}
-            bridgeReady={bridgeReady}
-            conversationEndRef={conversationEndRef}
-            draft={draft}
-            headerTitle={headerTitle}
-            highlightedMessageKey={highlightedMessageKey}
-            notice={notice}
-            sending={sending}
-            visibleIllustrationUrl={visibleIllustrationUrl}
-            onSendMessage={() => void sendMessage()}
-            onUpdateDraft={setDraft}
-          />
-          {showRoleEditor ? (
-            <RoleEditor
+          {mainView.kind === "chat" ? (
+            <ChatSurface
               activeRole={activeRole}
               activeRoleId={activeRoleId}
+              activeSession={activeSession}
+              bridgeReady={bridgeReady}
+              conversationEndRef={conversationEndRef}
+              draft={draft}
+              headerTitle={headerTitle}
+              highlightedMessageKey={highlightedMessageKey}
+              notice={notice}
+              sending={sending}
+              visibleIllustrationUrl={visibleIllustrationUrl}
+              onSendMessage={() => void sendMessage()}
+              onUpdateDraft={setDraft}
+            />
+          ) : null}
+          {mainView.kind === "roles-list" ? (
+            <RoleManagementPage
+              activeRoleId={activeRoleId}
+              bridgeReady={bridgeReady}
+              roles={roles}
+              onBackToChat={() => setMainView({ kind: "chat" })}
+              onCreateRole={() => setShowNewRoleComposer(true)}
+              onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
+              onOpenRoleSession={(roleId) => {
+                void openRole(roleId, null, { recordHistory: true });
+                setMainView({ kind: "chat" });
+              }}
+            />
+          ) : null}
+          {mainView.kind === "role-detail" ? (
+            <RoleDetailPage
+              activeRole={detailRole}
+              activeRoleId={detailRoleId}
               activeIllustration={activeIllustration}
               bridgeReady={bridgeReady}
               clearAvatar={clearAvatar}
@@ -942,6 +971,7 @@ function App(): React.ReactElement {
               roleForm={roleForm}
               roleFormDirty={roleFormDirty}
               savingRole={savingRole}
+              onBackToList={() => setMainView({ kind: "roles-list" })}
               onUpdateRoleForm={updateRoleForm}
               onSetActiveIllustration={setActiveIllustration}
               onRememberIllustration={(roleId, illustration) => void rememberIllustration(roleId, illustration)}

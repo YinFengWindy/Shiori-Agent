@@ -65,3 +65,9 @@ export type RoleSearchResult = {
   matchedMessagePreview: string;
   matchedField: "role" | "message";
 };
+
+/** Main content mode for the desktop shell. */
+export type AppMainView =
+  | { kind: "chat" }
+  | { kind: "roles-list" }
+  | { kind: "role-detail"; roleId: string };

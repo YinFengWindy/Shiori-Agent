@@ -20,6 +20,7 @@ type RoleEditorProps = {
   bridgeReady: boolean;
   clearAvatar: boolean;
   clearIllustrations: boolean;
+  embedded?: boolean;
   previewAvatar: string | null;
   previewIllustrations: string[];
   roleForm: RoleFormState;
@@ -45,6 +46,7 @@ export function RoleEditor({
   bridgeReady,
   previewAvatar,
   previewIllustrations,
+  embedded = false,
   roleForm,
   roleFormDirty,
   savingRole,
@@ -62,15 +64,21 @@ export function RoleEditor({
   const labelClass = cx("grid gap-1.5 text-xs text-text", bodyTextClass);
   const ghostDangerButtonClass =
     "ghost-btn danger cursor-pointer rounded-full border border-[rgba(143,43,24,0.22)] bg-[rgba(255,248,239,0.88)] px-[18px] py-3 text-[#8f2b18] disabled:cursor-default disabled:opacity-50";
+  const containerClass = embedded
+    ? "role-editor grid min-h-0 gap-3 rounded-[24px] border border-[#E7EBF0] bg-white/92 p-6 shadow-[0_18px_48px_rgba(31,41,55,0.08)]"
+    : "role-editor scrollbar-soft scrollbar-soft-muted absolute bottom-6 right-6 top-20 z-[3] grid min-h-0 w-[calc(100%_-_48px)] max-w-[420px] grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-auto rounded-[18px] border border-[#ededed] bg-white/95 p-[18px] shadow-editor";
+  const contentClass = embedded
+    ? "editor-form grid gap-3"
+    : "editor-form grid gap-3";
 
   return (
-    <section className="role-editor scrollbar-soft scrollbar-soft-muted absolute bottom-6 right-6 top-20 z-[3] grid min-h-0 w-[calc(100%_-_48px)] max-w-[420px] grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-auto rounded-[18px] border border-[#ededed] bg-white/95 p-[18px] shadow-editor">
+    <section className={containerClass}>
       <div className={panelHeadClass}>
         <h3 className={panelTitleClass}>Role Editor</h3>
         {roleFormDirty ? <span className="dirty-chip rounded-full border border-[rgba(138,91,17,0.18)] bg-[rgba(138,91,17,0.08)] px-3 py-2 text-xs text-[#8a5b11]">Unsaved changes</span> : null}
       </div>
       {activeRole ? (
-        <div className="editor-form grid gap-3">
+        <div className={contentClass}>
           <label className={labelClass}>
             <span>Name</span>
             <input
