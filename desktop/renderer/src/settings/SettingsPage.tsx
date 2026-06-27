@@ -136,6 +136,7 @@ function SectionCard({
 export function SettingsPage({ bridgeReady, search, section, onMetaChange }: SettingsPageProps) {
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
   const [draft, setDraft] = useState<SettingsFormData | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [phase, setPhase] = useState<SavePhase>("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
@@ -143,12 +144,18 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const nextSnapshot = await window.miraDesktop.readSettings();
-      if (cancelled) return;
-      setSnapshot(nextSnapshot);
-      setDraft(cloneSettings(nextSnapshot.formData));
-      setPhase("idle");
-      setStatusMessage("");
+      try {
+        const nextSnapshot = await window.miraDesktop.readSettings();
+        if (cancelled) return;
+        setSnapshot(nextSnapshot);
+        setDraft(cloneSettings(nextSnapshot.formData));
+        setLoadError("");
+        setPhase("idle");
+        setStatusMessage("");
+      } catch (error) {
+        if (cancelled) return;
+        setLoadError(error instanceof Error ? error.message : String(error));
+      }
     })();
     return () => {
       cancelled = true;
@@ -202,6 +209,16 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     setDraft(cloneSettings(snapshot.formData));
     setStatusMessage("已恢复到当前磁盘配置。");
     setPhase("idle");
+  }
+
+  if (loadError) {
+    return (
+      <section className="settings-page grid h-full place-items-center bg-[#F7F8FB]" data-testid="settings-page">
+        <div className={cx(cardClass, "mx-8 max-w-[680px] p-6 text-sm leading-6 text-[#8f2d2d]")}>
+          设置加载失败：{loadError}
+        </div>
+      </section>
+    );
   }
 
   if (!draft) {

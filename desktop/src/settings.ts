@@ -230,6 +230,10 @@ function renderPluginBlocks(rawToml: string): string {
   return trimmed ? `${trimmed}\n` : "";
 }
 
+function pickPreferredRecord(primary: Record<string, unknown>, fallback: Record<string, unknown>): Record<string, unknown> {
+  return Object.keys(primary).length > 0 ? primary : fallback;
+}
+
 function loadSettingsData(): SettingsSnapshot {
   const content = existsSync(configPath)
     ? readFileSync(configPath, "utf-8")
@@ -242,6 +246,7 @@ function loadSettingsData(): SettingsSnapshot {
   const channels = asRecord(parsed.channels);
   const telegram = asRecord(channels.telegram);
   const qq = asRecord(channels.qq);
+  const qqbotLegacy = asRecord(channels.qqbot);
   const memory = asRecord(parsed.memory);
   const embedding = asRecord(memory.embedding);
   const proactive = asRecord(parsed.proactive);
@@ -256,7 +261,8 @@ function loadSettingsData(): SettingsSnapshot {
   const agentMaintenance = asRecord(agent.maintenance);
   const agentWiring = asRecord(agent.wiring);
   const plugins = asRecord(parsed.plugins);
-  const qqbot = asRecord(plugins.qqbot);
+  const qqbot = pickPreferredRecord(asRecord(plugins.qqbot), qqbotLegacy);
+  const cli = asRecord(channels.cli);
 
   return {
     configPath,
@@ -302,8 +308,8 @@ function loadSettingsData(): SettingsSnapshot {
             allowProactive: Boolean(group.allow_proactive),
           };
         }),
-        cliSocket: String(channels.socket ?? ""),
-        cliSessionKey: String(asRecord(channels.cli).session_key ?? ""),
+        cliSocket: String(cli.socket ?? ""),
+        cliSessionKey: String(cli.session_key ?? ""),
       },
       memory: {
         enabled: Boolean(memory.enabled),
@@ -402,7 +408,7 @@ function renderSettingsToml(formData: SettingsFormData): string {
   const qqbotGroupBlocks = formData.channels.qqbotGroups
     .filter((group) => group.groupOpenid.trim())
     .map((group) => [
-      "[[plugins.qqbot.groups]]",
+      "[[channels.qqbot.groups]]",
       `group_openid = ${quote(group.groupOpenid.trim())}`,
       `allow_from = ${renderStringArray(group.allowFrom)}`,
       `require_at = ${group.requireAt ? "true" : "false"}`,
@@ -487,7 +493,7 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `socket = ${quote(formData.channels.cliSocket)}`,
     `session_key = ${quote(formData.channels.cliSessionKey)}`,
     "",
-    "[plugins.qqbot]",
+    "[channels.qqbot]",
     `app_id = ${quote(formData.channels.qqbotAppId)}`,
     `client_secret = ${quote(formData.channels.qqbotClientSecret)}`,
     `allow_from = ${renderStringArray(formData.channels.qqbotAllowFrom)}`,
