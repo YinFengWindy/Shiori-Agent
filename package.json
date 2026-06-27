@@ -13,7 +13,7 @@
     "desktop:dev": "npm --prefix desktop run dev",
     "desktop:dev:smoke": "npm --prefix desktop run smoke:desktop",
     "desktop:smoke:all": "npm --prefix desktop run smoke",
-    "desktop:smoke:ui": "npm --prefix desktop run smoke:desktop-ui",
+    "desktop:smoke:ui": "npm --prefix desktop run build && npm --prefix desktop run smoke:desktop-ui",
     "desktop:smoke:restart": "npm --prefix desktop run smoke:restart",
     "desktop:smoke": "npm --prefix desktop run build && npm --prefix desktop run smoke:desktop",
     "desktop:start": "npm --prefix desktop run start:built",

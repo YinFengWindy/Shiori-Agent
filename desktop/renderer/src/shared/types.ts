@@ -1,3 +1,11 @@
+import type {
+  SettingsChannelGroup,
+  SettingsFormData,
+  SettingsPeerAgent,
+  SettingsQQBotGroup,
+  SettingsSnapshot,
+} from "../../../src/shared";
+
 /** Role data returned by the desktop bridge. */
 export type RoleRecord = {
   id: string;
@@ -70,4 +78,13 @@ export type RoleSearchResult = {
 export type AppMainView =
   | { kind: "chat" }
   | { kind: "roles-list" }
-  | { kind: "role-detail"; roleId: string };
+  | { kind: "role-detail"; roleId: string }
+  | { kind: "settings" };
+
+export type {
+  SettingsChannelGroup,
+  SettingsFormData,
+  SettingsPeerAgent,
+  SettingsQQBotGroup,
+  SettingsSnapshot,
+};

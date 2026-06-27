@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import type { IpcMainInvokeEvent } from "electron";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
 import { runBridgeSmoke } from "./smoke.js";
+import { loadSettingsData, saveSettings } from "./settings.js";
+import type { SettingsFormData } from "./shared.js";
 import type { WindowControlAction } from "./shared.js";
 
 type RegisterDesktopIpcOptions = {
@@ -37,6 +39,40 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
         lastError: String(error),
       };
     }
+  });
+  ipcMain.handle("desktop:settings-read", async () => {
+    return loadSettingsData();
+  });
+  ipcMain.handle("desktop:settings-save", async (_event: IpcMainInvokeEvent, formData: SettingsFormData) => {
+    return await saveSettings(
+      formData,
+      async () => {
+        try {
+          await bridge.restart();
+          return {
+            ok: true,
+            running: bridge.isRunning(),
+            lastError: bridge.getLastError(),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            running: false,
+            lastError: String(error),
+          };
+        }
+      },
+      async () => {
+        const health = await bridge.invoke({
+          method: "health",
+          payload: {},
+        });
+        return {
+          ok: !health.error,
+          message: health.error?.message ?? "ok",
+        };
+      },
+    );
   });
   ipcMain.handle("desktop:window-control", (_event: IpcMainInvokeEvent, action: WindowControlAction) => {
     const [window] = BrowserWindow.getAllWindows();

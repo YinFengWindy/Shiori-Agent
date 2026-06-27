@@ -23,6 +23,121 @@ export type BridgeEvent = {
   payload: Record<string, unknown>;
 };
 
+export type SettingsChannelGroup = {
+  groupId: string;
+  allowFrom: string[];
+  requireAt: boolean;
+};
+
+export type SettingsQQBotGroup = {
+  groupOpenid: string;
+  allowFrom: string[];
+  requireAt: boolean;
+  allowProactive: boolean;
+};
+
+export type SettingsPeerAgent = {
+  name: string;
+  baseUrl: string;
+  launcher: string[];
+  cwd: string;
+  description: string;
+  healthPath: string;
+  startupTimeoutSeconds: number;
+  shutdownTimeoutSeconds: number;
+};
+
+export type SettingsFormData = {
+  models: {
+    provider: string;
+    mainModel: string;
+    mainApiKey: string;
+    mainBaseUrl: string;
+    enableThinking: boolean;
+    multimodal: boolean;
+    fastModel: string;
+    fastApiKey: string;
+    fastBaseUrl: string;
+    vlModel: string;
+    vlApiKey: string;
+    vlBaseUrl: string;
+  };
+  channels: {
+    telegramToken: string;
+    telegramAllowFrom: string[];
+    telegramChannelName: string;
+    qqBotUin: string;
+    qqAllowFrom: string[];
+    qqWebsocketOpenTimeoutSeconds: number;
+    qqGroups: SettingsChannelGroup[];
+    qqbotAppId: string;
+    qqbotClientSecret: string;
+    qqbotAllowFrom: string[];
+    qqbotGroups: SettingsQQBotGroup[];
+    cliSocket: string;
+    cliSessionKey: string;
+  };
+  memory: {
+    enabled: boolean;
+    engine: string;
+    embeddingModel: string;
+    embeddingApiKey: string;
+    embeddingBaseUrl: string;
+    outputDimensionality: string;
+  };
+  proactive: {
+    enabled: boolean;
+    profile: string;
+    targetChannel: string;
+    targetChatId: string;
+    agentMaxSteps: number;
+    agentContentLimit: number;
+    agentWebFetchMaxChars: number;
+    agentContextProb: number;
+    agentDeliveryCooldownHours: number;
+    driftEnabled: boolean;
+    driftMaxSteps: number;
+    driftMinIntervalHours: number;
+  };
+  integrations: {
+    fitbitEnabled: boolean;
+    peerAgents: SettingsPeerAgent[];
+  };
+  advanced: {
+    systemPrompt: string;
+    maxTokens: number;
+    maxIterations: number;
+    devMode: boolean;
+    memoryWindow: number;
+    searchEnabled: boolean;
+    spawnEnabled: boolean;
+    memoryOptimizerEnabled: boolean;
+    memoryOptimizerIntervalSeconds: number;
+    wiringContext: string;
+    wiringMemory: string;
+    wiringToolsets: string[];
+    pluginsRawToml: string;
+  };
+};
+
+export type SettingsSnapshot = {
+  configPath: string;
+  formData: SettingsFormData;
+};
+
+export type SaveSettingsResult = {
+  ok: boolean;
+  restart: {
+    ok: boolean;
+    running: boolean;
+    lastError: string | null;
+  };
+  health: {
+    ok: boolean;
+    message: string;
+  };
+};
+
 /** Window chrome actions exposed through the preload bridge. */
 export type WindowControlAction = "minimize" | "toggleMaximize" | "close";
 
@@ -32,6 +147,8 @@ export type DesktopApi = {
   pickImages(options?: { multiple?: boolean }): Promise<string[]>;
   bridgeStatus(): Promise<{ running: boolean; lastError: string | null }>;
   restartBridge(): Promise<{ ok: boolean; running: boolean; lastError: string | null }>;
+  readSettings(): Promise<SettingsSnapshot>;
+  saveSettings(formData: SettingsFormData): Promise<SaveSettingsResult>;
   /** Controls the custom frameless Electron window chrome. */
   windowControl(action: WindowControlAction): Promise<void>;
   smoke(): Promise<{

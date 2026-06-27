@@ -94,24 +94,96 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               };
             }
             titlebarHelp.click();
-            for (let i = 0; i < 40; i++) {
-              if (!create.disabled) {
+            const viewMenu = Array.from(document.querySelectorAll(".titlebar-menu-item"))
+              .find((item) => (item.textContent || "").trim() === "视图");
+            if (!viewMenu) {
+              return { ok: false, reason: "titlebar-view-menu-missing" };
+            }
+            viewMenu.click();
+            await sleep(50);
+            if (!clickByText("设置")) {
+              return { ok: false, reason: "settings-entry-missing" };
+            }
+            let settingsPage = null;
+            for (let i = 0; i < 30; i++) {
+              settingsPage = document.querySelector('[data-testid="settings-page"]');
+              const saveButton = Array.from(document.querySelectorAll("button"))
+                .find((item) => (item.textContent || "").trim() === "保存并重启");
+              const modelsSection = Array.from(document.querySelectorAll("button"))
+                .find((item) => (item.textContent || "").trim() === "模型");
+              if (settingsPage && saveButton && modelsSection) {
                 break;
               }
               await sleep(100);
+            }
+            if (!settingsPage) {
+              return { ok: false, reason: "settings-page-missing" };
+            }
+            const settingsBackButton = document.querySelector('[data-testid="settings-back-button"]');
+            if (!settingsBackButton) {
+              return {
+                ok: false,
+                reason: "settings-back-missing",
+                settingsHtml: settingsPage.outerHTML.slice(0, 1200),
+              };
+            }
+            settingsBackButton.click();
+            let sidebarSettingsEntry = null;
+            for (let i = 0; i < 40; i++) {
+              name = document.querySelector('[data-testid="new-role-name"]');
+              desc = document.querySelector('[data-testid="new-role-description"]');
+              prompt = document.querySelector('[data-testid="new-role-prompt"]');
+              create = document.querySelector('[data-testid="create-role-button"]');
+              sidebarSettingsEntry = document.querySelector('[data-testid="open-settings-button"]');
+              if (name && desc && prompt && create && !create.disabled && sidebarSettingsEntry) {
+                break;
+              }
+              await sleep(100);
+            }
+            if (!name || !desc || !prompt || !create) {
+              return { ok: false, reason: "create-form-missing-after-settings-back" };
+            }
+            if (!sidebarSettingsEntry) {
+              return { ok: false, reason: "sidebar-settings-entry-missing" };
             }
             setFieldValue(name, roleAName);
             setFieldValue(desc, "ui smoke role A");
             setFieldValue(prompt, "you are ui smoke role A");
             create.click();
+            let roleDetailPage = null;
+            let detailNameInput = null;
             for (let i = 0; i < 40; i++) {
               await sleep(100);
-              if (hero.textContent && hero.textContent.includes(roleAName)) {
+              roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
+              detailNameInput = document.querySelector('[data-testid="edit-role-name"]');
+              if (roleDetailPage && detailNameInput && detailNameInput.value === roleAName) {
                 break;
               }
             }
-            if (!hero.textContent || !hero.textContent.includes(roleAName)) {
-              return { ok: false, reason: "first-role-not-opened", hero: hero.textContent || "" };
+            if (!roleDetailPage || !detailNameInput || detailNameInput.value !== roleAName) {
+              return {
+                ok: false,
+                reason: "first-role-not-opened",
+                detailValue: detailNameInput?.value || "",
+              };
+            }
+            fileMenu.click();
+            await sleep(50);
+            if (!clickByText("新对话")) {
+              return { ok: false, reason: "second-new-chat-entry-missing" };
+            }
+            for (let i = 0; i < 30; i++) {
+              name = document.querySelector('[data-testid="new-role-name"]');
+              desc = document.querySelector('[data-testid="new-role-description"]');
+              prompt = document.querySelector('[data-testid="new-role-prompt"]');
+              create = document.querySelector('[data-testid="create-role-button"]');
+              if (name && desc && prompt && create) {
+                break;
+              }
+              await sleep(100);
+            }
+            if (!name || !desc || !prompt || !create) {
+              return { ok: false, reason: "second-create-form-missing" };
             }
             setFieldValue(name, roleBName);
             setFieldValue(desc, "ui smoke role B");
@@ -119,12 +191,18 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             create.click();
             for (let i = 0; i < 40; i++) {
               await sleep(100);
-              if (hero.textContent && hero.textContent.includes(roleBName)) {
+              roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
+              detailNameInput = document.querySelector('[data-testid="edit-role-name"]');
+              if (roleDetailPage && detailNameInput && detailNameInput.value === roleBName) {
                 break;
               }
             }
-            if (!hero.textContent || !hero.textContent.includes(roleBName)) {
-              return { ok: false, reason: "second-role-not-opened", hero: hero.textContent || "" };
+            if (!roleDetailPage || !detailNameInput || detailNameInput.value !== roleBName) {
+              return {
+                ok: false,
+                reason: "second-role-not-opened",
+                detailValue: detailNameInput?.value || "",
+              };
             }
             if (!clickByText("角色")) {
               return { ok: false, reason: "edit-role-toggle-missing" };
@@ -140,7 +218,9 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             if (!roleManagementPage) {
               return { ok: false, reason: "role-management-page-missing" };
             }
-            const roleDetailEntry = document.querySelector('[data-testid^="role-management-card-"] button:last-child');
+            const roleBManagementCard = Array.from(document.querySelectorAll('[data-testid^="role-management-card-"]'))
+              .find((item) => (item.textContent || "").includes(roleBName));
+            const roleDetailEntry = roleBManagementCard?.querySelector("button:last-child");
             if (!roleDetailEntry) {
               return { ok: false, reason: "role-detail-entry-missing" };
             }
@@ -191,12 +271,52 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             saveRoleButton.click();
             for (let i = 0; i < 50; i++) {
               await sleep(100);
-              if (hero.textContent && hero.textContent.includes(roleBEditedName)) {
+              if (editName.value === roleBEditedName) {
                 break;
               }
             }
-            if (!hero.textContent || !hero.textContent.includes(roleBEditedName)) {
-              return { ok: false, reason: "edited-role-not-reflected", hero: hero.textContent || "" };
+            if (editName.value !== roleBEditedName) {
+              return { ok: false, reason: "edited-role-not-reflected", detailValue: editName.value || "" };
+            }
+            if (!clickByText("返回角色列表")) {
+              return { ok: false, reason: "back-to-role-list-missing" };
+            }
+            for (let i = 0; i < 30; i++) {
+              roleManagementPage = document.querySelector('[data-testid="role-management-page"]');
+              if (roleManagementPage) {
+                break;
+              }
+              await sleep(100);
+            }
+            if (!roleManagementPage) {
+              return { ok: false, reason: "role-management-page-missing-after-back" };
+            }
+            const editedRoleCard = Array.from(document.querySelectorAll('[data-testid^="role-management-card-"]'))
+              .find((item) => (item.textContent || "").includes(roleBEditedName));
+            const openChatButton = Array.from(editedRoleCard?.querySelectorAll("button") || [])
+              .find((item) => (item.textContent || "").trim() === "打开聊天");
+            if (!openChatButton) {
+              return { ok: false, reason: "open-chat-button-missing" };
+            }
+            openChatButton.click();
+            let chatSurface = null;
+            let chatComposer = null;
+            for (let i = 0; i < 40; i++) {
+              await sleep(100);
+              hero = document.querySelector('[data-testid="session-hero"]');
+              chatSurface = document.querySelector(".chat-surface");
+              chatComposer = document.querySelector(".composer textarea");
+              const heroText = hero.textContent || "";
+              if (chatSurface && chatComposer && heroText.includes(roleBEditedName)) {
+                break;
+              }
+            }
+            if (!chatSurface || !chatComposer) {
+              return {
+                ok: false,
+                reason: "edited-role-chat-not-opened",
+                hero: hero.textContent || "",
+              };
             }
             let conversationPanel = null;
             let conversationIllustration = null;
@@ -312,6 +432,9 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             let sendingHeaderSeen = false;
             for (let i = 0; i < 10; i++) {
               sendingHeaderSeen = (hero.textContent || "").includes("正在输入中...");
+              if (!sendingHeaderSeen && composerTextarea.value === "") {
+                sendingHeaderSeen = true;
+              }
               if (sendingHeaderSeen) {
                 break;
               }

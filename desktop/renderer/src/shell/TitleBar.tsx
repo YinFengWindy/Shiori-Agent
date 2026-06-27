@@ -28,6 +28,7 @@ export function TitleBar({
   onRefreshSession,
   onCreateRole,
   onEditRole,
+  onOpenSettings,
   onRefreshBridge,
   onRestartBridge,
 }: {
@@ -42,6 +43,7 @@ export function TitleBar({
   onRefreshSession: () => void;
   onCreateRole: () => void;
   onEditRole: () => void;
+  onOpenSettings: () => void;
   onRefreshBridge: () => void;
   onRestartBridge: () => void;
 }) {
@@ -91,6 +93,7 @@ export function TitleBar({
     ],
     视图: [
       { label: sidebarCollapsed ? "展开侧边栏" : "收起侧边栏", onSelect: onToggleSidebar },
+      { label: "设置", onSelect: onOpenSettings },
     ],
     帮助: [
       { label: "刷新 Bridge", onSelect: onRefreshBridge },

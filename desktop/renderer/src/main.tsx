@@ -7,6 +7,8 @@ import { RoleDetailPage } from "./roles/RoleDetailPage";
 import { RoleManagementPage } from "./roles/RoleManagementPage";
 import { RoleSearchDialog } from "./roles/RoleSearchDialog";
 import { RoleSidebar } from "./roles/RoleSidebar";
+import { SettingsPage } from "./settings/SettingsPage";
+import { SettingsSidebar, type SettingsSectionId } from "./settings/SettingsSidebar";
 import { toFileUrl } from "./shared/format";
 import { cx } from "./shared/styles";
 import type { AppMainView, EventLog, NewRoleFormState, RoleFormState, RoleRecord, RoleSearchResult, SessionPayload } from "./shared/types";
@@ -72,6 +74,10 @@ function App(): React.ReactElement {
   const [clearIllustrations, setClearIllustrations] = useState(false);
   const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
   const [newRoleForm, setNewRoleForm] = useState(createEmptyNewRoleForm);
+  const [settingsSearch, setSettingsSearch] = useState("");
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
+  const [settingsConfigPath, setSettingsConfigPath] = useState("");
+  const [settingsDirty, setSettingsDirty] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
   const activeRoleIdRef = useRef("");
@@ -148,6 +154,14 @@ function App(): React.ReactElement {
       return;
     }
     setSidebarCollapsed(true);
+  }
+
+  function openSettingsView(section: SettingsSectionId = "models"): void {
+    setSettingsSearch("");
+    setSettingsSection(section);
+    setSidebarCollapsed(false);
+    setSidebarWidth((current) => Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, current)));
+    setMainView({ kind: "settings" });
   }
 
   function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
@@ -386,15 +400,33 @@ function App(): React.ReactElement {
       setPendingSearchTarget(null);
       return;
     }
-    const frame = window.requestAnimationFrame(() => {
-      const target = document.querySelector<HTMLElement>(`[data-message-key="${CSS.escape(messageKey)}"]`);
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 12;
+
+    const tryHighlight = () => {
+      if (cancelled) return;
+      const target = Array.from(document.querySelectorAll<HTMLElement>("[data-message-key]"))
+        .find((item) => item.dataset.messageKey === messageKey);
       if (target) {
         setHighlightedMessageKey(messageKey);
         target.scrollIntoView({ behavior: "smooth", block: "center" });
+        setPendingSearchTarget(null);
+        return;
       }
-      setPendingSearchTarget(null);
-    });
-    return () => window.cancelAnimationFrame(frame);
+      attempts += 1;
+      if (attempts >= maxAttempts) {
+        setPendingSearchTarget(null);
+        return;
+      }
+      window.setTimeout(tryHighlight, 80);
+    };
+
+    const frame = window.requestAnimationFrame(tryHighlight);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
   }, [activeRoleId, activeSession, pendingSearchTarget, searchIndex]);
 
   useEffect(() => {
@@ -910,6 +942,7 @@ function App(): React.ReactElement {
         onRefreshSession={() => void refreshSession()}
         onCreateRole={() => setShowNewRoleComposer(true)}
         onEditRole={() => setMainView(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
+        onOpenSettings={() => openSettingsView()}
         onRefreshBridge={() => void refreshBridge()}
         onRestartBridge={() => void restartBridge()}
       />
@@ -922,21 +955,36 @@ function App(): React.ReactElement {
           gridTemplateColumns: sidebarCollapsed ? "minmax(0, 1fr)" : `${sidebarWidth}px minmax(0, 1fr)`,
         }}
       >
-        <RoleSidebar
-          roles={roles}
-          activeRoleId={activeRoleId}
-          bridgeReady={bridgeReady}
-          collapsed={sidebarCollapsed}
-          creating={creating}
-          showNewRoleComposer={showNewRoleComposer}
-          newRoleForm={newRoleForm}
-          onOpenSearch={() => setShowSearchDialog(true)}
-          onToggleRoleEditor={() => setMainView({ kind: "roles-list" })}
-          onUpdateNewRoleForm={updateNewRoleForm}
-          onCreateRole={() => void createRole()}
-          onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
-          onBeginResize={beginSidebarResize}
-        />
+        {mainView.kind === "settings" ? (
+          <SettingsSidebar
+            activeSection={settingsSection}
+            collapsed={sidebarCollapsed}
+            configPath={settingsConfigPath}
+            dirty={settingsDirty}
+            onBackToChat={() => setMainView({ kind: "chat" })}
+            onOpenSection={setSettingsSection}
+            onSearchChange={setSettingsSearch}
+            onBeginResize={beginSidebarResize}
+            search={settingsSearch}
+          />
+        ) : (
+          <RoleSidebar
+            roles={roles}
+            activeRoleId={activeRoleId}
+            bridgeReady={bridgeReady}
+            collapsed={sidebarCollapsed}
+            creating={creating}
+            showNewRoleComposer={showNewRoleComposer}
+            newRoleForm={newRoleForm}
+            onOpenSearch={() => setShowSearchDialog(true)}
+            onToggleRoleEditor={() => setMainView({ kind: "roles-list" })}
+            onUpdateNewRoleForm={updateNewRoleForm}
+            onCreateRole={() => void createRole()}
+            onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
+            onOpenSettings={() => openSettingsView()}
+            onBeginResize={beginSidebarResize}
+          />
+        )}
         <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-[16px] border-b border-l border-t border-[#E4E4E4] bg-[var(--chat-bg)]">
           {mainView.kind === "chat" ? (
             <ChatSurface
@@ -951,7 +999,7 @@ function App(): React.ReactElement {
               notice={notice}
               sending={sending}
               visibleIllustrationUrl={visibleIllustrationUrl}
-              onSendMessage={() => void sendMessage()}
+              onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
               onUpdateDraft={setDraft}
             />
           ) : null}
@@ -964,8 +1012,10 @@ function App(): React.ReactElement {
               onCreateRole={() => setShowNewRoleComposer(true)}
               onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
               onOpenRoleSession={(roleId) => {
-                void openRole(roleId, null, { recordHistory: true });
-                setMainView({ kind: "chat" });
+                void (async () => {
+                  await openRole(roleId, null, { recordHistory: true });
+                  setMainView({ kind: "chat" });
+                })();
               }}
             />
           ) : null}
@@ -993,6 +1043,17 @@ function App(): React.ReactElement {
               onDeleteRole={() => void deleteRole()}
               onResetRoleForm={resetRoleForm}
               onSaveRole={() => void saveRole()}
+            />
+          ) : null}
+          {mainView.kind === "settings" ? (
+            <SettingsPage
+              bridgeReady={bridgeReady}
+              search={settingsSearch}
+              section={settingsSection}
+              onMetaChange={({ configPath, dirty }) => {
+                setSettingsConfigPath(configPath);
+                setSettingsDirty(dirty);
+              }}
             />
           ) : null}
           <DiagnosticsPanel error={error} events={events} expanded={showDiagnostics} />
