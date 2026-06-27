@@ -52,3 +52,16 @@ export type NewRoleFormState = {
   description: string;
   systemPrompt: string;
 };
+
+/** Search result row shown in the desktop sidebar search dialog. */
+export type RoleSearchResult = {
+  roleId: string;
+  roleName: string;
+  roleAvatarAbs: string | null;
+  sessionKey: string;
+  matchedMessageTimestamp: string | null;
+  matchedMessageId: string | null;
+  matchedMessageIndex: number | null;
+  matchedMessagePreview: string;
+  matchedField: "role" | "message";
+};

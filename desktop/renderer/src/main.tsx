@@ -4,10 +4,11 @@ import { createRoot } from "react-dom/client";
 import { ChatSurface } from "./chat/ChatSurface";
 import { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel";
 import { RoleEditor } from "./roles/RoleEditor";
+import { RoleSearchDialog } from "./roles/RoleSearchDialog";
 import { RoleSidebar } from "./roles/RoleSidebar";
 import { toFileUrl } from "./shared/format";
 import { cx } from "./shared/styles";
-import type { EventLog, NewRoleFormState, RoleFormState, RoleRecord, SessionPayload } from "./shared/types";
+import type { EventLog, NewRoleFormState, RoleFormState, RoleRecord, RoleSearchResult, SessionPayload } from "./shared/types";
 import { TitleBar } from "./shell/TitleBar";
 import "./styles.css";
 
@@ -15,6 +16,13 @@ const sidebarMinWidth = 360;
 const sidebarMaxWidth = 720;
 const sidebarDefaultWidth = 360;
 const sidebarAutoCollapseWindowWidth = 980;
+
+type SearchableSessionRecord = {
+  roleId: string;
+  roleName: string;
+  roleAvatarAbs: string | null;
+  session: SessionPayload;
+};
 
 function createEmptyRoleForm(): RoleFormState {
   return {
@@ -49,6 +57,12 @@ function App(): React.ReactElement {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showRoleEditor, setShowRoleEditor] = useState(false);
   const [showNewRoleComposer, setShowNewRoleComposer] = useState(false);
+  const [showSearchDialog, setShowSearchDialog] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchingSessions, setSearchingSessions] = useState(false);
+  const [searchIndex, setSearchIndex] = useState<SearchableSessionRecord[]>([]);
+  const [pendingSearchTarget, setPendingSearchTarget] = useState<RoleSearchResult | null>(null);
+  const [highlightedMessageKey, setHighlightedMessageKey] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(sidebarDefaultWidth);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [resizingSidebar, setResizingSidebar] = useState(false);
@@ -89,6 +103,31 @@ function App(): React.ReactElement {
       : next;
     newRoleFormRef.current = resolved;
     setNewRoleForm(resolved);
+  }
+
+  function getMessageKey(roleId: string, messageId: string | null, messageIndex: number | null): string {
+    if (messageId) return String(messageId);
+    if (messageIndex == null) return "";
+    const session = activeRoleId === roleId
+      ? (activeSession ?? searchIndex.find((item) => item.roleId === roleId)?.session ?? null)
+      : (searchIndex.find((item) => item.roleId === roleId)?.session ?? null);
+    const message = session?.messages[messageIndex];
+    if (!message) return "";
+    return String(message.id ?? `${message.role}-${messageIndex}`);
+  }
+
+  function truncateSearchPreview(value: string, query: string): string {
+    const compactValue = value.replace(/\s+/g, " ").trim();
+    if (!compactValue) return "空消息";
+    const compactQuery = query.trim().toLowerCase();
+    if (!compactQuery) return compactValue.slice(0, 88);
+    const hitIndex = compactValue.toLowerCase().indexOf(compactQuery);
+    if (hitIndex < 0) return compactValue.slice(0, 88);
+    const start = Math.max(0, hitIndex - 16);
+    const end = Math.min(compactValue.length, hitIndex + compactQuery.length + 44);
+    const prefix = start > 0 ? "..." : "";
+    const suffix = end < compactValue.length ? "..." : "";
+    return `${prefix}${compactValue.slice(start, end)}${suffix}`;
   }
 
   function toggleSidebar(): void {
@@ -154,6 +193,31 @@ function App(): React.ReactElement {
     const nextRoles = (rolesRes.payload.roles as RoleRecord[]) ?? [];
     setRoles(nextRoles);
     return nextRoles;
+  }
+
+  async function buildSearchIndex(nextRoles: RoleRecord[]): Promise<void> {
+    if (!nextRoles.length) {
+      setSearchIndex([]);
+      return;
+    }
+    setSearchingSessions(true);
+    try {
+      const sessionRecords = await Promise.all(
+        nextRoles.map(async (role) => {
+          const { session } = await fetchRoleSession(role.id);
+          if (!session) return null;
+          return {
+            roleId: role.id,
+            roleName: role.name,
+            roleAvatarAbs: role.avatar_abs,
+            session,
+          } satisfies SearchableSessionRecord;
+        }),
+      );
+      setSearchIndex(sessionRecords.filter((item): item is SearchableSessionRecord => item !== null));
+    } finally {
+      setSearchingSessions(false);
+    }
   }
 
   useEffect(() => {
@@ -284,8 +348,43 @@ function App(): React.ReactElement {
   }, [notice]);
 
   useEffect(() => {
+    if (highlightedMessageKey) return;
     conversationEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [activeSession?.messages.length, sending]);
+  }, [activeSession?.messages.length, highlightedMessageKey, sending]);
+
+  useEffect(() => {
+    if (!highlightedMessageKey) return;
+    const timer = window.setTimeout(() => setHighlightedMessageKey(""), 2400);
+    return () => window.clearTimeout(timer);
+  }, [highlightedMessageKey]);
+
+  useEffect(() => {
+    if (!showSearchDialog) return;
+    void buildSearchIndex(roles);
+  }, [roles, showSearchDialog]);
+
+  useEffect(() => {
+    if (!activeSession || !pendingSearchTarget) return;
+    if (pendingSearchTarget.roleId !== activeRoleId) return;
+    const messageKey = getMessageKey(
+      pendingSearchTarget.roleId,
+      pendingSearchTarget.matchedMessageId,
+      pendingSearchTarget.matchedMessageIndex,
+    );
+    if (!messageKey) {
+      setPendingSearchTarget(null);
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(`[data-message-key="${CSS.escape(messageKey)}"]`);
+      if (target) {
+        setHighlightedMessageKey(messageKey);
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      setPendingSearchTarget(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeRoleId, activeSession, pendingSearchTarget, searchIndex]);
 
   useEffect(() => {
     const off = window.miraDesktop.onEvent((event) => {
@@ -678,6 +777,47 @@ function App(): React.ReactElement {
     await openRole(nextRoleId, null, { recordHistory: false });
   }
 
+  const searchResults = (() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return [] satisfies RoleSearchResult[];
+
+    const results: RoleSearchResult[] = [];
+    for (const record of searchIndex) {
+      if (record.roleName.toLowerCase().includes(query)) {
+        results.push({
+          roleId: record.roleId,
+          roleName: record.roleName,
+          roleAvatarAbs: record.roleAvatarAbs,
+          sessionKey: record.session.key,
+          matchedMessageTimestamp: record.session.updated_at ?? null,
+          matchedMessageId: null,
+          matchedMessageIndex: null,
+          matchedMessagePreview: `角色 ${record.roleName}`,
+          matchedField: "role",
+        });
+      }
+
+      record.session.messages.forEach((message, messageIndex) => {
+        const content = message.content.trim();
+        if (!content) return;
+        if (!content.toLowerCase().includes(query)) return;
+        results.push({
+          roleId: record.roleId,
+          roleName: record.roleName,
+          roleAvatarAbs: record.roleAvatarAbs,
+          sessionKey: record.session.key,
+          matchedMessageTimestamp: message.timestamp ?? null,
+          matchedMessageId: message.id ?? null,
+          matchedMessageIndex: messageIndex,
+          matchedMessagePreview: truncateSearchPreview(content, query),
+          matchedField: "message",
+        });
+      });
+    }
+
+    return results.slice(0, 60);
+  })();
+
   const activeRole = roles.find((role) => role.id === activeRoleId) ?? null;
   const bridgeReady = health === "online";
   const roleFormDirty = Boolean(
@@ -766,7 +906,7 @@ function App(): React.ReactElement {
           creating={creating}
           showNewRoleComposer={showNewRoleComposer}
           newRoleForm={newRoleForm}
-          onToggleNewRoleComposer={() => setShowNewRoleComposer((value) => !value)}
+          onOpenSearch={() => setShowSearchDialog(true)}
           onToggleRoleEditor={() => setShowRoleEditor((value) => !value)}
           onUpdateNewRoleForm={updateNewRoleForm}
           onCreateRole={() => void createRole()}
@@ -782,6 +922,7 @@ function App(): React.ReactElement {
             conversationEndRef={conversationEndRef}
             draft={draft}
             headerTitle={headerTitle}
+            highlightedMessageKey={highlightedMessageKey}
             notice={notice}
             sending={sending}
             visibleIllustrationUrl={visibleIllustrationUrl}
@@ -816,6 +957,28 @@ function App(): React.ReactElement {
           <DiagnosticsPanel error={error} events={events} expanded={showDiagnostics} />
         </main>
       </div>
+      <RoleSearchDialog
+        open={showSearchDialog}
+        query={searchQuery}
+        searching={searchingSessions}
+        results={searchResults}
+        onClose={() => {
+          setShowSearchDialog(false);
+          setSearchQuery("");
+        }}
+        onSelectResult={(result) => {
+          setShowSearchDialog(false);
+          setSearchQuery("");
+          if (result.matchedField === "message") {
+            setPendingSearchTarget(result);
+          } else {
+            setPendingSearchTarget(null);
+            setHighlightedMessageKey("");
+          }
+          void openRole(result.roleId, null, { recordHistory: true });
+        }}
+        onUpdateQuery={setSearchQuery}
+      />
     </div>
   );
 }

@@ -11,7 +11,7 @@ type RoleSidebarProps = {
   creating: boolean;
   showNewRoleComposer: boolean;
   newRoleForm: NewRoleFormState;
-  onToggleNewRoleComposer: () => void;
+  onOpenSearch: () => void;
   onToggleRoleEditor: () => void;
   onUpdateNewRoleForm: React.Dispatch<React.SetStateAction<NewRoleFormState>>;
   onCreateRole: () => void;
@@ -28,7 +28,7 @@ export function RoleSidebar({
   creating,
   showNewRoleComposer,
   newRoleForm,
-  onToggleNewRoleComposer,
+  onOpenSearch,
   onToggleRoleEditor,
   onUpdateNewRoleForm,
   onCreateRole,
@@ -45,14 +45,7 @@ export function RoleSidebar({
   return (
     <aside className={cx("role-pane relative grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-[18px] overflow-hidden bg-transparent py-[18px] pl-5 pr-[18px]", collapsed && "hidden")}>
       <div className="sidebar-top grid gap-1">
-        <button className={sidebarEntryClass} type="button" onClick={onToggleNewRoleComposer}>
-          <span className="sidebar-entry-icon sidebar-entry-new relative block h-5 w-5 text-[#3f3f3f]" aria-hidden="true">
-            <span className="absolute inset-[3px_4px_4px_3px] rounded-[5px] border-[1.6px] border-current" />
-            <span className="absolute right-px top-0.5 h-[1.6px] w-[9px] origin-center -rotate-45 rounded-full bg-current" />
-          </span>
-          <span>新对话</span>
-        </button>
-        <button className={sidebarEntryClass} type="button">
+        <button className={sidebarEntryClass} type="button" onClick={onOpenSearch}>
           <span className="sidebar-entry-icon sidebar-entry-search relative block h-5 w-5 text-[#3f3f3f]" aria-hidden="true">
             <span className="absolute left-0.5 top-0.5 h-[11px] w-[11px] rounded-full border-[1.6px] border-current" />
             <span className="absolute bottom-[3px] right-0.5 h-[1.6px] w-2 origin-center rotate-45 rounded-full bg-current" />

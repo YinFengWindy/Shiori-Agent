@@ -12,6 +12,7 @@ type ChatSurfaceProps = {
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   draft: string;
   headerTitle: string;
+  highlightedMessageKey: string;
   notice: string;
   sending: boolean;
   visibleIllustrationUrl: string;
@@ -28,6 +29,7 @@ export function ChatSurface({
   conversationEndRef,
   draft,
   headerTitle,
+  highlightedMessageKey,
   notice,
   sending,
   visibleIllustrationUrl,
@@ -106,15 +108,19 @@ export function ChatSurface({
               const isUser = message.role === "user";
               const isError = message.role === "error";
               const authorLabel = isError ? "系统提示" : (activeRole?.name || "Agent");
+              const messageKey = String(message.id ?? `${message.role}-${index}`);
+              const isHighlighted = highlightedMessageKey === messageKey;
               const bubbleClass = isError
                 ? "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(176,58,58,0.22)] bg-[rgba(255,244,244,0.96)] px-3.5 py-2.5 text-left text-[#8f2d2d] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
                 : messageBubbleClass;
 
               return (
               <article
-                key={`${message.id ?? message.role}-${index}`}
+                key={messageKey}
+                data-message-key={messageKey}
                 className={cx(
                   "group max-w-[82%]",
+                  isHighlighted && "message-hit-anchor",
                   isUser ? "ml-auto translate-x-[2px] text-right" : "mr-auto -translate-x-[2px]",
                 )}
               >
@@ -138,7 +144,7 @@ export function ChatSurface({
                         {authorLabel}
                       </div>
                     ) : null}
-                    <div className={bubbleClass}>
+                    <div className={cx(bubbleClass, isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10")}>
                       <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
                     </div>
                     {message.timestamp ? (

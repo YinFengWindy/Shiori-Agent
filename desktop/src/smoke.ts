@@ -36,6 +36,13 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               button.click();
               return true;
             };
+            const fileMenu = Array.from(document.querySelectorAll(".titlebar-menu-item"))
+              .find((item) => (item.textContent || "").trim() === "文件");
+            if (!fileMenu) {
+              return { ok: false, reason: "file-menu-missing" };
+            }
+            fileMenu.click();
+            await sleep(50);
             if (!clickByText("新对话")) {
               return { ok: false, reason: "new-chat-entry-missing" };
             }
@@ -58,13 +65,24 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 html: document.body.innerHTML.slice(0, 800),
               };
             }
-            const titlebarRefresh = document.querySelector(".titlebar-refresh");
-            const titlebarHelp = Array.from(document.querySelectorAll(".titlebar-menu-item"))
-              .find((item) => (item.textContent || "").trim() === "帮助");
+            let titlebarRefresh = null;
+            let titlebarHelp = null;
+            for (let i = 0; i < 20; i++) {
+              titlebarRefresh = document.querySelector(".titlebar-refresh");
+              titlebarHelp = Array.from(document.querySelectorAll(".titlebar-menu-item"))
+                .find((item) => (item.textContent || "").trim() === "帮助");
+              if (titlebarRefresh && titlebarHelp) {
+                break;
+              }
+              await sleep(50);
+            }
             if (!titlebarRefresh || !titlebarHelp) {
               return {
                 ok: false,
                 reason: "titlebar-actions-missing",
+                titlebarHtml: document.querySelector(".titlebar")?.outerHTML?.slice(0, 1000) ?? "",
+                titlebarMenuCount: document.querySelectorAll(".titlebar-menu-item").length,
+                refreshCount: document.querySelectorAll(".titlebar-refresh").length,
               };
             }
             titlebarHelp.click();
@@ -274,7 +292,14 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 reason: "composer-enter-not-intercepted",
               };
             }
-            const sendingHeaderSeen = (hero.textContent || "").includes("正在输入中...");
+            let sendingHeaderSeen = false;
+            for (let i = 0; i < 10; i++) {
+              sendingHeaderSeen = (hero.textContent || "").includes("正在输入中...");
+              if (sendingHeaderSeen) {
+                break;
+              }
+              await sleep(50);
+            }
             if (!sendingHeaderSeen) {
               return {
                 ok: false,
@@ -321,6 +346,58 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 ok: false,
                 reason: "chat-header-did-not-reset-after-reply",
                 hero: hero.textContent || "",
+              };
+            }
+            if (!clickByText("搜索")) {
+              return {
+                ok: false,
+                reason: "sidebar-search-entry-missing",
+              };
+            }
+            let searchInput;
+            for (let i = 0; i < 20; i++) {
+              searchInput = document.querySelector('[data-testid="role-search-input"]');
+              if (searchInput) {
+                break;
+              }
+              await sleep(50);
+            }
+            if (!searchInput) {
+              return {
+                ok: false,
+                reason: "search-dialog-input-missing",
+              };
+            }
+            setFieldValue(searchInput, "send via enter");
+            let searchResult = null;
+            for (let i = 0; i < 30; i++) {
+              searchResult = Array.from(document.querySelectorAll('[data-testid^="role-search-result-"]'))
+                .find((item) => (item.textContent || "").includes(roleBEditedName));
+              if (searchResult) {
+                break;
+              }
+              await sleep(100);
+            }
+            if (!searchResult) {
+              return {
+                ok: false,
+                reason: "search-result-missing",
+                bodyText: (document.body.textContent || "").slice(0, 1200),
+              };
+            }
+            searchResult.click();
+            for (let i = 0; i < 20; i++) {
+              await sleep(100);
+              if (document.querySelector(".message-hit-anchor")) {
+                break;
+              }
+            }
+            const highlightedMessage = document.querySelector(".message-hit-anchor");
+            if (!highlightedMessage || !(highlightedMessage.textContent || "").includes("send via enter")) {
+              return {
+                ok: false,
+                reason: "search-result-did-not-highlight-message",
+                highlightedText: highlightedMessage?.textContent || "",
               };
             }
             const replyCompletedVisible = (document.body.textContent || "").includes("Reply completed.");
