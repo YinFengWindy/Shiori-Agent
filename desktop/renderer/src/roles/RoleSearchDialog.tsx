@@ -1,6 +1,6 @@
-import { useDeferredValue, useEffect, useId, useMemo, useRef } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef } from "react";
 import { formatTimestamp, toFileUrl } from "../shared/format";
-import { cx, inputClass } from "../shared/styles";
+import { cx } from "../shared/styles";
 import type { RoleSearchResult } from "../shared/types";
 
 type RoleSearchDialogProps = {
@@ -23,7 +23,6 @@ export function RoleSearchDialog({
   onSelectResult,
   onUpdateQuery,
 }: RoleSearchDialogProps) {
-  const titleId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const deferredQuery = useDeferredValue(query);
   const emptyMessage = useMemo(() => {
@@ -71,41 +70,26 @@ export function RoleSearchDialog({
         onClick={onClose}
       />
       <section
-        className="role-search-panel relative z-[1] grid max-h-[min(76vh,780px)] w-full max-w-[760px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[24px] border border-[rgba(228,228,228,0.95)] bg-[rgba(255,255,255,0.97)] shadow-[0_28px_80px_rgba(15,23,42,0.18)]"
+        className="role-search-panel relative z-[1] grid max-h-[min(76vh,780px)] w-full max-w-[760px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[24px] bg-[rgba(255,255,255,0.97)] shadow-[0_28px_80px_rgba(15,23,42,0.18)]"
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
+        aria-label="搜索"
       >
-        <div className="flex items-center gap-3 border-b border-[#ECECEC] px-5 py-4">
-          <span className="relative block h-5 w-5 flex-none text-[#525252]" aria-hidden="true">
-            <span className="absolute left-0.5 top-0.5 h-[11px] w-[11px] rounded-full border-[1.6px] border-current" />
-            <span className="absolute bottom-[3px] right-0.5 h-[1.6px] w-2 origin-center rotate-45 rounded-full bg-current" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div id={titleId} className="text-[15px] font-semibold text-[#202020]">搜索</div>
-            <div className="text-[12px] text-[#7A7A7A]">搜索角色名和历史消息</div>
-          </div>
-          <button
-            className="grid h-8 w-8 place-items-center rounded-md border-0 bg-transparent p-0 text-[#6D6D6D] transition hover:bg-black/5"
-            type="button"
-            aria-label="关闭搜索"
-            onClick={onClose}
-          >
-            <span className="relative block h-3.5 w-3.5 before:absolute before:left-[6px] before:top-[-1px] before:h-4 before:w-[1.5px] before:rotate-45 before:bg-current before:content-[''] after:absolute after:left-[6px] after:top-[-1px] after:h-4 after:w-[1.5px] after:-rotate-45 after:bg-current after:content-['']" />
-          </button>
-        </div>
         <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-          <div className="border-b border-[#F2F2F2] px-5 py-4">
+          <div className="px-5 pt-5">
             <input
               ref={inputRef}
               data-testid="role-search-input"
-              className={cx(inputClass, "h-12 rounded-[14px] border-[#E4E4E4] bg-[#FAFAFA] px-4 py-0 text-[15px]")}
+              className={cx(
+                "h-12 w-full rounded-[12px] border border-transparent bg-[#F3F3F3] px-4 py-0 text-[15px] text-[#202020] outline-none transition-none placeholder:text-[#9A9A9A]",
+                "hover:border-transparent focus:border-transparent focus:outline-none focus:ring-0 focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-0",
+              )}
               value={query}
               onChange={(event) => onUpdateQuery(event.target.value)}
               placeholder="搜索角色名或消息内容"
             />
           </div>
-          <div className="role-search-results scrollbar-soft min-h-0 overflow-y-auto px-3 py-3">
+          <div className="role-search-results scrollbar-soft min-h-0 overflow-y-auto px-3 pb-3 pt-4">
             {results.length ? (
               <div className="grid gap-1.5">
                 {results.map((result) => (
