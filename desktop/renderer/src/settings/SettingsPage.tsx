@@ -145,6 +145,9 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     let cancelled = false;
     void (async () => {
       try {
+        if (typeof window.miraDesktop.readSettings !== "function") {
+          throw new Error("当前桌面进程版本过旧，请完全关闭并重新打开桌面端。");
+        }
         const nextSnapshot = await window.miraDesktop.readSettings();
         if (cancelled) return;
         setSnapshot(nextSnapshot);
@@ -184,6 +187,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
 
   async function save(): Promise<void> {
     if (!draft) return;
+    if (typeof window.miraDesktop.saveSettings !== "function") {
+      setPhase("error");
+      setStatusMessage("当前桌面进程版本过旧，请完全关闭并重新打开桌面端。");
+      return;
+    }
     setPhase("saving");
     setStatusMessage("正在写入 config.toml...");
     try {
