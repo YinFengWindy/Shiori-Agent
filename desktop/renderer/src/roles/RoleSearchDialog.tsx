@@ -62,7 +62,7 @@ export function RoleSearchDialog({
   if (!open) return null;
 
   return (
-    <div className="role-search-dialog fixed inset-0 z-30 flex items-start justify-center px-6 pb-6 pt-20">
+    <div className="role-search-dialog fixed inset-0 z-30 flex items-start justify-center px-4 pb-4 pt-14">
       <button
         className="role-search-backdrop absolute inset-0 border-0 bg-[rgba(15,23,42,0.34)] p-0 backdrop-blur-[6px]"
         type="button"
@@ -76,7 +76,7 @@ export function RoleSearchDialog({
         aria-label="搜索"
       >
         <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-          <div className="px-5 pt-5">
+          <div className="px-4 pt-4">
             <input
               ref={inputRef}
               data-testid="role-search-input"
@@ -89,14 +89,14 @@ export function RoleSearchDialog({
               placeholder="搜索角色名或消息内容"
             />
           </div>
-          <div className="role-search-results scrollbar-soft min-h-0 overflow-y-auto px-3 pb-3 pt-4">
+          <div className="role-search-results scrollbar-soft min-h-0 overflow-y-auto px-2.5 pb-2.5 pt-3">
             {results.length ? (
               <div className="grid gap-1.5">
                 {results.map((result) => (
                   <button
                     key={`${result.roleId}:${result.matchedField}:${result.matchedMessageId ?? result.roleName}`}
                     data-testid={`role-search-result-${result.roleId}-${result.matchedMessageIndex ?? "role"}`}
-                    className="grid w-full grid-cols-[44px_minmax(0,1fr)] items-start gap-3 rounded-[16px] border-0 bg-transparent px-3 py-3 text-left transition hover:bg-[#F4F6F8] focus-visible:bg-[#F4F6F8]"
+                    className="grid w-full grid-cols-[44px_minmax(0,1fr)] items-start gap-3 rounded-[16px] border-0 bg-transparent px-2.5 py-2.5 text-left transition hover:bg-[#F4F6F8] focus-visible:bg-[#F4F6F8]"
                     type="button"
                     onClick={() => onSelectResult(result)}
                   >
@@ -131,7 +131,7 @@ export function RoleSearchDialog({
                 ))}
               </div>
             ) : (
-              <div className="grid min-h-[240px] place-items-center px-6 text-center text-[13px] text-[#8A8A8A]">
+              <div className="grid min-h-[200px] place-items-center px-4 text-center text-[13px] text-[#8A8A8A]">
                 {emptyMessage}
               </div>
             )}
