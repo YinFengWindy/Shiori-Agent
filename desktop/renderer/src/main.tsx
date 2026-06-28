@@ -176,6 +176,7 @@ function App(): React.ReactElement {
       setSidebarAnimating(false);
       setResizingSidebar(true);
     });
+    let dragCollapsed = sidebarCollapsed;
 
     function stopResize(): void {
       setResizingSidebar(false);
@@ -186,8 +187,16 @@ function App(): React.ReactElement {
 
     function resize(moveEvent: PointerEvent): void {
       if (moveEvent.clientX <= sidebarCollapseThreshold) {
+        if (!dragCollapsed) {
+          setSidebarAnimating(true);
+          dragCollapsed = true;
+        }
         setSidebarCollapsed(true);
         return;
+      }
+      if (dragCollapsed) {
+        setSidebarAnimating(true);
+        dragCollapsed = false;
       }
       setSidebarCollapsed(false);
       setSidebarWidth(Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, moveEvent.clientX)));
