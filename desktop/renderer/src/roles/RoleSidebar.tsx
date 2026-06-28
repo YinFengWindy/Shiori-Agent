@@ -44,11 +44,11 @@ export function RoleSidebar({
   const sidebarEntryClass =
     "sidebar-entry grid min-h-[38px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] text-[#3f3f3f] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-[0.45]";
   const roleCardClass =
-    "role-card grid min-h-[42px] grid-cols-[32px_1fr] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-1.5 text-left text-[13px] text-[#404040] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-60";
+    "role-card grid min-h-[42px] grid-cols-[32px_1fr] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] leading-none text-[#404040] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-60";
   const roleAvatarClass =
     "role-avatar grid h-8 w-8 place-items-center rounded-full border border-[rgba(76,48,24,0.12)] object-cover";
   const footerEntryClass =
-    "grid min-h-[42px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[12px] border border-transparent bg-transparent px-2.5 py-0 text-left text-[13px] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF]";
+    "grid min-h-[42px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[12px] border border-transparent bg-transparent px-2.5 py-0 text-left text-[13px] leading-none transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF]";
 
   return (
     <aside
