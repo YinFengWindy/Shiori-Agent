@@ -73,7 +73,7 @@ export function SettingsSidebar({
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
       />
-      <nav className="scrollbar-soft grid min-h-0 content-start gap-4 overflow-y-auto pr-1">
+      <nav className="scrollbar-soft grid min-h-0 content-start gap-4 overflow-y-auto pr-0">
         <div className="grid gap-1">
           {visibleSections.map((section) => (
             <button
@@ -98,7 +98,7 @@ export function SettingsSidebar({
       <div
         className={cx(
           "sidebar-resize-handle absolute bottom-0 right-0 top-0 cursor-col-resize bg-transparent hover:bg-black/5 focus-visible:bg-black/5",
-          collapsed ? "w-0" : "w-2",
+          collapsed ? "w-0" : "w-px",
         )}
         role="separator"
         aria-label="Resize sidebar"

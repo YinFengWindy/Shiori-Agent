@@ -106,7 +106,7 @@ export function RoleSidebar({
           </div>
         ) : null}
       </div>
-      <div className={cx("role-list scrollbar-soft scrollbar-soft-accent grid min-h-0 content-start gap-1.5 overflow-x-hidden overflow-y-auto pr-0.5", bodyTextClass)} data-testid="role-list">
+      <div className={cx("role-list scrollbar-soft scrollbar-soft-accent grid min-h-0 content-start gap-1.5 overflow-x-hidden overflow-y-auto pr-0", bodyTextClass)} data-testid="role-list">
         {roles.length ? roles.map((role) => (
           <button
             key={role.id}
@@ -153,7 +153,7 @@ export function RoleSidebar({
       <div
         className={cx(
           "sidebar-resize-handle absolute bottom-0 right-0 top-0 cursor-col-resize bg-transparent hover:bg-black/5 focus-visible:bg-black/5",
-          collapsed ? "w-0" : "w-2",
+          collapsed ? "w-0" : "w-px",
         )}
         role="separator"
         aria-label="Resize sidebar"
