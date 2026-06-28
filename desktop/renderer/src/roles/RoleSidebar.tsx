@@ -55,7 +55,7 @@ export function RoleSidebar({
       className={cx(
         "role-pane relative grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-[18px] overflow-hidden bg-transparent py-[18px]",
         animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-        collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-5 pr-[18px] opacity-100",
+        collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[18px] pr-4 opacity-100",
       )}
       aria-hidden={collapsed}
       style={{ width }}
@@ -152,14 +152,16 @@ export function RoleSidebar({
       </div>
       <div
         className={cx(
-          "sidebar-resize-handle absolute bottom-0 right-0 top-0 cursor-col-resize bg-transparent hover:bg-black/5 focus-visible:bg-black/5",
-          collapsed ? "w-0" : "w-px",
+          "sidebar-resize-handle absolute bottom-0 right-0 top-0 cursor-col-resize bg-transparent",
+          collapsed ? "w-0" : "w-2",
         )}
         role="separator"
         aria-label="Resize sidebar"
         aria-orientation="vertical"
         onPointerDown={onBeginResize}
-      />
+      >
+        <span className="pointer-events-none absolute bottom-0 right-0 top-0 w-px bg-black/5" aria-hidden="true" />
+      </div>
     </aside>
   );
 }
