@@ -24,6 +24,7 @@ type SettingsSidebarProps = {
   dirty: boolean;
   collapsed: boolean;
   animating: boolean;
+  width: number;
   onBackToChat: () => void;
   onOpenSection: (section: SettingsSectionId) => void;
   onSearchChange: (value: string) => void;
@@ -42,6 +43,7 @@ export function SettingsSidebar({
   dirty,
   collapsed,
   animating,
+  width,
   onBackToChat,
   onOpenSection,
   onSearchChange,
@@ -54,11 +56,12 @@ export function SettingsSidebar({
   return (
     <aside
       className={cx(
-        "settings-sidebar relative grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] border-r border-[#E6E8ED] bg-[#EEF1F5] py-3",
-        animating && "transition-[opacity,transform,padding] duration-180 ease-out",
+        "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] border-r border-[#E6E8ED] bg-[#EEF1F5] py-3",
+        animating && "transition-[opacity,transform] duration-220 ease-[cubic-bezier(0.22,1,0.36,1)]",
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 px-3 opacity-100",
       )}
       aria-hidden={collapsed}
+      style={{ width }}
     >
       <button data-testid="settings-back-button" className="mb-3 flex h-8 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-sm text-[#6E737A] hover:bg-white/50" type="button" onClick={onBackToChat}>
         <span className="text-base leading-none">←</span>

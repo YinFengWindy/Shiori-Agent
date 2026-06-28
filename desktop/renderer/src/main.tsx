@@ -20,7 +20,7 @@ const sidebarMinWidth = 220;
 const sidebarMaxWidth = 400;
 const sidebarDefaultWidth = 220;
 const sidebarCollapseThreshold = sidebarMinWidth / 2;
-const sidebarAnimationDurationMs = 180;
+const sidebarAnimationDurationMs = 220;
 const sidebarAutoCollapseWindowWidth = 980;
 
 type SearchableSessionRecord = {
@@ -964,45 +964,54 @@ function App(): React.ReactElement {
       <div
         className={cx(
           "desktop-shell grid min-h-0 overflow-hidden bg-transparent",
-          sidebarAnimating && "transition-[grid-template-columns] duration-180 ease-out",
           resizingSidebar && "sidebar-resizing cursor-col-resize select-none",
         )}
         style={{
-          gridTemplateColumns: `${sidebarCollapsed ? 0 : sidebarWidth}px minmax(0, 1fr)`,
+          gridTemplateColumns: "minmax(0, auto) minmax(0, 1fr)",
         }}
       >
-        {mainView.kind === "settings" ? (
-          <SettingsSidebar
-            activeSection={settingsSection}
-            animating={sidebarAnimating && !resizingSidebar}
-            collapsed={sidebarCollapsed}
-            configPath={settingsConfigPath}
-            dirty={settingsDirty}
-            onBackToChat={() => setMainView({ kind: "chat" })}
-            onOpenSection={setSettingsSection}
-            onSearchChange={setSettingsSearch}
-            onBeginResize={beginSidebarResize}
-            search={settingsSearch}
-          />
-        ) : (
-          <RoleSidebar
-            roles={roles}
-            activeRoleId={activeRoleId}
-            animating={sidebarAnimating && !resizingSidebar}
-            bridgeReady={bridgeReady}
-            collapsed={sidebarCollapsed}
-            creating={creating}
-            showNewRoleComposer={showNewRoleComposer}
-            newRoleForm={newRoleForm}
-            onOpenSearch={() => setShowSearchDialog(true)}
-            onToggleRoleEditor={() => setMainView({ kind: "roles-list" })}
-            onUpdateNewRoleForm={updateNewRoleForm}
-            onCreateRole={() => void createRole()}
-            onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
-            onOpenSettings={() => openSettingsView()}
-            onBeginResize={beginSidebarResize}
-          />
-        )}
+        <div
+          className={cx(
+            "sidebar-track relative min-h-0 overflow-hidden",
+            sidebarAnimating && !resizingSidebar && "transition-[width] duration-220 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          )}
+          style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
+        >
+          {mainView.kind === "settings" ? (
+            <SettingsSidebar
+              activeSection={settingsSection}
+              animating={sidebarAnimating && !resizingSidebar}
+              collapsed={sidebarCollapsed}
+              configPath={settingsConfigPath}
+              dirty={settingsDirty}
+              width={sidebarWidth}
+              onBackToChat={() => setMainView({ kind: "chat" })}
+              onOpenSection={setSettingsSection}
+              onSearchChange={setSettingsSearch}
+              onBeginResize={beginSidebarResize}
+              search={settingsSearch}
+            />
+          ) : (
+            <RoleSidebar
+              roles={roles}
+              activeRoleId={activeRoleId}
+              animating={sidebarAnimating && !resizingSidebar}
+              bridgeReady={bridgeReady}
+              collapsed={sidebarCollapsed}
+              creating={creating}
+              showNewRoleComposer={showNewRoleComposer}
+              newRoleForm={newRoleForm}
+              width={sidebarWidth}
+              onOpenSearch={() => setShowSearchDialog(true)}
+              onToggleRoleEditor={() => setMainView({ kind: "roles-list" })}
+              onUpdateNewRoleForm={updateNewRoleForm}
+              onCreateRole={() => void createRole()}
+              onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
+              onOpenSettings={() => openSettingsView()}
+              onBeginResize={beginSidebarResize}
+            />
+          )}
+        </div>
         <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-[16px] border-b border-l border-t border-[#E4E4E4] bg-[var(--chat-bg)]">
           {mainView.kind === "chat" ? (
             <ChatSurface

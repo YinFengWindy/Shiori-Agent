@@ -586,11 +586,12 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             (async () => {
               const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
               const shell = document.querySelector(".desktop-shell");
+              const sidebarTrack = document.querySelector(".sidebar-track");
               const rolePane = document.querySelector(".role-pane");
               const handle = document.querySelector(".sidebar-resize-handle");
               const toggle = document.querySelector(".titlebar-sidebar");
               const chatPane = document.querySelector(".chat-pane");
-              if (!shell || !rolePane || !handle || !toggle || !chatPane) {
+              if (!shell || !sidebarTrack || !rolePane || !handle || !toggle || !chatPane) {
                 return { ok: false, reason: "sidebar-resize-elements-missing" };
               }
               const dragTo = (x) => {
@@ -600,75 +601,75 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               };
               dragTo(400);
               await sleep(50);
-              let roleRect = rolePane.getBoundingClientRect();
-              if (Math.abs(roleRect.width - 400) > 1) {
-                return { ok: false, reason: "sidebar-max-resize-mismatch", width: roleRect.width };
+              let trackRect = sidebarTrack.getBoundingClientRect();
+              if (Math.abs(trackRect.width - 400) > 1) {
+                return { ok: false, reason: "sidebar-max-resize-mismatch", width: trackRect.width };
               }
               dragTo(220);
               await sleep(50);
-              roleRect = rolePane.getBoundingClientRect();
-              if (Math.abs(roleRect.width - 220) > 1) {
-                return { ok: false, reason: "sidebar-min-resize-mismatch", width: roleRect.width };
+              trackRect = sidebarTrack.getBoundingClientRect();
+              if (Math.abs(trackRect.width - 220) > 1) {
+                return { ok: false, reason: "sidebar-min-resize-mismatch", width: trackRect.width };
               }
               dragTo(180);
               await sleep(50);
-              roleRect = rolePane.getBoundingClientRect();
-              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 220) > 1) {
+              trackRect = sidebarTrack.getBoundingClientRect();
+              if (getComputedStyle(rolePane).display === "none" || Math.abs(trackRect.width - 220) > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-min-threshold-collapse-mismatch",
                   display: getComputedStyle(rolePane).display,
-                  width: roleRect.width,
+                  width: trackRect.width,
                 };
               }
               dragTo(110);
               await sleep(200);
-              roleRect = rolePane.getBoundingClientRect();
-              if (rolePane.getAttribute("aria-hidden") !== "true" || roleRect.width > 1) {
+              trackRect = sidebarTrack.getBoundingClientRect();
+              if (rolePane.getAttribute("aria-hidden") !== "true" || trackRect.width > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-drag-collapse-missing",
                   ariaHidden: rolePane.getAttribute("aria-hidden"),
-                  width: roleRect.width,
+                  width: trackRect.width,
                 };
               }
               dragTo(140);
               await sleep(200);
-              roleRect = rolePane.getBoundingClientRect();
-              if (rolePane.getAttribute("aria-hidden") === "true" || Math.abs(roleRect.width - 220) > 1) {
+              trackRect = sidebarTrack.getBoundingClientRect();
+              if (rolePane.getAttribute("aria-hidden") === "true" || Math.abs(trackRect.width - 220) > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-drag-expand-missing",
                   ariaHidden: rolePane.getAttribute("aria-hidden"),
-                  width: roleRect.width,
+                  width: trackRect.width,
                 };
               }
               dragTo(320);
               await sleep(50);
-              roleRect = rolePane.getBoundingClientRect();
-              if (Math.abs(roleRect.width - 320) > 1) {
-                return { ok: false, reason: "sidebar-drag-expand-width-mismatch", width: roleRect.width };
+              trackRect = sidebarTrack.getBoundingClientRect();
+              if (Math.abs(trackRect.width - 320) > 1) {
+                return { ok: false, reason: "sidebar-drag-expand-width-mismatch", width: trackRect.width };
               }
               toggle.click();
               await sleep(200);
-              roleRect = rolePane.getBoundingClientRect();
-              if (rolePane.getAttribute("aria-hidden") !== "true" || roleRect.width > 1) {
+              trackRect = sidebarTrack.getBoundingClientRect();
+              if (rolePane.getAttribute("aria-hidden") !== "true" || trackRect.width > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-toggle-collapse-failed",
                   ariaHidden: rolePane.getAttribute("aria-hidden"),
-                  width: roleRect.width,
+                  width: trackRect.width,
                 };
               }
               toggle.click();
               await sleep(200);
-              roleRect = rolePane.getBoundingClientRect();
-              if (rolePane.getAttribute("aria-hidden") === "true" || Math.abs(roleRect.width - 320) > 1) {
+              trackRect = sidebarTrack.getBoundingClientRect();
+              if (rolePane.getAttribute("aria-hidden") === "true" || Math.abs(trackRect.width - 320) > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-toggle-expand-failed",
                   ariaHidden: rolePane.getAttribute("aria-hidden"),
-                  width: roleRect.width,
+                  width: trackRect.width,
                 };
               }
               return { ok: true };
@@ -685,12 +686,13 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
           const narrowResult = await win.webContents.executeJavaScript(`
             (() => {
               const rolePane = document.querySelector(".role-pane");
+              const sidebarTrack = document.querySelector(".sidebar-track");
               const chatPane = document.querySelector(".chat-pane");
               const composer = document.querySelector(".composer");
-              if (!rolePane || !chatPane || !composer) {
+              if (!rolePane || !sidebarTrack || !chatPane || !composer) {
                 return { ok: false, reason: "narrow-layout-elements-missing" };
               }
-              const roleRect = rolePane.getBoundingClientRect();
+              const trackRect = sidebarTrack.getBoundingClientRect();
               const chatRect = chatPane.getBoundingClientRect();
               const composerRect = composer.getBoundingClientRect();
               const composerTrackRect = composer.parentElement?.getBoundingClientRect();
@@ -705,12 +707,12 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 : composerRect.width;
               const expectedComposerCenter = chatRect.left + chatRect.width / 2;
               const actualComposerCenter = composerRect.left + composerRect.width / 2;
-              if (rolePane.getAttribute("aria-hidden") !== "true" || roleRect.width > 1) {
+              if (rolePane.getAttribute("aria-hidden") !== "true" || trackRect.width > 1) {
                 return {
                   ok: false,
                   reason: "role-pane-not-collapsed",
                   ariaHidden: rolePane.getAttribute("aria-hidden"),
-                  roleWidth: roleRect.width,
+                  roleWidth: trackRect.width,
                 };
               }
               if (chatRect.left > 1 || Math.abs(chatRect.width - window.innerWidth) > 2) {
