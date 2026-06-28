@@ -182,8 +182,6 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 ok: false,
                 reason: "first-role-not-opened",
                 detailValue: detailNameInput?.value || "",
-                createButtonText: create.textContent || "",
-                createDisabled: Boolean(create.disabled),
               };
             }
             fileMenu.click();
