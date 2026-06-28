@@ -42,13 +42,13 @@ export function RoleSidebar({
   onBeginResize,
 }: RoleSidebarProps) {
   const sidebarEntryClass =
-    "sidebar-entry grid min-h-[42px] grid-cols-[24px_1fr] items-center gap-3 rounded-[10px] border-0 bg-transparent px-2 py-0 text-left text-sm text-[#3f3f3f] hover:bg-white/40 focus-visible:bg-white/40 disabled:cursor-default disabled:opacity-[0.45]";
+    "sidebar-entry grid min-h-[38px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] text-[#3f3f3f] transition-colors hover:border-white/45 hover:bg-white/55 focus-visible:border-white/45 focus-visible:bg-white/55 disabled:cursor-default disabled:opacity-[0.45]";
   const roleCardClass =
     "role-card grid min-h-11 grid-cols-[32px_1fr] items-center gap-2.5 rounded-[10px] border-0 bg-transparent px-2 py-1.5 text-left text-[#404040] hover:bg-white/40 focus-visible:bg-white/40 disabled:cursor-default disabled:opacity-60";
   const roleAvatarClass =
     "role-avatar grid h-8 w-8 place-items-center rounded-full border border-[rgba(76,48,24,0.12)] object-cover";
   const footerEntryClass =
-    "grid min-h-[54px] grid-cols-[24px_1fr] items-center gap-3 rounded-[14px] border border-white/40 bg-white/35 px-3 py-2 text-left hover:bg-white/55 focus-visible:bg-white/55";
+    "grid min-h-[40px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[12px] border border-white/45 bg-white/32 px-2.5 py-1.5 text-left text-[13px] transition-colors hover:bg-white/65 focus-visible:bg-white/65";
 
   return (
     <aside
@@ -63,7 +63,7 @@ export function RoleSidebar({
       <div className="sidebar-top grid gap-1">
         <button className={sidebarEntryClass} type="button" onClick={onOpenSearch}>
           <span className="sidebar-entry-icon sidebar-entry-search grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
-            <svg viewBox="0 0 1024 1024" className="h-[18px] w-[18px] fill-current">
+            <svg viewBox="0 0 1024 1024" className="h-4 w-4 fill-current">
               <path d="M447.957333 149.333333c164.949333 0 298.666667 133.717333 298.666667 298.666667 0 64.96-20.736 125.056-55.936 173.952l177.365333 177.365333a42.666667 42.666667 0 0 1-60.330666 60.330667l-177.365334-177.365333A297.344 297.344 0 0 1 447.957333 746.666667c-164.949333 0-298.666667-133.717333-298.666666-298.666667S283.008 149.333333 447.957333 149.333333z m0 85.333334C330.154667 234.666667 234.624 330.197333 234.624 448s95.530667 213.333333 213.333333 213.333333 213.333333-95.530667 213.333334-213.333333-95.530667-213.333333-213.333334-213.333333z" />
             </svg>
           </span>
@@ -71,7 +71,7 @@ export function RoleSidebar({
         </button>
         <button className={sidebarEntryClass} type="button" onClick={onToggleRoleEditor} disabled={!activeRoleId}>
           <span className="sidebar-entry-icon sidebar-entry-role grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
-            <svg viewBox="0 0 1024 1024" className="h-[18px] w-[18px] fill-current">
+            <svg viewBox="0 0 1024 1024" className="h-4 w-4 fill-current">
               <path d="M356.774 578.668C279.812 528.088 229 440.978 229 342c0-156.297 126.703-283 283-283s283 126.703 283 283c0 98.978-50.812 186.088-127.774 236.668C808.213 638.98 907 778.953 907 942c0 24.3-19.7 44-44 44s-44-19.7-44-44c0-169.551-137.449-307-307-307S205 772.449 205 942c0 24.3-19.7 44-44 44s-44-19.7-44-44c0-163.047 98.787-303.02 239.774-363.332zM512 537c107.696 0 195-87.304 195-195s-87.304-195-195-195-195 87.304-195 195 87.304 195 195 195z" />
             </svg>
           </span>
@@ -139,15 +139,12 @@ export function RoleSidebar({
           onClick={onOpenSettings}
         >
           <span className="grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
-            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3.2" />
               <path d="M19.4 15a1.66 1.66 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06A1.66 1.66 0 0 0 15 19.4a1.66 1.66 0 0 0-1 .6 1.66 1.66 0 0 0-.4 1V21a2 2 0 0 1-4 0v-.09A1.66 1.66 0 0 0 9 20a1.66 1.66 0 0 0-1-.6 1.66 1.66 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.66 1.66 0 0 0 4.6 15a1.66 1.66 0 0 0-.6-1 1.66 1.66 0 0 0-1-.4H3a2 2 0 0 1 0-4h.09A1.66 1.66 0 0 0 4 9a1.66 1.66 0 0 0 .6-1 1.66 1.66 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.66 1.66 0 0 0 9 4.6a1.66 1.66 0 0 0 1-.6 1.66 1.66 0 0 0 .4-1V3a2 2 0 0 1 4 0v.09A1.66 1.66 0 0 0 15 4a1.66 1.66 0 0 0 1 .6 1.66 1.66 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.66 1.66 0 0 0 19.4 9c.19.32.29.69.29 1.06 0 .37-.1.74-.29 1.06-.19.32-.47.58-.8.76-.33.18-.7.27-1.08.27h0" />
             </svg>
           </span>
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-medium text-[#242424]">设置</span>
-            <span className="block truncate text-[12px] leading-5 text-[#767676]">配置与集成</span>
-          </span>
+          <span className="min-w-0 truncate font-medium text-[#242424]">设置</span>
         </button>
       </div>
       <div
