@@ -48,7 +48,7 @@ export function RoleSidebar({
   const roleAvatarClass =
     "role-avatar grid h-8 w-8 place-items-center rounded-full border border-[rgba(76,48,24,0.12)] object-cover";
   const footerEntryClass =
-    "grid min-h-[40px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[12px] border border-transparent bg-transparent px-2.5 py-0 text-left text-[13px] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF]";
+    "grid min-h-[42px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[12px] border border-transparent bg-transparent px-2.5 py-0 text-left text-[13px] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF]";
 
   return (
     <aside
@@ -131,7 +131,7 @@ export function RoleSidebar({
           <div className={cx("empty-card", cardClass, "p-4")}>No roles yet.</div>
         )}
       </div>
-      <div className="border-t border-white/35 pt-2">
+      <div className="mt-1 border-t border-[#DFE4EA] pt-2">
         <button
           data-testid="open-settings-button"
           className={footerEntryClass}
