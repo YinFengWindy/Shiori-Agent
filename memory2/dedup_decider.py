@@ -8,10 +8,10 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 
-import json_repair
 import numpy as np
 
 from agent.provider import LLMProvider
+from agent.llm_json import load_json_object_loose
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ class DedupDecider:
             text = (resp.content or "").strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            data = json_repair.loads(text) or {}
+            data = load_json_object_loose(text) or {}
             if not isinstance(data, dict):
                 return DedupDecision.CREATE, "invalid_llm_payload", []
             return self._parse_payload(data, similar)

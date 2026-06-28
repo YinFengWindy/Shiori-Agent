@@ -5,9 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-import json_repair
-
 from agent.provider import LLMProvider
+from agent.llm_json import load_json_array_loose
 from core.memory.events import MemoryWritten, TurnIngested
 from memory2.memorizer import Memorizer
 from memory2.retriever import Retriever
@@ -277,7 +276,7 @@ class PostResponseMemoryWorker:
             text = (resp.content or "").strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            result = json_repair.loads(text)
+            result = load_json_array_loose(text)
             if isinstance(result, list):
                 return [
                     t for t in result if isinstance(t, str) and t.strip()
@@ -324,7 +323,7 @@ class PostResponseMemoryWorker:
             text = (resp.content or "").strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            result = json_repair.loads(text)
+            result = load_json_array_loose(text)
             if isinstance(result, list):
                 valid_ids = {c["id"] for c in candidates}
                 return [

@@ -161,9 +161,15 @@ if "telegramify_markdown.converter" not in sys.modules:
 if "json_repair" not in sys.modules:
     json_repair_stub = types.ModuleType("json_repair")
 
+    def loads(text, *args, **kwargs):
+        import json
+
+        return json.loads(text)
+
     def repair_json(text, *args, **kwargs):
         return text
 
+    json_repair_stub.loads = loads
     json_repair_stub.repair_json = repair_json
     sys.modules["json_repair"] = json_repair_stub
 
@@ -264,8 +270,6 @@ async def drain_tasks():
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_pyfunc_call(pyfuncitem):
-    if "asyncio" not in pyfuncitem.keywords:
-        return None
     test_func = pyfuncitem.obj
     if not inspect.iscoroutinefunction(test_func):
         return None

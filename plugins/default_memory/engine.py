@@ -10,9 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict, cast
 
-import json_repair
-
 from agent.config_models import Config
+from agent.llm_json import load_json_object_loose
 from agent.provider import LLMProvider, LLMResponse
 from agent.skills import SkillsLoader
 from bus.events_lifecycle import TurnCommitted
@@ -727,7 +726,7 @@ class DefaultMemoryEngine:
             )
             if text.startswith("```"):
                 text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            result = json_repair.loads(text)
+            result = load_json_object_loose(text)
             if not isinstance(result, dict):
                 raise RuntimeError("long_term extraction returned non-object JSON")
             return result
