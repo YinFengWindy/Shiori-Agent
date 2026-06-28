@@ -44,7 +44,7 @@ export function RoleSidebar({
   const sidebarEntryClass =
     "sidebar-entry grid min-h-[38px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] text-[#3f3f3f] transition-colors hover:border-white/45 hover:bg-white/55 focus-visible:border-white/45 focus-visible:bg-white/55 disabled:cursor-default disabled:opacity-[0.45]";
   const roleCardClass =
-    "role-card grid min-h-11 grid-cols-[32px_1fr] items-center gap-2.5 rounded-[10px] border-0 bg-transparent px-2 py-1.5 text-left text-[#404040] hover:bg-white/40 focus-visible:bg-white/40 disabled:cursor-default disabled:opacity-60";
+    "role-card grid min-h-10 grid-cols-[28px_1fr] items-center gap-2 rounded-[10px] border border-transparent bg-transparent px-2 py-1 text-left text-[13px] text-[#404040] transition-colors hover:border-white/45 hover:bg-white/55 focus-visible:border-white/45 focus-visible:bg-white/55 disabled:cursor-default disabled:opacity-60";
   const roleAvatarClass =
     "role-avatar grid h-8 w-8 place-items-center rounded-full border border-[rgba(76,48,24,0.12)] object-cover";
   const footerEntryClass =
@@ -123,7 +123,7 @@ export function RoleSidebar({
                 alt={`${role.name} avatar`}
               />
             ) : (
-              <span className={cx(roleAvatarClass, "role-avatar-fallback bg-white/55 text-sm font-bold text-accent-deep")}>{role.name.slice(0, 1).toUpperCase()}</span>
+              <span className={cx(roleAvatarClass, "h-7 w-7 role-avatar-fallback bg-white/55 text-[13px] font-bold text-accent-deep")}>{role.name.slice(0, 1).toUpperCase()}</span>
             )}
             <span className="role-name min-w-0 truncate font-semibold">{role.name}</span>
           </button>
