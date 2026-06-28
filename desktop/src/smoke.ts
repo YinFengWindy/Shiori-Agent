@@ -610,13 +610,46 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               }
               dragTo(340);
               await sleep(50);
+              roleRect = rolePane.getBoundingClientRect();
+              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 360) > 1) {
+                return {
+                  ok: false,
+                  reason: "sidebar-min-threshold-collapse-mismatch",
+                  display: getComputedStyle(rolePane).display,
+                  width: roleRect.width,
+                };
+              }
+              dragTo(180);
+              await sleep(50);
               if (getComputedStyle(rolePane).display !== "none") {
                 return { ok: false, reason: "sidebar-drag-collapse-missing", display: getComputedStyle(rolePane).display };
+              }
+              dragTo(220);
+              await sleep(50);
+              roleRect = rolePane.getBoundingClientRect();
+              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 360) > 1) {
+                return {
+                  ok: false,
+                  reason: "sidebar-drag-expand-missing",
+                  display: getComputedStyle(rolePane).display,
+                  width: roleRect.width,
+                };
+              }
+              dragTo(540);
+              await sleep(50);
+              roleRect = rolePane.getBoundingClientRect();
+              if (Math.abs(roleRect.width - 540) > 1) {
+                return { ok: false, reason: "sidebar-drag-expand-width-mismatch", width: roleRect.width };
+              }
+              toggle.click();
+              await sleep(50);
+              if (getComputedStyle(rolePane).display !== "none") {
+                return { ok: false, reason: "sidebar-toggle-collapse-failed", display: getComputedStyle(rolePane).display };
               }
               toggle.click();
               await sleep(50);
               roleRect = rolePane.getBoundingClientRect();
-              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 360) > 1) {
+              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 540) > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-toggle-expand-failed",

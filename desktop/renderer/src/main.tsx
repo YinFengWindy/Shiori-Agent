@@ -18,6 +18,7 @@ import "./styles.css";
 const sidebarMinWidth = 360;
 const sidebarMaxWidth = 720;
 const sidebarDefaultWidth = 360;
+const sidebarCollapseThreshold = sidebarMinWidth / 2;
 const sidebarAutoCollapseWindowWidth = 980;
 
 type SearchableSessionRecord = {
@@ -176,13 +177,12 @@ function App(): React.ReactElement {
     }
 
     function resize(moveEvent: PointerEvent): void {
-      if (moveEvent.clientX < sidebarMinWidth) {
+      if (moveEvent.clientX <= sidebarCollapseThreshold) {
         setSidebarCollapsed(true);
-        stopResize();
         return;
       }
       setSidebarCollapsed(false);
-      setSidebarWidth(Math.min(sidebarMaxWidth, moveEvent.clientX));
+      setSidebarWidth(Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, moveEvent.clientX)));
     }
 
     window.addEventListener("pointermove", resize);
