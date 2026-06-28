@@ -623,7 +623,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 };
               }
               dragTo(110);
-              await sleep(320);
+              await sleep(520);
               trackRect = sidebarTrack.getBoundingClientRect();
               if (rolePane.getAttribute("aria-hidden") !== "true" || trackRect.width > 1) {
                 return {
@@ -634,7 +634,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 };
               }
               dragTo(140);
-              await sleep(320);
+              await sleep(520);
               trackRect = sidebarTrack.getBoundingClientRect();
               if (rolePane.getAttribute("aria-hidden") === "true" || Math.abs(trackRect.width - 220) > 1) {
                 return {
@@ -651,7 +651,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 return { ok: false, reason: "sidebar-drag-expand-width-mismatch", width: trackRect.width };
               }
               toggle.click();
-              await sleep(320);
+              await sleep(520);
               trackRect = sidebarTrack.getBoundingClientRect();
               if (rolePane.getAttribute("aria-hidden") !== "true" || trackRect.width > 1) {
                 return {
@@ -662,7 +662,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 };
               }
               toggle.click();
-              await sleep(320);
+              await sleep(520);
               trackRect = sidebarTrack.getBoundingClientRect();
               if (rolePane.getAttribute("aria-hidden") === "true" || Math.abs(trackRect.width - 320) > 1) {
                 return {
@@ -682,7 +682,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
           }
           win.setSize(900, 760);
           await win.webContents.executeJavaScript(`window.dispatchEvent(new Event("resize"));`);
-          await new Promise((resolve) => setTimeout(resolve, 320));
+          await new Promise((resolve) => setTimeout(resolve, 520));
           const narrowResult = await win.webContents.executeJavaScript(`
             (() => {
               const rolePane = document.querySelector(".role-pane");
@@ -743,7 +743,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
           }
           win.setSize(540, 760);
           await win.webContents.executeJavaScript(`window.dispatchEvent(new Event("resize"));`);
-          await new Promise((resolve) => setTimeout(resolve, 320));
+          await new Promise((resolve) => setTimeout(resolve, 520));
           const compactResult = await win.webContents.executeJavaScript(`
             (() => {
               const composer = document.querySelector(".composer");

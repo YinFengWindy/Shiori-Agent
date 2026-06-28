@@ -57,7 +57,7 @@ export function SettingsSidebar({
     <aside
       className={cx(
         "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] border-r border-[#E6E8ED] bg-[#EEF1F5] py-3",
-        animating && "transition-[opacity,transform] duration-220 ease-[cubic-bezier(0.22,1,0.36,1)]",
+        animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 px-3 opacity-100",
       )}
       aria-hidden={collapsed}

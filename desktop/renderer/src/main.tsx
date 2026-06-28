@@ -20,7 +20,7 @@ const sidebarMinWidth = 220;
 const sidebarMaxWidth = 400;
 const sidebarDefaultWidth = 220;
 const sidebarCollapseThreshold = sidebarMinWidth / 2;
-const sidebarAnimationDurationMs = 280;
+const sidebarAnimationDurationMs = 480;
 const sidebarAutoCollapseWindowWidth = 980;
 
 type SearchableSessionRecord = {
@@ -982,7 +982,7 @@ function App(): React.ReactElement {
         <div
           className={cx(
             "sidebar-track relative min-h-0 overflow-hidden",
-            sidebarAnimating && "transition-[width] duration-[280ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+            sidebarAnimating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           )}
           style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
         >
