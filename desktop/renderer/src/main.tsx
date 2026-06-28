@@ -48,6 +48,33 @@ function createEmptyNewRoleForm(): NewRoleFormState {
   };
 }
 
+function mergeRoles(current: RoleRecord[], incoming: RoleRecord[]): RoleRecord[] {
+  const byId = new Map<string, RoleRecord>();
+  current.forEach((role) => {
+    byId.set(role.id, role);
+  });
+  incoming.forEach((role) => {
+    const existing = byId.get(role.id);
+    if (!existing) {
+      byId.set(role.id, role);
+      return;
+    }
+    const existingTime = Date.parse(existing.updated_at || existing.created_at || "");
+    const incomingTime = Date.parse(role.updated_at || role.created_at || "");
+    if (Number.isNaN(existingTime) || Number.isNaN(incomingTime) || incomingTime >= existingTime) {
+      byId.set(role.id, role);
+    }
+  });
+  const incomingIds = new Set(incoming.map((role) => role.id));
+  const merged = incoming.map((role) => byId.get(role.id) ?? role);
+  current.forEach((role) => {
+    if (!incomingIds.has(role.id)) {
+      merged.push(byId.get(role.id) ?? role);
+    }
+  });
+  return merged;
+}
+
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
   const [roles, setRoles] = useState<RoleRecord[]>([]);
@@ -91,6 +118,7 @@ function App(): React.ReactElement {
   const draftRef = useRef("");
   const roleFormRef = useRef<RoleFormState>(createEmptyRoleForm());
   const newRoleFormRef = useRef<NewRoleFormState>(createEmptyNewRoleForm());
+  const lastNonSettingsViewRef = useRef<AppMainView>({ kind: "chat" });
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
 
@@ -109,6 +137,12 @@ function App(): React.ReactElement {
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
+
+  useEffect(() => {
+    if (mainView.kind !== "settings") {
+      lastNonSettingsViewRef.current = mainView;
+    }
+  }, [mainView]);
 
   function updateRoleForm(next: React.SetStateAction<RoleFormState>): void {
     const resolved = typeof next === "function"
@@ -162,6 +196,7 @@ function App(): React.ReactElement {
   }
 
   function openSettingsView(section: SettingsSectionId = "models"): void {
+    lastNonSettingsViewRef.current = mainView;
     setSettingsSearch("");
     setSettingsSection(section);
     setSidebarAnimating(true);
@@ -233,8 +268,12 @@ function App(): React.ReactElement {
       return null;
     }
     const nextRoles = (rolesRes.payload.roles as RoleRecord[]) ?? [];
-    setRoles(nextRoles);
-    return nextRoles;
+    let mergedRoles = nextRoles;
+    setRoles((current) => {
+      mergedRoles = mergeRoles(current, nextRoles);
+      return mergedRoles;
+    });
+    return mergedRoles;
   }
 
   async function buildSearchIndex(nextRoles: RoleRecord[]): Promise<void> {
@@ -752,10 +791,39 @@ function App(): React.ReactElement {
     const role = res.payload.role as RoleRecord;
     updateNewRoleForm(createEmptyNewRoleForm());
     setShowNewRoleComposer(false);
-    const nextRoles = await loadRolesFromBridge();
     activeRoleIdRef.current = role.id;
+    setActiveRoleId(role.id);
+    setRoles((current) => {
+      const existing = current.find((item) => item.id === role.id);
+      if (existing) {
+        return current.map((item) => (item.id === role.id ? role : item));
+      }
+      return [...current, role];
+    });
+    updateRoleForm({
+      name: role.name,
+      description: role.description,
+      systemPrompt: role.system_prompt,
+      avatarSource: "",
+      illustrationSources: [],
+    });
+    setClearAvatar(false);
+    setClearIllustrations(false);
+    setActiveIllustration("");
+    setMainView({ kind: "role-detail", roleId: role.id });
     setNotice("Role created.");
-    await openRole(role.id, nextRoles?.find((item) => item.id === role.id) ?? role, { recordHistory: true });
+    const nextRoles = await loadRolesFromBridge();
+    const resolvedRole = nextRoles?.find((item) => item.id === role.id) ?? role;
+    if (!nextRoles?.some((item) => item.id === role.id)) {
+      setRoles((current) => {
+        const existing = current.find((item) => item.id === role.id);
+        if (existing) {
+          return current.map((item) => (item.id === role.id ? resolvedRole : item));
+        }
+        return [...current, resolvedRole];
+      });
+    }
+    await openRole(role.id, resolvedRole, { recordHistory: true });
     setMainView({ kind: "role-detail", roleId: role.id });
   }
 
@@ -994,7 +1062,7 @@ function App(): React.ReactElement {
               configPath={settingsConfigPath}
               dirty={settingsDirty}
               width={sidebarWidth}
-              onBackToChat={() => setMainView({ kind: "chat" })}
+              onBackToChat={() => setMainView(lastNonSettingsViewRef.current)}
               onOpenSection={setSettingsSection}
               onSearchChange={setSettingsSearch}
               onBeginResize={beginSidebarResize}

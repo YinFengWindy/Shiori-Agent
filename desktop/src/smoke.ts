@@ -36,6 +36,20 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               button.click();
               return true;
             };
+            const clickDropdownItemByText = (text) => {
+              const dropdown = Array.from(document.querySelectorAll(".titlebar-dropdown"))
+                .find((item) => item.childElementCount > 0);
+              if (!dropdown) {
+                return false;
+              }
+              const button = Array.from(dropdown.querySelectorAll("button"))
+                .find((item) => (item.textContent || "").trim() === text && !item.disabled);
+              if (!button) {
+                return false;
+              }
+              button.click();
+              return true;
+            };
             const fileMenu = Array.from(document.querySelectorAll(".titlebar-menu-item"))
               .find((item) => (item.textContent || "").trim() === "文件");
             if (!fileMenu) {
@@ -101,7 +115,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             }
             viewMenu.click();
             await sleep(50);
-            if (!clickByText("设置")) {
+            if (!clickDropdownItemByText("设置")) {
               return { ok: false, reason: "settings-entry-missing" };
             }
             let settingsPage = null;
@@ -134,7 +148,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               desc = document.querySelector('[data-testid="new-role-description"]');
               prompt = document.querySelector('[data-testid="new-role-prompt"]');
               create = document.querySelector('[data-testid="create-role-button"]');
-              sidebarSettingsEntry = document.querySelector('[data-testid="open-settings-button"]');
+              sidebarSettingsEntry = document.querySelector(".sidebar-top > button");
               if (name && desc && prompt && create && !create.disabled && sidebarSettingsEntry) {
                 break;
               }
@@ -150,21 +164,26 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             setFieldValue(desc, "ui smoke role A");
             setFieldValue(prompt, "you are ui smoke role A");
             create.click();
+            await sleep(20);
             let roleDetailPage = null;
             let detailNameInput = null;
+            let createdRoleAButton = null;
             for (let i = 0; i < 40; i++) {
               await sleep(100);
+              createdRoleAButton = findRoleButtonByName(roleAName);
               roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
               detailNameInput = document.querySelector('[data-testid="edit-role-name"]');
-              if (roleDetailPage && detailNameInput && detailNameInput.value === roleAName) {
+              if (createdRoleAButton && roleDetailPage && detailNameInput && detailNameInput.value === roleAName) {
                 break;
               }
             }
-            if (!roleDetailPage || !detailNameInput || detailNameInput.value !== roleAName) {
+            if (!createdRoleAButton || !roleDetailPage || !detailNameInput || detailNameInput.value !== roleAName) {
               return {
                 ok: false,
                 reason: "first-role-not-opened",
                 detailValue: detailNameInput?.value || "",
+                createButtonText: create.textContent || "",
+                createDisabled: Boolean(create.disabled),
               };
             }
             fileMenu.click();
@@ -563,11 +582,11 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 reason: "composer-ctrl-enter-was-blocked",
               };
             }
-            const roleAButton = findRoleButtonByName(roleAName);
-            if (!roleAButton) {
+            const returnToRoleAButton = findRoleButtonByName(roleAName);
+            if (!returnToRoleAButton) {
               return { ok: false, reason: "missing-role-a-button", count: findRoleButtons().length };
             }
-            roleAButton.click();
+            returnToRoleAButton.click();
             for (let i = 0; i < 40; i++) {
               await sleep(100);
               if (hero.textContent && hero.textContent.includes(roleAName)) {
