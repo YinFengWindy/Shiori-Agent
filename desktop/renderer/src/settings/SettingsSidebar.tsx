@@ -23,6 +23,7 @@ type SettingsSidebarProps = {
   configPath: string;
   dirty: boolean;
   collapsed: boolean;
+  animating: boolean;
   onBackToChat: () => void;
   onOpenSection: (section: SettingsSectionId) => void;
   onSearchChange: (value: string) => void;
@@ -40,6 +41,7 @@ export function SettingsSidebar({
   configPath,
   dirty,
   collapsed,
+  animating,
   onBackToChat,
   onOpenSection,
   onSearchChange,
@@ -50,7 +52,14 @@ export function SettingsSidebar({
   const visibleSections = settingsSections.filter((section) => sectionMatches(section, query));
 
   return (
-    <aside className={cx("settings-sidebar relative grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] border-r border-[#E6E8ED] bg-[#EEF1F5] px-3 py-3", collapsed && "hidden")}>
+    <aside
+      className={cx(
+        "settings-sidebar relative grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] border-r border-[#E6E8ED] bg-[#EEF1F5] py-3",
+        animating && "transition-[opacity,transform,padding] duration-180 ease-out",
+        collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 px-3 opacity-100",
+      )}
+      aria-hidden={collapsed}
+    >
       <button data-testid="settings-back-button" className="mb-3 flex h-8 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-sm text-[#6E737A] hover:bg-white/50" type="button" onClick={onBackToChat}>
         <span className="text-base leading-none">←</span>
         <span>返回应用</span>
@@ -84,7 +93,10 @@ export function SettingsSidebar({
         <div className="mt-1 break-all text-[#5E646B]">{configPath}</div>
       </div>
       <div
-        className="sidebar-resize-handle absolute bottom-0 right-0 top-0 w-2 cursor-col-resize bg-transparent hover:bg-black/5 focus-visible:bg-black/5"
+        className={cx(
+          "sidebar-resize-handle absolute bottom-0 right-0 top-0 cursor-col-resize bg-transparent hover:bg-black/5 focus-visible:bg-black/5",
+          collapsed ? "w-0" : "w-2",
+        )}
         role="separator"
         aria-label="Resize sidebar"
         aria-orientation="vertical"

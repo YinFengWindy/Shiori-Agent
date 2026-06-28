@@ -510,7 +510,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             }
             setFieldValue(searchInput, "send via enter");
             let searchResult = null;
-            for (let i = 0; i < 30; i++) {
+            for (let i = 0; i < 60; i++) {
               searchResult = Array.from(document.querySelectorAll('[data-testid^="role-search-result-"]'))
                 .find((item) => (item.textContent || "").includes(roleBEditedName));
               if (searchResult) {
@@ -526,13 +526,15 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               };
             }
             searchResult.click();
-            for (let i = 0; i < 20; i++) {
+            let highlightedMessage = null;
+            for (let i = 0; i < 30; i++) {
               await sleep(100);
-              if (document.querySelector(".message-hit-anchor")) {
+              highlightedMessage = Array.from(document.querySelectorAll(".message-hit-anchor"))
+                .find((item) => (item.textContent || "").includes("send via enter"));
+              if (highlightedMessage) {
                 break;
               }
             }
-            const highlightedMessage = document.querySelector(".message-hit-anchor");
             if (!highlightedMessage || !(highlightedMessage.textContent || "").includes("send via enter")) {
               return {
                 ok: false,
@@ -602,16 +604,16 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               if (Math.abs(roleRect.width - 400) > 1) {
                 return { ok: false, reason: "sidebar-max-resize-mismatch", width: roleRect.width };
               }
-              dragTo(200);
+              dragTo(220);
               await sleep(50);
               roleRect = rolePane.getBoundingClientRect();
-              if (Math.abs(roleRect.width - 200) > 1) {
+              if (Math.abs(roleRect.width - 220) > 1) {
                 return { ok: false, reason: "sidebar-min-resize-mismatch", width: roleRect.width };
               }
               dragTo(180);
               await sleep(50);
               roleRect = rolePane.getBoundingClientRect();
-              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 200) > 1) {
+              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 220) > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-min-threshold-collapse-mismatch",
@@ -619,19 +621,25 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                   width: roleRect.width,
                 };
               }
-              dragTo(100);
-              await sleep(50);
-              if (getComputedStyle(rolePane).display !== "none") {
-                return { ok: false, reason: "sidebar-drag-collapse-missing", display: getComputedStyle(rolePane).display };
+              dragTo(110);
+              await sleep(200);
+              roleRect = rolePane.getBoundingClientRect();
+              if (rolePane.getAttribute("aria-hidden") !== "true" || roleRect.width > 1) {
+                return {
+                  ok: false,
+                  reason: "sidebar-drag-collapse-missing",
+                  ariaHidden: rolePane.getAttribute("aria-hidden"),
+                  width: roleRect.width,
+                };
               }
               dragTo(140);
-              await sleep(50);
+              await sleep(200);
               roleRect = rolePane.getBoundingClientRect();
-              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 200) > 1) {
+              if (rolePane.getAttribute("aria-hidden") === "true" || Math.abs(roleRect.width - 220) > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-drag-expand-missing",
-                  display: getComputedStyle(rolePane).display,
+                  ariaHidden: rolePane.getAttribute("aria-hidden"),
                   width: roleRect.width,
                 };
               }
@@ -642,18 +650,24 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 return { ok: false, reason: "sidebar-drag-expand-width-mismatch", width: roleRect.width };
               }
               toggle.click();
-              await sleep(50);
-              if (getComputedStyle(rolePane).display !== "none") {
-                return { ok: false, reason: "sidebar-toggle-collapse-failed", display: getComputedStyle(rolePane).display };
+              await sleep(200);
+              roleRect = rolePane.getBoundingClientRect();
+              if (rolePane.getAttribute("aria-hidden") !== "true" || roleRect.width > 1) {
+                return {
+                  ok: false,
+                  reason: "sidebar-toggle-collapse-failed",
+                  ariaHidden: rolePane.getAttribute("aria-hidden"),
+                  width: roleRect.width,
+                };
               }
               toggle.click();
-              await sleep(50);
+              await sleep(200);
               roleRect = rolePane.getBoundingClientRect();
-              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 320) > 1) {
+              if (rolePane.getAttribute("aria-hidden") === "true" || Math.abs(roleRect.width - 320) > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-toggle-expand-failed",
-                  display: getComputedStyle(rolePane).display,
+                  ariaHidden: rolePane.getAttribute("aria-hidden"),
                   width: roleRect.width,
                 };
               }
@@ -676,7 +690,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               if (!rolePane || !chatPane || !composer) {
                 return { ok: false, reason: "narrow-layout-elements-missing" };
               }
-              const roleDisplay = getComputedStyle(rolePane).display;
+              const roleRect = rolePane.getBoundingClientRect();
               const chatRect = chatPane.getBoundingClientRect();
               const composerRect = composer.getBoundingClientRect();
               const composerTrackRect = composer.parentElement?.getBoundingClientRect();
@@ -691,8 +705,13 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 : composerRect.width;
               const expectedComposerCenter = chatRect.left + chatRect.width / 2;
               const actualComposerCenter = composerRect.left + composerRect.width / 2;
-              if (roleDisplay !== "none") {
-                return { ok: false, reason: "role-pane-not-collapsed", roleDisplay };
+              if (rolePane.getAttribute("aria-hidden") !== "true" || roleRect.width > 1) {
+                return {
+                  ok: false,
+                  reason: "role-pane-not-collapsed",
+                  ariaHidden: rolePane.getAttribute("aria-hidden"),
+                  roleWidth: roleRect.width,
+                };
               }
               if (chatRect.left > 1 || Math.abs(chatRect.width - window.innerWidth) > 2) {
                 return {

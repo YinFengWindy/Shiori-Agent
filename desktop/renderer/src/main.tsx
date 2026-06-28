@@ -1,6 +1,7 @@
 import type React from "react";
 import { startTransition, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { ChatSurface } from "./chat/ChatSurface";
 import { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel";
 import { RoleDetailPage } from "./roles/RoleDetailPage";
@@ -15,10 +16,11 @@ import type { AppMainView, EventLog, NewRoleFormState, RoleFormState, RoleRecord
 import { TitleBar } from "./shell/TitleBar";
 import "./styles.css";
 
-const sidebarMinWidth = 200;
+const sidebarMinWidth = 220;
 const sidebarMaxWidth = 400;
-const sidebarDefaultWidth = 200;
+const sidebarDefaultWidth = 220;
 const sidebarCollapseThreshold = sidebarMinWidth / 2;
+const sidebarAnimationDurationMs = 180;
 const sidebarAutoCollapseWindowWidth = 980;
 
 type SearchableSessionRecord = {
@@ -70,6 +72,7 @@ function App(): React.ReactElement {
   const [sidebarWidth, setSidebarWidth] = useState(sidebarDefaultWidth);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [resizingSidebar, setResizingSidebar] = useState(false);
+  const [sidebarAnimating, setSidebarAnimating] = useState(false);
   const [activeIllustration, setActiveIllustration] = useState("");
   const [clearAvatar, setClearAvatar] = useState(false);
   const [clearIllustrations, setClearIllustrations] = useState(false);
@@ -149,6 +152,7 @@ function App(): React.ReactElement {
   }
 
   function toggleSidebar(): void {
+    setSidebarAnimating(true);
     if (sidebarCollapsed) {
       setSidebarWidth((current) => Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, current)));
       setSidebarCollapsed(false);
@@ -160,6 +164,7 @@ function App(): React.ReactElement {
   function openSettingsView(section: SettingsSectionId = "models"): void {
     setSettingsSearch("");
     setSettingsSection(section);
+    setSidebarAnimating(true);
     setSidebarCollapsed(false);
     setSidebarWidth((current) => Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, current)));
     setMainView({ kind: "settings" });
@@ -167,7 +172,10 @@ function App(): React.ReactElement {
 
   function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
     event.preventDefault();
-    setResizingSidebar(true);
+    flushSync(() => {
+      setSidebarAnimating(false);
+      setResizingSidebar(true);
+    });
 
     function stopResize(): void {
       setResizingSidebar(false);
@@ -274,8 +282,15 @@ function App(): React.ReactElement {
   }, [activeIllustration]);
 
   useEffect(() => {
+    if (!sidebarAnimating) return undefined;
+    const timer = window.setTimeout(() => setSidebarAnimating(false), sidebarAnimationDurationMs + 40);
+    return () => window.clearTimeout(timer);
+  }, [sidebarAnimating]);
+
+  useEffect(() => {
     function collapseSidebarForNarrowWindow(): void {
       if (window.innerWidth < sidebarAutoCollapseWindowWidth) {
+        setSidebarAnimating(true);
         setSidebarCollapsed(true);
       }
     }
@@ -949,15 +964,17 @@ function App(): React.ReactElement {
       <div
         className={cx(
           "desktop-shell grid min-h-0 overflow-hidden bg-transparent",
+          sidebarAnimating && "transition-[grid-template-columns] duration-180 ease-out",
           resizingSidebar && "sidebar-resizing cursor-col-resize select-none",
         )}
         style={{
-          gridTemplateColumns: sidebarCollapsed ? "minmax(0, 1fr)" : `${sidebarWidth}px minmax(0, 1fr)`,
+          gridTemplateColumns: `${sidebarCollapsed ? 0 : sidebarWidth}px minmax(0, 1fr)`,
         }}
       >
         {mainView.kind === "settings" ? (
           <SettingsSidebar
             activeSection={settingsSection}
+            animating={sidebarAnimating && !resizingSidebar}
             collapsed={sidebarCollapsed}
             configPath={settingsConfigPath}
             dirty={settingsDirty}
@@ -971,6 +988,7 @@ function App(): React.ReactElement {
           <RoleSidebar
             roles={roles}
             activeRoleId={activeRoleId}
+            animating={sidebarAnimating && !resizingSidebar}
             bridgeReady={bridgeReady}
             collapsed={sidebarCollapsed}
             creating={creating}

@@ -8,6 +8,7 @@ type RoleSidebarProps = {
   activeRoleId: string;
   bridgeReady: boolean;
   collapsed: boolean;
+  animating: boolean;
   creating: boolean;
   showNewRoleComposer: boolean;
   newRoleForm: NewRoleFormState;
@@ -26,6 +27,7 @@ export function RoleSidebar({
   activeRoleId,
   bridgeReady,
   collapsed,
+  animating,
   creating,
   showNewRoleComposer,
   newRoleForm,
@@ -47,7 +49,14 @@ export function RoleSidebar({
     "grid min-h-[54px] grid-cols-[24px_1fr] items-center gap-3 rounded-[14px] border border-white/40 bg-white/35 px-3 py-2 text-left hover:bg-white/55 focus-visible:bg-white/55";
 
   return (
-    <aside className={cx("role-pane relative grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-[18px] overflow-hidden bg-transparent py-[18px] pl-5 pr-[18px]", collapsed && "hidden")}>
+    <aside
+      className={cx(
+        "role-pane relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-[18px] overflow-hidden bg-transparent py-[18px]",
+        animating && "transition-[opacity,transform,padding] duration-180 ease-out",
+        collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-5 pr-[18px] opacity-100",
+      )}
+      aria-hidden={collapsed}
+    >
       <div className="sidebar-top grid gap-1">
         <button className={sidebarEntryClass} type="button" onClick={onOpenSearch}>
           <span className="sidebar-entry-icon sidebar-entry-search grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
@@ -139,7 +148,10 @@ export function RoleSidebar({
         </button>
       </div>
       <div
-        className="sidebar-resize-handle absolute bottom-0 right-0 top-0 w-2 cursor-col-resize bg-transparent hover:bg-black/5 focus-visible:bg-black/5"
+        className={cx(
+          "sidebar-resize-handle absolute bottom-0 right-0 top-0 cursor-col-resize bg-transparent hover:bg-black/5 focus-visible:bg-black/5",
+          collapsed ? "w-0" : "w-2",
+        )}
         role="separator"
         aria-label="Resize sidebar"
         aria-orientation="vertical"
