@@ -15,9 +15,9 @@ import type { AppMainView, EventLog, NewRoleFormState, RoleFormState, RoleRecord
 import { TitleBar } from "./shell/TitleBar";
 import "./styles.css";
 
-const sidebarMinWidth = 360;
-const sidebarMaxWidth = 720;
-const sidebarDefaultWidth = 360;
+const sidebarMinWidth = 200;
+const sidebarMaxWidth = 400;
+const sidebarDefaultWidth = 200;
 const sidebarCollapseThreshold = sidebarMinWidth / 2;
 const sidebarAutoCollapseWindowWidth = 980;
 

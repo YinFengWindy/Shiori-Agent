@@ -596,22 +596,22 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, cancelable: true, clientX: x, pointerId: 1 }));
                 window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, clientX: x, pointerId: 1 }));
               };
-              dragTo(720);
+              dragTo(400);
               await sleep(50);
               let roleRect = rolePane.getBoundingClientRect();
-              if (Math.abs(roleRect.width - 720) > 1) {
+              if (Math.abs(roleRect.width - 400) > 1) {
                 return { ok: false, reason: "sidebar-max-resize-mismatch", width: roleRect.width };
               }
-              dragTo(360);
+              dragTo(200);
               await sleep(50);
               roleRect = rolePane.getBoundingClientRect();
-              if (Math.abs(roleRect.width - 360) > 1) {
+              if (Math.abs(roleRect.width - 200) > 1) {
                 return { ok: false, reason: "sidebar-min-resize-mismatch", width: roleRect.width };
               }
-              dragTo(340);
+              dragTo(180);
               await sleep(50);
               roleRect = rolePane.getBoundingClientRect();
-              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 360) > 1) {
+              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 200) > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-min-threshold-collapse-mismatch",
@@ -619,15 +619,15 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                   width: roleRect.width,
                 };
               }
-              dragTo(180);
+              dragTo(100);
               await sleep(50);
               if (getComputedStyle(rolePane).display !== "none") {
                 return { ok: false, reason: "sidebar-drag-collapse-missing", display: getComputedStyle(rolePane).display };
               }
-              dragTo(220);
+              dragTo(140);
               await sleep(50);
               roleRect = rolePane.getBoundingClientRect();
-              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 360) > 1) {
+              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 200) > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-drag-expand-missing",
@@ -635,10 +635,10 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                   width: roleRect.width,
                 };
               }
-              dragTo(540);
+              dragTo(320);
               await sleep(50);
               roleRect = rolePane.getBoundingClientRect();
-              if (Math.abs(roleRect.width - 540) > 1) {
+              if (Math.abs(roleRect.width - 320) > 1) {
                 return { ok: false, reason: "sidebar-drag-expand-width-mismatch", width: roleRect.width };
               }
               toggle.click();
@@ -649,7 +649,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               toggle.click();
               await sleep(50);
               roleRect = rolePane.getBoundingClientRect();
-              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 540) > 1) {
+              if (getComputedStyle(rolePane).display === "none" || Math.abs(roleRect.width - 320) > 1) {
                 return {
                   ok: false,
                   reason: "sidebar-toggle-expand-failed",
