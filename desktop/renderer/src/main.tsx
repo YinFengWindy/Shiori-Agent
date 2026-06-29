@@ -6,6 +6,7 @@ import { ChatSurface } from "./chat/ChatSurface";
 import { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel";
 import { RoleDetailPage } from "./roles/RoleDetailPage";
 import { RoleManagementPage } from "./roles/RoleManagementPage";
+import { reconcileRoles } from "./roles/roleListState";
 import { RoleSearchDialog } from "./roles/RoleSearchDialog";
 import { RoleSidebar } from "./roles/RoleSidebar";
 import { SettingsPage } from "./settings/SettingsPage";
@@ -46,33 +47,6 @@ function createEmptyNewRoleForm(): NewRoleFormState {
     description: "",
     systemPrompt: "",
   };
-}
-
-function mergeRoles(current: RoleRecord[], incoming: RoleRecord[]): RoleRecord[] {
-  const byId = new Map<string, RoleRecord>();
-  current.forEach((role) => {
-    byId.set(role.id, role);
-  });
-  incoming.forEach((role) => {
-    const existing = byId.get(role.id);
-    if (!existing) {
-      byId.set(role.id, role);
-      return;
-    }
-    const existingTime = Date.parse(existing.updated_at || existing.created_at || "");
-    const incomingTime = Date.parse(role.updated_at || role.created_at || "");
-    if (Number.isNaN(existingTime) || Number.isNaN(incomingTime) || incomingTime >= existingTime) {
-      byId.set(role.id, role);
-    }
-  });
-  const incomingIds = new Set(incoming.map((role) => role.id));
-  const merged = incoming.map((role) => byId.get(role.id) ?? role);
-  current.forEach((role) => {
-    if (!incomingIds.has(role.id)) {
-      merged.push(byId.get(role.id) ?? role);
-    }
-  });
-  return merged;
 }
 
 function App(): React.ReactElement {
@@ -270,7 +244,7 @@ function App(): React.ReactElement {
     const nextRoles = (rolesRes.payload.roles as RoleRecord[]) ?? [];
     let mergedRoles = nextRoles;
     setRoles((current) => {
-      mergedRoles = mergeRoles(current, nextRoles);
+      mergedRoles = reconcileRoles(current, nextRoles);
       return mergedRoles;
     });
     return mergedRoles;
