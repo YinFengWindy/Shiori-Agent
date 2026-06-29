@@ -1,4 +1,5 @@
 from .inbound import InboundRoleRouter, route_inbound_by_role
+from .migration import RoleLegacyMigrator, RoleMigrationSummary
 from .services import (
     RoleAggregate,
     RoleAggregateService,
@@ -17,11 +18,13 @@ __all__ = [
     "RoleBindingService",
     "RoleChannelBinding",
     "RoleMemoryService",
+    "RoleMigrationSummary",
     "RoleRecord",
     "RoleRepository",
     "RoleRequest",
     "RoleSessionService",
     "RoleStore",
+    "RoleLegacyMigrator",
     "InboundRoleRouter",
     "route_inbound_by_role",
 ]

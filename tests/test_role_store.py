@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from datetime import datetime
 
 from bus.events import InboundMessage
-from core.roles import RoleAggregateService, RoleStore, route_inbound_by_role
+from core.roles import (
+    RoleAggregateService,
+    RoleLegacyMigrator,
+    RoleStore,
+    route_inbound_by_role,
+)
 from session.manager import SessionManager
+from memory2.store import MemoryStore2
 
 
 def test_role_store_creates_manifest_and_assets_layout(tmp_path: Path):
@@ -229,3 +236,99 @@ def test_route_inbound_by_role_rejects_unbound_legacy_channel(tmp_path: Path):
         assert "渠道未绑定角色" in str(exc)
     else:
         raise AssertionError("未绑定 legacy channel 必须失败")
+
+
+def test_role_legacy_migrator_moves_confirmed_session_into_role_session(tmp_path: Path):
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    legacy = session_manager.get_or_create("telegram:123")
+    legacy.metadata["role_id"] = "mira"
+    legacy.add_message("user", "hello")
+    session_manager.save(legacy)
+
+    migrator = RoleLegacyMigrator(
+        workspace=tmp_path,
+        roles=service,
+        session_manager=session_manager,
+    )
+    summary = migrator.migrate()
+
+    migrated = session_manager.get_or_create("role:mira")
+    assert "telegram:123" in summary.migrated_session_keys
+    assert [item["content"] for item in migrated.messages] == ["hello"]
+
+
+def test_role_legacy_migrator_keeps_unconfirmed_session_in_unresolved(tmp_path: Path):
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    legacy = session_manager.get_or_create("telegram:404")
+    legacy.add_message("user", "hello")
+    session_manager.save(legacy)
+
+    migrator = RoleLegacyMigrator(
+        workspace=tmp_path,
+        roles=service,
+        session_manager=session_manager,
+    )
+    summary = migrator.migrate()
+
+    unresolved = json.loads((tmp_path / "roles" / "migration_unresolved.json").read_text(encoding="utf-8"))
+    assert summary.migrated_session_keys == []
+    assert "telegram:404" in unresolved["unresolved_session_keys"]
+
+
+def test_role_legacy_migrator_is_idempotent_for_sessions_and_memory_items(tmp_path: Path):
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    legacy = session_manager.get_or_create("telegram:123")
+    legacy.metadata["role_id"] = "mira"
+    legacy.add_message("user", "hello")
+    session_manager.save(legacy)
+
+    memory_store = MemoryStore2(tmp_path / "memory" / "memory2.db", vec_dim=2)
+    item_result = memory_store.upsert_item(
+        memory_type="profile",
+        summary="用户常驻上海",
+        embedding=[1.0, 0.0],
+        extra={"role_id": "mira", "memory_domain": "relationship"},
+        source_ref="telegram:123:profile",
+    )
+    item_id = item_result.split(":", 1)[1]
+
+    migrator = RoleLegacyMigrator(
+        workspace=tmp_path,
+        roles=service,
+        session_manager=session_manager,
+        memory_store=memory_store,
+    )
+    first = migrator.migrate()
+    second = migrator.migrate()
+
+    assert "telegram:123" in first.migrated_session_keys
+    assert item_id in first.migrated_memory_item_ids
+    assert second.migrated_session_keys == []
+    assert second.migrated_memory_item_ids == []
