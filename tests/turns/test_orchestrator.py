@@ -165,3 +165,42 @@ async def test_orchestrator_proactive_reply_dispatches_media():
     assert sent is True
     assert dispatched[0].media == ["/tmp/meme.png"]
     assert session.messages[0]["media"] == ["/tmp/meme.png"]
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_proactive_reply_records_presence_by_role_when_available():
+    session = _DummySession("role:mira")
+    session.metadata["role_id"] = "mira"
+    calls: list[tuple[str, str]] = []
+
+    class _Outbound:
+        async def dispatch(self, outbound: OutboundDispatch) -> bool:
+            return True
+
+    presence = SimpleNamespace(
+        record_proactive_sent=lambda _key: calls.append(("session", _key)),
+        record_proactive_sent_by_role=lambda role_id: calls.append(("role", role_id)),
+    )
+    session_manager = SimpleNamespace(
+        get_or_create=lambda _key: session,
+        append_messages=AsyncMock(return_value=None),
+    )
+    orchestrator = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            session=SessionServices(session_manager=cast(Any, session_manager), presence=cast(Any, presence)),
+            outbound=_Outbound(),
+        )
+    )
+
+    sent = await orchestrator.handle_proactive_turn(
+        result=TurnResult(
+            decision="reply",
+            outbound=TurnOutbound(session_key="role:mira", content="hello"),
+        ),
+        session_key="role:mira",
+        channel="telegram",
+        chat_id="123",
+    )
+
+    assert sent is True
+    assert calls == [("role", "mira")]

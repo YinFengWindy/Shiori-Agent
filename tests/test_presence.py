@@ -84,3 +84,36 @@ def test_persistence_survives_reload(tmp_path):
     store2 = PresenceStore(SessionStore(db_path))
     assert store2.get_last_user_at("telegram:123") == t_user
     assert store2.get_last_proactive_at("telegram:123") == t_pro
+
+
+def test_presence_prefers_role_session_keys(tmp_path):
+    store = PresenceStore(_store(tmp_path))
+    t = _utc(2026, 2, 24, 9, 0)
+
+    store.record_user_message("role:mira", now=t)
+
+    assert store.get_last_user_at("role:mira") == t
+
+
+def test_presence_maps_legacy_session_with_role_metadata_to_role_key(tmp_path):
+    raw_store = _store(tmp_path)
+    raw_store.create_session(
+        key="telegram:123",
+        metadata={"role_id": "mira"},
+    )
+    store = PresenceStore(raw_store)
+    t = _utc(2026, 2, 25, 11, 0)
+
+    store.record_user_message("telegram:123", now=t)
+
+    assert store.get_last_user_at("telegram:123") == t
+    assert store.get_all_sessions()["role:mira"]["last_user_at"] == t
+
+
+def test_presence_can_record_proactive_sent_by_role(tmp_path):
+    store = PresenceStore(_store(tmp_path))
+    t = _utc(2026, 2, 26, 8, 30)
+
+    store.record_proactive_sent_by_role("mira", now=t)
+
+    assert store.get_last_proactive_at("role:mira") == t
