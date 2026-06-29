@@ -3,7 +3,6 @@ import { startTransition, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { ChatSurface } from "./chat/ChatSurface";
-import { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel";
 import { RoleCreatePage } from "./roles/RoleCreatePage";
 import { RoleDetailPage } from "./roles/RoleDetailPage";
 import { RoleManagementPage } from "./roles/RoleManagementPage";
@@ -94,7 +93,6 @@ function App(): React.ReactElement {
   const [creating, setCreating] = useState(false);
   const [savingRole, setSavingRole] = useState(false);
   const [sending, setSending] = useState(false);
-  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchingSessions, setSearchingSessions] = useState(false);
@@ -1284,7 +1282,6 @@ function App(): React.ReactElement {
               }}
             />
           ) : null}
-          <DiagnosticsPanel error={error} events={events} expanded={showDiagnostics} />
         </main>
       </div>
       <RoleSearchDialog

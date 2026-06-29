@@ -1,6 +1,6 @@
 import type React from "react";
 import { toFileUrl } from "../shared/format";
-import { bodyTextClass, cardClass, cx } from "../shared/styles";
+import { bodyTextClass, cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 
 type RoleSidebarProps = {
@@ -101,7 +101,7 @@ export function RoleSidebar({
             <span className="role-name min-w-0 truncate font-semibold leading-none">{role.name}</span>
           </button>
         )) : (
-          <div className={cx("empty-card", cardClass, "p-4")}>暂无角色。</div>
+          null
         )}
       </div>
       <div
