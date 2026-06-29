@@ -116,7 +116,7 @@ export function TitleBar({
               "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']",
               sidebarCollapsed
                 ? "before:bottom-[2.2px] before:left-[0.8px] before:top-[2.2px]"
-                : "before:bottom-0 before:left-[3.9px] before:top-0",
+                : "before:bottom-0 before:left-[3.3px] before:top-0",
             )}
           />
         </button>
