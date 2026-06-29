@@ -1152,6 +1152,7 @@ class MarkdownMemoryMaintenance:
         session: object,
         draft: "_ConsolidationDraft",
     ) -> None:
+        role_id = str(getattr(session, "metadata", {}).get("role_id") or "").strip()
         history_entries = [entry for entry, _ in draft.history_entry_payloads]
         if history_entries:
             await asyncio.to_thread(
@@ -1192,6 +1193,7 @@ class MarkdownMemoryMaintenance:
                     scope_channel=draft.scope_channel,
                     scope_chat_id=draft.scope_chat_id,
                     conversation=draft.conversation,
+                    role_id=role_id,
                 )
             )
 

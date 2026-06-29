@@ -132,6 +132,7 @@ def _to_rag_query_log(event: RetrievalCompleted):
     return RagQueryLog(
         caller="passive",
         session_key=event.session_key,
+        role_id=event.role_id,
         query=event.query,
         orig_query=event.orig_query,
         aux_queries=list(event.aux_queries),
@@ -158,6 +159,7 @@ def _to_memory_write_trace(event: MemoryWritten):
 
     return MemoryWriteTrace(
         session_key=event.session_key,
+        role_id=event.role_id,
         source_ref=event.source_ref,
         action=event.action,
         memory_type=event.memory_type,

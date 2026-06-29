@@ -686,14 +686,16 @@ class DefaultContextStore(ContextStore):
         if bool((msg.metadata or {}).get("skip_memory_retrieval")):
             retrieval_result = RetrievalResult(block="", trace=None)
         else:
+            session_metadata = get_session_metadata(session)
             retrieval_result = await self._retrieval.retrieve(
                 RetrievalRequest(
                     message=msg.content,
+                    role_id=str(session_metadata.get("role_id") or "").strip(),
                     session_key=session_key,
                     channel=msg.context_channel,
                     chat_id=msg.context_chat_id,
                     history=history_messages,
-                    session_metadata=get_session_metadata(session),
+                    session_metadata=session_metadata,
                     timestamp=msg.timestamp,
                 )
             )

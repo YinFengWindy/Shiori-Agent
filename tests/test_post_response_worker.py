@@ -108,6 +108,7 @@ def test_post_worker_handle_delegates_turn_ingested_event():
         session_key="cli:1",
         channel="cli",
         chat_id="1",
+        role_id="",
     )
 
 

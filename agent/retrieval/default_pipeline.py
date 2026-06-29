@@ -34,6 +34,7 @@ class DefaultMemoryRetrievalPipeline(MemoryRetrievalPipeline):
                 text=request.message,
                 intent="context",
                 scope=MemoryScope(
+                    role_id=request.role_id,
                     session_key=request.session_key,
                     channel=request.channel,
                     chat_id=request.chat_id,

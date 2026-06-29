@@ -482,6 +482,7 @@ def test_store_vector_batch_reuses_time_filtered_embedding_rows(
         *,
         memory_types: list[str] | None,
         include_superseded: bool,
+        role_id: str | None,
         scope_channel: str | None,
         scope_chat_id: str | None,
         require_scope_match: bool,
@@ -493,6 +494,7 @@ def test_store_vector_batch_reuses_time_filtered_embedding_rows(
         return original(
             memory_types=memory_types,
             include_superseded=include_superseded,
+            role_id=role_id,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
             require_scope_match=require_scope_match,

@@ -39,6 +39,7 @@ class TurnStarted:
     chat_id: str
     content: str
     timestamp: datetime
+    role_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class StreamDeltaReady:
     chat_id: str
     content_delta: str = ""
     thinking_delta: str = ""
+    role_id: str = ""
 
 
 @dataclass
@@ -58,6 +60,7 @@ class BeforeReasoning:
     content: str
     skill_names: list[str] = field(default_factory=_empty_skill_names)
     retrieved_memory_block: str = ""
+    role_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,7 @@ class TurnCommitted:
     post_reply_budget: dict[str, int] = field(default_factory=_empty_int_metadata)
     react_stats: dict[str, int] = field(default_factory=_empty_int_metadata)
     extra: dict[str, Any] = field(default_factory=_empty_metadata)
+    role_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -92,6 +96,7 @@ class ToolCallStarted:
     call_id: str
     tool_name: str
     arguments: dict[str, Any]
+    role_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -106,3 +111,4 @@ class ToolCallCompleted:
     final_arguments: dict[str, Any]
     status: str
     result_preview: str
+    role_id: str = ""

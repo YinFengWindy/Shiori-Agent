@@ -34,6 +34,7 @@ class MemoryCapability(str, Enum):
 
 @dataclass(frozen=True)
 class MemoryScope:
+    role_id: str = ""
     session_key: str = ""
     channel: str = ""
     chat_id: str = ""

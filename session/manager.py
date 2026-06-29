@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 _TOOL_RESULT_CHAR_BUDGET = 10000
 _PROACTIVE_HISTORY_CHAR_BUDGET = 360
 _PROACTIVE_META_HISTORY_CHAR_BUDGET = 1200
-_ROLE_SESSION_PREFIX = "desktop:role:"
+_ROLE_SESSION_PREFIX = "role:"
 
 
 def _truncate_tool_result(content: object) -> str:

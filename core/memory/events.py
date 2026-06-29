@@ -36,6 +36,7 @@ class RetrievalCompleted:
     route_decision: str | None
     aux_queries: list[str] = field(default_factory=_empty_str_list)
     error: str | None = None
+    role_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class MemoryWritten:
     summary: str | None = None
     superseded_ids: list[str] = field(default_factory=_empty_str_list)
     error: str | None = None
+    role_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,7 @@ class TurnIngested:
     assistant_response: str
     tool_chain: list[dict[str, object]]
     source_ref: str
+    role_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -70,3 +73,4 @@ class ConsolidationCommitted:
     scope_channel: str
     scope_chat_id: str
     conversation: str
+    role_id: str = ""

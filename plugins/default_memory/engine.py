@@ -665,6 +665,7 @@ class DefaultMemoryEngine:
                 assistant_response=event.assistant_response,
                 tool_chain=cast(list[dict[str, object]], event.tool_chain_raw),
                 source_ref=source_ref,
+                role_id=event.role_id,
             )
         )
 
@@ -762,6 +763,7 @@ class DefaultMemoryEngine:
             request.text,
             memory_types=memory_types,
             top_k=request.limit,
+            role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
             scope_chat_id=scope.chat_id or None,
             require_scope_match=bool(request.filters.hints.get("require_scope_match", False)),
@@ -821,6 +823,7 @@ class DefaultMemoryEngine:
             session_key=scope.session_key,
             channel=scope.channel,
             chat_id=scope.chat_id,
+            role_id=scope.role_id,
         )
         return MemoryIngestResult(
             accepted=True,
@@ -1146,6 +1149,7 @@ class DefaultMemoryEngine:
             request.text,
             memory_types=types,
             top_k=max(request.limit, _VECTOR_TOP_K),
+            role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
             scope_chat_id=scope.chat_id or None,
             require_scope_match=should_require_scope_match(request, scope),
@@ -1205,6 +1209,7 @@ class DefaultMemoryEngine:
             request.text,
             memory_types=["preference", "profile"],
             top_k=request.limit,
+            role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
             scope_chat_id=scope.chat_id or None,
             require_scope_match=should_require_scope_match(request, scope),
@@ -1228,6 +1233,7 @@ class DefaultMemoryEngine:
         *,
         memory_types: list[str] | None = None,
         top_k: int | None = None,
+        role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
         require_scope_match: bool = False,
@@ -1246,6 +1252,7 @@ class DefaultMemoryEngine:
                 query,
                 memory_types=memory_types,
                 top_k=top_k,
+                role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
                 require_scope_match=require_scope_match,

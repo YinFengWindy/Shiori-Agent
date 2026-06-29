@@ -30,6 +30,7 @@ class RagQueryLog:
     injected_count: int
     route_decision: str | None = None   # "RETRIEVE" | "NO_RETRIEVE"；None = 无 gate
     error: str | None = None
+    role_id: str = ""
 
 
 @dataclass
@@ -91,3 +92,4 @@ class MemoryWriteTrace:
     summary: str | None = None       # write: 写入的 summary
     superseded_ids: list[str] = field(default_factory=list)  # supersede: 被退休的 id 列表
     error: str | None = None
+    role_id: str = ""

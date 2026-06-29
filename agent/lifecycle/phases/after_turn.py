@@ -115,6 +115,11 @@ class _BuildTurnCommittedModule:
         snap = frame.input
         state = snap.state
         msg = state.msg
+        raw_session = state.session
+        if raw_session is None:
+            raise RuntimeError("AfterTurn requires TurnState.session")
+        session = cast("Session", raw_session)
+        role_id = str(session.metadata.get("role_id") or "").strip()
         tool_chain_list = cast(list[dict[str, Any]], frame.slots[_TOOL_CHAIN_SLOT])
         omit_user_turn = bool(frame.slots[_OMIT_USER_TURN_SLOT])
         frame.slots[_TURN_COMMITTED_SLOT] = TurnCommitted(
@@ -135,6 +140,7 @@ class _BuildTurnCommittedModule:
             post_reply_budget=dict(cast(dict[str, int], frame.slots[_BUDGET_SLOT])),
             react_stats=dict(cast(dict[str, int], frame.slots[_REACT_STATS_SLOT])),
             extra=dict(cast(dict[str, object], frame.slots[_EXTRA_SLOT])),
+            role_id=role_id,
         )
         return frame
 

@@ -48,6 +48,7 @@ class PostResponseMemoryWorker:
         self._current_run_session_key = ""
         self._current_run_channel = ""
         self._current_run_chat_id = ""
+        self._current_run_role_id = ""
 
     async def handle(self, event: TurnIngested) -> None:
         await self.run(
@@ -58,6 +59,7 @@ class PostResponseMemoryWorker:
             session_key=event.session_key,
             channel=event.channel,
             chat_id=event.chat_id,
+            role_id=event.role_id,
         )
 
     async def run(
@@ -69,11 +71,13 @@ class PostResponseMemoryWorker:
         session_key: str = "",
         channel: str = "",
         chat_id: str = "",
+        role_id: str = "",
     ) -> None:
         # 1. 初始化本轮异步提炼的上下文和 token 预算。
         self._current_run_session_key = session_key
         self._current_run_channel = channel
         self._current_run_chat_id = chat_id
+        self._current_run_role_id = role_id
         token_budget = self.TOKEN_BUDGET_PER_RUN
         logger.debug(
             "post_response_memorize start session=%s source_ref=%s user_len=%d resp_len=%d tool_steps=%d",
@@ -231,6 +235,7 @@ class PostResponseMemoryWorker:
                             source_ref=source_ref,
                             action="supersede",
                             superseded_ids=supersede_ids,
+                            role_id=self._current_run_role_id,
                         )
                     )
         return token_budget

@@ -263,6 +263,10 @@ def _time_prefilter_clauses(
     return clauses, params
 
 
+def _role_json_filter(column: str = "extra_json") -> str:
+    return f"COALESCE(TRIM(json_extract({column}, '$.role_id')), '') = ?"
+
+
 class MemoryStore2:
     def __init__(self, db_path: str | Path, vec_dim: int = VEC_DIM) -> None:
         self.db_path = Path(db_path)
@@ -704,6 +708,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         memory_type: str = "",
         status: str = "",
         source_ref: str = "",
+        role_id: str = "",
         scope_channel: str = "",
         scope_chat_id: str = "",
         has_embedding: bool | None = None,
@@ -742,6 +747,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             if source_ref:
                 where_parts.append("COALESCE(source_ref, '') LIKE ?")
                 params.append(f"%{source_ref}%")
+            if role_id:
+                where_parts.append(_role_json_filter())
+                params.append(role_id.strip())
             if scope_channel:
                 where_parts.append(
                     "COALESCE(TRIM(json_extract(extra_json, '$.scope_channel')), '') = ?"
@@ -1018,6 +1026,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         *,
         memory_types: list[str] | None,
         include_superseded: bool,
+        role_id: str | None,
         scope_channel: str | None,
         scope_chat_id: str | None,
         require_scope_match: bool,
@@ -1032,6 +1041,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             placeholders = ",".join("?" for _ in memory_types)
             where_parts.append(f"memory_type IN ({placeholders})")
             params.extend(memory_types)
+        if role_id:
+            where_parts.append(_role_json_filter())
+            params.append(role_id.strip())
         if require_scope_match:
             where_parts.append(
                 "COALESCE(TRIM(json_extract(extra_json, '$.scope_channel')), '') = ?"
@@ -1093,6 +1105,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         memory_types: list[str] | None = None,
         score_threshold: float = 0.0,
         include_superseded: bool = False,
+        role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
         require_scope_match: bool = False,
@@ -1111,6 +1124,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 memory_types=memory_types,
                 score_threshold=score_threshold,
                 include_superseded=include_superseded,
+                role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
                 require_scope_match=require_scope_match,
@@ -1126,6 +1140,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 memory_types=memory_types,
                 score_threshold=score_threshold,
                 include_superseded=include_superseded,
+                role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
                 require_scope_match=require_scope_match,
@@ -1142,6 +1157,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             memory_types=memory_types,
             score_threshold=score_threshold,
             include_superseded=include_superseded,
+            role_id=role_id,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
             require_scope_match=require_scope_match,
@@ -1156,6 +1172,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         memory_types: list[str] | None = None,
         score_threshold: float = 0.0,
         include_superseded: bool = False,
+        role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
         require_scope_match: bool = False,
@@ -1174,6 +1191,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                     memory_types=memory_types,
                     score_threshold=score_threshold,
                     include_superseded=include_superseded,
+                    role_id=role_id,
                     scope_channel=scope_channel,
                     scope_chat_id=scope_chat_id,
                     require_scope_match=require_scope_match,
@@ -1186,6 +1204,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         rows = self._get_embedding_rows_by_time_filter(
             memory_types=memory_types,
             include_superseded=include_superseded,
+            role_id=role_id,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
             require_scope_match=require_scope_match,
@@ -1211,6 +1230,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         memory_types: list[str] | None = None,
         score_threshold: float = 0.0,
         include_superseded: bool = False,
+        role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
         require_scope_match: bool = False,
@@ -1228,6 +1248,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 memory_types=memory_types,
                 score_threshold=score_threshold,
                 include_superseded=include_superseded,
+                role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
                 require_scope_match=require_scope_match,
@@ -1250,6 +1271,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             params.extend(memory_types)
         else:
             type_filter = ""
+
+        if role_id:
+            role_filter = f"AND {_role_json_filter('m.extra_json')}"
+            params.append(role_id.strip())
+        else:
+            role_filter = ""
 
         # scope 推入 SQL，用 json_extract 读取 extra_json 字段
         if require_scope_match:
@@ -1274,7 +1301,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                   AND k = ?
             ) v
             JOIN memory_items m ON m.rowid = v.rowid
-            WHERE 1=1 {status_filter} {type_filter} {scope_filter}
+            WHERE 1=1 {status_filter} {type_filter} {role_filter} {scope_filter}
             ORDER BY v.distance ASC
         """
         rows = cast(list[tuple[object, ...]], self._db.execute(sql, tuple(params)).fetchall())
@@ -1349,6 +1376,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         memory_types: list[str] | None = None,
         score_threshold: float = 0.0,
         include_superseded: bool = False,
+        role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
         require_scope_match: bool = False,
@@ -1363,6 +1391,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             rows = self._get_embedding_rows_by_time_filter(
                 memory_types=memory_types,
                 include_superseded=include_superseded,
+                role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
                 require_scope_match=require_scope_match,
@@ -1376,6 +1405,14 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
 
         if memory_types and not has_time_filter:
             rows = [r for r in rows if r[1] in memory_types]
+
+        if role_id and not has_time_filter:
+            clean_role_id = role_id.strip()
+            rows = [
+                r
+                for r in rows
+                if str((r[4] or {}).get("role_id", "")).strip() == clean_role_id
+            ]
 
         if require_scope_match and not has_time_filter:
             s_channel = (scope_channel or "").strip()

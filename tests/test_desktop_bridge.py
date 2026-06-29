@@ -30,9 +30,9 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
         stream_events: bool,
         **kwargs,
     ) -> str:
-        assert session_key == f"desktop:role:{role_id}"
+        assert session_key == f"role:{role_id}"
         assert channel == "desktop"
-        assert chat_id == f"desktop:role:{role_id}"
+        assert chat_id == f"role:{role_id}"
         assert stream_events is True
         session = session_manager.get_or_create(session_key)
         session.add_message("user", content)
@@ -91,7 +91,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
         },
         emit_event=emitted.append,
     )
-    assert opened.payload["session"]["key"] == f"desktop:role:{role_id}"
+    assert opened.payload["session"]["key"] == f"role:{role_id}"
     assert opened.payload["session"]["created_at"]
     assert opened.payload["session"]["updated_at"]
     assert opened.payload["session"]["last_consolidated"] == 0
@@ -107,7 +107,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
     )
 
     assert response.error is None
-    assert response.payload["session"]["key"] == f"desktop:role:{role_id}"
+    assert response.payload["session"]["key"] == f"role:{role_id}"
     assert [item["role"] for item in response.payload["session"]["messages"]] == ["user", "assistant"]
     methods = [item["method"] for item in emitted]
     assert methods == ["session.updated", "chat.delta", "chat.done", "session.updated"]
@@ -153,15 +153,15 @@ async def test_desktop_bridge_chat_listeners_are_removed_after_send(tmp_path: Pa
     event_bus = EventBus()
 
     async def _process_direct(**kwargs) -> str:
-        session = session_manager.get_or_create("desktop:role:mira")
+        session = session_manager.get_or_create("role:mira")
         session.add_message("user", "hi")
         session.add_message("assistant", "hello")
         await session_manager.save_async(session)
         await event_bus.observe(
             TurnCommitted(
-                session_key="desktop:role:mira",
+                session_key="role:mira",
                 channel="desktop",
-                chat_id="desktop:role:mira",
+                chat_id="role:mira",
                 input_message="hi",
                 persisted_user_message="hi",
                 assistant_response="hello",
@@ -298,7 +298,7 @@ async def test_desktop_bridge_open_role_emits_session_updated(tmp_path: Path):
 
     assert response.error is None
     assert emitted[0]["method"] == "session.updated"
-    assert emitted[0]["payload"]["session"]["key"] == "desktop:role:mira"
+    assert emitted[0]["payload"]["session"]["key"] == "role:mira"
     assert emitted[0]["payload"]["session"]["metadata"]["role_name"] == "Mira"
 
 
@@ -398,7 +398,7 @@ async def test_desktop_bridge_chat_cancel_uses_interrupt_controller(tmp_path: Pa
 
     assert response.error is None
     assert response.payload["status"] == "interrupted"
-    assert response.payload["session_key"] == "desktop:role:mira"
+    assert response.payload["session_key"] == "role:mira"
 
 
 @pytest.mark.asyncio
@@ -439,7 +439,7 @@ async def test_desktop_bridge_normalizes_stale_active_illustration_on_role_updat
     )
 
     assert response.error is None
-    session = session_manager.get_or_create("desktop:role:mira")
+    session = session_manager.get_or_create("role:mira")
     assert "active_illustration" not in session.metadata
 
 
@@ -486,7 +486,7 @@ async def test_desktop_bridge_syncs_role_metadata_into_session_on_open_and_updat
         emit_event=lambda payload: None,
     )
     assert updated.error is None
-    session = session_manager.get_or_create("desktop:role:mira")
+    session = session_manager.get_or_create("role:mira")
     assert session.metadata["role_name"] == "Mira Prime"
     assert session.metadata["role_prompt"] == "you are still mira"
 
@@ -522,4 +522,4 @@ async def test_desktop_bridge_role_delete_removes_role_session(tmp_path: Path):
     assert response.error is None
     assert response.payload["deleted"] is True
     assert response.payload["session_deleted"] is True
-    assert session_manager._store.get_session_meta("desktop:role:mira") is None
+    assert session_manager._store.get_session_meta("role:mira") is None

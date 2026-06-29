@@ -52,6 +52,7 @@ class RecallMemoryTool(Tool):
         memory_kind: str = "",
         time_filter: str = "",
         limit: int = 8,
+        role_id: str | None = None,
         channel: str | None = None,
         chat_id: str | None = None,
         **extra: Any,
@@ -67,6 +68,7 @@ class RecallMemoryTool(Tool):
                 text=text,
                 intent=_normalize_intent(intent),
                 scope=MemoryScope(
+                    role_id=str(role_id or "").strip(),
                     session_key=f"{channel}:{chat_id}" if channel and chat_id else "",
                     channel=channel or "",
                     chat_id=chat_id or "",

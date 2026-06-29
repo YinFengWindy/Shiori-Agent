@@ -24,12 +24,17 @@ def source_ref_from_evidence(
 
 
 def resolve_memory_scope(scope: MemoryScope) -> MemoryScope:
+    if scope.role_id:
+        return scope
     if scope.channel and scope.chat_id:
         return scope
     if not scope.session_key or ":" not in scope.session_key:
         return scope
+    if scope.session_key.startswith("role:"):
+        return scope
     channel, chat_id = scope.session_key.split(":", 1)
     return MemoryScope(
+        role_id=scope.role_id,
         session_key=scope.session_key,
         channel=scope.channel or channel,
         chat_id=scope.chat_id or chat_id,

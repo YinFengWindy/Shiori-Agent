@@ -18,6 +18,7 @@ class RetrievalRequest:
     session_metadata: dict[str, object]
     timestamp: datetime | None = None
     extra: dict[str, object] = field(default_factory=dict[str, object])
+    role_id: str = ""
 
 
 @dataclass
