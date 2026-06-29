@@ -79,10 +79,32 @@ class Sensor:
         if default_role_id:
             if self._role_bindings is None:
                 raise RuntimeError(f"default_role_id 缺少 binding 服务: {default_role_id}")
-            for binding in self._role_bindings.list_bindings():
-                if binding.role_id == default_role_id:
-                    return binding.channel, binding.chat_id
-            raise KeyError(f"default_role_id 未绑定 transport: {default_role_id}")
+            role_bindings = [
+                binding
+                for binding in self._role_bindings.list_bindings()
+                if binding.role_id == default_role_id
+            ]
+            if not role_bindings:
+                raise KeyError(f"default_role_id 未绑定 transport: {default_role_id}")
+            preferred_channel = str(getattr(self._cfg, "default_channel", "") or "").strip()
+            preferred_chat_id = str(getattr(self._cfg, "default_chat_id", "") or "").strip()
+            if preferred_channel and preferred_chat_id:
+                for binding in role_bindings:
+                    if (
+                        binding.channel == preferred_channel
+                        and binding.chat_id == preferred_chat_id
+                    ):
+                        return binding.channel, binding.chat_id
+                raise KeyError(
+                    "default_role_id 配置的 target 未绑定到该角色: "
+                    f"{default_role_id} -> {preferred_channel}:{preferred_chat_id}"
+                )
+            if len(role_bindings) == 1:
+                binding = role_bindings[0]
+                return binding.channel, binding.chat_id
+            raise RuntimeError(
+                f"default_role_id 存在多个 transport 绑定，必须显式配置 target.channel/chat_id: {default_role_id}"
+            )
         return (
             (self._cfg.default_channel or "").strip(),
             self._cfg.default_chat_id.strip(),
