@@ -52,6 +52,10 @@ export function SettingsSidebar({
 }: SettingsSidebarProps) {
   const query = search.trim().toLowerCase();
   const visibleSections = settingsSections.filter((section) => sectionMatches(section, query));
+  const sidebarActionClass =
+    "flex min-h-[38px] items-center justify-between rounded-xl border border-transparent px-3 text-left text-sm text-[#32363C] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
+  const sidebarBackClass =
+    "mb-3 flex h-8 items-center gap-2 rounded-md border border-transparent bg-transparent px-2 text-left text-sm text-[#6E737A] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
 
   return (
     <aside
@@ -63,7 +67,7 @@ export function SettingsSidebar({
       aria-hidden={collapsed}
       style={{ width }}
     >
-      <button data-testid="settings-back-button" className="mb-3 flex h-8 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-sm text-[#6E737A] hover:bg-white/50" type="button" onClick={onBackToChat}>
+      <button data-testid="settings-back-button" className={sidebarBackClass} type="button" onClick={onBackToChat}>
         <span className="text-base leading-none">←</span>
         <span>返回应用</span>
       </button>
@@ -79,8 +83,8 @@ export function SettingsSidebar({
             <button
               key={section.id}
               className={cx(
-                "flex min-h-[38px] items-center justify-between rounded-xl border-0 px-3 text-left text-sm text-[#32363C] hover:bg-white/45",
-                activeSection === section.id && "bg-[#E4E8ED] font-medium",
+                sidebarActionClass,
+                activeSection === section.id && "border-[#D9E0E8] bg-white/80 font-medium shadow-[0_1px_2px_rgba(15,23,42,0.05)]",
               )}
               type="button"
               onClick={() => onOpenSection(section.id)}
