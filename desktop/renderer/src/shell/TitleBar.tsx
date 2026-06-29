@@ -113,10 +113,10 @@ export function TitleBar({
         >
           <span
             className={cx(
-              "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:bottom-[1.5px] before:top-[1.5px] before:w-[1.2px] before:rounded-full before:bg-current before:content-['']",
+              "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:bottom-0 before:top-0 before:w-[1.2px] before:rounded-full before:bg-current before:content-['']",
               sidebarCollapsed
                 ? "before:left-[0.8px]"
-                : "before:left-1/2 before:-translate-x-1/2",
+                : "before:left-[4.4px]",
             )}
           />
         </button>
