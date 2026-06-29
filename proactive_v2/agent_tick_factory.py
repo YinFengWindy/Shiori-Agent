@@ -103,6 +103,9 @@ class AgentTickFactory:
         try:
             return self._deps.sense.target_session_key()
         except Exception:
+            default_role_id = str(getattr(self._deps.cfg, "default_role_id", "") or "").strip()
+            if default_role_id:
+                return f"role:{default_role_id}"
             return self._deps.cfg.default_chat_id or ""
 
     def _build_last_user_at_fn(self, session_key: str) -> Callable[[], Any | None]:
@@ -325,8 +328,8 @@ class AgentTickFactory:
             return await orchestrator.handle_proactive_turn(
                 result=result,
                 session_key=session_key,
-                channel=str(self._deps.cfg.default_channel or "").strip(),
-                chat_id=str(self._deps.cfg.default_chat_id or "").strip(),
+                channel=str(self._deps.sense.target_transport()[0] or "").strip(),
+                chat_id=str(self._deps.sense.target_transport()[1] or "").strip(),
             )
 
         return send_message

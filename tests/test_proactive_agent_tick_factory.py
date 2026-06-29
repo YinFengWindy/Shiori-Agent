@@ -22,13 +22,15 @@ class _FakeProvider:
 
 def _build_deps(*, with_pool: bool):
     cfg = SimpleNamespace(
+        default_role_id="",
         default_chat_id="cid",
         agent_tick_model="",
         agent_tick_web_fetch_max_chars=4000,
         message_dedupe_recent_n=3,
     )
     sense = SimpleNamespace(
-        target_session_key=lambda: "telegram:1",
+        target_session_key=lambda: "role:mira" if cfg.default_role_id else "telegram:1",
+        target_transport=lambda: ("telegram", "1"),
         collect_recent=lambda: [],
         collect_recent_proactive=lambda n: [],
     )
@@ -63,6 +65,13 @@ def test_agent_tick_factory_build_returns_tick():
     deps = _build_deps(with_pool=True)
     tick = AgentTickFactory(deps).build()
     assert tick is not None
+
+
+def test_agent_tick_factory_prefers_role_session_key_when_default_role_id_present():
+    deps = _build_deps(with_pool=True)
+    deps.cfg.default_role_id = "mira"
+    tick = AgentTickFactory(deps).build()
+    assert tick._session_key == "role:mira"
 
 
 def test_agent_tick_factory_builds_drift_pipeline_when_enabled(tmp_path):

@@ -34,6 +34,7 @@ from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from core.common.strategy_trace import build_strategy_trace_envelope
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from proactive_v2.anyaction import AnyActionGate, QuotaStore
+from core.roles import RoleAggregateService, RoleStore
 from proactive_v2.energy import (
     compute_energy,
     d_energy,
@@ -155,6 +156,14 @@ class ProactiveLoop:
         )
 
     def _build_sense(self, fitbit_provider) -> Sensor:
+        role_bindings = None
+        workspace = getattr(self._sessions, "workspace", None)
+        if workspace is not None:
+            role_bindings = RoleAggregateService.from_runtime(
+                workspace=Path(workspace),
+                role_store=RoleStore(Path(workspace)),
+                session_manager=self._sessions,
+            ).bindings
         return Sensor(
             cfg=self._cfg,
             sessions=self._sessions,
@@ -163,6 +172,7 @@ class ProactiveLoop:
             presence=self._presence,
             rng=self._rng,
             fitbit=fitbit_provider,
+            role_bindings=role_bindings,
         )
 
     def _build_agent_tick(self):

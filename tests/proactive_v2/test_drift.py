@@ -1031,11 +1031,13 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
     deps = AgentTickDeps(
         cfg=cfg_with(
             drift_enabled=True,
+            default_role_id="",
             default_channel="telegram",
             default_chat_id="1",
         ),
         sense=SimpleNamespace(
             target_session_key=lambda: "telegram:1",
+            target_transport=lambda: ("telegram", "1"),
             collect_recent=lambda: [],
             collect_recent_proactive=lambda n: [],
         ),
@@ -1079,3 +1081,30 @@ async def test_factory_drift_send_message_marks_delivery_on_success(tmp_path: Pa
     assert ok is True
     state.mark_delivery.assert_called_once()
     sender.send.assert_called_once_with("hello")
+
+
+@pytest.mark.asyncio
+async def test_factory_drift_send_message_uses_bound_transport_from_role(tmp_path: Path):
+    state = SimpleNamespace(path=tmp_path / "proactive_state.json", mark_delivery=MagicMock())
+    factory, sender = _build_factory(tmp_path, sender_ok=True, state_store=state)
+    factory._deps.cfg.default_role_id = "mira"
+    factory._deps.sense = SimpleNamespace(
+        target_session_key=lambda: "role:mira",
+        target_transport=lambda: ("qq", "group-42"),
+    )
+    captured: dict[str, object] = {}
+
+    async def _dispatch(outbound):
+        captured["channel"] = outbound.channel
+        captured["chat_id"] = outbound.chat_id
+        return await sender.send(outbound.content)
+
+    factory._deps.turn_orchestrator._outbound.dispatch = _dispatch  # type: ignore[attr-defined]
+    send_message = factory._build_drift_send_message_fn()
+    assert send_message is not None
+
+    ok = await send_message("hello")
+
+    assert ok is True
+    assert captured["channel"] == "qq"
+    assert captured["chat_id"] == "group-42"

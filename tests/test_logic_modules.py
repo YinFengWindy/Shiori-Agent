@@ -11,7 +11,9 @@ import pytest
 
 from agent.prompting import is_context_frame
 from agent.provider import LLMResponse
+from core.roles import RoleAggregateService, RoleStore
 from proactive_v2.loop import ProactiveLoop
+from proactive_v2.sensor import Sensor
 from proactive_v2.memory_optimizer import (
     MemoryOptimizer,
     MemoryOptimizerLoop,
@@ -106,6 +108,7 @@ async def test_session_manager_and_proactive_loop_cover_paths(tmp_path: Path):
     )
     loop._sense = SimpleNamespace(
         target_session_key=lambda: "telegram:1",
+        target_transport=lambda: ("telegram", "1"),
         has_global_memory=lambda: True,
         read_memory_text=lambda: "mem",
         compute_energy=lambda: 0.5,
@@ -135,6 +138,35 @@ def test_session_get_history_returns_empty_when_window_is_zero():
     session.add_message("assistant", "world")
 
     assert session.get_history(max_messages=0) == []
+
+
+def test_sensor_prefers_role_target_and_binding_transport(tmp_path: Path):
+    session_manager = SessionManager(tmp_path)
+    role_service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = role_service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    _ = role_service.bindings.bind("telegram", "42", "mira")
+
+    sensor = Sensor(
+        cfg=SimpleNamespace(default_role_id="mira", default_channel="telegram", default_chat_id="42", recent_chat_messages=5),
+        sessions=session_manager,
+        state=SimpleNamespace(),
+        memory=None,
+        presence=None,
+        rng=None,
+        role_bindings=role_service.bindings,
+    )
+
+    assert sensor.target_session_key() == "role:mira"
+    assert sensor.target_transport() == ("telegram", "42")
 
 
 def test_session_get_history_skips_cached_llm_frame_by_default():
@@ -363,6 +395,7 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
     )
     loop._sense = SimpleNamespace(
         target_session_key=lambda: "telegram:1",
+        target_transport=lambda: ("telegram", "1"),
         has_global_memory=lambda: True,
         read_memory_text=lambda: "mem",
         compute_energy=lambda: 0.5,

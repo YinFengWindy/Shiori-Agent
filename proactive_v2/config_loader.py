@@ -112,6 +112,7 @@ def _check_forbidden_keys(p: dict[str, Any]) -> None:
         "profile",
         "profiles",
         "target",
+        "default_role_id",
         "feed",
         "agent",
         "drift",
@@ -264,6 +265,7 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
         raise ProactiveConfigError("proactive.target 必须是字典")
     default_channel = str(target.get("channel", p.get("default_channel", "telegram")))
     default_chat_id = str(target.get("chat_id", p.get("default_chat_id", "")))
+    default_role_id = str(target.get("role_id", p.get("default_role_id", "")))
     model = p.get("model", "")
 
     # 预设名称（必填）
@@ -340,6 +342,7 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
         enabled=enabled,
         default_channel=default_channel,
         default_chat_id=default_chat_id,
+        default_role_id=default_role_id,
         model=model,
         feed_poller_interval_seconds=feed_poller_interval_seconds,
         **final_config,

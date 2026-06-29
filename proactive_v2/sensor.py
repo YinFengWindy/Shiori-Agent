@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from agent.prompting import is_context_frame
+from core.roles.services import RoleBindingService
 from proactive_v2.energy import compute_energy, d_recent
 from proactive_v2.presence import PresenceStore
 from proactive_v2.state import ProactiveStateStore
@@ -38,6 +39,7 @@ class Sensor:
         presence: PresenceStore | None,
         rng: Any,
         fitbit: Any | None = None,
+        role_bindings: RoleBindingService | None = None,
     ) -> None:
         self._cfg = cfg
         self._sessions = sessions
@@ -46,6 +48,7 @@ class Sensor:
         self._presence = presence
         self._rng = rng
         self._fitbit = fitbit
+        self._role_bindings = role_bindings
 
     def sleep_context(self) -> Any:
         if self._fitbit is None:
@@ -64,9 +67,23 @@ class Sensor:
             return False
 
     def target_session_key(self) -> str:
+        default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
+        if default_role_id:
+            return f"role:{default_role_id}"
         channel = (self._cfg.default_channel or "").strip()
         chat_id = self._cfg.default_chat_id.strip()
         return f"{channel}:{chat_id}" if channel and chat_id else ""
+
+    def target_transport(self) -> tuple[str, str]:
+        default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
+        if default_role_id and self._role_bindings is not None:
+            for binding in self._role_bindings.list_bindings():
+                if binding.role_id == default_role_id:
+                    return binding.channel, binding.chat_id
+        return (
+            (self._cfg.default_channel or "").strip(),
+            self._cfg.default_chat_id.strip(),
+        )
 
     def read_memory_text(self) -> str:
         if not self._memory:
