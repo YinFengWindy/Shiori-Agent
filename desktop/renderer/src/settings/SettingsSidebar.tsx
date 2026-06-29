@@ -60,7 +60,7 @@ export function SettingsSidebar({
   return (
     <aside
       className={cx(
-        "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] border-r border-[#E6E8ED] bg-[#EEF1F5] py-3",
+        "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] bg-[#EEF1F5] py-3",
         animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
       )}
@@ -72,7 +72,10 @@ export function SettingsSidebar({
         <span>返回应用</span>
       </button>
       <input
-        className={cx(inputClass, "mb-3 h-10 rounded-xl border-[#D8DCE2] bg-[#F5F6F8] px-4 py-0 text-sm")}
+        className={cx(
+          inputClass,
+          "mb-3 h-10 rounded-xl border-[#D8DCE2] bg-[#F5F6F8] px-4 py-0 text-sm focus:border-[#D8DCE2] focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0",
+        )}
         placeholder="搜索设置..."
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
@@ -108,9 +111,7 @@ export function SettingsSidebar({
         aria-label="调整侧边栏宽度"
         aria-orientation="vertical"
         onPointerDown={onBeginResize}
-      >
-        <span className="pointer-events-none absolute bottom-0 right-px top-0 w-px bg-black/5" aria-hidden="true" />
-      </div>
+      />
     </aside>
   );
 }

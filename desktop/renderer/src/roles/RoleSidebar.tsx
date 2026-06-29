@@ -113,9 +113,7 @@ export function RoleSidebar({
         aria-label="调整侧边栏宽度"
         aria-orientation="vertical"
         onPointerDown={onBeginResize}
-      >
-        <span className="pointer-events-none absolute bottom-0 right-px top-0 w-px bg-black/5" aria-hidden="true" />
-      </div>
+      />
     </aside>
   );
 }
