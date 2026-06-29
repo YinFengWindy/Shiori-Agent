@@ -1144,8 +1144,10 @@ def create_dashboard_app(
     def list_memories(
         q: str = "",
         memory_type: str = "",
+        memory_domain: str = "",
         status: str = "",
         source_ref: str = "",
+        role_id: str = "",
         scope_channel: str = "",
         scope_chat_id: str = "",
         has_embedding: bool | None = None,
@@ -1157,8 +1159,10 @@ def create_dashboard_app(
         items, total = memory_admin.list_items_for_dashboard(
             q=q,
             memory_type=memory_type,
+            memory_domain=memory_domain,
             status=status,
             source_ref=source_ref,
+            role_id=role_id,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
             has_embedding=has_embedding,

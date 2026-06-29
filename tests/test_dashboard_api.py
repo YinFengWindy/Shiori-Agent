@@ -179,7 +179,12 @@ def _seed_workspace(tmp_path) -> None:
         summary="喜欢奶茶，少糖去冰",
         embedding=[1.0, 0.0],
         source_ref="telegram:100:pref",
-        extra={"scope_channel": "telegram", "scope_chat_id": "100"},
+        extra={
+            "scope_channel": "telegram",
+            "scope_chat_id": "100",
+            "role_id": "mira",
+            "memory_domain": "relationship",
+        },
         happened_at="2026-04-19T10:03:00+08:00",
         emotional_weight=6,
     )
@@ -188,7 +193,12 @@ def _seed_workspace(tmp_path) -> None:
         summary="昨晚和朋友去散步",
         embedding=[0.9, 0.1],
         source_ref="telegram:100:event",
-        extra={"scope_channel": "telegram", "scope_chat_id": "100"},
+        extra={
+            "scope_channel": "telegram",
+            "scope_chat_id": "100",
+            "role_id": "mira",
+            "memory_domain": "relationship",
+        },
         happened_at="2026-04-18T20:00:00+08:00",
     )
     memory_store.upsert_item(
@@ -196,7 +206,12 @@ def _seed_workspace(tmp_path) -> None:
         summary="常驻上海",
         embedding=None,
         source_ref="cli:local:profile",
-        extra={"scope_channel": "cli", "scope_chat_id": "local"},
+        extra={
+            "scope_channel": "cli",
+            "scope_chat_id": "local",
+            "role_id": "atlas",
+            "memory_domain": "role_self",
+        },
     )
     memory_store.close()
 
@@ -580,6 +595,17 @@ def test_list_memory_items_with_filters(tmp_path) -> None:
         assert status_resp.json()["total"] == 1
         assert status_resp.json()["items"][0]["memory_type"] == "profile"
 
+        domain_resp = client.get(
+            "/api/dashboard/memories",
+            params={
+                "memory_domain": "role_self",
+                "role_id": "atlas",
+            },
+        )
+        assert domain_resp.status_code == 200
+        assert domain_resp.json()["total"] == 1
+        assert domain_resp.json()["items"][0]["memory_domain"] == "role_self"
+
 
 def test_list_memory_items_sorts_by_created_at_desc(tmp_path) -> None:
     _seed_workspace(tmp_path)
@@ -664,6 +690,8 @@ def test_get_update_and_delete_memory(tmp_path) -> None:
         )
         assert get_resp.status_code == 200
         assert get_resp.json()["embedding_dim"] == 2
+        assert get_resp.json()["memory_domain"] == "relationship"
+        assert get_resp.json()["role_id"] == "mira"
 
         patch_resp = client.patch(
             f"/api/dashboard/memories/{memory_id}",

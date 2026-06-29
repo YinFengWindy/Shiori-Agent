@@ -34,6 +34,7 @@ class RecallInspectorDashboardReader:
         self,
         *,
         session_key: str = "",
+        role_id: str = "",
         q: str = "",
         page: int = 1,
         page_size: int = 50,
@@ -41,7 +42,7 @@ class RecallInspectorDashboardReader:
         normalized_q = q.strip().lower()
         turns = [
             item for item in self._collect_turns()
-            if _matches_recall_turn(item, session_key=session_key, q=normalized_q)
+            if _matches_recall_turn(item, session_key=session_key, role_id=role_id, q=normalized_q)
         ]
         total = len(turns)
         safe_page = max(1, page)
@@ -69,6 +70,7 @@ class RecallInspectorDashboardReader:
                 {
                     "turn_id": turn_id,
                     "session_key": str(record.get("session_key", "") or ""),
+                    "role_id": str(record.get("role_id", "") or ""),
                     "channel": str(record.get("channel", "") or ""),
                     "chat_id": str(record.get("chat_id", "") or ""),
                     "user_text": str(record.get("user_text", "") or ""),
@@ -77,7 +79,7 @@ class RecallInspectorDashboardReader:
                     "recall_memory_calls": [],
                 },
             )
-            for key in ("session_key", "channel", "chat_id", "user_text", "timestamp"):
+            for key in ("session_key", "role_id", "channel", "chat_id", "user_text", "timestamp"):
                 if record.get(key) and not turn.get(key):
                     turn[key] = str(record.get(key) or "")
             if record.get("kind") == "context_prepare":
@@ -141,12 +143,14 @@ def register(app: FastAPI, plugin_dir: Path, workspace: Path) -> None:
     @app.get("/api/dashboard/recall-inspector/turns")
     def list_recall_inspector_turns(
         session_key: str = "",
+        role_id: str = "",
         q: str = "",
         page: int = 1,
         page_size: int = 50,
     ) -> dict[str, Any]:
         items, total = reader.list_turns(
             session_key=session_key,
+            role_id=role_id,
             q=q,
             page=page,
             page_size=page_size,
@@ -170,9 +174,12 @@ def _matches_recall_turn(
     item: dict[str, Any],
     *,
     session_key: str,
+    role_id: str,
     q: str,
 ) -> bool:
     if session_key and item.get("session_key") != session_key:
+        return False
+    if role_id and item.get("role_id") != role_id:
         return False
     if not q:
         return True

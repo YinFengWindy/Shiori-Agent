@@ -860,14 +860,17 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             updated_at,
         ) = row
         embedding = json.loads(embedding_json) if embedding_json else None
+        extra = json.loads(extra_json) if extra_json else {}
         return {
             "id": row_id,
             "memory_type": memory_type,
+            "memory_domain": str(extra.get("memory_domain", "") or ""),
             "summary": summary,
             "content_hash": content_hash,
             "reinforcement": reinforcement,
             "emotional_weight": emotional_weight,
-            "extra_json": json.loads(extra_json) if extra_json else {},
+            "extra_json": extra,
+            "role_id": str(extra.get("role_id", "") or ""),
             "source_ref": source_ref,
             "happened_at": happened_at,
             "status": status,

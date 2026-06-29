@@ -67,10 +67,22 @@ async def test_recall_inspector_records_context_and_recall(tmp_path: Path) -> No
         )
     )
 
+    data_path = tmp_path / "observe" / "recall_inspector.jsonl"
+    records = [
+        {**json.loads(line), "role_id": "mira"}
+        for line in data_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    data_path.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n",
+        encoding="utf-8",
+    )
+
     reader = RecallInspectorDashboardReader(tmp_path)
-    items, total = reader.list_turns()
+    items, total = reader.list_turns(role_id="mira")
 
     assert total == 1
+    assert items[0]["role_id"] == "mira"
     assert items[0]["context_prepare_count"] == 2
     assert items[0]["recall_memory_count"] == 1
     assert items[0]["context_prepare"]["items"][0]["id"] == "m1"
