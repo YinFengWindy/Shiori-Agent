@@ -267,6 +267,10 @@ def _role_json_filter(column: str = "extra_json") -> str:
     return f"COALESCE(TRIM(json_extract({column}, '$.role_id')), '') = ?"
 
 
+def _domain_json_filter(column: str = "extra_json") -> str:
+    return f"COALESCE(TRIM(json_extract({column}, '$.memory_domain')), '') = ?"
+
+
 class MemoryStore2:
     def __init__(self, db_path: str | Path, vec_dim: int = VEC_DIM) -> None:
         self.db_path = Path(db_path)
@@ -706,6 +710,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         *,
         q: str = "",
         memory_type: str = "",
+        memory_domain: str = "",
         status: str = "",
         source_ref: str = "",
         role_id: str = "",
@@ -741,6 +746,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             if memory_type:
                 where_parts.append("memory_type = ?")
                 params.append(memory_type)
+            if memory_domain:
+                where_parts.append(_domain_json_filter())
+                params.append(memory_domain.strip())
             if status:
                 where_parts.append("status = ?")
                 params.append(status)
@@ -804,8 +812,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 items.append(
                     {
                         "id": str(row_id),
-                        "memory_type": row_memory_type,
-                        "summary": summary,
+                    "memory_type": row_memory_type,
+                    "memory_domain": str(extra.get("memory_domain", "") or ""),
+                    "summary": summary,
                         "source_ref": row_source_ref,
                         "happened_at": happened_at,
                         "status": row_status,
@@ -1025,6 +1034,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         self,
         *,
         memory_types: list[str] | None,
+        memory_domains: list[str] | None,
         include_superseded: bool,
         role_id: str | None,
         scope_channel: str | None,
@@ -1041,6 +1051,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             placeholders = ",".join("?" for _ in memory_types)
             where_parts.append(f"memory_type IN ({placeholders})")
             params.extend(memory_types)
+        if memory_domains:
+            placeholders = ",".join("?" for _ in memory_domains)
+            where_parts.append(
+                f"COALESCE(TRIM(json_extract(extra_json, '$.memory_domain')), '') IN ({placeholders})"
+            )
+            params.extend([domain.strip() for domain in memory_domains])
         if role_id:
             where_parts.append(_role_json_filter())
             params.append(role_id.strip())
@@ -1103,6 +1119,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         query_vec: list[float],
         top_k: int = 8,
         memory_types: list[str] | None = None,
+        memory_domains: list[str] | None = None,
         score_threshold: float = 0.0,
         include_superseded: bool = False,
         role_id: str | None = None,
@@ -1122,6 +1139,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 query_vec,
                 top_k=top_k,
                 memory_types=memory_types,
+                memory_domains=memory_domains,
                 score_threshold=score_threshold,
                 include_superseded=include_superseded,
                 role_id=role_id,
@@ -1155,6 +1173,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             query_vec,
             top_k=top_k,
             memory_types=memory_types,
+            memory_domains=memory_domains,
             score_threshold=score_threshold,
             include_superseded=include_superseded,
             role_id=role_id,
@@ -1170,6 +1189,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         query_vecs: list[list[float]],
         top_k: int = 8,
         memory_types: list[str] | None = None,
+        memory_domains: list[str] | None = None,
         score_threshold: float = 0.0,
         include_superseded: bool = False,
         role_id: str | None = None,
@@ -1189,6 +1209,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                     query_vec,
                     top_k=top_k,
                     memory_types=memory_types,
+                    memory_domains=memory_domains,
                     score_threshold=score_threshold,
                     include_superseded=include_superseded,
                     role_id=role_id,
@@ -1203,6 +1224,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
 
         rows = self._get_embedding_rows_by_time_filter(
             memory_types=memory_types,
+            memory_domains=memory_domains,
             include_superseded=include_superseded,
             role_id=role_id,
             scope_channel=scope_channel,
@@ -1228,6 +1250,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         query_vec: list[float],
         top_k: int = 8,
         memory_types: list[str] | None = None,
+        memory_domains: list[str] | None = None,
         score_threshold: float = 0.0,
         include_superseded: bool = False,
         role_id: str | None = None,
@@ -1246,6 +1269,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 query_vec,
                 top_k=top_k,
                 memory_types=memory_types,
+                memory_domains=memory_domains,
                 score_threshold=score_threshold,
                 include_superseded=include_superseded,
                 role_id=role_id,
@@ -1271,6 +1295,16 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             params.extend(memory_types)
         else:
             type_filter = ""
+
+        if memory_domains:
+            placeholders = ",".join("?" for _ in memory_domains)
+            domain_filter = (
+                "AND COALESCE(TRIM(json_extract(m.extra_json, '$.memory_domain')), '') "
+                f"IN ({placeholders})"
+            )
+            params.extend([domain.strip() for domain in memory_domains])
+        else:
+            domain_filter = ""
 
         if role_id:
             role_filter = f"AND {_role_json_filter('m.extra_json')}"
@@ -1301,7 +1335,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                   AND k = ?
             ) v
             JOIN memory_items m ON m.rowid = v.rowid
-            WHERE 1=1 {status_filter} {type_filter} {role_filter} {scope_filter}
+            WHERE 1=1 {status_filter} {type_filter} {domain_filter} {role_filter} {scope_filter}
             ORDER BY v.distance ASC
         """
         rows = cast(list[tuple[object, ...]], self._db.execute(sql, tuple(params)).fetchall())
@@ -1353,6 +1387,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 {
                     "id": str(row_id),
                     "memory_type": str(mtype),
+                    "memory_domain": str(extra.get("memory_domain", "") or ""),
                     "summary": str(summary),
                     "extra_json": extra,
                     "happened_at": str(happened_at) if happened_at else "",
@@ -1374,6 +1409,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         query_vec: list[float],
         top_k: int = 8,
         memory_types: list[str] | None = None,
+        memory_domains: list[str] | None = None,
         score_threshold: float = 0.0,
         include_superseded: bool = False,
         role_id: str | None = None,
@@ -1390,6 +1426,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         if has_time_filter:
             rows = self._get_embedding_rows_by_time_filter(
                 memory_types=memory_types,
+                memory_domains=memory_domains,
                 include_superseded=include_superseded,
                 role_id=role_id,
                 scope_channel=scope_channel,
@@ -1405,6 +1442,14 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
 
         if memory_types and not has_time_filter:
             rows = [r for r in rows if r[1] in memory_types]
+
+        if memory_domains and not has_time_filter:
+            clean_domains = {domain.strip() for domain in memory_domains}
+            rows = [
+                r
+                for r in rows
+                if str((r[4] or {}).get("memory_domain", "")).strip() in clean_domains
+            ]
 
         if role_id and not has_time_filter:
             clean_role_id = role_id.strip()
@@ -1758,6 +1803,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         self,
         terms: list[str],
         memory_types: list[str] | None = None,
+        memory_domains: list[str] | None = None,
         limit: int = 20,
         time_start: datetime | None = None,
         time_end: datetime | None = None,
@@ -1779,6 +1825,16 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             placeholders = ",".join("?" for _ in memory_types)
             type_filter = f" AND memory_type IN ({placeholders})"
             type_params = list(memory_types)
+
+        domain_filter = ""
+        domain_params: list[str] = []
+        if memory_domains:
+            placeholders = ",".join("?" for _ in memory_domains)
+            domain_filter = (
+                " AND COALESCE(TRIM(json_extract(extra_json, '$.memory_domain')), '') "
+                f"IN ({placeholders})"
+            )
+            domain_params = [domain.strip() for domain in memory_domains]
 
         scope_filter = ""
         scope_params: list[str] = []
@@ -1809,10 +1865,10 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             else limit
         )
         sql = (
-            f"SELECT id, memory_type, summary, source_ref, happened_at, created_at, "
+            f"SELECT id, memory_type, summary, extra_json, source_ref, happened_at, created_at, "
             f"reinforcement, ({score_expr}) AS kw_score "
             f"FROM memory_items "
-            f"WHERE status='active' AND ({or_conditions}){type_filter}{scope_filter}{time_filter} "
+            f"WHERE status='active' AND ({or_conditions}){type_filter}{domain_filter}{scope_filter}{time_filter} "
             f"ORDER BY kw_score DESC, reinforcement DESC, id ASC "
             f"LIMIT ? OFFSET ?"
         )
@@ -1823,6 +1879,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 like_vals
                 + like_vals
                 + type_params
+                + domain_params
                 + scope_params
                 + time_params
                 + [batch_size, offset]
@@ -1838,6 +1895,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                     row_id,
                     mtype,
                     summary,
+                    extra_json,
                     source_ref,
                     happened_at,
                     created_at,
@@ -1848,9 +1906,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                     happened_at, time_start, time_end
                 ):
                     continue
+                extra = _json_object(extra_json)
                 results.append({
                     "id": str(row_id),
                     "memory_type": str(mtype),
+                    "memory_domain": str(extra.get("memory_domain", "") or ""),
                     "summary": str(summary),
                     "source_ref": str(source_ref) if source_ref else "",
                     "happened_at": str(happened_at or created_at or ""),

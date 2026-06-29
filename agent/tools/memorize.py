@@ -39,6 +39,7 @@ class MemorizeTool(Tool):
         self,
         summary: str,
         memory_kind: str = "",
+        memory_domain: str = "",
         tool_requirement: str | None = None,
         steps: list[str] | None = None,
         metadata: dict[str, object] | None = None,
@@ -60,6 +61,7 @@ class MemorizeTool(Tool):
                 kind="remember",
                 summary=summary,
                 memory_kind=kind,
+                memory_domain=str(memory_domain or "").strip(),
                 source_ref=str(current_user_source_ref or "").strip(),
                 scope=MemoryScope(
                     role_id=str(role_id or "").strip(),

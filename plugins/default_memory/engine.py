@@ -759,9 +759,11 @@ class DefaultMemoryEngine:
         scope = resolve_memory_scope(request.scope)
         queries = self._resolve_queries(request)
         memory_types = self._resolve_memory_types(request)
+        memory_domains = self._resolve_memory_domains(request)
         items = await self._retrieve_related(
             request.text,
             memory_types=memory_types,
+            memory_domains=memory_domains,
             top_k=request.limit,
             role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
@@ -857,6 +859,9 @@ class DefaultMemoryEngine:
             "tool_requirement": request.metadata.get("tool_requirement"),
             "steps": list(steps or []),
         }
+        memory_domain = self._resolve_memory_domain_for_write(request, memory_type)
+        if memory_domain:
+            extra["memory_domain"] = memory_domain
         if memory_type == "procedure":
             extra["rule_schema"] = build_procedure_rule_schema(
                 summary=request.summary,
@@ -1148,6 +1153,7 @@ class DefaultMemoryEngine:
         hits = await self._retrieve_related(
             request.text,
             memory_types=types,
+            memory_domains=self._resolve_memory_domains(request),
             top_k=max(request.limit, _VECTOR_TOP_K),
             role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
@@ -1208,6 +1214,7 @@ class DefaultMemoryEngine:
         hits = await self._retrieve_related(
             request.text,
             memory_types=["preference", "profile"],
+            memory_domains=self._resolve_memory_domains(request),
             top_k=request.limit,
             role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
@@ -1232,6 +1239,7 @@ class DefaultMemoryEngine:
         query: str,
         *,
         memory_types: list[str] | None = None,
+        memory_domains: list[str] | None = None,
         top_k: int | None = None,
         role_id: str | None = None,
         scope_channel: str | None = None,
@@ -1251,6 +1259,7 @@ class DefaultMemoryEngine:
             await retriever.retrieve(
                 query,
                 memory_types=memory_types,
+                memory_domains=memory_domains,
                 top_k=top_k,
                 role_id=role_id,
                 scope_channel=scope_channel,
@@ -1320,6 +1329,7 @@ class DefaultMemoryEngine:
         return MemoryRecord(
             id=item_id,
             kind=memory_kind,
+            domain=str(item.get("memory_domain", "") or ""),
             summary=str(item.get("summary", "") or ""),
             score=float(score),
             engine_kind=cls.DESCRIPTOR.name,
@@ -1393,6 +1403,28 @@ class DefaultMemoryEngine:
         if request.intent == "procedure":
             return ["procedure", "preference"]
         return None
+
+    @staticmethod
+    def _resolve_memory_domains(
+        request: MemoryQuery,
+    ) -> list[str] | None:
+        if request.filters.domains:
+            return [str(item) for item in request.filters.domains if str(item).strip()]
+        return None
+
+    @staticmethod
+    def _resolve_memory_domain_for_write(
+        request: MemoryMutation,
+        memory_type: str,
+    ) -> str:
+        explicit = str(request.memory_domain or "").strip()
+        if explicit:
+            return explicit
+        if memory_type in {"identity", "background", "principle"}:
+            return "role_self"
+        if memory_type in {"profile", "preference", "procedure", "event"}:
+            return "relationship"
+        return ""
 
     @staticmethod
     def _resolve_queries(request: MemoryQuery) -> list[str]:

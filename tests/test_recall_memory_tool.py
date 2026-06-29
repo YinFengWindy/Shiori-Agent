@@ -77,6 +77,19 @@ async def test_recall_memory_passes_current_timestamp_to_engine() -> None:
     assert memory.request.timestamp == ts
 
 
+@pytest.mark.asyncio
+async def test_recall_memory_passes_memory_domain_to_engine() -> None:
+    memory = _CaptureMemory()
+    tool = RecallMemoryTool(
+        cast(Any, memory),
+        MemoryToolSpec(description="", parameters={"type": "object", "properties": {}}),
+    )
+
+    _ = await tool.execute(query="Akasha", memory_domain="role_self")
+
+    assert memory.request.filters.domains == ("role_self",)
+
+
 class _FakeProvider:
     chat: AsyncMock
 
@@ -481,6 +494,7 @@ def test_store_vector_batch_reuses_time_filtered_embedding_rows(
     def counted_get_embedding_rows_by_time_filter(
         *,
         memory_types: list[str] | None,
+        memory_domains: list[str] | None,
         include_superseded: bool,
         role_id: str | None,
         scope_channel: str | None,
@@ -493,6 +507,7 @@ def test_store_vector_batch_reuses_time_filtered_embedding_rows(
         calls += 1
         return original(
             memory_types=memory_types,
+            memory_domains=memory_domains,
             include_superseded=include_superseded,
             role_id=role_id,
             scope_channel=scope_channel,

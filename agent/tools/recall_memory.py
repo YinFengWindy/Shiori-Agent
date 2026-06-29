@@ -50,6 +50,7 @@ class RecallMemoryTool(Tool):
         query: str,
         intent: str = "answer",
         memory_kind: str = "",
+        memory_domain: str = "",
         time_filter: str = "",
         limit: int = 8,
         role_id: str | None = None,
@@ -75,6 +76,7 @@ class RecallMemoryTool(Tool):
                 ),
                 filters=MemoryQueryFilters(
                     kinds=_memory_kinds(memory_kind),
+                    domains=_memory_domains(memory_domain),
                     time_start=time_window[0] if time_window else None,
                     time_end=time_window[1] if time_window else None,
                 ),
@@ -164,6 +166,11 @@ def _normalize_intent(
 
 def _memory_kinds(memory_kind: str) -> tuple[str, ...]:
     value = memory_kind.strip()
+    return (value,) if value else ()
+
+
+def _memory_domains(memory_domain: str) -> tuple[str, ...]:
+    value = memory_domain.strip()
     return (value,) if value else ()
 
 

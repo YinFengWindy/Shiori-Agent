@@ -82,6 +82,7 @@ async def test_default_memory_engine_retrieve_maps_hits_and_text_block():
                     "summary": "记住用户偏好中文回复",
                     "score": 0.88,
                     "source_ref": "cli:1@seed",
+                    "memory_domain": "relationship",
                     "memory_type": "preference",
                     "extra_json": {"origin": "test"},
                 }
@@ -110,6 +111,7 @@ async def test_default_memory_engine_retrieve_maps_hits_and_text_block():
     assert result.records[0].injected is True
     assert result.records[0].engine_kind == "default"
     assert result.records[0].kind == "preference"
+    assert result.records[0].domain == "relationship"
     assert result.trace["profile"] == EngineProfile.RICH_MEMORY_ENGINE.value
 
 
@@ -600,6 +602,50 @@ async def test_default_memory_engine_remember_uses_memorizer():
     assert result.item_id == "memu-1"
     assert result.status == "new"
     memorizer.save_item_with_supersede.assert_awaited_once()
+    assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["memory_domain"] == "relationship"
+
+
+async def test_default_memory_engine_remember_keeps_explicit_memory_domain():
+    memorizer = SimpleNamespace(
+        save_item_with_supersede=AsyncMock(return_value="new:memu-1")
+    )
+    engine = _make_default_engine(
+        retriever=cast(Any, SimpleNamespace()),
+        memorizer=cast(Any, memorizer),
+    )
+
+    _ = await engine.mutate(
+        MemoryMutation(
+            kind="remember",
+            summary="角色坚持诚实表达",
+            memory_kind="identity",
+            memory_domain="role_self",
+            scope=MemoryScope(role_id="mira"),
+        )
+    )
+
+    assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["memory_domain"] == "role_self"
+
+
+async def test_default_memory_engine_query_passes_memory_domains():
+    retriever = SimpleNamespace(
+        retrieve=AsyncMock(return_value=[]),
+        build_injection_block=lambda items: ("", []),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+
+    await engine.query(
+        MemoryQuery(
+            text="角色自我设定",
+            intent="context",
+            scope=MemoryScope(role_id="mira"),
+            filters=MemoryQueryFilters(
+                domains=("role_self",),
+            ),
+        )
+    )
+
+    assert retriever.retrieve.await_args.kwargs["memory_domains"] == ["role_self"]
 
 
 async def test_default_memory_engine_remember_merged_keeps_target_id_alive():

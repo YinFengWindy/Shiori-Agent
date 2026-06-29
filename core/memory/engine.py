@@ -9,6 +9,7 @@ from typing import Literal, Protocol, runtime_checkable
 
 MemoryQueryIntent = Literal["context", "answer", "timeline", "interest", "procedure"]
 MemoryQueryEffect = Literal["stateful", "read_only"]
+MemoryDomain = Literal["role_self", "relationship", "shared"]
 
 
 class EngineProfile(str, Enum):
@@ -83,12 +84,14 @@ class MemoryRecord:
     engine_kind: str
     evidence: list[EvidenceRef] = field(default_factory=list[EvidenceRef])
     signals: dict[str, object] = field(default_factory=dict[str, object])
+    domain: str = ""
     injected: bool = False
 
 
 @dataclass(frozen=True)
 class MemoryQueryFilters:
     kinds: tuple[str, ...] = ()
+    domains: tuple[str, ...] = ()
     time_start: datetime | None = None
     time_end: datetime | None = None
     hints: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
@@ -98,6 +101,11 @@ class MemoryQueryFilters:
             self,
             "kinds",
             tuple(str(item) for item in self.kinds if str(item).strip()),
+        )
+        object.__setattr__(
+            self,
+            "domains",
+            tuple(str(item) for item in self.domains if str(item).strip()),
         )
         object.__setattr__(self, "hints", MappingProxyType(dict(self.hints)))
 
@@ -130,6 +138,7 @@ class MemoryMutation:
     scope: MemoryScope = field(default_factory=MemoryScope)
     summary: str = ""
     memory_kind: str = ""
+    memory_domain: str = ""
     source_ref: str = ""
     ids: tuple[str, ...] = ()
     metadata: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
