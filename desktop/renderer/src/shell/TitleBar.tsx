@@ -111,7 +111,14 @@ export function TitleBar({
           aria-expanded={!sidebarCollapsed}
           onClick={onToggleSidebar}
         >
-          <span className="relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:bottom-[1.5px] before:left-[2.5px] before:top-[1.5px] before:w-[1.2px] before:rounded-full before:bg-current before:content-['']" />
+          <span
+            className={cx(
+              "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:bottom-[1.5px] before:top-[1.5px] before:w-[1.2px] before:rounded-full before:bg-current before:content-['']",
+              sidebarCollapsed
+                ? "before:left-[0.8px]"
+                : "before:left-1/2 before:-translate-x-1/2",
+            )}
+          />
         </button>
         <button className={cx("titlebar-icon titlebar-back", titlebarIconClass)} type="button" aria-label="后退" onClick={onGoBack} disabled={!canGoBack}>
           <span className={cx(titlebarArrowClass, "before:left-0.5 after:left-[1.5px] after:-rotate-45")} />
