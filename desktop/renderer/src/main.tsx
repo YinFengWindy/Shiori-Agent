@@ -10,6 +10,7 @@ import { RoleManagementPage } from "./roles/RoleManagementPage";
 import { reconcileRoles } from "./roles/roleListState";
 import { RoleSearchDialog } from "./roles/RoleSearchDialog";
 import { RoleSidebar } from "./roles/RoleSidebar";
+import { RoleWorkspaceSidebar, type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { SettingsPage } from "./settings/SettingsPage";
 import { SettingsSidebar, type SettingsSectionId } from "./settings/SettingsSidebar";
 import { toFileUrl } from "./shared/format";
@@ -153,6 +154,12 @@ function App(): React.ReactElement {
     mainView.kind === "roles-list"
     || mainView.kind === "role-create"
     || mainView.kind === "role-detail";
+  const roleWorkspaceSection: RoleWorkspaceSectionId =
+    mainView.kind === "role-create"
+      ? "role-create"
+      : mainView.kind === "role-detail"
+        ? "role-detail"
+        : "roles-list";
 
   function buildNavigationEntry(
     view: AppMainView,
@@ -230,7 +237,7 @@ function App(): React.ReactElement {
 
   function openRoleWorkspaceView(nextView: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" }>): void {
     setSidebarAnimating(true);
-    setSidebarCollapsed(true);
+    setSidebarCollapsed(false);
     setMainView(nextView);
   }
 
@@ -1150,7 +1157,7 @@ function App(): React.ReactElement {
             "sidebar-track relative min-h-0 overflow-hidden",
             sidebarAnimating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           )}
-          style={{ width: roleWorkspaceViewActive ? 0 : (sidebarCollapsed ? 0 : sidebarWidth) }}
+          style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
         >
           {mainView.kind === "settings" ? (
             <SettingsSidebar
@@ -1166,13 +1173,32 @@ function App(): React.ReactElement {
               onBeginResize={beginSidebarResize}
               search={settingsSearch}
             />
+          ) : roleWorkspaceViewActive ? (
+            <RoleWorkspaceSidebar
+              activeRoleId={activeRoleId}
+              activeSection={roleWorkspaceSection}
+              animating={sidebarAnimating && !resizingSidebar}
+              collapsed={sidebarCollapsed}
+              roles={roles}
+              width={sidebarWidth}
+              onBackToChat={() => openChatView()}
+              onOpenSection={(section) => {
+                if (section === "role-create") {
+                  openRoleWorkspace({ kind: "role-create" });
+                  return;
+                }
+                openRoleWorkspace({ kind: "roles-list" });
+              }}
+              onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
+              onBeginResize={beginSidebarResize}
+            />
           ) : (
             <RoleSidebar
               roles={roles}
               activeRoleId={activeRoleId}
               animating={sidebarAnimating && !resizingSidebar}
               bridgeReady={bridgeReady}
-              collapsed={roleWorkspaceViewActive || sidebarCollapsed}
+              collapsed={sidebarCollapsed}
               width={sidebarWidth}
               onOpenSearch={() => setShowSearchDialog(true)}
               onToggleRoleEditor={() => openRoleWorkspace({ kind: "roles-list" })}

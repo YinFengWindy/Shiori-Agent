@@ -84,11 +84,12 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                   html: document.body.innerHTML.slice(0, 1200),
                 };
               }
+              const workspaceSidebar = document.querySelector(".role-workspace-sidebar");
               const sidebarTrack = document.querySelector(".sidebar-track");
-              if (!sidebarTrack || sidebarTrack.getBoundingClientRect().width > 1) {
+              if (!workspaceSidebar || !sidebarTrack || sidebarTrack.getBoundingClientRect().width < 200) {
                 return {
                   ok: false,
-                  reason: "create-page-sidebar-not-collapsed",
+                  reason: "create-page-workspace-sidebar-missing",
                   sidebarWidth: sidebarTrack?.getBoundingClientRect().width ?? null,
                 };
               }
@@ -267,11 +268,12 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             if (!roleManagementPage) {
               return { ok: false, reason: "role-management-page-missing" };
             }
+            const workspaceSidebar = document.querySelector(".role-workspace-sidebar");
             const sidebarTrack = document.querySelector(".sidebar-track");
-            if (!sidebarTrack || sidebarTrack.getBoundingClientRect().width > 1) {
+            if (!workspaceSidebar || !sidebarTrack || sidebarTrack.getBoundingClientRect().width < 200) {
               return {
                 ok: false,
-                reason: "role-management-sidebar-not-collapsed",
+                reason: "role-management-workspace-sidebar-missing",
                 sidebarWidth: sidebarTrack?.getBoundingClientRect().width ?? null,
               };
             }
