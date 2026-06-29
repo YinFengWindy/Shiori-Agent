@@ -67,20 +67,20 @@ export function RoleEditor({
   const containerClass = embedded
     ? "role-editor grid min-h-0 gap-3 rounded-[24px] border border-[#E7EBF0] bg-white/92 p-6 shadow-[0_18px_48px_rgba(31,41,55,0.08)]"
     : "role-editor scrollbar-soft scrollbar-soft-muted absolute bottom-6 right-6 top-20 z-[3] grid min-h-0 w-[calc(100%_-_48px)] max-w-[420px] grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-auto rounded-[18px] border border-[#ededed] bg-white/95 p-[18px] shadow-editor";
-  const contentClass = embedded
+      const contentClass = embedded
     ? "editor-form grid gap-3"
     : "editor-form grid gap-3";
 
   return (
     <section className={containerClass}>
       <div className={panelHeadClass}>
-        <h3 className={panelTitleClass}>Role Editor</h3>
-        {roleFormDirty ? <span className="dirty-chip rounded-full border border-[rgba(138,91,17,0.18)] bg-[rgba(138,91,17,0.08)] px-3 py-2 text-xs text-[#8a5b11]">Unsaved changes</span> : null}
+        <h3 className={panelTitleClass}>角色编辑</h3>
+        {roleFormDirty ? <span className="dirty-chip rounded-full border border-[rgba(138,91,17,0.18)] bg-[rgba(138,91,17,0.08)] px-3 py-2 text-xs text-[#8a5b11]">有未保存更改</span> : null}
       </div>
       {activeRole ? (
         <div className={contentClass}>
           <label className={labelClass}>
-            <span>Name</span>
+            <span>名称</span>
             <input
               data-testid="edit-role-name"
               className={inputClass}
@@ -89,7 +89,7 @@ export function RoleEditor({
             />
           </label>
           <label className={labelClass}>
-            <span>Description</span>
+            <span>简介</span>
             <input
               data-testid="edit-role-description"
               className={inputClass}
@@ -98,7 +98,7 @@ export function RoleEditor({
             />
           </label>
           <label className={labelClass}>
-            <span>System Prompt</span>
+            <span>系统提示词</span>
             <textarea
               data-testid="edit-role-prompt"
               className={cx("role-prompt", textareaClass, "min-h-40")}
@@ -108,19 +108,19 @@ export function RoleEditor({
           </label>
           <div className="asset-actions flex flex-wrap gap-2.5">
             <button data-testid="pick-avatar-button" className={cx("ghost-btn", ghostButtonClass)} type="button" onClick={onPickAvatar} disabled={!bridgeReady}>
-              Pick Avatar
+              选择头像
             </button>
             <button data-testid="pick-illustrations-button" className={cx("ghost-btn", ghostButtonClass)} type="button" onClick={onPickIllustrations} disabled={!bridgeReady}>
-              Pick Illustrations
+              选择插图
             </button>
             <button data-testid="clear-avatar-button" className={cx("ghost-btn", ghostButtonClass)} type="button" onClick={onClearAvatar} disabled={!bridgeReady}>
-              Clear Avatar
+              清空头像
             </button>
             <button data-testid="clear-illustrations-button" className={cx("ghost-btn", ghostButtonClass)} type="button" onClick={onClearIllustrations} disabled={!bridgeReady}>
-              Clear Illustrations
+              清空插图
             </button>
             <button className={ghostDangerButtonClass} type="button" onClick={onDeleteRole} disabled={!bridgeReady}>
-              Delete Role
+              删除角色
             </button>
           </div>
           {previewAvatar ? (
@@ -152,10 +152,10 @@ export function RoleEditor({
               ))}
             </div>
           ) : null}
-          {roleForm.avatarSource ? <div className="asset-preview rounded-[14px] border border-dashed border-stroke bg-[rgba(255,252,246,0.74)] px-3.5 py-3 text-muted">Avatar: {roleForm.avatarSource}</div> : null}
+          {roleForm.avatarSource ? <div className="asset-preview rounded-[14px] border border-dashed border-stroke bg-[rgba(255,252,246,0.74)] px-3.5 py-3 text-muted">头像：{roleForm.avatarSource}</div> : null}
           {roleForm.illustrationSources.length ? (
             <div className="asset-preview rounded-[14px] border border-dashed border-stroke bg-[rgba(255,252,246,0.74)] px-3.5 py-3 text-muted">
-              Illustrations:
+              插图：
               <ul className="mb-0 mt-2 list-disc pl-5">
                 {roleForm.illustrationSources.map((item) => <li key={item}>{item}</li>)}
               </ul>
@@ -163,15 +163,15 @@ export function RoleEditor({
           ) : null}
           <div className="editor-actions flex gap-2.5">
             <button className={cx("ghost-btn", ghostButtonClass)} type="button" onClick={onResetRoleForm} disabled={!roleFormDirty}>
-              Reset
+              重置
             </button>
             <button data-testid="save-role-button" className={cx("primary-btn text-sm", primaryButtonClass)} type="button" onClick={onSaveRole} disabled={savingRole || !activeRoleId || !roleFormDirty || !bridgeReady}>
-              {savingRole ? "Saving..." : "Save Role"}
+              {savingRole ? "保存中..." : "保存角色"}
             </button>
           </div>
         </div>
       ) : (
-        <div className={cx("empty-card", cardClass, "p-4")}>Select a role to edit its prompt and local artwork.</div>
+        <div className={cx("empty-card", cardClass, "p-4")}>选择一个角色后即可编辑它的提示词和本地素材。</div>
       )}
     </section>
   );

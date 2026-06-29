@@ -101,7 +101,7 @@ export function RoleSidebar({
             <span className="role-name min-w-0 truncate font-semibold leading-none">{role.name}</span>
           </button>
         )) : (
-          <div className={cx("empty-card", cardClass, "p-4")}>No roles yet.</div>
+          <div className={cx("empty-card", cardClass, "p-4")}>暂无角色。</div>
         )}
       </div>
       <div
@@ -110,7 +110,7 @@ export function RoleSidebar({
           collapsed ? "w-0" : "w-2",
         )}
         role="separator"
-        aria-label="Resize sidebar"
+        aria-label="调整侧边栏宽度"
         aria-orientation="vertical"
         onPointerDown={onBeginResize}
       >

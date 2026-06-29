@@ -96,8 +96,8 @@ export function TitleBar({
       { label: "设置", onSelect: onOpenSettings },
     ],
     帮助: [
-      { label: "刷新 Bridge", onSelect: onRefreshBridge },
-      { label: "重启 Bridge", onSelect: onRestartBridge },
+      { label: "刷新连接桥", onSelect: onRefreshBridge },
+      { label: "重启连接桥", onSelect: onRestartBridge },
     ],
   };
 
@@ -107,22 +107,22 @@ export function TitleBar({
         <button
           className={cx("titlebar-icon titlebar-sidebar", titlebarIconClass)}
           type="button"
-          aria-label="Sidebar"
+          aria-label="侧边栏"
           aria-expanded={!sidebarCollapsed}
           onClick={onToggleSidebar}
         >
           <span className="relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:bottom-[1.5px] before:left-[2.5px] before:top-[1.5px] before:w-[1.2px] before:rounded-full before:bg-current before:content-['']" />
         </button>
-        <button className={cx("titlebar-icon titlebar-back", titlebarIconClass)} type="button" aria-label="Back" onClick={onGoBack} disabled={!canGoBack}>
+        <button className={cx("titlebar-icon titlebar-back", titlebarIconClass)} type="button" aria-label="后退" onClick={onGoBack} disabled={!canGoBack}>
           <span className={cx(titlebarArrowClass, "before:left-0.5 after:left-[1.5px] after:-rotate-45")} />
         </button>
-        <button className={cx("titlebar-icon titlebar-forward", titlebarIconClass)} type="button" aria-label="Forward" onClick={onGoForward} disabled={!canGoForward}>
+        <button className={cx("titlebar-icon titlebar-forward", titlebarIconClass)} type="button" aria-label="前进" onClick={onGoForward} disabled={!canGoForward}>
           <span className={cx(titlebarArrowClass, "before:right-0.5 after:right-[1.5px] after:rotate-[135deg]")} />
         </button>
-        <button className={cx("titlebar-icon titlebar-refresh", titlebarIconClass)} type="button" aria-label="Refresh session" onClick={onRefreshSession} disabled={!canRefreshSession}>
+        <button className={cx("titlebar-icon titlebar-refresh", titlebarIconClass)} type="button" aria-label="刷新会话" onClick={onRefreshSession} disabled={!canRefreshSession}>
           <span className="relative h-[13px] w-[13px] before:absolute before:inset-[1px] before:rounded-full before:border-[1.3px] before:border-current before:border-r-transparent before:content-[''] after:absolute after:right-[0.5px] after:top-[1px] after:h-[4px] after:w-[4px] after:rotate-45 after:border-r-[1.3px] after:border-t-[1.3px] after:border-current after:content-['']" />
         </button>
-        <nav className="titlebar-menu ml-0.5 flex h-full items-center gap-0" aria-label="Application menu">
+        <nav className="titlebar-menu ml-0.5 flex h-full items-center gap-0" aria-label="应用菜单">
           {menuItems.map((item) => (
             <div key={item} className="titlebar-menu-entry relative">
               <button
@@ -157,13 +157,13 @@ export function TitleBar({
         </nav>
       </div>
       <div className="window-controls ml-auto flex h-full items-center">
-        <button className={cx("window-control", windowControlClass)} type="button" aria-label="Minimize" onClick={() => controlWindow("minimize")}>
+        <button className={cx("window-control", windowControlClass)} type="button" aria-label="最小化" onClick={() => controlWindow("minimize")}>
           <span className="window-minimize relative h-[11px] w-[11px] before:absolute before:inset-x-0 before:top-1.5 before:h-[1.5px] before:bg-current before:content-['']" />
         </button>
-        <button className={cx("window-control", windowControlClass)} type="button" aria-label="Maximize" onClick={() => controlWindow("toggleMaximize")}>
+        <button className={cx("window-control", windowControlClass)} type="button" aria-label="最大化" onClick={() => controlWindow("toggleMaximize")}>
           <span className="window-maximize h-[11px] w-[11px] rounded-sm border-[1.5px] border-current" />
         </button>
-        <button className={cx("window-control window-control-close", windowControlClass, "hover:bg-[#c42b1c] hover:text-white")} type="button" aria-label="Close" onClick={() => controlWindow("close")}>
+        <button className={cx("window-control window-control-close", windowControlClass, "hover:bg-[#c42b1c] hover:text-white")} type="button" aria-label="关闭" onClick={() => controlWindow("close")}>
           <span className="window-close relative h-[11px] w-[11px] before:absolute before:left-[5px] before:top-[-1px] before:h-[15px] before:w-[1.5px] before:rotate-45 before:bg-current before:content-[''] after:absolute after:left-[5px] after:top-[-1px] after:h-[15px] after:w-[1.5px] after:-rotate-45 after:bg-current after:content-['']" />
         </button>
       </div>

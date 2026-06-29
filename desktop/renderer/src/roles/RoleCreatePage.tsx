@@ -84,7 +84,7 @@ export function RoleCreatePage({
               onClick={onCreateRole}
               disabled={creating || !bridgeReady}
             >
-              {creating ? "Creating..." : "Create Role"}
+              {creating ? "创建中..." : "创建角色"}
             </button>
           </div>
         </div>

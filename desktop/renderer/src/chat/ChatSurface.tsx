@@ -170,11 +170,11 @@ export function ChatSurface({
                 value={draft}
                 onChange={(event) => onUpdateDraft(event.target.value)}
                 onKeyDown={handleComposerKeyDown}
-                placeholder="Type a message for this role..."
+                placeholder="给当前角色发送消息..."
               />
               <div className="composer-actions flex items-center gap-2">
                 <div className="composer-spacer flex-1" />
-                <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="Send message" onClick={() => onSendMessage(textareaRef.current?.value)} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
+                <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="发送消息" onClick={() => onSendMessage(textareaRef.current?.value)} disabled={!activeRoleId || !draft.trim() || sending || !bridgeReady}>
                   <svg className="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M12 19V5" />
                     <path d="M5 12l7-7 7 7" />

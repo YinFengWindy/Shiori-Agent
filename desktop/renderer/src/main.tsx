@@ -604,7 +604,7 @@ function App(): React.ReactElement {
 
         if (event.method === "chat.error") {
           setSending(false);
-          const message = String(event.payload.message ?? "chat failed");
+          const message = String(event.payload.message ?? "对话失败");
           setError(message);
           appendSessionErrorMessage(activeSession.key, message);
           return;
@@ -614,7 +614,7 @@ function App(): React.ReactElement {
           setSending(false);
           setHealth("offline");
           setError(String(event.payload.message ?? "bridge exited"));
-          setNotice("Bridge stopped. You can refresh or restart it.");
+          setNotice("连接桥已停止。你可以刷新或重启它。");
         }
       });
     });
@@ -670,7 +670,7 @@ function App(): React.ReactElement {
   async function refreshSession(): Promise<void> {
     if (!activeRoleId) return;
     await openRole(activeRoleId, null, { recordHistory: false });
-    setNotice("Session refreshed.");
+    setNotice("会话已刷新。");
   }
 
   async function refreshBridge(): Promise<void> {
@@ -705,7 +705,7 @@ function App(): React.ReactElement {
     } else if (nextRoles[0]) {
       await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
     }
-    setNotice("Bridge refreshed.");
+    setNotice("连接桥已刷新。");
   }
 
   async function restartBridge(): Promise<void> {
@@ -714,10 +714,10 @@ function App(): React.ReactElement {
     const result = await window.miraDesktop.restartBridge();
     if (!result.ok) {
       setHealth("offline");
-      setError(result.lastError || "bridge restart failed");
+      setError(result.lastError || "连接桥重启失败");
       return;
     }
-    setNotice("Bridge restarted.");
+    setNotice("连接桥已重启。");
     await refreshBridge();
   }
 
@@ -733,7 +733,7 @@ function App(): React.ReactElement {
       return;
     }
     if (!session) {
-      setError(sessionError ?? "failed to open role session");
+      setError(sessionError ?? "打开角色会话失败");
       return;
     }
     const latestRoles = await loadRolesFromBridge();
@@ -843,7 +843,7 @@ function App(): React.ReactElement {
     const name = newRoleFormRef.current.name.trim();
     const systemPrompt = newRoleFormRef.current.systemPrompt.trim();
     if (!name || !systemPrompt) {
-      setError("Role name and system prompt are required.");
+      setError("角色名称和系统提示词不能为空。");
       return;
     }
     setCreating(true);
@@ -883,7 +883,7 @@ function App(): React.ReactElement {
     setClearIllustrations(false);
     setActiveIllustration("");
     openRoleWorkspace({ kind: "role-detail", roleId: role.id }, { recordHistory: false });
-    setNotice("Role created.");
+    setNotice("角色已创建。");
     const nextRoles = await loadRolesFromBridge();
     const resolvedRole = nextRoles?.find((item) => item.id === role.id) ?? role;
     if (!nextRoles?.some((item) => item.id === role.id)) {
@@ -927,7 +927,7 @@ function App(): React.ReactElement {
     updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [] }));
     setClearAvatar(false);
     setClearIllustrations(false);
-    setNotice("Role saved.");
+    setNotice("角色已保存。");
     await openRole(updated.id, nextRoles?.find((item) => item.id === updated.id) ?? updated, { recordHistory: false });
     openRoleWorkspace({ kind: "role-detail", roleId: updated.id }, { recordHistory: false });
   }
@@ -948,7 +948,7 @@ function App(): React.ReactElement {
     setActiveRoleId("");
     setActiveSession(null);
     setActiveIllustration("");
-    setNotice("Role deleted.");
+    setNotice("角色已删除。");
     if (nextRoles[0]) {
       await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
       openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
@@ -1090,7 +1090,7 @@ function App(): React.ReactElement {
         : (detailRole?.illustrations_abs ?? []));
   const visibleIllustration = activeIllustration || previewIllustrations[0] || "";
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
-  const headerTitle = sending && activeRole ? "正在输入中..." : (activeRole ? activeRole.name : "Select a role");
+  const headerTitle = sending && activeRole ? "正在输入中..." : (activeRole ? activeRole.name : "选择一个角色");
 
   useEffect(() => {
     if (previewIllustrations.length === 0) {
@@ -1115,7 +1115,7 @@ function App(): React.ReactElement {
     });
     setClearAvatar(false);
     setClearIllustrations(false);
-    setNotice("Role form reset.");
+    setNotice("角色表单已重置。");
   }
 
   return (

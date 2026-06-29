@@ -308,16 +308,16 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 </Field>
                 <Field label="轻量模型">
                   <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.fastModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastModel: event.target.value } }))} placeholder="Model" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.models.fastModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastModel: event.target.value } }))} placeholder="模型名" />
                     <SecretInput value={draft.models.fastApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, fastApiKey: value } }))} />
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.fastBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastBaseUrl: event.target.value } }))} placeholder="Base URL" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.models.fastBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastBaseUrl: event.target.value } }))} placeholder="基础地址" />
                   </div>
                 </Field>
                 <Field label="视觉模型">
                   <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.vlModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlModel: event.target.value } }))} placeholder="Model" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.models.vlModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlModel: event.target.value } }))} placeholder="模型名" />
                     <SecretInput value={draft.models.vlApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, vlApiKey: value } }))} />
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.vlBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlBaseUrl: event.target.value } }))} placeholder="Base URL" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.models.vlBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlBaseUrl: event.target.value } }))} placeholder="基础地址" />
                   </div>
                 </Field>
               </SectionCard>
@@ -436,16 +436,16 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="记忆引擎">
                   <input className={cx(inputClass, "bg-white")} value={draft.memory.engine} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, engine: event.target.value } }))} />
                 </Field>
-                <Field label="Embedding Model">
+                <Field label="Embedding 模型">
                   <input className={cx(inputClass, "bg-white")} value={draft.memory.embeddingModel} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, embeddingModel: event.target.value } }))} />
                 </Field>
                 <Field label="Embedding API Key">
                   <SecretInput value={draft.memory.embeddingApiKey} onChange={(value) => updateDraft((current) => ({ ...current, memory: { ...current.memory, embeddingApiKey: value } }))} />
                 </Field>
-                <Field label="Embedding Base URL">
+                <Field label="Embedding 基础地址">
                   <input className={cx(inputClass, "bg-white")} value={draft.memory.embeddingBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, embeddingBaseUrl: event.target.value } }))} />
                 </Field>
-                <Field label="Output Dimensionality" hint="留空表示不写该字段。">
+                <Field label="输出维度" hint="留空表示不写该字段。">
                   <input className={cx(inputClass, "bg-white")} value={draft.memory.outputDimensionality} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, outputDimensionality: event.target.value } }))} />
                 </Field>
               </SectionCard>
@@ -459,22 +459,22 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <span>proactive.enabled</span>
                   </label>
                 </Field>
-                <Field label="Profile">
+                <Field label="配置档">
                   <input className={cx(inputClass, "bg-white")} value={draft.proactive.profile} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, profile: event.target.value } }))} />
                 </Field>
                 <Field label="目标频道与 Chat ID">
                   <div className="grid gap-3 md:grid-cols-2">
-                    <input className={cx(inputClass, "bg-white")} value={draft.proactive.targetChannel} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, targetChannel: event.target.value } }))} placeholder="channel" />
-                    <input className={cx(inputClass, "bg-white")} value={draft.proactive.targetChatId} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, targetChatId: event.target.value } }))} placeholder="chat_id" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.proactive.targetChannel} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, targetChannel: event.target.value } }))} placeholder="频道名" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.proactive.targetChatId} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, targetChatId: event.target.value } }))} placeholder="会话 ID" />
                   </div>
                 </Field>
                 <Field label="Agent 参数">
                   <div className="grid gap-3 md:grid-cols-2">
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentMaxSteps: parseNumber(event.target.value, current.proactive.agentMaxSteps) } }))} placeholder="max_steps" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentContentLimit)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentContentLimit: parseNumber(event.target.value, current.proactive.agentContentLimit) } }))} placeholder="content_limit" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentWebFetchMaxChars)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentWebFetchMaxChars: parseNumber(event.target.value, current.proactive.agentWebFetchMaxChars) } }))} placeholder="web_fetch_max_chars" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentContextProb)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentContextProb: parseNumber(event.target.value, current.proactive.agentContextProb) } }))} placeholder="context_prob" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentDeliveryCooldownHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentDeliveryCooldownHours: parseNumber(event.target.value, current.proactive.agentDeliveryCooldownHours) } }))} placeholder="delivery_cooldown_hours" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentMaxSteps: parseNumber(event.target.value, current.proactive.agentMaxSteps) } }))} placeholder="最大步数" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentContentLimit)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentContentLimit: parseNumber(event.target.value, current.proactive.agentContentLimit) } }))} placeholder="内容长度限制" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentWebFetchMaxChars)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentWebFetchMaxChars: parseNumber(event.target.value, current.proactive.agentWebFetchMaxChars) } }))} placeholder="网页抓取最大字符数" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentContextProb)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentContextProb: parseNumber(event.target.value, current.proactive.agentContextProb) } }))} placeholder="上下文概率" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentDeliveryCooldownHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentDeliveryCooldownHours: parseNumber(event.target.value, current.proactive.agentDeliveryCooldownHours) } }))} placeholder="发送冷却小时数" />
                   </div>
                 </Field>
                 <Field label="Drift">
@@ -484,8 +484,8 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                       <span>proactive.drift.enabled</span>
                     </label>
                     <div className="grid gap-3 md:grid-cols-2">
-                      <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMaxSteps: parseNumber(event.target.value, current.proactive.driftMaxSteps) } }))} placeholder="max_steps" />
-                      <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMinIntervalHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMinIntervalHours: parseNumber(event.target.value, current.proactive.driftMinIntervalHours) } }))} placeholder="min_interval_hours" />
+                      <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMaxSteps: parseNumber(event.target.value, current.proactive.driftMaxSteps) } }))} placeholder="最大步数" />
+                      <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMinIntervalHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMinIntervalHours: parseNumber(event.target.value, current.proactive.driftMinIntervalHours) } }))} placeholder="最小间隔小时数" />
                     </div>
                   </div>
                 </Field>
@@ -553,10 +553,10 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 </Field>
                 <Field label="全局数值项">
                   <div className="grid gap-3 md:grid-cols-2">
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.maxTokens)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, maxTokens: parseNumber(event.target.value, current.advanced.maxTokens) } }))} placeholder="max_tokens" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.maxIterations)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, maxIterations: parseNumber(event.target.value, current.advanced.maxIterations) } }))} placeholder="max_iterations" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.memoryWindow)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryWindow: parseNumber(event.target.value, current.advanced.memoryWindow) } }))} placeholder="memory_window" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.memoryOptimizerIntervalSeconds)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerIntervalSeconds: parseNumber(event.target.value, current.advanced.memoryOptimizerIntervalSeconds) } }))} placeholder="memory_optimizer_interval_seconds" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.maxTokens)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, maxTokens: parseNumber(event.target.value, current.advanced.maxTokens) } }))} placeholder="最大令牌数" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.maxIterations)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, maxIterations: parseNumber(event.target.value, current.advanced.maxIterations) } }))} placeholder="最大迭代次数" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.memoryWindow)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryWindow: parseNumber(event.target.value, current.advanced.memoryWindow) } }))} placeholder="记忆窗口大小" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.memoryOptimizerIntervalSeconds)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerIntervalSeconds: parseNumber(event.target.value, current.advanced.memoryOptimizerIntervalSeconds) } }))} placeholder="记忆优化间隔秒数" />
                   </div>
                 </Field>
                 <Field label="高级开关">
@@ -581,9 +581,9 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 </Field>
                 <Field label="Wiring">
                   <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={draft.advanced.wiringContext} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringContext: event.target.value } }))} placeholder="context" />
-                    <input className={cx(inputClass, "bg-white")} value={draft.advanced.wiringMemory} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringMemory: event.target.value } }))} placeholder="memory" />
-                    <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.advanced.wiringToolsets)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringToolsets: splitLines(event.target.value) } }))} placeholder="toolsets, one per line" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.advanced.wiringContext} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringContext: event.target.value } }))} placeholder="上下文实现名" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.advanced.wiringMemory} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringMemory: event.target.value } }))} placeholder="记忆实现名" />
+                    <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.advanced.wiringToolsets)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringToolsets: splitLines(event.target.value) } }))} placeholder="每行一个工具集名称" />
                   </div>
                 </Field>
                 <Field label="其他插件配置" hint="保留给尚未表单化的 plugins.* 段。按 TOML 片段填写。">
@@ -613,8 +613,8 @@ function GroupEditor({
         <div className="text-sm font-medium text-[#20242A]">QQ 群组</div>
         <button className="text-sm text-[#A14D32]" type="button" onClick={onRemove}>删除</button>
       </div>
-      <input className={cx(inputClass, "bg-white")} value={group.groupId} onChange={(event) => onChange({ ...group, groupId: event.target.value })} placeholder="group_id" />
-      <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="allow_from, one per line" />
+      <input className={cx(inputClass, "bg-white")} value={group.groupId} onChange={(event) => onChange({ ...group, groupId: event.target.value })} placeholder="群组 ID" />
+      <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
       <label className="flex items-center gap-3 text-sm text-[#4A4F57]">
         <input type="checkbox" checked={group.requireAt} onChange={(event) => onChange({ ...group, requireAt: event.target.checked })} />
         <span>require_at</span>
@@ -638,8 +638,8 @@ function QQBotGroupEditor({
         <div className="text-sm font-medium text-[#20242A]">QQBot 群组</div>
         <button className="text-sm text-[#A14D32]" type="button" onClick={onRemove}>删除</button>
       </div>
-      <input className={cx(inputClass, "bg-white")} value={group.groupOpenid} onChange={(event) => onChange({ ...group, groupOpenid: event.target.value })} placeholder="group_openid" />
-      <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="allow_from, one per line" />
+      <input className={cx(inputClass, "bg-white")} value={group.groupOpenid} onChange={(event) => onChange({ ...group, groupOpenid: event.target.value })} placeholder="群组 OpenID" />
+      <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
       <div className="grid gap-3 md:grid-cols-2">
         <label className="flex items-center gap-3 text-sm text-[#4A4F57]">
           <input type="checkbox" checked={group.requireAt} onChange={(event) => onChange({ ...group, requireAt: event.target.checked })} />
@@ -670,15 +670,15 @@ function PeerAgentEditor({
         <button className="text-sm text-[#A14D32]" type="button" onClick={onRemove}>删除</button>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        <input className={cx(inputClass, "bg-white")} value={agent.name} onChange={(event) => onChange({ ...agent, name: event.target.value })} placeholder="name" />
-        <input className={cx(inputClass, "bg-white")} value={agent.baseUrl} onChange={(event) => onChange({ ...agent, baseUrl: event.target.value })} placeholder="base_url" />
-        <input className={cx(inputClass, "bg-white")} value={agent.cwd} onChange={(event) => onChange({ ...agent, cwd: event.target.value })} placeholder="cwd" />
-        <input className={cx(inputClass, "bg-white")} value={agent.healthPath} onChange={(event) => onChange({ ...agent, healthPath: event.target.value })} placeholder="health_path" />
-        <input className={cx(inputClass, "bg-white")} value={String(agent.startupTimeoutSeconds)} onChange={(event) => onChange({ ...agent, startupTimeoutSeconds: parseNumber(event.target.value, agent.startupTimeoutSeconds) })} placeholder="startup_timeout_s" />
-        <input className={cx(inputClass, "bg-white")} value={String(agent.shutdownTimeoutSeconds)} onChange={(event) => onChange({ ...agent, shutdownTimeoutSeconds: parseNumber(event.target.value, agent.shutdownTimeoutSeconds) })} placeholder="shutdown_timeout_s" />
+        <input className={cx(inputClass, "bg-white")} value={agent.name} onChange={(event) => onChange({ ...agent, name: event.target.value })} placeholder="名称" />
+        <input className={cx(inputClass, "bg-white")} value={agent.baseUrl} onChange={(event) => onChange({ ...agent, baseUrl: event.target.value })} placeholder="基础地址" />
+        <input className={cx(inputClass, "bg-white")} value={agent.cwd} onChange={(event) => onChange({ ...agent, cwd: event.target.value })} placeholder="工作目录" />
+        <input className={cx(inputClass, "bg-white")} value={agent.healthPath} onChange={(event) => onChange({ ...agent, healthPath: event.target.value })} placeholder="健康检查路径" />
+        <input className={cx(inputClass, "bg-white")} value={String(agent.startupTimeoutSeconds)} onChange={(event) => onChange({ ...agent, startupTimeoutSeconds: parseNumber(event.target.value, agent.startupTimeoutSeconds) })} placeholder="启动超时秒数" />
+        <input className={cx(inputClass, "bg-white")} value={String(agent.shutdownTimeoutSeconds)} onChange={(event) => onChange({ ...agent, shutdownTimeoutSeconds: parseNumber(event.target.value, agent.shutdownTimeoutSeconds) })} placeholder="关闭超时秒数" />
       </div>
-      <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={agent.description} onChange={(event) => onChange({ ...agent, description: event.target.value })} placeholder="description" />
-      <textarea className={cx(textareaClass, "min-h-24 bg-white font-mono text-[12px]")} value={formatLauncher(agent.launcher)} onChange={(event) => onChange({ ...agent, launcher: parseLauncher(event.target.value) })} placeholder="launcher, one command part per line" />
+      <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={agent.description} onChange={(event) => onChange({ ...agent, description: event.target.value })} placeholder="描述" />
+      <textarea className={cx(textareaClass, "min-h-24 bg-white font-mono text-[12px]")} value={formatLauncher(agent.launcher)} onChange={(event) => onChange({ ...agent, launcher: parseLauncher(event.target.value) })} placeholder="每行一个启动命令片段" />
     </div>
   );
 }

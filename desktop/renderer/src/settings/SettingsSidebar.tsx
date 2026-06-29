@@ -101,7 +101,7 @@ export function SettingsSidebar({
           collapsed ? "w-0" : "w-2",
         )}
         role="separator"
-        aria-label="Resize sidebar"
+        aria-label="调整侧边栏宽度"
         aria-orientation="vertical"
         onPointerDown={onBeginResize}
       >
