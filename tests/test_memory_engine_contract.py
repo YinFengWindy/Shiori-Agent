@@ -261,6 +261,66 @@ async def test_default_memory_engine_role_query_excludes_legacy_unscoped_memory(
     assert "legacy 公共记忆：用户常驻上海" not in summaries
 
 
+async def test_default_memory_engine_isolates_relationship_memory_between_roles(tmp_path: Path):
+    provider = SimpleNamespace()
+    runtime = build_memory_runtime(
+        config=Config(
+            provider="test",
+            model="gpt-test",
+            api_key="k",
+            system_prompt="hi",
+            memory=MemoryConfig(enabled=True),
+        ),
+        workspace=tmp_path,
+        tools=ToolRegistry(),
+        provider=cast(Any, provider),
+        light_provider=None,
+        http_resources=cast(Any, SimpleNamespace(external_default=SimpleNamespace())),
+    )
+    engine = cast(Any, runtime.engine)
+    store = engine._v2_store
+    assert store is not None
+
+    store.upsert_item(
+        "preference",
+        "Mira 视角：用户偏好中文回复",
+        [1.0, 0.0],
+        extra={"role_id": "mira", "memory_domain": "relationship"},
+        source_ref="role:mira:pref",
+    )
+    store.upsert_item(
+        "preference",
+        "Atlas 视角：用户偏好英文回复",
+        [1.0, 0.0],
+        extra={"role_id": "atlas", "memory_domain": "relationship"},
+        source_ref="role:atlas:pref",
+    )
+
+    mira_result = await engine.query(
+        MemoryQuery(
+            text="用户偏好什么语言回复",
+            intent="interest",
+            scope=MemoryScope(role_id="mira"),
+            limit=10,
+        )
+    )
+    atlas_result = await engine.query(
+        MemoryQuery(
+            text="用户偏好什么语言回复",
+            intent="interest",
+            scope=MemoryScope(role_id="atlas"),
+            limit=10,
+        )
+    )
+
+    mira_summaries = [record.summary for record in mira_result.records]
+    atlas_summaries = [record.summary for record in atlas_result.records]
+    assert "Mira 视角：用户偏好中文回复" in mira_summaries
+    assert "Atlas 视角：用户偏好英文回复" not in mira_summaries
+    assert "Atlas 视角：用户偏好英文回复" in atlas_summaries
+    assert "Mira 视角：用户偏好中文回复" not in atlas_summaries
+
+
 async def test_default_engine_keeps_history_injected_ids():
     retriever = SimpleNamespace(
         retrieve=AsyncMock(
