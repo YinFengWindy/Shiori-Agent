@@ -80,7 +80,7 @@ export function RoleSidebar({
           </span>
           <span>搜索</span>
         </button>
-        <button className={sidebarEntryClass} type="button" onClick={onToggleRoleEditor} disabled={!activeRoleId}>
+        <button className={sidebarEntryClass} type="button" onClick={onToggleRoleEditor}>
           <span className="sidebar-entry-icon sidebar-entry-role grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
             <svg viewBox="0 0 1024 1024" className="h-4 w-4 fill-current">
               <path d="M356.774 578.668C279.812 528.088 229 440.978 229 342c0-156.297 126.703-283 283-283s283 126.703 283 283c0 98.978-50.812 186.088-127.774 236.668C808.213 638.98 907 778.953 907 942c0 24.3-19.7 44-44 44s-44-19.7-44-44c0-169.551-137.449-307-307-307S205 772.449 205 942c0 24.3-19.7 44-44 44s-44-19.7-44-44c0-163.047 98.787-303.02 239.774-363.332zM512 537c107.696 0 195-87.304 195-195s-87.304-195-195-195-195 87.304-195 195 87.304 195 195 195z" />
