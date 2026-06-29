@@ -292,7 +292,7 @@ def _load_wiring_config(data: dict) -> WiringConfig:
         "toolsets",
         ["meta_common", "spawn", "schedule", "mcp"],
     )
-    if not isinstance(toolsets, list):
+    if not isinstance(toolsets, list) or not toolsets:
         toolsets = ["meta_common", "spawn", "schedule", "mcp"]
     return WiringConfig(
         context=str(raw.get("context", "default") or "default"),

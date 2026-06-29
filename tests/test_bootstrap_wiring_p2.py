@@ -100,6 +100,32 @@ def test_config_load_reads_wiring_block(tmp_path: Path):
     assert cfg.wiring.toolsets == ["schedule", "mcp"]
 
 
+def test_config_load_defaults_empty_toolsets_to_full_wiring(tmp_path: Path):
+    cfg_path = tmp_path / "config.toml"
+    _write_toml(
+        cfg_path,
+        {
+            "llm": {
+                "provider": "openai",
+                "main": {
+                    "model": "m",
+                    "api_key": "k",
+                },
+            },
+            "agent": {
+                "system_prompt": "s",
+                "wiring": {
+                    "toolsets": [],
+                },
+            },
+        },
+    )
+
+    cfg = Config.load(cfg_path)
+
+    assert cfg.wiring.toolsets == ["meta_common", "spawn", "schedule", "mcp"]
+
+
 def test_config_load_reads_memory_engine_selector(tmp_path: Path):
     cfg_path = tmp_path / "config.toml"
     _write_toml(
