@@ -25,12 +25,17 @@ def _normalize_rel_path(path: str | None) -> str | None:
 
 @dataclass
 class RoleRecord:
+    """角色聚合根的持久化快照。"""
+
     id: str
     name: str
     description: str
     system_prompt: str
+    background: str
     avatar: str | None
     illustrations: list[str]
+    runtime_config: dict[str, Any]
+    memory_init_state: dict[str, Any]
     created_at: str
     updated_at: str
 
@@ -49,12 +54,15 @@ class RoleRecord:
             name=str(payload.get("name") or "").strip(),
             description=str(payload.get("description") or ""),
             system_prompt=str(payload.get("system_prompt") or ""),
+            background=str(payload.get("background") or ""),
             avatar=_normalize_rel_path(payload.get("avatar")),
             illustrations=[
                 _normalize_rel_path(str(item)) or ""
                 for item in payload.get("illustrations", [])
                 if str(item).strip()
             ],
+            runtime_config=dict(payload.get("runtime_config") or {}),
+            memory_init_state=dict(payload.get("memory_init_state") or {}),
             created_at=str(payload.get("created_at") or _now_iso()),
             updated_at=str(payload.get("updated_at") or _now_iso()),
         )
@@ -133,6 +141,8 @@ class RoleStore:
         name: str,
         system_prompt: str,
         description: str = "",
+        background: str = "",
+        runtime_config: dict[str, Any] | None = None,
         role_id: str | None = None,
         avatar_source: str | Path | None = None,
         illustration_sources: list[str | Path] | None = None,
@@ -155,8 +165,11 @@ class RoleStore:
                 name=clean_name,
                 description=str(description),
                 system_prompt=clean_prompt,
+                background=str(background),
                 avatar=None,
                 illustrations=[],
+                runtime_config=dict(runtime_config or {}),
+                memory_init_state={},
                 created_at=now,
                 updated_at=now,
             )
@@ -182,6 +195,9 @@ class RoleStore:
         name: str | None = None,
         description: str | None = None,
         system_prompt: str | None = None,
+        background: str | None = None,
+        runtime_config: dict[str, Any] | None = None,
+        memory_init_state: dict[str, Any] | None = None,
         avatar_source: str | Path | None = None,
         clear_avatar: bool = False,
         illustration_sources: list[str | Path] | None = None,
@@ -204,6 +220,12 @@ class RoleStore:
                     if not clean_prompt:
                         raise ValueError("role.system_prompt 不能为空")
                     role.system_prompt = clean_prompt
+                if background is not None:
+                    role.background = str(background)
+                if runtime_config is not None:
+                    role.runtime_config = dict(runtime_config)
+                if memory_init_state is not None:
+                    role.memory_init_state = dict(memory_init_state)
                 if clear_avatar:
                     self._remove_asset_relpath(role.avatar)
                     role.avatar = None

@@ -7,7 +7,7 @@ from typing import Any
 from agent.looping.core import AgentLoop
 from bus.event_bus import EventBus
 from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
-from core.roles import RoleStore
+from core.roles import RoleAggregateService, RoleStore
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from session.manager import Session, SessionManager
 
@@ -21,12 +21,18 @@ class DesktopBridgeService:
         session_manager: SessionManager,
         agent_loop: AgentLoop,
         event_bus: EventBus,
+        role_service: RoleAggregateService | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
         self.session_manager = session_manager
         self.agent_loop = agent_loop
         self.event_bus = event_bus
+        self.role_service = role_service or RoleAggregateService.from_runtime(
+            workspace=workspace,
+            role_store=role_store,
+            session_manager=session_manager,
+        )
 
     async def handle(
         self,
@@ -45,7 +51,7 @@ class DesktopBridgeService:
                 return self._ok(
                     request_id,
                     method,
-                    {"roles": [self._serialize_role(role) for role in self.role_store.list_roles()]},
+                    {"roles": [self._serialize_role(role) for role in self.role_service.repository.list_roles()]},
                 )
             if method == "roles.create":
                 avatar_source = str(payload.get("avatar_source") or "").strip() or None
@@ -55,14 +61,21 @@ class DesktopBridgeService:
                     if isinstance(raw_illustrations, list)
                     else None
                 )
-                role = self.role_store.create_role(
+                aggregate = self.role_service.create_role(
+                    role_id=str(payload.get("role_id") or "").strip() or None,
                     name=str(payload.get("name") or ""),
                     description=str(payload.get("description") or ""),
                     system_prompt=str(payload.get("system_prompt") or ""),
+                    background=str(payload.get("background") or ""),
+                    runtime_config=(
+                        dict(payload.get("runtime_config"))
+                        if isinstance(payload.get("runtime_config"), dict)
+                        else None
+                    ),
                     avatar_source=avatar_source,
                     illustration_sources=illustration_sources,
                 )
-                return self._ok(request_id, method, {"role": self._serialize_role(role)})
+                return self._ok(request_id, method, {"role": self._serialize_role(aggregate.role)})
             if method == "roles.update":
                 avatar_source = str(payload.get("avatar_source") or "").strip() or None
                 raw_illustrations = payload.get("illustration_sources")
@@ -71,29 +84,26 @@ class DesktopBridgeService:
                     if isinstance(raw_illustrations, list)
                     else None
                 )
-                role = self.role_store.update_role(
+                aggregate = self.role_service.update_role(
                     str(payload.get("role_id") or ""),
                     name=payload.get("name"),
                     description=payload.get("description"),
                     system_prompt=payload.get("system_prompt"),
+                    background=payload.get("background"),
+                    runtime_config=(
+                        dict(payload.get("runtime_config"))
+                        if isinstance(payload.get("runtime_config"), dict)
+                        else None
+                    ),
                     avatar_source=avatar_source,
                     clear_avatar=bool(payload.get("clear_avatar")),
                     illustration_sources=illustration_sources,
                     clear_illustrations=bool(payload.get("clear_illustrations")),
                 )
-                self.session_manager.sync_role_session_metadata(
-                    role.id,
-                    role_name=role.name,
-                    role_prompt=role.system_prompt,
-                    valid_illustrations=list(role.illustrations),
-                )
-                return self._ok(request_id, method, {"role": self._serialize_role(role)})
+                return self._ok(request_id, method, {"role": self._serialize_role(aggregate.role)})
             if method == "roles.delete":
                 role_id = str(payload.get("role_id") or "").strip()
-                deleted = self.role_store.delete_role(role_id)
-                session_deleted = False
-                if deleted:
-                    session_deleted = self.session_manager.delete_role_session(role_id)
+                deleted, session_deleted = self.role_service.delete_role(role_id)
                 return self._ok(
                     request_id,
                     method,
@@ -104,15 +114,8 @@ class DesktopBridgeService:
                 )
             if method == "session.openByRole":
                 role_id = str(payload.get("role_id") or "").strip()
-                role = self.role_store.get_role(role_id)
-                if role is None:
-                    return self._error(request_id, method, "role_not_found", f"role 不存在: {role_id}")
-                session = self.session_manager.sync_role_session_metadata(
-                    role.id,
-                    role_name=role.name,
-                    role_prompt=role.system_prompt,
-                    valid_illustrations=list(role.illustrations),
-                )
+                aggregate = self.role_service.open_role(role_id)
+                session = aggregate.session
                 await self._emit_session_updated(
                     request_id=request_id,
                     session=session,
@@ -127,12 +130,10 @@ class DesktopBridgeService:
                 )
             if method == "session.updateDisplayState":
                 role_id = str(payload.get("role_id") or "").strip()
-                role = self.role_store.get_role(role_id)
-                if role is None:
-                    return self._error(request_id, method, "role_not_found", f"role 不存在: {role_id}")
+                aggregate = self.role_service.open_role(role_id)
                 active_illustration = payload.get("active_illustration")
-                session = self.session_manager.update_role_session_display_state(
-                    role.id,
+                session = self.role_service.sessions.update_display_state(
+                    aggregate.role,
                     active_illustration=str(active_illustration) if active_illustration else None,
                 )
                 await self._emit_session_updated(
@@ -150,15 +151,8 @@ class DesktopBridgeService:
                 content = str(payload.get("content") or "").strip()
                 if not content:
                     return self._error(request_id, method, "invalid_request", "content 不能为空")
-                role = self.role_store.get_role(role_id)
-                if role is None:
-                    return self._error(request_id, method, "role_not_found", f"role 不存在: {role_id}")
-                session = self.session_manager.sync_role_session_metadata(
-                    role.id,
-                    role_name=role.name,
-                    role_prompt=role.system_prompt,
-                    valid_illustrations=list(role.illustrations),
-                )
+                aggregate = self.role_service.open_role(role_id)
+                session = aggregate.session
                 session, events = await self._run_chat_turn(
                     request_id=request_id,
                     session_key=session.key,
@@ -175,11 +169,9 @@ class DesktopBridgeService:
                 )
             if method == "chat.cancel":
                 role_id = str(payload.get("role_id") or "").strip()
-                role = self.role_store.get_role(role_id)
-                if role is None:
-                    return self._error(request_id, method, "role_not_found", f"role 不存在: {role_id}")
+                aggregate = self.role_service.open_role(role_id)
                 result = self.agent_loop.request_interrupt(
-                    self.session_manager.role_session_key(role.id),
+                    self.role_service.sessions.derive_session_key(aggregate.role.id),
                     sender="desktop",
                     command="/cancel",
                 )
@@ -193,7 +185,7 @@ class DesktopBridgeService:
                     },
                 )
         except KeyError as exc:
-            return self._error(request_id, method, "not_found", str(exc))
+            return self._error(request_id, method, "role_not_found", str(exc))
         except ValueError as exc:
             return self._error(request_id, method, "invalid_request", str(exc))
         except Exception as exc:

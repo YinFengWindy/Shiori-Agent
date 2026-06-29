@@ -35,6 +35,7 @@ from bus.events_lifecycle import (
     TurnStarted,
 )
 from bus.queue import MessageBus
+from core.roles import InboundRoleRouter
 from infra.channels.base import AttachmentStore, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
 from infra.channels.group_filter import (
@@ -321,6 +322,11 @@ class QQChannel:
         ws = getattr(session_manager, "workspace", None)
         self._workspace = Path(ws) if ws else None
         self._attachments = AttachmentStore(Path(ws) / "uploads" if ws else None)
+        self._role_router = (
+            InboundRoleRouter.from_workspace(Path(ws), session_manager=session_manager)
+            if ws
+            else None
+        )
         self._trace_actor_name_cache: str | None = None
         self._identity_index = SessionIdentityIndex(
             session_manager,
@@ -531,7 +537,7 @@ class QQChannel:
             self._http_requester,
             self._attachments,
         )
-        await self._bus.publish_inbound(
+        await self._publish_inbound(
             InboundMessage(
                 channel=_CHANNEL,
                 sender=user_id,
@@ -571,7 +577,7 @@ class QQChannel:
             self._http_requester,
             self._attachments,
         )
-        await self._bus.publish_inbound(
+        await self._publish_inbound(
             InboundMessage(
                 channel=_CHANNEL,
                 sender=user_id,
@@ -585,6 +591,11 @@ class QQChannel:
                 },
             )
         )
+
+    async def _publish_inbound(self, message: InboundMessage) -> None:
+        if self._role_router is not None:
+            message = self._role_router.route(message)
+        await self._bus.publish_inbound(message)
 
     async def _handle_stop_group(self, group_id: str, user_id: str) -> None:
         chat_id = f"{_GROUP_PREFIX}{group_id}"

@@ -21,6 +21,7 @@ from bus.events_lifecycle import (
     ToolCallStarted,
     TurnStarted,
 )
+from core.roles import RoleStore
 from infra.channels.base import AttachmentStore
 from infra.channels.contract import ChannelContext
 
@@ -38,9 +39,10 @@ class _Bus:
 
 
 class _SessionManager:
-    def __init__(self) -> None:
+    def __init__(self, workspace: Path | None = None) -> None:
         self.sessions = {}
         self.saved = []
+        self.workspace = workspace
 
     def get_or_create(self, key: str):
         return self.sessions.setdefault(key, SimpleNamespace(key=key, metadata={}))
@@ -50,6 +52,9 @@ class _SessionManager:
 
     def get_channel_metadata(self, channel: str):
         return []
+
+    def role_session_key(self, role_id: str) -> str:
+        return f"role:{role_id}"
 
 
 def _import_cli_tui(monkeypatch: pytest.MonkeyPatch):
@@ -943,7 +948,18 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
 async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     mod = _import_qq_channel(monkeypatch)
     bus = _Bus()
-    session_manager = _SessionManager()
+    session_manager = _SessionManager(tmp_path)
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="bound qq role",
+        system_prompt="you are mira",
+    )
+    (tmp_path / "roles" / "channel_bindings.json").write_text(
+        '{"version":1,"bindings":{"qq:1":{"channel":"qq","chat_id":"1","role_id":"mira","created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"},"qq:gqq:100":{"channel":"qq","chat_id":"gqq:100","role_id":"mira","created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}}}',
+        encoding="utf-8",
+    )
     async def _request_get(url, **kwargs):
         if url.endswith("a.jpg") or url.endswith("a.png"):
             return SimpleNamespace(
@@ -1009,6 +1025,9 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert len(bus.inbound) == 2
     assert bus.inbound[0].metadata["chat_type"] == "private"
     assert bus.inbound[1].metadata["chat_type"] == "group"
+    assert bus.inbound[0].session_key == "role:mira"
+    assert bus.inbound[0].metadata["role_id"] == "mira"
+    assert bus.inbound[1].session_key == "role:mira"
     assert channel._interrupt_controller.request_interrupt.call_count == 2
 
     channel._run_on_bot_loop = AsyncMock(side_effect=_drain)
@@ -1037,6 +1056,63 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     with pytest.raises(RuntimeError):
         await mod.QQChannel._run_on_bot_loop(channel, pending)
     pending.close()
+    await channel.stop()
+
+
+@pytest.mark.asyncio
+async def test_telegram_channel_routes_bound_inbound_to_role_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    mod = _import_telegram_channel(monkeypatch)
+    bus = _Bus()
+    session_manager = _SessionManager(tmp_path)
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="bound telegram role",
+        system_prompt="you are mira",
+    )
+    (tmp_path / "roles" / "channel_bindings.json").write_text(
+        '{"version":1,"bindings":{"telegram:123":{"channel":"telegram","chat_id":"123","role_id":"mira","created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}}}',
+        encoding="utf-8",
+    )
+
+    interrupt_controller = MagicMock()
+    event_bus = EventBus()
+    channel = mod.TelegramChannel(
+        token="token",
+        bus=bus,
+        session_manager=session_manager,
+        allow_from=["1"],
+        event_bus=event_bus,
+        interrupt_controller=interrupt_controller,
+    )
+    monkeypatch.setattr(mod, "send_markdown", AsyncMock())
+    monkeypatch.setattr(mod, "send_stream_markdown", AsyncMock())
+    monkeypatch.setattr(mod, "send_thinking_block", AsyncMock())
+    await channel.start()
+    context = SimpleNamespace(bot=channel._app.bot)
+    update = SimpleNamespace(
+        effective_message=SimpleNamespace(
+            text="你好",
+            message_id=1,
+            reply_to_message=None,
+            photo=None,
+            document=None,
+        ),
+        effective_chat=SimpleNamespace(id=123),
+        effective_user=SimpleNamespace(id=1, username="Alice"),
+    )
+
+    await channel._on_message(update, context)
+
+    assert len(bus.inbound) == 1
+    assert bus.inbound[0].session_key == "role:mira"
+    assert bus.inbound[0].metadata["role_id"] == "mira"
+    assert bus.inbound[0].metadata["transport_channel"] == "telegram"
+    assert bus.inbound[0].metadata["transport_chat_id"] == "123"
     await channel.stop()
 
 

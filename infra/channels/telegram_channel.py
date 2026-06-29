@@ -33,6 +33,7 @@ from bus.events_lifecycle import (
     TurnStarted,
 )
 from bus.queue import MessageBus
+from core.roles import InboundRoleRouter
 from agent.looping.interrupt import InterruptController
 from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
@@ -90,6 +91,11 @@ class TelegramChannel:
         self._message_deduper = MessageDeduper(_SEEN_MSG_MAXSIZE)
         ws = getattr(session_manager, "workspace", None)
         self._attachments = AttachmentStore(Path(ws) / "uploads" if ws else None)
+        self._role_router = (
+            InboundRoleRouter.from_workspace(Path(ws), session_manager=session_manager)
+            if ws
+            else None
+        )
         self._identity_index = SessionIdentityIndex(
             session_manager,
             channel=channel_name,
@@ -314,16 +320,46 @@ class TelegramChannel:
                     f"[telegram] 被回复文件下载失败  chat_id={chat.id}  err={e}"
                 )
         await self._bus.publish_inbound(
+            self._route_inbound(
+                InboundMessage(
+                    channel=self._channel,
+                    sender=str(user.id),
+                    chat_id=str(chat.id),
+                    content=inbound_text,
+                    media=reply_media,
+                    metadata={
+                        "username": user.username or "",
+                        **reply_meta,
+                    },
+                )
+            )
+        )
+
+    def _route_inbound(self, message: InboundMessage) -> InboundMessage:
+        if self._role_router is None:
+            return message
+        return self._role_router.route(message)
+
+    async def _publish_inbound(self, message: InboundMessage) -> None:
+        await self._bus.publish_inbound(self._route_inbound(message))
+
+    async def _publish_telegram_inbound(
+        self,
+        *,
+        sender: str,
+        chat_id: str,
+        content: str,
+        media: list[str] | None = None,
+        metadata: dict[str, object] | None = None,
+    ) -> None:
+        await self._publish_inbound(
             InboundMessage(
                 channel=self._channel,
-                sender=str(user.id),
-                chat_id=str(chat.id),
-                content=inbound_text,
-                media=reply_media,
-                metadata={
-                    "username": user.username or "",
-                    **reply_meta,
-                },
+                sender=sender,
+                chat_id=chat_id,
+                content=content,
+                media=list(media or []),
+                metadata=dict(metadata or {}),
             )
         )
 
@@ -378,14 +414,11 @@ class TelegramChannel:
             )
             return
 
-        await self._bus.publish_inbound(
-            InboundMessage(
-                channel=self._channel,
-                sender=str(user.id),
-                chat_id=str(chat.id),
-                content=str(getattr(msg, "text", "") or ""),
-                metadata={"username": user.username or ""},
-            )
+        await self._publish_telegram_inbound(
+            sender=str(user.id),
+            chat_id=str(chat.id),
+            content=str(getattr(msg, "text", "") or ""),
+            metadata={"username": user.username or ""},
         )
 
     async def _on_photo(
@@ -444,18 +477,15 @@ class TelegramChannel:
                 logger.warning(
                     f"[telegram] 被回复图片下载失败  chat_id={chat.id}  err={e}"
                 )
-        await self._bus.publish_inbound(
-            InboundMessage(
-                channel=self._channel,
-                sender=str(user.id),
-                chat_id=str(chat.id),
-                content=inbound_text,
-                media=media,
-                metadata={
-                    "username": user.username or "",
-                    **reply_meta,
-                },
-            )
+        await self._publish_telegram_inbound(
+            sender=str(user.id),
+            chat_id=str(chat.id),
+            content=inbound_text,
+            media=media,
+            metadata={
+                "username": user.username or "",
+                **reply_meta,
+            },
         )
 
     async def _on_document(
@@ -497,20 +527,17 @@ class TelegramChannel:
         )
         if doc.file_name:
             inbound_text = f"[文件: {doc.file_name}]\n{inbound_text}".strip()
-        await self._bus.publish_inbound(
-            InboundMessage(
-                channel=self._channel,
-                sender=str(user.id),
-                chat_id=str(chat.id),
-                content=inbound_text,
-                media=[str(tmp)],
-                metadata={
-                    "username": user.username or "",
-                    "document_filename": doc.file_name or "",
-                    "document_mime_type": doc.mime_type or "",
-                    **reply_meta,
-                },
-            )
+        await self._publish_telegram_inbound(
+            sender=str(user.id),
+            chat_id=str(chat.id),
+            content=inbound_text,
+            media=[str(tmp)],
+            metadata={
+                "username": user.username or "",
+                "document_filename": doc.file_name or "",
+                "document_mime_type": doc.mime_type or "",
+                **reply_meta,
+            },
         )
 
     def _resolve_chat_id(self, chat_id: str) -> str:
