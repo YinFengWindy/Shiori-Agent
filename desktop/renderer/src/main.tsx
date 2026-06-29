@@ -1228,8 +1228,6 @@ function App(): React.ReactElement {
               activeRoleId={activeRoleId}
               bridgeReady={bridgeReady}
               roles={roles}
-              onBackToChat={() => openChatView()}
-              onCreateRole={() => openRoleWorkspace({ kind: "role-create" })}
               onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
               onOpenRoleSession={(roleId) => {
                 void (async () => {

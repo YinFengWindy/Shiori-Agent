@@ -6,8 +6,6 @@ type RoleManagementPageProps = {
   activeRoleId: string;
   bridgeReady: boolean;
   roles: RoleRecord[];
-  onBackToChat: () => void;
-  onCreateRole: () => void;
   onOpenRoleDetail: (roleId: string) => void;
   onOpenRoleSession: (roleId: string) => void;
 };
@@ -17,8 +15,6 @@ export function RoleManagementPage({
   activeRoleId,
   bridgeReady,
   roles,
-  onBackToChat,
-  onCreateRole,
   onOpenRoleDetail,
   onOpenRoleSession,
 }: RoleManagementPageProps) {
@@ -28,24 +24,9 @@ export function RoleManagementPage({
       data-testid="role-management-page"
     >
       <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-8 pb-10 pt-10">
-        <div className="mb-8 flex items-start justify-between gap-4">
-          <div className="min-w-0">
+        <div className="mb-8 min-w-0">
             <h2 className={cx(panelTitleClass, "text-[28px] text-[#1f1f1f]")}>角色</h2>
             <p className="mt-2 text-sm text-[#7a7a7a]">从这里查看、进入和维护所有角色。</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button className={cx("ghost-btn text-sm", ghostButtonClass)} type="button" onClick={onBackToChat}>
-              返回聊天
-            </button>
-            <button
-              className={cx("primary-btn text-sm", primaryButtonClass)}
-              type="button"
-              onClick={onCreateRole}
-              disabled={!bridgeReady}
-            >
-              新建角色
-            </button>
-          </div>
         </div>
         {roles.length ? (
           <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">

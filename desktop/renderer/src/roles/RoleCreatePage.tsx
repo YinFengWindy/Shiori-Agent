@@ -25,18 +25,9 @@ export function RoleCreatePage({
       data-testid="role-create-page"
     >
       <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-8 pb-10 pt-10">
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <button
-              className={cx("ghost-btn mb-3 px-3 py-2 text-sm", ghostButtonClass)}
-              type="button"
-              onClick={onBackToList}
-            >
-              返回角色列表
-            </button>
-            <div className={cx(panelTitleClass, "text-[28px] text-[#1f1f1f]")}>新建角色</div>
-            <div className="mt-2 text-sm text-[#7a7a7a]">创建一个新的角色，并填写它的基础信息与系统提示词。</div>
-          </div>
+        <div className="mb-6 min-w-0">
+          <div className={cx(panelTitleClass, "text-[28px] text-[#1f1f1f]")}>新建角色</div>
+          <div className="mt-2 text-sm text-[#7a7a7a]">创建一个新的角色，并填写它的基础信息与系统提示词。</div>
         </div>
         <div className="grid max-w-[720px] gap-3 rounded-[24px] border border-[#E7EBF0] bg-white/92 p-6 shadow-[0_18px_48px_rgba(31,41,55,0.08)]">
           <label className="grid gap-1.5 text-xs text-[#1f1f1f]">
