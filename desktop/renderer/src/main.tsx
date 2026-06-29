@@ -1175,11 +1175,9 @@ function App(): React.ReactElement {
             />
           ) : roleWorkspaceViewActive ? (
             <RoleWorkspaceSidebar
-              activeRoleId={activeRoleId}
               activeSection={roleWorkspaceSection}
               animating={sidebarAnimating && !resizingSidebar}
               collapsed={sidebarCollapsed}
-              roles={roles}
               width={sidebarWidth}
               onBackToChat={() => openChatView()}
               onOpenSection={(section) => {
@@ -1189,7 +1187,6 @@ function App(): React.ReactElement {
                 }
                 openRoleWorkspace({ kind: "roles-list" });
               }}
-              onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
               onBeginResize={beginSidebarResize}
             />
           ) : (

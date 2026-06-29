@@ -1,37 +1,28 @@
 import type React from "react";
 import { cx } from "../shared/styles";
-import type { RoleRecord } from "../shared/types";
 
 export type RoleWorkspaceSectionId = "roles-list" | "role-create" | "role-detail";
 
 type RoleWorkspaceSidebarProps = {
-  activeRoleId: string;
   activeSection: RoleWorkspaceSectionId;
   collapsed: boolean;
   animating: boolean;
-  roles: RoleRecord[];
   width: number;
   onBackToChat: () => void;
   onOpenSection: (section: RoleWorkspaceSectionId) => void;
-  onOpenRoleDetail: (roleId: string) => void;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
 };
 
 /** Renders the dedicated role workspace sidebar, matching the settings layout pattern. */
 export function RoleWorkspaceSidebar({
-  activeRoleId,
   activeSection,
   collapsed,
   animating,
-  roles,
   width,
   onBackToChat,
   onOpenSection,
-  onOpenRoleDetail,
   onBeginResize,
 }: RoleWorkspaceSidebarProps) {
-  const activeRole = roles.find((role) => role.id === activeRoleId) ?? null;
-
   return (
     <aside
       className={cx(
@@ -73,34 +64,12 @@ export function RoleWorkspaceSidebar({
           <span>新建角色</span>
         </button>
       </div>
-      <nav className="scrollbar-soft grid min-h-0 content-start gap-4 overflow-y-auto pr-0">
-        <div className="grid gap-1 px-2">
-          {roles.map((role) => {
-            const isActive = role.id === activeRoleId;
-            const sectionActive = activeSection === "role-detail" && isActive;
-            return (
-              <button
-                key={role.id}
-                data-testid={`role-workspace-entry-${role.id}`}
-                className={cx(
-                  "flex min-h-[44px] items-center justify-between rounded-xl border-0 px-3 text-left hover:bg-white/45",
-                  sectionActive && "bg-[#E4E8ED]",
-                )}
-                type="button"
-                onClick={() => onOpenRoleDetail(role.id)}
-              >
-                <div className="min-w-0">
-                  <div className={cx("truncate text-sm text-[#32363C]", sectionActive && "font-medium")}>{role.name}</div>
-                  <div className="truncate text-[12px] text-[#7A7F86]">{role.description || "未填写角色简介"}</div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      <div className="min-h-0" />
       <div className="mt-3 border-t border-[#DFE3E8] px-2 pt-3 text-[12px] leading-5 text-[#7A7F86]">
-        <div>当前角色</div>
-        <div className="mt-1 break-all text-[#5E646B]">{activeRole?.name || "未选择"}</div>
+        <div>角色工作区</div>
+        <div className="mt-1 break-all text-[#5E646B]">
+          {activeSection === "role-create" ? "当前正在新建角色" : "在这里管理角色列表与角色详情"}
+        </div>
       </div>
       <div
         className={cx(
