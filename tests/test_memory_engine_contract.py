@@ -648,6 +648,80 @@ async def test_default_memory_engine_query_passes_memory_domains():
     assert retriever.retrieve.await_args.kwargs["memory_domains"] == ["role_self"]
 
 
+async def test_default_memory_engine_rejects_unauthorized_shared_write(tmp_path: Path):
+    memorizer = SimpleNamespace(
+        save_item_with_supersede=AsyncMock(return_value="new:memu-1")
+    )
+    engine = _make_default_engine(
+        retriever=cast(Any, SimpleNamespace()),
+        memorizer=cast(Any, memorizer),
+    )
+    engine._workspace = tmp_path
+
+    with pytest.raises(ValueError, match="memory_domain 未授权: shared"):
+        await engine.mutate(
+            MemoryMutation(
+                kind="remember",
+                summary="共享用户硬事实",
+                memory_kind="profile",
+                memory_domain="shared",
+                scope=MemoryScope(role_id="mira"),
+            )
+        )
+
+
+async def test_default_memory_engine_allows_authorized_shared_write(tmp_path: Path):
+    from core.roles import RoleStore
+
+    RoleStore(tmp_path).create_role(
+        role_id="mira",
+        name="Mira",
+        description="",
+        system_prompt="you are mira",
+        runtime_config={"shared_memory_enabled": True},
+    )
+    memorizer = SimpleNamespace(
+        save_item_with_supersede=AsyncMock(return_value="new:memu-1")
+    )
+    engine = _make_default_engine(
+        retriever=cast(Any, SimpleNamespace()),
+        memorizer=cast(Any, memorizer),
+    )
+    engine._workspace = tmp_path
+
+    _ = await engine.mutate(
+        MemoryMutation(
+            kind="remember",
+            summary="共享用户硬事实",
+            memory_kind="profile",
+            memory_domain="shared",
+            scope=MemoryScope(role_id="mira"),
+        )
+    )
+
+    assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["memory_domain"] == "shared"
+
+
+async def test_default_memory_engine_filters_unauthorized_shared_query(tmp_path: Path):
+    retriever = SimpleNamespace(
+        retrieve=AsyncMock(return_value=[]),
+        build_injection_block=lambda items: ("", []),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+    engine._workspace = tmp_path
+
+    await engine.query(
+        MemoryQuery(
+            text="共享资料",
+            intent="context",
+            scope=MemoryScope(role_id="mira"),
+            filters=MemoryQueryFilters(domains=("shared",)),
+        )
+    )
+
+    assert retriever.retrieve.await_args.kwargs["memory_domains"] is None
+
+
 async def test_default_memory_engine_remember_merged_keeps_target_id_alive():
     memorizer = SimpleNamespace(
         save_item_with_supersede=AsyncMock(return_value="merged:memu-1")

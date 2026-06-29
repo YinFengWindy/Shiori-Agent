@@ -36,6 +36,7 @@ from core.memory.utils import (
     should_require_scope_match,
 )
 from core.net.http import SharedHttpResources
+from core.roles.policy import get_role_for_runtime_scope, is_shared_memory_enabled
 from memory2.embedder import Embedder
 from memory2.memorizer import Memorizer
 from memory2.post_response_worker import PostResponseMemoryWorker
@@ -759,7 +760,10 @@ class DefaultMemoryEngine:
         scope = resolve_memory_scope(request.scope)
         queries = self._resolve_queries(request)
         memory_types = self._resolve_memory_types(request)
-        memory_domains = self._resolve_memory_domains(request)
+        memory_domains = self._guard_shared_memory_domains(
+            self._resolve_memory_domains(request),
+            role_id=scope.role_id,
+        )
         items = await self._retrieve_related(
             request.text,
             memory_types=memory_types,
@@ -860,6 +864,10 @@ class DefaultMemoryEngine:
             "steps": list(steps or []),
         }
         memory_domain = self._resolve_memory_domain_for_write(request, memory_type)
+        self._ensure_memory_domain_allowed(
+            memory_domain,
+            role_id=request.scope.role_id,
+        )
         if memory_domain:
             extra["memory_domain"] = memory_domain
         if memory_type == "procedure":
@@ -1157,7 +1165,10 @@ class DefaultMemoryEngine:
         hits = await self._retrieve_related(
             request.text,
             memory_types=types,
-            memory_domains=self._resolve_memory_domains(request),
+            memory_domains=self._guard_shared_memory_domains(
+                self._resolve_memory_domains(request),
+                role_id=scope.role_id,
+            ),
             top_k=max(request.limit, _VECTOR_TOP_K),
             role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
@@ -1218,7 +1229,10 @@ class DefaultMemoryEngine:
         hits = await self._retrieve_related(
             request.text,
             memory_types=["preference", "profile"],
-            memory_domains=self._resolve_memory_domains(request),
+            memory_domains=self._guard_shared_memory_domains(
+                self._resolve_memory_domains(request),
+                role_id=scope.role_id,
+            ),
             top_k=request.limit,
             role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
@@ -1429,6 +1443,49 @@ class DefaultMemoryEngine:
         if memory_type in {"profile", "preference", "procedure", "event"}:
             return "relationship"
         return ""
+
+    def _guard_shared_memory_domains(
+        self,
+        memory_domains: list[str] | None,
+        *,
+        role_id: str,
+    ) -> list[str] | None:
+        if not memory_domains:
+            return None
+        allowed: list[str] = []
+        for domain in memory_domains:
+            clean_domain = str(domain).strip()
+            if clean_domain != "shared":
+                allowed.append(clean_domain)
+                continue
+            if self._is_memory_domain_allowed(clean_domain, role_id=role_id):
+                allowed.append(clean_domain)
+        return allowed or None
+
+    def _ensure_memory_domain_allowed(
+        self,
+        memory_domain: str,
+        *,
+        role_id: str,
+    ) -> None:
+        clean_domain = str(memory_domain).strip()
+        if not clean_domain:
+            return
+        if self._is_memory_domain_allowed(clean_domain, role_id=role_id):
+            return
+        raise ValueError(f"memory_domain 未授权: {clean_domain}")
+
+    def _is_memory_domain_allowed(
+        self,
+        memory_domain: str,
+        *,
+        role_id: str,
+    ) -> bool:
+        clean_domain = str(memory_domain).strip()
+        if clean_domain != "shared":
+            return True
+        role = get_role_for_runtime_scope(Path(self._workspace), role_id)
+        return is_shared_memory_enabled(role)
 
     @staticmethod
     def _resolve_queries(request: MemoryQuery) -> list[str]:
