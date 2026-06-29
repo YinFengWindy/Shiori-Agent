@@ -323,7 +323,11 @@ def test_role_legacy_migrator_moves_confirmed_session_into_role_session(tmp_path
 
     migrated = session_manager.get_or_create("role:mira")
     assert "telegram:123" in summary.migrated_session_keys
+    assert "telegram:123" in summary.migrated_bindings
     assert [item["content"] for item in migrated.messages] == ["hello"]
+    binding = service.bindings.get_binding("telegram", "123")
+    assert binding is not None
+    assert binding.role_id == "mira"
 
 
 def test_role_legacy_migrator_keeps_unconfirmed_session_in_unresolved(tmp_path: Path):
@@ -390,3 +394,42 @@ def test_role_legacy_migrator_is_idempotent_for_sessions_and_memory_items(tmp_pa
     assert item_id in first.migrated_memory_item_ids
     assert second.migrated_session_keys == []
     assert second.migrated_memory_item_ids == []
+    migrated = session_manager.get_or_create("role:mira")
+    assert [item["content"] for item in migrated.messages] == ["hello"]
+
+
+def test_role_legacy_migrator_avoids_duplicate_messages_when_state_file_missing(tmp_path: Path):
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    legacy = session_manager.get_or_create("telegram:123")
+    legacy.metadata["role_id"] = "mira"
+    legacy.add_message("user", "hello")
+    session_manager.save(legacy)
+
+    migrator = RoleLegacyMigrator(
+        workspace=tmp_path,
+        roles=service,
+        session_manager=session_manager,
+    )
+    first = migrator.migrate()
+    assert "telegram:123" in first.migrated_session_keys
+
+    state_path = tmp_path / "roles" / "migration_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    second = migrator.migrate()
+
+    migrated = session_manager.get_or_create("role:mira")
+    assert second.migrated_session_keys == ["telegram:123"]
+    assert [item["content"] for item in migrated.messages] == ["hello"]

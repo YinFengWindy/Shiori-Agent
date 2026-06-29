@@ -819,7 +819,7 @@ async def test_default_memory_engine_filters_unauthorized_shared_query(tmp_path:
     engine = _make_default_engine(retriever=cast(Any, retriever))
     engine._workspace = tmp_path
 
-    await engine.query(
+    result = await engine.query(
         MemoryQuery(
             text="共享资料",
             intent="context",
@@ -828,7 +828,10 @@ async def test_default_memory_engine_filters_unauthorized_shared_query(tmp_path:
         )
     )
 
-    assert retriever.retrieve.await_args.kwargs["memory_domains"] is None
+    retriever.retrieve.assert_not_awaited()
+    assert result.records == []
+    assert result.raw == {"items": []}
+    assert result.trace["denied_reason"] == "memory_domain_unauthorized"
 
 
 async def test_default_memory_engine_remember_merged_keeps_target_id_alive():

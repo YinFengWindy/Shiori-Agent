@@ -760,10 +760,24 @@ class DefaultMemoryEngine:
         scope = resolve_memory_scope(request.scope)
         queries = self._resolve_queries(request)
         memory_types = self._resolve_memory_types(request)
+        requested_domains = self._resolve_memory_domains(request)
         memory_domains = self._guard_shared_memory_domains(
-            self._resolve_memory_domains(request),
+            requested_domains,
             role_id=scope.role_id,
         )
+        if self._is_domain_request_denied(requested_domains, memory_domains):
+            return MemoryQueryResult(
+                records=[],
+                trace={
+                    "source": self.DESCRIPTOR.name,
+                    "intent": request.intent,
+                    "effect": request.effect,
+                    "profile": EngineProfile.RICH_MEMORY_ENGINE.value,
+                    "denied_domains": list(requested_domains),
+                    "denied_reason": "memory_domain_unauthorized",
+                },
+                raw={"items": []},
+            )
         items = await self._retrieve_related(
             request.text,
             memory_types=memory_types,
@@ -1162,13 +1176,29 @@ class DefaultMemoryEngine:
         aux_queries = [text for text in (hyp1, hyp2) if text]
         scope = resolve_memory_scope(request.scope)
         types = self._resolve_memory_types(request)
+        requested_domains = self._resolve_memory_domains(request)
+        memory_domains = self._guard_shared_memory_domains(
+            requested_domains,
+            role_id=scope.role_id,
+        )
+        if self._is_domain_request_denied(requested_domains, memory_domains):
+            return MemoryQueryResult(
+                records=[],
+                trace={
+                    "source": self.DESCRIPTOR.name,
+                    "intent": "answer",
+                    "effect": request.effect,
+                    "hit_count": 0,
+                    "hyde_hypotheses": aux_queries,
+                    "denied_domains": list(requested_domains or []),
+                    "denied_reason": "memory_domain_unauthorized",
+                },
+                raw={"items": []},
+            )
         hits = await self._retrieve_related(
             request.text,
             memory_types=types,
-            memory_domains=self._guard_shared_memory_domains(
-                self._resolve_memory_domains(request),
-                role_id=scope.role_id,
-            ),
+            memory_domains=memory_domains,
             top_k=max(request.limit, _VECTOR_TOP_K),
             role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
@@ -1226,13 +1256,28 @@ class DefaultMemoryEngine:
         request: MemoryQuery,
     ) -> MemoryQueryResult:
         scope = resolve_memory_scope(request.scope)
+        requested_domains = self._resolve_memory_domains(request)
+        memory_domains = self._guard_shared_memory_domains(
+            requested_domains,
+            role_id=scope.role_id,
+        )
+        if self._is_domain_request_denied(requested_domains, memory_domains):
+            return MemoryQueryResult(
+                text_block="",
+                records=[],
+                trace={
+                    "source": self.DESCRIPTOR.name,
+                    "intent": "interest",
+                    "effect": request.effect,
+                    "denied_domains": list(requested_domains or []),
+                    "denied_reason": "memory_domain_unauthorized",
+                },
+                raw={"items": []},
+            )
         hits = await self._retrieve_related(
             request.text,
             memory_types=["preference", "profile"],
-            memory_domains=self._guard_shared_memory_domains(
-                self._resolve_memory_domains(request),
-                role_id=scope.role_id,
-            ),
+            memory_domains=memory_domains,
             top_k=request.limit,
             role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
@@ -1461,6 +1506,19 @@ class DefaultMemoryEngine:
             if self._is_memory_domain_allowed(clean_domain, role_id=role_id):
                 allowed.append(clean_domain)
         return allowed or None
+
+    def _is_domain_request_denied(
+        self,
+        requested_domains: list[str] | None,
+        resolved_domains: list[str] | None,
+    ) -> bool:
+        """显式请求的记忆域若被权限裁掉，则本次查询应返回空结果而不是放宽过滤。"""
+
+        requested = {str(item).strip() for item in requested_domains or [] if str(item).strip()}
+        if not requested:
+            return False
+        resolved = {str(item).strip() for item in resolved_domains or [] if str(item).strip()}
+        return not requested.issubset(resolved)
 
     def _ensure_memory_domain_allowed(
         self,

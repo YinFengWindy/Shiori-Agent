@@ -56,6 +56,31 @@ class RoleLegacyMigrator:
         self._save_unresolved(summary)
         return summary
 
+    @staticmethod
+    def _source_binding_from_session_key(session_key: str) -> tuple[str, str] | None:
+        clean_key = str(session_key or "").strip()
+        if not clean_key or clean_key.startswith("role:"):
+            return None
+        channel, sep, chat_id = clean_key.partition(":")
+        if not sep:
+            return None
+        clean_channel = channel.strip()
+        clean_chat_id = chat_id.strip()
+        if not clean_channel or not clean_chat_id:
+            return None
+        return clean_channel, clean_chat_id
+
+    @staticmethod
+    def _message_signature(message: dict[str, Any]) -> str:
+        payload = {
+            "role": str(message.get("role") or ""),
+            "content": str(message.get("content") or ""),
+            "timestamp": str(message.get("timestamp") or ""),
+            "tool_chain": message.get("tool_chain") or [],
+            "proactive": bool(message.get("proactive")),
+        }
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
     def _migrate_sessions(
         self,
         state: dict[str, Any],
@@ -76,20 +101,30 @@ class RoleLegacyMigrator:
                 summary.unresolved_session_keys.append(source_key)
                 continue
             role = self._roles.repository.get_required(role_id)
+            binding = self._source_binding_from_session_key(source_key)
+            if binding is not None:
+                channel, chat_id = binding
+                binding_key = f"{channel}:{chat_id}"
+                if binding_key not in set(state.get("migrated_bindings") or []):
+                    self._roles.bindings.bind(channel, chat_id, role.id)
+                    state.setdefault("migrated_bindings", []).append(binding_key)
+                    summary.migrated_bindings.append(binding_key)
             target = self._roles.sessions.open_by_role(role)
             source_messages = self._session_manager._store.fetch_session_messages(source_key)
-            existing_ids = {
-                str(item.get("id") or "")
+            existing_signatures = {
+                self._message_signature(item)
                 for item in self._session_manager._store.fetch_session_messages(target.key)
             }
             for message in source_messages:
-                if str(message.get("id") or "") in existing_ids:
+                signature = self._message_signature(message)
+                if signature in existing_signatures:
                     continue
                 copied = dict(message)
                 copied.pop("id", None)
                 copied.pop("session_key", None)
                 copied.pop("seq", None)
                 target.messages.append(copied)
+                existing_signatures.add(signature)
             self._session_manager.save(target)
             state.setdefault("migrated_session_keys", []).append(source_key)
             migrated.append(source_key)
@@ -130,7 +165,6 @@ class RoleLegacyMigrator:
             key = f"{binding.channel}:{binding.chat_id}"
             if key in seen:
                 continue
-            self._roles.bindings.bind(binding.channel, binding.chat_id, binding.role_id)
             state.setdefault("migrated_bindings", []).append(key)
             migrated.append(key)
         return migrated
