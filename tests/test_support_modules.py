@@ -637,7 +637,13 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
         name="Mira",
         description="desktop role",
         system_prompt="你现在要用更温柔的风格说话。",
+        background="来自深海城的向导。",
+        runtime_config={"shared_memory_enabled": True, "model": "deepseek-chat"},
     )
+    role_memory_root = tmp_path / "roles" / "mira" / "memory"
+    role_memory_root.mkdir(parents=True, exist_ok=True)
+    (role_memory_root / "SELF.md").write_text("# 角色背景\n\n来自深海城的向导。\n", encoding="utf-8")
+    (role_memory_root / "MEMORY.md").write_text("# 关系基线\n\n来源: seed:first_impression\n", encoding="utf-8")
     role_messages = builder.render(
         ContextRequest(
             history=[],
@@ -648,8 +654,28 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
         session_metadata={"role_id": "mira"},
     ).messages
     role_prompt = role_messages[0]["content"]
+    assert "role_id=mira" in role_prompt
+    assert "[role_background]" in role_prompt
+    assert "[role_runtime_config]" in role_prompt
     assert "## Active Role: Mira" in role_prompt
     assert "你现在要用更温柔的风格说话。" in role_prompt
+
+    role_prompt_cross_channel = builder.render(
+        ContextRequest(
+            history=[],
+            current_message="hello",
+            skill_names=["extra"],
+            channel="telegram",
+            chat_id="42",
+            message_timestamp=now,
+        ),
+        session_metadata={"role_id": "mira"},
+    ).messages[0]["content"]
+    assert "role_id=mira" in role_prompt_cross_channel
+    assert "[role_background]" in role_prompt_cross_channel
+    role_prefix = role_prompt.split("## Active Role: Mira", 1)[0]
+    role_prefix_cross_channel = role_prompt_cross_channel.split("## Active Role: Mira", 1)[0]
+    assert role_prefix == role_prefix_cross_channel
 
 
 def test_context_builder_reproduces_temporal_conflict_baseline(

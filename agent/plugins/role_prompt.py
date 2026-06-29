@@ -31,3 +31,50 @@ def build_role_system_section(
         content=f"## Active Role: {role_name}\n{prompt}",
         is_static=False,
     )
+
+
+def build_role_cache_prefix_section(
+    *,
+    workspace: Path,
+    session_metadata: dict[str, Any] | None,
+) -> PromptSectionRender | None:
+    metadata = session_metadata if isinstance(session_metadata, dict) else {}
+    role_id = str(metadata.get("role_id") or "").strip()
+    if not role_id:
+        return None
+
+    role = RoleStore(workspace).get_role(role_id)
+    if role is None:
+        return None
+
+    memory_root = workspace / "roles" / role_id / "memory"
+    self_text = _read_text(memory_root / "SELF.md")
+    relationship_text = _read_text(memory_root / "MEMORY.md")
+    runtime_config = role.runtime_config if isinstance(role.runtime_config, dict) else {}
+    config_lines = [
+        f"{key}={runtime_config[key]}"
+        for key in sorted(runtime_config)
+        if runtime_config[key] not in ("", None, [], {})
+    ]
+
+    blocks: list[str] = [f"role_id={role_id}"]
+    if role.background.strip():
+        blocks.append(f"[role_background]\n{role.background.strip()}")
+    if self_text:
+        blocks.append(f"[role_self_memory]\n{self_text}")
+    if relationship_text:
+        blocks.append(f"[role_relationship_baseline]\n{relationship_text}")
+    if config_lines:
+        blocks.append("[role_runtime_config]\n" + "\n".join(config_lines))
+
+    return PromptSectionRender(
+        name="role_cache_prefix",
+        content="\n\n".join(blocks),
+        is_static=False,
+    )
+
+
+def _read_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8").strip()
