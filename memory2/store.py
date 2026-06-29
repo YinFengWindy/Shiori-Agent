@@ -1807,6 +1807,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         terms: list[str],
         memory_types: list[str] | None = None,
         memory_domains: list[str] | None = None,
+        role_id: str | None = None,
         limit: int = 20,
         time_start: datetime | None = None,
         time_end: datetime | None = None,
@@ -1838,6 +1839,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 f"IN ({placeholders})"
             )
             domain_params = [domain.strip() for domain in memory_domains]
+
+        role_filter = ""
+        role_params: list[str] = []
+        if role_id:
+            role_filter = f" AND {_role_json_filter()}"
+            role_params = [role_id.strip()]
 
         scope_filter = ""
         scope_params: list[str] = []
@@ -1871,7 +1878,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             f"SELECT id, memory_type, summary, extra_json, source_ref, happened_at, created_at, "
             f"reinforcement, ({score_expr}) AS kw_score "
             f"FROM memory_items "
-            f"WHERE status='active' AND ({or_conditions}){type_filter}{domain_filter}{scope_filter}{time_filter} "
+            f"WHERE status='active' AND ({or_conditions}){type_filter}{domain_filter}{role_filter}{scope_filter}{time_filter} "
             f"ORDER BY kw_score DESC, reinforcement DESC, id ASC "
             f"LIMIT ? OFFSET ?"
         )
@@ -1883,6 +1890,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 + like_vals
                 + type_params
                 + domain_params
+                + role_params
                 + scope_params
                 + time_params
                 + [batch_size, offset]

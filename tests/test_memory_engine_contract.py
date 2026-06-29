@@ -212,6 +212,55 @@ async def test_default_memory_engine_retrieve_falls_back_to_session_scope():
     assert "keyword_only_enabled" not in kwargs
 
 
+async def test_default_memory_engine_role_query_excludes_legacy_unscoped_memory(tmp_path: Path):
+    provider = SimpleNamespace()
+    runtime = build_memory_runtime(
+        config=Config(
+            provider="test",
+            model="gpt-test",
+            api_key="k",
+            system_prompt="hi",
+            memory=MemoryConfig(enabled=True),
+        ),
+        workspace=tmp_path,
+        tools=ToolRegistry(),
+        provider=cast(Any, provider),
+        light_provider=None,
+        http_resources=cast(Any, SimpleNamespace(external_default=SimpleNamespace())),
+    )
+    engine = cast(Any, runtime.engine)
+    store = engine._v2_store
+    assert store is not None
+
+    store.upsert_item(
+        "profile",
+        "legacy 公共记忆：用户常驻上海",
+        [1.0, 0.0],
+        extra={},
+        source_ref="legacy:profile",
+    )
+    store.upsert_item(
+        "profile",
+        "角色记忆：Mira 视角下用户常驻上海",
+        [1.0, 0.0],
+        extra={"role_id": "mira", "memory_domain": "relationship"},
+        source_ref="role:mira:profile",
+    )
+
+    result = await engine.query(
+        MemoryQuery(
+            text="用户常驻上海",
+            intent="interest",
+            scope=MemoryScope(role_id="mira"),
+            limit=10,
+        )
+    )
+
+    summaries = [record.summary for record in result.records]
+    assert "角色记忆：Mira 视角下用户常驻上海" in summaries
+    assert "legacy 公共记忆：用户常驻上海" not in summaries
+
+
 async def test_default_engine_keeps_history_injected_ids():
     retriever = SimpleNamespace(
         retrieve=AsyncMock(

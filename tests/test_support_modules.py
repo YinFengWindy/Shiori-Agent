@@ -981,6 +981,45 @@ def test_main_desktop_entry_prints_deprecation_notice_and_uses_bridge(
     assert "main.py bridge" in output
 
 
+def test_role_memory_migrate_script_prints_json_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    import scripts.role_memory_migrate as module
+
+    class _FakeMigrator:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+        def migrate(self):
+            return SimpleNamespace(
+                migrated_session_keys=["telegram:1"],
+                migrated_memory_item_ids=["mem-1"],
+                migrated_bindings=["telegram:1"],
+                unresolved_session_keys=["telegram:404"],
+                unresolved_memory_item_ids=["mem-x"],
+            )
+
+    monkeypatch.setattr(module, "RoleLegacyMigrator", _FakeMigrator)
+    monkeypatch.setattr(module, "RoleAggregateService", SimpleNamespace(from_runtime=lambda **kwargs: SimpleNamespace()))
+    monkeypatch.setattr(module, "RoleStore", lambda workspace: SimpleNamespace())
+    monkeypatch.setattr(module, "SessionManager", lambda workspace: SimpleNamespace())
+    monkeypatch.setattr(module, "MemoryStore2", lambda path: SimpleNamespace(close=lambda: None))
+
+    old_argv = sys.argv
+    try:
+        sys.argv = ["role_memory_migrate.py", "--workspace", str(tmp_path)]
+        exit_code = module.main()
+    finally:
+        sys.argv = old_argv
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["migrated_session_keys"] == ["telegram:1"]
+    assert payload["unresolved_session_keys"] == ["telegram:404"]
+
+
 def test_repository_entrypoints_are_desktop_first():
     repo_root = Path(__file__).resolve().parents[1]
     package_json = json.loads((repo_root / "package.json").read_text(encoding="utf-8"))
