@@ -32,6 +32,37 @@ type SearchableSessionRecord = {
   session: SessionPayload;
 };
 
+type NavigationEntry = {
+  view: AppMainView;
+  activeRoleId: string;
+  settingsSection: SettingsSectionId;
+};
+
+function cloneView(view: AppMainView): AppMainView {
+  if (view.kind === "role-detail") {
+    return { kind: "role-detail", roleId: view.roleId };
+  }
+  return { kind: view.kind };
+}
+
+function viewsEqual(left: AppMainView, right: AppMainView): boolean {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind === "role-detail" && right.kind === "role-detail") {
+    return left.roleId === right.roleId;
+  }
+  return true;
+}
+
+function navigationEntriesEqual(left: NavigationEntry, right: NavigationEntry): boolean {
+  return (
+    viewsEqual(left.view, right.view)
+    && left.activeRoleId === right.activeRoleId
+    && left.settingsSection === right.settingsSection
+  );
+}
+
 function createEmptyRoleForm(): RoleFormState {
   return {
     name: "",
@@ -87,8 +118,8 @@ function App(): React.ReactElement {
   const openRoleRequestIdRef = useRef(0);
   const activeRoleIdRef = useRef("");
   const activeSessionRef = useRef<SessionPayload | null>(null);
-  const roleHistoryRef = useRef<string[]>([]);
-  const roleHistoryIndexRef = useRef(-1);
+  const navigationHistoryRef = useRef<NavigationEntry[]>([]);
+  const navigationHistoryIndexRef = useRef(-1);
   const draftRef = useRef("");
   const roleFormRef = useRef<RoleFormState>(createEmptyRoleForm());
   const newRoleFormRef = useRef<NewRoleFormState>(createEmptyNewRoleForm());
@@ -122,6 +153,19 @@ function App(): React.ReactElement {
     mainView.kind === "roles-list"
     || mainView.kind === "role-create"
     || mainView.kind === "role-detail";
+
+  function buildNavigationEntry(
+    view: AppMainView,
+    roleId = activeRoleIdRef.current,
+    section = settingsSection,
+  ): NavigationEntry {
+    const resolvedRoleId = view.kind === "role-detail" ? view.roleId : roleId;
+    return {
+      view: cloneView(view),
+      activeRoleId: resolvedRoleId,
+      settingsSection: section,
+    };
+  }
 
   function updateRoleForm(next: React.SetStateAction<RoleFormState>): void {
     const resolved = typeof next === "function"
@@ -188,6 +232,70 @@ function App(): React.ReactElement {
     setSidebarAnimating(true);
     setSidebarCollapsed(true);
     setMainView(nextView);
+  }
+
+  function syncNavigationState(): void {
+    setCanGoBack(navigationHistoryIndexRef.current > 0);
+    setCanGoForward(
+      navigationHistoryIndexRef.current >= 0
+      && navigationHistoryIndexRef.current < navigationHistoryRef.current.length - 1,
+    );
+  }
+
+  function pushNavigationEntry(entry: NavigationEntry): void {
+    const nextHistory = navigationHistoryRef.current.slice(0, navigationHistoryIndexRef.current + 1);
+    const previous = nextHistory[nextHistory.length - 1];
+    if (previous && navigationEntriesEqual(previous, entry)) {
+      navigationHistoryRef.current = nextHistory;
+      navigationHistoryIndexRef.current = nextHistory.length - 1;
+      syncNavigationState();
+      return;
+    }
+    nextHistory.push(entry);
+    navigationHistoryRef.current = nextHistory;
+    navigationHistoryIndexRef.current = nextHistory.length - 1;
+    syncNavigationState();
+  }
+
+  function replaceNavigationEntry(entry: NavigationEntry): void {
+    if (navigationHistoryIndexRef.current < 0) {
+      navigationHistoryRef.current = [entry];
+      navigationHistoryIndexRef.current = 0;
+      syncNavigationState();
+      return;
+    }
+    const nextHistory = [...navigationHistoryRef.current];
+    nextHistory[navigationHistoryIndexRef.current] = entry;
+    navigationHistoryRef.current = nextHistory;
+    syncNavigationState();
+  }
+
+  function openChatView(options?: { recordHistory?: boolean }): void {
+    const nextView: AppMainView = { kind: "chat" };
+    setMainView(nextView);
+    if (options?.recordHistory !== false) {
+      pushNavigationEntry(buildNavigationEntry(nextView));
+    }
+  }
+
+  function openSettingsWorkspace(
+    section: SettingsSectionId = "models",
+    options?: { recordHistory?: boolean },
+  ): void {
+    openSettingsView(section);
+    if (options?.recordHistory !== false) {
+      pushNavigationEntry(buildNavigationEntry({ kind: "settings" }, activeRoleIdRef.current, section));
+    }
+  }
+
+  function openRoleWorkspace(
+    nextView: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" }>,
+    options?: { recordHistory?: boolean },
+  ): void {
+    openRoleWorkspaceView(nextView);
+    if (options?.recordHistory !== false) {
+      pushNavigationEntry(buildNavigationEntry(nextView));
+    }
   }
 
   function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
@@ -341,29 +449,6 @@ function App(): React.ReactElement {
         active_illustration: illustration,
       },
     });
-  }
-
-  function syncRoleHistoryState(): void {
-    setCanGoBack(roleHistoryIndexRef.current > 0);
-    setCanGoForward(
-      roleHistoryIndexRef.current >= 0
-      && roleHistoryIndexRef.current < roleHistoryRef.current.length - 1,
-    );
-  }
-
-  function pushRoleHistory(roleId: string): void {
-    if (!roleId) return;
-    const nextHistory = roleHistoryRef.current.slice(0, roleHistoryIndexRef.current + 1);
-    if (nextHistory[nextHistory.length - 1] === roleId) {
-      roleHistoryRef.current = nextHistory;
-      roleHistoryIndexRef.current = nextHistory.length - 1;
-      syncRoleHistoryState();
-      return;
-    }
-    nextHistory.push(roleId);
-    roleHistoryRef.current = nextHistory;
-    roleHistoryIndexRef.current = nextHistory.length - 1;
-    syncRoleHistoryState();
   }
 
   /** Loads the authoritative session for a role without mutating renderer state. */
@@ -573,6 +658,7 @@ function App(): React.ReactElement {
         const preferredRole = nextRoles.find((item) => item.id === preferredRoleId) ?? null;
         void openRole(preferredRoleId, preferredRole, { recordHistory: false });
       }
+      pushNavigationEntry(buildNavigationEntry({ kind: "chat" }, preferredRoleId ?? ""));
     }
 
     void load();
@@ -681,13 +767,15 @@ function App(): React.ReactElement {
       setActiveIllustration("");
     }
     if (options?.recordHistory !== false) {
-      pushRoleHistory(roleId);
+      pushNavigationEntry(buildNavigationEntry({ kind: "chat" }, roleId));
+    } else if (mainView.kind === "chat") {
+      replaceNavigationEntry(buildNavigationEntry({ kind: "chat" }, roleId));
     }
   }
 
   async function openRoleDetail(roleId: string): Promise<void> {
     await openRole(roleId, null, { recordHistory: false });
-    setMainView({ kind: "role-detail", roleId });
+    openRoleWorkspace({ kind: "role-detail", roleId });
   }
 
   async function sendMessage(contentOverride?: string): Promise<void> {
@@ -794,7 +882,7 @@ function App(): React.ReactElement {
     setClearAvatar(false);
     setClearIllustrations(false);
     setActiveIllustration("");
-    openRoleWorkspaceView({ kind: "role-detail", roleId: role.id });
+    openRoleWorkspace({ kind: "role-detail", roleId: role.id }, { recordHistory: false });
     setNotice("Role created.");
     const nextRoles = await loadRolesFromBridge();
     const resolvedRole = nextRoles?.find((item) => item.id === role.id) ?? role;
@@ -808,7 +896,7 @@ function App(): React.ReactElement {
       });
     }
     await openRole(role.id, resolvedRole, { recordHistory: true });
-    openRoleWorkspaceView({ kind: "role-detail", roleId: role.id });
+    openRoleWorkspace({ kind: "role-detail", roleId: role.id }, { recordHistory: false });
   }
 
   async function saveRole(): Promise<void> {
@@ -841,7 +929,7 @@ function App(): React.ReactElement {
     setClearIllustrations(false);
     setNotice("Role saved.");
     await openRole(updated.id, nextRoles?.find((item) => item.id === updated.id) ?? updated, { recordHistory: false });
-    openRoleWorkspaceView({ kind: "role-detail", roleId: updated.id });
+    openRoleWorkspace({ kind: "role-detail", roleId: updated.id }, { recordHistory: false });
   }
 
   async function deleteRole(): Promise<void> {
@@ -860,16 +948,15 @@ function App(): React.ReactElement {
     setActiveRoleId("");
     setActiveSession(null);
     setActiveIllustration("");
-    roleHistoryRef.current = roleHistoryRef.current.filter((item) => item !== deletingRoleId);
-    roleHistoryIndexRef.current = roleHistoryRef.current.length - 1;
-    syncRoleHistoryState();
     setNotice("Role deleted.");
     if (nextRoles[0]) {
       await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
-      openRoleWorkspaceView({ kind: "roles-list" });
+      openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
+      replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, nextRoles[0].id));
       return;
     }
-    openRoleWorkspaceView({ kind: "roles-list" });
+    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
+    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, ""));
   }
 
   async function pickAvatar(): Promise<void> {
@@ -897,14 +984,41 @@ function App(): React.ReactElement {
     setActiveIllustration("");
   }
 
-  async function navigateRoleHistory(direction: "back" | "forward"): Promise<void> {
+  async function navigateHistory(direction: "back" | "forward"): Promise<void> {
     const delta = direction === "back" ? -1 : 1;
-    const nextIndex = roleHistoryIndexRef.current + delta;
-    const nextRoleId = roleHistoryRef.current[nextIndex];
-    if (!nextRoleId) return;
-    roleHistoryIndexRef.current = nextIndex;
-    syncRoleHistoryState();
-    await openRole(nextRoleId, null, { recordHistory: false });
+    const nextIndex = navigationHistoryIndexRef.current + delta;
+    const nextEntry = navigationHistoryRef.current[nextIndex];
+    if (!nextEntry) return;
+    navigationHistoryIndexRef.current = nextIndex;
+    syncNavigationState();
+
+    setSettingsSection(nextEntry.settingsSection);
+    if (nextEntry.view.kind === "settings") {
+      openSettingsView(nextEntry.settingsSection);
+      return;
+    }
+    if (nextEntry.view.kind === "roles-list" || nextEntry.view.kind === "role-create") {
+      openRoleWorkspaceView(nextEntry.view);
+      return;
+    }
+    if (nextEntry.view.kind === "role-detail") {
+      const detailView = nextEntry.view;
+      const detailRole = roles.find((role) => role.id === detailView.roleId) ?? null;
+      if (!detailRole) {
+        openRoleWorkspaceView({ kind: "roles-list" });
+        return;
+      }
+      await openRole(detailView.roleId, detailRole, { recordHistory: false });
+      openRoleWorkspaceView(detailView);
+      return;
+    }
+    if (nextEntry.activeRoleId) {
+      const nextRole = roles.find((role) => role.id === nextEntry.activeRoleId) ?? null;
+      if (nextRole) {
+        await openRole(nextRole.id, nextRole, { recordHistory: false });
+      }
+    }
+    setMainView({ kind: "chat" });
   }
 
   const searchResults = (() => {
@@ -1013,12 +1127,12 @@ function App(): React.ReactElement {
         canRefreshSession={Boolean(activeRoleId)}
         canEditRole={Boolean(activeRoleId)}
         onToggleSidebar={toggleSidebar}
-        onGoBack={() => void navigateRoleHistory("back")}
-        onGoForward={() => void navigateRoleHistory("forward")}
+        onGoBack={() => void navigateHistory("back")}
+        onGoForward={() => void navigateHistory("forward")}
         onRefreshSession={() => void refreshSession()}
-        onCreateRole={() => openRoleWorkspaceView({ kind: "role-create" })}
-        onEditRole={() => openRoleWorkspaceView(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
-        onOpenSettings={() => openSettingsView()}
+        onCreateRole={() => openRoleWorkspace({ kind: "role-create" })}
+        onEditRole={() => openRoleWorkspace(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
+        onOpenSettings={() => openSettingsWorkspace()}
         onRefreshBridge={() => void refreshBridge()}
         onRestartBridge={() => void restartBridge()}
       />
@@ -1046,8 +1160,8 @@ function App(): React.ReactElement {
               configPath={settingsConfigPath}
               dirty={settingsDirty}
               width={sidebarWidth}
-              onBackToChat={() => setMainView(lastNonSettingsViewRef.current)}
-              onOpenSection={setSettingsSection}
+              onBackToChat={() => openChatView()}
+              onOpenSection={(section) => openSettingsWorkspace(section)}
               onSearchChange={setSettingsSearch}
               onBeginResize={beginSidebarResize}
               search={settingsSearch}
@@ -1061,9 +1175,9 @@ function App(): React.ReactElement {
               collapsed={roleWorkspaceViewActive || sidebarCollapsed}
               width={sidebarWidth}
               onOpenSearch={() => setShowSearchDialog(true)}
-              onToggleRoleEditor={() => openRoleWorkspaceView({ kind: "roles-list" })}
+              onToggleRoleEditor={() => openRoleWorkspace({ kind: "roles-list" })}
               onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
-              onOpenSettings={() => openSettingsView()}
+              onOpenSettings={() => openSettingsWorkspace()}
               onBeginResize={beginSidebarResize}
             />
           )}
@@ -1091,13 +1205,13 @@ function App(): React.ReactElement {
               activeRoleId={activeRoleId}
               bridgeReady={bridgeReady}
               roles={roles}
-              onBackToChat={() => setMainView({ kind: "chat" })}
-              onCreateRole={() => openRoleWorkspaceView({ kind: "role-create" })}
+              onBackToChat={() => openChatView()}
+              onCreateRole={() => openRoleWorkspace({ kind: "role-create" })}
               onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
               onOpenRoleSession={(roleId) => {
                 void (async () => {
                   await openRole(roleId, null, { recordHistory: true });
-                  setMainView({ kind: "chat" });
+                  openChatView({ recordHistory: false });
                 })();
               }}
             />
@@ -1107,7 +1221,7 @@ function App(): React.ReactElement {
               bridgeReady={bridgeReady}
               creating={creating}
               form={newRoleForm}
-              onBackToList={() => openRoleWorkspaceView({ kind: "roles-list" })}
+              onBackToList={() => openRoleWorkspace({ kind: "roles-list" })}
               onCreateRole={() => void createRole()}
               onUpdateForm={updateNewRoleForm}
             />
@@ -1125,7 +1239,7 @@ function App(): React.ReactElement {
               roleForm={roleForm}
               roleFormDirty={roleFormDirty}
               savingRole={savingRole}
-              onBackToList={() => openRoleWorkspaceView({ kind: "roles-list" })}
+              onBackToList={() => openRoleWorkspace({ kind: "roles-list" })}
               onUpdateRoleForm={updateRoleForm}
               onSetActiveIllustration={setActiveIllustration}
               onRememberIllustration={(roleId, illustration) => void rememberIllustration(roleId, illustration)}
