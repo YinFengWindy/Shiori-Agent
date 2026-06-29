@@ -20,6 +20,7 @@ declare module "electron" {
       contextIsolation?: boolean;
       nodeIntegration?: boolean;
       sandbox?: boolean;
+      spellcheck?: boolean;
     };
   }
 

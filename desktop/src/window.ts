@@ -15,7 +15,8 @@ export function createDesktopWindow(): BrowserWindow {
       preload: preloadScript,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      spellcheck: false,
     },
   });
   win.webContents.on("console-message", (_event, _level, message) => {
