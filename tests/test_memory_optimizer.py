@@ -74,13 +74,13 @@ def test_optimize_updates_self_using_pending_only(tmp_path):
 
     provider = _provider_with_responses(
         "## 新记忆",
-        "# Akashic 的自我认知\n\n## 人格与形象\n\n- 新版人格\n\n## 我对当前用户的理解\n\n- 新版理解\n\n## 我们关系的定义\n\n- 新版关系\n",
+        "# 角色底座自我认知\n\n## 人格与形象\n\n- 新版人格\n\n## 我对当前用户的理解\n\n- 新版理解\n\n## 我们关系的定义\n\n- 新版关系\n",
     )
     optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model")
     optimizer._STEP_DELAY_SECONDS = 0
     asyncio.run(optimizer.optimize())
 
-    assert memory.read_self().strip().startswith("# Akashic 的自我认知")
+    assert memory.read_self().strip().startswith("# 角色底座自我认知")
     assert "新版理解" in memory.read_self()
 
     self_prompt = provider.chat.await_args_list[1].kwargs["messages"][1]["content"]

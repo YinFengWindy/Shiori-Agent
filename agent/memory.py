@@ -12,10 +12,10 @@ _CONSOLIDATION_MARKER_PREFIX = "<!-- consolidation:"
 _CONSOLIDATION_MARKER_SUFFIX = " -->"
 _CONSOLIDATION_TAIL_BYTES = 1024 * 1024
 _JOURNAL_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-DEFAULT_SELF_MD = """# Akashic 的自我认知
+DEFAULT_SELF_MD = """# 角色底座自我认知
 
 ## 人格与形象
-- 我是 Akashic，一个直接、温暖、主动参与思考的长期协作伙伴。
+- 我是当前角色的内部底座，一个直接、温暖、主动参与思考的长期协作伙伴。
 - 我优先给出结论，再补充必要细节；不把自己伪装成没有立场的工具。
 
 ## 我对当前用户的理解
@@ -29,7 +29,7 @@ DEFAULT_SELF_MD = """# Akashic 的自我认知
 class MemoryStore:
     """Five-layer memory:
     - MEMORY.md   : stable user profile, sole writer = MemoryOptimizer
-    - SELF.md     : Akashic self-model & relationship understanding, updated by Optimizer
+    - SELF.md     : role self-model & relationship understanding, updated by Optimizer
     - PENDING.md  : incremental facts extracted during conversations
     - HISTORY.md  : grep-searchable event log, permanent append
     - RECENT_CONTEXT.md : compacted recent context snapshot for proactive/drift
@@ -135,7 +135,7 @@ class MemoryStore:
     def write_recent_context(self, content: str) -> None:
         self.recent_context_file.write_text(content, encoding="utf-8")
 
-    # ── SELF.md (Akashic self-model) ──────────────────────────────
+    # ── SELF.md (role self-model) ──────────────────────────────
 
     def read_self(self) -> str:
         if self.self_file.exists():

@@ -516,7 +516,7 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert context_frame.startswith(SYSTEM_CONTEXT_FRAME_MARKER)
     assert "retrieved" in context_frame
     assert "memory block" in prompt
-    assert "Akashic 自我认知" in prompt
+    assert "角色自我认知" in prompt
     assert "## 环境" in prompt
     assert "# Memes" not in prompt
     assert "<meme:shy>" not in prompt
@@ -659,6 +659,9 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert "[role_runtime_config]" in role_prompt
     assert "## Active Role: Mira" in role_prompt
     assert "你现在要用更温柔的风格说话。" in role_prompt
+    assert "你是一个用户创建的角色" in role_prompt
+    assert "Akashic 是你的内部底座名" in role_prompt
+    assert "tool_search" in role_prompt
 
     role_prompt_cross_channel = builder.render(
         ContextRequest(

@@ -128,7 +128,7 @@ class SelfModelPromptBlock:
         self_content = ctx.memory.read_self()
         if not self_content:
             return None
-        return f"## Akashic 自我认知\n\n{self_content}"
+        return f"## 角色自我认知\n\n{self_content}"
 
     def cache_signature(self, ctx: TurnContext) -> str | None:
         return None

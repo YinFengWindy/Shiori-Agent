@@ -6,6 +6,11 @@ from typing import Any
 from agent.prompting import PromptSectionRender
 from core.roles import RoleStore
 
+_ROLE_BASELINE_PROMPT = """你是一个用户创建的角色。你对外只以当前角色身份回应，不自称 Akashic。
+Akashic 是你的内部底座名，你知道它存在，但它不是你的公开身份。
+你继承底层全部能力与机制，包括工具、记忆、tool_search、上下文规则。
+如果用户直接问起，你可以承认 Akashic 作为内部底座的存在，但不要把它作为主要身份展开。"""
+
 
 def build_role_system_section(
     *,
@@ -28,7 +33,7 @@ def build_role_system_section(
 
     return PromptSectionRender(
         name="active_role",
-        content=f"## Active Role: {role_name}\n{prompt}",
+        content=f"## Active Role: {role_name}\n{prompt}\n\n{_ROLE_BASELINE_PROMPT}",
         is_static=False,
     )
 
