@@ -240,18 +240,81 @@ class RoleMemoryService:
 
         if not state.get("seed_first_impression_ready"):
             impression = self._build_first_impression(role)
-            self._append_once(
-                root / "MEMORY.md",
-                f"# 关系基线\n\n{impression}\n",
-            )
-            state["seed_first_impression_ready"] = True
-            state["relationship_revision_count"] = int(
-                state.get("relationship_revision_count") or 0
+            state = self.update_relationship_baseline(
+                role,
+                content=impression,
+                source="seed:first_impression",
+                current_state=state,
             )
             changed = True
 
         if changed:
             state["last_memory_initialized_at"] = _now_iso()
+        return state
+
+    def update_relationship_baseline(
+        self,
+        role: RoleRecord,
+        *,
+        content: str,
+        source: str,
+        current_state: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        clean_content = str(content or "").strip()
+        clean_source = str(source or "").strip()
+        if not clean_content:
+            raise ValueError("relationship baseline 不能为空")
+        if not clean_source:
+            raise ValueError("relationship baseline source 不能为空")
+
+        state = dict(current_state or role.memory_init_state or {})
+        root = self.ensure_initialized(role)
+        path = root / "MEMORY.md"
+        current_value = str(state.get("relationship_baseline_value") or "").strip()
+        current_source = str(state.get("relationship_baseline_source") or "").strip()
+        normalized_source = "seed" if clean_source.startswith("seed") else clean_source
+
+        if normalized_source == "system_derived" and current_source == "user_edited":
+            self._append_once(
+                root / "HISTORY.md",
+                (
+                    "# 关系记忆演化建议\n\n"
+                    f"来源: {clean_source}\n"
+                    f"保留当前人工基线: {current_value}\n"
+                    f"系统建议: {clean_content}\n"
+                ),
+            )
+            state["relationship_revision_count"] = int(
+                state.get("relationship_revision_count") or 0
+            ) + 1
+            return state
+
+        if clean_content == current_value and clean_source == current_source:
+            return state
+
+        if current_value:
+            self._append_once(
+                root / "HISTORY.md",
+                (
+                    "# 关系基线修订\n\n"
+                    f"来源: {clean_source}\n"
+                    f"旧版本来源: {current_source or 'unknown'}\n"
+                    f"旧版本内容: {current_value}\n"
+                    f"新版本内容: {clean_content}\n"
+                ),
+            )
+            if normalized_source != "seed":
+                state["relationship_revision_count"] = int(
+                    state.get("relationship_revision_count") or 0
+                ) + 1
+        else:
+            state.setdefault("relationship_revision_count", 0)
+
+        self._write_relationship_baseline(path, clean_content, clean_source)
+        state["seed_first_impression_ready"] = True
+        state["relationship_baseline_value"] = clean_content
+        state["relationship_baseline_source"] = clean_source
+        state["last_memory_initialized_at"] = _now_iso()
         return state
 
     def _append_once(self, path: Path, text: str) -> None:
@@ -261,6 +324,21 @@ class RoleMemoryService:
 
     def _write_stable_background(self, path: Path, background: str) -> None:
         path.write_text(f"# 角色背景\n\n{background.strip()}\n", encoding="utf-8")
+
+    def _write_relationship_baseline(
+        self,
+        path: Path,
+        content: str,
+        source: str,
+    ) -> None:
+        path.write_text(
+            (
+                "# 关系基线\n\n"
+                f"来源: {source}\n\n"
+                f"{content.strip()}\n"
+            ),
+            encoding="utf-8",
+        )
 
     def _build_first_impression(self, role: RoleRecord) -> str:
         pieces = [
@@ -447,6 +525,23 @@ class RoleAggregateService:
         memory_state = self.memory.seed_role_memory(role)
         if memory_state != role.memory_init_state:
             role = self.repository.update_role(role.id, memory_init_state=memory_state)
+        session = self.sessions.open_by_role(role)
+        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+
+    def update_relationship_baseline(
+        self,
+        role_id: str,
+        *,
+        content: str,
+        source: str,
+    ) -> RoleAggregate:
+        role = self.repository.get_required(role_id)
+        memory_state = self.memory.update_relationship_baseline(
+            role,
+            content=content,
+            source=source,
+        )
+        role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
         return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
 

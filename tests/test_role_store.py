@@ -153,6 +153,64 @@ def test_role_aggregate_service_updates_background_without_losing_history(tmp_pa
     assert "新版本: 新背景" in history_text
 
 
+def test_role_aggregate_service_user_edit_first_impression_becomes_baseline(tmp_path: Path):
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+    )
+    aggregate = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+
+    updated = service.update_relationship_baseline(
+        aggregate.role.id,
+        content="用户给人的第一印象是谨慎而真诚。",
+        source="user_edited",
+    )
+
+    memory_text = (updated.memory_root / "MEMORY.md").read_text(encoding="utf-8")
+    history_text = (updated.memory_root / "HISTORY.md").read_text(encoding="utf-8")
+    assert "来源: user_edited" in memory_text
+    assert "用户给人的第一印象是谨慎而真诚。" in memory_text
+    assert "关系基线修订" in history_text
+
+
+def test_role_aggregate_service_system_derived_cannot_override_user_relationship_baseline(tmp_path: Path):
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+    )
+    aggregate = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    edited = service.update_relationship_baseline(
+        aggregate.role.id,
+        content="用户给人的第一印象是谨慎而真诚。",
+        source="user_edited",
+    )
+
+    evolved = service.update_relationship_baseline(
+        edited.role.id,
+        content="系统推断用户最近显得更放松。",
+        source="system_derived",
+    )
+
+    memory_text = (evolved.memory_root / "MEMORY.md").read_text(encoding="utf-8")
+    history_text = (evolved.memory_root / "HISTORY.md").read_text(encoding="utf-8")
+    assert "用户给人的第一印象是谨慎而真诚。" in memory_text
+    assert "系统推断用户最近显得更放松。" not in memory_text
+    assert "关系记忆演化建议" in history_text
+    assert "系统建议: 系统推断用户最近显得更放松。" in history_text
+
+
 def test_role_binding_service_requires_explicit_binding(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
