@@ -50,32 +50,70 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               button.click();
               return true;
             };
-            const fileMenu = Array.from(document.querySelectorAll(".titlebar-menu-item"))
-              .find((item) => (item.textContent || "").trim() === "文件");
-            if (!fileMenu) {
-              return { ok: false, reason: "file-menu-missing" };
-            }
-            fileMenu.click();
-            await sleep(50);
-            if (!clickByText("新对话")) {
-              return { ok: false, reason: "new-chat-entry-missing" };
+            const openCreateRolePage = async () => {
+              const fileMenu = Array.from(document.querySelectorAll(".titlebar-menu-item"))
+                .find((item) => (item.textContent || "").trim() === "文件");
+              if (!fileMenu) {
+                return { ok: false, reason: "file-menu-missing" };
+              }
+              fileMenu.click();
+              await sleep(50);
+              if (!clickByText("新对话")) {
+                return { ok: false, reason: "new-chat-entry-missing" };
+              }
+              let createPage = null;
+              let name = null;
+              let desc = null;
+              let prompt = null;
+              let create = null;
+              for (let i = 0; i < 40; i++) {
+                createPage = document.querySelector('[data-testid="role-create-page"]');
+                name = document.querySelector('[data-testid="new-role-name"]');
+                desc = document.querySelector('[data-testid="new-role-description"]');
+                prompt = document.querySelector('[data-testid="new-role-prompt"]');
+                create = document.querySelector('[data-testid="create-role-button"]');
+                if (createPage && name && desc && prompt && create) {
+                  break;
+                }
+                await sleep(100);
+              }
+              if (!createPage || !name || !desc || !prompt || !create) {
+                return {
+                  ok: false,
+                  reason: "create-page-missing",
+                  html: document.body.innerHTML.slice(0, 1200),
+                };
+              }
+              const sidebarTrack = document.querySelector(".sidebar-track");
+              if (!sidebarTrack || sidebarTrack.getBoundingClientRect().width > 1) {
+                return {
+                  ok: false,
+                  reason: "create-page-sidebar-not-collapsed",
+                  sidebarWidth: sidebarTrack?.getBoundingClientRect().width ?? null,
+                };
+              }
+              return { ok: true, name, desc, prompt, create };
+            };
+            const firstCreatePage = await openCreateRolePage();
+            if (!firstCreatePage.ok) {
+              return firstCreatePage;
             }
             let name, desc, prompt, create, hero;
-            for (let i = 0; i < 40; i++) {
-              name = document.querySelector('[data-testid="new-role-name"]');
-              desc = document.querySelector('[data-testid="new-role-description"]');
-              prompt = document.querySelector('[data-testid="new-role-prompt"]');
-              create = document.querySelector('[data-testid="create-role-button"]');
+            name = firstCreatePage.name;
+            desc = firstCreatePage.desc;
+            prompt = firstCreatePage.prompt;
+            create = firstCreatePage.create;
+            for (let i = 0; i < 20; i++) {
               hero = document.querySelector('[data-testid="session-hero"]');
-              if (name && desc && prompt && create && hero) {
+              if (hero) {
                 break;
               }
               await sleep(100);
             }
-            if (!name || !desc || !prompt || !create || !hero) {
+            if (!hero) {
               return {
                 ok: false,
-                reason: "missing-elements",
+                reason: "missing-session-hero",
                 html: document.body.innerHTML.slice(0, 800),
               };
             }
@@ -144,22 +182,23 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             settingsBackButton.click();
             let sidebarSettingsEntry = null;
             for (let i = 0; i < 40; i++) {
-              name = document.querySelector('[data-testid="new-role-name"]');
-              desc = document.querySelector('[data-testid="new-role-description"]');
-              prompt = document.querySelector('[data-testid="new-role-prompt"]');
-              create = document.querySelector('[data-testid="create-role-button"]');
               sidebarSettingsEntry = document.querySelector(".sidebar-top > button");
-              if (name && desc && prompt && create && !create.disabled && sidebarSettingsEntry) {
+              hero = document.querySelector('[data-testid="session-hero"]');
+              if (hero && sidebarSettingsEntry) {
                 break;
               }
               await sleep(100);
             }
-            if (!name || !desc || !prompt || !create) {
-              return { ok: false, reason: "create-form-missing-after-settings-back" };
+            if (!hero) {
+              return { ok: false, reason: "session-hero-missing-after-settings-back" };
             }
             if (!sidebarSettingsEntry) {
               return { ok: false, reason: "sidebar-settings-entry-missing" };
             }
+            name = firstCreatePage.name;
+            desc = firstCreatePage.desc;
+            prompt = firstCreatePage.prompt;
+            create = firstCreatePage.create;
             setFieldValue(name, roleAName);
             setFieldValue(desc, "ui smoke role A");
             setFieldValue(prompt, "you are ui smoke role A");
@@ -184,24 +223,17 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 detailValue: detailNameInput?.value || "",
               };
             }
-            fileMenu.click();
-            await sleep(50);
-            if (!clickByText("新对话")) {
-              return { ok: false, reason: "second-new-chat-entry-missing" };
+            const secondCreatePage = await openCreateRolePage();
+            if (!secondCreatePage.ok) {
+              return {
+                ok: false,
+                reason: secondCreatePage.reason || "second-create-page-missing",
+              };
             }
-            for (let i = 0; i < 30; i++) {
-              name = document.querySelector('[data-testid="new-role-name"]');
-              desc = document.querySelector('[data-testid="new-role-description"]');
-              prompt = document.querySelector('[data-testid="new-role-prompt"]');
-              create = document.querySelector('[data-testid="create-role-button"]');
-              if (name && desc && prompt && create) {
-                break;
-              }
-              await sleep(100);
-            }
-            if (!name || !desc || !prompt || !create) {
-              return { ok: false, reason: "second-create-form-missing" };
-            }
+            name = secondCreatePage.name;
+            desc = secondCreatePage.desc;
+            prompt = secondCreatePage.prompt;
+            create = secondCreatePage.create;
             setFieldValue(name, roleBName);
             setFieldValue(desc, "ui smoke role B");
             setFieldValue(prompt, "you are ui smoke role B");
@@ -234,6 +266,14 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             }
             if (!roleManagementPage) {
               return { ok: false, reason: "role-management-page-missing" };
+            }
+            const sidebarTrack = document.querySelector(".sidebar-track");
+            if (!sidebarTrack || sidebarTrack.getBoundingClientRect().width > 1) {
+              return {
+                ok: false,
+                reason: "role-management-sidebar-not-collapsed",
+                sidebarWidth: sidebarTrack?.getBoundingClientRect().width ?? null,
+              };
             }
             const roleBManagementCard = Array.from(document.querySelectorAll('[data-testid^="role-management-card-"]'))
               .find((item) => (item.textContent || "").includes(roleBName));

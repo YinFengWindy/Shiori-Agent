@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { ChatSurface } from "./chat/ChatSurface";
 import { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel";
+import { RoleCreatePage } from "./roles/RoleCreatePage";
 import { RoleDetailPage } from "./roles/RoleDetailPage";
 import { RoleManagementPage } from "./roles/RoleManagementPage";
 import { reconcileRoles } from "./roles/roleListState";
@@ -62,7 +63,6 @@ function App(): React.ReactElement {
   const [savingRole, setSavingRole] = useState(false);
   const [sending, setSending] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [showNewRoleComposer, setShowNewRoleComposer] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchingSessions, setSearchingSessions] = useState(false);
@@ -117,6 +117,11 @@ function App(): React.ReactElement {
       lastNonSettingsViewRef.current = mainView;
     }
   }, [mainView]);
+
+  const roleWorkspaceViewActive =
+    mainView.kind === "roles-list"
+    || mainView.kind === "role-create"
+    || mainView.kind === "role-detail";
 
   function updateRoleForm(next: React.SetStateAction<RoleFormState>): void {
     const resolved = typeof next === "function"
@@ -177,6 +182,12 @@ function App(): React.ReactElement {
     setSidebarCollapsed(false);
     setSidebarWidth((current) => Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, current)));
     setMainView({ kind: "settings" });
+  }
+
+  function openRoleWorkspaceView(nextView: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" }>): void {
+    setSidebarAnimating(true);
+    setSidebarCollapsed(true);
+    setMainView(nextView);
   }
 
   function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
@@ -764,7 +775,6 @@ function App(): React.ReactElement {
     }
     const role = res.payload.role as RoleRecord;
     updateNewRoleForm(createEmptyNewRoleForm());
-    setShowNewRoleComposer(false);
     activeRoleIdRef.current = role.id;
     setActiveRoleId(role.id);
     setRoles((current) => {
@@ -784,7 +794,7 @@ function App(): React.ReactElement {
     setClearAvatar(false);
     setClearIllustrations(false);
     setActiveIllustration("");
-    setMainView({ kind: "role-detail", roleId: role.id });
+    openRoleWorkspaceView({ kind: "role-detail", roleId: role.id });
     setNotice("Role created.");
     const nextRoles = await loadRolesFromBridge();
     const resolvedRole = nextRoles?.find((item) => item.id === role.id) ?? role;
@@ -798,7 +808,7 @@ function App(): React.ReactElement {
       });
     }
     await openRole(role.id, resolvedRole, { recordHistory: true });
-    setMainView({ kind: "role-detail", roleId: role.id });
+    openRoleWorkspaceView({ kind: "role-detail", roleId: role.id });
   }
 
   async function saveRole(): Promise<void> {
@@ -831,7 +841,7 @@ function App(): React.ReactElement {
     setClearIllustrations(false);
     setNotice("Role saved.");
     await openRole(updated.id, nextRoles?.find((item) => item.id === updated.id) ?? updated, { recordHistory: false });
-    setMainView({ kind: "role-detail", roleId: updated.id });
+    openRoleWorkspaceView({ kind: "role-detail", roleId: updated.id });
   }
 
   async function deleteRole(): Promise<void> {
@@ -856,10 +866,10 @@ function App(): React.ReactElement {
     setNotice("Role deleted.");
     if (nextRoles[0]) {
       await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
-      setMainView({ kind: "roles-list" });
+      openRoleWorkspaceView({ kind: "roles-list" });
       return;
     }
-    setMainView({ kind: "roles-list" });
+    openRoleWorkspaceView({ kind: "roles-list" });
   }
 
   async function pickAvatar(): Promise<void> {
@@ -1006,8 +1016,8 @@ function App(): React.ReactElement {
         onGoBack={() => void navigateRoleHistory("back")}
         onGoForward={() => void navigateRoleHistory("forward")}
         onRefreshSession={() => void refreshSession()}
-        onCreateRole={() => setShowNewRoleComposer(true)}
-        onEditRole={() => setMainView(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
+        onCreateRole={() => openRoleWorkspaceView({ kind: "role-create" })}
+        onEditRole={() => openRoleWorkspaceView(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
         onOpenSettings={() => openSettingsView()}
         onRefreshBridge={() => void refreshBridge()}
         onRestartBridge={() => void restartBridge()}
@@ -1026,7 +1036,7 @@ function App(): React.ReactElement {
             "sidebar-track relative min-h-0 overflow-hidden",
             sidebarAnimating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           )}
-          style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
+          style={{ width: roleWorkspaceViewActive ? 0 : (sidebarCollapsed ? 0 : sidebarWidth) }}
         >
           {mainView.kind === "settings" ? (
             <SettingsSidebar
@@ -1048,15 +1058,10 @@ function App(): React.ReactElement {
               activeRoleId={activeRoleId}
               animating={sidebarAnimating && !resizingSidebar}
               bridgeReady={bridgeReady}
-              collapsed={sidebarCollapsed}
-              creating={creating}
-              showNewRoleComposer={showNewRoleComposer}
-              newRoleForm={newRoleForm}
+              collapsed={roleWorkspaceViewActive || sidebarCollapsed}
               width={sidebarWidth}
               onOpenSearch={() => setShowSearchDialog(true)}
-              onToggleRoleEditor={() => setMainView({ kind: "roles-list" })}
-              onUpdateNewRoleForm={updateNewRoleForm}
-              onCreateRole={() => void createRole()}
+              onToggleRoleEditor={() => openRoleWorkspaceView({ kind: "roles-list" })}
               onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
               onOpenSettings={() => openSettingsView()}
               onBeginResize={beginSidebarResize}
@@ -1087,7 +1092,7 @@ function App(): React.ReactElement {
               bridgeReady={bridgeReady}
               roles={roles}
               onBackToChat={() => setMainView({ kind: "chat" })}
-              onCreateRole={() => setShowNewRoleComposer(true)}
+              onCreateRole={() => openRoleWorkspaceView({ kind: "role-create" })}
               onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
               onOpenRoleSession={(roleId) => {
                 void (async () => {
@@ -1095,6 +1100,16 @@ function App(): React.ReactElement {
                   setMainView({ kind: "chat" });
                 })();
               }}
+            />
+          ) : null}
+          {mainView.kind === "role-create" ? (
+            <RoleCreatePage
+              bridgeReady={bridgeReady}
+              creating={creating}
+              form={newRoleForm}
+              onBackToList={() => openRoleWorkspaceView({ kind: "roles-list" })}
+              onCreateRole={() => void createRole()}
+              onUpdateForm={updateNewRoleForm}
             />
           ) : null}
           {mainView.kind === "role-detail" ? (
@@ -1110,7 +1125,7 @@ function App(): React.ReactElement {
               roleForm={roleForm}
               roleFormDirty={roleFormDirty}
               savingRole={savingRole}
-              onBackToList={() => setMainView({ kind: "roles-list" })}
+              onBackToList={() => openRoleWorkspaceView({ kind: "roles-list" })}
               onUpdateRoleForm={updateRoleForm}
               onSetActiveIllustration={setActiveIllustration}
               onRememberIllustration={(roleId, illustration) => void rememberIllustration(roleId, illustration)}

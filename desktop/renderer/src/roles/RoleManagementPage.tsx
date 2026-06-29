@@ -106,7 +106,7 @@ export function RoleManagementPage({
           </div>
         ) : (
           <div className={cx(cardClass, "grid min-h-[280px] place-items-center border-dashed p-8 text-center text-sm text-[#7f7f7f]")}>
-            暂无角色，先创建一个角色再进入管理页。
+            暂无角色，先创建一个角色开始管理。
           </div>
         )}
       </div>

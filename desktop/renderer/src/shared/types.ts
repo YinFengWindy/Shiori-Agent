@@ -78,6 +78,7 @@ export type RoleSearchResult = {
 export type AppMainView =
   | { kind: "chat" }
   | { kind: "roles-list" }
+  | { kind: "role-create" }
   | { kind: "role-detail"; roleId: string }
   | { kind: "settings" };
 

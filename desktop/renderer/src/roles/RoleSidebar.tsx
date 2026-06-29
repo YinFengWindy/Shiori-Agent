@@ -1,7 +1,7 @@
 import type React from "react";
 import { toFileUrl } from "../shared/format";
-import { bodyTextClass, cardClass, cx, inputClass, primaryButtonClass, textareaClass } from "../shared/styles";
-import type { NewRoleFormState, RoleRecord } from "../shared/types";
+import { bodyTextClass, cardClass, cx } from "../shared/styles";
+import type { RoleRecord } from "../shared/types";
 
 type RoleSidebarProps = {
   roles: RoleRecord[];
@@ -10,13 +10,8 @@ type RoleSidebarProps = {
   collapsed: boolean;
   animating: boolean;
   width: number;
-  creating: boolean;
-  showNewRoleComposer: boolean;
-  newRoleForm: NewRoleFormState;
   onOpenSearch: () => void;
   onToggleRoleEditor: () => void;
-  onUpdateNewRoleForm: React.Dispatch<React.SetStateAction<NewRoleFormState>>;
-  onCreateRole: () => void;
   onOpenRole: (roleId: string) => void;
   onOpenSettings: () => void;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -30,13 +25,8 @@ export function RoleSidebar({
   collapsed,
   animating,
   width,
-  creating,
-  showNewRoleComposer,
-  newRoleForm,
   onOpenSearch,
   onToggleRoleEditor,
-  onUpdateNewRoleForm,
-  onCreateRole,
   onOpenRole,
   onOpenSettings,
   onBeginResize,
@@ -88,34 +78,6 @@ export function RoleSidebar({
           </span>
           <span>角色</span>
         </button>
-        {showNewRoleComposer ? (
-          <div className="create-form mt-3 grid gap-2.5">
-            <input
-              data-testid="new-role-name"
-              className={inputClass}
-              value={newRoleForm.name}
-              onChange={(event) => onUpdateNewRoleForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder="New role name"
-            />
-            <input
-              data-testid="new-role-description"
-              className={inputClass}
-              value={newRoleForm.description}
-              onChange={(event) => onUpdateNewRoleForm((current) => ({ ...current, description: event.target.value }))}
-              placeholder="Short description"
-            />
-            <textarea
-              data-testid="new-role-prompt"
-              className={cx("compact-prompt", textareaClass, "min-h-24")}
-              value={newRoleForm.systemPrompt}
-              onChange={(event) => onUpdateNewRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
-              placeholder="Role system prompt"
-            />
-            <button data-testid="create-role-button" className={cx("primary-btn text-sm", primaryButtonClass)} type="button" onClick={onCreateRole} disabled={creating || !bridgeReady}>
-              {creating ? "Creating..." : "Create Role"}
-            </button>
-          </div>
-        ) : null}
       </div>
       <div className={cx("role-list scrollbar-soft scrollbar-soft-accent grid min-h-0 content-start gap-1.5 overflow-x-hidden overflow-y-auto pr-0", bodyTextClass)} data-testid="role-list">
         {roles.length ? roles.map((role) => (
