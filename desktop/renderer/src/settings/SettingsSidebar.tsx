@@ -74,7 +74,7 @@ export function SettingsSidebar({
       <input
         className={cx(
           inputClass,
-          "mb-3 h-10 rounded-xl border-[#D8DCE2] bg-[#F5F6F8] px-4 py-0 text-sm focus:border-[#D8DCE2] focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0",
+          "mb-3 h-10 rounded-xl bg-[#F5F6F8] px-4 py-0 text-sm",
         )}
         placeholder="搜索设置..."
         value={search}

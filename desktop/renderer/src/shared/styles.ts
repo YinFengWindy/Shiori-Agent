@@ -11,7 +11,7 @@ export const bodyTextClass = "text-xs leading-5";
 
 /** Shared input styling for form controls outside the chat composer. */
 export const inputClass =
-  "w-full rounded-md border border-stroke bg-[rgba(255,252,246,0.95)] px-3.5 py-3 text-text transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
+  "w-full rounded-md border border-[#D8DCE2] bg-[rgba(255,252,246,0.95)] px-3.5 py-3 text-text transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0";
 
 /** Shared textarea styling for role prompt fields. */
 export const textareaClass = cx(inputClass, "min-h-24 resize-y");
