@@ -123,7 +123,6 @@ function App(): React.ReactElement {
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const [sidebarAnimating, setSidebarAnimating] = useState(false);
   const [activeIllustration, setActiveIllustration] = useState("");
-  const [selectedRoleAsset, setSelectedRoleAsset] = useState("");
   const [selectedAvatarAsset, setSelectedAvatarAsset] = useState("");
   const [selectedFeaturedImage, setSelectedFeaturedImage] = useState("");
   const [clearAvatar, setClearAvatar] = useState(false);
@@ -790,7 +789,6 @@ function App(): React.ReactElement {
       });
       setSelectedAvatarAsset(role.avatar ?? "");
       setSelectedFeaturedImage(role.featured_image ?? role.illustrations[0] ?? "");
-      setSelectedRoleAsset(role.featured_image ?? role.avatar ?? role.illustrations[0] ?? "");
       setClearAvatar(false);
       setClearIllustrations(false);
       const savedIllustration =
@@ -804,7 +802,6 @@ function App(): React.ReactElement {
       );
     } else {
       setActiveIllustration("");
-      setSelectedRoleAsset("");
       setSelectedAvatarAsset("");
       setSelectedFeaturedImage("");
     }
@@ -825,7 +822,6 @@ function App(): React.ReactElement {
       await openRole(roleId, null, { recordHistory: false });
     } else {
       const currentRole = roles.find((role) => role.id === roleId) ?? null;
-      setSelectedRoleAsset(currentRole?.featured_image ?? currentRole?.avatar ?? currentRole?.illustrations[0] ?? "");
       setSelectedAvatarAsset(currentRole?.avatar ?? "");
       setSelectedFeaturedImage(currentRole?.featured_image ?? currentRole?.illustrations[0] ?? "");
     }
@@ -1020,14 +1016,6 @@ function App(): React.ReactElement {
     }
     const updated = res.payload.role as RoleRecord;
     await loadRolesFromBridge();
-    const nextSelectedRoleAsset =
-      nextSelection?.featuredImage
-      ?? nextSelection?.avatarAsset
-      ?? updated.featured_image
-      ?? updated.avatar
-      ?? updated.illustrations[0]
-      ?? "";
-    setSelectedRoleAsset(nextSelectedRoleAsset);
     setSelectedAvatarAsset(updated.avatar ?? "");
     setSelectedFeaturedImage(updated.featured_image ?? updated.illustrations[0] ?? "");
     setNotice("角色素材已更新。");
@@ -1110,7 +1098,6 @@ function App(): React.ReactElement {
     }
     const updated = res.payload.role as RoleRecord;
     await loadRolesFromBridge();
-    setSelectedRoleAsset(updated.featured_image ?? updated.avatar ?? updated.illustrations[0] ?? "");
     setSelectedAvatarAsset(updated.avatar ?? "");
     setSelectedFeaturedImage(updated.featured_image ?? updated.illustrations[0] ?? "");
     openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
@@ -1457,12 +1444,10 @@ function App(): React.ReactElement {
               activeRole={detailRole}
               bridgeReady={bridgeReady}
               savingSelection={savingRoleAssets}
-              selectedAssetPath={selectedRoleAsset}
               selectedAvatarAsset={selectedAvatarAsset}
               selectedFeaturedImage={selectedFeaturedImage}
               onBackToDetail={() => openRoleWorkspace({ kind: "role-detail", roleId: detailRoleId })}
               onPickAssets={() => void pickRoleAssets()}
-              onSelectAsset={setSelectedRoleAsset}
               onSelectAvatarAsset={setSelectedAvatarAsset}
               onSelectFeaturedImage={setSelectedFeaturedImage}
               onSaveSelections={(nextSelection) => void saveRoleAssets(nextSelection)}

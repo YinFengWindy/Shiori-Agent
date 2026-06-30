@@ -3,17 +3,16 @@ import { toFileUrl } from "../shared/format";
 import { UploadIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
+import { getSelectedRoleAssetPath } from "./roleAssetSelection";
 
 type RoleAssetsPageProps = {
   activeRole: RoleRecord | null;
   bridgeReady: boolean;
   savingSelection: boolean;
-  selectedAssetPath: string;
   selectedAvatarAsset: string;
   selectedFeaturedImage: string;
   onBackToDetail: () => void;
   onPickAssets: () => void;
-  onSelectAsset: (path: string) => void;
   onSelectAvatarAsset: (path: string) => void;
   onSelectFeaturedImage: (path: string) => void;
   onSaveSelections: (nextSelection?: { avatarAsset?: string; featuredImage?: string }) => void;
@@ -23,12 +22,10 @@ export function RoleAssetsPage({
   activeRole,
   bridgeReady,
   savingSelection,
-  selectedAssetPath,
   selectedAvatarAsset,
   selectedFeaturedImage,
   onBackToDetail,
   onPickAssets,
-  onSelectAsset,
   onSelectAvatarAsset,
   onSelectFeaturedImage,
   onSaveSelections,
@@ -42,11 +39,17 @@ export function RoleAssetsPage({
     relPath,
     absPath: activeRole?.illustrations_abs[index] ?? "",
   }));
+  const [selectionMode, setSelectionMode] = useState<"avatar" | "featured">("avatar");
+  const fallbackAssetPath = assetPairs[0]?.relPath ?? "";
+  const selectedAssetPath = getSelectedRoleAssetPath(
+    selectionMode,
+    selectedAvatarAsset,
+    selectedFeaturedImage,
+    fallbackAssetPath,
+  );
   const selectedAsset = assetPairs.find((item) => item.relPath === selectedAssetPath) ?? assetPairs[0] ?? null;
-  const [selectionMode, setSelectionMode] = useState<"avatar" | "featured">("featured");
 
   async function applyAsset(relPath: string): Promise<void> {
-    onSelectAsset(relPath);
     if (selectionMode === "avatar") {
       onSelectAvatarAsset(relPath);
       onSaveSelections({ avatarAsset: relPath });
