@@ -182,6 +182,8 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   const [phase, setPhase] = useState<SavePhase>("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
+  const floatingActionClass =
+    "grid h-10 w-10 place-items-center rounded-full border bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-default disabled:border-black/6 disabled:bg-white/60 disabled:text-[#b8b8b8] disabled:shadow-none";
 
   useEffect(() => {
     let cancelled = false;
@@ -233,6 +235,16 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     });
   }, [draft, onMetaChange, snapshot]);
 
+  useEffect(() => {
+    if (phase !== "saved" && phase !== "restart-failed" && phase !== "error") return;
+    const timeoutMs = phase === "saved" ? 2200 : 4200;
+    const timer = window.setTimeout(() => {
+      setStatusMessage("");
+      setPhase((current) => (current === "saved" || current === "restart-failed" || current === "error" ? "idle" : current));
+    }, timeoutMs);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+
   function updateDraft(mutator: (current: SettingsFormData) => SettingsFormData): void {
     setDraft((current) => {
       if (!current) return current;
@@ -280,7 +292,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     const nextDraft = cloneSettings(snapshot.formData);
     nextDraft.channels.roleBindings = draft?.channels.roleBindings ?? [];
     setDraft(nextDraft);
-    setStatusMessage("已恢复到当前磁盘配置。");
+    setStatusMessage("");
     setPhase("idle");
   }
 
@@ -313,30 +325,42 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     <section className="settings-page grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[#F7F8FB]" data-testid="settings-page">
       <div className="settings-content grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
         <div className="border-b border-[#E8EBF0] bg-[#F7F8FB] px-10 py-5">
-          <div className="flex items-center justify-between gap-4">
-            <div className="grid gap-1">
-              <div className="text-sm font-medium text-[#1A1D21]">
-                {phase === "idle" && "当前配置已同步"}
-                {phase === "dirty" && "有未保存更改"}
-                {phase === "saving" && "正在保存"}
-                {phase === "restarting" && "正在重启 Bridge"}
-                {phase === "saved" && "已保存"}
-                {phase === "restart-failed" && "Bridge 重启失败"}
-                {phase === "error" && "保存失败"}
-              </div>
-              {statusMessage ? <div className="text-[12px] leading-5 text-[#7A7F86]">{statusMessage}</div> : null}
-            </div>
-            <div className="flex items-center gap-2.5">
-              <button className={cx("grid h-10 w-10 place-items-center rounded-xl text-[#6E737A]", ghostButtonClass)} type="button" aria-label="重置" onClick={reset}>
+          <div className="flex items-center justify-end gap-2.5">
+            <button
+              className={cx(floatingActionClass, "border-black/8 text-[#747474] hover:border-black/14 hover:bg-[#F5F7FA] hover:text-[#4f4f4f]")}
+              type="button"
+              aria-label="重置"
+              onClick={reset}
+              disabled={!snapshot || !draft || settingsEqual(snapshot.formData, draft)}
+            >
                 <ResetIcon className="h-[18px] w-[18px] fill-current" />
-              </button>
-              <button className={cx("grid h-10 w-10 place-items-center rounded-xl", primaryButtonClass)} type="button" aria-label="保存并重启" onClick={() => void save()} disabled={!bridgeReady || phase === "saving"}>
+            </button>
+            <button
+              className={cx(floatingActionClass, "border-transparent bg-white text-[#1f1f1f] hover:bg-[#F5F7FA]")}
+              type="button"
+              aria-label="保存并重启"
+              onClick={() => void save()}
+              disabled={!bridgeReady || phase === "saving"}
+            >
                 <SaveIcon className="h-[18px] w-[18px] fill-current" />
-              </button>
-            </div>
+            </button>
           </div>
         </div>
-        <div className="scrollbar-soft overflow-y-auto px-10 py-8">
+        <div className="relative scrollbar-soft overflow-y-auto px-10 py-8">
+          {(phase === "saved" || phase === "restart-failed" || phase === "error") && statusMessage ? (
+            <div
+              className={cx(
+                "pointer-events-none absolute right-10 top-6 z-10 max-w-[440px] rounded-2xl border px-4 py-3 text-sm leading-6 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-[8px]",
+                phase === "saved"
+                  ? "border-[rgba(26,106,58,0.18)] bg-[rgba(237,248,240,0.94)] text-[#1a6a3a]"
+                  : "border-[rgba(176,58,58,0.18)] bg-[rgba(255,241,241,0.96)] text-[#9a2f2f]",
+              )}
+              role="status"
+              aria-live="polite"
+            >
+              {statusMessage}
+            </div>
+          ) : null}
           <div className="mx-auto w-full max-w-[940px]">
             {!currentSection ? (
               <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-[#7f8490]")}>
