@@ -913,15 +913,22 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           <div className="mx-auto flex w-full max-w-[940px] items-center gap-4">
             <div className="min-w-0 flex-1">
               {visibleSubsections.length ? (
-                <select
-                  className={cx(inputClass, "h-10 max-w-[260px] rounded-md bg-white py-0")}
-                  value={currentSubsectionId ?? ""}
-                  onChange={(event) => updateActiveSubsection(event.target.value)}
-                >
-                  {visibleSubsections.map((item) => (
-                    <option key={item.id} value={item.id}>{item.label}</option>
-                  ))}
-                </select>
+                <div className="relative max-w-[260px]">
+                  <select
+                    className="h-10 w-full appearance-none rounded-md border border-[#D8DCE2] bg-white px-3.5 pr-10 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0"
+                    value={currentSubsectionId ?? ""}
+                    onChange={(event) => updateActiveSubsection(event.target.value)}
+                  >
+                    {visibleSubsections.map((item) => (
+                      <option key={item.id} value={item.id}>{item.label}</option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[#737781]" aria-hidden="true">
+                    <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 fill-current">
+                      <path d="M2.2 4.2 6 8l3.8-3.8.8.8L6 9.8 1.4 5z" />
+                    </svg>
+                  </span>
+                </div>
               ) : null}
             </div>
             <div className="flex items-center gap-2.5">
