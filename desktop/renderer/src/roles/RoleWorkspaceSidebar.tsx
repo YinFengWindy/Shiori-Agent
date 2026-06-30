@@ -68,29 +68,6 @@ export function RoleWorkspaceSidebar({
         >
           <span>新建角色</span>
         </button>
-        {(activeSection === "role-detail" || activeSection === "role-assets") ? (
-          <button
-            className={cx(
-              sidebarActionClass,
-              activeSection === "role-assets" && "border-[#D9E0E8] bg-white/80 font-medium shadow-[0_1px_2px_rgba(15,23,42,0.05)]",
-            )}
-            type="button"
-            onClick={() => onOpenSection("role-assets")}
-          >
-            <span>素材库</span>
-          </button>
-        ) : null}
-      </div>
-      <div className="min-h-0" />
-      <div className="mt-3 border-t border-[#DFE3E8] px-2 pt-3 text-[12px] leading-5 text-[#7A7F86]">
-        <div>角色工作区</div>
-        <div className="mt-1 break-all text-[#5E646B]">
-          {activeSection === "role-create"
-            ? "当前正在新建角色"
-            : activeSection === "role-assets"
-              ? "在这里上传并选择当前角色的头像与顶栏立绘"
-              : "在这里管理角色列表与角色详情"}
-        </div>
       </div>
       <div
         className={cx(

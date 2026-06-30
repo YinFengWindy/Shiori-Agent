@@ -82,9 +82,6 @@ export function RoleDetailPage({
                   {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "R"}
                 </div>
               )}
-              <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,rgba(15,23,42,0)_0%,rgba(15,23,42,0.68)_100%)] px-3 py-2 text-[11px] text-white/88">
-                打开素材库
-              </div>
             </button>
             <div className="grid gap-4">
               <div>

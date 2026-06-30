@@ -1307,10 +1307,6 @@ function App(): React.ReactElement {
                   openRoleWorkspace({ kind: "role-create" });
                   return;
                 }
-                if (section === "role-assets" && detailRoleId) {
-                  openRoleWorkspace({ kind: "role-assets", roleId: detailRoleId });
-                  return;
-                }
                 openRoleWorkspace({ kind: "roles-list" });
               }}
               onBeginResize={beginSidebarResize}
