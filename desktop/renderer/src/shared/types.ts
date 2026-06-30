@@ -52,6 +52,7 @@ export type RoleFormState = {
   systemPrompt: string;
   avatarSource: string;
   illustrationSources: string[];
+  removedIllustrations: string[];
 };
 
 /** New role composer form state. */

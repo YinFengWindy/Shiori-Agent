@@ -84,6 +84,12 @@ class DesktopBridgeService:
                     if isinstance(raw_illustrations, list)
                     else None
                 )
+                raw_removed_illustrations = payload.get("removed_illustrations")
+                removed_illustrations = (
+                    [str(item) for item in raw_removed_illustrations if str(item).strip()]
+                    if isinstance(raw_removed_illustrations, list)
+                    else None
+                )
                 aggregate = self.role_service.update_role(
                     str(payload.get("role_id") or ""),
                     name=payload.get("name"),
@@ -98,6 +104,7 @@ class DesktopBridgeService:
                     avatar_source=avatar_source,
                     clear_avatar=bool(payload.get("clear_avatar")),
                     illustration_sources=illustration_sources,
+                    removed_illustrations=removed_illustrations,
                     clear_illustrations=bool(payload.get("clear_illustrations")),
                 )
                 return self._ok(request_id, method, {"role": self._serialize_role(aggregate.role)})

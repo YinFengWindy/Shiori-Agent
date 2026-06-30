@@ -107,6 +107,34 @@ def test_role_store_replaces_and_clears_old_assets(tmp_path: Path):
     assert cleared.avatar is None
 
 
+def test_role_store_removes_selected_illustration_only(tmp_path: Path):
+    ill1 = tmp_path / "ill-1.png"
+    ill1.write_bytes(b"ill-1")
+    ill2 = tmp_path / "ill-2.png"
+    ill2.write_bytes(b"ill-2")
+
+    store = RoleStore(tmp_path)
+    role = store.create_role(
+        name="Mira",
+        description="assistant role",
+        system_prompt="you are mira",
+        role_id="mira",
+        illustration_sources=[ill1, ill2],
+    )
+    first_path = tmp_path / "roles" / role.illustrations[0]
+    second_path = tmp_path / "roles" / role.illustrations[1]
+
+    updated = store.update_role(
+        "mira",
+        removed_illustrations=[role.illustrations[0]],
+    )
+
+    assert len(updated.illustrations) == 1
+    assert updated.illustrations[0] == role.illustrations[1]
+    assert not first_path.exists()
+    assert second_path.exists()
+
+
 def test_role_aggregate_service_initializes_role_session_and_memory_space(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,

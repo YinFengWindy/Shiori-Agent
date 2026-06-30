@@ -201,6 +201,7 @@ class RoleStore:
         avatar_source: str | Path | None = None,
         clear_avatar: bool = False,
         illustration_sources: list[str | Path] | None = None,
+        removed_illustrations: list[str] | None = None,
         clear_illustrations: bool = False,
     ) -> RoleRecord:
         with self._lock:
@@ -236,6 +237,21 @@ class RoleStore:
                     for rel_path in role.illustrations:
                         self._remove_asset_relpath(rel_path)
                     role.illustrations = []
+                if removed_illustrations:
+                    removed_set = {
+                        _normalize_rel_path(str(path)) or ""
+                        for path in removed_illustrations
+                        if str(path).strip()
+                    }
+                    if removed_set:
+                        kept_illustrations: list[str] = []
+                        for rel_path in role.illustrations:
+                            normalized = _normalize_rel_path(rel_path) or ""
+                            if normalized in removed_set:
+                                self._remove_asset_relpath(normalized)
+                                continue
+                            kept_illustrations.append(rel_path)
+                        role.illustrations = kept_illustrations
                 if illustration_sources:
                     role.illustrations.extend(
                         self.import_asset(role.id, source, prefix="illustration")

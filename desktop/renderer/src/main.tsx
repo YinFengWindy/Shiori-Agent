@@ -70,6 +70,7 @@ function createEmptyRoleForm(): RoleFormState {
     systemPrompt: "",
     avatarSource: "",
     illustrationSources: [],
+    removedIllustrations: [],
   };
 }
 
@@ -756,6 +757,7 @@ function App(): React.ReactElement {
         systemPrompt: role.system_prompt,
         avatarSource: "",
         illustrationSources: [],
+        removedIllustrations: [],
       });
       setClearAvatar(false);
       setClearIllustrations(false);
@@ -883,6 +885,7 @@ function App(): React.ReactElement {
       systemPrompt: role.system_prompt,
       avatarSource: "",
       illustrationSources: [],
+      removedIllustrations: [],
     });
     setClearAvatar(false);
     setClearIllustrations(false);
@@ -918,6 +921,7 @@ function App(): React.ReactElement {
         system_prompt: nextRoleForm.systemPrompt,
         avatar_source: nextRoleForm.avatarSource || undefined,
         illustration_sources: nextRoleForm.illustrationSources,
+        removed_illustrations: nextRoleForm.removedIllustrations,
         clear_avatar: clearAvatar,
         clear_illustrations: clearIllustrations,
       },
@@ -929,7 +933,7 @@ function App(): React.ReactElement {
     }
     const updated = res.payload.role as RoleRecord;
     const nextRoles = await loadRolesFromBridge();
-    updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [] }));
+    updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [], removedIllustrations: [] }));
     setClearAvatar(false);
     setClearIllustrations(false);
     setNotice("角色已保存。");
@@ -975,7 +979,7 @@ function App(): React.ReactElement {
     const files = await window.miraDesktop.pickImages({ multiple: true });
     if (!files.length) return;
     setClearIllustrations(false);
-    updateRoleForm((current) => ({ ...current, illustrationSources: files }));
+    updateRoleForm((current) => ({ ...current, illustrationSources: files, removedIllustrations: [] }));
   }
 
   function clearAvatarSelection(): void {
@@ -983,9 +987,30 @@ function App(): React.ReactElement {
     updateRoleForm((current) => ({ ...current, avatarSource: "" }));
   }
 
+  function removeIllustrationSelection(path: string): void {
+    const cleanPath = path.trim();
+    if (!cleanPath) return;
+    const isPendingLocalFile = roleFormRef.current.illustrationSources.includes(cleanPath);
+    if (isPendingLocalFile) {
+      updateRoleForm((current) => ({
+        ...current,
+        illustrationSources: current.illustrationSources.filter((item) => item !== cleanPath),
+      }));
+    } else {
+      setClearIllustrations(false);
+      updateRoleForm((current) => ({
+        ...current,
+        removedIllustrations: current.removedIllustrations.includes(cleanPath)
+          ? current.removedIllustrations
+          : [...current.removedIllustrations, cleanPath],
+      }));
+    }
+    setActiveIllustration((current) => (current === cleanPath ? "" : current));
+  }
+
   function clearIllustrationsSelection(): void {
     setClearIllustrations(true);
-    updateRoleForm((current) => ({ ...current, illustrationSources: [] }));
+    updateRoleForm((current) => ({ ...current, illustrationSources: [], removedIllustrations: [] }));
     setActiveIllustration("");
   }
 
@@ -1079,6 +1104,7 @@ function App(): React.ReactElement {
         || roleForm.systemPrompt !== detailRole.system_prompt
         || Boolean(roleForm.avatarSource)
         || roleForm.illustrationSources.length > 0
+        || roleForm.removedIllustrations.length > 0
         || clearAvatar
         || clearIllustrations
       )
@@ -1092,7 +1118,9 @@ function App(): React.ReactElement {
     ? []
     : (roleForm.illustrationSources.length
         ? roleForm.illustrationSources
-        : (detailRole?.illustrations_abs ?? []));
+        : (detailRole?.illustrations_abs ?? []).filter(
+          (path) => !roleForm.removedIllustrations.includes(path),
+        ));
   const visibleIllustration = activeIllustration || previewIllustrations[0] || "";
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
   const headerTitle = sending && activeRole ? "正在输入中..." : (activeRole ? activeRole.name : "选择一个角色");
@@ -1117,6 +1145,7 @@ function App(): React.ReactElement {
       systemPrompt: detailRole.system_prompt,
       avatarSource: "",
       illustrationSources: [],
+      removedIllustrations: [],
     });
     setClearAvatar(false);
     setClearIllustrations(false);
@@ -1258,8 +1287,8 @@ function App(): React.ReactElement {
               onRememberIllustration={(roleId, illustration) => void rememberIllustration(roleId, illustration)}
               onPickAvatar={() => void pickAvatar()}
               onPickIllustrations={() => void pickIllustrations()}
-              onClearAvatar={clearAvatarSelection}
-              onClearIllustrations={clearIllustrationsSelection}
+              onRemoveAvatar={clearAvatarSelection}
+              onRemoveIllustration={removeIllustrationSelection}
               onDeleteRole={() => void deleteRole()}
               onResetRoleForm={resetRoleForm}
               onSaveRole={() => void saveRole()}

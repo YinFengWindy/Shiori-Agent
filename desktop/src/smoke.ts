@@ -224,23 +224,39 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             if (!(await waitForFieldValues([name, desc, prompt], [roleAName, "ui smoke role A", "you are ui smoke role A"]))) {
               return { ok: false, reason: "first-create-fields-not-settled" };
             }
+            if (create.disabled) {
+              return { ok: false, reason: "first-create-button-disabled" };
+            }
             create.click();
-            await sleep(20);
+            await sleep(80);
             let roleDetailPage = null;
             let detailNameInput = null;
-            for (let i = 0; i < 40; i++) {
+            for (let i = 0; i < 60; i++) {
               await sleep(100);
               roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
               detailNameInput = document.querySelector('[data-testid="edit-role-name"]');
-              if (roleDetailPage && detailNameInput && detailNameInput.value === roleAName) {
+              if (roleDetailPage && detailNameInput) {
                 break;
               }
             }
-            if (!roleDetailPage || !detailNameInput || detailNameInput.value !== roleAName) {
+            if (!roleDetailPage || !detailNameInput) {
               return {
                 ok: false,
                 reason: "first-role-not-opened",
                 detailValue: detailNameInput?.value || "",
+              };
+            }
+            for (let i = 0; i < 40; i++) {
+              if (detailNameInput.value === roleAName) {
+                break;
+              }
+              await sleep(100);
+            }
+            if (detailNameInput.value !== roleAName) {
+              return {
+                ok: false,
+                reason: "first-role-form-not-synced",
+                detailValue: detailNameInput.value || "",
               };
             }
             const secondCreatePage = await openCreateRolePage();
@@ -260,20 +276,36 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             if (!(await waitForFieldValues([name, desc, prompt], [roleBName, "ui smoke role B", "you are ui smoke role B"]))) {
               return { ok: false, reason: "second-create-fields-not-settled" };
             }
+            if (create.disabled) {
+              return { ok: false, reason: "second-create-button-disabled" };
+            }
             create.click();
-            for (let i = 0; i < 40; i++) {
+            for (let i = 0; i < 60; i++) {
               await sleep(100);
               roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
               detailNameInput = document.querySelector('[data-testid="edit-role-name"]');
-              if (roleDetailPage && detailNameInput && detailNameInput.value === roleBName) {
+              if (roleDetailPage && detailNameInput) {
                 break;
               }
             }
-            if (!roleDetailPage || !detailNameInput || detailNameInput.value !== roleBName) {
+            if (!roleDetailPage || !detailNameInput) {
               return {
                 ok: false,
                 reason: "second-role-not-opened",
                 detailValue: detailNameInput?.value || "",
+              };
+            }
+            for (let i = 0; i < 40; i++) {
+              if (detailNameInput.value === roleBName) {
+                break;
+              }
+              await sleep(100);
+            }
+            if (detailNameInput.value !== roleBName) {
+              return {
+                ok: false,
+                reason: "second-role-form-not-synced",
+                detailValue: detailNameInput.value || "",
               };
             }
             if (!clickByText("角色列表")) {
@@ -305,22 +337,28 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               return { ok: false, reason: "role-detail-entry-missing" };
             }
             roleBManagementCard.click();
-            let editName, editDesc, editPrompt, saveRoleButton, pickAvatarButton, pickIllustrationsButton;
+            let editName, editDesc, editPrompt, saveRoleButton, pickAvatarButton, pickIllustrationsButton, removeAvatarButton;
             for (let i = 0; i < 40; i++) {
               const roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
+              const previewPanel = document.querySelector('[data-testid="role-detail-preview-panel"]');
+              const formPanel = document.querySelector('[data-testid="role-detail-form-panel"]');
               editName = document.querySelector('[data-testid="edit-role-name"]');
               editDesc = document.querySelector('[data-testid="edit-role-description"]');
               editPrompt = document.querySelector('[data-testid="edit-role-prompt"]');
               saveRoleButton = document.querySelector('[data-testid="save-role-button"]');
               pickAvatarButton = document.querySelector('[data-testid="pick-avatar-button"]');
               pickIllustrationsButton = document.querySelector('[data-testid="pick-illustrations-button"]');
-              if (roleDetailPage && editName && editDesc && editPrompt && saveRoleButton && pickAvatarButton && pickIllustrationsButton) {
+              removeAvatarButton = document.querySelector('[data-testid="remove-avatar-button"]');
+              if (roleDetailPage && previewPanel && formPanel && editName && editDesc && editPrompt && saveRoleButton && pickAvatarButton && pickIllustrationsButton && removeAvatarButton) {
                 break;
               }
               await sleep(100);
             }
-            if (!editName || !editDesc || !editPrompt || !saveRoleButton || !pickAvatarButton || !pickIllustrationsButton) {
-              return { ok: false, reason: "role-editor-elements-missing" };
+            if (!editName || !editDesc || !editPrompt || !saveRoleButton || !pickAvatarButton || !pickIllustrationsButton || !removeAvatarButton) {
+              return {
+                ok: false,
+                reason: "role-editor-elements-missing",
+              };
             }
             setFieldValue(editName, roleBEditedName);
             setFieldValue(editDesc, "ui smoke role B edited");
@@ -338,12 +376,16 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             pickIllustrationsButton.click();
             for (let i = 0; i < 40; i++) {
               await sleep(100);
-              if ((document.body.textContent || "").includes("illustration-smoke")) {
+              if (document.querySelector('[data-testid^="remove-illustration-"]')) {
                 break;
               }
             }
-            if (!(document.body.textContent || "").includes("illustration-smoke")) {
+            if (!document.querySelector('[data-testid^="remove-illustration-"]')) {
               return { ok: false, reason: "illustration-selection-not-reflected" };
+            }
+            const removeIllustrationButton = Array.from(document.querySelectorAll('[data-testid^="remove-illustration-"]'))[0];
+            if (!removeIllustrationButton) {
+              return { ok: false, reason: "remove-illustration-button-missing" };
             }
             if (saveRoleButton.disabled) {
               return { ok: false, reason: "save-role-disabled-after-edit" };

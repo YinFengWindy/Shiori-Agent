@@ -1,6 +1,6 @@
 import { bodyTextClass, cx, ghostButtonClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
-import { RoleEditor } from "./RoleEditor";
+import { RoleDangerZone, RoleDetailFormPanel, RoleDetailPreviewPanel } from "./RoleDetailPanels";
 
 type RoleDetailPageProps = {
   activeIllustration: string;
@@ -20,8 +20,8 @@ type RoleDetailPageProps = {
   onRememberIllustration: (roleId: string, illustration: string) => void;
   onPickAvatar: () => void;
   onPickIllustrations: () => void;
-  onClearAvatar: () => void;
-  onClearIllustrations: () => void;
+  onRemoveAvatar: () => void;
+  onRemoveIllustration: (path: string) => void;
   onDeleteRole: () => void;
   onResetRoleForm: () => void;
   onSaveRole: () => void;
@@ -46,8 +46,8 @@ export function RoleDetailPage({
   onRememberIllustration,
   onPickAvatar,
   onPickIllustrations,
-  onClearAvatar,
-  onClearIllustrations,
+  onRemoveAvatar,
+  onRemoveIllustration,
   onDeleteRole,
   onResetRoleForm,
   onSaveRole,
@@ -75,31 +75,37 @@ export function RoleDetailPage({
             </div>
           </div>
         </div>
-        <div className="relative min-h-0 flex-1">
-          <RoleEditor
+        <div className="grid min-h-0 gap-5 xl:grid-cols-[minmax(0,1.12fr)_minmax(360px,0.88fr)]">
+          <RoleDetailPreviewPanel
             activeRole={activeRole}
             activeRoleId={activeRoleId}
             activeIllustration={activeIllustration}
             bridgeReady={bridgeReady}
-            clearAvatar={clearAvatar}
-            clearIllustrations={clearIllustrations}
             previewAvatar={previewAvatar}
             previewIllustrations={previewIllustrations}
             roleForm={roleForm}
-            roleFormDirty={roleFormDirty}
-            savingRole={savingRole}
-            onUpdateRoleForm={onUpdateRoleForm}
-            onSetActiveIllustration={onSetActiveIllustration}
-            onRememberIllustration={onRememberIllustration}
             onPickAvatar={onPickAvatar}
             onPickIllustrations={onPickIllustrations}
-            onClearAvatar={onClearAvatar}
-            onClearIllustrations={onClearIllustrations}
-            onDeleteRole={onDeleteRole}
-            onResetRoleForm={onResetRoleForm}
-            onSaveRole={onSaveRole}
-            embedded
+            onRemoveAvatar={onRemoveAvatar}
+            onRemoveIllustration={onRemoveIllustration}
+            onRememberIllustration={onRememberIllustration}
+            onSetActiveIllustration={onSetActiveIllustration}
           />
+          <div className="grid content-start gap-5">
+            <RoleDetailFormPanel
+              bridgeReady={bridgeReady}
+              roleForm={roleForm}
+              roleFormDirty={roleFormDirty}
+              savingRole={savingRole}
+              onResetRoleForm={onResetRoleForm}
+              onSaveRole={onSaveRole}
+              onUpdateRoleForm={onUpdateRoleForm}
+            />
+            <RoleDangerZone
+              bridgeReady={bridgeReady}
+              onDeleteRole={onDeleteRole}
+            />
+          </div>
         </div>
       </div>
     </section>
