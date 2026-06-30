@@ -179,7 +179,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   const [draft, setDraft] = useState<SettingsFormData | null>(null);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [loadError, setLoadError] = useState("");
-  const [phase, setPhase] = useState<SavePhase>("idle");
+  const [savePhase, setSavePhase] = useState<Exclude<SavePhase, "dirty">>("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
   const floatingActionClass =
@@ -210,7 +210,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
         setDraft(nextFormData);
         setRoles(Array.isArray(rolesResponse.payload.roles) ? rolesResponse.payload.roles as RoleRecord[] : []);
         setLoadError("");
-        setPhase("idle");
+        setSavePhase("idle");
         setStatusMessage("");
       } catch (error) {
         if (cancelled) return;
@@ -224,11 +224,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
 
   useEffect(() => {
     if (!snapshot || !draft) return;
-    setPhase(settingsEqual(snapshot.formData, draft) ? "idle" : "dirty");
-  }, [snapshot, draft]);
-
-  useEffect(() => {
-    if (!snapshot || !draft) return;
     onMetaChange?.({
       configPath: snapshot.configPath,
       dirty: !settingsEqual(snapshot.formData, draft),
@@ -236,14 +231,14 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   }, [draft, onMetaChange, snapshot]);
 
   useEffect(() => {
-    if (phase !== "saved" && phase !== "restart-failed" && phase !== "error") return;
-    const timeoutMs = phase === "saved" ? 2200 : 4200;
+    if (savePhase !== "saved" && savePhase !== "restart-failed" && savePhase !== "error") return;
+    const timeoutMs = savePhase === "saved" ? 2200 : 4200;
     const timer = window.setTimeout(() => {
       setStatusMessage("");
-      setPhase((current) => (current === "saved" || current === "restart-failed" || current === "error" ? "idle" : current));
+      setSavePhase((current) => (current === "saved" || current === "restart-failed" || current === "error" ? "idle" : current));
     }, timeoutMs);
     return () => window.clearTimeout(timer);
-  }, [phase]);
+  }, [savePhase]);
 
   function updateDraft(mutator: (current: SettingsFormData) => SettingsFormData): void {
     setDraft((current) => {
@@ -255,11 +250,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   async function save(): Promise<void> {
     if (!draft) return;
     if (typeof window.miraDesktop.saveSettings !== "function") {
-      setPhase("error");
+      setSavePhase("error");
       setStatusMessage("当前桌面进程版本过旧，请完全关闭并重新打开桌面端。");
       return;
     }
-    setPhase("saving");
+    setSavePhase("saving");
     setStatusMessage("正在写入 config.toml...");
     try {
       const [result] = await Promise.all([
@@ -267,10 +262,10 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
         window.miraDesktop.saveChannelRoleBindings(draft.channels.roleBindings),
       ]);
       if (result.restart.ok) {
-        setPhase("saved");
+        setSavePhase("saved");
         setStatusMessage(result.health.ok ? "配置已保存，Bridge 已重启。" : `配置已保存，但健康检查失败：${result.health.message}`);
       } else {
-        setPhase("restart-failed");
+        setSavePhase("restart-failed");
         setStatusMessage(`配置已保存，但 Bridge 重启失败：${result.restart.lastError || "unknown error"}`);
       }
       const [nextSnapshot, nextBindings] = await Promise.all([
@@ -282,7 +277,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
       setSnapshot(nextSnapshot);
       setDraft(nextFormData);
     } catch (error) {
-      setPhase("error");
+      setSavePhase("error");
       setStatusMessage(error instanceof Error ? error.message : String(error));
     }
   }
@@ -293,7 +288,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     nextDraft.channels.roleBindings = draft?.channels.roleBindings ?? [];
     setDraft(nextDraft);
     setStatusMessage("");
-    setPhase("idle");
+    setSavePhase("idle");
   }
 
   if (loadError) {
@@ -320,6 +315,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   });
   const currentSection = visibleSections.find((item) => item.id === section) ?? visibleSections[0] ?? null;
   const currentId = currentSection?.id ?? null;
+  const isDirty = Boolean(snapshot && draft && !settingsEqual(snapshot.formData, draft));
 
   return (
     <section className="settings-page grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[#F7F8FB]" data-testid="settings-page">
@@ -331,7 +327,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
               type="button"
               aria-label="重置"
               onClick={reset}
-              disabled={!snapshot || !draft || settingsEqual(snapshot.formData, draft)}
+              disabled={!isDirty}
             >
                 <ResetIcon className="h-[18px] w-[18px] fill-current" />
             </button>
@@ -340,18 +336,18 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
               type="button"
               aria-label="保存并重启"
               onClick={() => void save()}
-              disabled={!bridgeReady || phase === "saving"}
+              disabled={!bridgeReady || !isDirty || savePhase === "saving"}
             >
                 <SaveIcon className="h-[18px] w-[18px] fill-current" />
             </button>
           </div>
         </div>
         <div className="relative scrollbar-soft overflow-y-auto px-10 py-8">
-          {(phase === "saved" || phase === "restart-failed" || phase === "error") && statusMessage ? (
+          {(savePhase === "saved" || savePhase === "restart-failed" || savePhase === "error") && statusMessage ? (
             <div
               className={cx(
                 "pointer-events-none absolute right-10 top-6 z-10 max-w-[440px] rounded-2xl border px-4 py-3 text-sm leading-6 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-[8px]",
-                phase === "saved"
+                savePhase === "saved"
                   ? "border-[rgba(26,106,58,0.18)] bg-[rgba(237,248,240,0.94)] text-[#1a6a3a]"
                   : "border-[rgba(176,58,58,0.18)] bg-[rgba(255,241,241,0.96)] text-[#9a2f2f]",
               )}
