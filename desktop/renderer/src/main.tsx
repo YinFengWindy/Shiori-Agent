@@ -40,6 +40,11 @@ type NavigationEntry = {
   settingsSection: SettingsSectionId;
 };
 
+type WorkspaceFeedback = {
+  tone: "success" | "error";
+  message: string;
+};
+
 function cloneView(view: AppMainView): AppMainView {
   if (view.kind === "role-detail") {
     return { kind: "role-detail", roleId: view.roleId };
@@ -106,6 +111,7 @@ function App(): React.ReactElement {
   const [sending, setSending] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [pendingDeleteRoleId, setPendingDeleteRoleId] = useState("");
+  const [workspaceFeedback, setWorkspaceFeedback] = useState<WorkspaceFeedback | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchingSessions, setSearchingSessions] = useState(false);
   const [searchIndex, setSearchIndex] = useState<SearchableSessionRecord[]>([]);
@@ -529,6 +535,12 @@ function App(): React.ReactElement {
   }, [notice]);
 
   useEffect(() => {
+    if (!workspaceFeedback) return;
+    const timer = window.setTimeout(() => setWorkspaceFeedback(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [workspaceFeedback]);
+
+  useEffect(() => {
     if (highlightedMessageKey) return;
     conversationEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [activeSession?.messages.length, highlightedMessageKey, sending]);
@@ -885,11 +897,14 @@ function App(): React.ReactElement {
     const name = newRoleFormRef.current.name.trim();
     const systemPrompt = newRoleFormRef.current.systemPrompt.trim();
     if (!name || !systemPrompt) {
-      setError("角色名称和系统提示词不能为空。");
+      const message = "角色名称和系统提示词不能为空。";
+      setError(message);
+      setWorkspaceFeedback({ tone: "error", message: `角色创建失败：${message}` });
       return;
     }
     setCreating(true);
     setError("");
+    setWorkspaceFeedback(null);
     const res = await window.miraDesktop.invoke({
       method: "roles.create",
       payload: {
@@ -901,6 +916,7 @@ function App(): React.ReactElement {
     setCreating(false);
     if (res.error) {
       setError(res.error.message);
+      setWorkspaceFeedback({ tone: "error", message: `角色创建失败：${res.error.message}` });
       return;
     }
     const role = res.payload.role as RoleRecord;
@@ -925,8 +941,6 @@ function App(): React.ReactElement {
     setClearAvatar(false);
     setClearIllustrations(false);
     setActiveIllustration("");
-    openRoleWorkspace({ kind: "role-detail", roleId: role.id }, { recordHistory: false });
-    setNotice("角色已创建。");
     const nextRoles = await loadRolesFromBridge();
     const resolvedRole = nextRoles?.find((item) => item.id === role.id) ?? role;
     if (!nextRoles?.some((item) => item.id === role.id)) {
@@ -938,14 +952,17 @@ function App(): React.ReactElement {
         return [...current, resolvedRole];
       });
     }
-    await openRole(role.id, resolvedRole, { recordHistory: true });
-    openRoleWorkspace({ kind: "role-detail", roleId: role.id }, { recordHistory: false });
+    await openRole(role.id, resolvedRole, { recordHistory: false });
+    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
+    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, resolvedRole.id));
+    setWorkspaceFeedback({ tone: "success", message: "角色创建成功。" });
   }
 
   async function saveRole(): Promise<void> {
     if (!activeRoleId) return;
     setSavingRole(true);
     setError("");
+    setWorkspaceFeedback(null);
     const nextRoleForm = roleFormRef.current;
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
@@ -964,6 +981,7 @@ function App(): React.ReactElement {
     setSavingRole(false);
     if (res.error) {
       setError(res.error.message);
+      setWorkspaceFeedback({ tone: "error", message: `角色保存失败：${res.error.message}` });
       return;
     }
     const updated = res.payload.role as RoleRecord;
@@ -971,9 +989,10 @@ function App(): React.ReactElement {
     updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [], removedIllustrations: [] }));
     setClearAvatar(false);
     setClearIllustrations(false);
-    setNotice("角色已保存。");
     await openRole(updated.id, nextRoles?.find((item) => item.id === updated.id) ?? updated, { recordHistory: false });
-    openRoleWorkspace({ kind: "role-detail", roleId: updated.id }, { recordHistory: false });
+    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
+    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, updated.id));
+    setWorkspaceFeedback({ tone: "success", message: "角色保存成功。" });
   }
 
   async function saveRoleAssets(): Promise<void> {
@@ -1348,6 +1367,19 @@ function App(): React.ReactElement {
           )}
         </div>
         <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-[16px] border-b border-l border-t border-[#E4E4E4] bg-[var(--chat-bg)]">
+          {roleWorkspaceViewActive && workspaceFeedback ? (
+            <div
+              className={cx(
+                "absolute left-1/2 top-4 z-[6] -translate-x-1/2 rounded-[14px] border px-4 py-2.5 text-sm shadow-[0_8px_24px_rgba(15,23,42,0.08)]",
+                workspaceFeedback.tone === "success"
+                  ? "border-[rgba(26,106,58,0.18)] bg-[#edf8f0] text-[#1a6a3a]"
+                  : "border-[rgba(176,58,58,0.18)] bg-[#fff1f1] text-[#9a2f2f]",
+              )}
+              aria-live="polite"
+            >
+              {workspaceFeedback.message}
+            </div>
+          ) : null}
           {mainView.kind === "chat" ? (
             <ChatSurface
               activeRole={activeRole}
