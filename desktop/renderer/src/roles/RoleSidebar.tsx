@@ -14,6 +14,7 @@ type RoleSidebarProps = {
   onOpenSearch: () => void;
   onToggleRoleEditor: () => void;
   onOpenRole: (roleId: string) => void;
+  onOpenImageStudio: () => void;
   onOpenSettings: () => void;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
 };
@@ -29,6 +30,7 @@ export function RoleSidebar({
   onOpenSearch,
   onToggleRoleEditor,
   onOpenRole,
+  onOpenImageStudio,
   onOpenSettings,
   onBeginResize,
 }: RoleSidebarProps) {
@@ -79,7 +81,7 @@ export function RoleSidebar({
           </span>
           <span>角色</span>
         </button>
-        <button className={sidebarEntryClass} type="button">
+        <button className={sidebarEntryClass} type="button" onClick={onOpenImageStudio}>
           <span className="sidebar-entry-icon sidebar-entry-image grid h-5 w-5 place-items-center" aria-hidden="true">
             <img className="h-4 w-4" src={novelAiLogoDark} alt="" />
           </span>

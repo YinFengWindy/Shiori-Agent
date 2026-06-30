@@ -10,6 +10,12 @@ import pytest
 
 from bus.event_bus import EventBus
 from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
+from core.integrations.novelai.models import (
+    GenerateImageResult,
+    GeneratedImageRecord,
+    NovelAISettings,
+)
+from core.integrations.novelai.store import NovelAIStore
 from core.roles import RoleStore
 from desktop_bridge import DesktopBridgeServer, DesktopBridgeService
 from session.manager import SessionManager
@@ -627,3 +633,103 @@ async def test_desktop_bridge_role_delete_removes_role_session(tmp_path: Path):
     assert response.payload["deleted"] is True
     assert response.payload["session_deleted"] is True
     assert session_manager._store.get_session_meta("role:mira") is None
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_novelai_generate_and_history(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    novelai_store = NovelAIStore(tmp_path)
+    output_path = tmp_path / "private_runtime" / "novelai" / "outputs" / "2026-06-30" / "rec-1" / "output-1.png"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(b"png")
+    request_path = output_path.parent / "request.json"
+    request_path.write_text("{}", encoding="utf-8")
+    meta_path = output_path.parent / "meta.json"
+    meta_path.write_text("{}", encoding="utf-8")
+    novelai_store.append_record(
+        GeneratedImageRecord(
+            id="rec-0",
+            created_at="2026-06-30T10:00:00+00:00",
+            mode="txt2img",
+            role_id="mira",
+            session_key="role:mira",
+            prompt="history item",
+            negative_prompt="",
+            model="nai-diffusion-4-5-full",
+            sampler="k_euler",
+            steps=28,
+            seed=123,
+            width=1024,
+            height=1024,
+            base_image_path="",
+            output_paths=[str(output_path)],
+            wrote_back_to_role=False,
+        )
+    )
+    novelai_service = SimpleNamespace(
+        generate=AsyncMock(
+            return_value=GenerateImageResult(
+                record_id="rec-1",
+                created_at="2026-06-30T12:00:00+00:00",
+                mode="txt2img",
+                model="nai-diffusion-4-5-full",
+                seed=456,
+                width=1024,
+                height=1024,
+                output_paths=[str(output_path)],
+                request_path=str(request_path),
+                meta_path=str(meta_path),
+                wrote_back_to_role=True,
+                role_asset_paths=["assets/mira/output.png"],
+            )
+        )
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+        config=SimpleNamespace(novelai=NovelAISettings(enabled=True, token="novel-token")),
+        novelai_service=novelai_service,
+        novelai_store=novelai_store,
+    )
+
+    generated = await service.handle(
+        {
+            "id": "1",
+            "method": "novelai.generate",
+            "payload": {
+                "role_id": role.id,
+                "prompt": "moonlight portrait",
+                "mode": "txt2img",
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+    history = await service.handle(
+        {
+            "id": "2",
+            "method": "novelai.history",
+            "payload": {"role_id": role.id, "limit": 5},
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert generated.error is None
+    assert generated.payload["result"]["record_id"] == "rec-1"
+    assert generated.payload["result"]["wrote_back_to_role"] is True
+    novelai_service.generate.assert_awaited_once()
+    request = novelai_service.generate.await_args.args[0]
+    assert request.role_id == "mira"
+    assert request.session_key == "role:mira"
+
+    assert history.error is None
+    assert history.payload["records"][0]["id"] == "rec-0"

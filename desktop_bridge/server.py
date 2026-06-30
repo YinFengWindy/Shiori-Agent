@@ -6,6 +6,7 @@ import sys
 from typing import Any
 
 from bootstrap.tools import CoreRuntime
+from core.integrations.novelai.store import NovelAIStore
 from core.roles import RoleStore
 from desktop_bridge.service import DesktopBridgeService
 
@@ -20,6 +21,8 @@ class DesktopBridgeServer:
             session_manager=runtime.session_manager,
             agent_loop=runtime.loop,
             event_bus=runtime.event_bus,
+            config=getattr(runtime, "config", None),
+            novelai_store=NovelAIStore(runtime.session_manager.workspace),
         )
 
     async def serve_streams(self, *, read_line, write_payload) -> None:

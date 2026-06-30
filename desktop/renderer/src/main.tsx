@@ -8,6 +8,7 @@ import { RoleAssetsPage } from "./roles/RoleAssetsPage";
 import { RoleCreatePage } from "./roles/RoleCreatePage";
 import { RoleDetailPage } from "./roles/RoleDetailPage";
 import { RoleManagementPage } from "./roles/RoleManagementPage";
+import { ImageStudioPage } from "./image/ImageStudioPage";
 import { reconcileRoles } from "./roles/roleListState";
 import { RoleSearchDialog } from "./roles/RoleSearchDialog";
 import { RoleSidebar } from "./roles/RoleSidebar";
@@ -301,6 +302,16 @@ function App(): React.ReactElement {
 
   function openChatView(options?: { recordHistory?: boolean }): void {
     const nextView: AppMainView = { kind: "chat" };
+    setMainView(nextView);
+    if (options?.recordHistory !== false) {
+      pushNavigationEntry(buildNavigationEntry(nextView));
+    }
+  }
+
+  function openImageStudio(options?: { recordHistory?: boolean }): void {
+    const nextView: AppMainView = { kind: "image-studio" };
+    setSidebarAnimating(true);
+    setSidebarCollapsed(false);
     setMainView(nextView);
     if (options?.recordHistory !== false) {
       pushNavigationEntry(buildNavigationEntry(nextView));
@@ -1157,6 +1168,10 @@ function App(): React.ReactElement {
       openSettingsView(nextEntry.settingsSection);
       return;
     }
+    if (nextEntry.view.kind === "image-studio") {
+      openImageStudio({ recordHistory: false });
+      return;
+    }
     if (nextEntry.view.kind === "roles-list" || nextEntry.view.kind === "role-create") {
       openRoleWorkspaceView(nextEntry.view);
       return;
@@ -1374,6 +1389,7 @@ function App(): React.ReactElement {
               onOpenSearch={() => setShowSearchDialog(true)}
               onToggleRoleEditor={() => openRoleWorkspace({ kind: "roles-list" })}
               onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
+              onOpenImageStudio={() => openImageStudio()}
               onOpenSettings={() => openSettingsWorkspace()}
               onBeginResize={beginSidebarResize}
             />
@@ -1408,6 +1424,12 @@ function App(): React.ReactElement {
               visibleIllustrationUrl={visibleIllustrationUrl}
               onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
               onUpdateDraft={setDraft}
+            />
+          ) : null}
+          {mainView.kind === "image-studio" ? (
+            <ImageStudioPage
+              activeRole={activeRole}
+              bridgeReady={bridgeReady}
             />
           ) : null}
           {mainView.kind === "roles-list" ? (

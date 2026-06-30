@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Any
+from typing import Any, cast
 
 from agent.looping.core import AgentLoop
 from bus.event_bus import EventBus
 from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
+from core.integrations.novelai import NovelAIClient, NovelAIService, NovelAIStore
+from core.integrations.novelai.models import GenerateImageRequest, NovelAISettings
+from core.net.http import get_default_http_requester
 from core.roles import RoleAggregateService, RoleStore
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from session.manager import Session, SessionManager
@@ -22,17 +25,23 @@ class DesktopBridgeService:
         agent_loop: AgentLoop,
         event_bus: EventBus,
         role_service: RoleAggregateService | None = None,
+        config: Any = None,
+        novelai_service: NovelAIService | None = None,
+        novelai_store: NovelAIStore | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
         self.session_manager = session_manager
         self.agent_loop = agent_loop
         self.event_bus = event_bus
+        self.config = config
         self.role_service = role_service or RoleAggregateService.from_runtime(
             workspace=workspace,
             role_store=role_store,
             session_manager=session_manager,
         )
+        self.novelai_store = novelai_store or NovelAIStore(workspace)
+        self.novelai_service = novelai_service or self._build_novelai_service()
 
     async def handle(
         self,
@@ -229,6 +238,60 @@ class DesktopBridgeService:
                         "session_key": result.session_key,
                     },
                 )
+            if method == "novelai.generate":
+                if self.novelai_service is None:
+                    return self._error(request_id, method, "invalid_request", "NovelAI 未配置")
+                role_id = str(payload.get("role_id") or "").strip()
+                session_key = str(payload.get("session_key") or "").strip()
+                if not session_key and role_id:
+                    session_key = self.role_service.sessions.derive_session_key(role_id)
+                result = await self.novelai_service.generate(
+                    GenerateImageRequest(
+                        prompt=str(payload.get("prompt") or ""),
+                        mode=str(payload.get("mode") or "txt2img"),  # type: ignore[arg-type]
+                        base_image_path=str(payload.get("base_image_path") or ""),
+                        negative_prompt=str(payload.get("negative_prompt") or ""),
+                        size_preset=str(payload.get("size_preset") or "square"),  # type: ignore[arg-type]
+                        custom_width=(
+                            int(payload["custom_width"])
+                            if payload.get("custom_width") is not None
+                            else None
+                        ),
+                        custom_height=(
+                            int(payload["custom_height"])
+                            if payload.get("custom_height") is not None
+                            else None
+                        ),
+                        steps=(
+                            int(payload["steps"])
+                            if payload.get("steps") is not None
+                            else None
+                        ),
+                        seed=(
+                            int(payload["seed"])
+                            if payload.get("seed") is not None
+                            else None
+                        ),
+                        sampler=str(payload.get("sampler") or "k_euler"),
+                        model=str(payload.get("model") or ""),
+                        role_id=role_id,
+                        session_key=session_key,
+                    )
+                )
+                return self._ok(
+                    request_id,
+                    method,
+                    {"result": result.to_public_payload()},
+                )
+            if method == "novelai.history":
+                limit = int(payload.get("limit") or 20)
+                role_id = str(payload.get("role_id") or "").strip()
+                records = self.novelai_store.list_records(limit=limit, role_id=role_id)
+                return self._ok(
+                    request_id,
+                    method,
+                    {"records": records},
+                )
         except KeyError as exc:
             return self._error(request_id, method, "role_not_found", str(exc))
         except ValueError as exc:
@@ -420,3 +483,21 @@ class DesktopBridgeService:
             if isinstance(rel, str) and rel
         ]
         return payload
+
+    def _build_novelai_service(self) -> NovelAIService | None:
+        if self.config is None:
+            return None
+        settings = cast(
+            NovelAISettings,
+            getattr(self.config, "novelai", NovelAISettings()),
+        )
+        return NovelAIService(
+            settings=settings,
+            client=NovelAIClient(
+                get_default_http_requester("external_default"),
+                settings,
+            ),
+            store=self.novelai_store,
+            role_store=self.role_store,
+            workspace=self.workspace,
+        )

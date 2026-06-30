@@ -84,6 +84,7 @@ export type RoleSearchResult = {
 /** Main content mode for the desktop shell. */
 export type AppMainView =
   | { kind: "chat" }
+  | { kind: "image-studio" }
   | { kind: "roles-list" }
   | { kind: "role-create" }
   | { kind: "role-detail"; roleId: string }

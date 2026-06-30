@@ -55,3 +55,31 @@ class NovelAIStore:
                 json.dumps(asdict(record), ensure_ascii=False, separators=(",", ":"))
                 + "\n"
             )
+
+    def list_records(
+        self,
+        *,
+        limit: int = 20,
+        role_id: str = "",
+    ) -> list[dict[str, Any]]:
+        """Load recent generation records from the local JSONL index."""
+
+        if limit <= 0 or not self._records_path.exists():
+            return []
+        clean_role_id = role_id.strip()
+        items: list[dict[str, Any]] = []
+        for line in self._records_path.read_text(encoding="utf-8").splitlines():
+            raw = line.strip()
+            if not raw:
+                continue
+            payload = json.loads(raw)
+            if not isinstance(payload, dict):
+                continue
+            if clean_role_id and str(payload.get("role_id") or "").strip() != clean_role_id:
+                continue
+            items.append(payload)
+        items.sort(
+            key=lambda item: str(item.get("created_at") or ""),
+            reverse=True,
+        )
+        return items[:limit]
