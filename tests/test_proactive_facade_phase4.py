@@ -140,3 +140,49 @@ def test_agent_tick_prompt_keeps_self_block_with_facade():
 
     assert "self_model" in content
     assert "SELF" in content
+
+
+def test_agent_tick_prompt_binds_role_metadata_for_memory_reads():
+    calls: list[dict[str, str] | None] = []
+
+    def _bind_session_metadata(metadata):
+        calls.append(metadata)
+
+    tick = ProactiveTurnPipeline(
+        ProactiveTurnPipelineDeps(
+            cfg=ProactiveConfig(),
+            session_key="role:mira",
+            state_store=MagicMock(),
+            any_action_gate=MagicMock(),
+            last_user_at_fn=lambda: None,
+            passive_busy_fn=None,
+            turn_orchestrator=None,
+            deduper=MagicMock(),
+            tool_deps=cast(Any, SimpleNamespace(
+                memory=SimpleNamespace(
+                    bind_session_metadata=_bind_session_metadata,
+                    read_long_term=lambda: "MEMORY",
+                    read_self=lambda: "SELF",
+                    read_recent_context=lambda: "RECENT",
+                ),
+                recent_chat_fn=None,
+            )),
+            gateway_deps=GatewayDeps(
+                alert_fn=MagicMock(),
+                feed_fn=MagicMock(),
+                context_fn=MagicMock(),
+            ),
+            workspace_context_fn=None,
+            llm_fn=None,
+            rng=None,
+            recent_proactive_fn=None,
+            drift_pipeline=None,
+        ),
+    )
+
+    _ = tick._build_runtime_context_message(
+        AgentTickContext(session_key="role:mira"),
+        GatewayResult(),
+    )
+
+    assert calls == [{"role_id": "mira"}]

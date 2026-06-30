@@ -1225,6 +1225,14 @@ class ProactiveTurnPipeline:
         recent_context_block = ""
         if self._tool_deps.memory is not None:
             profile_memory = cast(MemoryProfileApi, self._tool_deps.memory)
+            bind_session_metadata = getattr(profile_memory, "bind_session_metadata", None)
+            role_id = (
+                self._session_key.split(":", 1)[1]
+                if self._session_key.startswith("role:")
+                else ""
+            )
+            if callable(bind_session_metadata):
+                bind_session_metadata({"role_id": role_id} if role_id else None)
             try:
                 self_content = _read_self_text(profile_memory).strip()
             except Exception:

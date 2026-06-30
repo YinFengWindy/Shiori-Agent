@@ -311,7 +311,9 @@ function dmemRenderTopbarAction(container: HTMLElement, dispatch: PluginDispatch
     btn.addEventListener("click", () => {
       btn.disabled = true;
       btn.textContent = "正在启动优化";
-      api("/api/dashboard/memory/optimize", { method: "POST" }).then(() => {
+      const roleId = dispatch.filters["role_id"] ?? "";
+      const params = roleId ? `?role_id=${encodeURIComponent(roleId)}` : "";
+      api(`/api/dashboard/memory/optimize${params}`, { method: "POST" }).then(() => {
         btn.textContent = "记忆优化中";
         poll();
       }).catch(() => {

@@ -28,6 +28,7 @@ from proactive_v2.memory_optimizer import MemoryOptimizerBusy
 from proactive_v2.state import ProactiveStateStore
 from core.common.timekit import utcnow
 from core.memory.engine import MemoryAdminApi
+from core.memory.runtime import MemoryRuntime
 from session.store import SessionStore
 
 logger = logging.getLogger(__name__)
@@ -742,7 +743,7 @@ def create_dashboard_app(
     manual_consolidator: ManualConsolidator | None = None,
     manual_memory_optimizer: ManualMemoryOptimizer | None = None,
     memory_admin: MemoryAdminApi,
-    memory_store: MemoryStore | None = None,
+    memory_store: MemoryStore | MemoryRuntime | None = None,
 ) -> FastAPI:
     workspace.mkdir(parents=True, exist_ok=True)
     store = SessionStore(workspace / "sessions.db")
@@ -1423,7 +1424,7 @@ def run_dashboard_api(
     manual_consolidator: ManualConsolidator | None = None,
     manual_memory_optimizer: ManualMemoryOptimizer | None = None,
     memory_admin: MemoryAdminApi,
-    memory_store: MemoryStore | None = None,
+    memory_store: MemoryStore | MemoryRuntime | None = None,
 ) -> None:
     server = uvicorn.Server(
         _build_dashboard_uvicorn_config(
@@ -1447,7 +1448,7 @@ def _build_dashboard_uvicorn_config(
     manual_consolidator: ManualConsolidator | None,
     manual_memory_optimizer: ManualMemoryOptimizer | None = None,
     memory_admin: MemoryAdminApi,
-    memory_store: MemoryStore | None = None,
+    memory_store: MemoryStore | MemoryRuntime | None = None,
 ) -> uvicorn.Config:
     config = uvicorn.Config(
         create_dashboard_app(
@@ -1473,7 +1474,7 @@ def build_dashboard_server(
     manual_consolidator: ManualConsolidator | None = None,
     manual_memory_optimizer: ManualMemoryOptimizer | None = None,
     memory_admin: MemoryAdminApi,
-    memory_store: MemoryStore | None = None,
+    memory_store: MemoryStore | MemoryRuntime | None = None,
 ) -> uvicorn.Server:
     config = _build_dashboard_uvicorn_config(
         workspace=workspace,
