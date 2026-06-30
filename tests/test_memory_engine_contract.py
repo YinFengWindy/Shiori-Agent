@@ -500,6 +500,58 @@ async def test_default_memory_engine_refreshes_recent_context_from_lifecycle():
     await event_bus.aclose()
 
 
+async def test_default_memory_engine_refreshes_role_recent_context_in_role_memory(tmp_path: Path):
+    event_bus = EventBus()
+    session = SimpleNamespace(
+        key="role:mira",
+        metadata={"role_id": "mira"},
+        messages=[
+            {"role": "user", "content": "你好"},
+            {"role": "assistant", "content": "嗯。"},
+        ],
+        last_consolidated=0,
+    )
+    maintenance = MarkdownMemoryMaintenance(
+        store=MarkdownMemoryStore(tmp_path),
+        provider=cast(Any, SimpleNamespace()),
+        model="lm",
+        keep_count=20,
+        event_bus=event_bus,
+    )
+    save_session = AsyncMock()
+    maintenance.bind_lifecycle(
+        MemoryLifecycleBindRequest(
+            get_session=lambda _key: session,
+            save_session=save_session,
+        )
+    )
+
+    event_bus.enqueue(
+        TurnCommitted(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
+            input_message="你好",
+            persisted_user_message="你好",
+            assistant_response="嗯。",
+            tools_used=[],
+            role_id="mira",
+        )
+    )
+    await event_bus.drain()
+    await _drain_maintenance(maintenance)
+
+    role_recent_context_path = tmp_path / "roles" / "mira" / "memory" / "RECENT_CONTEXT.md"
+    global_recent_context_path = tmp_path / "memory" / "RECENT_CONTEXT.md"
+
+    assert role_recent_context_path.exists()
+    assert "你好" in role_recent_context_path.read_text(encoding="utf-8")
+    assert "嗯。" in role_recent_context_path.read_text(encoding="utf-8")
+    assert not global_recent_context_path.exists()
+    save_session.assert_not_awaited()
+    await event_bus.aclose()
+
+
 async def test_default_memory_engine_consolidates_ready_session_from_lifecycle():
     event_bus = EventBus()
     session = SimpleNamespace(

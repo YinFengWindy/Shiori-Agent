@@ -11,7 +11,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from agent.llm_json import load_json_object_loose
 from agent.memory import MemoryStore
@@ -997,6 +997,77 @@ class MarkdownMemoryStore(MemoryStore):
 class MarkdownMemoryRuntime:
     store: MarkdownMemoryStore
     maintenance: "MarkdownMemoryMaintenance"
+    workspace: Path
+
+    def resolve_store(
+        self,
+        *,
+        session_metadata: dict[str, Any] | None = None,
+        role_id: str | None = None,
+    ) -> MarkdownMemoryStore:
+        resolved_role_id = str(role_id or "").strip()
+        if not resolved_role_id and isinstance(session_metadata, dict):
+            resolved_role_id = str(session_metadata.get("role_id") or "").strip()
+        if not resolved_role_id:
+            return self.store
+        role_memory_workspace = self.workspace / "roles" / resolved_role_id
+        return MarkdownMemoryStore(role_memory_workspace)
+
+    def read_long_term(
+        self,
+        *,
+        session_metadata: dict[str, Any] | None = None,
+        role_id: str | None = None,
+    ) -> str:
+        return self.resolve_store(
+            session_metadata=session_metadata,
+            role_id=role_id,
+        ).read_long_term()
+
+    def read_self(
+        self,
+        *,
+        session_metadata: dict[str, Any] | None = None,
+        role_id: str | None = None,
+    ) -> str:
+        return self.resolve_store(
+            session_metadata=session_metadata,
+            role_id=role_id,
+        ).read_self()
+
+    def read_recent_context(
+        self,
+        *,
+        session_metadata: dict[str, Any] | None = None,
+        role_id: str | None = None,
+    ) -> str:
+        return self.resolve_store(
+            session_metadata=session_metadata,
+            role_id=role_id,
+        ).read_recent_context()
+
+    def read_recent_history(
+        self,
+        *,
+        max_chars: int = 0,
+        session_metadata: dict[str, Any] | None = None,
+        role_id: str | None = None,
+    ) -> str:
+        return self.resolve_store(
+            session_metadata=session_metadata,
+            role_id=role_id,
+        ).read_recent_history(max_chars=max_chars)
+
+    def get_memory_context(
+        self,
+        *,
+        session_metadata: dict[str, Any] | None = None,
+        role_id: str | None = None,
+    ) -> str:
+        return self.resolve_store(
+            session_metadata=session_metadata,
+            role_id=role_id,
+        ).get_memory_context()
 
 
 class MarkdownMemoryMaintenance:
@@ -1030,6 +1101,18 @@ class MarkdownMemoryMaintenance:
         self._maintenance_locks: dict[str, asyncio.Lock] = {}
         if event_bus is not None:
             event_bus.on(TurnCommitted, self.on_turn_committed)
+
+    def _resolve_store_for_session(self, session: object) -> MarkdownMemoryStore:
+        metadata = getattr(session, "metadata", {})
+        role_id = (
+            str(metadata.get("role_id") or "").strip()
+            if isinstance(metadata, dict)
+            else ""
+        )
+        if not role_id:
+            return self._store
+        workspace = self._store.memory_dir.parent
+        return MarkdownMemoryStore(workspace / "roles" / role_id)
 
     def bind_lifecycle(self, request: MemoryLifecycleBindRequest) -> None:
         self._get_session = request.get_session
@@ -1152,18 +1235,19 @@ class MarkdownMemoryMaintenance:
         session: object,
         draft: "_ConsolidationDraft",
     ) -> None:
+        target_store = self._resolve_store_for_session(session)
         role_id = str(getattr(session, "metadata", {}).get("role_id") or "").strip()
         history_entries = [entry for entry, _ in draft.history_entry_payloads]
         if history_entries:
             await asyncio.to_thread(
-                self._store.append_history_once,
+                target_store.append_history_once,
                 "\n".join(history_entries),
                 source_ref=draft.source_ref,
                 kind="history_entry",
             )
         if draft.pending_items:
             appended = await asyncio.to_thread(
-                self._store.append_pending_once,
+                target_store.append_pending_once,
                 draft.pending_items,
                 source_ref=draft.source_ref,
                 kind="pending_items",
@@ -1173,11 +1257,11 @@ class MarkdownMemoryMaintenance:
                     "Markdown memory: appended %d pending_items",
                     len(draft.pending_items.splitlines()),
                 )
-        self._store.write_recent_context(draft.recent_context_text)
+        target_store.write_recent_context(draft.recent_context_text)
         if history_entries:
             await asyncio.to_thread(
                 _append_entries_to_journal,
-                self._store,
+                target_store,
                 history_entries,
                 draft.source_ref,
             )
@@ -1201,7 +1285,10 @@ class MarkdownMemoryMaintenance:
         self,
         request: RefreshRecentTurnsRequest,
     ) -> None:
-        await self._worker.refresh_recent_turns(session=request.session)
+        await self._worker.refresh_recent_turns(
+            session=request.session,
+            profile_maint=self._resolve_store_for_session(request.session),
+        )
 
 
 def build_markdown_memory_runtime(
@@ -1224,4 +1311,8 @@ def build_markdown_memory_runtime(
         recent_context_provider=recent_context_provider,
         recent_context_model=recent_context_model,
     )
-    return MarkdownMemoryRuntime(store=store, maintenance=maintenance)
+    return MarkdownMemoryRuntime(
+        store=store,
+        maintenance=maintenance,
+        workspace=workspace,
+    )

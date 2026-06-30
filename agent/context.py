@@ -293,6 +293,9 @@ class ContextBuilder:
         system_sections_bottom: list[PromptSectionRender] | None = None,
         session_metadata: dict[str, Any] | None = None,
     ) -> ContextRenderResult:
+        bind_session_metadata = getattr(self.memory, "bind_session_metadata", None)
+        if callable(bind_session_metadata):
+            bind_session_metadata(session_metadata)
         merged_top = list(system_sections_top or [])
         role_cache_prefix = build_role_cache_prefix_section(
             workspace=self.workspace,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 from dataclasses import dataclass, field
+from typing import Any
 from typing import TYPE_CHECKING, Protocol, cast
 
 if TYPE_CHECKING:
@@ -31,24 +32,36 @@ class MemoryRuntime:
     markdown: "MarkdownMemoryRuntime"
     engine: "MemoryEngine"
     closeables: list[object] = field(default_factory=list[object])
+    _session_metadata: dict[str, Any] | None = None
 
     def read_long_term(self) -> str:
-        return self.markdown.store.read_long_term()
+        return self.markdown.read_long_term(session_metadata=self._session_metadata)
 
     def read_self(self) -> str:
-        return self.markdown.store.read_self()
+        return self.markdown.read_self(session_metadata=self._session_metadata)
 
     def read_recent_context(self) -> str:
-        return self.markdown.store.read_recent_context()
+        return self.markdown.read_recent_context(session_metadata=self._session_metadata)
 
     def read_recent_history(self, *, max_chars: int = 0) -> str:
-        return self.markdown.store.read_recent_history(max_chars=max_chars)
+        return self.markdown.read_recent_history(
+            max_chars=max_chars,
+            session_metadata=self._session_metadata,
+        )
 
     def get_memory_context(self) -> str:
-        return self.markdown.store.get_memory_context()
+        return self.markdown.get_memory_context(session_metadata=self._session_metadata)
 
     def has_long_term_memory(self) -> bool:
         return bool(self.read_long_term().strip())
+
+    def bind_session_metadata(
+        self,
+        session_metadata: dict[str, Any] | None,
+    ) -> None:
+        self._session_metadata = (
+            dict(session_metadata) if isinstance(session_metadata, dict) else None
+        )
 
     async def query(
         self,
