@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from agent.config import load_config
+
+
+def test_load_config_reads_novelai_settings(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+[llm]
+provider = "openai"
+
+[llm.main]
+model = "gpt-4.1"
+api_key = "sk-test"
+base_url = "https://api.openai.com/v1"
+
+[integrations.novelai]
+enabled = true
+token = "novel-token"
+base_url = "https://image.novelai.net"
+default_model = "nai-diffusion-4-5-full"
+allow_txt2img = true
+allow_img2img = false
+auto_writeback_role_assets = true
+max_pixels = 524288
+max_steps = 20
+default_samples = 1
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.novelai.enabled is True
+    assert config.novelai.token == "novel-token"
+    assert config.novelai.base_url == "https://image.novelai.net"
+    assert config.novelai.default_model == "nai-diffusion-4-5-full"
+    assert config.novelai.allow_txt2img is True
+    assert config.novelai.allow_img2img is False
+    assert config.novelai.auto_writeback_role_assets is True
+    assert config.novelai.max_pixels == 524288
+    assert config.novelai.max_steps == 20

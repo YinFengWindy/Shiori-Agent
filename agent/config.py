@@ -21,6 +21,7 @@ from agent.config_models import (
     FitbitIntegrationConfig,
     MemoryConfig,
     MemoryEmbeddingConfig,
+    NovelAISettings,
     PeerAgentConfig,
     QQChannelConfig,
     QQGroupConfig,
@@ -90,6 +91,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     memory = _load_memory_config(data)
     peer_agents = _load_peer_agents_config(data)
     fitbit = _load_fitbit_config(data)
+    novelai = _load_novelai_config(data)
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
 
@@ -160,6 +162,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
         vl_api_key=_resolve(str(llm_vl.get("api_key") or data.get("vl_api_key", ""))),
         vl_base_url=str(llm_vl.get("base_url") or data.get("vl_base_url", "")),
         peer_agents=peer_agents,
+        novelai=novelai,
         wiring=wiring,
         plugins=plugins,
     )
@@ -285,6 +288,29 @@ def _load_fitbit_config(data: dict) -> FitbitIntegrationConfig:
     fitbit = _as_dict(integrations.get("fitbit"))
     return FitbitIntegrationConfig(
         enabled=bool(fitbit.get("enabled", False)),
+    )
+
+
+def _load_novelai_config(data: dict) -> NovelAISettings:
+    integrations = _as_dict(data.get("integrations"))
+    raw = _as_dict(integrations.get("novelai"))
+    defaults = NovelAISettings()
+    return NovelAISettings(
+        enabled=bool(raw.get("enabled", defaults.enabled)),
+        token=_resolve(str(raw.get("token", defaults.token))),
+        base_url=str(raw.get("base_url") or defaults.base_url),
+        default_model=str(raw.get("default_model") or defaults.default_model),
+        allow_txt2img=bool(raw.get("allow_txt2img", defaults.allow_txt2img)),
+        allow_img2img=bool(raw.get("allow_img2img", defaults.allow_img2img)),
+        auto_writeback_role_assets=bool(
+            raw.get(
+                "auto_writeback_role_assets",
+                defaults.auto_writeback_role_assets,
+            )
+        ),
+        max_pixels=int(raw.get("max_pixels", defaults.max_pixels)),
+        max_steps=int(raw.get("max_steps", defaults.max_steps)),
+        default_samples=int(raw.get("default_samples", defaults.default_samples)),
     )
 
 

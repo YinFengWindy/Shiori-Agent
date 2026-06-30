@@ -208,6 +208,7 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
     { id: "drift", label: "Drift" },
   ],
   integrations: [
+    { id: "novelai", label: "NovelAI" },
     { id: "fitbit", label: "Fitbit" },
     { id: "peer-agents", label: "Peer Agents" },
   ],
@@ -769,6 +770,40 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
         }
       case "integrations":
         switch (currentSubsectionId) {
+          case "novelai":
+            return (
+              <SectionCard>
+                <Field label="NovelAI / 生图">
+                  <div className="grid gap-3">
+                    <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
+                      <input type="checkbox" checked={draft.integrations.novelaiEnabled} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiEnabled: event.target.checked } }))} />
+                      <span>integrations.novelai.enabled</span>
+                    </label>
+                    <SecretInput value={draft.integrations.novelaiToken} onChange={(value) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiToken: value } }))} />
+                    <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiBaseUrl: event.target.value } }))} placeholder="Base URL" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiDefaultModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiDefaultModel: event.target.value } }))} placeholder="默认模型" />
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
+                        <input type="checkbox" checked={draft.integrations.novelaiAllowTxt2img} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowTxt2img: event.target.checked } }))} />
+                        <span>允许文生图</span>
+                      </label>
+                      <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
+                        <input type="checkbox" checked={draft.integrations.novelaiAllowImg2img} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowImg2img: event.target.checked } }))} />
+                        <span>允许图生图</span>
+                      </label>
+                      <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3 md:col-span-2">
+                        <input type="checkbox" checked={draft.integrations.novelaiAutoWritebackRoleAssets} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAutoWritebackRoleAssets: event.target.checked } }))} />
+                        <span>生成后自动写回角色素材</span>
+                      </label>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <input className={cx(inputClass, "bg-white")} value={String(draft.integrations.novelaiMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiMaxSteps: parseNumber(event.target.value, current.integrations.novelaiMaxSteps) } }))} placeholder="最大步数" />
+                      <input className={cx(inputClass, "bg-white")} value={String(draft.integrations.novelaiMaxPixels)} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiMaxPixels: parseNumber(event.target.value, current.integrations.novelaiMaxPixels) } }))} placeholder="最大总像素" />
+                    </div>
+                  </div>
+                </Field>
+              </SectionCard>
+            );
           case "fitbit":
             return (
               <SectionCard>

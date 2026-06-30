@@ -155,6 +155,18 @@ min_interval_hours = 3
 [integrations.fitbit]
 enabled = false
 
+[integrations.novelai]
+enabled = false
+token = "${NOVELAI_TOKEN}"
+base_url = "https://image.novelai.net"
+default_model = "nai-diffusion-4-5-full"
+allow_txt2img = true
+allow_img2img = true
+auto_writeback_role_assets = false
+max_pixels = 1048576
+max_steps = 28
+default_samples = 1
+
 # 可选：接入外部 Peer Agent（如 DeepResearch）
 # [[integrations.peer_agents]]
 # name = "DeepResearch Agent"

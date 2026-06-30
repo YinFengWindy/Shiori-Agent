@@ -95,6 +95,15 @@ export type SettingsFormData = {
   };
   integrations: {
     fitbitEnabled: boolean;
+    novelaiEnabled: boolean;
+    novelaiToken: string;
+    novelaiBaseUrl: string;
+    novelaiDefaultModel: string;
+    novelaiAllowTxt2img: boolean;
+    novelaiAllowImg2img: boolean;
+    novelaiAutoWritebackRoleAssets: boolean;
+    novelaiMaxSteps: number;
+    novelaiMaxPixels: number;
     peerAgents: SettingsPeerAgent[];
   };
   advanced: {
@@ -276,6 +285,7 @@ function loadSettingsData(): SettingsSnapshot {
   const proactiveDrift = asRecord(proactive.drift);
   const integrations = asRecord(parsed.integrations);
   const fitbit = asRecord(integrations.fitbit);
+  const novelai = asRecord(integrations.novelai);
   const agent = asRecord(parsed.agent);
   const agentContext = asRecord(agent.context);
   const agentTools = asRecord(agent.tools);
@@ -367,6 +377,15 @@ function loadSettingsData(): SettingsSnapshot {
       },
       integrations: {
         fitbitEnabled: Boolean(fitbit.enabled),
+        novelaiEnabled: Boolean(novelai.enabled),
+        novelaiToken: String(novelai.token ?? ""),
+        novelaiBaseUrl: String(novelai.base_url ?? "https://image.novelai.net"),
+        novelaiDefaultModel: String(novelai.default_model ?? "nai-diffusion-4-5-full"),
+        novelaiAllowTxt2img: Boolean(novelai.allow_txt2img ?? true),
+        novelaiAllowImg2img: Boolean(novelai.allow_img2img ?? true),
+        novelaiAutoWritebackRoleAssets: Boolean(novelai.auto_writeback_role_assets),
+        novelaiMaxSteps: Number(novelai.max_steps ?? 28),
+        novelaiMaxPixels: Number(novelai.max_pixels ?? 1048576),
         peerAgents: asArray(integrations.peer_agents, (item) => {
           const peer = asRecord(item);
           return {
@@ -577,6 +596,18 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "[integrations.fitbit]",
     `enabled = ${formData.integrations.fitbitEnabled ? "true" : "false"}`,
     "",
+    "[integrations.novelai]",
+    `enabled = ${formData.integrations.novelaiEnabled ? "true" : "false"}`,
+    `token = ${quote(formData.integrations.novelaiToken)}`,
+    `base_url = ${quote(formData.integrations.novelaiBaseUrl.trim() || "https://image.novelai.net")}`,
+    `default_model = ${quote(formData.integrations.novelaiDefaultModel.trim() || "nai-diffusion-4-5-full")}`,
+    `allow_txt2img = ${formData.integrations.novelaiAllowTxt2img ? "true" : "false"}`,
+    `allow_img2img = ${formData.integrations.novelaiAllowImg2img ? "true" : "false"}`,
+    `auto_writeback_role_assets = ${formData.integrations.novelaiAutoWritebackRoleAssets ? "true" : "false"}`,
+    `max_pixels = ${formData.integrations.novelaiMaxPixels}`,
+    `max_steps = ${formData.integrations.novelaiMaxSteps}`,
+    `default_samples = 1`,
+    "",
     peerAgentBlocks,
     formData.advanced.pluginsRawToml.trim(),
     "",
@@ -605,6 +636,12 @@ function validateSettings(formData: SettingsFormData): void {
   }
   if (formData.advanced.maxIterations < 0) {
     throw new Error("max_iterations 不能小于 0");
+  }
+  if (formData.integrations.novelaiMaxSteps <= 0) {
+    throw new Error("NovelAI 最大步数必须大于 0");
+  }
+  if (formData.integrations.novelaiMaxPixels <= 0) {
+    throw new Error("NovelAI 最大总像素必须大于 0");
   }
   if (formData.memory.outputDimensionality.trim()) {
     const value = Number(formData.memory.outputDimensionality);

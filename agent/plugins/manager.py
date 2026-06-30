@@ -55,6 +55,7 @@ class PluginManager:
         workspace: Path | None = None,
         session_manager: Any = None,
         memory_engine: Any = None,
+        app_config: Any = None,
         plugin_configs: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self._dirs = plugin_dirs
@@ -63,6 +64,7 @@ class PluginManager:
         self._workspace = workspace
         self._session_manager = session_manager
         self._memory_engine = memory_engine
+        self._app_config = app_config
         self._plugin_configs = plugin_configs or {}
         self._loaded: set[str] = set()
         self._channels: list[Channel] = []
@@ -204,6 +206,7 @@ class PluginManager:
             plugin_dir=plugin_dir,
             kv_store=PluginKVStore(plugin_dir / ".kv.json"),
             config=plugin_config,
+            app_config=self._app_config,
             workspace=self._workspace,
             session_manager=self._session_manager,
             memory_engine=self._memory_engine,

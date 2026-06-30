@@ -117,6 +117,15 @@ export type SettingsFormData = {
   };
   integrations: {
     fitbitEnabled: boolean;
+    novelaiEnabled: boolean;
+    novelaiToken: string;
+    novelaiBaseUrl: string;
+    novelaiDefaultModel: string;
+    novelaiAllowTxt2img: boolean;
+    novelaiAllowImg2img: boolean;
+    novelaiAutoWritebackRoleAssets: boolean;
+    novelaiMaxSteps: number;
+    novelaiMaxPixels: number;
     peerAgents: SettingsPeerAgent[];
   };
   advanced: {

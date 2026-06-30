@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.integrations.novelai.models import NovelAISettings
 from proactive_v2.config import ProactiveConfig
 
 
@@ -122,6 +123,7 @@ class Config:
     spawn_enabled: bool = True
     dev_mode: bool = False
     peer_agents: list[PeerAgentConfig] = field(default_factory=list)
+    novelai: NovelAISettings = field(default_factory=NovelAISettings)
     wiring: WiringConfig = field(default_factory=WiringConfig)
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
 
@@ -138,6 +140,7 @@ __all__ = [
     "FitbitIntegrationConfig",
     "MemoryConfig",
     "MemoryEmbeddingConfig",
+    "NovelAISettings",
     "PeerAgentConfig",
     "QQChannelConfig",
     "QQBotGroupConfig",
