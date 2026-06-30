@@ -1,3 +1,4 @@
+import { toFileUrl } from "../shared/format";
 import { bodyTextClass, cardClass, cx, ghostButtonClass, inputClass, panelTitleClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
 import { RoleDangerZone, RoleDetailFormPanel } from "./RoleDetailPanels";
@@ -60,7 +61,7 @@ export function RoleDetailPage({
             <div className="grid content-start gap-3">
               <div className="relative h-[116px] w-[116px] overflow-hidden rounded-[28px] border border-[#D9E0E8] bg-[radial-gradient(circle_at_top_left,#F8FBFF_0%,#EDF2F8_52%,#E3EAF2_100%)] shadow-[0_14px_32px_rgba(15,23,42,0.08)]" data-testid="role-avatar-card">
                 {previewAvatar ? (
-                  <img className="h-full w-full object-cover" src={previewAvatar} alt={`${activeRole?.name || "角色"} avatar`} />
+                  <img className="h-full w-full object-cover" src={toFileUrl(previewAvatar)} alt={`${activeRole?.name || "角色"} avatar`} />
                 ) : (
                   <div className="grid h-full w-full place-items-center text-[34px] font-semibold text-[#8a3211]">
                     {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "R"}
