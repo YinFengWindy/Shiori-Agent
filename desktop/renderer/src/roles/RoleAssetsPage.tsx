@@ -31,6 +31,11 @@ export function RoleAssetsPage({
   onSelectFeaturedImage,
   onSaveSelections,
 }: RoleAssetsPageProps) {
+  const backIcon = (
+    <svg viewBox="0 0 1024 1024" className="h-5 w-5 fill-[#111111]" aria-hidden="true">
+      <path d="M631.04 161.941333a42.666667 42.666667 0 0 1 63.061333 57.386667l-2.474666 2.730667-289.962667 292.245333 289.706667 287.402667a42.666667 42.666667 0 0 1 2.730666 57.6l-2.474666 2.752a42.666667 42.666667 0 0 1-57.6 2.709333l-2.752-2.474667-320-317.44a42.666667 42.666667 0 0 1-2.709334-57.6l2.474667-2.752 320-322.56z" />
+    </svg>
+  );
   const assetPairs = (activeRole?.illustrations ?? []).map((relPath, index) => ({
     relPath,
     absPath: activeRole?.illustrations_abs[index] ?? "",
@@ -39,18 +44,19 @@ export function RoleAssetsPage({
 
   return (
     <section
-      className="role-assets-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(248,249,252,0.98)_100%)]"
+      className="role-assets-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-white"
       data-testid="role-assets-page"
     >
       <div className="mx-auto flex min-h-full w-full max-w-[1280px] flex-col gap-5 px-8 pb-10 pt-10">
         <div className={cx(cardClass, "grid min-h-[680px] grid-cols-[320px_minmax(0,1fr)] overflow-hidden border-[#D9E0E8] bg-white/92 shadow-[0_18px_48px_rgba(31,41,55,0.08)]")}>
           <div className="border-r border-[#E4EAF0] bg-[#FBFCFE] p-5">
             <button
-              className={cx("ghost-btn mb-4 px-3 py-2 text-sm", ghostButtonClass)}
+              className="mb-4 grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition hover:bg-[#F7F9FC]"
               type="button"
               onClick={onBackToDetail}
+              aria-label="返回角色详情"
             >
-              返回角色详情
+              {backIcon}
             </button>
             <div className={panelTitleClass}>素材库</div>
             <div className="mt-2 text-sm text-[#7A8593]">左侧上传与选择素材，右侧查看效果并决定用途。</div>

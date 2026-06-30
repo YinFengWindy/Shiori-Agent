@@ -40,10 +40,15 @@ export function RoleDetailPage({
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState(false);
+  const backIcon = (
+    <svg viewBox="0 0 1024 1024" className="h-5 w-5 fill-[#111111]" aria-hidden="true">
+      <path d="M631.04 161.941333a42.666667 42.666667 0 0 1 63.061333 57.386667l-2.474666 2.730667-289.962667 292.245333 289.706667 287.402667a42.666667 42.666667 0 0 1 2.730666 57.6l-2.474666 2.752a42.666667 42.666667 0 0 1-57.6 2.709333l-2.752-2.474667-320-317.44a42.666667 42.666667 0 0 1-2.709334-57.6l2.474667-2.752 320-322.56z" />
+    </svg>
+  );
 
   return (
     <section
-      className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-[#EEF2F7]"
+      className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-white"
       data-testid="role-detail-page"
     >
       {featuredImageUrl ? (
@@ -55,16 +60,17 @@ export function RoleDetailPage({
       ) : (
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#F8FBFF_0%,#EDF2F8_52%,#E3EAF2_100%)]" data-testid="role-illustration-hero" />
       )}
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(245,247,250,0.08)_0%,rgba(245,247,250,0.12)_18%,rgba(15,23,42,0.42)_100%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0.08)_18%,rgba(15,23,42,0.38)_100%)]" />
       <div className="relative mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-8 pb-8 pt-8">
         <div className="flex items-start">
           <button
             data-testid="role-detail-back-button"
-            className={cx("ghost-btn px-3 py-2 text-sm", ghostButtonClass, "border-white/25 bg-white/14 text-white backdrop-blur-[6px] hover:bg-white/22")}
+            className="grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition hover:bg-white"
             type="button"
             onClick={onBackToList}
+            aria-label="返回角色列表"
           >
-            返回角色列表
+            {backIcon}
           </button>
         </div>
         <div className="p-2" data-testid="role-detail-info-card">
