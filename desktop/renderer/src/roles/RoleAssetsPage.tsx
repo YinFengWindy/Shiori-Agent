@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { toFileUrl } from "../shared/format";
 import { SaveIcon, UploadIcon } from "../shared/icons";
-import { cx, ghostButtonClass, primaryButtonClass } from "../shared/styles";
+import { cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 
 type RoleAssetsPageProps = {
@@ -42,17 +43,28 @@ export function RoleAssetsPage({
     absPath: activeRole?.illustrations_abs[index] ?? "",
   }));
   const selectedAsset = assetPairs.find((item) => item.relPath === selectedAssetPath) ?? assetPairs[0] ?? null;
+  const [selectionMode, setSelectionMode] = useState<"avatar" | "featured">("featured");
+
+  async function applyAsset(relPath: string): Promise<void> {
+    onSelectAsset(relPath);
+    if (selectionMode === "avatar") {
+      onSelectAvatarAsset(relPath);
+    } else {
+      onSelectFeaturedImage(relPath);
+    }
+    onSaveSelections();
+  }
 
   return (
     <section
       className="role-assets-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-white"
       data-testid="role-assets-page"
     >
-      <div className="mx-auto flex min-h-full w-full max-w-[1280px] flex-col gap-5 px-8 pb-10 pt-10">
+      <div className="mx-auto flex min-h-full w-full max-w-[1280px] flex-col gap-5 px-8 pb-10 pt-8">
         <div className="grid min-h-[680px] grid-cols-[320px_minmax(0,1fr)] overflow-hidden rounded-[18px] bg-white/92 shadow-[0_18px_48px_rgba(31,41,55,0.08)]">
           <div className="bg-[#FBFCFE] p-5">
             <button
-              className="mb-4 grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)]"
+              className="mb-3 grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)]"
               type="button"
               onClick={onBackToDetail}
               aria-label="返回角色详情"
@@ -61,13 +73,13 @@ export function RoleAssetsPage({
             </button>
             <button
               data-testid="pick-role-assets-button"
-              className={cx("primary-btn mt-2 flex w-full items-center justify-center gap-2 text-sm", primaryButtonClass)}
+              className="grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white text-[#272536] shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)] disabled:cursor-default disabled:border-black/6 disabled:bg-white/60 disabled:text-[#b8b8b8] disabled:shadow-none"
               type="button"
               disabled={!bridgeReady}
               onClick={onPickAssets}
+              aria-label="上传素材"
             >
-              <UploadIcon className="h-4 w-4 fill-current" />
-              上传素材
+              <UploadIcon className="h-[18px] w-[18px] fill-current" />
             </button>
             <div className="mt-6 grid content-start gap-3">
               {assetPairs.length ? assetPairs.map(({ relPath, absPath }, index) => {
@@ -81,10 +93,9 @@ export function RoleAssetsPage({
                       isSelected ? "border-[#272536] bg-[#F4F5F8] shadow-[0_8px_24px_rgba(39,37,54,0.12)]" : "border-[#D8DFE7] bg-white hover:border-[#9AA3B2]",
                     )}
                     type="button"
-                    onClick={() => onSelectAsset(relPath)}
+                    onClick={() => void applyAsset(relPath)}
                   >
                     <img className="h-[132px] w-full rounded-[16px] object-cover" src={toFileUrl(absPath)} alt="role asset" />
-                    <div className="truncate text-xs text-[#5D6876]">{relPath}</div>
                   </button>
                 );
               }) : (
@@ -96,42 +107,31 @@ export function RoleAssetsPage({
           </div>
           <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-white p-6">
             <div className="flex items-start justify-between gap-4">
-              <div className="ml-auto flex gap-2">
+              <div className="inline-flex rounded-full border border-[#D8DFE7] bg-[#F6F8FB] p-1">
                 <button
-                  data-testid="select-avatar-action"
+                  data-testid="selection-mode-avatar"
                   className={cx(
-                    "ghost-btn px-3 py-2 text-sm",
-                    selectedAsset && selectedAvatarAsset === selectedAsset.relPath ? primaryButtonClass : ghostButtonClass,
+                    "rounded-full px-4 py-2 text-sm transition",
+                    selectionMode === "avatar" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
                   )}
                   type="button"
-                  disabled={!bridgeReady || !selectedAsset}
-                  onClick={() => selectedAsset && onSelectAvatarAsset(selectedAsset.relPath)}
+                  onClick={() => setSelectionMode("avatar")}
                 >
-                  {selectedAsset && selectedAvatarAsset === selectedAsset.relPath ? "当前头像" : "设为头像"}
+                  头像
                 </button>
                 <button
-                  data-testid="select-featured-action"
+                  data-testid="selection-mode-featured"
                   className={cx(
-                    "ghost-btn px-3 py-2 text-sm",
-                    selectedAsset && selectedFeaturedImage === selectedAsset.relPath ? primaryButtonClass : ghostButtonClass,
+                    "rounded-full px-4 py-2 text-sm transition",
+                    selectionMode === "featured" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
                   )}
                   type="button"
-                  disabled={!bridgeReady || !selectedAsset}
-                  onClick={() => selectedAsset && onSelectFeaturedImage(selectedAsset.relPath)}
+                  onClick={() => setSelectionMode("featured")}
                 >
-                  {selectedAsset && selectedFeaturedImage === selectedAsset.relPath ? "当前立绘" : "设为顶栏立绘"}
-                </button>
-                <button
-                  data-testid="save-role-assets-button"
-                  className={cx("primary-btn flex items-center gap-2 text-sm", primaryButtonClass)}
-                  type="button"
-                  disabled={!bridgeReady || savingSelection || !selectedAsset}
-                  onClick={onSaveSelections}
-                >
-                  <SaveIcon className="h-4 w-4 fill-current" />
-                  {savingSelection ? "保存中..." : "应用选择"}
+                  立绘
                 </button>
               </div>
+              {savingSelection ? <div className="flex items-center gap-2 text-sm text-[#5B6472]"><SaveIcon className="h-4 w-4 fill-current" />保存中...</div> : null}
             </div>
             <div className="mt-6 grid min-h-0 gap-5 lg:grid-cols-[minmax(0,1.2fr)_320px]">
               <div className="rounded-[24px] border border-[#E4EAF0] bg-[#FAFBFD] p-5">
