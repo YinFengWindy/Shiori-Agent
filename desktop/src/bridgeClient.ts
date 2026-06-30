@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,50 @@ export class DesktopBridgeClient extends EventEmitter {
   private stopRequested = false;
   private lastError: string | null = null;
   private startPromise: Promise<void> | null = null;
+
+  private cleanupStaleBridgeProcesses(): void {
+    if (process.platform !== "win32") {
+      return;
+    }
+    const result = spawnSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-Command",
+        `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.ParentProcessId -eq ${process.pid} -and $_.CommandLine -like '*main.py bridge*' } | Select-Object -ExpandProperty ProcessId`,
+      ],
+      {
+        encoding: "utf-8",
+      },
+    );
+    if (result.status !== 0 || !result.stdout.trim()) {
+      return;
+    }
+    for (const rawPid of result.stdout.split(/\r?\n/)) {
+      const pid = Number(rawPid.trim());
+      if (!Number.isFinite(pid) || pid <= 0) {
+        continue;
+      }
+      this.killProcessTree(pid);
+    }
+  }
+
+  private killProcessTree(pid: number): void {
+    if (!Number.isFinite(pid) || pid <= 0) {
+      return;
+    }
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+        stdio: "ignore",
+      });
+      return;
+    }
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Ignore cleanup failures for already-exited processes.
+    }
+  }
 
   private resolvePendingWithExit(message: string): void {
     for (const [, resolvePending] of this.pending) {
@@ -45,6 +89,7 @@ export class DesktopBridgeClient extends EventEmitter {
     if (this.child) {
       return this.startPromise ?? Promise.resolve();
     }
+    this.cleanupStaleBridgeProcesses();
     this.stopRequested = false;
     this.stderrChunks = [];
     this.lastError = null;
@@ -83,7 +128,10 @@ export class DesktopBridgeClient extends EventEmitter {
           this.stderrChunks.push(message);
           this.resolvePendingWithExit(message);
           this.emit("exit", message);
-          this.child?.kill();
+          const pid = this.child?.pid;
+          if (pid) {
+            this.killProcessTree(pid);
+          }
           return;
         }
         if (parsed.type === "event") {
@@ -143,7 +191,10 @@ export class DesktopBridgeClient extends EventEmitter {
     const message = "bridge stopped";
     this.lastError = message;
     this.resolvePendingWithExit(message);
-    this.child?.kill();
+    const pid = this.child?.pid;
+    if (pid) {
+      this.killProcessTree(pid);
+    }
     this.child = null;
     this.startPromise = null;
   }
