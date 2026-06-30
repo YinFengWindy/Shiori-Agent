@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { DeleteIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 
 type ConfirmDialogProps = {
@@ -59,10 +58,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-label={title}
       >
-        <div className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[rgba(143,43,24,0.08)] text-[#8f2b18]">
-          <DeleteIcon className="h-[18px] w-[18px] fill-current" />
-        </div>
-        <div className="mt-4 text-[20px] font-semibold text-[#202020]">{title}</div>
+        <div className="text-[20px] font-semibold text-[#202020]">{title}</div>
         <div className="mt-2 text-sm leading-6 text-[#5E5E5E]">{description}</div>
         <div className="mt-6 flex justify-end gap-3">
           <button
