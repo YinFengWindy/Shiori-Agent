@@ -52,7 +52,7 @@ export function RoleDetailPage({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#F8FBFF_0%,#EDF2F8_52%,#E3EAF2_100%)]" data-testid="role-illustration-hero" />
       )}
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(245,247,250,0.22)_0%,rgba(245,247,250,0.38)_22%,rgba(15,23,42,0.46)_100%)]" />
-      <div className="relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col gap-5 px-8 pb-10 pt-8">
+      <div className="relative mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-8 pb-8 pt-8">
         <div className="flex items-start">
           <button
             data-testid="role-detail-back-button"
@@ -63,7 +63,7 @@ export function RoleDetailPage({
             返回角色列表
           </button>
         </div>
-        <div className="mt-auto rounded-[28px] border border-white/16 bg-[rgba(255,255,255,0.12)] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.24)] backdrop-blur-[14px]" data-testid="role-detail-info-card">
+        <div className="rounded-[28px] border border-white/16 bg-[rgba(255,255,255,0.12)] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.24)] backdrop-blur-[14px]" data-testid="role-detail-info-card">
           <div className="grid gap-5 md:grid-cols-[116px_minmax(0,1fr)]">
             <button
               type="button"
