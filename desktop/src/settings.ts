@@ -14,6 +14,12 @@ type SettingsQQBotGroup = {
   allowProactive: boolean;
 };
 
+type SettingsChannelRoleBinding = {
+  channel: string;
+  chatId: string;
+  roleId: string;
+};
+
 type SettingsPeerAgent = {
   name: string;
   baseUrl: string;
@@ -32,10 +38,14 @@ export type SettingsFormData = {
     mainApiKey: string;
     mainBaseUrl: string;
     enableThinking: boolean;
+    reasoningEffort: string;
     multimodal: boolean;
     fastModel: string;
     fastApiKey: string;
     fastBaseUrl: string;
+    agentModel: string;
+    agentApiKey: string;
+    agentBaseUrl: string;
     vlModel: string;
     vlApiKey: string;
     vlBaseUrl: string;
@@ -52,8 +62,13 @@ export type SettingsFormData = {
     qqbotClientSecret: string;
     qqbotAllowFrom: string[];
     qqbotGroups: SettingsQQBotGroup[];
+    feishuAppId: string;
+    feishuAppSecret: string;
+    feishuAllowFrom: string[];
+    feishuDomain: string;
     cliSocket: string;
     cliSessionKey: string;
+    roleBindings: SettingsChannelRoleBinding[];
   };
   memory: {
     enabled: boolean;
@@ -68,6 +83,7 @@ export type SettingsFormData = {
     profile: string;
     targetChannel: string;
     targetChatId: string;
+    targetRoleId: string;
     agentMaxSteps: number;
     agentContentLimit: number;
     agentWebFetchMaxChars: number;
@@ -101,6 +117,10 @@ export type SettingsFormData = {
 export type SettingsSnapshot = {
   configPath: string;
   formData: SettingsFormData;
+};
+
+export type SettingsBindingsSnapshot = {
+  bindings: SettingsChannelRoleBinding[];
 };
 
 type SaveSettingsResult = {
@@ -242,6 +262,7 @@ function loadSettingsData(): SettingsSnapshot {
   const llm = asRecord(parsed.llm);
   const llmMain = asRecord(llm.main);
   const llmFast = asRecord(llm.fast);
+  const llmAgent = asRecord(llm.agent);
   const llmVl = asRecord(llm.vl);
   const channels = asRecord(parsed.channels);
   const telegram = asRecord(channels.telegram);
@@ -262,6 +283,7 @@ function loadSettingsData(): SettingsSnapshot {
   const agentWiring = asRecord(agent.wiring);
   const plugins = asRecord(parsed.plugins);
   const qqbot = pickPreferredRecord(asRecord(plugins.qqbot), qqbotLegacy);
+  const feishu = asRecord(plugins.feishu);
   const cli = asRecord(channels.cli);
 
   return {
@@ -273,10 +295,14 @@ function loadSettingsData(): SettingsSnapshot {
         mainApiKey: String(llmMain.api_key ?? ""),
         mainBaseUrl: String(llmMain.base_url ?? ""),
         enableThinking: Boolean(llmMain.enable_thinking),
+        reasoningEffort: String(llmMain.reasoning_effort ?? ""),
         multimodal: Boolean(llmMain.multimodal),
         fastModel: String(llmFast.model ?? ""),
         fastApiKey: String(llmFast.api_key ?? ""),
         fastBaseUrl: String(llmFast.base_url ?? ""),
+        agentModel: String(llmAgent.model ?? ""),
+        agentApiKey: String(llmAgent.api_key ?? ""),
+        agentBaseUrl: String(llmAgent.base_url ?? ""),
         vlModel: String(llmVl.model ?? ""),
         vlApiKey: String(llmVl.api_key ?? ""),
         vlBaseUrl: String(llmVl.base_url ?? ""),
@@ -308,8 +334,13 @@ function loadSettingsData(): SettingsSnapshot {
             allowProactive: Boolean(group.allow_proactive),
           };
         }),
+        feishuAppId: String(feishu.app_id ?? ""),
+        feishuAppSecret: String(feishu.app_secret ?? ""),
+        feishuAllowFrom: splitList(feishu.allow_from as string[] | undefined),
+        feishuDomain: String(feishu.domain ?? "https://open.feishu.cn"),
         cliSocket: String(cli.socket ?? ""),
         cliSessionKey: String(cli.session_key ?? ""),
+        roleBindings: [],
       },
       memory: {
         enabled: Boolean(memory.enabled),
@@ -324,6 +355,7 @@ function loadSettingsData(): SettingsSnapshot {
         profile: String(proactive.profile ?? ""),
         targetChannel: String(proactiveTarget.channel ?? ""),
         targetChatId: String(proactiveTarget.chat_id ?? ""),
+        targetRoleId: String(proactiveTarget.role_id ?? proactive.default_role_id ?? ""),
         agentMaxSteps: Number(proactiveAgent.max_steps ?? 35),
         agentContentLimit: Number(proactiveAgent.content_limit ?? 5),
         agentWebFetchMaxChars: Number(proactiveAgent.web_fetch_max_chars ?? 8000),
@@ -364,7 +396,7 @@ function loadSettingsData(): SettingsSnapshot {
         wiringToolsets: asArray(agentWiring.toolsets, (item) => String(item ?? "")),
         pluginsRawToml: renderPluginBlocks(
           Object.entries(plugins)
-            .filter(([name]) => name !== "qqbot")
+            .filter(([name]) => name !== "qqbot" && name !== "feishu")
             .map(([name, value]) => renderPluginSection(name, asRecord(value)))
             .join("\n"),
         ).trimEnd(),
@@ -408,7 +440,7 @@ function renderSettingsToml(formData: SettingsFormData): string {
   const qqbotGroupBlocks = formData.channels.qqbotGroups
     .filter((group) => group.groupOpenid.trim())
     .map((group) => [
-      "[[channels.qqbot.groups]]",
+      "[[plugins.qqbot.groups]]",
       `group_openid = ${quote(group.groupOpenid.trim())}`,
       `allow_from = ${renderStringArray(group.allowFrom)}`,
       `require_at = ${group.requireAt ? "true" : "false"}`,
@@ -444,12 +476,18 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `api_key = ${quote(formData.models.mainApiKey)}`,
     `base_url = ${quote(formData.models.mainBaseUrl)}`,
     `enable_thinking = ${formData.models.enableThinking ? "true" : "false"}`,
+    formData.models.reasoningEffort.trim() ? `reasoning_effort = ${quote(formData.models.reasoningEffort.trim())}` : "",
     `multimodal = ${formData.models.multimodal ? "true" : "false"}`,
     "",
     "[llm.fast]",
     `model = ${quote(formData.models.fastModel)}`,
     `api_key = ${quote(formData.models.fastApiKey)}`,
     `base_url = ${quote(formData.models.fastBaseUrl)}`,
+    "",
+    "[llm.agent]",
+    `model = ${quote(formData.models.agentModel)}`,
+    `api_key = ${quote(formData.models.agentApiKey)}`,
+    `base_url = ${quote(formData.models.agentBaseUrl)}`,
     "",
     "[llm.vl]",
     `model = ${quote(formData.models.vlModel)}`,
@@ -493,12 +531,18 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `socket = ${quote(formData.channels.cliSocket)}`,
     `session_key = ${quote(formData.channels.cliSessionKey)}`,
     "",
-    "[channels.qqbot]",
+    "[plugins.qqbot]",
     `app_id = ${quote(formData.channels.qqbotAppId)}`,
     `client_secret = ${quote(formData.channels.qqbotClientSecret)}`,
     `allow_from = ${renderStringArray(formData.channels.qqbotAllowFrom)}`,
     "",
     qqbotGroupBlocks,
+    "[plugins.feishu]",
+    `app_id = ${quote(formData.channels.feishuAppId)}`,
+    `app_secret = ${quote(formData.channels.feishuAppSecret)}`,
+    `allow_from = ${renderStringArray(formData.channels.feishuAllowFrom)}`,
+    `domain = ${quote(formData.channels.feishuDomain.trim() || "https://open.feishu.cn")}`,
+    "",
     "[memory]",
     `enabled = ${formData.memory.enabled ? "true" : "false"}`,
     `engine = ${quote(formData.memory.engine)}`,
@@ -516,6 +560,7 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "[proactive.target]",
     `channel = ${quote(formData.proactive.targetChannel)}`,
     `chat_id = ${quote(formData.proactive.targetChatId)}`,
+    `role_id = ${quote(formData.proactive.targetRoleId)}`,
     "",
     "[proactive.agent]",
     `max_steps = ${formData.proactive.agentMaxSteps}`,
@@ -569,6 +614,16 @@ function validateSettings(formData: SettingsFormData): void {
   }
 }
 
+function sanitizeChannelRoleBindings(bindings: SettingsChannelRoleBinding[]): SettingsChannelRoleBinding[] {
+  return bindings
+    .map((binding) => ({
+      channel: String(binding.channel ?? "").trim(),
+      chatId: String(binding.chatId ?? "").trim(),
+      roleId: String(binding.roleId ?? "").trim(),
+    }))
+    .filter((binding) => binding.channel && binding.chatId && binding.roleId);
+}
+
 export async function saveSettings(
   formData: SettingsFormData,
   restartBridge: BridgeRestarter,
@@ -585,6 +640,12 @@ export async function saveSettings(
     ok: restart.ok && health.ok,
     restart,
     health,
+  };
+}
+
+export function loadChannelRoleBindings(bindings: SettingsChannelRoleBinding[]): SettingsBindingsSnapshot {
+  return {
+    bindings: sanitizeChannelRoleBindings(bindings),
   };
 }
 

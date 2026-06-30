@@ -1339,7 +1339,6 @@ function App(): React.ReactElement {
               activeSection={settingsSection}
               animating={sidebarAnimating && !resizingSidebar}
               collapsed={sidebarCollapsed}
-              configPath={settingsConfigPath}
               dirty={settingsDirty}
               width={sidebarWidth}
               onBackToChat={() => openChatView()}

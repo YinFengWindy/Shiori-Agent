@@ -36,6 +36,12 @@ export type SettingsQQBotGroup = {
   allowProactive: boolean;
 };
 
+export type SettingsChannelRoleBinding = {
+  channel: string;
+  chatId: string;
+  roleId: string;
+};
+
 export type SettingsPeerAgent = {
   name: string;
   baseUrl: string;
@@ -54,10 +60,14 @@ export type SettingsFormData = {
     mainApiKey: string;
     mainBaseUrl: string;
     enableThinking: boolean;
+    reasoningEffort: string;
     multimodal: boolean;
     fastModel: string;
     fastApiKey: string;
     fastBaseUrl: string;
+    agentModel: string;
+    agentApiKey: string;
+    agentBaseUrl: string;
     vlModel: string;
     vlApiKey: string;
     vlBaseUrl: string;
@@ -74,8 +84,13 @@ export type SettingsFormData = {
     qqbotClientSecret: string;
     qqbotAllowFrom: string[];
     qqbotGroups: SettingsQQBotGroup[];
+    feishuAppId: string;
+    feishuAppSecret: string;
+    feishuAllowFrom: string[];
+    feishuDomain: string;
     cliSocket: string;
     cliSessionKey: string;
+    roleBindings: SettingsChannelRoleBinding[];
   };
   memory: {
     enabled: boolean;
@@ -90,6 +105,7 @@ export type SettingsFormData = {
     profile: string;
     targetChannel: string;
     targetChatId: string;
+    targetRoleId: string;
     agentMaxSteps: number;
     agentContentLimit: number;
     agentWebFetchMaxChars: number;
@@ -125,6 +141,10 @@ export type SettingsSnapshot = {
   formData: SettingsFormData;
 };
 
+export type SettingsBindingsSnapshot = {
+  bindings: SettingsChannelRoleBinding[];
+};
+
 export type SaveSettingsResult = {
   ok: boolean;
   restart: {
@@ -152,6 +172,8 @@ export type DesktopApi = {
   restartBridge(): Promise<{ ok: boolean; running: boolean; lastError: string | null }>;
   readSettings(): Promise<SettingsSnapshot>;
   saveSettings(formData: SettingsFormData): Promise<SaveSettingsResult>;
+  readChannelRoleBindings(): Promise<SettingsBindingsSnapshot>;
+  saveChannelRoleBindings(bindings: SettingsChannelRoleBinding[]): Promise<SettingsBindingsSnapshot>;
   /** Controls the custom frameless Electron window chrome. */
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */

@@ -20,7 +20,6 @@ export const settingsSections: Array<{ id: SettingsSectionId; label: string }> =
 
 type SettingsSidebarProps = {
   activeSection: SettingsSectionId;
-  configPath: string;
   dirty: boolean;
   collapsed: boolean;
   animating: boolean;
@@ -39,7 +38,6 @@ function sectionMatches(section: { id: SettingsSectionId; label: string }, query
 
 export function SettingsSidebar({
   activeSection,
-  configPath,
   dirty,
   collapsed,
   animating,
@@ -98,10 +96,6 @@ export function SettingsSidebar({
           ))}
         </div>
       </nav>
-      <div className="mt-3 border-t border-[#DFE3E8] px-2 pt-3 text-[12px] leading-5 text-[#7A7F86]">
-        <div>配置文件</div>
-        <div className="mt-1 break-all text-[#5E646B]">{configPath}</div>
-      </div>
       <div
         className={cx(
           "sidebar-resize-handle absolute bottom-0 right-0 top-0 cursor-col-resize bg-transparent",

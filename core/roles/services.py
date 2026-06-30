@@ -417,6 +417,45 @@ class RoleBindingService:
             if isinstance(item, dict)
         ]
 
+    def replace_bindings(
+        self,
+        bindings: list[RoleChannelBinding | dict[str, Any]],
+    ) -> list[RoleChannelBinding]:
+        with self._lock:
+            payload = self._load_payload()
+            existing_bindings = {
+                key: value
+                for key, value in payload["bindings"].items()
+                if isinstance(value, dict)
+            }
+            next_bindings: dict[str, dict[str, str]] = {}
+            now = _now_iso()
+            for item in bindings:
+                binding = (
+                    item
+                    if isinstance(item, RoleChannelBinding)
+                    else RoleChannelBinding.from_dict(item)
+                )
+                role = self._repository.get_required(binding.role_id)
+                key = _binding_key(binding.channel, binding.chat_id)
+                existing = existing_bindings.get(key)
+                created_at = (
+                    str(existing.get("created_at"))
+                    if isinstance(existing, dict) and existing.get("created_at")
+                    else now
+                )
+                next_binding = RoleChannelBinding(
+                    channel=binding.channel.strip(),
+                    chat_id=binding.chat_id.strip(),
+                    role_id=role.id,
+                    created_at=created_at,
+                    updated_at=now,
+                )
+                next_bindings[key] = next_binding.to_dict()
+            payload["bindings"] = next_bindings
+            self._save_payload(payload)
+        return self.list_bindings()
+
     def _load_payload(self) -> dict[str, Any]:
         payload = load_json(
             self._path,

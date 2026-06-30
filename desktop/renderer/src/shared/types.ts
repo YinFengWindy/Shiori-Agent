@@ -1,5 +1,7 @@
 import type {
+  SettingsBindingsSnapshot,
   SettingsChannelGroup,
+  SettingsChannelRoleBinding,
   SettingsFormData,
   SettingsPeerAgent,
   SettingsQQBotGroup,
@@ -87,7 +89,9 @@ export type AppMainView =
   | { kind: "settings" };
 
 export type {
+  SettingsBindingsSnapshot,
   SettingsChannelGroup,
+  SettingsChannelRoleBinding,
   SettingsFormData,
   SettingsPeerAgent,
   SettingsQQBotGroup,
