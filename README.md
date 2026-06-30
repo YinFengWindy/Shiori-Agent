@@ -1,97 +1,219 @@
 [![欢迎加入交流群](https://img.shields.io/badge/QQ%E4%BA%A4%E6%B5%81%E7%BE%A4-%E6%AC%A2%E8%BF%8E%E5%8A%A0%E5%85%A5-2ea44f?style=for-the-badge)](./COMMUNICATION.md)
 
-# akashic Agent
+# Mira-Agent
 
-一个**会主动找你**的 AI 伙伴——不只是被动回答问题，还能根据你订阅的信息源主动判断"现在该不该发消息、发什么"，在空闲时自主执行后台任务。
+Mira-Agent 是一个基于 Akashic Agent 基座演进出来的角色扮演 Agent 助手。当前仓库的主形态已经是 **Windows 桌面端 + Python Agent Runtime**：你可以创建和维护多个角色，让不同角色承接聊天、记忆、主动推送、图片生成和外部渠道绑定。
+
+---
+
+## 当前形态
+
+- **桌面端优先**：Electron 桌面端是当前推荐入口，内置角色管理、聊天、设置、渠道绑定和基础 smoke 验证链路。
+- **角色驱动**：角色有独立名称、简介、系统提示词、头像、立绘和角色记忆空间。
+- **多渠道接入**：当前配置面已经覆盖 Telegram、QQ、QQBot、Feishu、CLI。
+- **主动能力保留**：支持 proactive 推送、Drift 空闲任务和外部 MCP / peer agent 接入。
+- **Akashic 基座仍在**：Phase、插件、记忆系统、工具编排和旧渠道兼容路径仍然保留。
+
+如果你第一次接触这个仓库，建议直接把它理解成：**一个以角色为核心、桌面端优先的本地 Agent 应用**。
 
 ---
 
 ## Quickstart
 
-需要 Python 3.12。
+需要：
+
+- Python `3.12+`
+- Node.js `20+`
+- npm
+
+先安装 Python 依赖：
 
 ```bash
 git clone <this-repo>
-cd akashic-agent
-uv venv && uv pip install -r requirements.txt
+cd Mira-Agent
+uv venv
+uv pip install -r requirements.txt
 ```
 
-没有 uv？先 `pip install uv`。
-
-**1. 初始化**
+没有 `uv` 的话先执行：
 
 ```bash
-uv run python main.py setup    # 交互向导（推荐）
-uv run python main.py init     # 非交互，CI/自动化用
+pip install uv
 ```
 
-**2. 填写 config.toml**
+再安装前端与桌面端依赖：
 
-推荐配置：DeepSeek 主模型 + Qwen 轻量/视觉/向量：
+```bash
+npm install
+npm --prefix desktop install
+```
+
+### 1. 初始化配置与工作区
+
+推荐先跑交互式初始化：
+
+```bash
+uv run python main.py setup
+```
+
+如果你只想生成默认文件，不走交互向导：
+
+```bash
+uv run python main.py init
+```
+
+初始化后，默认会准备这些内容：
+
+- `config.toml`
+- `~/.akashic/workspace/memory/*`
+- `~/.akashic/workspace/roles/roles.json`
+- `~/.akashic/workspace/roles/assets`
+- `~/.akashic/workspace/proactive_sources.json`
+- `~/.akashic/workspace/mcp_servers.json`
+
+### 2. 填写 `config.toml`
+
+`config.example.toml` 已经是当前仓库的最新模板。默认推荐组合仍然是：
+
+- `llm.main` 使用 DeepSeek 主模型
+- `llm.fast` 使用轻量模型做改写 / gate / HyDE
+- `llm.vl` 单独承接视觉
+- `memory.embedding` 提供向量检索
+
+一个最小可用示例：
 
 ```toml
 [llm]
 provider = "deepseek"
 
 [llm.main]
-model = "deepseek-v4-flash"     # 主模型：推理强、速度快、价格低
+model = "deepseek-v4-flash"
 api_key = "sk-..."
 base_url = "https://api.deepseek.com/v1"
-enable_thinking = true          # 开启 reasoning
-multimodal = false              # DeepSeek 不支持图片，用 VL 工具补
+enable_thinking = true
+multimodal = false
 
 [llm.fast]
-model = "qwen-flash"            # 轻量模型：memory gate / query rewrite / HyDE
+model = "qwen-flash"
 api_key = "sk-..."
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 [llm.vl]
-model = "qwen-vl-plus"          # 视觉：主模型 multimodal=false 时自动启用
+model = "qwen-vl-plus"
 api_key = "sk-..."
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 [memory]
 enabled = true
-engine = ""                     # 记忆引擎，留空 = default_memory 插件
+engine = ""
 
 [memory.embedding]
-model = "text-embedding-v3"     # 向量模型
+model = "text-embedding-v3"
 api_key = "sk-..."
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 [channels.telegram]
-token = "123456:ABC..."
+token = ""
 allow_from = ["your_username"]
 ```
 
-**个人推荐**：
-这个项目和 deepseekv4flash 以及 qwen 相性比较好，其他模型不保证效果。特别是一些连 xml 输出都做不好的国产模型。
-通信渠道推荐 telegram，提供了丰富好看的流式输出。
+补充说明：
 
-**3. 启动**
+- 至少配置一个可用渠道后，被动消息链路才有实际入口。
+- `plugins.qqbot`、`plugins.feishu`、`integrations.peer_agents`、`integrations.novelai` 都已经进入当前配置模型。
+- 如果你主要体验桌面端，本地聊天与角色编辑本身不依赖 Telegram，但模型配置仍然是必需的。
 
-```bash
-uv run python main.py
-```
+### 3. 启动桌面端
 
-如果你要体验当前推荐的产品形态，优先启动桌面端：
+开发态：
 
 ```bash
-npm run start
 npm run dev
 ```
 
-其中 `npm run dev` 会拉起桌面端开发态；桌面端会在内部自动启动所需的后端桥接进程。
-
-如果你要继续使用旧的消息渠道/兼容路径，再运行：
+生产构建后启动：
 
 ```bash
-uv run python main.py
+npm run build
+npm run start
 ```
 
-### Windows Desktop (MVP)
+其中：
 
-当前仓库已经包含一个 Windows 桌面 MVP 原型，桌面端通过 Electron 宿主拉起本地 Python bridge，再和现有 Agent 核心通信。
+- `npm run dev` 会先构建桌面主进程与 preload，再启动 Electron 开发态
+- 桌面端会自动拉起 `python main.py bridge`
+- `npm run start` 实际对应 `npm run desktop:start`
+
+如果你只想单独启动桌面桥接层：
+
+```bash
+uv run python main.py bridge
+```
+
+---
+
+## 主要能力
+
+### 角色工作流
+
+- 创建、编辑、删除角色
+- 为角色维护系统提示词、头像、立绘和描述
+- 为不同聊天渠道绑定默认角色
+- 让角色拥有各自隔离的记忆目录
+
+### 桌面端设置面
+
+当前桌面设置页已经覆盖：
+
+- 模型配置：`main` / `fast` / `vl`
+- 渠道配置：Telegram、QQ、QQBot、Feishu、CLI
+- Memory 与 Embedding 配置
+- Proactive 与 Drift 配置
+- NovelAI、Fitbit、Peer Agents 集成配置
+- 原始插件 / wiring / TOML 片段编辑能力
+
+### Agent Runtime
+
+- 被动回复链路
+- 长短期记忆注入与 consolidation
+- proactive 主动推送
+- drift 空闲任务执行
+- 插件扩展与工具拦截
+- 外部 peer agent 接入
+
+---
+
+## 运行入口
+
+```bash
+uv run python main.py               # 启动主 runtime
+uv run python main.py cli           # 连接运行中的 agent（TUI/CLI）
+uv run python main.py setup         # 交互式初始化
+uv run python main.py init          # 生成默认配置与工作区
+uv run python main.py bridge        # 启动桌面端 bridge
+uv run python main.py --help        # 查看全部命令
+```
+
+兼容入口说明：
+
+- `uv run python main.py desktop` 仍可用，但已经进入兼容维护模式
+- `uv run python main.py dashboard` 也仍保留，但默认不再作为推荐产品入口
+
+---
+
+## 桌面端验证
+
+桌面端相关常用命令：
+
+```bash
+npm run desktop:typecheck
+npm run desktop:smoke
+npm run desktop:smoke:all
+npm run desktop:smoke:ui
+npm run desktop:smoke:restart
+```
+
+如果你想直接看更底层的桌面脚本，也可以使用：
 
 ```bash
 npm --prefix desktop run typecheck
@@ -101,109 +223,81 @@ npm --prefix desktop run smoke:bridge
 npm --prefix desktop run smoke:host
 npm --prefix desktop run smoke:desktop
 npm --prefix desktop run smoke:desktop-ui
+npm --prefix desktop run smoke:restart
 ```
 
-其中 smoke 分层大致是：
-- `smoke:bridge`：直接验证 Python bridge 的角色/会话生命周期
-- `smoke:host`：验证桌面宿主到 bridge 的 RPC 主链
-- `smoke:desktop`：验证 renderer -> preload -> host -> bridge 的真实调用链
-- `smoke:desktop-ui`：验证 UI 层的最小角色创建与会话切换交互
+几个 smoke 的含义：
 
-如果需要额外验证 bridge 的自愈能力，可以再跑：
+- `smoke:bridge`：验证 Python bridge 的角色 / 会话生命周期
+- `smoke:host`：验证 Electron host 到 bridge 的 RPC 主链
+- `smoke:desktop`：验证 renderer -> preload -> host -> bridge 的完整调用链
+- `smoke:desktop-ui`：验证 UI 层角色创建、切换、编辑与素材选择
+- `smoke:restart`：验证 bridge 重启后的恢复路径
+
+---
+
+## 测试
+
+默认只跑与你当轮修改范围直接相关的测试即可。
+
+常用命令：
 
 ```bash
-npm run desktop:smoke:restart
+pytest tests/
+npm run desktop:typecheck
+npm run desktop:smoke
 ```
 
-这条 smoke 会更慢一些，因为它会显式验证一次 `bridge restart -> health` 的恢复路径。
-
-如果要直接启动桌面端：
-
-```bash
-npm run desktop:start
-```
-
-如果你是第一次看这个仓库，而目标是体验当前产品形态，**优先从桌面端开始**。`dashboard` 和旧消息渠道入口目前仍保留兼容能力，但它们不再是推荐的主路径。
-
-如果你只想启动桌面端后端桥接层（不拉起 Electron 窗口），可以运行：
-
-```bash
-uv run python main.py bridge
-```
-
-`uv run python main.py desktop` 目前仍保留兼容别名，但推荐优先使用上面的两个明确入口。
+如果你需要更大范围验证，再按需补充回归。
 
 ---
 
 ## 系统全景
 
+```text
+桌面端 / 消息渠道
+        ↓
+   Agent Runtime
+        ├── 角色系统
+        ├── 记忆系统
+        ├── 工具与插件系统
+        ├── Proactive 主动推送
+        └── Drift 空闲任务
 ```
-你的消息 → [被动回复] ──→ agent loop ──→ 回复
-                │
-                ├── 记忆系统 ─── 每轮注入长期记忆 + 对话后 consolidation
-                │
-                └── 插件系统 ─── 拦截命令、注入协议、阻断工具、挂载新工具...
 
-[主动推送] ──→ 定期轮询 ──→ 三路数据 (alert/content/context) ──→ LLM 决策 ──→ 推送或跳过
-                │
-                └── [Drift] ──→ 没东西推时执行后台任务 (SKILL.md)
-```
+保留的 Akashic 核心能力包括：
+
+- 多 Phase 生命周期
+- 插件注册与工具拦截
+- 语义记忆与 markdown 记忆共存
+- 主动轮询与后台任务
+
+---
+
+## 相关文档
 
 | 想看什么 | 文档 |
 |---------|------|
-| 怎么让 agent 主动推送消息、怎么配数据源 | [_handbook/proactive-guide.md](./_handbook/proactive-guide.md) |
-| 怎么写后台任务让 agent 空闲时自动干活 | [_handbook/drift-guide.md](./_handbook/drift-guide.md) |
-| MEMORY.md / SELF.md / consolidation / 记忆怎么流转 | [_handbook/memory-markdown.md](./_handbook/memory-markdown.md) |
-| 怎么写插件介入生命周期、注册工具 | [_handbook/plugins-tutorial.md](./_handbook/plugins-tutorial.md) |
+| 主动推送与数据源配置 | [_handbook/proactive-guide.md](./_handbook/proactive-guide.md) |
+| Drift 空闲任务 | [_handbook/drift-guide.md](./_handbook/drift-guide.md) |
+| 记忆文件与流转机制 | [_handbook/memory-markdown.md](./_handbook/memory-markdown.md) |
+| 插件生命周期与工具注册 | [_handbook/plugins-tutorial.md](./_handbook/plugins-tutorial.md) |
 
 ---
-
-## 被动回复
-
-收到消息 → 记忆检索 → 工具调用 → 流式回复。每轮经过 6 个 Phase（BeforeTurn → BeforeReasoning → PromptRender → Reasoner → AfterReasoning → AfterTurn）。
-
-插件有 **4 种介入方式**：PhaseModule 链（7 个 Phase 方法 + slot 依赖声明）、EventBus 装饰器（9 种事件）、`@on_tool_pre`（工具拦截）、`@tool`（注册工具）。见 [插件系统](./_handbook/plugins-tutorial.md)。
-
-## 主动推送（Proactive）
-
-Agent 根据电量模型自适应调整轮询频率——你刚聊完时不烦你（8 分钟一次），半天没动静就加速到 1 分钟一次。每轮拉取三路 MCP 数据：
-
-- **alert** — 高优先级告警，直接透传
-- **content** — 内容流，逐条 LLM 评分分类
-- **context** — 背景上下文，概率注入做 fallback
-
-见 [Proactive 配置指南](./_handbook/proactive-guide.md)。
-
-## 记忆系统
-
-对话通过 **consolidation** 自动提取为结构化事实：HISTORY.md（时间线事件） + PENDING.md（待归档缓冲） + RECENT_CONTEXT.md（近期上下文摘要）。**Optimizer** 定时将 PENDING 归档到 MEMORY.md——中间隔一层是为了保护 prompt cache（MEMORY.md 全文注入 system prompt，高频修改会破坏缓存）。同时 `memory2.db`（向量层）提供语义检索。
-
-见 [记忆系统](./_handbook/memory-markdown.md)。
-
-## Drift 空闲任务
-
-没内容可推时 agent 不空转——执行你写的 `SKILL.md`（分步操作指南），比如审计长期记忆是否准确、补用户画像、自我诊断。
-
-见 [Drift 指南](./_handbook/drift-guide.md)。
-
----
-
-## 其他命令
-
-```bash
-uv run python main.py cli       # 连接运行中的 agent（TUI）
-uv run python main.py bridge    # 启动桌面端 bridge（Electron 宿主会自动拉起）
-uv run python main.py --help    # 查看全部子命令
-
-pytest tests/
-akashic_RUN_SCENARIOS=1 pytest -c pytest-scenarios.ini tests_scenarios/
-npm run desktop:typecheck
-npm run desktop:smoke
-npm run desktop:smoke:all
-npm run desktop:smoke:ui
-npm run desktop:smoke:restart
-```
 
 ## 工作区
 
-所有运行时数据在 `~/.akashic/workspace/`。
+默认运行时工作区位于：
+
+```text
+~/.akashic/workspace/
+```
+
+其中常见内容包括：
+
+- `memory/`：长期记忆与近期上下文
+- `roles/`：角色定义、素材与角色记忆
+- `sessions.db`：会话存储
+- `proactive_sources.json`：主动推送数据源
+- `mcp_servers.json`：MCP 服务定义
+
