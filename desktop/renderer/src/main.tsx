@@ -1014,7 +1014,7 @@ function App(): React.ReactElement {
       return;
     }
     const updated = res.payload.role as RoleRecord;
-    const nextRoles = await loadRolesFromBridge();
+    await loadRolesFromBridge();
     setSelectedRoleAsset(updated.featured_image ?? updated.avatar ?? updated.illustrations[0] ?? "");
     setSelectedAvatarAsset(updated.avatar ?? "");
     setSelectedFeaturedImage(updated.featured_image ?? updated.illustrations[0] ?? "");
@@ -1022,7 +1022,7 @@ function App(): React.ReactElement {
     updateRoleForm({
       ...pendingRoleForm,
     });
-    openRoleWorkspace({ kind: "role-detail", roleId: updated.id }, { recordHistory: false });
+    openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
   }
 
   async function deleteRole(roleIdOverride?: string): Promise<void> {
