@@ -403,6 +403,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           <div className="grid gap-3">
             {bindings.length ? bindings.map(({ binding, index }) => (
               <ChannelRoleBindingEditor
+                channel={channel}
                 key={`${binding.channel}-${binding.chatId}-${index}`}
                 binding={binding}
                 roles={roles}
@@ -1034,17 +1035,19 @@ function QQBotGroupEditor({
 }
 
 function ChannelRoleBindingEditor({
+  channel,
   binding,
   roles,
   onChange,
   onRemove,
 }: {
+  channel: SettingsChannelRoleBinding["channel"];
   binding: SettingsChannelRoleBinding;
   roles: RoleRecord[];
   onChange: (next: SettingsChannelRoleBinding) => void;
   onRemove: () => void;
 }) {
-  const chatIdMeta = getBindingChatIdMeta(binding.channel);
+  const chatIdMeta = getBindingChatIdMeta(channel);
 
   return (
     <div className="grid gap-3 rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] p-4">
@@ -1052,21 +1055,12 @@ function ChannelRoleBindingEditor({
         <div className="text-sm font-medium text-[#20242A]">渠道角色绑定</div>
         <button className="text-sm text-[#A14D32]" type="button" onClick={onRemove}>删除</button>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        <select className={cx(inputClass, "bg-white")} value={binding.channel} onChange={(event) => onChange({ ...binding, channel: event.target.value })}>
-          <option value="telegram">telegram</option>
-          <option value="qq">qq</option>
-          <option value="qqbot">qqbot</option>
-          <option value="feishu">feishu</option>
-          <option value="cli">cli</option>
-        </select>
-        <input className={cx(inputClass, "bg-white")} value={binding.chatId} onChange={(event) => onChange({ ...binding, chatId: event.target.value })} placeholder={chatIdMeta.placeholder} />
-      </div>
+      <input className={cx(inputClass, "bg-white")} value={binding.chatId} onChange={(event) => onChange({ ...binding, channel, chatId: event.target.value })} placeholder={chatIdMeta.placeholder} />
       <div className="grid gap-1">
         <div className="text-xs font-medium text-[#4A4F57]">{chatIdMeta.label}</div>
         <div className="text-[12px] leading-5 text-[#7B7F87]">{chatIdMeta.hint}</div>
       </div>
-      <select className={cx(inputClass, "bg-white")} value={binding.roleId} onChange={(event) => onChange({ ...binding, roleId: event.target.value })}>
+      <select className={cx(inputClass, "bg-white")} value={binding.roleId} onChange={(event) => onChange({ ...binding, channel, roleId: event.target.value })}>
         <option value="">选择角色</option>
         {roles.map((role) => (
           <option key={role.id} value={role.id}>{role.name}</option>
