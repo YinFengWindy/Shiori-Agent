@@ -1286,6 +1286,11 @@ function App(): React.ReactElement {
     setNotice("角色表单已重置。");
   }
 
+  function resetNewRoleForm(): void {
+    updateNewRoleForm(createEmptyNewRoleForm());
+    setWorkspaceFeedback({ tone: "success", message: "新建角色表单已重置。" });
+  }
+
   return (
     <div className="app-frame grid h-screen grid-rows-app overflow-hidden bg-[var(--app-bg)]">
       <TitleBar
@@ -1413,6 +1418,7 @@ function App(): React.ReactElement {
               form={newRoleForm}
               onBackToList={() => openRoleWorkspace({ kind: "roles-list" })}
               onCreateRole={() => void createRole()}
+              onResetForm={resetNewRoleForm}
               onUpdateForm={updateNewRoleForm}
             />
           ) : null}
