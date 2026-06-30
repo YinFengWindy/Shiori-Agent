@@ -7,6 +7,7 @@ type RoleManagementPageProps = {
   bridgeReady: boolean;
   roles: RoleRecord[];
   onOpenRoleDetail: (roleId: string) => void;
+  onDeleteRole: (roleId: string) => void;
 };
 
 /** Renders the first-level role management screen with the full role list. */
@@ -15,6 +16,7 @@ export function RoleManagementPage({
   bridgeReady,
   roles,
   onOpenRoleDetail,
+  onDeleteRole,
 }: RoleManagementPageProps) {
   return (
     <section
@@ -48,6 +50,18 @@ export function RoleManagementPage({
                   ) : (
                     <div className="absolute inset-0 bg-[linear-gradient(180deg,#F6F8FB_0%,#E8EEF5_100%)]" />
                   )}
+                  <button
+                    data-testid={`delete-role-card-${role.id}`}
+                    className="absolute right-4 top-4 z-[2] grid h-9 w-9 place-items-center rounded-full border border-white/24 bg-[rgba(15,23,42,0.62)] text-lg text-white opacity-0 transition duration-200 hover:bg-[rgba(143,43,24,0.88)] group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white/30"
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDeleteRole(role.id);
+                    }}
+                    aria-label={`删除角色 ${role.name}`}
+                  >
+                    ×
+                  </button>
                   <div className="relative z-[1] flex h-full flex-col justify-between p-5">
                     <div className="flex items-start gap-3">
                       {role.avatar_abs ? (

@@ -998,22 +998,24 @@ function App(): React.ReactElement {
     openRoleWorkspace({ kind: "role-detail", roleId: updated.id }, { recordHistory: false });
   }
 
-  async function deleteRole(): Promise<void> {
-    if (!activeRoleId) return;
-    const deletingRoleId = activeRoleId;
+  async function deleteRole(roleIdOverride?: string): Promise<void> {
+    const roleId = roleIdOverride || activeRoleId;
+    if (!roleId) return;
     setError("");
     const res = await window.miraDesktop.invoke({
       method: "roles.delete",
-      payload: { role_id: activeRoleId },
+      payload: { role_id: roleId },
     });
     if (res.error) {
       setError(res.error.message);
       return;
     }
     const nextRoles = (await loadRolesFromBridge()) ?? [];
-    setActiveRoleId("");
-    setActiveSession(null);
-    setActiveIllustration("");
+    if (!roleIdOverride || roleId === activeRoleId) {
+      setActiveRoleId("");
+      setActiveSession(null);
+      setActiveIllustration("");
+    }
     setNotice("角色已删除。");
     if (nextRoles[0]) {
       await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
@@ -1353,6 +1355,7 @@ function App(): React.ReactElement {
               bridgeReady={bridgeReady}
               roles={roles}
               onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
+              onDeleteRole={(roleId) => void deleteRole(roleId)}
             />
           ) : null}
           {mainView.kind === "role-create" ? (
@@ -1376,9 +1379,9 @@ function App(): React.ReactElement {
               roleForm={roleForm}
               roleFormDirty={roleFormDirty}
               savingRole={savingRole}
+              onBackToList={() => openRoleWorkspace({ kind: "roles-list" })}
               onOpenAssetsPage={() => void openRoleAssets(detailRoleId)}
               onUpdateRoleForm={updateRoleForm}
-              onDeleteRole={() => void deleteRole()}
               onResetRoleForm={resetRoleForm}
               onSaveRole={() => void saveRole()}
             />

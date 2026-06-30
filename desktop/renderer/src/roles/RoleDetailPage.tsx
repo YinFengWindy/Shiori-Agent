@@ -1,7 +1,7 @@
 import { toFileUrl } from "../shared/format";
-import { bodyTextClass, cardClass, cx, ghostButtonClass, inputClass, panelTitleClass } from "../shared/styles";
+import { bodyTextClass, cx, ghostButtonClass, inputClass, panelTitleClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
-import { RoleDangerZone, RoleDetailFormPanel } from "./RoleDetailPanels";
+import { RoleDetailFormPanel } from "./RoleDetailPanels";
 
 type RoleDetailPageProps = {
   activeIllustration: string;
@@ -13,9 +13,9 @@ type RoleDetailPageProps = {
   roleForm: RoleFormState;
   roleFormDirty: boolean;
   savingRole: boolean;
+  onBackToList: () => void;
   onOpenAssetsPage: () => void;
   onUpdateRoleForm: React.Dispatch<React.SetStateAction<RoleFormState>>;
-  onDeleteRole: () => void;
   onResetRoleForm: () => void;
   onSaveRole: () => void;
 };
@@ -31,97 +31,115 @@ export function RoleDetailPage({
   roleForm,
   roleFormDirty,
   savingRole,
+  onBackToList,
   onOpenAssetsPage,
   onUpdateRoleForm,
-  onDeleteRole,
   onResetRoleForm,
   onSaveRole,
 }: RoleDetailPageProps) {
   return (
     <section
-      className="role-detail-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(248,249,252,0.98)_100%)]"
+      className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-[#EEF2F7]"
       data-testid="role-detail-page"
     >
-      <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col gap-5 px-8 pb-10 pt-10">
+      {featuredImageUrl ? (
         <div
-          className={cx(cardClass, "relative min-h-[420px] overflow-hidden border-[#D9E0E8] bg-white/88 shadow-[0_18px_48px_rgba(31,41,55,0.08)]")}
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: `url("${featuredImageUrl}")` }}
           data-testid="role-illustration-hero"
-        >
-          {featuredImageUrl ? (
-            <>
-              <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url("${featuredImageUrl}")` }} />
-              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0.1)_34%,rgba(15,23,42,0.58)_100%)]" />
-            </>
-          ) : (
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#F8FBFF_0%,#EDF2F8_52%,#E3EAF2_100%)]" />
-          )}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#F8FBFF_0%,#EDF2F8_52%,#E3EAF2_100%)]" data-testid="role-illustration-hero" />
+      )}
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(245,247,250,0.22)_0%,rgba(245,247,250,0.38)_22%,rgba(15,23,42,0.46)_100%)]" />
+      <div className="relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col gap-5 px-8 pb-10 pt-8">
+        <div className="flex items-start">
+          <button
+            data-testid="role-detail-back-button"
+            className={cx("ghost-btn px-3 py-2 text-sm", ghostButtonClass, "border-white/25 bg-white/14 text-white backdrop-blur-[6px] hover:bg-white/22")}
+            type="button"
+            onClick={onBackToList}
+          >
+            返回角色列表
+          </button>
         </div>
-        <div className={cx(cardClass, "border-[#D9E0E8] bg-white/92 p-5 shadow-[0_18px_48px_rgba(31,41,55,0.08)]")} data-testid="role-detail-info-card">
+        <div className="mt-auto rounded-[28px] border border-white/16 bg-[rgba(255,255,255,0.12)] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.24)] backdrop-blur-[14px]" data-testid="role-detail-info-card">
           <div className="grid gap-5 md:grid-cols-[116px_minmax(0,1fr)]">
-            <div className="grid content-start gap-3">
-              <div className="relative h-[116px] w-[116px] overflow-hidden rounded-[28px] border border-[#D9E0E8] bg-[radial-gradient(circle_at_top_left,#F8FBFF_0%,#EDF2F8_52%,#E3EAF2_100%)] shadow-[0_14px_32px_rgba(15,23,42,0.08)]" data-testid="role-avatar-card">
-                {previewAvatar ? (
-                  <img className="h-full w-full object-cover" src={toFileUrl(previewAvatar)} alt={`${activeRole?.name || "角色"} avatar`} />
-                ) : (
-                  <div className="grid h-full w-full place-items-center text-[34px] font-semibold text-[#8a3211]">
-                    {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "R"}
-                  </div>
-                )}
+            <button
+              type="button"
+              data-testid="role-avatar-card"
+              className="group relative h-[116px] w-[116px] overflow-hidden rounded-[28px] border border-white/24 bg-[rgba(255,255,255,0.18)] text-left shadow-[0_14px_32px_rgba(15,23,42,0.14)] transition hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-white/30"
+              onClick={onOpenAssetsPage}
+            >
+              {previewAvatar ? (
+                <img className="h-full w-full object-cover" src={toFileUrl(previewAvatar)} alt={`${activeRole?.name || "角色"} avatar`} />
+              ) : (
+                <div className="grid h-full w-full place-items-center text-[34px] font-semibold text-white">
+                  {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "R"}
+                </div>
+              )}
+              <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,rgba(15,23,42,0)_0%,rgba(15,23,42,0.68)_100%)] px-3 py-2 text-[11px] text-white/88">
+                打开素材库
               </div>
-            </div>
+            </button>
             <div className="grid gap-4">
               <div>
-                <div className={panelTitleClass}>{activeRole ? activeRole.name : "角色详情"}</div>
-                <div className="mt-2 text-sm text-[#7A8593]">{activeRole?.description || "编辑当前角色的基本信息，并通过素材库管理头像与顶栏立绘。"}</div>
+                <div className={cx(panelTitleClass, "text-[34px] leading-none text-white")}>{activeRole ? activeRole.name : "角色详情"}</div>
+                <div className="mt-3 text-sm leading-6 text-white/86">{activeRole?.description || "编辑当前角色的基本信息，并通过素材库管理头像与顶栏立绘。"}</div>
               </div>
-              <label className={cx("grid gap-1.5 text-xs text-text", bodyTextClass)}>
+              <label className={cx("grid gap-1.5 text-xs text-white/85", bodyTextClass)}>
                 <span>名称</span>
                 <input
                   data-testid="edit-role-name"
-                  className={inputClass}
+                  className={cx(inputClass, "border-white/20 bg-white/16 text-white placeholder:text-white/55")}
                   value={roleForm.name}
                   onChange={(event) => onUpdateRoleForm((current) => ({ ...current, name: event.target.value }))}
                 />
               </label>
-              <label className={cx("grid gap-1.5 text-xs text-text", bodyTextClass)}>
+              <label className={cx("grid gap-1.5 text-xs text-white/85", bodyTextClass)}>
                 <span>简介</span>
                 <input
                   data-testid="edit-role-description"
-                  className={inputClass}
+                  className={cx(inputClass, "border-white/20 bg-white/16 text-white placeholder:text-white/55")}
                   value={roleForm.description}
                   onChange={(event) => onUpdateRoleForm((current) => ({ ...current, description: event.target.value }))}
                 />
               </label>
-              <div className="grid gap-2 rounded-[18px] border border-[#E4EAF0] bg-[#F8FBFD] px-4 py-3 text-sm text-[#596776]">
+              <div className="grid gap-2 rounded-[18px] border border-white/16 bg-[rgba(255,255,255,0.12)] px-4 py-3 text-sm text-white/82">
                 <div className="truncate">当前头像：{activeRole?.avatar || "未设置"}</div>
                 <div className="truncate">当前顶栏立绘：{activeRole?.featured_image || "未设置"}</div>
               </div>
+              <label className={cx("grid gap-1.5 text-xs text-white/85", bodyTextClass)} data-testid="role-detail-form-panel">
+                <span>系统提示词</span>
+                <textarea
+                  data-testid="edit-role-prompt"
+                  className={cx(inputClass, "min-h-[220px] resize-y border-white/20 bg-white/16 text-white placeholder:text-white/55")}
+                  value={roleForm.systemPrompt}
+                  onChange={(event) => onUpdateRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
+                />
+              </label>
               <div className="flex gap-2.5">
                 <button
-                  data-testid="open-role-assets-button"
-                  className={cx("ghost-btn text-sm", ghostButtonClass)}
+                  className={cx("ghost-btn", ghostButtonClass, "border-white/20 bg-white/12 text-white hover:bg-white/18")}
                   type="button"
-                  onClick={onOpenAssetsPage}
+                  onClick={onResetRoleForm}
+                  disabled={!roleFormDirty}
                 >
-                  打开素材库
+                  重置
+                </button>
+                <button
+                  data-testid="save-role-button"
+                  className={cx("ghost-btn border border-transparent bg-white px-[18px] py-3 text-sm text-[#1f1f1f]")}
+                  type="button"
+                  onClick={onSaveRole}
+                  disabled={savingRole || !roleFormDirty || !bridgeReady}
+                >
+                  {savingRole ? "保存中..." : "保存角色"}
                 </button>
               </div>
             </div>
           </div>
         </div>
-        <RoleDetailFormPanel
-          bridgeReady={bridgeReady}
-          roleForm={roleForm}
-          roleFormDirty={roleFormDirty}
-          savingRole={savingRole}
-          onResetRoleForm={onResetRoleForm}
-          onSaveRole={onSaveRole}
-          onUpdateRoleForm={onUpdateRoleForm}
-        />
-        <RoleDangerZone
-          bridgeReady={bridgeReady}
-          onDeleteRole={onDeleteRole}
-        />
       </div>
     </section>
   );
