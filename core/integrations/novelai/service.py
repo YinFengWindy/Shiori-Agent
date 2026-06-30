@@ -26,6 +26,7 @@ _SIZE_PRESETS: dict[str, tuple[int, int]] = {
     "portrait": (832, 1216),
 }
 _DEFAULT_IMG2IMG_STRENGTH = 0.7
+_DEFAULT_IMG2IMG_NOISE = 0.2
 _SUPPORTED_OUTPUT_SUFFIX = {
     "image/png": ".png",
     "image/webp": ".webp",
@@ -71,19 +72,19 @@ class NovelAIService:
                 request.base_image_path
             )
 
-        parameters: dict[str, Any] = {
-            "width": width,
-            "height": height,
-            "steps": steps,
-            "sampler": request.sampler.strip() or "k_euler",
-            "n_samples": self._settings.default_samples,
-            "uc": request.negative_prompt,
-        }
+        parameters = self._build_parameters(
+            request=request,
+            width=width,
+            height=height,
+            steps=steps,
+            model=model,
+        )
         if request.seed is not None:
             parameters["seed"] = request.seed
         if base_image_b64:
             parameters["image"] = base_image_b64
             parameters["strength"] = _DEFAULT_IMG2IMG_STRENGTH
+            parameters["noise"] = _DEFAULT_IMG2IMG_NOISE
 
         try:
             response = await self._client.generate_image(
@@ -212,6 +213,61 @@ class NovelAIService:
             raise ValueError(f"当前仅允许 steps 不超过 {self._settings.max_steps}")
         return steps
 
+    def _build_parameters(
+        self,
+        *,
+        request: GenerateImageRequest,
+        width: int,
+        height: int,
+        steps: int,
+        model: str,
+    ) -> dict[str, Any]:
+        sampler = request.sampler.strip() or "k_euler_ancestral"
+        parameters: dict[str, Any] = {
+            "width": width,
+            "height": height,
+            "steps": steps,
+            "sampler": sampler,
+            "n_samples": self._settings.default_samples,
+            "negative_prompt": request.negative_prompt,
+            "scale": 5,
+        }
+        if self._is_v45_model(model):
+            parameters.update(
+                {
+                    "params_version": 3,
+                    "noise_schedule": "native",
+                    "cfg_rescale": 0,
+                    "ucPreset": 0,
+                    "qualityToggle": False,
+                    "dynamic_thresholding": False,
+                    "characterPrompts": [],
+                    "controlnet_strength": 1,
+                    "deliberate_euler_ancestral_bug": False,
+                    "prefer_brownian": True,
+                    "reference_image_multiple": [],
+                    "reference_information_extracted_multiple": [],
+                    "reference_strength_multiple": [],
+                    "skip_cfg_above_sigma": None,
+                    "use_coords": False,
+                    "v4_prompt": {
+                        "caption": {
+                            "base_caption": request.prompt,
+                            "char_captions": [],
+                        },
+                        "use_coords": False,
+                        "use_order": True,
+                    },
+                    "v4_negative_prompt": {
+                        "caption": {
+                            "base_caption": request.negative_prompt,
+                            "char_captions": [],
+                        },
+                    },
+                }
+            )
+        return parameters
+
     def _load_base_image(self, raw_path: str) -> tuple[str, str]:
         clean_path = raw_path.strip()
         if not clean_path:
@@ -264,6 +320,9 @@ class NovelAIService:
         if suffix is None:
             raise ValueError("上游响应不是支持的图片格式")
         return suffix
+
+    def _is_v45_model(self, model: str) -> bool:
+        return model.startswith("nai-diffusion-4-5")
 
     async def _rewrite_http_error(
         self,

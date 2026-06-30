@@ -21,7 +21,7 @@ base_url = "https://api.openai.com/v1"
 enabled = true
 token = "novel-token"
 base_url = "https://image.novelai.net"
-default_model = "nai-diffusion-4-5-full"
+default_model = "nai-diffusion-4-5-curated"
 allow_txt2img = true
 allow_img2img = false
 auto_writeback_role_assets = true
@@ -37,7 +37,7 @@ default_samples = 1
     assert config.novelai.enabled is True
     assert config.novelai.token == "novel-token"
     assert config.novelai.base_url == "https://image.novelai.net"
-    assert config.novelai.default_model == "nai-diffusion-4-5-full"
+    assert config.novelai.default_model == "nai-diffusion-4-5-curated"
     assert config.novelai.allow_txt2img is True
     assert config.novelai.allow_img2img is False
     assert config.novelai.auto_writeback_role_assets is True

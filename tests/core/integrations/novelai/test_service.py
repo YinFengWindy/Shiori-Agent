@@ -80,6 +80,10 @@ async def test_service_persists_generated_image_and_metadata(tmp_path: Path) -> 
     assert record["mode"] == "txt2img"
     assert record["prompt"] == "a girl under moonlight"
     assert record["session_key"] == "role:mira"
+    request_payload = json.loads(Path(result.request_path).read_text(encoding="utf-8"))
+    assert request_payload["model"] == "nai-diffusion-4-5-curated"
+    assert request_payload["parameters"]["negative_prompt"] == "blurry"
+    assert request_payload["parameters"]["v4_prompt"]["caption"]["base_caption"] == "a girl under moonlight"
 
 
 @pytest.mark.asyncio

@@ -14,7 +14,7 @@ class NovelAISettings:
     enabled: bool = False
     token: str = ""
     base_url: str = "https://image.novelai.net"
-    default_model: str = "nai-diffusion-4-5-full"
+    default_model: str = "nai-diffusion-4-5-curated"
     allow_txt2img: bool = True
     allow_img2img: bool = True
     auto_writeback_role_assets: bool = False
@@ -36,7 +36,7 @@ class GenerateImageRequest:
     custom_height: int | None = None
     steps: int | None = None
     seed: int | None = None
-    sampler: str = "k_euler"
+    sampler: str = "k_euler_ancestral"
     model: str = ""
     role_id: str = ""
     session_key: str = ""

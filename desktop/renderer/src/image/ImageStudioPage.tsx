@@ -24,8 +24,8 @@ const initialForm: ImageStudioFormState = {
   customHeight: "",
   steps: "28",
   seed: "",
-  sampler: "k_euler",
-  model: "nai-diffusion-4-5-full",
+  sampler: "k_euler_ancestral",
+  model: "nai-diffusion-4-5-curated",
 };
 
 function parsePositiveInteger(value: string): number | null {

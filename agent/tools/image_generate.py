@@ -94,7 +94,7 @@ class GenerateImageTool(Tool):
             ),
             steps=int(kwargs["steps"]) if kwargs.get("steps") is not None else None,
             seed=int(kwargs["seed"]) if kwargs.get("seed") is not None else None,
-            sampler=str(kwargs.get("sampler") or "k_euler"),
+            sampler=str(kwargs.get("sampler") or "k_euler_ancestral"),
             model=str(kwargs.get("model") or ""),
             role_id=str(kwargs.get("role_id") or ""),
             session_key=str(kwargs.get("session_key") or ""),
