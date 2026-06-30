@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, isAbsolute, resolve } from "node:path";
@@ -48,6 +48,15 @@ function configureUserDataPath(): void {
 
 configureUserDataPath();
 
+function ensureDesktopConfig(): void {
+  const configPath = resolve(desktopRoot, "..", "config.toml");
+  if (existsSync(configPath)) {
+    return;
+  }
+  const templatePath = resolve(desktopRoot, "..", "config.example.toml");
+  copyFileSync(templatePath, configPath);
+}
+
 async function loadLocalImageAsset(assetPath: string): Promise<Response> {
   if (!isAbsolute(assetPath)) {
     return new Response("asset path must be absolute", { status: 400 });
@@ -76,6 +85,7 @@ function registerAssetProtocol(): void {
 }
 
 app.whenReady().then(() => {
+  ensureDesktopConfig();
   registerAssetProtocol();
   void startBridge(bridge);
   wireBridgeEvents(bridge);
