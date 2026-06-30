@@ -133,6 +133,7 @@ function App(): React.ReactElement {
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
   const [settingsConfigPath, setSettingsConfigPath] = useState("");
   const [settingsDirty, setSettingsDirty] = useState(false);
+  const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
   const activeRoleIdRef = useRef("");
@@ -600,6 +601,10 @@ function App(): React.ReactElement {
     const off = window.miraDesktop.onEvent((event) => {
       startTransition(() => {
         setEvents((items) => [...items, { method: event.method, payload: event.payload }].slice(-12));
+        if (event.method === "window.state") {
+          setWindowMaximized(Boolean(event.payload.isMaximized));
+          return;
+        }
         if (!activeSession) return;
         if (String(event.payload.session_key ?? "") !== activeSession.key) return;
 
@@ -659,6 +664,10 @@ function App(): React.ReactElement {
     let cancelled = false;
 
     async function load(): Promise<void> {
+      const currentWindowState = await window.miraDesktop.windowState();
+      if (cancelled) return;
+      setWindowMaximized(currentWindowState.isMaximized);
+
       const bridgeStatus = await window.miraDesktop.bridgeStatus();
       if (cancelled) return;
       if (!bridgeStatus.running && bridgeStatus.lastError) {
@@ -1294,6 +1303,7 @@ function App(): React.ReactElement {
     <div className="app-frame grid h-screen grid-rows-app overflow-hidden bg-[var(--app-bg)]">
       <TitleBar
         sidebarCollapsed={sidebarCollapsed}
+        windowMaximized={windowMaximized}
         canGoBack={canGoBack}
         canGoForward={canGoForward}
         canRefreshSession={Boolean(activeRoleId)}

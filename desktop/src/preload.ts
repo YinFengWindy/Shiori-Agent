@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { BridgeEvent, DesktopApi, WindowControlAction } from "./shared.js";
+import type { BridgeEvent, DesktopApi, WindowControlAction, WindowState } from "./shared.js";
 
 const api: DesktopApi = {
   invoke(request) {
@@ -27,6 +27,9 @@ const api: DesktopApi = {
   },
   windowControl(action: WindowControlAction) {
     return ipcRenderer.invoke("desktop:window-control", action) as Promise<void>;
+  },
+  windowState() {
+    return ipcRenderer.invoke("desktop:window-state") as Promise<WindowState>;
   },
   smoke() {
     return ipcRenderer.invoke("desktop:smoke") as Promise<{

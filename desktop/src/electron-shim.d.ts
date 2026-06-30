@@ -32,6 +32,7 @@ declare module "electron" {
     unmaximize(): void;
     isMaximized(): boolean;
     close(): void;
+    on(event: string, handler: (...args: unknown[]) => void): void;
     webContents: {
       send(channel: string, payload: unknown): void;
       on(event: string, handler: (...args: unknown[]) => void): void;

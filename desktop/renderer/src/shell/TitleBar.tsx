@@ -19,6 +19,7 @@ const windowControlClass =
 /** Renders the frameless desktop title bar and window controls. */
 export function TitleBar({
   sidebarCollapsed,
+  windowMaximized,
   canGoBack,
   canGoForward,
   canRefreshSession,
@@ -34,6 +35,7 @@ export function TitleBar({
   onRestartBridge,
 }: {
   sidebarCollapsed: boolean;
+  windowMaximized: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
   canRefreshSession: boolean;
@@ -169,7 +171,14 @@ export function TitleBar({
           <span className="window-minimize relative h-[11px] w-[11px] before:absolute before:inset-x-0 before:top-1.5 before:h-[1.5px] before:bg-current before:content-['']" />
         </button>
         <button className={cx("window-control", windowControlClass)} type="button" aria-label="最大化" onClick={() => controlWindow("toggleMaximize")}>
-          <span className="window-maximize h-[11px] w-[11px] rounded-sm border-[1.5px] border-current" />
+          <span
+            className={cx(
+              "window-maximize relative h-[11px] w-[11px]",
+              windowMaximized
+                ? "before:absolute before:right-0 before:top-0 before:h-[8px] before:w-[8px] before:rounded-[1px] before:border-[1.3px] before:border-current before:bg-transparent before:content-[''] after:absolute after:bottom-0 after:left-0 after:h-[8px] after:w-[8px] after:rounded-[1px] after:border-[1.3px] after:border-current after:bg-transparent after:content-['']"
+                : "rounded-sm border-[1.5px] border-current",
+            )}
+          />
         </button>
         <button className={cx("window-control window-control-close", windowControlClass, "hover:bg-[#c42b1c] hover:text-white")} type="button" aria-label="关闭" onClick={() => controlWindow("close")}>
           <DeleteIcon className="h-[11px] w-[11px] fill-current" />

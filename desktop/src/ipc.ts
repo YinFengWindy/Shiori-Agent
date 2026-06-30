@@ -95,6 +95,12 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
       window.close();
     }
   });
+  ipcMain.handle("desktop:window-state", () => {
+    const [window] = BrowserWindow.getAllWindows();
+    return {
+      isMaximized: window?.isMaximized() ?? false,
+    };
+  });
   ipcMain.handle("desktop:pick-images", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
     if (process.env.MIRA_DESKTOP_PICK_IMAGES_FIXTURE === "1") {
       const fixtureDir = resolve(desktopRoot, ".smoke-fixtures");

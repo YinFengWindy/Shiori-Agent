@@ -140,6 +140,9 @@ export type SaveSettingsResult = {
 
 /** Window chrome actions exposed through the preload bridge. */
 export type WindowControlAction = "minimize" | "toggleMaximize" | "close";
+export type WindowState = {
+  isMaximized: boolean;
+};
 
 export type DesktopApi = {
   invoke(request: Omit<BridgeRequest, "id">): Promise<BridgeResponse>;
@@ -151,6 +154,8 @@ export type DesktopApi = {
   saveSettings(formData: SettingsFormData): Promise<SaveSettingsResult>;
   /** Controls the custom frameless Electron window chrome. */
   windowControl(action: WindowControlAction): Promise<void>;
+  /** Returns the current custom window state used by the frameless title bar. */
+  windowState(): Promise<WindowState>;
   smoke(): Promise<{
     status: { running: boolean; lastError: string | null };
     health: BridgeResponse;
