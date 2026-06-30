@@ -216,7 +216,7 @@ export function ChatSurface({
                       </div>
                     ) : null}
                     {sourceLabel ? (
-                      <div className={cx("mb-1 inline-flex w-fit items-center rounded-full border border-[#D8DCE2] bg-white/86 px-2 py-0.5 text-[11px] font-medium tracking-[0.08em] text-[#6B7280]", isUser && "ml-auto")}>
+                      <div className={cx("mb-1 inline-flex w-fit items-center rounded-full border border-[#D8DCE2] bg-white/86 px-2 py-0.5 text-[11px] font-medium tracking-[0.08em] text-[#6B7280] opacity-0 transition-opacity duration-150 group-hover:opacity-100", isUser && "ml-auto")}>
                         {sourceLabel}
                       </div>
                     ) : null}

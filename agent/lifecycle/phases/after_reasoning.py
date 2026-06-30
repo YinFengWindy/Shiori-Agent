@@ -46,6 +46,24 @@ _ASSISTANT_FIXED_FIELDS = {"tools_used", "tool_chain", "reasoning_content"}
 _USER_FIXED_FIELDS = {"media"}
 
 
+def _build_synced_message_metadata(
+    *,
+    channel: str,
+    chat_id: str,
+    metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    next_metadata = dict(metadata or {})
+    if channel == "desktop":
+        next_metadata.setdefault("source", "desktop")
+    else:
+        next_metadata.setdefault("source", "channel_sync")
+        next_metadata.setdefault("context_channel", channel)
+        next_metadata.setdefault("context_chat_id", chat_id)
+        next_metadata.setdefault("transport_channel", channel)
+        next_metadata.setdefault("transport_chat_id", chat_id)
+    return next_metadata
+
+
 class _BuildAfterReasoningCtxModule:
     slot = "after_reasoning.build_ctx"
     requires: tuple[str, ...] = ()
@@ -118,6 +136,11 @@ class _PersistUserMessageModule:
         if self._session_services.presence:
             self._session_services.presence.record_user_message(session.key)
         user_kwargs: dict[str, object] = {}
+        user_kwargs["metadata"] = _build_synced_message_metadata(
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            metadata=msg.metadata,
+        )
         llm_user_content = ctx.context_retry.get("llm_user_content")
         if isinstance(llm_user_content, (str, list)):
             user_kwargs["llm_user_content"] = llm_user_content
@@ -147,9 +170,16 @@ class _PersistAssistantMessageModule:
         assistant_kwargs: dict[str, Any] = {
             "tools_used": list(ctx.tools_used) if ctx.tools_used else None,
             "tool_chain": list(ctx.tool_chain) if ctx.tool_chain else None,
+            "metadata": _build_synced_message_metadata(
+                channel=ctx.channel,
+                chat_id=ctx.chat_id,
+                metadata=ctx.outbound_metadata,
+            ),
         }
         if ctx.thinking is not None:
             assistant_kwargs["reasoning_content"] = ctx.thinking
+        if ctx.media:
+            assistant_kwargs["media"] = list(ctx.media)
         assistant_kwargs.update(_collect_persist_assistant_slots(frame.slots))
         session.add_message("assistant", ctx.reply, **assistant_kwargs)
         return frame
