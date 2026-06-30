@@ -356,22 +356,46 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               const illustrationHero = document.querySelector('[data-testid="role-illustration-hero"]');
               const formPanel = document.querySelector('[data-testid="role-detail-form-panel"]');
               const infoCard = document.querySelector('[data-testid="role-detail-info-card"]');
-              editName = document.querySelector('[data-testid="edit-role-name"]');
-              editPrompt = document.querySelector('[data-testid="edit-role-prompt"]');
               saveRoleButton = document.querySelector('[data-testid="save-role-button"]');
               openRoleAssetsButton = document.querySelector('[data-testid="open-role-assets-button"]');
-              if (roleDetailPage && formPanel && infoCard && illustrationHero && editName && editPrompt && saveRoleButton && openRoleAssetsButton) {
+              if (roleDetailPage && formPanel && infoCard && illustrationHero && saveRoleButton && openRoleAssetsButton) {
                 break;
               }
               await sleep(100);
             }
-            if (!editName || !editPrompt || !saveRoleButton || !openRoleAssetsButton) {
+            if (!saveRoleButton || !openRoleAssetsButton) {
               return {
                 ok: false,
                 reason: "role-editor-elements-missing",
               };
             }
+            if (!clickByText(roleBName)) {
+              return { ok: false, reason: "edit-name-display-missing" };
+            }
+            for (let i = 0; i < 20; i++) {
+              editName = document.querySelector('[data-testid="edit-role-name"]');
+              if (editName) {
+                break;
+              }
+              await sleep(50);
+            }
+            if (!editName) {
+              return { ok: false, reason: "edit-name-input-missing" };
+            }
             setFieldValue(editName, roleBEditedName);
+            if (!clickByText("you are ui smoke role B")) {
+              return { ok: false, reason: "edit-prompt-display-missing" };
+            }
+            for (let i = 0; i < 20; i++) {
+              editPrompt = document.querySelector('[data-testid="edit-role-prompt"]');
+              if (editPrompt) {
+                break;
+              }
+              await sleep(50);
+            }
+            if (!editPrompt) {
+              return { ok: false, reason: "edit-prompt-input-missing" };
+            }
             setFieldValue(editPrompt, "you are ui smoke role B edited");
             openRoleAssetsButton.click();
             let roleAssetsPage = null;
