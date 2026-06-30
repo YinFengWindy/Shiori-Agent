@@ -341,24 +341,42 @@ class DesktopBridgeService:
         )
 
     def _serialize_session(self, session: Session) -> dict[str, Any]:
+        def _serialize_message(msg: dict[str, Any]) -> dict[str, Any]:
+            metadata = msg.get("metadata")
+            merged_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+            skip_keys = {
+                "id",
+                "session_key",
+                "seq",
+                "role",
+                "content",
+                "timestamp",
+                "reasoning_content",
+                "tool_chain",
+                "media",
+                "metadata",
+            }
+            for key, value in msg.items():
+                if key in skip_keys:
+                    continue
+                merged_metadata[key] = value
+            return {
+                "id": msg.get("id"),
+                "role": msg.get("role"),
+                "content": msg.get("content"),
+                "timestamp": msg.get("timestamp"),
+                "reasoning_content": msg.get("reasoning_content"),
+                "media": list(msg.get("media") or []),
+                "metadata": merged_metadata,
+            }
+
         return {
             "key": session.key,
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
             "last_consolidated": session.last_consolidated,
             "metadata": dict(session.metadata),
-            "messages": [
-                {
-                    "id": msg.get("id"),
-                    "role": msg.get("role"),
-                    "content": msg.get("content"),
-                    "timestamp": msg.get("timestamp"),
-                    "reasoning_content": msg.get("reasoning_content"),
-                    "media": list(msg.get("media") or []),
-                    "metadata": dict(msg.get("metadata") or {}),
-                }
-                for msg in session.messages
-            ],
+            "messages": [_serialize_message(msg) for msg in session.messages],
         }
 
     async def _emit_event(self, emit_event, payload: dict[str, Any]) -> None:
