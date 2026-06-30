@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sys
@@ -28,6 +29,8 @@ from agent.config_models import (
 )
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
+
+logger = logging.getLogger(__name__)
 
 _PRESETS: dict[str, str] = {
     "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -231,7 +234,7 @@ def _load_proactive_config(data: dict) -> ProactiveConfig:
         try:
             proactive = load_proactive_config(p)
         except ProactiveConfigError as e:
-            print(f"❌ Proactive 配置错误: {e}", file=sys.stderr)
+            logger.error("Proactive 配置错误: %s", e)
             sys.exit(1)
     return proactive
 

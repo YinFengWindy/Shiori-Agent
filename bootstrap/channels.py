@@ -13,6 +13,8 @@ from infra.channels.base import AttachmentStore
 from infra.channels.contract import Channel, ChannelContext
 from session.manager import SessionManager
 
+logger = logging.getLogger(__name__)
+
 
 async def start_channels(
     config: Config,
@@ -38,7 +40,7 @@ async def start_channels(
             default_session_key=config.channels.cli_session_key,
         )
         await ipc.start()
-        print(f"Agent 已启动  |  CLI 连接地址: {config.channels.socket}")
+        logger.info("Agent 已启动  |  CLI 连接地址: %s", config.channels.socket)
 
     attachment_store = AttachmentStore()
 

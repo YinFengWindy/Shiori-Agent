@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
     from core.memory.engine import MemoryEngine
     from core.memory.markdown import MarkdownMemoryStore
     from core.memory.runtime import MemoryRuntime
+
+logger = logging.getLogger(__name__)
 
 
 def _build_proactive_provider(config: Config, provider: LLMProvider) -> LLMProvider:
@@ -97,7 +100,7 @@ def build_memory_optimizer_task(
     memory_store: "MarkdownMemoryStore",
 ) -> tuple[list, "MemoryOptimizer | None"]:
     if not config.memory_optimizer_enabled:
-        print("MemoryOptimizerLoop 已禁用（memory_optimizer_enabled=false）")
+        logger.info("MemoryOptimizerLoop 已禁用（memory_optimizer_enabled=false）")
         return [], None
 
     mem_optimizer = MemoryOptimizer(
@@ -106,5 +109,5 @@ def build_memory_optimizer_task(
         model=config.model,
     )
     interval = config.memory_optimizer_interval_seconds
-    print(f"MemoryOptimizerLoop 已启动，间隔={interval}s ({interval / 3600:.1f}h)")
+    logger.info("MemoryOptimizerLoop 已启动，间隔=%ss (%.1fh)", interval, interval / 3600)
     return [MemoryOptimizerLoop(mem_optimizer, interval_seconds=interval).run()], mem_optimizer

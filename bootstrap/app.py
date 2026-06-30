@@ -36,7 +36,7 @@ from core.net.http import (
     configure_default_shared_http_resources,
 )
 
-configure_logging_stream(sys.stdout)
+configure_logging_stream(sys.stderr)
 
 logger = logging.getLogger(__name__)
 

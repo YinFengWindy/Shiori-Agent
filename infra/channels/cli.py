@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 
 from agent.config import DEFAULT_SOCKET, _normalize_cli_socket_endpoint
 
 _EXIT_CMDS = {"exit", "quit", "q"}
+logger = logging.getLogger(__name__)
 
 
 def _parse_tcp_endpoint(endpoint: str) -> tuple[str, int] | None:
@@ -44,8 +46,9 @@ class CLIClient:
                     raise OSError("Unix sockets are unavailable on this platform.")
                 reader, writer = await asyncio.open_unix_connection(self._socket_path)
         except (FileNotFoundError, ConnectionRefusedError, OSError):
-            print(
-                f"无法连接到 agent（{self._socket_path}），请先启动主进程：python main.py"
+            logger.error(
+                "无法连接到 agent（%s），请先启动主进程：python main.py",
+                self._socket_path,
             )
             return
 
@@ -69,25 +72,23 @@ class CLIClient:
             receive_task.cancel()
             writer.close()
             await writer.wait_closed()
-            print("\n再见")
+            logger.info("CLI client 已关闭。")
 
     @staticmethod
     async def _receive(reader: asyncio.StreamReader) -> None:
         while True:
             line = await reader.readline()
             if not line:
-                print("\n连接已断开")
+                logger.warning("CLI 连接已断开。")
                 break
             data = json.loads(line)
-            print(f"\n{data['content']}\n> ", end="", flush=True)
+            logger.info("CLI 收到消息: %s", data["content"])
 
 
 def _print_banner() -> None:
-    print("akashic Agent CLI  |  输入 exit 退出\n")
+    logger.info("akashic Agent CLI 已连接。")
 
 
 async def _read_line() -> str:
     loop = asyncio.get_event_loop()
-    sys.stdout.write("> ")
-    sys.stdout.flush()
     return await loop.run_in_executor(None, sys.stdin.readline)

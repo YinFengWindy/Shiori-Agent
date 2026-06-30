@@ -894,7 +894,7 @@ async def test_group_filter_and_cli_paths(
     monkeypatch.setattr("infra.channels.cli._read_line", _fake_read_line)
     await CLIClient("/tmp/sock").run()
     writer.write.assert_called()
-    assert "再见" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""
 
     if sys.platform == "win32":
         monkeypatch.setattr(
@@ -908,7 +908,7 @@ async def test_group_filter_and_cli_paths(
         )
     await CLIClient("/tmp/missing").run()
     _print_banner()
-    assert "akashic Agent CLI" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import signal
 import sys
@@ -17,7 +18,6 @@ from pathlib import Path
 
 from agent.config import Config
 from bootstrap.app import (
-    DESKTOP_RUNTIME_FEATURES,
     SERVICE_RUNTIME_FEATURES,
     RuntimeFeatures,
     build_app_runtime,
@@ -30,6 +30,8 @@ from bootstrap.providers import build_providers
 from bootstrap.tools import build_core_runtime
 from core.net.http import SharedHttpResources
 from desktop_bridge import DesktopBridgeServer
+
+logger = logging.getLogger(__name__)
 
 
 def _default_workspace() -> Path:
@@ -45,25 +47,25 @@ def _get_flag_value(args: list[str], flag: str) -> str | None:
     return args[idx + 1]
 
 
-def _print_init_summary(summary: InitSummary) -> None:
-    def _print_group(title: str, paths: list[Path]) -> None:
+def _log_init_summary(summary: InitSummary) -> None:
+    def _log_group(title: str, paths: list[Path]) -> None:
         if not paths:
             return
-        print(title)
+        logger.info("%s", title)
         for path in paths:
-            print(f"  {path}")
+            logger.info("  %s", path)
 
-    _print_group("已创建：", summary.created)
-    _print_group("已覆盖：", summary.overwritten)
-    _print_group("已跳过：", summary.skipped)
+    _log_group("已创建：", summary.created)
+    _log_group("已覆盖：", summary.overwritten)
+    _log_group("已跳过：", summary.skipped)
     if summary.notes:
-        print("说明：")
+        logger.info("说明：")
         for note in summary.notes:
-            print(f"  {note}")
+            logger.info("  %s", note)
     if summary.next_steps:
-        print("\n下一步：")
+        logger.info("下一步：")
         for step in summary.next_steps:
-            print(f"  {step}")
+            logger.info("  %s", step)
 
 
 def _legacy_dashboard_enabled() -> bool:
@@ -75,8 +77,8 @@ def connect_cli(config_path: str = "config.toml") -> None:
     try:
         from infra.channels.cli_tui import run_tui
     except RuntimeError as exc:
-        print(exc)
-        print("回退到纯文本 CLI。")
+        logger.warning("%s", exc)
+        logger.info("回退到纯文本 CLI。")
         from infra.channels.cli import CLIClient
 
         asyncio.run(CLIClient(socket_path).run())
@@ -101,7 +103,7 @@ async def inspect_modules(
         http_resources,
     )
     try:
-        print(await runtime.inspect_modules())
+        logger.info("%s", await runtime.inspect_modules())
     finally:
         await runtime.stop()
         await http_resources.aclose()
@@ -201,6 +203,7 @@ async def serve(
 
 
 if __name__ == "__main__":
+    configure_logging_stream(sys.stderr)
     args = sys.argv[1:]
     config_path = "config.toml"
     workspace: Path | None = None
@@ -214,7 +217,7 @@ if __name__ == "__main__":
         host_value = _get_flag_value(args, "--host")
         port_value = _get_flag_value(args, "--port")
     except ValueError as exc:
-        print(str(exc))
+        logger.error("%s", exc)
         sys.exit(1)
 
     if config_value is not None:
@@ -240,7 +243,7 @@ if __name__ == "__main__":
             workspace=workspace or _default_workspace(),
             force=force,
         )
-        _print_init_summary(summary)
+        _log_init_summary(summary)
         sys.exit(0)
 
     if args and args[0] == "gateway":
@@ -248,7 +251,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if args and args[0] == "desktop":
-        print("[deprecated] `python main.py desktop` 已进入兼容维护模式；请优先使用 `npm run desktop:start`，如需仅启动桌面后端请使用 `python main.py bridge`。")
+        logger.warning("[deprecated] `python main.py desktop` 已进入兼容维护模式；请优先使用 `npm run desktop:start`，如需仅启动桌面后端请使用 `python main.py bridge`。")
         asyncio.run(serve_bridge(config_path, workspace))
         sys.exit(0)
 
@@ -257,12 +260,12 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if args and args[0] == "dashboard":
-        print("[deprecated] `python main.py dashboard` 已进入兼容维护模式；桌面端请优先使用 `npm run desktop:start`。")
+        logger.warning("[deprecated] `python main.py dashboard` 已进入兼容维护模式；桌面端请优先使用 `npm run desktop:start`。")
         if "--allow-legacy-dashboard" not in args:
-            print("如确需继续使用旧 Dashboard，请显式添加 `--allow-legacy-dashboard`。")
+            logger.error("如确需继续使用旧 Dashboard，请显式添加 `--allow-legacy-dashboard`。")
             sys.exit(2)
         if not _legacy_dashboard_enabled():
-            print("旧 Dashboard 现仅保留给内部兼容调试路径，请改用桌面端；如需内部调试，请设置 `AKASHIC_ENABLE_LEGACY_DASHBOARD=1`。")
+            logger.error("旧 Dashboard 现仅保留给内部兼容调试路径，请改用桌面端；如需内部调试，请设置 `AKASHIC_ENABLE_LEGACY_DASHBOARD=1`。")
             sys.exit(3)
         config = Config.load(config_path)
         dashboard_workspace = workspace or _default_workspace()
@@ -287,7 +290,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     if not Path(config_path).exists():
-        print(
+        logger.error(
             f"找不到配置文件 {config_path!r}，请先复制 config.example.toml 为 config.toml。"
         )
         sys.exit(1)

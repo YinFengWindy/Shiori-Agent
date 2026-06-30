@@ -908,7 +908,7 @@ def test_main_dashboard_entry_prints_deprecation_notice(
         sys.argv = old_argv
 
     assert exc.value.code == 0
-    output = capsys.readouterr().out
+    output = capsys.readouterr().err
     assert "[deprecated]" in output
     assert "desktop:start" in output
 
@@ -929,7 +929,7 @@ def test_main_dashboard_entry_requires_legacy_flag(
         sys.argv = old_argv
 
     assert exc.value.code == 2
-    output = capsys.readouterr().out
+    output = capsys.readouterr().err
     assert "--allow-legacy-dashboard" in output
 
 
@@ -955,7 +955,7 @@ def test_main_dashboard_entry_requires_internal_env_gate(
         sys.argv = old_argv
 
     assert exc.value.code == 3
-    output = capsys.readouterr().out
+    output = capsys.readouterr().err
     assert "AKASHIC_ENABLE_LEGACY_DASHBOARD=1" in output
 
 
@@ -978,7 +978,7 @@ def test_main_desktop_entry_prints_deprecation_notice_and_uses_bridge(
         sys.argv = old_argv
 
     assert exc.value.code == 0
-    output = capsys.readouterr().out
+    output = capsys.readouterr().err
     assert "[deprecated]" in output
     assert "desktop:start" in output
     assert "main.py bridge" in output
