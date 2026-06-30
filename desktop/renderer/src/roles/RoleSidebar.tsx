@@ -1,4 +1,5 @@
 import type React from "react";
+import novelAiLogoDark from "../assets/novelai-logo-dark.svg";
 import { toFileUrl } from "../shared/format";
 import { bodyTextClass, cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
@@ -77,6 +78,12 @@ export function RoleSidebar({
             </svg>
           </span>
           <span>角色</span>
+        </button>
+        <button className={sidebarEntryClass} type="button">
+          <span className="sidebar-entry-icon sidebar-entry-image grid h-5 w-5 place-items-center" aria-hidden="true">
+            <img className="h-4 w-4" src={novelAiLogoDark} alt="" />
+          </span>
+          <span>生图</span>
         </button>
       </div>
       <div className={cx("role-list scrollbar-soft scrollbar-soft-accent grid min-h-0 content-start gap-1.5 overflow-x-hidden overflow-y-auto pr-0", bodyTextClass)} data-testid="role-list">

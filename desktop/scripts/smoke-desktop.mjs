@@ -62,7 +62,7 @@ proc.stdout.on("data", (chunk) => {
         && parsed?.restarted?.running === true
         && parsed?.healthAfterRestart?.payload?.ok === true
         && parsed?.createdRole?.payload?.role?.id
-        && parsed?.openedSession?.payload?.session?.key === `desktop:role:${parsed.createdRole.payload.role.id}`
+        && parsed?.openedSession?.payload?.session?.key === `role:${parsed.createdRole.payload.role.id}`
         && parsed?.deletedRole?.payload?.deleted === true
         && parsed?.deletedRole?.payload?.session_deleted === true
       ) {

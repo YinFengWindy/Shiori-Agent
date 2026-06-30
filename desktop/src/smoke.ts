@@ -50,6 +50,16 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               button.click();
               return true;
             };
+            const waitForFieldValues = async (fields, expectedValues) => {
+              for (let i = 0; i < 20; i++) {
+                const settled = fields.every((field, index) => field && field.value === expectedValues[index]);
+                if (settled) {
+                  return true;
+                }
+                await sleep(50);
+              }
+              return false;
+            };
             const openCreateRolePage = async () => {
               const fileMenu = Array.from(document.querySelectorAll(".titlebar-menu-item"))
                 .find((item) => (item.textContent || "").trim() === "文件");
@@ -95,15 +105,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               }
               return { ok: true, name, desc, prompt, create };
             };
-            const firstCreatePage = await openCreateRolePage();
-            if (!firstCreatePage.ok) {
-              return firstCreatePage;
-            }
             let name, desc, prompt, create, hero;
-            name = firstCreatePage.name;
-            desc = firstCreatePage.desc;
-            prompt = firstCreatePage.prompt;
-            create = firstCreatePage.create;
             for (let i = 0; i < 20; i++) {
               hero = document.querySelector('[data-testid="session-hero"]');
               if (hero) {
@@ -118,6 +120,14 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 html: document.body.innerHTML.slice(0, 800),
               };
             }
+            const firstCreatePage = await openCreateRolePage();
+            if (!firstCreatePage.ok) {
+              return firstCreatePage;
+            }
+            name = firstCreatePage.name;
+            desc = firstCreatePage.desc;
+            prompt = firstCreatePage.prompt;
+            create = firstCreatePage.create;
             let titlebarRefresh = null;
             let titlebarHelp = null;
             for (let i = 0; i < 20; i++) {
@@ -140,7 +150,8 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             }
             titlebarHelp.click();
             await sleep(50);
-            if (!(document.body.textContent || "").includes("重启 Bridge")) {
+            const helpMenuText = document.body.textContent || "";
+            if (!helpMenuText.includes("重启连接桥") || !helpMenuText.includes("刷新连接桥")) {
               return {
                 ok: false,
                 reason: "titlebar-help-menu-missing-actions",
@@ -196,28 +207,36 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             if (!sidebarSettingsEntry) {
               return { ok: false, reason: "sidebar-settings-entry-missing" };
             }
-            name = firstCreatePage.name;
-            desc = firstCreatePage.desc;
-            prompt = firstCreatePage.prompt;
-            create = firstCreatePage.create;
+            const refreshedCreatePage = await openCreateRolePage();
+            if (!refreshedCreatePage.ok) {
+              return {
+                ok: false,
+                reason: refreshedCreatePage.reason || "refreshed-create-page-missing",
+              };
+            }
+            name = refreshedCreatePage.name;
+            desc = refreshedCreatePage.desc;
+            prompt = refreshedCreatePage.prompt;
+            create = refreshedCreatePage.create;
             setFieldValue(name, roleAName);
             setFieldValue(desc, "ui smoke role A");
             setFieldValue(prompt, "you are ui smoke role A");
+            if (!(await waitForFieldValues([name, desc, prompt], [roleAName, "ui smoke role A", "you are ui smoke role A"]))) {
+              return { ok: false, reason: "first-create-fields-not-settled" };
+            }
             create.click();
             await sleep(20);
             let roleDetailPage = null;
             let detailNameInput = null;
-            let createdRoleAButton = null;
             for (let i = 0; i < 40; i++) {
               await sleep(100);
-              createdRoleAButton = findRoleButtonByName(roleAName);
               roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
               detailNameInput = document.querySelector('[data-testid="edit-role-name"]');
-              if (createdRoleAButton && roleDetailPage && detailNameInput && detailNameInput.value === roleAName) {
+              if (roleDetailPage && detailNameInput && detailNameInput.value === roleAName) {
                 break;
               }
             }
-            if (!createdRoleAButton || !roleDetailPage || !detailNameInput || detailNameInput.value !== roleAName) {
+            if (!roleDetailPage || !detailNameInput || detailNameInput.value !== roleAName) {
               return {
                 ok: false,
                 reason: "first-role-not-opened",
@@ -238,6 +257,9 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             setFieldValue(name, roleBName);
             setFieldValue(desc, "ui smoke role B");
             setFieldValue(prompt, "you are ui smoke role B");
+            if (!(await waitForFieldValues([name, desc, prompt], [roleBName, "ui smoke role B", "you are ui smoke role B"]))) {
+              return { ok: false, reason: "second-create-fields-not-settled" };
+            }
             create.click();
             for (let i = 0; i < 40; i++) {
               await sleep(100);
@@ -254,7 +276,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 detailValue: detailNameInput?.value || "",
               };
             }
-            if (!clickByText("角色")) {
+            if (!clickByText("角色列表")) {
               return { ok: false, reason: "edit-role-toggle-missing" };
             }
             let roleManagementPage;

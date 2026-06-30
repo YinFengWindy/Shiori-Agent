@@ -97,7 +97,7 @@ setTimeout(() => {
 
   const roleId = role.payload.role.id;
   const session = await request("session.openByRole", { role_id: roleId });
-  if (session.error || session.payload?.session?.key !== `desktop:role:${roleId}`) {
+  if (session.error || session.payload?.session?.key !== `role:${roleId}`) {
     finish(1, `session.openByRole failed: ${JSON.stringify(session)}\n${stderr}`);
     return;
   }
