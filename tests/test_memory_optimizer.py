@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from core.roles import RoleStore
 from proactive_v2.memory_optimizer import (
     MemoryOptimizerBusy,
     MemoryOptimizer,
@@ -194,3 +195,37 @@ def test_seconds_until_next_tick_always_positive():
         now = datetime(2026, 2, 23, h, 59, 59)
         loop = MemoryOptimizerLoop(None, interval_seconds=300, _now_fn=lambda n=now: n)
         assert loop._seconds_until_next_tick() > 0
+
+
+def test_memory_optimizer_loop_runs_global_and_role_optimizations(tmp_path):
+    role_store = RoleStore(tmp_path)
+    _ = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="",
+        system_prompt="you are mira",
+    )
+
+    optimizer = types.SimpleNamespace()
+    calls: list[str | None] = []
+
+    async def _optimize(*, role_id: str | None = None) -> None:
+        calls.append(role_id)
+        loop.stop()
+
+    optimizer.optimize = _optimize
+    optimizer._workspace = tmp_path
+    loop = MemoryOptimizerLoop(optimizer, interval_seconds=60, _now_fn=lambda: datetime(2026, 2, 23, 12, 0, 0))
+
+    original_sleep = asyncio.sleep
+
+    async def _fast_sleep(_secs: float) -> None:
+        return None
+
+    try:
+        asyncio.sleep = _fast_sleep  # type: ignore[assignment]
+        asyncio.run(loop.run())
+    finally:
+        asyncio.sleep = original_sleep  # type: ignore[assignment]
+
+    assert calls == [None, "mira"]

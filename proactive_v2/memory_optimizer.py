@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 from agent.memory import DEFAULT_SELF_MD
 from agent.provider import LLMProvider
 from core.memory.markdown import resolve_markdown_store
+from core.roles import RoleStore
 
 logger = logging.getLogger(__name__)
 
@@ -366,6 +367,11 @@ class MemoryOptimizerLoop:
             try:
                 if self._optimizer:
                     await self._optimizer.optimize()
+                    workspace = getattr(self._optimizer, "_workspace", None)
+                    if workspace:
+                        role_store = RoleStore(Path(workspace))
+                        for role in role_store.list_roles():
+                            await self._optimizer.optimize(role_id=role.id)
             except Exception:
                 logger.exception("[memory_optimizer] 优化异常")
 
