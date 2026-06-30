@@ -1,4 +1,5 @@
 import { toFileUrl } from "../shared/format";
+import { DeleteIcon } from "../shared/icons";
 import {
   bodyTextClass,
   cardClass,
@@ -243,7 +244,10 @@ export function RoleDangerZone({
           onClick={onDeleteRole}
           disabled={!bridgeReady}
         >
-          删除角色
+          <span className="inline-flex items-center gap-2">
+            <DeleteIcon className="h-3.5 w-3.5 fill-current" />
+            删除角色
+          </span>
         </button>
       </div>
     </section>

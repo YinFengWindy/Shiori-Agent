@@ -1,4 +1,5 @@
 import { toFileUrl } from "../shared/format";
+import { ResetIcon } from "../shared/icons";
 import { bodyTextClass, cx, inputClass, panelTitleClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
 import { useState } from "react";
@@ -50,12 +51,6 @@ export function RoleDetailPage({
       <path d="M382.4 876 7.4 501 43.1 465.4 380.9 803.2 983.6 149.7 1020.7 183.9Z" />
     </svg>
   );
-  const resetIcon = (
-    <span
-      className="relative h-[13px] w-[13px] before:absolute before:inset-[1px] before:rounded-full before:border-[1.3px] before:border-current before:border-r-transparent before:content-[''] after:absolute after:right-[0.5px] after:top-[1px] after:h-[4px] after:w-[4px] after:rotate-45 after:border-r-[1.3px] after:border-t-[1.3px] after:border-current after:content-['']"
-      aria-hidden="true"
-    />
-  );
   const floatingActionClass =
     "grid h-10 w-10 place-items-center rounded-full border bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-default disabled:border-black/6 disabled:bg-white/60 disabled:text-[#b8b8b8] disabled:shadow-none";
 
@@ -94,7 +89,7 @@ export function RoleDetailPage({
               disabled={!roleFormDirty}
               aria-label="重置角色表单"
             >
-              {resetIcon}
+              <ResetIcon className="h-[18px] w-[18px] fill-current" />
             </button>
             <button
               data-testid="save-role-button"

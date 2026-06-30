@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { WindowControlAction } from "../../../src/shared";
+import { DeleteIcon, ResetIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 
 const menuItems = ["文件", "编辑", "视图", "帮助"] as const;
@@ -127,7 +128,7 @@ export function TitleBar({
           <span className={cx(titlebarArrowClass, "before:right-0.5 after:right-[1.5px] after:rotate-[135deg]")} />
         </button>
         <button className={cx("titlebar-icon titlebar-refresh", titlebarIconClass)} type="button" aria-label="刷新会话" onClick={onRefreshSession} disabled={!canRefreshSession}>
-          <span className="relative h-[13px] w-[13px] before:absolute before:inset-[1px] before:rounded-full before:border-[1.3px] before:border-current before:border-r-transparent before:content-[''] after:absolute after:right-[0.5px] after:top-[1px] after:h-[4px] after:w-[4px] after:rotate-45 after:border-r-[1.3px] after:border-t-[1.3px] after:border-current after:content-['']" />
+          <ResetIcon className="h-[15px] w-[15px] fill-current" />
         </button>
         <nav className="titlebar-menu ml-0.5 flex h-full items-center gap-0" aria-label="应用菜单">
           {menuItems.map((item) => (
@@ -171,7 +172,7 @@ export function TitleBar({
           <span className="window-maximize h-[11px] w-[11px] rounded-sm border-[1.5px] border-current" />
         </button>
         <button className={cx("window-control window-control-close", windowControlClass, "hover:bg-[#c42b1c] hover:text-white")} type="button" aria-label="关闭" onClick={() => controlWindow("close")}>
-          <span className="window-close relative h-[11px] w-[11px] before:absolute before:left-[5px] before:top-[-1px] before:h-[15px] before:w-[1.5px] before:rotate-45 before:bg-current before:content-[''] after:absolute after:left-[5px] after:top-[-1px] after:h-[15px] after:w-[1.5px] after:-rotate-45 after:bg-current after:content-['']" />
+          <DeleteIcon className="h-[11px] w-[11px] fill-current" />
         </button>
       </div>
     </header>

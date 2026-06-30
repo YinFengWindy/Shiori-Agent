@@ -1,4 +1,5 @@
 import { toFileUrl } from "../shared/format";
+import { DeleteIcon } from "../shared/icons";
 import { bodyTextClass, cardClass, cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 
@@ -60,7 +61,7 @@ export function RoleManagementPage({
                     }}
                     aria-label={`删除角色 ${role.name}`}
                   >
-                    ×
+                    <DeleteIcon className="h-[15px] w-[15px] fill-current" />
                   </button>
                   <div className="relative z-[1] flex h-full flex-col justify-between p-5">
                     <div className="flex items-start gap-3">
