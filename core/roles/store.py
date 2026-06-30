@@ -297,6 +297,9 @@ class RoleStore:
                 asset_dir = self.assets_dir / role_id
                 if asset_dir.exists():
                     shutil.rmtree(asset_dir, ignore_errors=True)
+            role_runtime_dir = self.roles_dir / role_id
+            if role_runtime_dir.exists():
+                shutil.rmtree(role_runtime_dir)
             return True
 
     def import_asset(

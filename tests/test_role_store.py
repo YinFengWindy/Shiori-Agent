@@ -71,6 +71,57 @@ def test_role_store_updates_and_deletes_role(tmp_path: Path):
     assert store.get_role("mira") is None
 
 
+def test_role_store_delete_role_removes_role_runtime_directory(tmp_path: Path):
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+    )
+    aggregate = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="assistant role",
+        system_prompt="you are mira",
+    )
+
+    role_dir = tmp_path / "roles" / aggregate.role.id
+    assert role_dir.is_dir()
+    assert (role_dir / "memory").is_dir()
+
+    assert service.delete_role(aggregate.role.id)[0] is True
+    assert not role_dir.exists()
+
+
+def test_role_store_delete_role_keeps_other_role_runtime_directories(tmp_path: Path):
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+    )
+    first = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="assistant role",
+        system_prompt="you are mira",
+    )
+    second = service.create_role(
+        role_id="luna",
+        name="Luna",
+        description="assistant role",
+        system_prompt="you are luna",
+    )
+
+    first_dir = tmp_path / "roles" / first.role.id
+    second_dir = tmp_path / "roles" / second.role.id
+    assert first_dir.is_dir()
+    assert second_dir.is_dir()
+
+    assert service.delete_role(first.role.id)[0] is True
+    assert not first_dir.exists()
+    assert second_dir.is_dir()
+    assert (tmp_path / "roles" / "assets").is_dir()
+
+
 def test_role_store_replaces_and_clears_old_assets(tmp_path: Path):
     avatar1 = tmp_path / "avatar-1.png"
     avatar1.write_bytes(b"avatar-1")
