@@ -113,3 +113,24 @@ def test_consolidation_formatters_skip_context_frame_messages():
     assert "内部上下文" not in _format_conversation_for_consolidation(messages)
     assert "内部上下文" not in _format_conversation_for_recent_context(messages)
     assert "内部上下文" not in _format_recent_context_messages(messages)
+
+
+def test_recent_context_formatters_skip_memory_maintenance_assistant_messages():
+    messages = [
+        {"role": "user", "content": "把今天聊的东西整理下", "timestamp": "2026-06-30T20:40:00"},
+        {
+            "role": "assistant",
+            "content": "📋 今日总结 · 2026-06-30",
+            "timestamp": "2026-06-30T20:41:00",
+            "tools_used": ["read_file", "memorize"],
+        },
+        {"role": "assistant", "content": "普通回复", "timestamp": "2026-06-30T20:42:00"},
+    ]
+
+    recent_turns = _format_recent_context_messages(messages)
+    conversation = _format_conversation_for_recent_context(messages)
+
+    assert "今日总结" not in recent_turns
+    assert "今日总结" not in conversation
+    assert "普通回复" in recent_turns
+    assert "普通回复" in conversation

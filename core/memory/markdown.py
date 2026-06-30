@@ -306,6 +306,16 @@ def _is_context_frame_message(message: dict) -> bool:
     return is_context_frame(content)
 
 
+def _is_memory_maintenance_assistant_message(message: dict) -> bool:
+    role = str(message.get("role") or "").lower()
+    if role != "assistant":
+        return False
+    tools_used = message.get("tools_used") or []
+    if not isinstance(tools_used, list):
+        return False
+    return "memorize" in {str(item).strip() for item in tools_used if str(item).strip()}
+
+
 def _format_recent_context_messages(messages: list[dict]) -> str:
     lines = []
     for message in messages:
@@ -316,6 +326,8 @@ def _format_recent_context_messages(messages: list[dict]) -> str:
         if not content or role not in {"user", "assistant"}:
             continue
         if role == "assistant" and message.get("proactive"):
+            continue
+        if _is_memory_maintenance_assistant_message(message):
             continue
         if role == "assistant":
             preview = content[:60]
@@ -357,6 +369,8 @@ def _format_conversation_for_recent_context(messages: list[dict]) -> str:
         if not content or role not in {"USER", "ASSISTANT"}:
             continue
         if role == "ASSISTANT" and message.get("proactive"):
+            continue
+        if _is_memory_maintenance_assistant_message(message):
             continue
         lines.append(f"{role}: {content}")
     return "\n".join(lines).strip()
