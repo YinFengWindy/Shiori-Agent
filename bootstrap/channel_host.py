@@ -23,7 +23,7 @@ class ChannelHost:
         for channel in self._channels:
             try:
                 await channel.start(self._ctx_factory(channel))
-                print(f"渠道已启动: {channel.name}")
+                logger.info("渠道已启动: %s", channel.name)
             except Exception as e:
                 logger.error("渠道启动失败 %s: %s", channel.name, e)
 
