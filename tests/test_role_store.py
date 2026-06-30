@@ -405,28 +405,26 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
     assert routed.metadata["transport_chat_id"] == "chat-1"
 
 
-def test_route_inbound_by_role_rejects_unbound_legacy_channel(tmp_path: Path):
+def test_route_inbound_by_role_leaves_unbound_legacy_channel_untouched(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
         session_manager=SessionManager(tmp_path),
     )
 
-    try:
-        _ = route_inbound_by_role(
-            service,
-            InboundMessage(
-                channel="telegram",
-                sender="u1",
-                chat_id="chat-404",
-                content="hello",
-                timestamp=datetime.now(),
-            ),
-        )
-    except KeyError as exc:
-        assert "渠道未绑定角色" in str(exc)
-    else:
-        raise AssertionError("未绑定 legacy channel 必须失败")
+    original = InboundMessage(
+        channel="telegram",
+        sender="u1",
+        chat_id="chat-404",
+        content="hello",
+        timestamp=datetime.now(),
+    )
+
+    routed = route_inbound_by_role(service, original)
+
+    assert routed is original
+    assert "role_id" not in routed.metadata
+    assert "session_key_override" not in routed.metadata
 
 
 def test_role_legacy_migrator_moves_confirmed_session_into_role_session(tmp_path: Path):
