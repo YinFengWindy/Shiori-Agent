@@ -3,6 +3,7 @@ import { startTransition, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { ChatSurface } from "./chat/ChatSurface";
+import { RoleAssetsPage } from "./roles/RoleAssetsPage";
 import { RoleCreatePage } from "./roles/RoleCreatePage";
 import { RoleDetailPage } from "./roles/RoleDetailPage";
 import { RoleManagementPage } from "./roles/RoleManagementPage";
@@ -42,6 +43,9 @@ function cloneView(view: AppMainView): AppMainView {
   if (view.kind === "role-detail") {
     return { kind: "role-detail", roleId: view.roleId };
   }
+  if (view.kind === "role-assets") {
+    return { kind: "role-assets", roleId: view.roleId };
+  }
   return { kind: view.kind };
 }
 
@@ -50,6 +54,9 @@ function viewsEqual(left: AppMainView, right: AppMainView): boolean {
     return false;
   }
   if (left.kind === "role-detail" && right.kind === "role-detail") {
+    return left.roleId === right.roleId;
+  }
+  if (left.kind === "role-assets" && right.kind === "role-assets") {
     return left.roleId === right.roleId;
   }
   return true;
@@ -93,6 +100,7 @@ function App(): React.ReactElement {
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
   const [savingRole, setSavingRole] = useState(false);
+  const [savingRoleAssets, setSavingRoleAssets] = useState(false);
   const [sending, setSending] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,6 +114,8 @@ function App(): React.ReactElement {
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const [sidebarAnimating, setSidebarAnimating] = useState(false);
   const [activeIllustration, setActiveIllustration] = useState("");
+  const [selectedAvatarAsset, setSelectedAvatarAsset] = useState("");
+  const [selectedFeaturedImage, setSelectedFeaturedImage] = useState("");
   const [clearAvatar, setClearAvatar] = useState(false);
   const [clearIllustrations, setClearIllustrations] = useState(false);
   const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
@@ -152,10 +162,13 @@ function App(): React.ReactElement {
   const roleWorkspaceViewActive =
     mainView.kind === "roles-list"
     || mainView.kind === "role-create"
-    || mainView.kind === "role-detail";
+    || mainView.kind === "role-detail"
+    || mainView.kind === "role-assets";
   const roleWorkspaceSection: RoleWorkspaceSectionId =
     mainView.kind === "role-create"
       ? "role-create"
+      : mainView.kind === "role-assets"
+        ? "role-assets"
       : mainView.kind === "role-detail"
         ? "role-detail"
         : "roles-list";
@@ -165,7 +178,7 @@ function App(): React.ReactElement {
     roleId = activeRoleIdRef.current,
     section = settingsSection,
   ): NavigationEntry {
-    const resolvedRoleId = view.kind === "role-detail" ? view.roleId : roleId;
+    const resolvedRoleId = view.kind === "role-detail" || view.kind === "role-assets" ? view.roleId : roleId;
     return {
       view: cloneView(view),
       activeRoleId: resolvedRoleId,
@@ -234,7 +247,7 @@ function App(): React.ReactElement {
     setMainView({ kind: "settings" });
   }
 
-  function openRoleWorkspaceView(nextView: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" }>): void {
+  function openRoleWorkspaceView(nextView: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" | "role-assets" }>): void {
     setSidebarAnimating(true);
     setSidebarCollapsed(false);
     setMainView(nextView);
@@ -295,7 +308,7 @@ function App(): React.ReactElement {
   }
 
   function openRoleWorkspace(
-    nextView: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" }>,
+    nextView: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" | "role-assets" }>,
     options?: { recordHistory?: boolean },
   ): void {
     openRoleWorkspaceView(nextView);
@@ -759,6 +772,8 @@ function App(): React.ReactElement {
         illustrationSources: [],
         removedIllustrations: [],
       });
+      setSelectedAvatarAsset(role.avatar ?? "");
+      setSelectedFeaturedImage(role.featured_image ?? role.illustrations[0] ?? "");
       setClearAvatar(false);
       setClearIllustrations(false);
       const savedIllustration =
@@ -772,6 +787,8 @@ function App(): React.ReactElement {
       );
     } else {
       setActiveIllustration("");
+      setSelectedAvatarAsset("");
+      setSelectedFeaturedImage("");
     }
     if (options?.recordHistory !== false) {
       pushNavigationEntry(buildNavigationEntry({ kind: "chat" }, roleId));
@@ -783,6 +800,17 @@ function App(): React.ReactElement {
   async function openRoleDetail(roleId: string): Promise<void> {
     await openRole(roleId, null, { recordHistory: false });
     openRoleWorkspace({ kind: "role-detail", roleId });
+  }
+
+  async function openRoleAssets(roleId: string): Promise<void> {
+    if (activeRoleIdRef.current !== roleId) {
+      await openRole(roleId, null, { recordHistory: false });
+    } else {
+      const currentRole = roles.find((role) => role.id === roleId) ?? null;
+      setSelectedAvatarAsset(currentRole?.avatar ?? "");
+      setSelectedFeaturedImage(currentRole?.featured_image ?? currentRole?.illustrations[0] ?? "");
+    }
+    openRoleWorkspace({ kind: "role-assets", roleId });
   }
 
   async function sendMessage(contentOverride?: string): Promise<void> {
@@ -941,6 +969,35 @@ function App(): React.ReactElement {
     openRoleWorkspace({ kind: "role-detail", roleId: updated.id }, { recordHistory: false });
   }
 
+  async function saveRoleAssets(): Promise<void> {
+    if (!detailRoleId) return;
+    setSavingRoleAssets(true);
+    setError("");
+    const pendingRoleForm = roleFormRef.current;
+    const res = await window.miraDesktop.invoke({
+      method: "roles.update",
+      payload: {
+        role_id: detailRoleId,
+        avatar_asset: selectedAvatarAsset || undefined,
+        featured_image: selectedFeaturedImage || undefined,
+      },
+    });
+    setSavingRoleAssets(false);
+    if (res.error) {
+      setError(res.error.message);
+      return;
+    }
+    const updated = res.payload.role as RoleRecord;
+    const nextRoles = await loadRolesFromBridge();
+    setSelectedAvatarAsset(updated.avatar ?? "");
+    setSelectedFeaturedImage(updated.featured_image ?? updated.illustrations[0] ?? "");
+    setNotice("角色素材已更新。");
+    updateRoleForm({
+      ...pendingRoleForm,
+    });
+    openRoleWorkspace({ kind: "role-detail", roleId: updated.id }, { recordHistory: false });
+  }
+
   async function deleteRole(): Promise<void> {
     if (!activeRoleId) return;
     const deletingRoleId = activeRoleId;
@@ -980,6 +1037,30 @@ function App(): React.ReactElement {
     if (!files.length) return;
     setClearIllustrations(false);
     updateRoleForm((current) => ({ ...current, illustrationSources: files, removedIllustrations: [] }));
+  }
+
+  async function pickRoleAssets(): Promise<void> {
+    const files = await window.miraDesktop.pickImages({ multiple: true });
+    if (!files.length || !detailRoleId) return;
+    setSavingRoleAssets(true);
+    setError("");
+    const res = await window.miraDesktop.invoke({
+      method: "roles.update",
+      payload: {
+        role_id: detailRoleId,
+        illustration_sources: files,
+      },
+    });
+    setSavingRoleAssets(false);
+    if (res.error) {
+      setError(res.error.message);
+      return;
+    }
+    const updated = res.payload.role as RoleRecord;
+    await loadRolesFromBridge();
+    setSelectedAvatarAsset(updated.avatar ?? "");
+    setSelectedFeaturedImage(updated.featured_image ?? updated.illustrations[0] ?? "");
+    openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
   }
 
   function clearAvatarSelection(): void {
@@ -1029,6 +1110,17 @@ function App(): React.ReactElement {
     }
     if (nextEntry.view.kind === "roles-list" || nextEntry.view.kind === "role-create") {
       openRoleWorkspaceView(nextEntry.view);
+      return;
+    }
+    if (nextEntry.view.kind === "role-assets") {
+      const assetsView = nextEntry.view;
+      const assetsRole = roles.find((role) => role.id === assetsView.roleId) ?? null;
+      if (!assetsRole) {
+        openRoleWorkspaceView({ kind: "roles-list" });
+        return;
+      }
+      await openRole(assetsView.roleId, assetsRole, { recordHistory: false });
+      openRoleWorkspaceView(assetsView);
       return;
     }
     if (nextEntry.view.kind === "role-detail") {
@@ -1123,6 +1215,7 @@ function App(): React.ReactElement {
         ));
   const visibleIllustration = activeIllustration || previewIllustrations[0] || "";
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
+  const featuredImageUrl = detailRole?.featured_image_abs || visibleIllustrationUrl;
   const headerTitle = sending && activeRole ? "正在输入中..." : (activeRole ? activeRole.name : "选择一个角色");
 
   useEffect(() => {
@@ -1212,6 +1305,10 @@ function App(): React.ReactElement {
                   openRoleWorkspace({ kind: "role-create" });
                   return;
                 }
+                if (section === "role-assets" && detailRoleId) {
+                  openRoleWorkspace({ kind: "role-assets", roleId: detailRoleId });
+                  return;
+                }
                 openRoleWorkspace({ kind: "roles-list" });
               }}
               onBeginResize={beginSidebarResize}
@@ -1275,19 +1372,29 @@ function App(): React.ReactElement {
               activeIllustration={activeIllustration}
               bridgeReady={bridgeReady}
               previewAvatar={previewAvatar}
-              previewIllustrations={previewIllustrations}
+              featuredImageUrl={featuredImageUrl}
               roleForm={roleForm}
               roleFormDirty={roleFormDirty}
               savingRole={savingRole}
-              onBackToList={() => openRoleWorkspace({ kind: "roles-list" })}
+              onOpenAssetsPage={() => void openRoleAssets(detailRoleId)}
               onUpdateRoleForm={updateRoleForm}
-              onSetActiveIllustration={setActiveIllustration}
-              onRememberIllustration={(roleId, illustration) => void rememberIllustration(roleId, illustration)}
-              onPickAvatar={() => void pickAvatar()}
-              onPickIllustrations={() => void pickIllustrations()}
               onDeleteRole={() => void deleteRole()}
               onResetRoleForm={resetRoleForm}
               onSaveRole={() => void saveRole()}
+            />
+          ) : null}
+          {mainView.kind === "role-assets" ? (
+            <RoleAssetsPage
+              activeRole={detailRole}
+              bridgeReady={bridgeReady}
+              savingSelection={savingRoleAssets}
+              selectedAvatarAsset={selectedAvatarAsset}
+              selectedFeaturedImage={selectedFeaturedImage}
+              onBackToDetail={() => openRoleWorkspace({ kind: "role-detail", roleId: detailRoleId })}
+              onPickAssets={() => void pickRoleAssets()}
+              onSelectAvatarAsset={setSelectedAvatarAsset}
+              onSelectFeaturedImage={setSelectedFeaturedImage}
+              onSaveSelections={() => void saveRoleAssets()}
             />
           ) : null}
           {mainView.kind === "settings" ? (

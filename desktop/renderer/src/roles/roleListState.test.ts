@@ -13,6 +13,8 @@ function createRole(overrides: Partial<RoleRecord> & Pick<RoleRecord, "id" | "na
     system_prompt: overrides.system_prompt ?? "",
     avatar: overrides.avatar ?? null,
     avatar_abs: overrides.avatar_abs ?? null,
+    featured_image: overrides.featured_image ?? null,
+    featured_image_abs: overrides.featured_image_abs ?? null,
     illustrations: overrides.illustrations ?? [],
     illustrations_abs: overrides.illustrations_abs ?? [],
     created_at: overrides.created_at ?? "2026-06-29T12:00:00+08:00",

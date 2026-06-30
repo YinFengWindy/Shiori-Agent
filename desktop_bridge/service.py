@@ -78,6 +78,7 @@ class DesktopBridgeService:
                 return self._ok(request_id, method, {"role": self._serialize_role(aggregate.role)})
             if method == "roles.update":
                 avatar_source = str(payload.get("avatar_source") or "").strip() or None
+                avatar_asset = str(payload.get("avatar_asset") or "").strip() or None
                 raw_illustrations = payload.get("illustration_sources")
                 illustration_sources = (
                     [str(item) for item in raw_illustrations if str(item).strip()]
@@ -90,6 +91,7 @@ class DesktopBridgeService:
                     if isinstance(raw_removed_illustrations, list)
                     else None
                 )
+                featured_image = str(payload.get("featured_image") or "").strip() or None
                 aggregate = self.role_service.update_role(
                     str(payload.get("role_id") or ""),
                     name=payload.get("name"),
@@ -102,6 +104,9 @@ class DesktopBridgeService:
                         else None
                     ),
                     avatar_source=avatar_source,
+                    avatar_asset=avatar_asset,
+                    featured_image=featured_image,
+                    clear_featured_image=bool(payload.get("clear_featured_image")),
                     clear_avatar=bool(payload.get("clear_avatar")),
                     illustration_sources=illustration_sources,
                     removed_illustrations=removed_illustrations,
@@ -348,6 +353,12 @@ class DesktopBridgeService:
         payload["avatar_abs"] = (
             str((self.role_store.roles_dir / avatar).resolve())
             if isinstance(avatar, str) and avatar
+            else None
+        )
+        featured_image = payload.get("featured_image")
+        payload["featured_image_abs"] = (
+            str((self.role_store.roles_dir / featured_image).resolve())
+            if isinstance(featured_image, str) and featured_image
             else None
         )
         payload["illustrations_abs"] = [

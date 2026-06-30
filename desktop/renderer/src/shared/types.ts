@@ -14,6 +14,8 @@ export type RoleRecord = {
   system_prompt: string;
   avatar: string | null;
   avatar_abs: string | null;
+  featured_image: string | null;
+  featured_image_abs: string | null;
   illustrations: string[];
   illustrations_abs: string[];
   created_at: string;
@@ -81,6 +83,7 @@ export type AppMainView =
   | { kind: "roles-list" }
   | { kind: "role-create" }
   | { kind: "role-detail"; roleId: string }
+  | { kind: "role-assets"; roleId: string }
   | { kind: "settings" };
 
 export type {

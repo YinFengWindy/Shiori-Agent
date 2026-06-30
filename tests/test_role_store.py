@@ -135,6 +135,60 @@ def test_role_store_removes_selected_illustration_only(tmp_path: Path):
     assert second_path.exists()
 
 
+def test_role_store_can_select_avatar_and_featured_image_from_asset_library(tmp_path: Path):
+    ill1 = tmp_path / "ill-1.png"
+    ill1.write_bytes(b"ill-1")
+    ill2 = tmp_path / "ill-2.png"
+    ill2.write_bytes(b"ill-2")
+
+    store = RoleStore(tmp_path)
+    role = store.create_role(
+        name="Mira",
+        description="assistant role",
+        system_prompt="you are mira",
+        role_id="mira",
+        illustration_sources=[ill1, ill2],
+    )
+
+    updated = store.update_role(
+        "mira",
+        avatar_asset=role.illustrations[0],
+        featured_image=role.illustrations[1],
+    )
+
+    assert updated.avatar == role.illustrations[0]
+    assert updated.featured_image == role.illustrations[1]
+
+
+def test_role_store_clears_selected_assets_when_underlying_asset_removed(tmp_path: Path):
+    ill1 = tmp_path / "ill-1.png"
+    ill1.write_bytes(b"ill-1")
+    ill2 = tmp_path / "ill-2.png"
+    ill2.write_bytes(b"ill-2")
+
+    store = RoleStore(tmp_path)
+    role = store.create_role(
+        name="Mira",
+        description="assistant role",
+        system_prompt="you are mira",
+        role_id="mira",
+        illustration_sources=[ill1, ill2],
+    )
+    selected = store.update_role(
+        "mira",
+        avatar_asset=role.illustrations[0],
+        featured_image=role.illustrations[0],
+    )
+
+    updated = store.update_role(
+        "mira",
+        removed_illustrations=[selected.illustrations[0]],
+    )
+
+    assert updated.avatar is None
+    assert updated.featured_image is None
+
+
 def test_role_aggregate_service_initializes_role_session_and_memory_space(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,

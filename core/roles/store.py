@@ -33,6 +33,7 @@ class RoleRecord:
     system_prompt: str
     background: str
     avatar: str | None
+    featured_image: str | None
     illustrations: list[str]
     runtime_config: dict[str, Any]
     memory_init_state: dict[str, Any]
@@ -42,6 +43,7 @@ class RoleRecord:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["avatar"] = _normalize_rel_path(self.avatar)
+        payload["featured_image"] = _normalize_rel_path(self.featured_image)
         payload["illustrations"] = [
             _normalize_rel_path(path) or "" for path in self.illustrations
         ]
@@ -56,6 +58,7 @@ class RoleRecord:
             system_prompt=str(payload.get("system_prompt") or ""),
             background=str(payload.get("background") or ""),
             avatar=_normalize_rel_path(payload.get("avatar")),
+            featured_image=_normalize_rel_path(payload.get("featured_image")),
             illustrations=[
                 _normalize_rel_path(str(item)) or ""
                 for item in payload.get("illustrations", [])
@@ -167,6 +170,7 @@ class RoleStore:
                 system_prompt=clean_prompt,
                 background=str(background),
                 avatar=None,
+                featured_image=None,
                 illustrations=[],
                 runtime_config=dict(runtime_config or {}),
                 memory_init_state={},
@@ -199,6 +203,9 @@ class RoleStore:
         runtime_config: dict[str, Any] | None = None,
         memory_init_state: dict[str, Any] | None = None,
         avatar_source: str | Path | None = None,
+        avatar_asset: str | None = None,
+        featured_image: str | None = None,
+        clear_featured_image: bool = False,
         clear_avatar: bool = False,
         illustration_sources: list[str | Path] | None = None,
         removed_illustrations: list[str] | None = None,
@@ -233,6 +240,18 @@ class RoleStore:
                 if avatar_source is not None:
                     self._remove_asset_relpath(role.avatar)
                     role.avatar = self.import_asset(role.id, avatar_source, prefix="avatar")
+                if avatar_asset is not None:
+                    clean_avatar_asset = _normalize_rel_path(avatar_asset)
+                    if clean_avatar_asset and not self._is_role_asset_path(role.id, clean_avatar_asset):
+                        raise ValueError(f"角色素材不存在: {clean_avatar_asset}")
+                    role.avatar = clean_avatar_asset
+                if clear_featured_image:
+                    role.featured_image = None
+                if featured_image is not None:
+                    clean_featured_image = _normalize_rel_path(featured_image)
+                    if clean_featured_image and not self._is_role_asset_path(role.id, clean_featured_image):
+                        raise ValueError(f"角色素材不存在: {clean_featured_image}")
+                    role.featured_image = clean_featured_image
                 if clear_illustrations:
                     for rel_path in role.illustrations:
                         self._remove_asset_relpath(rel_path)
@@ -248,6 +267,10 @@ class RoleStore:
                         for rel_path in role.illustrations:
                             normalized = _normalize_rel_path(rel_path) or ""
                             if normalized in removed_set:
+                                if role.avatar == normalized:
+                                    role.avatar = None
+                                if role.featured_image == normalized:
+                                    role.featured_image = None
                                 self._remove_asset_relpath(normalized)
                                 continue
                             kept_illustrations.append(rel_path)
@@ -293,3 +316,15 @@ class RoleStore:
         target = role_assets_dir / target_name
         shutil.copy2(src, target)
         return target.relative_to(self.roles_dir).as_posix()
+
+    def _is_role_asset_path(self, role_id: str, rel_path: str) -> bool:
+        normalized = _normalize_rel_path(rel_path)
+        if not normalized:
+            return False
+        target = (self.roles_dir / normalized).resolve()
+        role_assets_dir = (self.assets_dir / role_id).resolve()
+        try:
+            target.relative_to(role_assets_dir)
+        except ValueError:
+            return False
+        return target.is_file()
