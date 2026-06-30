@@ -7,8 +7,6 @@ type RoleDetailPageProps = {
   activeRole: RoleRecord | null;
   activeRoleId: string;
   bridgeReady: boolean;
-  clearAvatar: boolean;
-  clearIllustrations: boolean;
   previewAvatar: string | null;
   previewIllustrations: string[];
   roleForm: RoleFormState;
@@ -20,8 +18,6 @@ type RoleDetailPageProps = {
   onRememberIllustration: (roleId: string, illustration: string) => void;
   onPickAvatar: () => void;
   onPickIllustrations: () => void;
-  onRemoveAvatar: () => void;
-  onRemoveIllustration: (path: string) => void;
   onDeleteRole: () => void;
   onResetRoleForm: () => void;
   onSaveRole: () => void;
@@ -33,8 +29,6 @@ export function RoleDetailPage({
   activeRole,
   activeRoleId,
   bridgeReady,
-  clearAvatar,
-  clearIllustrations,
   previewAvatar,
   previewIllustrations,
   roleForm,
@@ -46,8 +40,6 @@ export function RoleDetailPage({
   onRememberIllustration,
   onPickAvatar,
   onPickIllustrations,
-  onRemoveAvatar,
-  onRemoveIllustration,
   onDeleteRole,
   onResetRoleForm,
   onSaveRole,
@@ -86,10 +78,9 @@ export function RoleDetailPage({
             roleForm={roleForm}
             onPickAvatar={onPickAvatar}
             onPickIllustrations={onPickIllustrations}
-            onRemoveAvatar={onRemoveAvatar}
-            onRemoveIllustration={onRemoveIllustration}
             onRememberIllustration={onRememberIllustration}
             onSetActiveIllustration={onSetActiveIllustration}
+            onUpdateRoleForm={onUpdateRoleForm}
           />
           <div className="grid content-start gap-5">
             <RoleDetailFormPanel

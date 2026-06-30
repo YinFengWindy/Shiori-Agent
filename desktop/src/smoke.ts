@@ -337,24 +337,25 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               return { ok: false, reason: "role-detail-entry-missing" };
             }
             roleBManagementCard.click();
-            let editName, editDesc, editPrompt, saveRoleButton, pickAvatarButton, pickIllustrationsButton, removeAvatarButton;
+            let editName, editDesc, editPrompt, saveRoleButton, pickAvatarButton, pickIllustrationsButton;
             for (let i = 0; i < 40; i++) {
               const roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
               const previewPanel = document.querySelector('[data-testid="role-detail-preview-panel"]');
               const formPanel = document.querySelector('[data-testid="role-detail-form-panel"]');
+              const infoCard = document.querySelector('[data-testid="role-detail-info-card"]');
+              const illustrationHero = document.querySelector('[data-testid="role-illustration-hero"]');
               editName = document.querySelector('[data-testid="edit-role-name"]');
               editDesc = document.querySelector('[data-testid="edit-role-description"]');
               editPrompt = document.querySelector('[data-testid="edit-role-prompt"]');
               saveRoleButton = document.querySelector('[data-testid="save-role-button"]');
               pickAvatarButton = document.querySelector('[data-testid="pick-avatar-button"]');
               pickIllustrationsButton = document.querySelector('[data-testid="pick-illustrations-button"]');
-              removeAvatarButton = document.querySelector('[data-testid="remove-avatar-button"]');
-              if (roleDetailPage && previewPanel && formPanel && editName && editDesc && editPrompt && saveRoleButton && pickAvatarButton && pickIllustrationsButton && removeAvatarButton) {
+              if (roleDetailPage && previewPanel && formPanel && infoCard && illustrationHero && editName && editDesc && editPrompt && saveRoleButton && pickAvatarButton && pickIllustrationsButton) {
                 break;
               }
               await sleep(100);
             }
-            if (!editName || !editDesc || !editPrompt || !saveRoleButton || !pickAvatarButton || !pickIllustrationsButton || !removeAvatarButton) {
+            if (!editName || !editDesc || !editPrompt || !saveRoleButton || !pickAvatarButton || !pickIllustrationsButton) {
               return {
                 ok: false,
                 reason: "role-editor-elements-missing",
@@ -376,16 +377,13 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             pickIllustrationsButton.click();
             for (let i = 0; i < 40; i++) {
               await sleep(100);
-              if (document.querySelector('[data-testid^="remove-illustration-"]')) {
+              const currentIllustrationText = document.body.textContent || "";
+              if (currentIllustrationText.includes("illustration-smoke") || document.querySelector('[data-testid^="illustration-switch-"]')) {
                 break;
               }
             }
-            if (!document.querySelector('[data-testid^="remove-illustration-"]')) {
+            if (!(document.body.textContent || "").includes("illustration-smoke") && !document.querySelector('[data-testid^="illustration-switch-"]')) {
               return { ok: false, reason: "illustration-selection-not-reflected" };
-            }
-            const removeIllustrationButton = Array.from(document.querySelectorAll('[data-testid^="remove-illustration-"]'))[0];
-            if (!removeIllustrationButton) {
-              return { ok: false, reason: "remove-illustration-button-missing" };
             }
             if (saveRoleButton.disabled) {
               return { ok: false, reason: "save-role-disabled-after-edit" };
@@ -640,7 +638,7 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 value: composerTextarea.value,
               };
             }
-            for (let i = 0; i < 40; i++) {
+            for (let i = 0; i < 60; i++) {
               await sleep(100);
               if ((hero.textContent || "").includes(roleBEditedName)) {
                 break;

@@ -1274,8 +1274,6 @@ function App(): React.ReactElement {
               activeRoleId={detailRoleId}
               activeIllustration={activeIllustration}
               bridgeReady={bridgeReady}
-              clearAvatar={clearAvatar}
-              clearIllustrations={clearIllustrations}
               previewAvatar={previewAvatar}
               previewIllustrations={previewIllustrations}
               roleForm={roleForm}
@@ -1287,8 +1285,6 @@ function App(): React.ReactElement {
               onRememberIllustration={(roleId, illustration) => void rememberIllustration(roleId, illustration)}
               onPickAvatar={() => void pickAvatar()}
               onPickIllustrations={() => void pickIllustrations()}
-              onRemoveAvatar={clearAvatarSelection}
-              onRemoveIllustration={removeIllustrationSelection}
               onDeleteRole={() => void deleteRole()}
               onResetRoleForm={resetRoleForm}
               onSaveRole={() => void saveRole()}
