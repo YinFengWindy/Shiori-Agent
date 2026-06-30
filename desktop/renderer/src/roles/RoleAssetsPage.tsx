@@ -51,7 +51,7 @@ export function RoleAssetsPage({
         <div className={cx(cardClass, "grid min-h-[680px] grid-cols-[320px_minmax(0,1fr)] overflow-hidden border-[#D9E0E8] bg-white/92 shadow-[0_18px_48px_rgba(31,41,55,0.08)]")}>
           <div className="border-r border-[#E4EAF0] bg-[#FBFCFE] p-5">
             <button
-              className="mb-4 grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition hover:bg-[#F7F9FC]"
+              className="mb-4 grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)]"
               type="button"
               onClick={onBackToDetail}
               aria-label="返回角色详情"
