@@ -22,9 +22,11 @@ class _FakeClient(NovelAIClient):
     def __init__(self, response: httpx.Response, settings: NovelAISettings) -> None:
         self._response = response
         self._user_data: dict[str, object] = {}
+        self.last_generate_kwargs: dict[str, object] = {}
         super().__init__(requester=None, settings=settings)  # type: ignore[arg-type]
 
     async def generate_image(self, **kwargs: object) -> httpx.Response:
+        self.last_generate_kwargs = dict(kwargs)
         return self._response
 
     async def fetch_user_data(self) -> dict[str, object]:
@@ -173,3 +175,29 @@ async def test_service_rewrites_v45_subscription_error(tmp_path: Path) -> None:
                 mode="txt2img",
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_service_uses_nsfw_model_when_switch_enabled(tmp_path: Path) -> None:
+    settings = NovelAISettings(
+        enabled=True,
+        token="novel-token",
+        nsfw_enabled=True,
+    )
+    client = _FakeClient(_json_response(), settings)
+    service = NovelAIService(
+        settings=settings,
+        client=client,
+        store=NovelAIStore(tmp_path),
+        role_store=RoleStore(tmp_path),
+        workspace=tmp_path,
+    )
+
+    _ = await service.generate(
+        GenerateImageRequest(
+            prompt="moonlight portrait",
+            mode="txt2img",
+        )
+    )
+
+    assert client.last_generate_kwargs["model"] == "nai-diffusion-4-5-full"

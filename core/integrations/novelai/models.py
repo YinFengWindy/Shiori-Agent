@@ -15,6 +15,8 @@ class NovelAISettings:
     token: str = ""
     base_url: str = "https://image.novelai.net"
     default_model: str = "nai-diffusion-4-5-curated"
+    nsfw_model: str = "nai-diffusion-4-5-full"
+    nsfw_enabled: bool = False
     allow_txt2img: bool = True
     allow_img2img: bool = True
     auto_writeback_role_assets: bool = False

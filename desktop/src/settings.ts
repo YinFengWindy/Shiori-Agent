@@ -99,6 +99,8 @@ export type SettingsFormData = {
     novelaiToken: string;
     novelaiBaseUrl: string;
     novelaiDefaultModel: string;
+    novelaiNsfwModel: string;
+    novelaiNsfwEnabled: boolean;
     novelaiAllowTxt2img: boolean;
     novelaiAllowImg2img: boolean;
     novelaiAutoWritebackRoleAssets: boolean;
@@ -381,6 +383,8 @@ function loadSettingsData(): SettingsSnapshot {
         novelaiToken: String(novelai.token ?? ""),
         novelaiBaseUrl: String(novelai.base_url ?? "https://image.novelai.net"),
         novelaiDefaultModel: String(novelai.default_model ?? "nai-diffusion-4-5-curated"),
+        novelaiNsfwModel: String(novelai.nsfw_model ?? "nai-diffusion-4-5-full"),
+        novelaiNsfwEnabled: Boolean(novelai.nsfw_enabled),
         novelaiAllowTxt2img: Boolean(novelai.allow_txt2img ?? true),
         novelaiAllowImg2img: Boolean(novelai.allow_img2img ?? true),
         novelaiAutoWritebackRoleAssets: Boolean(novelai.auto_writeback_role_assets),
@@ -601,6 +605,8 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `token = ${quote(formData.integrations.novelaiToken)}`,
     `base_url = ${quote(formData.integrations.novelaiBaseUrl.trim() || "https://image.novelai.net")}`,
     `default_model = ${quote(formData.integrations.novelaiDefaultModel.trim() || "nai-diffusion-4-5-curated")}`,
+    `nsfw_model = ${quote(formData.integrations.novelaiNsfwModel.trim() || "nai-diffusion-4-5-full")}`,
+    `nsfw_enabled = ${formData.integrations.novelaiNsfwEnabled ? "true" : "false"}`,
     `allow_txt2img = ${formData.integrations.novelaiAllowTxt2img ? "true" : "false"}`,
     `allow_img2img = ${formData.integrations.novelaiAllowImg2img ? "true" : "false"}`,
     `auto_writeback_role_assets = ${formData.integrations.novelaiAutoWritebackRoleAssets ? "true" : "false"}`,

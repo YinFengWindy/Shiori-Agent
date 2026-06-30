@@ -781,7 +781,8 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     </label>
                     <SecretInput value={draft.integrations.novelaiToken} onChange={(value) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiToken: value } }))} />
                     <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiBaseUrl: event.target.value } }))} placeholder="Base URL" />
-                    <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiDefaultModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiDefaultModel: event.target.value } }))} placeholder="默认模型" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiDefaultModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiDefaultModel: event.target.value } }))} placeholder="普通模型" />
+                    <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiNsfwModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwModel: event.target.value } }))} placeholder="NSFW 模型" />
                     <div className="grid gap-3 md:grid-cols-2">
                       <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
                         <input type="checkbox" checked={draft.integrations.novelaiAllowTxt2img} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowTxt2img: event.target.checked } }))} />
@@ -794,6 +795,10 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                       <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3 md:col-span-2">
                         <input type="checkbox" checked={draft.integrations.novelaiAutoWritebackRoleAssets} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAutoWritebackRoleAssets: event.target.checked } }))} />
                         <span>生成后自动写回角色素材</span>
+                      </label>
+                      <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3 md:col-span-2">
+                        <input type="checkbox" checked={draft.integrations.novelaiNsfwEnabled} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwEnabled: event.target.checked } }))} />
+                        <span>NSFW 模式（开启时使用 Full）</span>
                       </label>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">

@@ -61,9 +61,7 @@ class NovelAIService:
             raise ValueError("prompt 不能为空")
         width, height = self._resolve_dimensions(request)
         steps = self._resolve_steps(request)
-        model = request.model.strip() or self._settings.default_model
-        if model != self._settings.default_model:
-            raise ValueError(f"当前仅允许模型 {self._settings.default_model}")
+        model = self._resolve_model(request)
         action = self._resolve_action(request.mode)
         base_image_path = ""
         base_image_b64 = ""
@@ -212,6 +210,24 @@ class NovelAIService:
         if steps > self._settings.max_steps:
             raise ValueError(f"当前仅允许 steps 不超过 {self._settings.max_steps}")
         return steps
+
+    def _resolve_model(self, request: GenerateImageRequest) -> str:
+        requested_model = request.model.strip()
+        allowed_models = {
+            self._settings.default_model.strip(),
+            self._settings.nsfw_model.strip(),
+        }
+        if requested_model:
+            if requested_model not in allowed_models:
+                raise ValueError(
+                    f"当前仅允许模型 {self._settings.default_model} 或 {self._settings.nsfw_model}"
+                )
+            return requested_model
+        return (
+            self._settings.nsfw_model
+            if self._settings.nsfw_enabled
+            else self._settings.default_model
+        )
 
     def _build_parameters(
         self,

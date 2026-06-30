@@ -300,6 +300,8 @@ def _load_novelai_config(data: dict) -> NovelAISettings:
         token=_resolve(str(raw.get("token", defaults.token))),
         base_url=str(raw.get("base_url") or defaults.base_url),
         default_model=str(raw.get("default_model") or defaults.default_model),
+        nsfw_model=str(raw.get("nsfw_model") or defaults.nsfw_model),
+        nsfw_enabled=bool(raw.get("nsfw_enabled", defaults.nsfw_enabled)),
         allow_txt2img=bool(raw.get("allow_txt2img", defaults.allow_txt2img)),
         allow_img2img=bool(raw.get("allow_img2img", defaults.allow_img2img)),
         auto_writeback_role_assets=bool(
