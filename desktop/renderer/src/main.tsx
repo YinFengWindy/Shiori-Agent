@@ -1020,7 +1020,14 @@ function App(): React.ReactElement {
     }
     const updated = res.payload.role as RoleRecord;
     await loadRolesFromBridge();
-    setSelectedRoleAsset(updated.featured_image ?? updated.avatar ?? updated.illustrations[0] ?? "");
+    const nextSelectedRoleAsset =
+      nextSelection?.featuredImage
+      ?? nextSelection?.avatarAsset
+      ?? updated.featured_image
+      ?? updated.avatar
+      ?? updated.illustrations[0]
+      ?? "";
+    setSelectedRoleAsset(nextSelectedRoleAsset);
     setSelectedAvatarAsset(updated.avatar ?? "");
     setSelectedFeaturedImage(updated.featured_image ?? updated.illustrations[0] ?? "");
     setNotice("角色素材已更新。");
