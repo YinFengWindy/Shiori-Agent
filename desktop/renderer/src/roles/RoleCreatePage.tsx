@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import { ResetIcon } from "../shared/icons";
-import { cx, inputClass, panelTitleClass } from "../shared/styles";
+import { cx, inputClass } from "../shared/styles";
 import type { NewRoleFormState } from "../shared/types";
 
 type RoleCreatePageProps = {
@@ -86,33 +86,29 @@ export function RoleCreatePage({
         </div>
         <div className="p-2">
           <div className="grid gap-5 rounded-[28px] border border-white/65 bg-white/72 p-8 shadow-[0_18px_48px_rgba(31,41,55,0.08)] backdrop-blur-[6px]">
-            <div>
-              <div className={cx(panelTitleClass, "text-[34px] leading-none text-[#1f1f1f]")}>
-                {form.name || "新建角色"}
-              </div>
-              <div className="mt-3 text-sm leading-6 text-[#6b7280]">
-                创建一个新的角色，并填写它的基础信息与系统提示词。
-              </div>
-            </div>
             <div className="grid gap-4">
-              <div>
+              <label className="grid gap-1.5 text-xs text-[#6b7280]">
+                <span>名称</span>
                 <input
                   data-testid="new-role-name"
-                  className={cx(inputClass, "max-w-[420px] border-transparent bg-transparent px-0 py-0 text-[34px] font-semibold leading-none text-[#1f1f1f] placeholder:text-[#9ca3af] focus:border-transparent focus:ring-0")}
+                  className={inputClass}
                   value={form.name}
                   onChange={(event) => onUpdateForm((current) => ({ ...current, name: event.target.value }))}
                   placeholder="输入角色名称"
                 />
+              </label>
+              <label className="grid gap-1.5 text-xs text-[#6b7280]">
+                <span>简介</span>
                 <input
                   data-testid="new-role-description"
-                  className={cx(inputClass, "mt-3 border-transparent bg-transparent px-0 text-sm text-[#4b5563] placeholder:text-[#9ca3af] focus:border-transparent focus:ring-0")}
+                  className={inputClass}
                   value={form.description}
                   onChange={(event) => onUpdateForm((current) => ({ ...current, description: event.target.value }))}
                   placeholder="简短描述这个角色"
                 />
-              </div>
-              <div className="grid gap-2 text-xs text-[#6b7280]">
-                <div className="uppercase tracking-[0.14em]">系统提示词</div>
+              </label>
+              <label className="grid gap-2 text-xs text-[#6b7280]">
+                <span>系统提示词</span>
                 <textarea
                   ref={promptRef}
                   data-testid="new-role-prompt"
@@ -121,7 +117,7 @@ export function RoleCreatePage({
                   onChange={(event) => onUpdateForm((current) => ({ ...current, systemPrompt: event.target.value }))}
                   placeholder="定义这个角色的行为、语气和边界"
                 />
-              </div>
+              </label>
             </div>
           </div>
         </div>
