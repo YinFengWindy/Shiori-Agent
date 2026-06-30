@@ -23,7 +23,7 @@ export function RoleManagementPage({
     >
       <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-8 pb-10 pt-10">
         {roles.length ? (
-          <div className="grid grid-cols-[repeat(auto-fit,264px)] justify-start gap-5">
+          <div className="grid grid-cols-3 gap-5">
             {roles.map((role) => {
               const isActive = role.id === activeRoleId;
               const coverImage = role.illustrations_abs[0] ? toFileUrl(role.illustrations_abs[0]) : "";
@@ -35,7 +35,7 @@ export function RoleManagementPage({
                   disabled={!bridgeReady}
                   onClick={() => onOpenRoleDetail(role.id)}
                   className={cx(
-                    "group relative grid h-[360px] w-[264px] overflow-hidden rounded-[22px] border border-[#D9E0E8] bg-[#EEF1F5] text-left shadow-[0_14px_40px_rgba(31,41,55,0.06)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(31,41,55,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-default disabled:opacity-60",
+                    "group relative grid h-[420px] w-full overflow-hidden rounded-[22px] border border-[#D9E0E8] bg-[#EEF1F5] text-left shadow-[0_14px_40px_rgba(31,41,55,0.06)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(31,41,55,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-default disabled:opacity-60",
                     isActive && "shadow-[0_18px_44px_rgba(31,41,55,0.12)]",
                   )}
                   style={coverImage ? { backgroundImage: `url("${coverImage}")`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
