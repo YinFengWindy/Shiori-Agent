@@ -118,7 +118,7 @@ async def serve_bridge(
         Config.load(config_path),
         workspace=workspace or _default_workspace(),
         features=RuntimeFeatures(
-            start_ipc=True,
+            start_ipc=False,
             enable_message_channels=True,
             enable_dashboard=False,
             enable_proactive=True,
