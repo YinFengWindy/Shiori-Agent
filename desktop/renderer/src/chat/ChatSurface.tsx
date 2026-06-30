@@ -215,11 +215,6 @@ export function ChatSurface({
                         {authorLabel}
                       </div>
                     ) : null}
-                    {sourceLabel ? (
-                      <div className={cx("mb-1 inline-flex w-fit items-center rounded-full border border-[#D8DCE2] bg-white/86 px-2 py-0.5 text-[11px] font-medium tracking-[0.08em] text-[#6B7280] opacity-0 transition-opacity duration-150 group-hover:opacity-100", isUser && "ml-auto")}>
-                        {sourceLabel}
-                      </div>
-                    ) : null}
                     <div className={cx(bubbleClass, isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10")}>
                       <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
                       {media.length ? (
@@ -239,9 +234,10 @@ export function ChatSurface({
                         </div>
                       ) : null}
                     </div>
-                    {message.timestamp ? (
-                      <div className={cx("message-time mt-1 text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100", chatMinorTextClass)}>
-                        {formatTimestamp(message.timestamp)}
+                    {message.timestamp || sourceLabel ? (
+                      <div className={cx("message-time mt-1 flex items-center gap-2 text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100", chatMinorTextClass)}>
+                        {message.timestamp ? <span>{formatTimestamp(message.timestamp)}</span> : null}
+                        {sourceLabel ? <span>{`from ${sourceLabel.toLowerCase()}`}</span> : null}
                       </div>
                     ) : null}
                   </div>
