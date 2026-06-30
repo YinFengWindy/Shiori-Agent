@@ -6,7 +6,6 @@ import {
   cx,
   ghostButtonClass,
   inputClass,
-  primaryButtonClass,
   textareaClass,
 } from "../shared/styles";
 import { ResetIcon, SaveIcon } from "../shared/icons";
@@ -174,6 +173,55 @@ function SectionCard({
   );
 }
 
+const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: string }>> = {
+  models: [
+    { id: "main", label: "主模型" },
+    { id: "fast", label: "轻量模型" },
+    { id: "agent", label: "Agent 模型" },
+    { id: "vl", label: "视觉模型" },
+  ],
+  channels: [
+    { id: "telegram", label: "Telegram" },
+    { id: "qq", label: "QQ" },
+    { id: "qqbot", label: "QQBot" },
+    { id: "feishu", label: "Feishu" },
+    { id: "cli", label: "CLI" },
+    { id: "bindings", label: "角色绑定" },
+  ],
+  memory: [
+    { id: "general", label: "基础" },
+    { id: "embedding", label: "Embedding" },
+  ],
+  proactive: [
+    { id: "general", label: "基础" },
+    { id: "target", label: "目标" },
+    { id: "agent", label: "Agent 参数" },
+    { id: "drift", label: "Drift" },
+  ],
+  integrations: [
+    { id: "fitbit", label: "Fitbit" },
+    { id: "peer-agents", label: "Peer Agents" },
+  ],
+  advanced: [
+    { id: "prompt", label: "Prompt" },
+    { id: "numbers", label: "数值项" },
+    { id: "toggles", label: "开关" },
+    { id: "wiring", label: "Wiring" },
+    { id: "plugins", label: "插件 / TOML" },
+  ],
+};
+
+function createInitialSubsectionState(): Record<SettingsSectionId, string> {
+  return {
+    models: settingsSubsections.models[0]?.id ?? "",
+    channels: settingsSubsections.channels[0]?.id ?? "",
+    memory: settingsSubsections.memory[0]?.id ?? "",
+    proactive: settingsSubsections.proactive[0]?.id ?? "",
+    integrations: settingsSubsections.integrations[0]?.id ?? "",
+    advanced: settingsSubsections.advanced[0]?.id ?? "",
+  };
+}
+
 export function SettingsPage({ bridgeReady, search, section, onMetaChange }: SettingsPageProps) {
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
   const [draft, setDraft] = useState<SettingsFormData | null>(null);
@@ -181,6 +229,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   const [loadError, setLoadError] = useState("");
   const [savePhase, setSavePhase] = useState<Exclude<SavePhase, "dirty">>("idle");
   const [statusMessage, setStatusMessage] = useState("");
+  const [activeSubsections, setActiveSubsections] = useState<Record<SettingsSectionId, string>>(createInitialSubsectionState);
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
   const floatingActionClass =
     "grid h-10 w-10 place-items-center rounded-full border bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-default disabled:border-black/6 disabled:bg-white/60 disabled:text-[#b8b8b8] disabled:shadow-none";
@@ -309,6 +358,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     );
   }
 
+  const formData = draft;
   const visibleSections = settingsSections.filter((section) => {
     if (!deferredSearch) return true;
     return section.label.toLowerCase().includes(deferredSearch) || section.id.toLowerCase().includes(deferredSearch);
@@ -316,258 +366,281 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   const currentSection = visibleSections.find((item) => item.id === section) ?? visibleSections[0] ?? null;
   const currentId = currentSection?.id ?? null;
   const isDirty = Boolean(snapshot && draft && !settingsEqual(snapshot.formData, draft));
+  const visibleSubsections = currentId ? settingsSubsections[currentId] : [];
+  const currentSubsectionId = currentId
+    ? (visibleSubsections.some((item) => item.id === activeSubsections[currentId])
+      ? activeSubsections[currentId]
+      : (visibleSubsections[0]?.id ?? null))
+    : null;
 
-  return (
-    <section className="settings-page grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[#F7F8FB]" data-testid="settings-page">
-      <div className="settings-content grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-        <div className="border-b border-[#E8EBF0] bg-[#F7F8FB] px-10 py-5">
-          <div className="flex items-center justify-end gap-2.5">
-            <button
-              className={cx(floatingActionClass, "border-black/8 text-[#747474] hover:border-black/14 hover:bg-[#F5F7FA] hover:text-[#4f4f4f]")}
-              type="button"
-              aria-label="重置"
-              onClick={reset}
-              disabled={!isDirty}
-            >
-                <ResetIcon className="h-[18px] w-[18px] fill-current" />
-            </button>
-            <button
-              className={cx(floatingActionClass, "border-transparent bg-white text-[#1f1f1f] hover:bg-[#F5F7FA]")}
-              type="button"
-              aria-label="保存并重启"
-              onClick={() => void save()}
-              disabled={!bridgeReady || !isDirty || savePhase === "saving"}
-            >
-                <SaveIcon className="h-[18px] w-[18px] fill-current" />
-            </button>
-          </div>
-        </div>
-        <div className="relative scrollbar-soft overflow-y-auto px-10 py-8">
-          {(savePhase === "saved" || savePhase === "restart-failed" || savePhase === "error") && statusMessage ? (
-            <div
-              className={cx(
-                "pointer-events-none absolute right-10 top-6 z-10 max-w-[440px] rounded-2xl border px-4 py-3 text-sm leading-6 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-[8px]",
-                savePhase === "saved"
-                  ? "border-[rgba(26,106,58,0.18)] bg-[rgba(237,248,240,0.94)] text-[#1a6a3a]"
-                  : "border-[rgba(176,58,58,0.18)] bg-[rgba(255,241,241,0.96)] text-[#9a2f2f]",
-              )}
-              role="status"
-              aria-live="polite"
-            >
-              {statusMessage}
-            </div>
-          ) : null}
-          <div className="mx-auto w-full max-w-[940px]">
-            {!currentSection ? (
-              <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-[#7f8490]")}>
-                没有匹配的设置项
-              </div>
-            ) : null}
-            {currentId === "models" ? (
+  function updateActiveSubsection(nextId: string): void {
+    if (!currentId) return;
+    setActiveSubsections((current) => (
+      current[currentId] === nextId
+        ? current
+        : { ...current, [currentId]: nextId }
+    ));
+  }
+
+  function renderCurrentSectionContent(): React.ReactNode {
+    if (!currentId || !currentSubsectionId) return null;
+    const draft = formData;
+
+    switch (currentId) {
+      case "models":
+        switch (currentSubsectionId) {
+          case "main":
+            return (
               <SectionCard>
                 <Field label="Provider" hint="当前主模型提供商。">
-                  <input className={cx(inputClass, "bg-white")} value={draft.models.provider} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, provider: event.target.value } }))} />
+                  <input className={cx(inputClass, "bg-white")} value={formData.models.provider} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, provider: event.target.value } }))} />
                 </Field>
                 <Field label="主模型" hint="桌面主对话使用的模型名。">
-                  <input className={cx(inputClass, "bg-white")} value={draft.models.mainModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, mainModel: event.target.value } }))} />
+                  <input className={cx(inputClass, "bg-white")} value={formData.models.mainModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, mainModel: event.target.value } }))} />
                 </Field>
                 <Field label="主模型 API Key">
-                  <SecretInput value={draft.models.mainApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, mainApiKey: value } }))} />
+                  <SecretInput value={formData.models.mainApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, mainApiKey: value } }))} />
                 </Field>
                 <Field label="主模型 Base URL">
-                  <input className={cx(inputClass, "bg-white")} value={draft.models.mainBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, mainBaseUrl: event.target.value } }))} />
+                  <input className={cx(inputClass, "bg-white")} value={formData.models.mainBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, mainBaseUrl: event.target.value } }))} />
                 </Field>
                 <Field label="Reasoning Effort" hint="支持的模型可用，用于控制推理强度；留空表示不写入。">
-                  <input className={cx(inputClass, "bg-white")} value={draft.models.reasoningEffort} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, reasoningEffort: event.target.value } }))} placeholder="例如 low / medium / high" />
+                  <input className={cx(inputClass, "bg-white")} value={formData.models.reasoningEffort} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, reasoningEffort: event.target.value } }))} placeholder="例如 low / medium / high" />
                 </Field>
                 <Field label="主模型开关">
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                      <input type="checkbox" checked={draft.models.enableThinking} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, enableThinking: event.target.checked } }))} />
+                      <input type="checkbox" checked={formData.models.enableThinking} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, enableThinking: event.target.checked } }))} />
                       <span>启用 Thinking</span>
                     </label>
                     <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                      <input type="checkbox" checked={draft.models.multimodal} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, multimodal: event.target.checked } }))} />
+                      <input type="checkbox" checked={formData.models.multimodal} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, multimodal: event.target.checked } }))} />
                       <span>启用多模态</span>
                     </label>
                   </div>
                 </Field>
+              </SectionCard>
+            );
+          case "fast":
+            return (
+              <SectionCard>
                 <Field label="轻量模型">
                   <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.fastModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastModel: event.target.value } }))} placeholder="模型名" />
-                    <SecretInput value={draft.models.fastApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, fastApiKey: value } }))} />
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.fastBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastBaseUrl: event.target.value } }))} placeholder="基础地址" />
-                  </div>
-                </Field>
-                <Field label="Agent 模型" hint="专用于主动任务 / agent tick；留空表示继续使用默认回退路径。">
-                  <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.agentModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentModel: event.target.value } }))} placeholder="模型名" />
-                    <SecretInput value={draft.models.agentApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, agentApiKey: value } }))} />
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.agentBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentBaseUrl: event.target.value } }))} placeholder="基础地址" />
-                  </div>
-                </Field>
-                <Field label="视觉模型">
-                  <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.vlModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlModel: event.target.value } }))} placeholder="模型名" />
-                    <SecretInput value={draft.models.vlApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, vlApiKey: value } }))} />
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.vlBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlBaseUrl: event.target.value } }))} placeholder="基础地址" />
+                    <input className={cx(inputClass, "bg-white")} value={formData.models.fastModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastModel: event.target.value } }))} placeholder="模型名" />
+                    <SecretInput value={formData.models.fastApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, fastApiKey: value } }))} />
+                    <input className={cx(inputClass, "bg-white")} value={formData.models.fastBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastBaseUrl: event.target.value } }))} placeholder="基础地址" />
                   </div>
                 </Field>
               </SectionCard>
-            ) : null}
-
-            {currentId === "channels" ? (
-              <div className="grid gap-8">
-                <SectionCard>
-                  <Field label="Telegram Token">
-                    <SecretInput value={draft.channels.telegramToken} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramToken: value } }))} />
-                  </Field>
-                  <Field label="Telegram Allow From" hint="每行一个用户名，不带 @。">
-                    <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.telegramAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramAllowFrom: splitLines(event.target.value) } }))} />
-                  </Field>
-                  <Field label="Telegram Channel Name">
-                    <input className={cx(inputClass, "bg-white")} value={draft.channels.telegramChannelName} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramChannelName: event.target.value } }))} />
-                  </Field>
-                  <Field label="QQ Bot UIN">
-                    <input className={cx(inputClass, "bg-white")} value={draft.channels.qqBotUin} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqBotUin: event.target.value } }))} />
-                  </Field>
-                  <Field label="QQ Allow From" hint="每行一个 QQ 号。">
-                    <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.qqAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqAllowFrom: splitLines(event.target.value) } }))} />
-                  </Field>
-                  <Field label="QQ WebSocket 超时秒数">
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.channels.qqWebsocketOpenTimeoutSeconds)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqWebsocketOpenTimeoutSeconds: parseNumber(event.target.value, current.channels.qqWebsocketOpenTimeoutSeconds) } }))} />
-                  </Field>
-                  <Field label="QQ 群组规则" hint="第一版先用逐条卡片编辑。">
-                    <div className="grid gap-3">
-                      {draft.channels.qqGroups.map((group, index) => (
-                        <GroupEditor
-                          key={`${group.groupId}-${index}`}
-                          group={group}
-                          onChange={(nextGroup) => updateDraft((current) => {
-                            const next = [...current.channels.qqGroups];
-                            next[index] = nextGroup;
-                            return { ...current, channels: { ...current.channels, qqGroups: next } };
-                          })}
-                          onRemove={() => updateDraft((current) => ({
+            );
+          case "agent":
+            return (
+              <SectionCard>
+                <Field label="Agent 模型" hint="专用于主动任务 / agent tick；留空表示继续使用默认回退路径。">
+                  <div className="grid gap-3">
+                    <input className={cx(inputClass, "bg-white")} value={formData.models.agentModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentModel: event.target.value } }))} placeholder="模型名" />
+                    <SecretInput value={formData.models.agentApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, agentApiKey: value } }))} />
+                    <input className={cx(inputClass, "bg-white")} value={formData.models.agentBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentBaseUrl: event.target.value } }))} placeholder="基础地址" />
+                  </div>
+                </Field>
+              </SectionCard>
+            );
+          case "vl":
+            return (
+              <SectionCard>
+                <Field label="视觉模型">
+                  <div className="grid gap-3">
+                    <input className={cx(inputClass, "bg-white")} value={formData.models.vlModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlModel: event.target.value } }))} placeholder="模型名" />
+                    <SecretInput value={formData.models.vlApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, vlApiKey: value } }))} />
+                    <input className={cx(inputClass, "bg-white")} value={formData.models.vlBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlBaseUrl: event.target.value } }))} placeholder="基础地址" />
+                  </div>
+                </Field>
+              </SectionCard>
+            );
+          default:
+            return null;
+        }
+      case "channels":
+        switch (currentSubsectionId) {
+          case "telegram":
+            return (
+              <SectionCard>
+                <Field label="Telegram Token">
+                  <SecretInput value={draft.channels.telegramToken} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramToken: value } }))} />
+                </Field>
+                <Field label="Telegram Allow From" hint="每行一个用户名，不带 @。">
+                  <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.telegramAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramAllowFrom: splitLines(event.target.value) } }))} />
+                </Field>
+                <Field label="Telegram Channel Name">
+                  <input className={cx(inputClass, "bg-white")} value={draft.channels.telegramChannelName} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramChannelName: event.target.value } }))} />
+                </Field>
+              </SectionCard>
+            );
+          case "qq":
+            return (
+              <SectionCard>
+                <Field label="QQ Bot UIN">
+                  <input className={cx(inputClass, "bg-white")} value={draft.channels.qqBotUin} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqBotUin: event.target.value } }))} />
+                </Field>
+                <Field label="QQ Allow From" hint="每行一个 QQ 号。">
+                  <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.qqAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqAllowFrom: splitLines(event.target.value) } }))} />
+                </Field>
+                <Field label="QQ WebSocket 超时秒数">
+                  <input className={cx(inputClass, "bg-white")} value={String(draft.channels.qqWebsocketOpenTimeoutSeconds)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqWebsocketOpenTimeoutSeconds: parseNumber(event.target.value, current.channels.qqWebsocketOpenTimeoutSeconds) } }))} />
+                </Field>
+                <Field label="QQ 群组规则" hint="第一版先用逐条卡片编辑。">
+                  <div className="grid gap-3">
+                    {draft.channels.qqGroups.map((group, index) => (
+                      <GroupEditor
+                        key={`${group.groupId}-${index}`}
+                        group={group}
+                        onChange={(nextGroup) => updateDraft((current) => {
+                          const next = [...current.channels.qqGroups];
+                          next[index] = nextGroup;
+                          return { ...current, channels: { ...current.channels, qqGroups: next } };
+                        })}
+                        onRemove={() => updateDraft((current) => ({
+                          ...current,
+                          channels: {
+                            ...current.channels,
+                            qqGroups: current.channels.qqGroups.filter((_, groupIndex) => groupIndex !== index),
+                          },
+                        }))}
+                      />
+                    ))}
+                    <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
+                      ...current,
+                      channels: {
+                        ...current.channels,
+                        qqGroups: [...current.channels.qqGroups, { groupId: "", allowFrom: [], requireAt: true }],
+                      },
+                    }))}>
+                      添加 QQ 群组
+                    </button>
+                  </div>
+                </Field>
+              </SectionCard>
+            );
+          case "qqbot":
+            return (
+              <SectionCard>
+                <Field label="QQBot App ID">
+                  <input className={cx(inputClass, "bg-white")} value={draft.channels.qqbotAppId} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqbotAppId: event.target.value } }))} />
+                </Field>
+                <Field label="QQBot Client Secret">
+                  <SecretInput value={draft.channels.qqbotClientSecret} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqbotClientSecret: value } }))} />
+                </Field>
+                <Field label="QQBot Allow From" hint="每行一个 user_openid。">
+                  <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.qqbotAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqbotAllowFrom: splitLines(event.target.value) } }))} />
+                </Field>
+                <Field label="QQBot 群组规则">
+                  <div className="grid gap-3">
+                    {draft.channels.qqbotGroups.map((group, index) => (
+                      <QQBotGroupEditor
+                        key={`${group.groupOpenid}-${index}`}
+                        group={group}
+                        onChange={(nextGroup) => updateDraft((current) => {
+                          const next = [...current.channels.qqbotGroups];
+                          next[index] = nextGroup;
+                          return { ...current, channels: { ...current.channels, qqbotGroups: next } };
+                        })}
+                        onRemove={() => updateDraft((current) => ({
+                          ...current,
+                          channels: {
+                            ...current.channels,
+                            qqbotGroups: current.channels.qqbotGroups.filter((_, groupIndex) => groupIndex !== index),
+                          },
+                        }))}
+                      />
+                    ))}
+                    <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
+                      ...current,
+                      channels: {
+                        ...current.channels,
+                        qqbotGroups: [...current.channels.qqbotGroups, { groupOpenid: "", allowFrom: [], requireAt: true, allowProactive: false }],
+                      },
+                    }))}>
+                      添加 QQBot 群组
+                    </button>
+                  </div>
+                </Field>
+              </SectionCard>
+            );
+          case "feishu":
+            return (
+              <SectionCard>
+                <Field label="Feishu App ID">
+                  <input className={cx(inputClass, "bg-white")} value={draft.channels.feishuAppId} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuAppId: event.target.value } }))} />
+                </Field>
+                <Field label="Feishu App Secret">
+                  <SecretInput value={draft.channels.feishuAppSecret} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuAppSecret: value } }))} />
+                </Field>
+                <Field label="Feishu Allow From" hint="每行一个 open_id / user_id / union_id；留空表示允许所有人。">
+                  <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.feishuAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuAllowFrom: splitLines(event.target.value) } }))} />
+                </Field>
+                <Field label="Feishu Domain" hint="默认 open.feishu.cn；Lark 或私有化部署时再改。">
+                  <input className={cx(inputClass, "bg-white")} value={draft.channels.feishuDomain} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuDomain: event.target.value } }))} />
+                </Field>
+              </SectionCard>
+            );
+          case "cli":
+            return (
+              <SectionCard>
+                <Field label="CLI Socket">
+                  <input className={cx(inputClass, "bg-white")} value={draft.channels.cliSocket} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, cliSocket: event.target.value } }))} />
+                </Field>
+                <Field label="CLI Session Key">
+                  <input className={cx(inputClass, "bg-white")} value={draft.channels.cliSessionKey} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, cliSessionKey: event.target.value } }))} />
+                </Field>
+              </SectionCard>
+            );
+          case "bindings":
+            return (
+              <SectionCard>
+                <Field label="渠道目标绑定角色" hint="每条绑定代表一个具体 transport 身份；例如 telegram:123456、qqbot:c2c:openid、cli:local。">
+                  <div className="grid gap-3">
+                    {draft.channels.roleBindings.map((binding, index) => (
+                      <ChannelRoleBindingEditor
+                        key={`${binding.channel}-${binding.chatId}-${index}`}
+                        binding={binding}
+                        roles={roles}
+                        onChange={(nextBinding) => updateDraft((current) => {
+                          const nextBindings = [...current.channels.roleBindings];
+                          nextBindings[index] = nextBinding;
+                          return {
                             ...current,
-                            channels: {
-                              ...current.channels,
-                              qqGroups: current.channels.qqGroups.filter((_, groupIndex) => groupIndex !== index),
-                            },
-                          }))}
-                        />
-                      ))}
-                      <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
-                        ...current,
-                        channels: {
-                          ...current.channels,
-                          qqGroups: [...current.channels.qqGroups, { groupId: "", allowFrom: [], requireAt: true }],
-                        },
-                      }))}>
-                        添加 QQ 群组
-                      </button>
-                    </div>
-                  </Field>
-                  <Field label="QQBot App ID">
-                    <input className={cx(inputClass, "bg-white")} value={draft.channels.qqbotAppId} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqbotAppId: event.target.value } }))} />
-                  </Field>
-                  <Field label="QQBot Client Secret">
-                    <SecretInput value={draft.channels.qqbotClientSecret} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqbotClientSecret: value } }))} />
-                  </Field>
-                  <Field label="QQBot Allow From" hint="每行一个 user_openid。">
-                    <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.qqbotAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqbotAllowFrom: splitLines(event.target.value) } }))} />
-                  </Field>
-                  <Field label="QQBot 群组规则">
-                    <div className="grid gap-3">
-                      {draft.channels.qqbotGroups.map((group, index) => (
-                        <QQBotGroupEditor
-                          key={`${group.groupOpenid}-${index}`}
-                          group={group}
-                          onChange={(nextGroup) => updateDraft((current) => {
-                            const next = [...current.channels.qqbotGroups];
-                            next[index] = nextGroup;
-                            return { ...current, channels: { ...current.channels, qqbotGroups: next } };
-                          })}
-                          onRemove={() => updateDraft((current) => ({
-                            ...current,
-                            channels: {
-                              ...current.channels,
-                              qqbotGroups: current.channels.qqbotGroups.filter((_, groupIndex) => groupIndex !== index),
-                            },
-                          }))}
-                        />
-                      ))}
-                      <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
-                        ...current,
-                        channels: {
-                          ...current.channels,
-                          qqbotGroups: [...current.channels.qqbotGroups, { groupOpenid: "", allowFrom: [], requireAt: true, allowProactive: false }],
-                        },
-                      }))}>
-                        添加 QQBot 群组
-                      </button>
-                    </div>
-                  </Field>
-                  <Field label="Feishu App ID">
-                    <input className={cx(inputClass, "bg-white")} value={draft.channels.feishuAppId} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuAppId: event.target.value } }))} />
-                  </Field>
-                  <Field label="Feishu App Secret">
-                    <SecretInput value={draft.channels.feishuAppSecret} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuAppSecret: value } }))} />
-                  </Field>
-                  <Field label="Feishu Allow From" hint="每行一个 open_id / user_id / union_id；留空表示允许所有人。">
-                    <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.feishuAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuAllowFrom: splitLines(event.target.value) } }))} />
-                  </Field>
-                  <Field label="Feishu Domain" hint="默认 open.feishu.cn；Lark 或私有化部署时再改。">
-                    <input className={cx(inputClass, "bg-white")} value={draft.channels.feishuDomain} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuDomain: event.target.value } }))} />
-                  </Field>
-                  <Field label="CLI Socket">
-                    <input className={cx(inputClass, "bg-white")} value={draft.channels.cliSocket} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, cliSocket: event.target.value } }))} />
-                  </Field>
-                  <Field label="CLI Session Key">
-                    <input className={cx(inputClass, "bg-white")} value={draft.channels.cliSessionKey} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, cliSessionKey: event.target.value } }))} />
-                  </Field>
-                </SectionCard>
-                <SectionCard>
-                  <Field label="渠道目标绑定角色" hint="每条绑定代表一个具体 transport 身份；例如 telegram:123456、qqbot:c2c:openid、cli:local。">
-                    <div className="grid gap-3">
-                      {draft.channels.roleBindings.map((binding, index) => (
-                        <ChannelRoleBindingEditor
-                          key={`${binding.channel}-${binding.chatId}-${index}`}
-                          binding={binding}
-                          roles={roles}
-                          onChange={(nextBinding) => updateDraft((current) => {
-                            const nextBindings = [...current.channels.roleBindings];
-                            nextBindings[index] = nextBinding;
-                            return {
-                              ...current,
-                              channels: { ...current.channels, roleBindings: nextBindings },
-                            };
-                          })}
-                          onRemove={() => updateDraft((current) => ({
-                            ...current,
-                            channels: {
-                              ...current.channels,
-                              roleBindings: current.channels.roleBindings.filter((_, bindingIndex) => bindingIndex !== index),
-                            },
-                          }))}
-                        />
-                      ))}
-                      <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
-                        ...current,
-                        channels: {
-                          ...current.channels,
-                          roleBindings: [...current.channels.roleBindings, { channel: "telegram", chatId: "", roleId: "" }],
-                        },
-                      }))}>
-                        添加角色绑定
-                      </button>
-                    </div>
-                  </Field>
-                </SectionCard>
-              </div>
-            ) : null}
-
-            {currentId === "memory" ? (
+                            channels: { ...current.channels, roleBindings: nextBindings },
+                          };
+                        })}
+                        onRemove={() => updateDraft((current) => ({
+                          ...current,
+                          channels: {
+                            ...current.channels,
+                            roleBindings: current.channels.roleBindings.filter((_, bindingIndex) => bindingIndex !== index),
+                          },
+                        }))}
+                      />
+                    ))}
+                    <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
+                      ...current,
+                      channels: {
+                        ...current.channels,
+                        roleBindings: [...current.channels.roleBindings, { channel: "telegram", chatId: "", roleId: "" }],
+                      },
+                    }))}>
+                      添加角色绑定
+                    </button>
+                  </div>
+                </Field>
+              </SectionCard>
+            );
+          default:
+            return null;
+        }
+      case "memory":
+        switch (currentSubsectionId) {
+          case "general":
+            return (
               <SectionCard>
                 <Field label="启用记忆">
                   <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
@@ -578,6 +651,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="记忆引擎">
                   <input className={cx(inputClass, "bg-white")} value={draft.memory.engine} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, engine: event.target.value } }))} />
                 </Field>
+              </SectionCard>
+            );
+          case "embedding":
+            return (
+              <SectionCard>
                 <Field label="Embedding 模型">
                   <input className={cx(inputClass, "bg-white")} value={draft.memory.embeddingModel} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, embeddingModel: event.target.value } }))} />
                 </Field>
@@ -591,10 +669,15 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                   <input className={cx(inputClass, "bg-white")} value={draft.memory.outputDimensionality} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, outputDimensionality: event.target.value } }))} />
                 </Field>
               </SectionCard>
-            ) : null}
-
-            {currentId === "proactive" ? (
-                <SectionCard>
+            );
+          default:
+            return null;
+        }
+      case "proactive":
+        switch (currentSubsectionId) {
+          case "general":
+            return (
+              <SectionCard>
                 <Field label="启用主动推送">
                   <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
                     <input type="checkbox" checked={draft.proactive.enabled} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, enabled: event.target.checked } }))} />
@@ -609,6 +692,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     常用运行项在这里改；复杂策略预设、覆盖白名单和实验参数，放在下方“高级”页的 TOML 文本区维护。
                   </div>
                 </Field>
+              </SectionCard>
+            );
+          case "target":
+            return (
+              <SectionCard>
                 <Field label="目标频道与 Chat ID">
                   <div className="grid gap-3 md:grid-cols-2">
                     <input className={cx(inputClass, "bg-white")} value={draft.proactive.targetChannel} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, targetChannel: event.target.value } }))} placeholder="频道名" />
@@ -623,6 +711,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     ))}
                   </select>
                 </Field>
+              </SectionCard>
+            );
+          case "agent":
+            return (
+              <SectionCard>
                 <Field label="Agent 参数">
                   <div className="grid gap-3 md:grid-cols-2">
                     <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentMaxSteps: parseNumber(event.target.value, current.proactive.agentMaxSteps) } }))} placeholder="最大步数" />
@@ -632,6 +725,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentDeliveryCooldownHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentDeliveryCooldownHours: parseNumber(event.target.value, current.proactive.agentDeliveryCooldownHours) } }))} placeholder="发送冷却小时数" />
                   </div>
                 </Field>
+              </SectionCard>
+            );
+          case "drift":
+            return (
+              <SectionCard>
                 <Field label="Drift">
                   <div className="grid gap-3">
                     <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
@@ -645,9 +743,14 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                   </div>
                 </Field>
               </SectionCard>
-            ) : null}
-
-            {currentId === "integrations" ? (
+            );
+          default:
+            return null;
+        }
+      case "integrations":
+        switch (currentSubsectionId) {
+          case "fitbit":
+            return (
               <SectionCard>
                 <Field label="Fitbit">
                   <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
@@ -655,6 +758,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <span>integrations.fitbit.enabled</span>
                   </label>
                 </Field>
+              </SectionCard>
+            );
+          case "peer-agents":
+            return (
+              <SectionCard>
                 <Field label="Peer Agents">
                   <div className="grid gap-3">
                     {draft.integrations.peerAgents.map((agent, index) => (
@@ -699,13 +807,23 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                   </div>
                 </Field>
               </SectionCard>
-            ) : null}
-
-            {currentId === "advanced" ? (
+            );
+          default:
+            return null;
+        }
+      case "advanced":
+        switch (currentSubsectionId) {
+          case "prompt":
+            return (
               <SectionCard>
                 <Field label="全局基础 Prompt" hint="这是 config.toml 里的 agent.system_prompt，不是角色 prompt。">
                   <textarea className={cx(textareaClass, "min-h-28 bg-white")} value={draft.advanced.systemPrompt} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, systemPrompt: event.target.value } }))} />
                 </Field>
+              </SectionCard>
+            );
+          case "numbers":
+            return (
+              <SectionCard>
                 <Field label="全局数值项">
                   <div className="grid gap-3 md:grid-cols-2">
                     <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.maxTokens)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, maxTokens: parseNumber(event.target.value, current.advanced.maxTokens) } }))} placeholder="最大令牌数" />
@@ -714,6 +832,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.memoryOptimizerIntervalSeconds)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerIntervalSeconds: parseNumber(event.target.value, current.advanced.memoryOptimizerIntervalSeconds) } }))} placeholder="记忆优化间隔秒数" />
                   </div>
                 </Field>
+              </SectionCard>
+            );
+          case "toggles":
+            return (
+              <SectionCard>
                 <Field label="高级开关">
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
@@ -734,6 +857,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     </label>
                   </div>
                 </Field>
+              </SectionCard>
+            );
+          case "wiring":
+            return (
+              <SectionCard>
                 <Field label="Wiring">
                   <div className="grid gap-3">
                     <input className={cx(inputClass, "bg-white")} value={draft.advanced.wiringContext} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringContext: event.target.value } }))} placeholder="上下文实现名" />
@@ -741,6 +869,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.advanced.wiringToolsets)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringToolsets: splitLines(event.target.value) } }))} placeholder="每行一个工具集名称" />
                   </div>
                 </Field>
+              </SectionCard>
+            );
+          case "plugins":
+            return (
+              <SectionCard>
                 <Field label="其他插件配置" hint="保留给尚未表单化的 plugins.* 段，以及主动推送的高级策略项。按 TOML 片段填写。">
                   <textarea className={cx(textareaClass, "min-h-[240px] bg-white font-mono text-[12px]")} value={draft.advanced.pluginsRawToml} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, pluginsRawToml: event.target.value } }))} />
                 </Field>
@@ -750,7 +883,77 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                   </div>
                 </Field>
               </SectionCard>
+            );
+          default:
+            return null;
+        }
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <section className="settings-page relative grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[#F7F8FB]" data-testid="settings-page">
+      {(savePhase === "saved" || savePhase === "restart-failed" || savePhase === "error") && statusMessage ? (
+        <div
+          className={cx(
+            "pointer-events-none absolute left-1/2 top-4 z-20 max-w-[560px] -translate-x-1/2 rounded-[14px] border px-4 py-2.5 text-sm leading-6 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-[8px]",
+            savePhase === "saved"
+              ? "border-[rgba(26,106,58,0.18)] bg-[rgba(237,248,240,0.94)] text-[#1a6a3a]"
+              : "border-[rgba(176,58,58,0.18)] bg-[rgba(255,241,241,0.96)] text-[#9a2f2f]",
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          {statusMessage}
+        </div>
+      ) : null}
+      <div className="settings-content grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+        <div className="border-b border-[#E8EBF0] bg-[#F7F8FB] px-10 py-5">
+          <div className="mx-auto flex w-full max-w-[940px] items-center gap-4">
+            <div className="min-w-0 flex-1">
+              {visibleSubsections.length ? (
+                <select
+                  className={cx(inputClass, "h-10 max-w-[260px] rounded-md bg-white py-0")}
+                  value={currentSubsectionId ?? ""}
+                  onChange={(event) => updateActiveSubsection(event.target.value)}
+                >
+                  {visibleSubsections.map((item) => (
+                    <option key={item.id} value={item.id}>{item.label}</option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                className={cx(floatingActionClass, "border-black/8 text-[#747474] hover:border-black/14 hover:bg-[#F5F7FA] hover:text-[#4f4f4f]")}
+                type="button"
+                aria-label="重置"
+                onClick={reset}
+                disabled={!isDirty}
+              >
+                  <ResetIcon className="h-[18px] w-[18px] fill-current" />
+              </button>
+              <button
+                className={cx(floatingActionClass, "border-transparent bg-white text-[#1f1f1f] hover:bg-[#F5F7FA]")}
+                type="button"
+                aria-label="保存并重启"
+                onClick={() => void save()}
+                disabled={!bridgeReady || !isDirty || savePhase === "saving"}
+              >
+                  <SaveIcon className="h-[18px] w-[18px] fill-current" />
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="relative scrollbar-soft overflow-y-auto px-10 py-8">
+          <div className="mx-auto w-full max-w-[940px]">
+            {!currentSection ? (
+              <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-[#7f8490]")}>
+                没有匹配的设置项
+              </div>
             ) : null}
+            {currentSection ? renderCurrentSectionContent() : null}
           </div>
         </div>
       </div>
