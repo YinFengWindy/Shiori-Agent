@@ -370,16 +370,12 @@ class NovelAIService:
             else False
         )
         trial_images_left = int(information.get("trialImagesLeft") or 0)
-        if not active and not image_generation:
-            return ValueError(
-                "当前 NovelAI 账号未启用可用的订阅生图权益："
-                f"subscription.active={active}, "
-                f"perks.imageGeneration={image_generation}, "
-                f"trialImagesLeft={trial_images_left}。"
-                f"模型 {model} 当前无法完成生成，请先确认账号订阅状态。"
-            )
         return ValueError(
-            f"NovelAI 上游对模型 {model} 返回 500：{detail or 'Internal Server Error'}"
+            f"NovelAI 上游对模型 {model} 返回 500：{detail or 'Internal Server Error'}。"
+            " 诊断信息："
+            f"subscription.active={active}, "
+            f"perks.imageGeneration={image_generation}, "
+            f"trialImagesLeft={trial_images_left}。"
         )
 
     async def _safe_fetch_user_data(self) -> dict[str, Any]:

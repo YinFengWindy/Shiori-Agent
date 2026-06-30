@@ -168,7 +168,7 @@ async def test_service_rewrites_v45_subscription_error(tmp_path: Path) -> None:
         workspace=tmp_path,
     )
 
-    with pytest.raises(ValueError, match="subscription.active=False"):
+    with pytest.raises(ValueError, match="诊断信息：subscription.active=False"):
         await service.generate(
             GenerateImageRequest(
                 prompt="moonlight portrait",
