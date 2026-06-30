@@ -1,6 +1,6 @@
 import { toFileUrl } from "../shared/format";
 import { useLayoutEffect, useRef } from "react";
-import { ResetIcon } from "../shared/icons";
+import { ResetIcon, SaveIcon } from "../shared/icons";
 import { cx, inputClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
 
@@ -40,11 +40,6 @@ export function RoleDetailPage({
   const backIcon = (
     <svg viewBox="0 0 1024 1024" className="h-5 w-5 fill-[#111111]" aria-hidden="true">
       <path d="M631.04 161.941333a42.666667 42.666667 0 0 1 63.061333 57.386667l-2.474666 2.730667-289.962667 292.245333 289.706667 287.402667a42.666667 42.666667 0 0 1 2.730666 57.6l-2.474666 2.752a42.666667 42.666667 0 0 1-57.6 2.709333l-2.752-2.474667-320-317.44a42.666667 42.666667 0 0 1-2.709334-57.6l2.474667-2.752 320-322.56z" />
-    </svg>
-  );
-  const saveIcon = (
-    <svg viewBox="0 0 1024 1024" className="h-5 w-5 fill-current" aria-hidden="true">
-      <path d="M382.4 876 7.4 501 43.1 465.4 380.9 803.2 983.6 149.7 1020.7 183.9Z" />
     </svg>
   );
   const floatingActionClass =
@@ -102,7 +97,7 @@ export function RoleDetailPage({
               disabled={savingRole || !roleFormDirty || !bridgeReady}
               aria-label={savingRole ? "正在保存角色" : "保存角色"}
             >
-              {saveIcon}
+              <SaveIcon className="h-5 w-5 fill-current" />
             </button>
           </div>
         </div>

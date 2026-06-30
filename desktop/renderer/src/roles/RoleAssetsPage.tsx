@@ -1,5 +1,6 @@
 import { toFileUrl } from "../shared/format";
-import { cardClass, cx, ghostButtonClass, panelTitleClass, primaryButtonClass } from "../shared/styles";
+import { SaveIcon, UploadIcon } from "../shared/icons";
+import { cx, ghostButtonClass, primaryButtonClass } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 
 type RoleAssetsPageProps = {
@@ -48,8 +49,8 @@ export function RoleAssetsPage({
       data-testid="role-assets-page"
     >
       <div className="mx-auto flex min-h-full w-full max-w-[1280px] flex-col gap-5 px-8 pb-10 pt-10">
-        <div className={cx(cardClass, "grid min-h-[680px] grid-cols-[320px_minmax(0,1fr)] overflow-hidden border-[#D9E0E8] bg-white/92 shadow-[0_18px_48px_rgba(31,41,55,0.08)]")}>
-          <div className="border-r border-[#E4EAF0] bg-[#FBFCFE] p-5">
+        <div className="grid min-h-[680px] grid-cols-[320px_minmax(0,1fr)] overflow-hidden rounded-[18px] bg-white/92 shadow-[0_18px_48px_rgba(31,41,55,0.08)]">
+          <div className="bg-[#FBFCFE] p-5">
             <button
               className="mb-4 grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)]"
               type="button"
@@ -58,15 +59,14 @@ export function RoleAssetsPage({
             >
               {backIcon}
             </button>
-            <div className={panelTitleClass}>素材库</div>
-            <div className="mt-2 text-sm text-[#7A8593]">左侧上传与选择素材，右侧查看效果并决定用途。</div>
             <button
               data-testid="pick-role-assets-button"
-              className={cx("primary-btn mt-5 w-full text-sm", primaryButtonClass)}
+              className={cx("primary-btn mt-2 flex w-full items-center justify-center gap-2 text-sm", primaryButtonClass)}
               type="button"
               disabled={!bridgeReady}
               onClick={onPickAssets}
             >
+              <UploadIcon className="h-4 w-4 fill-current" />
               上传素材
             </button>
             <div className="mt-6 grid content-start gap-3">
@@ -78,7 +78,7 @@ export function RoleAssetsPage({
                     data-testid={`role-asset-card-${index}`}
                     className={cx(
                       "grid gap-2 rounded-[20px] border p-3 text-left transition",
-                      isSelected ? "border-[#7C6BFF] bg-[#F3F1FF] shadow-[0_8px_24px_rgba(124,107,255,0.12)]" : "border-[#E4EAF0] bg-white hover:border-[#D6DEEA]",
+                      isSelected ? "border-[#272536] bg-[#F4F5F8] shadow-[0_8px_24px_rgba(39,37,54,0.12)]" : "border-[#D8DFE7] bg-white hover:border-[#9AA3B2]",
                     )}
                     type="button"
                     onClick={() => onSelectAsset(relPath)}
@@ -88,7 +88,7 @@ export function RoleAssetsPage({
                   </button>
                 );
               }) : (
-                <div className="grid min-h-[240px] place-items-center rounded-[22px] border border-dashed border-[#D9E0E8] bg-[#F7FAFD] text-sm text-[#74808D]">
+                <div className="grid min-h-[240px] place-items-center rounded-[22px] bg-[#F7FAFD] text-sm text-[#74808D]">
                   暂无素材
                 </div>
               )}
@@ -96,11 +96,7 @@ export function RoleAssetsPage({
           </div>
           <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-white p-6">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className={panelTitleClass}>素材预览</div>
-                <div className="mt-2 text-sm text-[#7A8593]">在右侧查看素材效果，再决定是否设为头像或顶栏立绘。</div>
-              </div>
-              <div className="flex gap-2">
+              <div className="ml-auto flex gap-2">
                 <button
                   data-testid="select-avatar-action"
                   className={cx(
@@ -127,11 +123,12 @@ export function RoleAssetsPage({
                 </button>
                 <button
                   data-testid="save-role-assets-button"
-                  className={cx("primary-btn text-sm", primaryButtonClass)}
+                  className={cx("primary-btn flex items-center gap-2 text-sm", primaryButtonClass)}
                   type="button"
                   disabled={!bridgeReady || savingSelection || !selectedAsset}
                   onClick={onSaveSelections}
                 >
+                  <SaveIcon className="h-4 w-4 fill-current" />
                   {savingSelection ? "保存中..." : "应用选择"}
                 </button>
               </div>
