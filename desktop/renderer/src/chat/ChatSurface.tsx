@@ -91,7 +91,9 @@ export function ChatSurface({
   const chatMinorTextClass = "text-[12px]";
   const chatContentTrackClass = "mx-auto w-full max-w-[860px] px-5 md:px-6";
   const composerTrackClass = "mx-auto w-full max-w-[700px] px-5 md:px-6";
-  const messageBubbleClass =
+  const assistantMessageBubbleClass =
+    "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(228,228,228,0.82)] bg-[rgba(255,255,255,0.64)] px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] backdrop-blur-[10px] transition-colors duration-150 group-hover:bg-[rgba(255,255,255,0.86)]";
+  const userMessageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
   const hasIllustration = Boolean(visibleIllustrationUrl);
   const showScrollToBottom = scrollState.isScrollable && !scrollState.isAtBottom;
@@ -158,7 +160,9 @@ export function ChatSurface({
               const isHighlighted = highlightedMessageKey === messageKey;
               const bubbleClass = isError
                 ? "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(176,58,58,0.22)] bg-[rgba(255,244,244,0.96)] px-3.5 py-2.5 text-left text-[#8f2d2d] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                : messageBubbleClass;
+                : isUser
+                  ? userMessageBubbleClass
+                  : assistantMessageBubbleClass;
 
               return (
               <article
@@ -211,7 +215,7 @@ export function ChatSurface({
             {showScrollToBottom ? (
               <div className="pointer-events-none mb-2 flex justify-center">
                 <button
-                  className="pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-[#E4E4E4] bg-[rgba(255,255,255,0.96)] text-[#4b5563] shadow-[0_10px_24px_rgba(17,24,39,0.08)] transition hover:border-[#d5d5d5] hover:bg-white hover:text-[#1f2937] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-[#E4E4E4] bg-[rgba(255,255,255,0.96)] text-[#4b5563] shadow-[0_10px_24px_rgba(17,24,39,0.08)] transition hover:border-[#d5d5d5] hover:bg-white hover:text-[#1f2937] focus:outline-none"
                   type="button"
                   aria-label="滑到最下方"
                   onClick={handleScrollToBottom}
