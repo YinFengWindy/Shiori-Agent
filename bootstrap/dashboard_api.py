@@ -136,7 +136,7 @@ class ManualMemoryOptimizer(Protocol):
     @property
     def is_running(self) -> bool: ...
 
-    async def optimize(self) -> None: ...
+    async def optimize(self, *, role_id: str | None = None) -> None: ...
 
 
 class ProactiveDashboardReader:
@@ -970,13 +970,13 @@ def create_dashboard_app(
             "session": meta,
         }
 
-    async def _run_memory_optimizer() -> None:
+    async def _run_memory_optimizer(role_id: str | None = None) -> None:
         nonlocal optimizer_last_error, optimizer_last_status
         assert manual_memory_optimizer is not None
         optimizer_last_status = "running"
         optimizer_last_error = None
         try:
-            await manual_memory_optimizer.optimize()
+            await manual_memory_optimizer.optimize(role_id=role_id)
             optimizer_last_status = "succeeded"
         except MemoryOptimizerBusy:
             optimizer_last_status = "skipped"
@@ -1012,7 +1012,7 @@ def create_dashboard_app(
         }
 
     @app.post("/api/dashboard/memory/optimize", status_code=202)
-    async def trigger_memory_optimizer() -> dict[str, Any]:
+    async def trigger_memory_optimizer(role_id: str = "") -> dict[str, Any]:
         nonlocal optimizer_last_error, optimizer_last_status, optimizer_task
         if manual_memory_optimizer is None:
             raise HTTPException(status_code=503, detail="memory optimizer 未启用")
@@ -1023,11 +1023,16 @@ def create_dashboard_app(
         logger.info("Manual memory optimizer triggered via dashboard")
         optimizer_last_status = "running"
         optimizer_last_error = None
+        clean_role_id = str(role_id or "").strip() or None
         optimizer_task = asyncio.create_task(
-            _run_memory_optimizer(),
+            _run_memory_optimizer(clean_role_id),
             name="manual_memory_optimizer",
         )
-        return {"status": "started", "message": "Memory optimizer started"}
+        return {
+            "status": "started",
+            "message": "Memory optimizer started",
+            "role_id": clean_role_id or "",
+        }
 
     @app.post("/api/dashboard/sessions/batch-delete")
     def delete_sessions_batch(payload: SessionBatchDeletePayload) -> dict[str, Any]:

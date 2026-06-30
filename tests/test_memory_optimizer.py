@@ -32,7 +32,7 @@ def test_optimize_skips_when_memory_pending_history_all_empty(tmp_path):
     provider = types.SimpleNamespace()
     provider.chat = AsyncMock()
 
-    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model")
+    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
     asyncio.run(optimizer.optimize())
 
@@ -44,7 +44,7 @@ def test_optimize_rewrites_memory_from_first_llm_call(tmp_path):
     memory.write_long_term("old profile")
 
     provider = _provider_with_responses("## 用户画像\n- 新版本\n")
-    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model")
+    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
     asyncio.run(optimizer.optimize())
 
@@ -57,7 +57,7 @@ def test_optimize_rolls_back_snapshot_when_merge_returns_empty(tmp_path):
     memory.append_pending("- pending fact")
 
     provider = _provider_with_responses("")
-    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model")
+    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
     asyncio.run(optimizer.optimize())
 
@@ -76,7 +76,7 @@ def test_optimize_updates_self_using_pending_only(tmp_path):
         "## 新记忆",
         "# 角色底座自我认知\n\n## 人格与形象\n\n- 新版人格\n\n## 我对当前用户的理解\n\n- 新版理解\n\n## 我们关系的定义\n\n- 新版关系\n",
     )
-    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model")
+    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
     asyncio.run(optimizer.optimize())
 
@@ -95,7 +95,7 @@ def test_merge_memory_ignores_history_and_only_uses_pending(tmp_path):
     memory.append_history("[2026-03-03 10:00] USER: 这段历史不该进入长期记忆")
 
     provider = _provider_with_responses("## 用户画像\n- 新版本\n")
-    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model")
+    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
     asyncio.run(optimizer.optimize())
 
@@ -109,7 +109,7 @@ def test_merge_memory_ignores_history_and_only_uses_pending(tmp_path):
 def test_request_text_response_uses_expected_chat_kwargs(tmp_path):
     memory = MarkdownMemoryStore(tmp_path)
     provider = _provider_with_responses("merged")
-    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model")
+    optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
 
     result = asyncio.run(
         optimizer._request_text_response(
@@ -131,11 +131,11 @@ def test_optimize_reports_busy_instead_of_waiting(tmp_path):
         memory = MarkdownMemoryStore(tmp_path)
         provider = types.SimpleNamespace()
         provider.chat = AsyncMock()
-        optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model")
+        optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
         started = asyncio.Event()
         release = asyncio.Event()
 
-        async def blocked_optimize() -> None:
+        async def blocked_optimize(*, role_id: str | None = None) -> None:
             started.set()
             await release.wait()
 
@@ -151,6 +151,33 @@ def test_optimize_reports_busy_instead_of_waiting(tmp_path):
         await running
 
     asyncio.run(run_case())
+
+
+def test_optimize_with_role_id_updates_role_markdown_memory(tmp_path):
+    global_memory = MarkdownMemoryStore(tmp_path)
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.write_long_term("角色旧记忆")
+    role_memory.write_self("## 旧 SELF")
+    role_memory.append_pending("- [identity] 角色新事实")
+    global_memory.write_long_term("全局旧记忆")
+
+    provider = _provider_with_responses(
+        "## 用户画像\n- 角色新版本\n",
+        "# 角色底座自我认知\n\n## 人格与形象\n\n- 角色人格\n\n## 我对当前用户的理解\n\n- 角色理解\n\n## 我们关系的定义\n\n- 角色关系\n",
+    )
+    optimizer = MemoryOptimizer(
+        global_memory,
+        cast(Any, provider),
+        "test-model",
+        tmp_path,
+    )
+    optimizer._STEP_DELAY_SECONDS = 0
+
+    asyncio.run(optimizer.optimize(role_id="mira"))
+
+    assert "角色新版本" in role_memory.read_long_term()
+    assert "角色理解" in role_memory.read_self()
+    assert "全局旧记忆" in global_memory.read_long_term()
 
 
 def test_seconds_until_next_tick_aligns_to_interval_boundary():

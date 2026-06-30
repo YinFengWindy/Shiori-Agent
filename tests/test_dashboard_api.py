@@ -112,18 +112,20 @@ class _ManualMemoryOptimizer:
         self.release = threading.Event()
         self._running = False
         self.raise_busy = False
+        self.role_ids: list[str | None] = []
 
     @property
     def is_running(self) -> bool:
         return self._running
 
-    async def optimize(self) -> None:
+    async def optimize(self, *, role_id: str | None = None) -> None:
         if self.raise_busy:
             from proactive_v2.memory_optimizer import MemoryOptimizerBusy
 
             raise MemoryOptimizerBusy("busy")
         self._running = True
         self.calls += 1
+        self.role_ids.append(role_id)
         self.started.set()
         try:
             if self.block:
@@ -482,6 +484,20 @@ def test_manual_memory_optimizer_uses_runtime_entrypoint(tmp_path) -> None:
     assert resp.json()["status"] == "started"
     assert optimizer.started.wait(1.0)
     assert optimizer.calls == 1
+    assert optimizer.role_ids == [None]
+
+
+def test_manual_memory_optimizer_passes_role_id(tmp_path) -> None:
+    optimizer = _ManualMemoryOptimizer()
+    with TestClient(
+        create_dashboard_app(tmp_path, manual_memory_optimizer=optimizer)
+    ) as client:
+        resp = client.post("/api/dashboard/memory/optimize", params={"role_id": "mira"})
+
+    assert resp.status_code == 202
+    assert resp.json()["role_id"] == "mira"
+    assert optimizer.started.wait(1.0)
+    assert optimizer.role_ids == ["mira"]
 
 
 def test_manual_memory_optimizer_reports_unavailable_runtime(tmp_path) -> None:

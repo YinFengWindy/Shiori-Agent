@@ -418,6 +418,15 @@ class ProactiveLoop:
             return []
         try:
             memory = cast("MemoryProfileApi", self._memory)
+            bind_session_metadata = getattr(memory, "bind_session_metadata", None)
+            target_session_key = self._target_session_key()
+            role_id = (
+                target_session_key.split(":", 1)[1]
+                if target_session_key.startswith("role:")
+                else ""
+            )
+            if callable(bind_session_metadata):
+                bind_session_metadata({"role_id": role_id} if role_id else None)
             raw = str(memory.read_long_term() or "").strip()
             return sample_memory_chunks(raw, n=n)
         except Exception as e:

@@ -114,6 +114,12 @@ class Sensor:
         if not self._memory:
             return ""
         try:
+            bind_session_metadata = getattr(self._memory, "bind_session_metadata", None)
+            default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
+            if callable(bind_session_metadata):
+                bind_session_metadata(
+                    {"role_id": default_role_id} if default_role_id else None
+                )
             return str(self._memory.read_long_term() or "").strip()
         except Exception:
             return ""

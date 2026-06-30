@@ -993,6 +993,23 @@ class MarkdownMemoryStore(MemoryStore):
         return bool(self.read_long_term().strip())
 
 
+def resolve_markdown_store(
+    *,
+    workspace: Path,
+    default_store: MarkdownMemoryStore | None = None,
+    session_metadata: dict[str, Any] | None = None,
+    role_id: str | None = None,
+) -> MarkdownMemoryStore:
+    resolved_role_id = str(role_id or "").strip()
+    if not resolved_role_id and isinstance(session_metadata, dict):
+        resolved_role_id = str(session_metadata.get("role_id") or "").strip()
+    if resolved_role_id:
+        return MarkdownMemoryStore(workspace / "roles" / resolved_role_id)
+    if default_store is not None:
+        return default_store
+    return MarkdownMemoryStore(workspace)
+
+
 @dataclass
 class MarkdownMemoryRuntime:
     store: MarkdownMemoryStore
@@ -1005,13 +1022,12 @@ class MarkdownMemoryRuntime:
         session_metadata: dict[str, Any] | None = None,
         role_id: str | None = None,
     ) -> MarkdownMemoryStore:
-        resolved_role_id = str(role_id or "").strip()
-        if not resolved_role_id and isinstance(session_metadata, dict):
-            resolved_role_id = str(session_metadata.get("role_id") or "").strip()
-        if not resolved_role_id:
-            return self.store
-        role_memory_workspace = self.workspace / "roles" / resolved_role_id
-        return MarkdownMemoryStore(role_memory_workspace)
+        return resolve_markdown_store(
+            workspace=self.workspace,
+            default_store=self.store,
+            session_metadata=session_metadata,
+            role_id=role_id,
+        )
 
     def read_long_term(
         self,
@@ -1104,15 +1120,11 @@ class MarkdownMemoryMaintenance:
 
     def _resolve_store_for_session(self, session: object) -> MarkdownMemoryStore:
         metadata = getattr(session, "metadata", {})
-        role_id = (
-            str(metadata.get("role_id") or "").strip()
-            if isinstance(metadata, dict)
-            else ""
+        return resolve_markdown_store(
+            workspace=self._store.memory_dir.parent,
+            default_store=self._store,
+            session_metadata=metadata if isinstance(metadata, dict) else None,
         )
-        if not role_id:
-            return self._store
-        workspace = self._store.memory_dir.parent
-        return MarkdownMemoryStore(workspace / "roles" / role_id)
 
     def bind_lifecycle(self, request: MemoryLifecycleBindRequest) -> None:
         self._get_session = request.get_session

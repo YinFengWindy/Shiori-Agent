@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 
 from agent.memory import DEFAULT_SELF_MD
 from agent.provider import LLMProvider
+from core.memory.markdown import resolve_markdown_store
 
 logger = logging.getLogger(__name__)
 
@@ -205,11 +207,13 @@ class MemoryOptimizer:
         memory: "MarkdownMemoryStore",
         provider: LLMProvider,
         model: str,
+        workspace: Path,
         max_tokens: int = 16384,
     ) -> None:
         self._memory = memory
         self._provider = provider
         self._model = model
+        self._workspace = Path(workspace)
         self._max_tokens = max_tokens
         self._lock = asyncio.Lock()
 
@@ -220,17 +224,22 @@ class MemoryOptimizer:
     def is_running(self) -> bool:
         return self._lock.locked()
 
-    async def optimize(self) -> None:
+    async def optimize(self, *, role_id: str | None = None) -> None:
         """两步优化：合并 PENDING → MEMORY，更新 SELF。"""
         if self._lock.locked():
             raise MemoryOptimizerBusy("memory optimizer 正在运行")
         async with self._lock:
-            await self._optimize()
+            await self._optimize(role_id=role_id)
 
-    async def _optimize(self) -> None:
+    async def _optimize(self, *, role_id: str | None = None) -> None:
+        memory_store = resolve_markdown_store(
+            workspace=self._workspace,
+            default_store=self._memory,
+            role_id=role_id,
+        )
         # ── Step 1: MEMORY.md 合并 ────────────────────────────────
-        pending = self._memory.snapshot_pending()
-        current_memory = self._memory.read_long_term().strip()
+        pending = memory_store.snapshot_pending()
+        current_memory = memory_store.read_long_term().strip()
 
         if not current_memory and not pending:
             logger.info("[memory_optimizer] 记忆和 pending 均为空，跳过优化")
@@ -239,28 +248,28 @@ class MemoryOptimizer:
         merged_memory = await self._merge_memory(current_memory, pending)
         if merged_memory:
             if current_memory:
-                self._memory.backup_long_term()
-            self._memory.write_long_term(merged_memory)
+                memory_store.backup_long_term()
+            memory_store.write_long_term(merged_memory)
             logger.info(
                 "[memory_optimizer] 记忆已合并 before=%d after=%d chars",
                 len(current_memory),
                 len(merged_memory),
             )
             if pending:
-                self._memory.append_history(
+                memory_store.append_history(
                     f"[memory_optimizer] PENDING 归档:\n{pending}"
                 )
-            self._memory.commit_pending_snapshot()
+            memory_store.commit_pending_snapshot()
             logger.info("[memory_optimizer] PENDING 已归档，snapshot 已提交")
         else:
-            self._memory.rollback_pending_snapshot()
+            memory_store.rollback_pending_snapshot()
             logger.warning(
                 "[memory_optimizer] 合并返回空，保留原有内容，snapshot 已回滚"
             )
 
         # ── Step 2: SELF.md 更新 ──────────────────────────────────
         await asyncio.sleep(self._STEP_DELAY_SECONDS)
-        await self._update_self(pending)
+        await self._update_self(memory_store, pending)
 
     async def _merge_memory(self, memory: str, pending: str) -> str:
         today = datetime.now().strftime("%Y-%m-%d")
@@ -279,9 +288,9 @@ class MemoryOptimizer:
             logger.error("[memory_optimizer] 记忆合并失败: %s", e)
             return ""
 
-    async def _update_self(self, pending: str) -> None:
+    async def _update_self(self, memory_store: "MarkdownMemoryStore", pending: str) -> None:
         """只更新 SELF.md 现有保留的三段，不新增 section。"""
-        self_content = self._memory.read_self().strip() or DEFAULT_SELF_MD.strip()
+        self_content = memory_store.read_self().strip() or DEFAULT_SELF_MD.strip()
         if not self_content:
             logger.info("[memory_optimizer] SELF.md 不存在或为空，跳过更新")
             return
@@ -296,7 +305,7 @@ class MemoryOptimizer:
                 max_tokens=2048,
             )
             if updated:
-                self._memory.write_self(updated)
+                memory_store.write_self(updated)
                 logger.info("[memory_optimizer] SELF.md 已更新")
         except Exception as e:
             logger.error("[memory_optimizer] SELF.md 更新失败: %s", e)

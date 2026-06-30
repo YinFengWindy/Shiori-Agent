@@ -107,6 +107,7 @@ def build_memory_optimizer_task(
         memory=memory_store,
         provider=provider,
         model=config.model,
+        workspace=memory_store.memory_dir.parent,
     )
     interval = config.memory_optimizer_interval_seconds
     logger.info("MemoryOptimizerLoop 已启动，间隔=%ss (%.1fh)", interval, interval / 3600)
