@@ -995,17 +995,22 @@ function App(): React.ReactElement {
     setWorkspaceFeedback({ tone: "success", message: "角色保存成功。" });
   }
 
-  async function saveRoleAssets(): Promise<void> {
+  async function saveRoleAssets(nextSelection?: {
+    avatarAsset?: string;
+    featuredImage?: string;
+  }): Promise<void> {
     if (!detailRoleId) return;
     setSavingRoleAssets(true);
     setError("");
     const pendingRoleForm = roleFormRef.current;
+    const avatarAsset = nextSelection?.avatarAsset ?? selectedAvatarAsset;
+    const featuredImage = nextSelection?.featuredImage ?? selectedFeaturedImage;
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
         role_id: detailRoleId,
-        avatar_asset: selectedAvatarAsset || undefined,
-        featured_image: selectedFeaturedImage || undefined,
+        avatar_asset: avatarAsset || undefined,
+        featured_image: featuredImage || undefined,
       },
     });
     setSavingRoleAssets(false);
@@ -1453,7 +1458,7 @@ function App(): React.ReactElement {
               onSelectAsset={setSelectedRoleAsset}
               onSelectAvatarAsset={setSelectedAvatarAsset}
               onSelectFeaturedImage={setSelectedFeaturedImage}
-              onSaveSelections={() => void saveRoleAssets()}
+              onSaveSelections={(nextSelection) => void saveRoleAssets(nextSelection)}
             />
           ) : null}
           {mainView.kind === "settings" ? (

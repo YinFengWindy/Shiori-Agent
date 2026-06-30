@@ -16,7 +16,7 @@ type RoleAssetsPageProps = {
   onSelectAsset: (path: string) => void;
   onSelectAvatarAsset: (path: string) => void;
   onSelectFeaturedImage: (path: string) => void;
-  onSaveSelections: () => void;
+  onSaveSelections: (nextSelection?: { avatarAsset?: string; featuredImage?: string }) => void;
 };
 
 export function RoleAssetsPage({
@@ -49,10 +49,11 @@ export function RoleAssetsPage({
     onSelectAsset(relPath);
     if (selectionMode === "avatar") {
       onSelectAvatarAsset(relPath);
+      onSaveSelections({ avatarAsset: relPath });
     } else {
       onSelectFeaturedImage(relPath);
+      onSaveSelections({ featuredImage: relPath });
     }
-    onSaveSelections();
   }
 
   return (
