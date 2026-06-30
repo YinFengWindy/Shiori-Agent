@@ -6,10 +6,12 @@ type RoleAssetsPageProps = {
   activeRole: RoleRecord | null;
   bridgeReady: boolean;
   savingSelection: boolean;
+  selectedAssetPath: string;
   selectedAvatarAsset: string;
   selectedFeaturedImage: string;
   onBackToDetail: () => void;
   onPickAssets: () => void;
+  onSelectAsset: (path: string) => void;
   onSelectAvatarAsset: (path: string) => void;
   onSelectFeaturedImage: (path: string) => void;
   onSaveSelections: () => void;
@@ -19,10 +21,12 @@ export function RoleAssetsPage({
   activeRole,
   bridgeReady,
   savingSelection,
+  selectedAssetPath,
   selectedAvatarAsset,
   selectedFeaturedImage,
   onBackToDetail,
   onPickAssets,
+  onSelectAsset,
   onSelectAvatarAsset,
   onSelectFeaturedImage,
   onSaveSelections,
@@ -31,104 +35,144 @@ export function RoleAssetsPage({
     relPath,
     absPath: activeRole?.illustrations_abs[index] ?? "",
   }));
+  const selectedAsset = assetPairs.find((item) => item.relPath === selectedAssetPath) ?? assetPairs[0] ?? null;
 
   return (
     <section
       className="role-assets-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(248,249,252,0.98)_100%)]"
       data-testid="role-assets-page"
     >
-      <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col gap-5 px-8 pb-10 pt-10">
-        <div className={cx(cardClass, "border-[#D9E0E8] bg-white/92 p-6 shadow-[0_18px_48px_rgba(31,41,55,0.08)]")}>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <button
-                className={cx("ghost-btn mb-3 px-3 py-2 text-sm", ghostButtonClass)}
-                type="button"
-                onClick={onBackToDetail}
-              >
-                返回角色详情
-              </button>
-              <div className={panelTitleClass}>素材库</div>
-              <div className="mt-2 text-sm text-[#7A8593]">上传图片到当前角色素材库，再选择其作为头像或顶栏立绘。</div>
-            </div>
+      <div className="mx-auto flex min-h-full w-full max-w-[1280px] flex-col gap-5 px-8 pb-10 pt-10">
+        <div className={cx(cardClass, "grid min-h-[680px] grid-cols-[320px_minmax(0,1fr)] overflow-hidden border-[#D9E0E8] bg-white/92 shadow-[0_18px_48px_rgba(31,41,55,0.08)]")}>
+          <div className="border-r border-[#E4EAF0] bg-[#FBFCFE] p-5">
+            <button
+              className={cx("ghost-btn mb-4 px-3 py-2 text-sm", ghostButtonClass)}
+              type="button"
+              onClick={onBackToDetail}
+            >
+              返回角色详情
+            </button>
+            <div className={panelTitleClass}>素材库</div>
+            <div className="mt-2 text-sm text-[#7A8593]">左侧上传与选择素材，右侧查看效果并决定用途。</div>
             <button
               data-testid="pick-role-assets-button"
-              className={cx("primary-btn text-sm", primaryButtonClass)}
+              className={cx("primary-btn mt-5 w-full text-sm", primaryButtonClass)}
               type="button"
               disabled={!bridgeReady}
               onClick={onPickAssets}
             >
               上传素材
             </button>
-          </div>
-        </div>
-        <div className={cx(cardClass, "border-[#D9E0E8] bg-white/92 p-6 shadow-[0_18px_48px_rgba(31,41,55,0.08)]")}>
-          <div className="mb-4 grid gap-2 md:grid-cols-2">
-            <div className="rounded-[18px] border border-[#E4EAF0] bg-[#F8FBFD] px-4 py-3 text-sm text-[#596776]">
-              当前头像：{selectedAvatarAsset || "未设置"}
-            </div>
-            <div className="rounded-[18px] border border-[#E4EAF0] bg-[#F8FBFD] px-4 py-3 text-sm text-[#596776]">
-              当前顶栏立绘：{selectedFeaturedImage || "未设置"}
-            </div>
-          </div>
-          {assetPairs.length ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
-              {assetPairs.map(({ relPath, absPath }, index) => {
-                const isAvatar = relPath === selectedAvatarAsset;
-                const isFeatured = relPath === selectedFeaturedImage;
+            <div className="mt-6 grid content-start gap-3">
+              {assetPairs.length ? assetPairs.map(({ relPath, absPath }, index) => {
+                const isSelected = (selectedAsset?.relPath ?? "") === relPath;
                 return (
-                  <article
+                  <button
                     key={relPath}
                     data-testid={`role-asset-card-${index}`}
-                    className={cx(cardClass, "overflow-hidden border-[#D9E0E8] bg-[#FCFDFE] p-3")}
+                    className={cx(
+                      "grid gap-2 rounded-[20px] border p-3 text-left transition",
+                      isSelected ? "border-[#7C6BFF] bg-[#F3F1FF] shadow-[0_8px_24px_rgba(124,107,255,0.12)]" : "border-[#E4EAF0] bg-white hover:border-[#D6DEEA]",
+                    )}
+                    type="button"
+                    onClick={() => onSelectAsset(relPath)}
                   >
-                    <img className="h-[180px] w-full rounded-[18px] object-cover" src={toFileUrl(absPath)} alt="role asset" />
-                    <div className="mt-3 truncate text-xs text-[#5D6876]">{relPath}</div>
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        data-testid={`select-avatar-${index}`}
-                        className={cx(
-                          "ghost-btn flex-1 px-3 py-2 text-sm",
-                          isAvatar ? primaryButtonClass : ghostButtonClass,
-                        )}
-                        type="button"
-                        disabled={!bridgeReady}
-                        onClick={() => onSelectAvatarAsset(relPath)}
-                      >
-                        {isAvatar ? "当前头像" : "设为头像"}
-                      </button>
-                      <button
-                        data-testid={`select-featured-${index}`}
-                        className={cx(
-                          "ghost-btn flex-1 px-3 py-2 text-sm",
-                          isFeatured ? primaryButtonClass : ghostButtonClass,
-                        )}
-                        type="button"
-                        disabled={!bridgeReady}
-                        onClick={() => onSelectFeaturedImage(relPath)}
-                      >
-                        {isFeatured ? "当前立绘" : "设为立绘"}
-                      </button>
-                    </div>
-                  </article>
+                    <img className="h-[132px] w-full rounded-[16px] object-cover" src={toFileUrl(absPath)} alt="role asset" />
+                    <div className="truncate text-xs text-[#5D6876]">{relPath}</div>
+                  </button>
                 );
-              })}
+              }) : (
+                <div className="grid min-h-[240px] place-items-center rounded-[22px] border border-dashed border-[#D9E0E8] bg-[#F7FAFD] text-sm text-[#74808D]">
+                  暂无素材
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="grid min-h-[240px] place-items-center rounded-[22px] border border-dashed border-[#D9E0E8] bg-[#F7FAFD] text-sm text-[#74808D]">
-              暂无素材，先上传一些图片。
+          </div>
+          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-white p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className={panelTitleClass}>素材预览</div>
+                <div className="mt-2 text-sm text-[#7A8593]">在右侧查看素材效果，再决定是否设为头像或顶栏立绘。</div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  data-testid="select-avatar-action"
+                  className={cx(
+                    "ghost-btn px-3 py-2 text-sm",
+                    selectedAsset && selectedAvatarAsset === selectedAsset.relPath ? primaryButtonClass : ghostButtonClass,
+                  )}
+                  type="button"
+                  disabled={!bridgeReady || !selectedAsset}
+                  onClick={() => selectedAsset && onSelectAvatarAsset(selectedAsset.relPath)}
+                >
+                  {selectedAsset && selectedAvatarAsset === selectedAsset.relPath ? "当前头像" : "设为头像"}
+                </button>
+                <button
+                  data-testid="select-featured-action"
+                  className={cx(
+                    "ghost-btn px-3 py-2 text-sm",
+                    selectedAsset && selectedFeaturedImage === selectedAsset.relPath ? primaryButtonClass : ghostButtonClass,
+                  )}
+                  type="button"
+                  disabled={!bridgeReady || !selectedAsset}
+                  onClick={() => selectedAsset && onSelectFeaturedImage(selectedAsset.relPath)}
+                >
+                  {selectedAsset && selectedFeaturedImage === selectedAsset.relPath ? "当前立绘" : "设为顶栏立绘"}
+                </button>
+                <button
+                  data-testid="save-role-assets-button"
+                  className={cx("primary-btn text-sm", primaryButtonClass)}
+                  type="button"
+                  disabled={!bridgeReady || savingSelection || !selectedAsset}
+                  onClick={onSaveSelections}
+                >
+                  {savingSelection ? "保存中..." : "应用选择"}
+                </button>
+              </div>
             </div>
-          )}
-          <div className="mt-6 flex justify-end">
-            <button
-              data-testid="save-role-assets-button"
-              className={cx("primary-btn text-sm", primaryButtonClass)}
-              type="button"
-              disabled={!bridgeReady || savingSelection}
-              onClick={onSaveSelections}
-            >
-              {savingSelection ? "保存中..." : "应用素材选择"}
-            </button>
+            <div className="mt-6 grid min-h-0 gap-5 lg:grid-cols-[minmax(0,1.2fr)_320px]">
+              <div className="rounded-[24px] border border-[#E4EAF0] bg-[#FAFBFD] p-5">
+                {selectedAsset ? (
+                  <img
+                    className="h-[380px] w-full rounded-[20px] bg-white object-contain"
+                    src={toFileUrl(selectedAsset.absPath)}
+                    alt="selected role asset"
+                  />
+                ) : (
+                  <div className="grid h-[380px] place-items-center rounded-[20px] bg-[#F2F5F8] text-sm text-[#74808D]">
+                    选择左侧素材以预览
+                  </div>
+                )}
+              </div>
+              <div className="grid content-start gap-4">
+                <div className="rounded-[22px] border border-[#E4EAF0] bg-[#FAFBFD] p-4">
+                  <div className="text-sm font-medium text-[#2A3440]">头像效果</div>
+                  <div className="mt-4 grid min-h-[180px] place-items-center rounded-[20px] bg-white">
+                    {selectedAsset ? (
+                      <img className="h-[116px] w-[116px] rounded-[28px] object-cover shadow-[0_10px_24px_rgba(15,23,42,0.08)]" src={toFileUrl(selectedAsset.absPath)} alt="avatar preview" />
+                    ) : (
+                      <div className="text-sm text-[#7A8593]">未选择素材</div>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-[22px] border border-[#E4EAF0] bg-[#FAFBFD] p-4">
+                  <div className="text-sm font-medium text-[#2A3440]">顶栏立绘效果</div>
+                  <div className="mt-4 h-[220px] overflow-hidden rounded-[20px] bg-white">
+                    {selectedAsset ? (
+                      <div className="h-full w-full bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url("${toFileUrl(selectedAsset.absPath)}")` }} />
+                    ) : (
+                      <div className="grid h-full place-items-center text-sm text-[#7A8593]">未选择素材</div>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-[18px] border border-[#E4EAF0] bg-[#F8FBFD] px-4 py-3 text-sm text-[#596776]">
+                  当前头像：{selectedAvatarAsset || "未设置"}
+                </div>
+                <div className="rounded-[18px] border border-[#E4EAF0] bg-[#F8FBFD] px-4 py-3 text-sm text-[#596776]">
+                  当前顶栏立绘：{selectedFeaturedImage || "未设置"}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
