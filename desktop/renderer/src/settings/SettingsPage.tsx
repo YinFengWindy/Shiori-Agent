@@ -72,6 +72,47 @@ function parseNumber(value: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function getBindingChatIdMeta(channel: string): { label: string; placeholder: string; hint: string } {
+  switch (channel) {
+    case "telegram":
+      return {
+        label: "Telegram Chat ID",
+        placeholder: "例如 123456789",
+        hint: "通常填 Telegram user id 或群 chat_id。",
+      };
+    case "qq":
+      return {
+        label: "QQ Chat ID",
+        placeholder: "例如好友 QQ 号或群号",
+        hint: "和运行时 transport 使用的 chat_id 保持一致。",
+      };
+    case "qqbot":
+      return {
+        label: "QQBot Chat ID",
+        placeholder: "例如 c2c:USER_OPENID",
+        hint: "私聊常用 c2c:USER_OPENID；如果后续支持群，再填对应 group 标识。",
+      };
+    case "feishu":
+      return {
+        label: "Feishu Chat ID",
+        placeholder: "例如 open_id / chat_id",
+        hint: "填入运行时实际使用的 open_id 或 chat_id。",
+      };
+    case "cli":
+      return {
+        label: "CLI Session Key",
+        placeholder: "例如 local 或 cli:local",
+        hint: "用于把特定 CLI 会话固定路由到某个角色。",
+      };
+    default:
+      return {
+        label: "Chat ID",
+        placeholder: "输入 transport chat_id",
+        hint: "填入该渠道实际使用的 chat_id。",
+      };
+  }
+}
+
 function Field({
   label,
   hint,
@@ -543,7 +584,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             ) : null}
 
             {currentId === "proactive" ? (
-              <SectionCard title="主动推送" description="配置 proactive 总开关、目标、agent 和 drift。">
+                <SectionCard title="主动推送" description="这里保留日常会改的主路径配置。策略预设扩展和高级覆盖仍然建议放在高级 TOML 区手写。">
                 <Field label="启用主动推送">
                   <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
                     <input type="checkbox" checked={draft.proactive.enabled} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, enabled: event.target.checked } }))} />
@@ -552,6 +593,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 </Field>
                 <Field label="配置档">
                   <input className={cx(inputClass, "bg-white")} value={draft.proactive.profile} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, profile: event.target.value } }))} />
+                </Field>
+                <Field label="高级策略说明" hint="`proactive.profile` 是当前启用的策略名。像 `proactive.profiles`、`proactive.overrides` 这类高级策略树，继续放到高级 TOML 区编辑更稳妥。">
+                  <div className="rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] px-4 py-3 text-sm leading-6 text-[#5B616A]">
+                    常用运行项在这里改；复杂策略预设、覆盖白名单和实验参数，放在下方“高级”页的 TOML 文本区维护。
+                  </div>
                 </Field>
                 <Field label="目标频道与 Chat ID">
                   <div className="grid gap-3 md:grid-cols-2">
@@ -685,8 +731,13 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.advanced.wiringToolsets)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringToolsets: splitLines(event.target.value) } }))} placeholder="每行一个工具集名称" />
                   </div>
                 </Field>
-                <Field label="其他插件配置" hint="保留给尚未表单化的 plugins.* 段。按 TOML 片段填写。">
+                <Field label="其他插件配置" hint="保留给尚未表单化的 plugins.* 段，以及主动推送的高级策略项。按 TOML 片段填写。">
                   <textarea className={cx(textareaClass, "min-h-[240px] bg-white font-mono text-[12px]")} value={draft.advanced.pluginsRawToml} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, pluginsRawToml: event.target.value } }))} />
+                </Field>
+                <Field label="TOML 提示" hint="这里最适合放表单之外、但仍然需要保留的高级配置。">
+                  <div className="rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] px-4 py-3 text-sm leading-6 text-[#5B616A]">
+                    例如：`proactive.profiles`、`proactive.overrides`、尚未表单化的 `plugins.*` 配置。这里填写的是原始 TOML 片段，会原样写回配置文件。
+                  </div>
                 </Field>
               </SectionCard>
             ) : null}
@@ -764,6 +815,8 @@ function ChannelRoleBindingEditor({
   onChange: (next: SettingsChannelRoleBinding) => void;
   onRemove: () => void;
 }) {
+  const chatIdMeta = getBindingChatIdMeta(binding.channel);
+
   return (
     <div className="grid gap-3 rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] p-4">
       <div className="flex items-center justify-between">
@@ -778,7 +831,11 @@ function ChannelRoleBindingEditor({
           <option value="feishu">feishu</option>
           <option value="cli">cli</option>
         </select>
-        <input className={cx(inputClass, "bg-white")} value={binding.chatId} onChange={(event) => onChange({ ...binding, chatId: event.target.value })} placeholder="chat_id / session_key / open_id" />
+        <input className={cx(inputClass, "bg-white")} value={binding.chatId} onChange={(event) => onChange({ ...binding, chatId: event.target.value })} placeholder={chatIdMeta.placeholder} />
+      </div>
+      <div className="grid gap-1">
+        <div className="text-xs font-medium text-[#4A4F57]">{chatIdMeta.label}</div>
+        <div className="text-[12px] leading-5 text-[#7B7F87]">{chatIdMeta.hint}</div>
       </div>
       <select className={cx(inputClass, "bg-white")} value={binding.roleId} onChange={(event) => onChange({ ...binding, roleId: event.target.value })}>
         <option value="">选择角色</option>
