@@ -92,7 +92,7 @@ export function ChatSurface({
   const chatContentTrackClass = "mx-auto w-full max-w-[860px] px-5 md:px-6";
   const composerTrackClass = "mx-auto w-full max-w-[700px] px-5 md:px-6";
   const assistantMessageBubbleClass =
-    "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(228,228,228,0.82)] bg-[rgba(255,255,255,0.64)] px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] backdrop-blur-[10px] transition-colors duration-150 group-hover:bg-[rgba(255,255,255,0.86)]";
+    "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(228,228,228,0.66)] bg-[rgba(255,255,255,0.48)] px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-[10px] transition-colors duration-150 group-hover:bg-[rgba(255,255,255,0.72)]";
   const userMessageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
   const hasIllustration = Boolean(visibleIllustrationUrl);
@@ -125,7 +125,7 @@ export function ChatSurface({
             className="conversation-illustration-image absolute inset-0 bg-cover bg-center bg-no-repeat opacity-[0.96]"
             style={{ backgroundImage: `url("${visibleIllustrationUrl}")` }}
           />
-          <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.9)_0%,rgba(255,255,255,0.8)_28%,rgba(255,255,255,0.56)_52%,rgba(255,255,255,0.22)_74%,rgba(255,255,255,0.04)_100%)]" />
+          <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.78)_0%,rgba(255,255,255,0.64)_24%,rgba(255,255,255,0.4)_48%,rgba(255,255,255,0.14)_72%,rgba(255,255,255,0.03)_100%)]" />
         </div>
       ) : null}
       <header className="chat-header relative z-[1] flex min-w-0 items-center gap-3 border-b border-[#E4E4E4] bg-[rgba(255,255,255,0.55)] pl-[23px] pr-6 backdrop-blur-[3px]" data-testid="session-hero">
