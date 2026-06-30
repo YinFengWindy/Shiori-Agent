@@ -114,6 +114,25 @@ export function ChatSurface({
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   };
 
+  function isImageAsset(path: string): boolean {
+    const cleanPath = path.split(/[?#]/)[0] ?? "";
+    const dotIndex = cleanPath.lastIndexOf(".");
+    const ext = dotIndex >= 0 ? cleanPath.slice(dotIndex).toLowerCase() : "";
+    return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"].includes(ext);
+  }
+
+  function getMessageSourceLabel(message: SessionPayload["messages"][number]): string | null {
+    const metadata = message.metadata ?? {};
+    const transportChannel = String(metadata.transport_channel ?? metadata.context_channel ?? metadata.source_channel ?? "").trim();
+    if (transportChannel) {
+      return transportChannel.toUpperCase();
+    }
+    if (String(metadata.source ?? "").trim() === "desktop") {
+      return "DESKTOP";
+    }
+    return null;
+  }
+
   return (
     <section className="chat-surface relative grid h-full min-h-0 grid-rows-chat overflow-hidden bg-[var(--chat-bg)]">
       {hasIllustration ? (
@@ -158,6 +177,8 @@ export function ChatSurface({
               const authorLabel = isError ? "系统提示" : (activeRole?.name || "Agent");
               const messageKey = String(message.id ?? `${message.role}-${index}`);
               const isHighlighted = highlightedMessageKey === messageKey;
+              const sourceLabel = getMessageSourceLabel(message);
+              const media = Array.isArray(message.media) ? message.media : [];
               const bubbleClass = isError
                 ? "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(176,58,58,0.22)] bg-[rgba(255,244,244,0.96)] px-3.5 py-2.5 text-left text-[#8f2d2d] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
                 : isUser
@@ -194,8 +215,29 @@ export function ChatSurface({
                         {authorLabel}
                       </div>
                     ) : null}
+                    {sourceLabel ? (
+                      <div className={cx("mb-1 inline-flex w-fit items-center rounded-full border border-[#D8DCE2] bg-white/86 px-2 py-0.5 text-[11px] font-medium tracking-[0.08em] text-[#6B7280]", isUser && "ml-auto")}>
+                        {sourceLabel}
+                      </div>
+                    ) : null}
                     <div className={cx(bubbleClass, isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10")}>
                       <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
+                      {media.length ? (
+                        <div className="mt-3 grid gap-2">
+                          {media.map((item) => (
+                            isImageAsset(item) ? (
+                              <a key={item} href={toFileUrl(item)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-[12px] border border-black/8 bg-white/70">
+                                <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" />
+                              </a>
+                            ) : (
+                              <a key={item} href={toFileUrl(item)} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-[12px] border border-black/8 bg-white/70 px-3 py-2 text-[12px] text-[#4B5563] hover:bg-white">
+                                <span className="font-medium">附件</span>
+                                <span className="truncate">{item.split(/[\\/]/).pop() || item}</span>
+                              </a>
+                            )
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     {message.timestamp ? (
                       <div className={cx("message-time mt-1 text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100", chatMinorTextClass)}>

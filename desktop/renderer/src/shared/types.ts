@@ -31,6 +31,8 @@ export type SessionMessage = {
   content: string;
   timestamp?: string;
   reasoning_content?: string | null;
+  media?: string[];
+  metadata?: Record<string, unknown>;
 };
 
 /** Session payload returned by the desktop bridge. */

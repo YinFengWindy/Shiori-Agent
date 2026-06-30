@@ -354,6 +354,8 @@ class DesktopBridgeService:
                     "content": msg.get("content"),
                     "timestamp": msg.get("timestamp"),
                     "reasoning_content": msg.get("reasoning_content"),
+                    "media": list(msg.get("media") or []),
+                    "metadata": dict(msg.get("metadata") or {}),
                 }
                 for msg in session.messages
             ],
