@@ -105,50 +105,54 @@ export function RoleAssetsPage({
               </button>
             </div>
           </div>
-          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-white p-6">
-            <div className="flex justify-end">
-              <div className="inline-flex rounded-full border border-[#D8DFE7] bg-[#F6F8FB] p-1">
-                <button
-                  data-testid="selection-mode-avatar"
-                  className={cx(
-                    "rounded-full px-4 py-2 text-sm transition",
-                    selectionMode === "avatar" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
-                  )}
-                  type="button"
-                  onClick={() => setSelectionMode("avatar")}
-                >
-                  头像
-                </button>
-                <button
-                  data-testid="selection-mode-featured"
-                  className={cx(
-                    "rounded-full px-4 py-2 text-sm transition",
-                    selectionMode === "featured" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
-                  )}
-                  type="button"
-                  onClick={() => setSelectionMode("featured")}
-                >
-                  立绘
-                </button>
-              </div>
-            </div>
-            <div className="mt-6">
-              <div className="rounded-[24px] border border-[#E4EAF0] bg-[#FAFBFD] p-5">
-                <div className="mb-4 text-sm font-medium text-[#2A3440]">
-                  {selectionMode === "avatar" ? "头像效果" : "立绘效果"}
+          <div className="grid min-h-0 grid-rows-[minmax(0,1fr)] bg-white p-6">
+            <div className="flex min-h-0 flex-col">
+              <div className="flex h-full min-h-[420px] flex-col rounded-[24px] border border-[#E4EAF0] bg-[#FAFBFD] p-5">
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <div className="text-sm font-medium text-[#2A3440]">
+                    {selectionMode === "avatar" ? "头像效果" : "立绘效果"}
+                  </div>
+                  <div className="inline-flex rounded-full border border-[#D8DFE7] bg-[#F6F8FB] p-1">
+                    <button
+                      data-testid="selection-mode-avatar"
+                      className={cx(
+                        "rounded-full px-4 py-2 text-sm transition",
+                        selectionMode === "avatar" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
+                      )}
+                      type="button"
+                      onClick={() => setSelectionMode("avatar")}
+                    >
+                      头像
+                    </button>
+                    <button
+                      data-testid="selection-mode-featured"
+                      className={cx(
+                        "rounded-full px-4 py-2 text-sm transition",
+                        selectionMode === "featured" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
+                      )}
+                      type="button"
+                      onClick={() => setSelectionMode("featured")}
+                    >
+                      立绘
+                    </button>
+                  </div>
                 </div>
                 {selectedAsset ? (
                   selectionMode === "avatar" ? (
-                    <div className="grid min-h-[420px] place-items-center rounded-[20px] bg-white">
+                    <div className="grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-white p-8">
                       <img className="h-[140px] w-[140px] rounded-[32px] object-cover shadow-[0_10px_24px_rgba(15,23,42,0.08)]" src={toFileUrl(selectedAsset.absPath)} alt="avatar preview" />
                     </div>
                   ) : (
-                    <div className="h-[420px] overflow-hidden rounded-[20px] bg-white">
-                      <div className="h-full w-full bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url("${toFileUrl(selectedAsset.absPath)}")` }} />
+                    <div className="flex min-h-[360px] flex-1 items-center justify-center overflow-hidden rounded-[20px] bg-white p-6">
+                      <img
+                        className="max-h-full w-full object-contain"
+                        src={toFileUrl(selectedAsset.absPath)}
+                        alt="featured preview"
+                      />
                     </div>
                   )
                 ) : (
-                  <div className="grid h-[420px] place-items-center rounded-[20px] bg-[#F2F5F8] text-sm text-[#74808D]">
+                  <div className="grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-[#F2F5F8] text-sm text-[#74808D]">
                     选择左侧素材以预览
                   </div>
                 )}
