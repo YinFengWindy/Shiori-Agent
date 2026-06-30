@@ -1,8 +1,8 @@
 import { toFileUrl } from "../shared/format";
+import { useLayoutEffect, useRef } from "react";
 import { ResetIcon } from "../shared/icons";
-import { bodyTextClass, cx, inputClass, panelTitleClass } from "../shared/styles";
+import { cx, inputClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
-import { useState } from "react";
 
 type RoleDetailPageProps = {
   activeIllustration: string;
@@ -23,9 +23,7 @@ type RoleDetailPageProps = {
 
 /** Renders the second-level role detail page and hosts the role editor form. */
 export function RoleDetailPage({
-  activeIllustration,
   activeRole,
-  activeRoleId,
   bridgeReady,
   previewAvatar,
   featuredImageUrl,
@@ -38,9 +36,7 @@ export function RoleDetailPage({
   onResetRoleForm,
   onSaveRole,
 }: RoleDetailPageProps) {
-  const [editingName, setEditingName] = useState(false);
-  const [editingDescription, setEditingDescription] = useState(false);
-  const [editingPrompt, setEditingPrompt] = useState(false);
+  const promptRef = useRef<HTMLTextAreaElement | null>(null);
   const backIcon = (
     <svg viewBox="0 0 1024 1024" className="h-5 w-5 fill-[#111111]" aria-hidden="true">
       <path d="M631.04 161.941333a42.666667 42.666667 0 0 1 63.061333 57.386667l-2.474666 2.730667-289.962667 292.245333 289.706667 287.402667a42.666667 42.666667 0 0 1 2.730666 57.6l-2.474666 2.752a42.666667 42.666667 0 0 1-57.6 2.709333l-2.752-2.474667-320-317.44a42.666667 42.666667 0 0 1-2.709334-57.6l2.474667-2.752 320-322.56z" />
@@ -53,6 +49,13 @@ export function RoleDetailPage({
   );
   const floatingActionClass =
     "grid h-10 w-10 place-items-center rounded-full border bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-default disabled:border-black/6 disabled:bg-white/60 disabled:text-[#b8b8b8] disabled:shadow-none";
+
+  useLayoutEffect(() => {
+    const textarea = promptRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [roleForm.systemPrompt]);
 
   return (
     <section
@@ -121,65 +124,37 @@ export function RoleDetailPage({
               )}
             </button>
             <div className="grid gap-4">
-              <div>
-                {editingName ? (
-                  <input
-                    data-testid="edit-role-name"
-                    className={cx(inputClass, "max-w-[420px] border-white/16 bg-transparent px-0 py-0 text-[34px] font-semibold leading-none text-white placeholder:text-white/45")}
-                    value={roleForm.name}
-                    onChange={(event) => onUpdateRoleForm((current) => ({ ...current, name: event.target.value }))}
-                    onBlur={() => setEditingName(false)}
-                    autoFocus
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className={cx(panelTitleClass, "text-left text-[34px] leading-none text-white")}
-                    onClick={() => setEditingName(true)}
-                  >
-                    {roleForm.name || "点击填写角色名称"}
-                  </button>
-                )}
-                {editingDescription ? (
-                  <input
-                    data-testid="edit-role-description"
-                    className={cx(inputClass, "mt-3 border-white/16 bg-transparent text-sm text-white placeholder:text-white/45")}
-                    value={roleForm.description}
-                    onChange={(event) => onUpdateRoleForm((current) => ({ ...current, description: event.target.value }))}
-                    onBlur={() => setEditingDescription(false)}
-                    autoFocus
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="mt-3 text-left text-sm leading-6 text-white/86"
-                    onClick={() => setEditingDescription(true)}
-                  >
-                    {roleForm.description || "点击填写角色简介"}
-                  </button>
-                )}
-              </div>
-              <div className={cx("grid gap-2 text-xs text-white/72", bodyTextClass)} data-testid="role-detail-form-panel">
-                <div className="uppercase tracking-[0.14em]">系统提示词</div>
-                {editingPrompt ? (
-                  <textarea
-                    data-testid="edit-role-prompt"
-                    className={cx(inputClass, "min-h-[220px] resize-y border-white/16 bg-transparent text-white placeholder:text-white/45")}
-                    value={roleForm.systemPrompt}
-                    onChange={(event) => onUpdateRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
-                    onBlur={() => setEditingPrompt(false)}
-                    autoFocus
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="text-left text-sm leading-7 text-white/86"
-                    onClick={() => setEditingPrompt(true)}
-                  >
-                    {roleForm.systemPrompt || "点击填写系统提示词"}
-                  </button>
-                )}
-              </div>
+              <label className="grid gap-1.5 text-xs text-white/72">
+                <span>名称</span>
+                <input
+                  data-testid="edit-role-name"
+                  className={cx(inputClass, "border-white/16 bg-white/8 text-white placeholder:text-white/45")}
+                  value={roleForm.name}
+                  onChange={(event) => onUpdateRoleForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="输入角色名称"
+                />
+              </label>
+              <label className="grid gap-1.5 text-xs text-white/72">
+                <span>简介</span>
+                <input
+                  data-testid="edit-role-description"
+                  className={cx(inputClass, "border-white/16 bg-white/8 text-white placeholder:text-white/45")}
+                  value={roleForm.description}
+                  onChange={(event) => onUpdateRoleForm((current) => ({ ...current, description: event.target.value }))}
+                  placeholder="简短描述这个角色"
+                />
+              </label>
+              <label className="grid gap-2 text-xs text-white/72" data-testid="role-detail-form-panel">
+                <span>系统提示词</span>
+                <textarea
+                  ref={promptRef}
+                  data-testid="edit-role-prompt"
+                  className={cx(inputClass, "min-h-[120px] resize-none overflow-hidden border-white/16 bg-white/8 text-white placeholder:text-white/45")}
+                  value={roleForm.systemPrompt}
+                  onChange={(event) => onUpdateRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
+                  placeholder="定义这个角色的行为、语气和边界"
+                />
+              </label>
             </div>
           </div>
         </div>
