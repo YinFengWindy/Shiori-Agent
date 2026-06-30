@@ -112,6 +112,17 @@ function getBindingChatIdMeta(channel: string): { label: string; placeholder: st
   }
 }
 
+function getMemoryEngineOptions(currentValue: string): Array<{ value: string; label: string }> {
+  const normalized = currentValue.trim();
+  const options = [
+    { value: "", label: "default" },
+  ];
+  if (normalized && normalized !== "default") {
+    options.push({ value: normalized, label: normalized });
+  }
+  return options;
+}
+
 function Field({
   label,
   hint,
@@ -177,7 +188,6 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
   models: [
     { id: "main", label: "主模型" },
     { id: "fast", label: "轻量模型" },
-    { id: "agent", label: "Agent 模型" },
     { id: "vl", label: "视觉模型" },
   ],
   channels: [
@@ -186,7 +196,6 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
     { id: "qqbot", label: "QQBot" },
     { id: "feishu", label: "Feishu" },
     { id: "cli", label: "CLI" },
-    { id: "bindings", label: "角色绑定" },
   ],
   memory: [
     { id: "general", label: "基础" },
@@ -203,9 +212,7 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
     { id: "peer-agents", label: "Peer Agents" },
   ],
   advanced: [
-    { id: "prompt", label: "Prompt" },
-    { id: "numbers", label: "数值项" },
-    { id: "toggles", label: "开关" },
+    { id: "general", label: "基础" },
     { id: "wiring", label: "Wiring" },
     { id: "plugins", label: "插件 / TOML" },
   ],
@@ -386,6 +393,54 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     if (!currentId || !currentSubsectionId) return null;
     const draft = formData;
 
+    function renderRoleBindingsForChannel(channel: SettingsChannelRoleBinding["channel"]): React.ReactNode {
+      const bindings = draft.channels.roleBindings
+        .map((binding, index) => ({ binding, index }))
+        .filter((entry) => entry.binding.channel === channel);
+
+      return (
+        <Field label="角色绑定" hint="把当前频道里的具体会话身份绑定到角色。">
+          <div className="grid gap-3">
+            {bindings.length ? bindings.map(({ binding, index }) => (
+              <ChannelRoleBindingEditor
+                key={`${binding.channel}-${binding.chatId}-${index}`}
+                binding={binding}
+                roles={roles}
+                onChange={(nextBinding) => updateDraft((current) => {
+                  const nextBindings = [...current.channels.roleBindings];
+                  nextBindings[index] = nextBinding;
+                  return {
+                    ...current,
+                    channels: { ...current.channels, roleBindings: nextBindings },
+                  };
+                })}
+                onRemove={() => updateDraft((current) => ({
+                  ...current,
+                  channels: {
+                    ...current.channels,
+                    roleBindings: current.channels.roleBindings.filter((_, bindingIndex) => bindingIndex !== index),
+                  },
+                }))}
+              />
+            )) : (
+              <div className="rounded-2xl border border-dashed border-[#D8DCE2] bg-[#FBFBFC] px-4 py-3 text-sm text-[#737781]">
+                当前频道还没有角色绑定。
+              </div>
+            )}
+            <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
+              ...current,
+              channels: {
+                ...current.channels,
+                roleBindings: [...current.channels.roleBindings, { channel, chatId: "", roleId: "" }],
+              },
+            }))}>
+              添加角色绑定
+            </button>
+          </div>
+        </Field>
+      );
+    }
+
     switch (currentId) {
       case "models":
         switch (currentSubsectionId) {
@@ -433,18 +488,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 </Field>
               </SectionCard>
             );
-          case "agent":
-            return (
-              <SectionCard>
-                <Field label="Agent 模型" hint="专用于主动任务 / agent tick；留空表示继续使用默认回退路径。">
-                  <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={formData.models.agentModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentModel: event.target.value } }))} placeholder="模型名" />
-                    <SecretInput value={formData.models.agentApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, agentApiKey: value } }))} />
-                    <input className={cx(inputClass, "bg-white")} value={formData.models.agentBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentBaseUrl: event.target.value } }))} placeholder="基础地址" />
-                  </div>
-                </Field>
-              </SectionCard>
-            );
           case "vl":
             return (
               <SectionCard>
@@ -474,6 +517,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="Telegram Channel Name">
                   <input className={cx(inputClass, "bg-white")} value={draft.channels.telegramChannelName} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramChannelName: event.target.value } }))} />
                 </Field>
+                {renderRoleBindingsForChannel("telegram")}
               </SectionCard>
             );
           case "qq":
@@ -519,6 +563,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     </button>
                   </div>
                 </Field>
+                {renderRoleBindingsForChannel("qq")}
               </SectionCard>
             );
           case "qqbot":
@@ -564,6 +609,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     </button>
                   </div>
                 </Field>
+                {renderRoleBindingsForChannel("qqbot")}
               </SectionCard>
             );
           case "feishu":
@@ -581,6 +627,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="Feishu Domain" hint="默认 open.feishu.cn；Lark 或私有化部署时再改。">
                   <input className={cx(inputClass, "bg-white")} value={draft.channels.feishuDomain} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuDomain: event.target.value } }))} />
                 </Field>
+                {renderRoleBindingsForChannel("feishu")}
               </SectionCard>
             );
           case "cli":
@@ -592,46 +639,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="CLI Session Key">
                   <input className={cx(inputClass, "bg-white")} value={draft.channels.cliSessionKey} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, cliSessionKey: event.target.value } }))} />
                 </Field>
-              </SectionCard>
-            );
-          case "bindings":
-            return (
-              <SectionCard>
-                <Field label="渠道目标绑定角色" hint="每条绑定代表一个具体 transport 身份；例如 telegram:123456、qqbot:c2c:openid、cli:local。">
-                  <div className="grid gap-3">
-                    {draft.channels.roleBindings.map((binding, index) => (
-                      <ChannelRoleBindingEditor
-                        key={`${binding.channel}-${binding.chatId}-${index}`}
-                        binding={binding}
-                        roles={roles}
-                        onChange={(nextBinding) => updateDraft((current) => {
-                          const nextBindings = [...current.channels.roleBindings];
-                          nextBindings[index] = nextBinding;
-                          return {
-                            ...current,
-                            channels: { ...current.channels, roleBindings: nextBindings },
-                          };
-                        })}
-                        onRemove={() => updateDraft((current) => ({
-                          ...current,
-                          channels: {
-                            ...current.channels,
-                            roleBindings: current.channels.roleBindings.filter((_, bindingIndex) => bindingIndex !== index),
-                          },
-                        }))}
-                      />
-                    ))}
-                    <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
-                      ...current,
-                      channels: {
-                        ...current.channels,
-                        roleBindings: [...current.channels.roleBindings, { channel: "telegram", chatId: "", roleId: "" }],
-                      },
-                    }))}>
-                      添加角色绑定
-                    </button>
-                  </div>
-                </Field>
+                {renderRoleBindingsForChannel("cli")}
               </SectionCard>
             );
           default:
@@ -648,8 +656,12 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <span>memory.enabled</span>
                   </label>
                 </Field>
-                <Field label="记忆引擎">
-                  <input className={cx(inputClass, "bg-white")} value={draft.memory.engine} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, engine: event.target.value } }))} />
+                <Field label="记忆引擎" hint="default 对应 default_memory 插件。">
+                  <select className={cx(inputClass, "bg-white")} value={draft.memory.engine} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, engine: event.target.value } }))}>
+                    {getMemoryEngineOptions(draft.memory.engine).map((option) => (
+                      <option key={option.value || "default"} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
                 </Field>
               </SectionCard>
             );
@@ -716,6 +728,13 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "agent":
             return (
               <SectionCard>
+                <Field label="Proactive 模型" hint="专用于主动推送 / agent tick；留空表示继续使用默认回退路径。">
+                  <div className="grid gap-3">
+                    <input className={cx(inputClass, "bg-white")} value={draft.models.agentModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentModel: event.target.value } }))} placeholder="模型名" />
+                    <SecretInput value={draft.models.agentApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, agentApiKey: value } }))} />
+                    <input className={cx(inputClass, "bg-white")} value={draft.models.agentBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentBaseUrl: event.target.value } }))} placeholder="基础地址" />
+                  </div>
+                </Field>
                 <Field label="Agent 参数">
                   <div className="grid gap-3 md:grid-cols-2">
                     <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentMaxSteps: parseNumber(event.target.value, current.proactive.agentMaxSteps) } }))} placeholder="最大步数" />
@@ -813,17 +832,12 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
         }
       case "advanced":
         switch (currentSubsectionId) {
-          case "prompt":
+          case "general":
             return (
               <SectionCard>
                 <Field label="全局基础 Prompt" hint="这是 config.toml 里的 agent.system_prompt，不是角色 prompt。">
                   <textarea className={cx(textareaClass, "min-h-28 bg-white")} value={draft.advanced.systemPrompt} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, systemPrompt: event.target.value } }))} />
                 </Field>
-              </SectionCard>
-            );
-          case "numbers":
-            return (
-              <SectionCard>
                 <Field label="全局数值项">
                   <div className="grid gap-3 md:grid-cols-2">
                     <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.maxTokens)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, maxTokens: parseNumber(event.target.value, current.advanced.maxTokens) } }))} placeholder="最大令牌数" />
@@ -832,11 +846,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.memoryOptimizerIntervalSeconds)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerIntervalSeconds: parseNumber(event.target.value, current.advanced.memoryOptimizerIntervalSeconds) } }))} placeholder="记忆优化间隔秒数" />
                   </div>
                 </Field>
-              </SectionCard>
-            );
-          case "toggles":
-            return (
-              <SectionCard>
                 <Field label="高级开关">
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
