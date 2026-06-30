@@ -82,12 +82,12 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     if (response.error) {
       throw new Error(response.error.message);
     }
-    const bindings = Array.isArray(response.payload.bindings) ? response.payload.bindings as SettingsChannelRoleBinding[] : [];
+    const bindings = Array.isArray(response.payload.bindings) ? response.payload.bindings as Array<Record<string, unknown>> : [];
     return loadChannelRoleBindings(
       bindings.map((binding) => ({
         channel: String(binding.channel ?? ""),
-        chatId: String(binding.chatId ?? ""),
-        roleId: String(binding.roleId ?? ""),
+        chatId: String(binding.chat_id ?? binding.chatId ?? ""),
+        roleId: String(binding.role_id ?? binding.roleId ?? ""),
       })),
     );
   });
