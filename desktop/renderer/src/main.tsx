@@ -3,6 +3,7 @@ import { startTransition, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { ChatSurface } from "./chat/ChatSurface";
+import { ConfirmDialog } from "./roles/ConfirmDialog";
 import { RoleAssetsPage } from "./roles/RoleAssetsPage";
 import { RoleCreatePage } from "./roles/RoleCreatePage";
 import { RoleDetailPage } from "./roles/RoleDetailPage";
@@ -101,8 +102,10 @@ function App(): React.ReactElement {
   const [creating, setCreating] = useState(false);
   const [savingRole, setSavingRole] = useState(false);
   const [savingRoleAssets, setSavingRoleAssets] = useState(false);
+  const [deletingRole, setDeletingRole] = useState(false);
   const [sending, setSending] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
+  const [pendingDeleteRoleId, setPendingDeleteRoleId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchingSessions, setSearchingSessions] = useState(false);
   const [searchIndex, setSearchIndex] = useState<SearchableSessionRecord[]>([]);
@@ -1006,11 +1009,13 @@ function App(): React.ReactElement {
   async function deleteRole(roleIdOverride?: string): Promise<void> {
     const roleId = roleIdOverride || activeRoleId;
     if (!roleId) return;
+    setDeletingRole(true);
     setError("");
     const res = await window.miraDesktop.invoke({
       method: "roles.delete",
       payload: { role_id: roleId },
     });
+    setDeletingRole(false);
     if (res.error) {
       setError(res.error.message);
       return;
@@ -1030,6 +1035,15 @@ function App(): React.ReactElement {
     }
     openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
     replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, ""));
+  }
+
+  const pendingDeleteRole = roles.find((role) => role.id === pendingDeleteRoleId) ?? null;
+
+  async function confirmDeleteRole(): Promise<void> {
+    if (!pendingDeleteRoleId) return;
+    const targetRoleId = pendingDeleteRoleId;
+    setPendingDeleteRoleId("");
+    await deleteRole(targetRoleId);
   }
 
   async function pickAvatar(): Promise<void> {
@@ -1357,7 +1371,7 @@ function App(): React.ReactElement {
               bridgeReady={bridgeReady}
               roles={roles}
               onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
-              onDeleteRole={(roleId) => void deleteRole(roleId)}
+              onDeleteRole={(roleId) => setPendingDeleteRoleId(roleId)}
             />
           ) : null}
           {mainView.kind === "role-create" ? (
@@ -1438,6 +1452,18 @@ function App(): React.ReactElement {
           void openRole(result.roleId, null, { recordHistory: true });
         }}
         onUpdateQuery={setSearchQuery}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDeleteRole)}
+        title="确认删除角色"
+        description={pendingDeleteRole ? `“${pendingDeleteRole.name}” 删除后会移除角色会话与相关素材。` : ""}
+        confirmLabel="确认删除"
+        busy={deletingRole}
+        onClose={() => {
+          if (deletingRole) return;
+          setPendingDeleteRoleId("");
+        }}
+        onConfirm={() => void confirmDeleteRole()}
       />
     </div>
   );
