@@ -43,12 +43,7 @@ export function RoleManagementPage({
                   )}
                   style={coverImage ? { backgroundImage: `url("${coverImage}")`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
                 >
-                  {coverImage ? (
-                    <>
-                      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.18)_34%,rgba(15,23,42,0.52)_100%)]" />
-                      <div className="absolute inset-x-0 bottom-0 h-36 bg-[linear-gradient(180deg,rgba(15,23,42,0)_0%,rgba(15,23,42,0.72)_100%)]" />
-                    </>
-                  ) : (
+                  {coverImage ? null : (
                     <div className="absolute inset-0 bg-[linear-gradient(180deg,#F6F8FB_0%,#E8EEF5_100%)]" />
                   )}
                   <button
@@ -78,8 +73,8 @@ export function RoleManagementPage({
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className={cx("truncate text-[22px] font-semibold leading-none", coverImage ? "text-white" : "text-[#1f1f1f]")}>{role.name}</div>
-                      <div className={cx(bodyTextClass, "mt-2 line-clamp-2 text-sm leading-6", coverImage ? "text-white/88" : "text-[#5f6873]")}>
+                      <div className="truncate text-[22px] font-semibold leading-none text-[#1f1f1f]">{role.name}</div>
+                      <div className={cx(bodyTextClass, "mt-2 line-clamp-2 text-sm leading-6 text-[#5f6873]")}>
                         {role.description || "未填写角色简介"}
                       </div>
                     </div>
