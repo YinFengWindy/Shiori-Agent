@@ -124,32 +124,32 @@ export function RoleDetailPage({
               )}
             </button>
             <div className="grid gap-4">
-              <label className="grid gap-1.5 text-xs text-white/72">
+              <label className="grid gap-1.5 text-xs text-[#374151]">
                 <span>名称</span>
                 <input
                   data-testid="edit-role-name"
-                  className={cx(inputClass, "border-white/16 bg-white/8 text-white placeholder:text-white/45")}
+                  className={cx(inputClass, "border-[#D8DFE7] bg-white/82 text-[#111827] placeholder:text-[#9CA3AF]")}
                   value={roleForm.name}
                   onChange={(event) => onUpdateRoleForm((current) => ({ ...current, name: event.target.value }))}
                   placeholder="输入角色名称"
                 />
               </label>
-              <label className="grid gap-1.5 text-xs text-white/72">
+              <label className="grid gap-1.5 text-xs text-[#374151]">
                 <span>简介</span>
                 <input
                   data-testid="edit-role-description"
-                  className={cx(inputClass, "border-white/16 bg-white/8 text-white placeholder:text-white/45")}
+                  className={cx(inputClass, "border-[#D8DFE7] bg-white/82 text-[#111827] placeholder:text-[#9CA3AF]")}
                   value={roleForm.description}
                   onChange={(event) => onUpdateRoleForm((current) => ({ ...current, description: event.target.value }))}
                   placeholder="简短描述这个角色"
                 />
               </label>
-              <label className="grid gap-2 text-xs text-white/72" data-testid="role-detail-form-panel">
+              <label className="grid gap-2 text-xs text-[#374151]" data-testid="role-detail-form-panel">
                 <span>系统提示词</span>
                 <textarea
                   ref={promptRef}
                   data-testid="edit-role-prompt"
-                  className={cx(inputClass, "min-h-[120px] resize-none overflow-hidden border-white/16 bg-white/8 text-white placeholder:text-white/45")}
+                  className={cx(inputClass, "min-h-[20px] resize-none overflow-hidden border-[#D8DFE7] bg-white/82 text-[#111827] placeholder:text-[#9CA3AF]")}
                   value={roleForm.systemPrompt}
                   onChange={(event) => onUpdateRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
                   placeholder="定义这个角色的行为、语气和边界"
