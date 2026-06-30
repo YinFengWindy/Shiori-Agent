@@ -1,5 +1,5 @@
 import type React from "react";
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { cx, ghostButtonClass } from "../shared/styles";
 import type { RoleRecord, SessionPayload } from "../shared/types";
@@ -37,6 +37,8 @@ export function ChatSurface({
   onUpdateDraft,
 }: ChatSurfaceProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const conversationListRef = useRef<HTMLDivElement | null>(null);
+  const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -44,6 +46,42 @@ export function ChatSurface({
     textarea.style.height = "auto";
     textarea.style.height = `${textarea.scrollHeight}px`;
   }, [draft]);
+
+  useEffect(() => {
+    const updateScrollState = () => {
+      const container = conversationListRef.current;
+      if (!container) return;
+
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      const nextState = {
+        isAtBottom: distanceFromBottom <= 24,
+        isScrollable: container.scrollHeight - container.clientHeight > 24,
+      };
+
+      setScrollState((current) => (
+        current.isAtBottom === nextState.isAtBottom && current.isScrollable === nextState.isScrollable
+          ? current
+          : nextState
+      ));
+    };
+
+    updateScrollState();
+
+    const container = conversationListRef.current;
+    if (!container) return;
+
+    container.addEventListener("scroll", updateScrollState, { passive: true });
+    window.addEventListener("resize", updateScrollState);
+
+    const resizeObserver = new ResizeObserver(() => updateScrollState());
+    resizeObserver.observe(container);
+
+    return () => {
+      container.removeEventListener("scroll", updateScrollState);
+      window.removeEventListener("resize", updateScrollState);
+      resizeObserver.disconnect();
+    };
+  }, [activeSession?.messages.length, highlightedMessageKey, sending]);
 
   const headerAvatarClass =
     "chat-header-avatar grid h-[34px] w-[34px] flex-none place-items-center rounded-full border border-black/10 object-cover";
@@ -56,6 +94,7 @@ export function ChatSurface({
   const messageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
   const hasIllustration = Boolean(visibleIllustrationUrl);
+  const showScrollToBottom = scrollState.isScrollable && !scrollState.isAtBottom;
 
   const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter") return;
@@ -65,6 +104,12 @@ export function ChatSurface({
     event.preventDefault();
     if (!activeRoleId || !event.currentTarget.value.trim() || sending || !bridgeReady) return;
     onSendMessage(event.currentTarget.value);
+  };
+
+  const handleScrollToBottom = () => {
+    const container = conversationListRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   };
 
   return (
@@ -78,7 +123,7 @@ export function ChatSurface({
             className="conversation-illustration-image absolute inset-0 bg-cover bg-center bg-no-repeat opacity-[0.96]"
             style={{ backgroundImage: `url("${visibleIllustrationUrl}")` }}
           />
-          <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.96)_0%,rgba(255,255,255,0.92)_32%,rgba(255,255,255,0.72)_56%,rgba(255,255,255,0.32)_76%,rgba(255,255,255,0.08)_100%)]" />
+          <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.9)_0%,rgba(255,255,255,0.8)_28%,rgba(255,255,255,0.56)_52%,rgba(255,255,255,0.22)_74%,rgba(255,255,255,0.04)_100%)]" />
         </div>
       ) : null}
       <header className="chat-header relative z-[1] flex min-w-0 items-center gap-3 border-b border-[#E4E4E4] bg-[rgba(255,255,255,0.55)] pl-[23px] pr-6 backdrop-blur-[3px]" data-testid="session-hero">
@@ -98,6 +143,7 @@ export function ChatSurface({
       <section className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent">
         {notice ? <div className="notice-chip absolute left-1/2 top-4 z-[2] -translate-x-1/2 rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[#edf8f0] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
         <div
+          ref={conversationListRef}
           className={cx(
             "conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] h-full min-h-0 overflow-auto pb-5 pt-7",
             chatBodyClass,
@@ -162,6 +208,21 @@ export function ChatSurface({
         </div>
         <div className="composer-wrap absolute inset-x-0 bottom-10 z-[2] flex min-w-0 justify-center overflow-visible">
           <div className={composerTrackClass}>
+            {showScrollToBottom ? (
+              <div className="pointer-events-none mb-2 flex justify-center">
+                <button
+                  className="pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-[#E4E4E4] bg-[rgba(255,255,255,0.96)] text-[#4b5563] shadow-[0_10px_24px_rgba(17,24,39,0.08)] transition hover:border-[#d5d5d5] hover:bg-white hover:text-[#1f2937] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  type="button"
+                  aria-label="滑到最下方"
+                  onClick={handleScrollToBottom}
+                >
+                  <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 5v14" />
+                    <path d="m6 13 6 6 6-6" />
+                  </svg>
+                </button>
+              </div>
+            ) : null}
             <div className="composer grid w-full flex-none grid-rows-[auto_auto] gap-1.5 rounded-[18px] border border-[#E4E4E4] bg-[#FFFEFF] px-3 pb-2 pt-2.5">
               <textarea
                 ref={textareaRef}
