@@ -1,5 +1,5 @@
 import { toFileUrl } from "../shared/format";
-import { bodyTextClass, cx, ghostButtonClass, inputClass, panelTitleClass } from "../shared/styles";
+import { bodyTextClass, cx, inputClass, panelTitleClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
 import { useState } from "react";
 
@@ -45,11 +45,25 @@ export function RoleDetailPage({
       <path d="M631.04 161.941333a42.666667 42.666667 0 0 1 63.061333 57.386667l-2.474666 2.730667-289.962667 292.245333 289.706667 287.402667a42.666667 42.666667 0 0 1 2.730666 57.6l-2.474666 2.752a42.666667 42.666667 0 0 1-57.6 2.709333l-2.752-2.474667-320-317.44a42.666667 42.666667 0 0 1-2.709334-57.6l2.474667-2.752 320-322.56z" />
     </svg>
   );
+  const saveIcon = (
+    <svg viewBox="0 0 1024 1024" className="h-5 w-5 fill-current" aria-hidden="true">
+      <path d="M382.4 876 7.4 501 43.1 465.4 380.9 803.2 983.6 149.7 1020.7 183.9Z" />
+    </svg>
+  );
+  const resetIcon = (
+    <span
+      className="relative h-[13px] w-[13px] before:absolute before:inset-[1px] before:rounded-full before:border-[1.3px] before:border-current before:border-r-transparent before:content-[''] after:absolute after:right-[0.5px] after:top-[1px] after:h-[4px] after:w-[4px] after:rotate-45 after:border-r-[1.3px] after:border-t-[1.3px] after:border-current after:content-['']"
+      aria-hidden="true"
+    />
+  );
+  const floatingActionClass =
+    "grid h-10 w-10 place-items-center rounded-full border bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-default disabled:border-black/6 disabled:bg-white/60 disabled:text-[#b8b8b8] disabled:shadow-none";
 
   return (
     <section
       className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-white"
       data-testid="role-detail-page"
+      data-has-featured-image={featuredImageUrl ? "true" : "false"}
     >
       {featuredImageUrl ? (
         <div
@@ -62,7 +76,7 @@ export function RoleDetailPage({
       )}
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04)_0%,rgba(255,255,255,0.06)_18%,rgba(255,255,255,0.18)_100%)]" />
       <div className="relative mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-8 pb-8 pt-8">
-        <div className="flex items-start">
+        <div className="flex items-start justify-between gap-4">
           <button
             data-testid="role-detail-back-button"
             className="grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)]"
@@ -72,12 +86,34 @@ export function RoleDetailPage({
           >
             {backIcon}
           </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              className={cx(floatingActionClass, "border-black/8 text-[#747474] hover:border-black/14 hover:bg-[#F5F7FA] hover:text-[#4f4f4f]")}
+              type="button"
+              onClick={onResetRoleForm}
+              disabled={!roleFormDirty}
+              aria-label="重置角色表单"
+            >
+              {resetIcon}
+            </button>
+            <button
+              data-testid="save-role-button"
+              className={cx(floatingActionClass, "border-transparent bg-white text-[#1f1f1f] hover:bg-[#F5F7FA]")}
+              type="button"
+              onClick={onSaveRole}
+              disabled={savingRole || !roleFormDirty || !bridgeReady}
+              aria-label={savingRole ? "正在保存角色" : "保存角色"}
+            >
+              {saveIcon}
+            </button>
+          </div>
         </div>
         <div className="p-2" data-testid="role-detail-info-card">
           <div className="grid gap-5 md:grid-cols-[116px_minmax(0,1fr)]">
             <button
               type="button"
-              data-testid="role-avatar-card"
+              data-testid="open-role-assets-button"
+              data-has-preview-avatar={previewAvatar ? "true" : "false"}
               className="group relative h-[116px] w-[116px] overflow-hidden rounded-[28px] border border-white/22 bg-[rgba(255,255,255,0.08)] text-left shadow-[0_14px_32px_rgba(15,23,42,0.14)] transition hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-white/30"
               onClick={onOpenAssetsPage}
             >
@@ -148,25 +184,6 @@ export function RoleDetailPage({
                     {roleForm.systemPrompt || "点击填写系统提示词"}
                   </button>
                 )}
-              </div>
-              <div className="flex gap-2.5">
-                <button
-                  className={cx("ghost-btn", ghostButtonClass, "border-white/20 bg-white/12 text-white hover:bg-white/18")}
-                  type="button"
-                  onClick={onResetRoleForm}
-                  disabled={!roleFormDirty}
-                >
-                  重置
-                </button>
-                <button
-                  data-testid="save-role-button"
-                  className={cx("ghost-btn border border-transparent bg-white px-[18px] py-3 text-sm text-[#1f1f1f]")}
-                  type="button"
-                  onClick={onSaveRole}
-                  disabled={savingRole || !roleFormDirty || !bridgeReady}
-                >
-                  {savingRole ? "保存中..." : "保存角色"}
-                </button>
               </div>
             </div>
           </div>
