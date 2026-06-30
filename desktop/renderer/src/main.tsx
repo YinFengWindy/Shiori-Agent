@@ -1227,12 +1227,6 @@ function App(): React.ReactElement {
               bridgeReady={bridgeReady}
               roles={roles}
               onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
-              onOpenRoleSession={(roleId) => {
-                void (async () => {
-                  await openRole(roleId, null, { recordHistory: true });
-                  openChatView({ recordHistory: false });
-                })();
-              }}
             />
           ) : null}
           {mainView.kind === "role-create" ? (

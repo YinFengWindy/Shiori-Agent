@@ -301,11 +301,10 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             }
             const roleBManagementCard = Array.from(document.querySelectorAll('[data-testid^="role-management-card-"]'))
               .find((item) => (item.textContent || "").includes(roleBName));
-            const roleDetailEntry = roleBManagementCard?.querySelector("button:last-child");
-            if (!roleDetailEntry) {
+            if (!roleBManagementCard) {
               return { ok: false, reason: "role-detail-entry-missing" };
             }
-            roleDetailEntry.click();
+            roleBManagementCard.click();
             let editName, editDesc, editPrompt, saveRoleButton, pickAvatarButton, pickIllustrationsButton;
             for (let i = 0; i < 40; i++) {
               const roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
@@ -374,12 +373,55 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
             }
             const editedRoleCard = Array.from(document.querySelectorAll('[data-testid^="role-management-card-"]'))
               .find((item) => (item.textContent || "").includes(roleBEditedName));
-            const openChatButton = Array.from(editedRoleCard?.querySelectorAll("button") || [])
-              .find((item) => (item.textContent || "").trim() === "打开聊天");
-            if (!openChatButton) {
+            if (!editedRoleCard) {
               return { ok: false, reason: "open-chat-button-missing" };
             }
-            openChatButton.click();
+            editedRoleCard.click();
+            for (let i = 0; i < 40; i++) {
+              await sleep(100);
+              const roleDetailPage = document.querySelector('[data-testid="role-detail-page"]');
+              editName = document.querySelector('[data-testid="edit-role-name"]');
+              if (roleDetailPage && editName && editName.value === roleBEditedName) {
+                break;
+              }
+            }
+            if (!editName || editName.value !== roleBEditedName) {
+              return {
+                ok: false,
+                reason: "edited-role-detail-not-opened",
+                detailValue: editName?.value || "",
+              };
+            }
+            if (!clickByText("返回角色列表")) {
+              return { ok: false, reason: "back-to-role-list-missing-before-chat" };
+            }
+            for (let i = 0; i < 30; i++) {
+              roleManagementPage = document.querySelector('[data-testid="role-management-page"]');
+              if (roleManagementPage) {
+                break;
+              }
+              await sleep(100);
+            }
+            if (!roleManagementPage) {
+              return { ok: false, reason: "role-management-page-missing-before-chat" };
+            }
+            const roleWorkspaceBackButton = document.querySelector('[data-testid="role-workspace-back-button"]');
+            if (!roleWorkspaceBackButton) {
+              return { ok: false, reason: "role-workspace-back-missing-before-chat" };
+            }
+            roleWorkspaceBackButton.click();
+            let returnToRoleBButton = null;
+            for (let i = 0; i < 40; i++) {
+              await sleep(100);
+              returnToRoleBButton = findRoleButtonByName(roleBEditedName);
+              if (returnToRoleBButton) {
+                break;
+              }
+            }
+            if (!returnToRoleBButton) {
+              return { ok: false, reason: "missing-role-b-button", count: findRoleButtons().length };
+            }
+            returnToRoleBButton.click();
             let chatSurface = null;
             let chatComposer = null;
             for (let i = 0; i < 40; i++) {
@@ -387,16 +429,16 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
               hero = document.querySelector('[data-testid="session-hero"]');
               chatSurface = document.querySelector(".chat-surface");
               chatComposer = document.querySelector(".composer textarea");
-              const heroText = hero.textContent || "";
+              const heroText = hero?.textContent || "";
               if (chatSurface && chatComposer && heroText.includes(roleBEditedName)) {
                 break;
               }
             }
-            if (!chatSurface || !chatComposer) {
+            if (!chatSurface || !chatComposer || !hero) {
               return {
                 ok: false,
                 reason: "edited-role-chat-not-opened",
-                hero: hero.textContent || "",
+                hero: hero?.textContent || "",
               };
             }
             let conversationPanel = null;

@@ -1,5 +1,5 @@
 import { toFileUrl } from "../shared/format";
-import { bodyTextClass, cardClass, cx, ghostButtonClass, panelTitleClass, primaryButtonClass } from "../shared/styles";
+import { bodyTextClass, cardClass, cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 
 type RoleManagementPageProps = {
@@ -7,7 +7,6 @@ type RoleManagementPageProps = {
   bridgeReady: boolean;
   roles: RoleRecord[];
   onOpenRoleDetail: (roleId: string) => void;
-  onOpenRoleSession: (roleId: string) => void;
 };
 
 /** Renders the first-level role management screen with the full role list. */
@@ -16,7 +15,6 @@ export function RoleManagementPage({
   bridgeReady,
   roles,
   onOpenRoleDetail,
-  onOpenRoleSession,
 }: RoleManagementPageProps) {
   return (
     <section
@@ -24,64 +22,54 @@ export function RoleManagementPage({
       data-testid="role-management-page"
     >
       <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-8 pb-10 pt-10">
-        <div className="mb-8 min-w-0">
-            <h2 className={cx(panelTitleClass, "text-[28px] text-[#1f1f1f]")}>角色</h2>
-            <p className="mt-2 text-sm text-[#7a7a7a]">从这里查看、进入和维护所有角色。</p>
-        </div>
         {roles.length ? (
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
+          <div className="grid grid-cols-[repeat(auto-fit,264px)] justify-start gap-5">
             {roles.map((role) => {
               const isActive = role.id === activeRoleId;
+              const coverImage = role.illustrations_abs[0] ? toFileUrl(role.illustrations_abs[0]) : "";
               return (
-                <article
+                <button
                   key={role.id}
                   data-testid={`role-management-card-${role.id}`}
+                  type="button"
+                  disabled={!bridgeReady}
+                  onClick={() => onOpenRoleDetail(role.id)}
                   className={cx(
-                    "grid gap-4 rounded-[22px] border border-[#E7EBF0] bg-white/88 p-5 shadow-[0_14px_40px_rgba(31,41,55,0.06)]",
-                    isActive && "border-[rgba(202,93,46,0.28)] shadow-[0_16px_42px_rgba(202,93,46,0.14)]",
+                    "group relative grid h-[360px] w-[264px] overflow-hidden rounded-[22px] border border-[#D9E0E8] bg-[#EEF1F5] text-left shadow-[0_14px_40px_rgba(31,41,55,0.06)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(31,41,55,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-default disabled:opacity-60",
+                    isActive && "shadow-[0_18px_44px_rgba(31,41,55,0.12)]",
                   )}
+                  style={coverImage ? { backgroundImage: `url("${coverImage}")`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
                 >
-                  <div className="flex items-start gap-3">
-                    {role.avatar_abs ? (
-                      <img
-                        className="h-14 w-14 rounded-full border border-[rgba(76,48,24,0.12)] object-cover"
-                        src={toFileUrl(role.avatar_abs)}
-                        alt={`${role.name} avatar`}
-                      />
-                    ) : (
-                      <span className="grid h-14 w-14 place-items-center rounded-full border border-[rgba(76,48,24,0.12)] bg-[#F4F4F4] text-lg font-bold text-[#8a3211]">
-                        {role.name.slice(0, 1).toUpperCase()}
-                      </span>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-base font-semibold text-[#1f1f1f]">{role.name}</div>
-                      <div className={cx(bodyTextClass, "mt-1 line-clamp-2 text-[#858585]")}>
+                  {coverImage ? (
+                    <>
+                      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.18)_34%,rgba(15,23,42,0.52)_100%)]" />
+                      <div className="absolute inset-x-0 bottom-0 h-36 bg-[linear-gradient(180deg,rgba(15,23,42,0)_0%,rgba(15,23,42,0.72)_100%)]" />
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 bg-[linear-gradient(180deg,#F6F8FB_0%,#E8EEF5_100%)]" />
+                  )}
+                  <div className="relative z-[1] flex h-full flex-col justify-between p-5">
+                    <div className="flex items-start gap-3">
+                      {role.avatar_abs ? (
+                        <img
+                          className="h-14 w-14 rounded-full border border-[rgba(255,255,255,0.38)] object-cover shadow-[0_4px_16px_rgba(15,23,42,0.18)]"
+                          src={toFileUrl(role.avatar_abs)}
+                          alt={`${role.name} avatar`}
+                        />
+                      ) : (
+                        <span className="grid h-14 w-14 place-items-center rounded-full border border-[rgba(255,255,255,0.38)] bg-white/75 text-lg font-bold text-[#8a3211] shadow-[0_4px_16px_rgba(15,23,42,0.12)]">
+                          {role.name.slice(0, 1).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className={cx("truncate text-[22px] font-semibold leading-none", coverImage ? "text-white" : "text-[#1f1f1f]")}>{role.name}</div>
+                      <div className={cx(bodyTextClass, "mt-2 line-clamp-2 text-sm leading-6", coverImage ? "text-white/88" : "text-[#5f6873]")}>
                         {role.description || "未填写角色简介"}
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-[16px] bg-[#F7F8FA] px-3.5 py-3 text-[12px] leading-5 text-[#696969]">
-                    {role.system_prompt || "未填写系统提示词"}
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      className={cx("ghost-btn text-sm", ghostButtonClass)}
-                      type="button"
-                      disabled={!bridgeReady}
-                      onClick={() => onOpenRoleSession(role.id)}
-                    >
-                      打开聊天
-                    </button>
-                    <button
-                      className={cx("primary-btn text-sm", primaryButtonClass)}
-                      type="button"
-                      disabled={!bridgeReady}
-                      onClick={() => onOpenRoleDetail(role.id)}
-                    >
-                      进入详情
-                    </button>
-                  </div>
-                </article>
+                </button>
               );
             })}
           </div>
