@@ -40,3 +40,17 @@ class NovelAIClient:
                 "parameters": parameters,
             },
         )
+
+    async def fetch_user_data(self) -> dict[str, Any]:
+        """Fetch NovelAI account metadata from the primary API."""
+
+        response = await self._requester.get(
+            "https://api.novelai.net/user/data",
+            headers={
+                "Authorization": f"Bearer {self._settings.token}",
+                "Accept": "application/json",
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}

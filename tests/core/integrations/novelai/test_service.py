@@ -21,10 +21,14 @@ _TINY_PNG = base64.b64decode(
 class _FakeClient(NovelAIClient):
     def __init__(self, response: httpx.Response, settings: NovelAISettings) -> None:
         self._response = response
+        self._user_data: dict[str, object] = {}
         super().__init__(requester=None, settings=settings)  # type: ignore[arg-type]
 
     async def generate_image(self, **kwargs: object) -> httpx.Response:
         return self._response
+
+    async def fetch_user_data(self) -> dict[str, object]:
+        return self._user_data
 
 
 def _json_response() -> httpx.Response:
@@ -33,6 +37,16 @@ def _json_response() -> httpx.Response:
         200,
         headers={"content-type": "application/json"},
         json={"images": [base64.b64encode(_TINY_PNG).decode("utf-8")]},
+        request=request,
+    )
+
+
+def _error_response(status_code: int) -> httpx.Response:
+    request = httpx.Request("POST", "https://image.novelai.net/ai/generate-image")
+    return httpx.Response(
+        status_code,
+        headers={"content-type": "application/json"},
+        json={"statusCode": status_code, "message": "Internal Server Error"},
         request=request,
     )
 
@@ -123,3 +137,35 @@ async def test_service_auto_writeback_updates_role_assets(tmp_path: Path) -> Non
     assert result.wrote_back_to_role is True
     assert len(updated.illustrations) == 1
     assert updated.featured_image == updated.illustrations[0]
+
+
+@pytest.mark.asyncio
+async def test_service_rewrites_v45_subscription_error(tmp_path: Path) -> None:
+    settings = NovelAISettings(enabled=True, token="novel-token")
+    client = _FakeClient(_error_response(500), settings)
+    client._user_data = {
+        "subscription": {
+            "active": False,
+            "perks": {
+                "imageGeneration": False,
+            },
+        },
+        "information": {
+            "trialImagesLeft": 30,
+        },
+    }
+    service = NovelAIService(
+        settings=settings,
+        client=client,
+        store=NovelAIStore(tmp_path),
+        role_store=RoleStore(tmp_path),
+        workspace=tmp_path,
+    )
+
+    with pytest.raises(ValueError, match="subscription.active=False"):
+        await service.generate(
+            GenerateImageRequest(
+                prompt="moonlight portrait",
+                mode="txt2img",
+            )
+        )

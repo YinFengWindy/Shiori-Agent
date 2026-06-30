@@ -7,10 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from agent.tools.filesystem import (
-    _detect_supported_image_mime_from_header,
-    _resolve_path,
-)
+import httpx
+
+from agent.tools.filesystem import _detect_supported_image_mime_from_header, _resolve_path
 from core.integrations.novelai.client import NovelAIClient
 from core.integrations.novelai.models import (
     GenerateImageRequest,
@@ -86,13 +85,16 @@ class NovelAIService:
             parameters["image"] = base_image_b64
             parameters["strength"] = _DEFAULT_IMG2IMG_STRENGTH
 
-        response = await self._client.generate_image(
-            action=action,
-            prompt=prompt,
-            model=model,
-            parameters=parameters,
-        )
-        output_bytes, suffix = self._extract_primary_image(response)
+        try:
+            response = await self._client.generate_image(
+                action=action,
+                prompt=prompt,
+                model=model,
+                parameters=parameters,
+            )
+            output_bytes, suffix = self._extract_primary_image(response)
+        except httpx.HTTPStatusError as exc:
+            raise await self._rewrite_http_error(exc, model=model) from exc
         created_at = datetime.now(timezone.utc)
         record_id = self._store.new_record_id()
         record_dir = self._store.build_record_dir(
@@ -262,3 +264,51 @@ class NovelAIService:
         if suffix is None:
             raise ValueError("上游响应不是支持的图片格式")
         return suffix
+
+    async def _rewrite_http_error(
+        self,
+        exc: httpx.HTTPStatusError,
+        *,
+        model: str,
+    ) -> ValueError:
+        response = exc.response
+        if response is None:
+            return ValueError(f"NovelAI 请求失败: {exc}")
+        detail = response.text.strip()
+        if response.status_code != 500 or model != self._settings.default_model:
+            return ValueError(
+                f"NovelAI 请求失败: HTTP {response.status_code}"
+                + (f" - {detail}" if detail else "")
+            )
+        user_data = await self._safe_fetch_user_data()
+        if not user_data:
+            return ValueError("NovelAI 上游返回 500，且未能读取账号状态信息。")
+        subscription = user_data.get("subscription")
+        information = user_data.get("information")
+        if not isinstance(subscription, dict) or not isinstance(information, dict):
+            return ValueError("NovelAI 上游返回 500，且账号状态信息结构异常。")
+        active = bool(subscription.get("active"))
+        perks = subscription.get("perks")
+        image_generation = (
+            bool(perks.get("imageGeneration"))
+            if isinstance(perks, dict)
+            else False
+        )
+        trial_images_left = int(information.get("trialImagesLeft") or 0)
+        if not active and not image_generation:
+            return ValueError(
+                "当前 NovelAI 账号未启用可用的订阅生图权益："
+                f"subscription.active={active}, "
+                f"perks.imageGeneration={image_generation}, "
+                f"trialImagesLeft={trial_images_left}。"
+                f"模型 {model} 当前无法完成生成，请先确认账号订阅状态。"
+            )
+        return ValueError(
+            f"NovelAI 上游对模型 {model} 返回 500：{detail or 'Internal Server Error'}"
+        )
+
+    async def _safe_fetch_user_data(self) -> dict[str, Any]:
+        try:
+            return await self._client.fetch_user_data()
+        except Exception:
+            return {}
