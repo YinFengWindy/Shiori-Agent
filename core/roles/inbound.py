@@ -32,7 +32,10 @@ class InboundRoleRouter:
         if message.channel == "desktop":
             return message
 
-        role_id = self._service.bindings.resolve_role_id(message.channel, message.chat_id)
+        try:
+            role_id = self._service.bindings.resolve_role_id(message.channel, message.chat_id)
+        except KeyError:
+            return message
         session_key = self._service.sessions.derive_session_key(role_id)
         metadata["role_id"] = role_id
         metadata["session_key_override"] = session_key
