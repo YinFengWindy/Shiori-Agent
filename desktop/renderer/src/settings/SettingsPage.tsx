@@ -6,10 +6,10 @@ import {
   cx,
   ghostButtonClass,
   inputClass,
-  panelTitleClass,
   primaryButtonClass,
   textareaClass,
 } from "../shared/styles";
+import { ResetIcon, SaveIcon } from "../shared/icons";
 import type {
   RoleRecord,
   SettingsChannelGroup,
@@ -161,20 +161,12 @@ function SecretInput({
 }
 
 function SectionCard({
-  title,
-  description,
   children,
 }: {
-  title: string;
-  description?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="grid gap-4">
-      <div className="grid gap-1.5">
-        <h2 className={cx(panelTitleClass, "font-sans text-[30px] text-[#171717]")}>{title}</h2>
-        {description ? <p className="m-0 text-sm text-[#72767D]">{description}</p> : null}
-      </div>
+    <section>
       <div className={cx(cardClass, "overflow-hidden rounded-[18px] border border-[#E7EAF0] bg-white shadow-[0_10px_28px_rgba(15,23,42,0.04)]")}>
         {children}
       </div>
@@ -332,16 +324,14 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 {phase === "restart-failed" && "Bridge 重启失败"}
                 {phase === "error" && "保存失败"}
               </div>
-              <div className="text-[12px] leading-5 text-[#7A7F86]">
-                {statusMessage || "包含密钥字段的修改会直接写入本地 config.toml，并在保存后自动重启 Bridge。"}
-              </div>
+              {statusMessage ? <div className="text-[12px] leading-5 text-[#7A7F86]">{statusMessage}</div> : null}
             </div>
             <div className="flex items-center gap-2.5">
-              <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={reset}>
-                重置
+              <button className={cx("grid h-10 w-10 place-items-center rounded-xl text-[#6E737A]", ghostButtonClass)} type="button" aria-label="重置" onClick={reset}>
+                <ResetIcon className="h-[18px] w-[18px] fill-current" />
               </button>
-              <button className={cx("text-sm", primaryButtonClass)} type="button" onClick={() => void save()} disabled={!bridgeReady || phase === "saving"}>
-                保存并重启
+              <button className={cx("grid h-10 w-10 place-items-center rounded-xl", primaryButtonClass)} type="button" aria-label="保存并重启" onClick={() => void save()} disabled={!bridgeReady || phase === "saving"}>
+                <SaveIcon className="h-[18px] w-[18px] fill-current" />
               </button>
             </div>
           </div>
@@ -354,7 +344,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
               </div>
             ) : null}
             {currentId === "models" ? (
-              <SectionCard title="模型" description="配置主模型、轻量模型和视觉模型，以及它们各自的密钥与访问地址。">
+              <SectionCard>
                 <Field label="Provider" hint="当前主模型提供商。">
                   <input className={cx(inputClass, "bg-white")} value={draft.models.provider} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, provider: event.target.value } }))} />
                 </Field>
@@ -408,7 +398,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
 
             {currentId === "channels" ? (
               <div className="grid gap-8">
-                <SectionCard title="频道" description="配置 Telegram、QQ、QQBot、Feishu 以及 CLI/socket 的连接信息。">
+                <SectionCard>
                   <Field label="Telegram Token">
                     <SecretInput value={draft.channels.telegramToken} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramToken: value } }))} />
                   </Field>
@@ -517,7 +507,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <input className={cx(inputClass, "bg-white")} value={draft.channels.cliSessionKey} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, cliSessionKey: event.target.value } }))} />
                   </Field>
                 </SectionCard>
-                <SectionCard title="角色绑定" description="把具体渠道目标绑定到默认角色。运行时这批绑定会落到角色绑定存储，而不是 config.toml。">
+                <SectionCard>
                   <Field label="渠道目标绑定角色" hint="每条绑定代表一个具体 transport 身份；例如 telegram:123456、qqbot:c2c:openid、cli:local。">
                     <div className="grid gap-3">
                       {draft.channels.roleBindings.map((binding, index) => (
@@ -558,7 +548,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             ) : null}
 
             {currentId === "memory" ? (
-              <SectionCard title="记忆" description="配置语义记忆开关、引擎和 embedding 模型。">
+              <SectionCard>
                 <Field label="启用记忆">
                   <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
                     <input type="checkbox" checked={draft.memory.enabled} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, enabled: event.target.checked } }))} />
@@ -584,7 +574,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             ) : null}
 
             {currentId === "proactive" ? (
-                <SectionCard title="主动推送" description="这里保留日常会改的主路径配置。策略预设扩展和高级覆盖仍然建议放在高级 TOML 区手写。">
+                <SectionCard>
                 <Field label="启用主动推送">
                   <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
                     <input type="checkbox" checked={draft.proactive.enabled} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, enabled: event.target.checked } }))} />
@@ -638,7 +628,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             ) : null}
 
             {currentId === "integrations" ? (
-              <SectionCard title="集成" description="当前先覆盖 Fitbit 和 Peer Agents。">
+              <SectionCard>
                 <Field label="Fitbit">
                   <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
                     <input type="checkbox" checked={draft.integrations.fitbitEnabled} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, fitbitEnabled: event.target.checked } }))} />
@@ -692,7 +682,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             ) : null}
 
             {currentId === "advanced" ? (
-              <SectionCard title="高级" description="包含不常改但仍然可编辑的全局配置项。">
+              <SectionCard>
                 <Field label="全局基础 Prompt" hint="这是 config.toml 里的 agent.system_prompt，不是角色 prompt。">
                   <textarea className={cx(textareaClass, "min-h-28 bg-white")} value={draft.advanced.systemPrompt} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, systemPrompt: event.target.value } }))} />
                 </Field>
