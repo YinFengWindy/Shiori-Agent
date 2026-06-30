@@ -112,20 +112,42 @@ async def serve_bridge(
     workspace: Path | None = None,
 ) -> None:
     configure_logging_stream(sys.stderr)
-    config = Config.load(config_path)
-    http_resources = SharedHttpResources()
-    runtime = build_core_runtime(
-        config,
-        workspace or _default_workspace(),
-        http_resources,
+    fallback_core_runtime = None
+    fallback_http_resources = None
+    runtime = build_app_runtime(
+        Config.load(config_path),
+        workspace=workspace or _default_workspace(),
+        features=RuntimeFeatures(
+            start_ipc=True,
+            enable_message_channels=True,
+            enable_dashboard=False,
+            enable_proactive=True,
+        ),
     )
     try:
-        await runtime.start()
-        server = DesktopBridgeServer(runtime)
+        if hasattr(runtime, "start") and callable(runtime.start):
+            await runtime.start()
+            core_runtime = getattr(runtime, "core", None)
+        else:
+            fallback_http_resources = SharedHttpResources()
+            fallback_core_runtime = build_core_runtime(
+                Config.load(config_path),
+                workspace or _default_workspace(),
+                fallback_http_resources,
+            )
+            core_runtime = fallback_core_runtime
+            await core_runtime.start()
+        if core_runtime is None:
+            raise RuntimeError("desktop bridge runtime 未正确初始化 core")
+        server = DesktopBridgeServer(core_runtime)
         await server.serve_stdio()
     finally:
-        await runtime.stop()
-        await http_resources.aclose()
+        if hasattr(runtime, "shutdown") and callable(runtime.shutdown):
+            await runtime.shutdown()
+        if fallback_core_runtime is not None:
+            await fallback_core_runtime.stop()
+        if fallback_http_resources is not None:
+            await fallback_http_resources.aclose()
 
 
 async def serve(
