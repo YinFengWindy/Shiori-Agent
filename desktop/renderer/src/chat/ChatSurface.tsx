@@ -9,6 +9,11 @@ type ChatSurfaceProps = {
   activeRoleId: string;
   activeSession: SessionPayload | null;
   bridgeReady: boolean;
+  chatLatestImageLoading: boolean;
+  chatLatestImagePath: string;
+  chatLatestImageSidebarAnimating: boolean;
+  chatLatestImageSidebarCollapsed: boolean;
+  chatLatestImageSidebarWidth: number;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   draft: string;
   headerTitle: string;
@@ -16,7 +21,9 @@ type ChatSurfaceProps = {
   notice: string;
   sending: boolean;
   visibleIllustrationUrl: string;
+  onBeginChatLatestImageSidebarResize: (event: React.PointerEvent<HTMLDivElement>) => void;
   onSendMessage: (contentOverride?: string) => void;
+  onToggleChatLatestImageSidebar: () => void;
   onUpdateDraft: (value: string) => void;
 };
 
@@ -26,6 +33,11 @@ export function ChatSurface({
   activeRoleId,
   activeSession,
   bridgeReady,
+  chatLatestImageLoading,
+  chatLatestImagePath,
+  chatLatestImageSidebarAnimating,
+  chatLatestImageSidebarCollapsed,
+  chatLatestImageSidebarWidth,
   conversationEndRef,
   draft,
   headerTitle,
@@ -33,12 +45,17 @@ export function ChatSurface({
   notice,
   sending,
   visibleIllustrationUrl,
+  onBeginChatLatestImageSidebarResize,
   onSendMessage,
+  onToggleChatLatestImageSidebar,
   onUpdateDraft,
 }: ChatSurfaceProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationListRef = useRef<HTMLDivElement | null>(null);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
+  const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
+  const sidebarToggleGlyphClass =
+    "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -82,6 +99,15 @@ export function ChatSurface({
       resizeObserver.disconnect();
     };
   }, [activeSession?.messages.length, highlightedMessageKey, sending]);
+
+  useEffect(() => {
+    if (!chatLatestImageSidebarCollapsed) {
+      setChatLatestImageSidebarMounted(true);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setChatLatestImageSidebarMounted(false), 240);
+    return () => window.clearTimeout(timer);
+  }, [chatLatestImageSidebarCollapsed]);
 
   const headerAvatarClass =
     "chat-header-avatar grid h-[34px] w-[34px] flex-none place-items-center rounded-full border border-black/10 object-cover";
@@ -134,7 +160,24 @@ export function ChatSurface({
   }
 
   return (
-    <section className="chat-surface relative grid h-full min-h-0 grid-rows-chat overflow-hidden bg-[var(--chat-bg)]">
+    <section className="chat-surface relative grid h-full min-h-0 grid-cols-[minmax(0,1fr)_auto] overflow-hidden bg-[var(--chat-bg)]">
+      <button
+        className="absolute right-4 top-4 z-[5] m-0 grid h-6 w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-[#747474] transition hover:bg-black/5 hover:text-[#4B4B4B] focus:outline-none"
+        type="button"
+        aria-label={chatLatestImageSidebarCollapsed ? "展开最新图片侧栏" : "收起最新图片侧栏"}
+        aria-expanded={!chatLatestImageSidebarCollapsed}
+        onClick={onToggleChatLatestImageSidebar}
+      >
+        <span
+          className={cx(
+            sidebarToggleGlyphClass,
+            chatLatestImageSidebarCollapsed
+              ? "before:bottom-[2.2px] before:right-[0.8px] before:top-[2.2px]"
+              : "before:bottom-0 before:right-[3.3px] before:top-0",
+          )}
+        />
+      </button>
+      <div className="relative grid h-full min-h-0 grid-rows-chat overflow-hidden">
       {hasIllustration ? (
         <div
           className="conversation-illustration pointer-events-none absolute inset-0 z-0 overflow-hidden"
@@ -288,6 +331,45 @@ export function ChatSurface({
           </div>
         </div>
       </section>
+      </div>
+      <div
+        className={cx(
+          "relative h-full overflow-hidden border-l border-[#E0E6EE] bg-[rgba(244,247,251,0.92)]",
+          chatLatestImageSidebarAnimating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+        )}
+        style={{ width: chatLatestImageSidebarCollapsed ? 0 : chatLatestImageSidebarWidth }}
+      >
+        {!chatLatestImageSidebarCollapsed ? (
+          <div
+            className="absolute inset-y-0 left-0 z-[3] w-3 -translate-x-1/2 cursor-col-resize before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-[#D8DEE8] before:content-['']"
+            onPointerDown={onBeginChatLatestImageSidebarResize}
+          />
+        ) : null}
+        {chatLatestImageSidebarMounted ? (
+          <div
+            className={cx(
+              "h-full min-h-0 pb-3 pt-3 transition-[opacity,transform] duration-200",
+              chatLatestImageSidebarCollapsed ? "pointer-events-none translate-x-8 pl-0 pr-0 opacity-0" : "translate-x-0 pl-2 pr-2 opacity-100",
+            )}
+          >
+            <div className="grid h-full min-h-0 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+              <div className="grid h-full min-h-0 place-items-center overflow-hidden rounded-[16px] bg-[#F1F5F9]">
+                {chatLatestImagePath ? (
+                  <img
+                    className="h-full w-full object-contain"
+                    src={toFileUrl(chatLatestImagePath)}
+                    alt="latest generated result"
+                  />
+                ) : chatLatestImageLoading ? (
+                  <div className="h-5 w-5 rounded-full border border-[#D6DCE5] border-t-[#747474]" />
+                ) : (
+                  <div className="h-10 w-10 rounded-[14px] border border-[#D6DCE5] bg-white/70" />
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

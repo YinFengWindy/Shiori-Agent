@@ -19,6 +19,7 @@ import { SettingsPage } from "./settings/SettingsPage";
 import { SettingsSidebar, type SettingsSectionId } from "./settings/SettingsSidebar";
 import { toFileUrl } from "./shared/format";
 import { cx } from "./shared/styles";
+import { useRightSidebarState } from "./shared/useRightSidebarState";
 import type {
   AppMainView,
   EventLog,
@@ -39,7 +40,9 @@ const sidebarCollapseThreshold = sidebarMinWidth / 2;
 const historySidebarMinWidth = 126;
 const historySidebarMaxWidth = 280;
 const historySidebarDefaultWidth = 126;
-const historySidebarCollapseThreshold = historySidebarMinWidth / 2;
+const chatLatestImageSidebarMinWidth = 180;
+const chatLatestImageSidebarMaxWidth = 360;
+const chatLatestImageSidebarDefaultWidth = 220;
 const sidebarAnimationDurationMs = 480;
 const sidebarAutoCollapseWindowWidth = 980;
 const minRoleCardBusyMs = 600;
@@ -172,10 +175,20 @@ function App(): React.ReactElement {
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
   const [settingsConfigPath, setSettingsConfigPath] = useState("");
   const [settingsDirty, setSettingsDirty] = useState(false);
-  const [imageHistorySidebarWidth, setImageHistorySidebarWidth] = useState(historySidebarDefaultWidth);
-  const [imageHistorySidebarCollapsed, setImageHistorySidebarCollapsed] = useState(false);
-  const [imageHistorySidebarAnimating, setImageHistorySidebarAnimating] = useState(false);
-  const [resizingImageHistorySidebar, setResizingImageHistorySidebar] = useState(false);
+  const imageHistorySidebar = useRightSidebarState({
+    minWidth: historySidebarMinWidth,
+    maxWidth: historySidebarMaxWidth,
+    defaultWidth: historySidebarDefaultWidth,
+    animationDurationMs: sidebarAnimationDurationMs,
+  });
+  const chatLatestImageSidebar = useRightSidebarState({
+    minWidth: chatLatestImageSidebarMinWidth,
+    maxWidth: chatLatestImageSidebarMaxWidth,
+    defaultWidth: chatLatestImageSidebarDefaultWidth,
+    animationDurationMs: sidebarAnimationDurationMs,
+  });
+  const [chatLatestImagePath, setChatLatestImagePath] = useState("");
+  const [chatLatestImageLoading, setChatLatestImageLoading] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
@@ -296,16 +309,6 @@ function App(): React.ReactElement {
     setSidebarCollapsed(true);
   }
 
-  function toggleImageHistorySidebar(): void {
-    setImageHistorySidebarAnimating(true);
-    if (imageHistorySidebarCollapsed) {
-      setImageHistorySidebarWidth((current) => Math.min(historySidebarMaxWidth, Math.max(historySidebarMinWidth, current)));
-      setImageHistorySidebarCollapsed(false);
-      return;
-    }
-    setImageHistorySidebarCollapsed(true);
-  }
-
   function openSettingsView(section: SettingsSectionId = "models"): void {
     lastNonSettingsViewRef.current = mainView;
     setSettingsSearch("");
@@ -375,9 +378,7 @@ function App(): React.ReactElement {
     const nextView: AppMainView = { kind: "image-studio" };
     setSidebarAnimating(true);
     setSidebarCollapsed(false);
-    setImageHistorySidebarAnimating(true);
-    setImageHistorySidebarCollapsed(false);
-    setImageHistorySidebarWidth((current) => Math.min(historySidebarMaxWidth, Math.max(historySidebarMinWidth, current)));
+    imageHistorySidebar.open();
     setMainView(nextView);
     if (options?.recordHistory !== false) {
       pushNavigationEntry(buildNavigationEntry(nextView));
@@ -434,45 +435,6 @@ function App(): React.ReactElement {
       }
       setSidebarCollapsed(false);
       setSidebarWidth(Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, moveEvent.clientX)));
-    }
-
-    window.addEventListener("pointermove", resize);
-    window.addEventListener("pointerup", stopResize);
-    window.addEventListener("pointercancel", stopResize);
-  }
-
-  function beginImageHistorySidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
-    event.preventDefault();
-    flushSync(() => {
-      setImageHistorySidebarAnimating(false);
-      setResizingImageHistorySidebar(true);
-    });
-    let dragCollapsed = imageHistorySidebarCollapsed;
-
-    function stopResize(): void {
-      setResizingImageHistorySidebar(false);
-      window.removeEventListener("pointermove", resize);
-      window.removeEventListener("pointerup", stopResize);
-      window.removeEventListener("pointercancel", stopResize);
-    }
-
-    function resize(moveEvent: PointerEvent): void {
-      const viewportWidth = window.innerWidth;
-      const nextWidth = viewportWidth - moveEvent.clientX;
-      if (nextWidth <= historySidebarCollapseThreshold) {
-        if (!dragCollapsed) {
-          setImageHistorySidebarAnimating(true);
-          dragCollapsed = true;
-        }
-        setImageHistorySidebarCollapsed(true);
-        return;
-      }
-      if (dragCollapsed) {
-        setImageHistorySidebarAnimating(true);
-        dragCollapsed = false;
-      }
-      setImageHistorySidebarCollapsed(false);
-      setImageHistorySidebarWidth(Math.min(historySidebarMaxWidth, Math.max(historySidebarMinWidth, nextWidth)));
     }
 
     window.addEventListener("pointermove", resize);
@@ -601,10 +563,40 @@ function App(): React.ReactElement {
   }, [sidebarAnimating]);
 
   useEffect(() => {
-    if (!imageHistorySidebarAnimating) return undefined;
-    const timer = window.setTimeout(() => setImageHistorySidebarAnimating(false), sidebarAnimationDurationMs + 40);
-    return () => window.clearTimeout(timer);
-  }, [imageHistorySidebarAnimating]);
+    if (!activeRoleId) {
+      setChatLatestImagePath("");
+      setChatLatestImageLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setChatLatestImageLoading(true);
+
+    void (async () => {
+      const response = await window.miraDesktop.invoke({
+        method: "novelai.history",
+        payload: {
+          role_id: activeRoleId,
+          limit: 1,
+        },
+      });
+      if (cancelled) return;
+      if (response.error) {
+        setChatLatestImagePath("");
+        setChatLatestImageLoading(false);
+        return;
+      }
+      const records = Array.isArray(response.payload.records)
+        ? response.payload.records as Array<{ output_paths?: string[] }>
+        : [];
+      setChatLatestImagePath(records[0]?.output_paths?.[0] ?? "");
+      setChatLatestImageLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRoleId, imageStudioState.latestResult?.record_id]);
 
   useEffect(() => {
     function collapseSidebarForNarrowWindow(): void {
@@ -1479,7 +1471,7 @@ function App(): React.ReactElement {
       <div
         className={cx(
           "desktop-shell grid min-h-0 overflow-hidden bg-transparent",
-          (resizingSidebar || resizingImageHistorySidebar) && "sidebar-resizing cursor-col-resize select-none",
+          (resizingSidebar || imageHistorySidebar.resizing || chatLatestImageSidebar.resizing) && "sidebar-resizing cursor-col-resize select-none",
         )}
         style={{
           gridTemplateColumns: "minmax(0, auto) minmax(0, 1fr)",
@@ -1576,6 +1568,11 @@ function App(): React.ReactElement {
               activeRoleId={activeRoleId}
               activeSession={activeSession}
               bridgeReady={bridgeReady}
+              chatLatestImageLoading={chatLatestImageLoading}
+              chatLatestImagePath={chatLatestImagePath}
+              chatLatestImageSidebarAnimating={chatLatestImageSidebar.animating && !chatLatestImageSidebar.resizing}
+              chatLatestImageSidebarCollapsed={chatLatestImageSidebar.collapsed}
+              chatLatestImageSidebarWidth={chatLatestImageSidebar.width}
               conversationEndRef={conversationEndRef}
               draft={draft}
               headerTitle={headerTitle}
@@ -1583,7 +1580,9 @@ function App(): React.ReactElement {
               notice={notice}
               sending={sending}
               visibleIllustrationUrl={visibleIllustrationUrl}
+              onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
               onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
+              onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
               onUpdateDraft={setDraft}
             />
           ) : null}
@@ -1596,12 +1595,12 @@ function App(): React.ReactElement {
               latestResult={imageStudioState.latestResult}
               requestSummary={imageStudioState.requestSummary}
               selectedRecordId={imageStudioState.selectedRecordId}
-              historySidebarCollapsed={imageHistorySidebarCollapsed}
-              historySidebarWidth={imageHistorySidebarWidth}
-              historySidebarAnimating={imageHistorySidebarAnimating && !resizingImageHistorySidebar}
+              historySidebarCollapsed={imageHistorySidebar.collapsed}
+              historySidebarWidth={imageHistorySidebar.width}
+              historySidebarAnimating={imageHistorySidebar.animating && !imageHistorySidebar.resizing}
               onSelectRecord={imageStudioState.onSelectRecord}
-              onToggleHistorySidebar={toggleImageHistorySidebar}
-              onBeginHistorySidebarResize={beginImageHistorySidebarResize}
+              onToggleHistorySidebar={imageHistorySidebar.toggle}
+              onBeginHistorySidebarResize={imageHistorySidebar.beginResize}
             />
           ) : null}
           {mainView.kind === "roles-list" ? (
