@@ -36,6 +36,7 @@ const sidebarDefaultWidth = 220;
 const sidebarCollapseThreshold = sidebarMinWidth / 2;
 const sidebarAnimationDurationMs = 480;
 const sidebarAutoCollapseWindowWidth = 980;
+const minRoleCardBusyMs = 600;
 
 type SearchableSessionRecord = {
   roleId: string;
@@ -102,6 +103,27 @@ function createEmptyNewRoleForm(): NewRoleFormState {
     name: "",
     description: "",
     systemPrompt: "",
+  };
+}
+
+function createPendingRoleRecord(
+  roleId: string,
+  form: NewRoleFormState,
+): RoleRecord {
+  const timestamp = new Date().toISOString();
+  return {
+    id: roleId,
+    name: form.name.trim() || "新角色",
+    description: form.description,
+    system_prompt: form.systemPrompt,
+    avatar: null,
+    avatar_abs: null,
+    featured_image: null,
+    featured_image_abs: null,
+    illustrations: [],
+    illustrations_abs: [],
+    created_at: timestamp,
+    updated_at: timestamp,
   };
 }
 
@@ -436,6 +458,14 @@ function App(): React.ReactElement {
     setClearIllustrations(false);
     const savedIllustration = window.localStorage.getItem("miraDesktop.activeIllustration") ?? "";
     setActiveIllustration(chooseIllustration(role, sessionOverride, savedIllustration));
+  }
+
+  async function waitForMinimumRoleCardBusy(startedAt: number): Promise<void> {
+    const elapsed = Date.now() - startedAt;
+    if (elapsed >= minRoleCardBusyMs) {
+      return;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, minRoleCardBusyMs - elapsed));
   }
 
   async function buildSearchIndex(nextRoles: RoleRecord[]): Promise<void> {
@@ -936,9 +966,18 @@ function App(): React.ReactElement {
       setWorkspaceFeedback({ tone: "error", message: `角色创建失败：${message}` });
       return;
     }
+    const pendingRoleId = `pending-create:${Date.now()}`;
+    const pendingRole = createPendingRoleRecord(pendingRoleId, newRoleFormRef.current);
+    const previousActiveRoleId = activeRoleIdRef.current;
+    const startedAt = Date.now();
     setCreating(true);
     setError("");
     setWorkspaceFeedback(null);
+    setPendingRoleCardAction({ roleId: pendingRoleId, action: "create" });
+    setRoles((current) => [...current, pendingRole]);
+    applyRoleSnapshot(pendingRole);
+    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
+    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, pendingRoleId));
     const res = await window.miraDesktop.invoke({
       method: "roles.create",
       payload: {
@@ -947,24 +986,30 @@ function App(): React.ReactElement {
         system_prompt: systemPrompt,
       },
     });
+    await waitForMinimumRoleCardBusy(startedAt);
     setCreating(false);
     if (res.error) {
       setPendingRoleCardAction(null);
+      setRoles((current) => current.filter((item) => item.id !== pendingRoleId));
+      setActiveRoleId(previousActiveRoleId);
+      activeRoleIdRef.current = previousActiveRoleId;
+      openRoleWorkspace({ kind: "role-create" }, { recordHistory: false });
+      replaceNavigationEntry(buildNavigationEntry({ kind: "role-create" }, previousActiveRoleId));
       setError(res.error.message);
       setWorkspaceFeedback({ tone: "error", message: `角色创建失败：${res.error.message}` });
       return;
     }
     const role = res.payload.role as RoleRecord;
-    updateNewRoleForm(createEmptyNewRoleForm());
     activeRoleIdRef.current = role.id;
     setActiveRoleId(role.id);
     setPendingRoleCardAction({ roleId: role.id, action: "create" });
     setRoles((current) => {
-      const existing = current.find((item) => item.id === role.id);
+      const withoutPending = current.filter((item) => item.id !== pendingRoleId);
+      const existing = withoutPending.find((item) => item.id === role.id);
       if (existing) {
-        return current.map((item) => (item.id === role.id ? role : item));
+        return withoutPending.map((item) => (item.id === role.id ? role : item));
       }
-      return [...current, role];
+      return [...withoutPending, role];
     });
     applyRoleSnapshot(role);
     const nextRoles = await loadRolesFromBridge();
@@ -982,6 +1027,7 @@ function App(): React.ReactElement {
     openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
     replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, resolvedRole.id));
     setPendingRoleCardAction(null);
+    updateNewRoleForm(createEmptyNewRoleForm());
     setWorkspaceFeedback({ tone: "success", message: "角色创建成功。" });
   }
 
@@ -1059,6 +1105,7 @@ function App(): React.ReactElement {
   async function deleteRole(roleIdOverride?: string): Promise<void> {
     const roleId = roleIdOverride || activeRoleId;
     if (!roleId) return;
+    const startedAt = Date.now();
     setDeletingRole(true);
     setPendingRoleCardAction({ roleId, action: "delete" });
     setError("");
@@ -1066,6 +1113,7 @@ function App(): React.ReactElement {
       method: "roles.delete",
       payload: { role_id: roleId },
     });
+    await waitForMinimumRoleCardBusy(startedAt);
     setDeletingRole(false);
     if (res.error) {
       setPendingRoleCardAction(null);
