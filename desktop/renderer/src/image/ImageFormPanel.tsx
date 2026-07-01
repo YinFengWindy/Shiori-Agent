@@ -1,5 +1,6 @@
 import { cx, ghostButtonClass, inputClass, textareaClass } from "../shared/styles";
 import type { ImageMode, ImageSizePreset, ImageStudioFormState } from "./types";
+import { useState } from "react";
 
 type ImageSelectOption<T extends string> = {
   id: T;
@@ -41,10 +42,17 @@ export function ImageFormPanel({
   onPickBaseImage,
   onSubmit,
 }: ImageFormPanelProps) {
+  const [promptTab, setPromptTab] = useState<"prompt" | "negative">("prompt");
   const selectClass = cx(
     inputClass,
     "h-11 appearance-none bg-white py-0 pr-10 text-sm leading-5",
   );
+  const promptTextareaClass = cx(
+    textareaClass,
+    "min-h-[176px] resize-none rounded-none border-[#D6DCE3] bg-[#F3F5F7] px-3 py-2 leading-7 shadow-none hover:border-primary focus:border-primary focus:bg-primary/[0.03]",
+  );
+  const segmentedControlClassName = "inline-flex rounded-xl bg-[#F5F6F8] p-1";
+  const segmentedButtonBaseClassName = "rounded-lg px-3 py-1.5 text-[13px] font-semibold transition";
 
   return (
     <section className="grid min-h-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-[#FBFCFE] p-5 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
@@ -110,21 +118,54 @@ export function ImageFormPanel({
       </div>
 
       <div className="grid gap-2">
-        <div className="text-xs font-medium text-[#4A4F57]">Prompt</div>
-        <textarea
-          className={cx(textareaClass, "min-h-[140px] bg-white")}
-          value={form.prompt}
-          onChange={(event) => onChange({ prompt: event.target.value })}
-        />
-      </div>
-
-      <div className="grid gap-2">
-        <div className="text-xs font-medium text-[#4A4F57]">Negative Prompt</div>
-        <textarea
-          className={cx(textareaClass, "min-h-[96px] bg-white")}
-          value={form.negativePrompt}
-          onChange={(event) => onChange({ negativePrompt: event.target.value })}
-        />
+        <div className="rounded-[18px] border border-[#E4EAF0] bg-white p-3">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className={segmentedControlClassName}>
+              <button
+                type="button"
+                className={cx(
+                  segmentedButtonBaseClassName,
+                  promptTab === "prompt"
+                    ? "bg-white text-[#20242A] shadow-sm"
+                    : "bg-transparent text-[#5B616A] hover:bg-white hover:text-[#20242A]",
+                )}
+                onClick={() => setPromptTab("prompt")}
+              >
+                Base Prompt
+              </button>
+              <button
+                type="button"
+                className={cx(
+                  segmentedButtonBaseClassName,
+                  promptTab === "negative"
+                    ? "bg-white text-[#20242A] shadow-sm"
+                    : "bg-transparent text-[#5B616A] hover:bg-white hover:text-[#20242A]",
+                )}
+                onClick={() => setPromptTab("negative")}
+              >
+                Undesired Content
+              </button>
+            </div>
+            <button
+              type="button"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-primary/40 hover:text-[#20242A] focus:outline-none focus:ring-2 focus:ring-primary/20"
+              aria-label="Prompt 设置"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                <path d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.08 7.08 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7.08 7.08 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94 7.43 7.43 0 0 0 .05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.39 1.04.71 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.59-.23 1.13-.55 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z" />
+              </svg>
+            </button>
+          </div>
+          <textarea
+            className={promptTextareaClass}
+            value={promptTab === "prompt" ? form.prompt : form.negativePrompt}
+            onChange={(event) => (
+              promptTab === "prompt"
+                ? onChange({ prompt: event.target.value })
+                : onChange({ negativePrompt: event.target.value })
+            )}
+          />
+        </div>
       </div>
 
       <div className="grid gap-2">
@@ -174,15 +215,6 @@ export function ImageFormPanel({
           </div>
         </div>
       ) : null}
-
-      <div className="grid gap-2">
-        <input
-          className={cx(inputClass, "bg-white")}
-          value={form.seed}
-          onChange={(event) => onChange({ seed: event.target.value })}
-          placeholder="Seed"
-        />
-      </div>
 
       {validationError ? (
         <div className="rounded-md border border-[rgba(176,58,58,0.18)] bg-[#FFF1F1] px-3 py-2 text-[12px] leading-5 text-[#9A2F2F]">

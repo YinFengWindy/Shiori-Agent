@@ -10,7 +10,6 @@ type ImagePreviewPanelProps = {
     width: string;
     height: string;
     model: string;
-    seed: string;
   } | null;
   error: string;
 };

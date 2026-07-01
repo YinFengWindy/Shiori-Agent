@@ -22,9 +22,6 @@ const initialForm: ImageStudioFormState = {
   sizePreset: "square",
   customWidth: "",
   customHeight: "",
-  steps: "28",
-  seed: "",
-  sampler: "k_euler_ancestral",
   model: "nai-diffusion-4-5-curated",
 };
 
@@ -67,6 +64,7 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
   const [error, setError] = useState("");
   const [autoWritebackRoleAssets, setAutoWritebackRoleAssets] = useState(false);
   const [settingsFormData, setSettingsFormData] = useState<SettingsFormData | null>(null);
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
   const roleOptions = useMemo(() => (
     roles.map((role) => ({
@@ -154,7 +152,6 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
   }, [modelOptions]);
 
   const validationError = useMemo(() => {
-    if (!form.prompt.trim()) return "prompt 不能为空";
     if (form.mode === "img2img" && !form.baseImagePath.trim()) {
       return "img2img 需要输入图";
     }
@@ -176,7 +173,6 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
       width: form.sizePreset === "custom" ? (form.customWidth || "-") : presetSize.width,
       height: form.sizePreset === "custom" ? (form.customHeight || "-") : presetSize.height,
       model: form.model || "-",
-      seed: form.seed || "-",
     };
   }, [form]);
 
@@ -187,6 +183,11 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
   }
 
   async function handleSubmit(): Promise<void> {
+    setAttemptedSubmit(true);
+    if (!form.prompt.trim()) {
+      setError("");
+      return;
+    }
     if (validationError) return;
     setSubmitting(true);
     setError("");
@@ -203,7 +204,6 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
           size_preset: form.sizePreset,
           custom_width: form.sizePreset === "custom" ? parsePositiveInteger(form.customWidth) : undefined,
           custom_height: form.sizePreset === "custom" ? parsePositiveInteger(form.customHeight) : undefined,
-          seed: parsePositiveInteger(form.seed),
           model: form.model,
         },
       });
@@ -234,9 +234,12 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
     roleOptions,
     selectedRecordId,
     submitting,
-    validationError,
+    validationError: attemptedSubmit && !form.prompt.trim() ? "prompt 不能为空" : validationError,
     onChange: (next: Partial<ImageStudioFormState>) => {
       setForm((current) => ({ ...current, ...next }));
+      if ("prompt" in next && String(next.prompt ?? "").trim()) {
+        setAttemptedSubmit(false);
+      }
     },
     onPickBaseImage: () => void handlePickBaseImage(),
     onSelectRecord: (record: ImageHistoryRecord) => setSelectedRecordId(record.id),

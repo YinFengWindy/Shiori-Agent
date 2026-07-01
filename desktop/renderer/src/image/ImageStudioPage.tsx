@@ -18,7 +18,6 @@ type ImageStudioPageProps = {
     width: string;
     height: string;
     model: string;
-    seed: string;
   } | null;
   selectedRecordId: string;
   historyDrawerOpen: boolean;
