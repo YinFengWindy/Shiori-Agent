@@ -1,5 +1,6 @@
 import { startTransition, useEffect, useMemo, useState } from "react";
 import type { RoleRecord } from "../shared/types";
+import type { SettingsFormData } from "../shared/types";
 import type {
   ImageGenerateResult,
   ImageHistoryRecord,
@@ -9,9 +10,11 @@ import type {
 type UseImageStudioStateArgs = {
   active: boolean;
   activeRole: RoleRecord | null;
+  roles: RoleRecord[];
 };
 
 const initialForm: ImageStudioFormState = {
+  roleId: "",
   prompt: "",
   negativePrompt: "",
   mode: "txt2img",
@@ -23,6 +26,11 @@ const initialForm: ImageStudioFormState = {
   seed: "",
   sampler: "k_euler_ancestral",
   model: "nai-diffusion-4-5-curated",
+};
+
+type ImageStudioModelOption = {
+  id: string;
+  label: string;
 };
 
 function parsePositiveInteger(value: string): number | null {
@@ -50,7 +58,7 @@ function resolvePresetSize(sizePreset: ImageStudioFormState["sizePreset"]): {
 }
 
 /** Manages image studio state so the shell sidebar and preview area stay in sync. */
-export function useImageStudioState({ active, activeRole }: UseImageStudioStateArgs) {
+export function useImageStudioState({ active, activeRole, roles }: UseImageStudioStateArgs) {
   const [form, setForm] = useState<ImageStudioFormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<ImageHistoryRecord[]>([]);
@@ -58,12 +66,29 @@ export function useImageStudioState({ active, activeRole }: UseImageStudioStateA
   const [latestResult, setLatestResult] = useState<ImageGenerateResult | null>(null);
   const [error, setError] = useState("");
   const [autoWritebackRoleAssets, setAutoWritebackRoleAssets] = useState(false);
+  const [settingsFormData, setSettingsFormData] = useState<SettingsFormData | null>(null);
+
+  const roleOptions = useMemo(() => (
+    roles.map((role) => ({
+      id: role.id,
+      label: role.name,
+    }))
+  ), [roles]);
+
+  const modelOptions = useMemo<ImageStudioModelOption[]>(() => {
+    const defaultModel = settingsFormData?.integrations.novelaiDefaultModel?.trim() || "nai-diffusion-4-5-curated";
+    const nsfwModel = settingsFormData?.integrations.novelaiNsfwModel?.trim() || "nai-diffusion-4-5-full";
+    return [
+      { id: defaultModel, label: "普通模型" },
+      { id: nsfwModel, label: "NSFW 模型" },
+    ];
+  }, [settingsFormData]);
 
   async function loadHistory(): Promise<void> {
     const response = await window.miraDesktop.invoke({
       method: "novelai.history",
       payload: {
-        role_id: activeRole?.id ?? "",
+        role_id: form.roleId,
         limit: 24,
       },
     });
@@ -95,19 +120,41 @@ export function useImageStudioState({ active, activeRole }: UseImageStudioStateA
         loadHistory(),
       ]);
       if (cancelled) return;
+      setSettingsFormData(settingsResult.formData);
       setAutoWritebackRoleAssets(settingsResult.formData.integrations.novelaiAutoWritebackRoleAssets);
+      const defaultModel = settingsResult.formData.integrations.novelaiDefaultModel?.trim() || "nai-diffusion-4-5-curated";
+      setForm((current) => ({
+        ...current,
+        roleId: current.roleId || activeRole?.id || "",
+        model: current.model || defaultModel,
+      }));
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [active, activeRole?.id]);
+  }, [active, activeRole?.id, form.roleId]);
+
+  useEffect(() => {
+    setForm((current) => {
+      const roleId = current.roleId && roles.some((role) => role.id === current.roleId)
+        ? current.roleId
+        : (activeRole?.id ?? roles[0]?.id ?? "");
+      return current.roleId === roleId ? current : { ...current, roleId };
+    });
+  }, [activeRole?.id, roles]);
+
+  useEffect(() => {
+    if (!modelOptions.length) return;
+    setForm((current) => (
+      modelOptions.some((option) => option.id === current.model)
+        ? current
+        : { ...current, model: modelOptions[0]?.id ?? current.model }
+    ));
+  }, [modelOptions]);
 
   const validationError = useMemo(() => {
     if (!form.prompt.trim()) return "prompt 不能为空";
-    const steps = parsePositiveInteger(form.steps);
-    if (steps == null) return "steps 必须是正整数";
-    if (steps > 28) return "当前仅允许 steps 不超过 28";
     if (form.mode === "img2img" && !form.baseImagePath.trim()) {
       return "img2img 需要输入图";
     }
@@ -128,7 +175,6 @@ export function useImageStudioState({ active, activeRole }: UseImageStudioStateA
       mode: form.mode,
       width: form.sizePreset === "custom" ? (form.customWidth || "-") : presetSize.width,
       height: form.sizePreset === "custom" ? (form.customHeight || "-") : presetSize.height,
-      steps: form.steps || "-",
       model: form.model || "-",
       seed: form.seed || "-",
     };
@@ -148,8 +194,8 @@ export function useImageStudioState({ active, activeRole }: UseImageStudioStateA
       const response = await window.miraDesktop.invoke({
         method: "novelai.generate",
         payload: {
-          role_id: activeRole?.id ?? "",
-          session_key: activeRole ? `role:${activeRole.id}` : "desktop:image-studio",
+          role_id: form.roleId,
+          session_key: form.roleId ? `role:${form.roleId}` : "desktop:image-studio",
           prompt: form.prompt,
           mode: form.mode,
           base_image_path: form.baseImagePath,
@@ -157,9 +203,7 @@ export function useImageStudioState({ active, activeRole }: UseImageStudioStateA
           size_preset: form.sizePreset,
           custom_width: form.sizePreset === "custom" ? parsePositiveInteger(form.customWidth) : undefined,
           custom_height: form.sizePreset === "custom" ? parsePositiveInteger(form.customHeight) : undefined,
-          steps: parsePositiveInteger(form.steps),
           seed: parsePositiveInteger(form.seed),
-          sampler: form.sampler,
           model: form.model,
         },
       });
@@ -185,7 +229,9 @@ export function useImageStudioState({ active, activeRole }: UseImageStudioStateA
     form,
     history,
     latestResult,
+    modelOptions,
     requestSummary,
+    roleOptions,
     selectedRecordId,
     submitting,
     validationError,

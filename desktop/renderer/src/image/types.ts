@@ -2,6 +2,7 @@ export type ImageMode = "txt2img" | "img2img";
 export type ImageSizePreset = "square" | "landscape" | "portrait" | "custom";
 
 export type ImageStudioFormState = {
+  roleId: string;
   prompt: string;
   negativePrompt: string;
   mode: ImageMode;

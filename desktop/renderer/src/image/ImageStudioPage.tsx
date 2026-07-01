@@ -17,7 +17,6 @@ type ImageStudioPageProps = {
     mode: string;
     width: string;
     height: string;
-    steps: string;
     model: string;
     seed: string;
   } | null;

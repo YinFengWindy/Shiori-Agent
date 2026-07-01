@@ -6,12 +6,13 @@ import { cx } from "../shared/styles";
 export type ImageStudioSidebarSectionId = "generate";
 
 type ImageStudioSidebarProps = {
-  autoWritebackRoleAssets: boolean;
   bridgeReady: boolean;
   collapsed: boolean;
   animating: boolean;
   width: number;
   form: ImageStudioFormState;
+  modelOptions: Array<{ id: string; label: string }>;
+  roleOptions: Array<{ id: string; label: string }>;
   submitting: boolean;
   validationError: string;
   onBackToChat: () => void;
@@ -23,12 +24,13 @@ type ImageStudioSidebarProps = {
 
 /** Renders the image studio workspace sidebar with generation parameters. */
 export function ImageStudioSidebar({
-  autoWritebackRoleAssets,
   bridgeReady,
   collapsed,
   animating,
   width,
   form,
+  modelOptions,
+  roleOptions,
   submitting,
   validationError,
   onBackToChat,
@@ -61,10 +63,10 @@ export function ImageStudioSidebar({
       </button>
       <div className="scrollbar-soft min-h-0 overflow-y-auto px-2 pb-1">
         <ImageFormPanel
-          activeRole={null}
-          autoWritebackRoleAssets={autoWritebackRoleAssets}
           bridgeReady={bridgeReady}
           form={form}
+          modelOptions={modelOptions}
+          roleOptions={roleOptions}
           validationError={validationError}
           submitting={submitting}
           onChange={onChange}

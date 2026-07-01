@@ -222,6 +222,7 @@ function App(): React.ReactElement {
   const imageStudioState = useImageStudioState({
     active: imageStudioViewActive,
     activeRole: roles.find((role) => role.id === activeRoleId) ?? null,
+    roles,
   });
 
   function buildNavigationEntry(
@@ -1437,12 +1438,13 @@ function App(): React.ReactElement {
             />
           ) : imageStudioViewActive ? (
             <ImageStudioSidebar
-              autoWritebackRoleAssets={imageStudioState.autoWritebackRoleAssets}
               bridgeReady={bridgeReady}
               animating={sidebarAnimating && !resizingSidebar}
               collapsed={sidebarCollapsed}
               width={sidebarWidth}
               form={imageStudioState.form}
+              modelOptions={imageStudioState.modelOptions}
+              roleOptions={imageStudioState.roleOptions}
               submitting={imageStudioState.submitting}
               validationError={imageStudioState.validationError}
               onBackToChat={() => openChatView()}

@@ -1,12 +1,16 @@
 import { cx, ghostButtonClass, inputClass, textareaClass } from "../shared/styles";
-import type { RoleRecord } from "../shared/types";
 import type { ImageMode, ImageSizePreset, ImageStudioFormState } from "./types";
 
+type ImageSelectOption<T extends string> = {
+  id: T;
+  label: string;
+};
+
 type ImageFormPanelProps = {
-  activeRole: RoleRecord | null;
-  autoWritebackRoleAssets: boolean;
   bridgeReady: boolean;
   form: ImageStudioFormState;
+  modelOptions: Array<ImageSelectOption<string>>;
+  roleOptions: Array<ImageSelectOption<string>>;
   validationError: string;
   submitting: boolean;
   onChange: (next: Partial<ImageStudioFormState>) => void;
@@ -14,57 +18,94 @@ type ImageFormPanelProps = {
   onSubmit: () => void;
 };
 
-const sizeOptions: Array<{ id: ImageSizePreset; label: string }> = [
+const sizeOptions: Array<ImageSelectOption<ImageSizePreset>> = [
   { id: "square", label: "1024 × 1024" },
   { id: "landscape", label: "1216 × 832" },
   { id: "portrait", label: "832 × 1216" },
   { id: "custom", label: "自定义" },
 ];
 
-const modeOptions: Array<{ id: ImageMode; label: string }> = [
+const modeOptions: Array<ImageSelectOption<ImageMode>> = [
   { id: "txt2img", label: "文生图" },
   { id: "img2img", label: "图生图" },
 ];
 
 export function ImageFormPanel({
-  activeRole,
-  autoWritebackRoleAssets,
   bridgeReady,
   form,
+  modelOptions,
+  roleOptions,
   validationError,
   submitting,
   onChange,
   onPickBaseImage,
   onSubmit,
 }: ImageFormPanelProps) {
+  const selectClass = cx(
+    inputClass,
+    "h-11 appearance-none bg-white py-0 pr-10 text-sm leading-5",
+  );
+
   return (
     <section className="grid min-h-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-[#FBFCFE] p-5 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
-      <div className="grid gap-1">
-        <div className="text-sm font-semibold text-[#20242A]">生成参数</div>
-        <div className="text-[12px] leading-5 text-[#7B7F87]">
-          {activeRole ? activeRole.name : "未绑定角色"}
-          {activeRole && autoWritebackRoleAssets ? " · 自动写回" : ""}
+      <div className="grid gap-2">
+        <div className="text-xs font-medium text-[#4A4F57]">角色</div>
+        <div className="relative">
+          <select
+            className={selectClass}
+            value={form.roleId}
+            onChange={(event) => onChange({ roleId: event.target.value })}
+          >
+            <option value="">不绑定角色</option>
+            {roleOptions.map((option) => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[#737781]" aria-hidden="true">
+            <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 fill-current">
+              <path d="M2.2 4.2 6 8l3.8-3.8.8.8L6 9.8 1.4 5z" />
+            </svg>
+          </span>
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <div className="text-xs font-medium text-[#4A4F57]">模型</div>
+        <div className="relative">
+          <select
+            className={selectClass}
+            value={form.model}
+            onChange={(event) => onChange({ model: event.target.value })}
+          >
+            {modelOptions.map((option) => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[#737781]" aria-hidden="true">
+            <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 fill-current">
+              <path d="M2.2 4.2 6 8l3.8-3.8.8.8L6 9.8 1.4 5z" />
+            </svg>
+          </span>
         </div>
       </div>
 
       <div className="grid gap-2">
         <div className="text-xs font-medium text-[#4A4F57]">模式</div>
-        <div className="grid grid-cols-2 gap-2">
-          {modeOptions.map((option) => (
-            <button
-              key={option.id}
-              className={cx(
-                "rounded-md border px-3 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-primary/20",
-                form.mode === option.id
-                  ? "border-[#272536] bg-[#272536] text-white"
-                  : "border-[#D8DCE2] bg-white text-[#32363C] hover:border-[#9AA3B2]",
-              )}
-              type="button"
-              onClick={() => onChange({ mode: option.id })}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="relative">
+          <select
+            className={selectClass}
+            value={form.mode}
+            onChange={(event) => onChange({ mode: event.target.value as ImageMode })}
+          >
+            {modeOptions.map((option) => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[#737781]" aria-hidden="true">
+            <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 fill-current">
+              <path d="M2.2 4.2 6 8l3.8-3.8.8.8L6 9.8 1.4 5z" />
+            </svg>
+          </span>
         </div>
       </div>
 
@@ -88,22 +129,21 @@ export function ImageFormPanel({
 
       <div className="grid gap-2">
         <div className="text-xs font-medium text-[#4A4F57]">尺寸</div>
-        <div className="grid grid-cols-2 gap-2">
-          {sizeOptions.map((option) => (
-            <button
-              key={option.id}
-              className={cx(
-                "rounded-md border px-3 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-primary/20",
-                form.sizePreset === option.id
-                  ? "border-[#272536] bg-[#272536] text-white"
-                  : "border-[#D8DCE2] bg-white text-[#32363C] hover:border-[#9AA3B2]",
-              )}
-              type="button"
-              onClick={() => onChange({ sizePreset: option.id })}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="relative">
+          <select
+            className={selectClass}
+            value={form.sizePreset}
+            onChange={(event) => onChange({ sizePreset: event.target.value as ImageSizePreset })}
+          >
+            {sizeOptions.map((option) => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[#737781]" aria-hidden="true">
+            <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 fill-current">
+              <path d="M2.2 4.2 6 8l3.8-3.8.8.8L6 9.8 1.4 5z" />
+            </svg>
+          </span>
         </div>
         {form.sizePreset === "custom" ? (
           <div className="grid gap-2 md:grid-cols-2">
@@ -135,30 +175,12 @@ export function ImageFormPanel({
         </div>
       ) : null}
 
-      <div className="grid gap-2 md:grid-cols-2">
-        <input
-          className={cx(inputClass, "bg-white")}
-          value={form.steps}
-          onChange={(event) => onChange({ steps: event.target.value })}
-          placeholder="步数"
-        />
+      <div className="grid gap-2">
         <input
           className={cx(inputClass, "bg-white")}
           value={form.seed}
           onChange={(event) => onChange({ seed: event.target.value })}
           placeholder="Seed"
-        />
-        <input
-          className={cx(inputClass, "bg-white")}
-          value={form.sampler}
-          onChange={(event) => onChange({ sampler: event.target.value })}
-          placeholder="Sampler"
-        />
-        <input
-          className={cx(inputClass, "bg-white")}
-          value={form.model}
-          onChange={(event) => onChange({ model: event.target.value })}
-          placeholder="Model"
         />
       </div>
 
