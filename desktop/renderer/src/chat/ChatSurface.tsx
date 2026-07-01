@@ -9,6 +9,7 @@ type ChatSurfaceProps = {
   activeRoleId: string;
   activeSession: SessionPayload | null;
   bridgeReady: boolean;
+  chatLatestImageLoading: boolean;
   chatLatestImagePath: string;
   chatLatestImageSidebarAnimating: boolean;
   chatLatestImageSidebarCollapsed: boolean;
@@ -33,6 +34,7 @@ export function ChatSurface({
   activeRoleId,
   activeSession,
   bridgeReady,
+  chatLatestImageLoading,
   chatLatestImagePath,
   chatLatestImageSidebarAnimating,
   chatLatestImageSidebarCollapsed,
@@ -365,6 +367,8 @@ export function ChatSurface({
                     src={toFileUrl(chatLatestImagePath)}
                     alt="selected message image"
                   />
+                ) : chatLatestImageLoading ? (
+                  <div className="h-5 w-5 rounded-full border border-[#D6DCE5] border-t-[#747474]" />
                 ) : (
                   <div className="h-10 w-10 rounded-[14px] border border-[#D6DCE5] bg-white/70" />
                 )}

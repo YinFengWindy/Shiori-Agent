@@ -188,6 +188,7 @@ function App(): React.ReactElement {
     animationDurationMs: sidebarAnimationDurationMs,
   });
   const [chatImagePreviewPath, setChatImagePreviewPath] = useState("");
+  const [chatImagePreviewLoading, setChatImagePreviewLoading] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
@@ -556,19 +557,52 @@ function App(): React.ReactElement {
   }, [activeIllustration]);
 
   useEffect(() => {
-    setChatImagePreviewPath("");
-  }, [activeRoleId]);
-
-  useEffect(() => {
     if (!sidebarAnimating) return undefined;
     const timer = window.setTimeout(() => setSidebarAnimating(false), sidebarAnimationDurationMs + 40);
     return () => window.clearTimeout(timer);
   }, [sidebarAnimating]);
 
+  useEffect(() => {
+    if (!activeRoleId) {
+      setChatImagePreviewPath("");
+      setChatImagePreviewLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setChatImagePreviewLoading(true);
+
+    void (async () => {
+      const response = await window.miraDesktop.invoke({
+        method: "novelai.history",
+        payload: {
+          role_id: activeRoleId,
+          limit: 1,
+        },
+      });
+      if (cancelled) return;
+      if (response.error) {
+        setChatImagePreviewPath("");
+        setChatImagePreviewLoading(false);
+        return;
+      }
+      const records = Array.isArray(response.payload.records)
+        ? response.payload.records as Array<{ output_paths?: string[] }>
+        : [];
+      setChatImagePreviewPath(records[0]?.output_paths?.[0] ?? "");
+      setChatImagePreviewLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRoleId]);
+
   function openChatImagePreview(path: string): void {
     const cleanPath = path.trim();
     if (!cleanPath) return;
     setChatImagePreviewPath(cleanPath);
+    setChatImagePreviewLoading(false);
     chatLatestImageSidebar.open();
   }
 
@@ -1390,6 +1424,36 @@ function App(): React.ReactElement {
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
   const featuredImageUrl = detailRole?.featured_image_abs || visibleIllustrationUrl;
   const headerTitle = sending && activeRole ? "正在输入中..." : (activeRole ? activeRole.name : "选择一个角色");
+  const latestChatGeneratedImagePath = (() => {
+    const messages = activeSession?.messages ?? [];
+    for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+      const media = messages[messageIndex]?.media;
+      if (!Array.isArray(media)) continue;
+      for (let mediaIndex = media.length - 1; mediaIndex >= 0; mediaIndex -= 1) {
+        const path = String(media[mediaIndex] ?? "").trim();
+        if (!path) continue;
+        const lower = path.toLowerCase();
+        if (
+          lower.endsWith(".png")
+          || lower.endsWith(".jpg")
+          || lower.endsWith(".jpeg")
+          || lower.endsWith(".webp")
+          || lower.endsWith(".gif")
+          || lower.endsWith(".bmp")
+        ) {
+          return path;
+        }
+      }
+    }
+    return "";
+  })();
+
+  useEffect(() => {
+    if (!latestChatGeneratedImagePath) return;
+    setChatImagePreviewPath((current) => (current === latestChatGeneratedImagePath ? current : latestChatGeneratedImagePath));
+    setChatImagePreviewLoading(false);
+    chatLatestImageSidebar.open();
+  }, [latestChatGeneratedImagePath]);
 
   useEffect(() => {
     if (previewIllustrations.length === 0) {
@@ -1542,6 +1606,7 @@ function App(): React.ReactElement {
               activeRoleId={activeRoleId}
               activeSession={activeSession}
               bridgeReady={bridgeReady}
+              chatLatestImageLoading={chatImagePreviewLoading}
               chatLatestImagePath={chatImagePreviewPath}
               chatLatestImageSidebarAnimating={chatLatestImageSidebar.animating && !chatLatestImageSidebar.resizing}
               chatLatestImageSidebarCollapsed={chatLatestImageSidebar.collapsed}
