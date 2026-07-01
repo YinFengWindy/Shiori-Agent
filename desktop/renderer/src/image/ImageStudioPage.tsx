@@ -89,14 +89,14 @@ export function ImageStudioPage({
         </div>
         <div
           className={cx(
-            "relative h-full overflow-hidden bg-[rgba(244,247,251,0.92)]",
+            "relative h-full overflow-hidden border-l border-[#E0E6EE] bg-[rgba(244,247,251,0.92)]",
             historySidebarAnimating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           )}
           style={{ width: historySidebarCollapsed ? 0 : historySidebarWidth }}
         >
           {!historySidebarCollapsed ? (
             <div
-              className="absolute inset-y-0 left-0 z-[3] w-3 -translate-x-1/2 cursor-col-resize"
+              className="absolute inset-y-0 left-0 z-[3] w-3 -translate-x-1/2 cursor-col-resize before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-[#D8DEE8] before:content-['']"
               onPointerDown={onBeginHistorySidebarResize}
             />
           ) : null}
