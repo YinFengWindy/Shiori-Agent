@@ -78,7 +78,7 @@ export function ImageFormPanel({
     () => roleItems.find((item) => item.id === form.roleId) ?? null,
     [form.roleId, roleItems],
   );
-  const currentAvatarLabel = activeRole?.label.slice(0, 1).toUpperCase() || "无";
+  const currentAvatarLabel = activeRole?.label.slice(0, 1).toUpperCase() || "?";
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent): void {
@@ -115,28 +115,14 @@ export function ImageFormPanel({
               {currentAvatarLabel}
             </span>
           )}
-          <span className="text-sm font-medium text-[#20242A]">{activeRole?.label || "不绑定角色"}</span>
+          <span className="text-sm font-medium text-[#20242A]">{activeRole?.label || "选择角色"}</span>
           <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 fill-current text-[#737781]" aria-hidden="true">
             <path d="M2.2 4.2 6 8l3.8-3.8.8.8L6 9.8 1.4 5z" />
           </svg>
         </button>
         {rolePanelOpen ? (
           <div className="absolute left-0 top-[calc(100%+0.5rem)] z-20 w-[248px] overflow-hidden rounded-2xl border border-[#D8DCE2] bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.12)]">
-            <button
-              type="button"
-              className={cx(
-                "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-[#F5F6F8] focus:outline-none focus:ring-2 focus:ring-primary/20",
-                !form.roleId && "bg-[#F5F6F8]",
-              )}
-              onClick={() => {
-                onChange({ roleId: "" });
-                setRolePanelOpen(false);
-              }}
-            >
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-[#F3F5F7] text-[12px] font-semibold text-[#20242A]">无</span>
-              <span className="text-sm text-[#20242A]">不绑定角色</span>
-            </button>
-            <div className="mt-1 grid gap-1">
+            <div className="grid gap-1">
               {roleItems.map((item) => (
                 <button
                   key={item.id}

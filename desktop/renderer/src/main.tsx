@@ -350,6 +350,11 @@ function App(): React.ReactElement {
   }
 
   function openImageStudio(options?: { recordHistory?: boolean }): void {
+    if (!roles.length) {
+      setError("请先创建至少一个角色，再进入生图。");
+      setNotice("");
+      return;
+    }
     const nextView: AppMainView = { kind: "image-studio" };
     setSidebarAnimating(true);
     setSidebarCollapsed(false);
