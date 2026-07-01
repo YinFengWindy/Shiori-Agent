@@ -681,6 +681,7 @@ class DefaultMemoryEngine:
                 source_ref=_build_entry_source_ref(event.source_ref, entry),
                 scope_channel=event.scope_channel,
                 scope_chat_id=event.scope_chat_id,
+                role_id=event.role_id,
                 emotional_weight=emotional_weight,
             )
             for entry, emotional_weight in event.history_entry_payloads
@@ -697,6 +698,7 @@ class DefaultMemoryEngine:
                 source_ref=event.source_ref,
                 scope_channel=event.scope_channel,
                 scope_chat_id=event.scope_chat_id,
+                role_id=event.role_id,
             )
 
     async def _extract_implicit_long_term(
@@ -877,6 +879,8 @@ class DefaultMemoryEngine:
             "tool_requirement": request.metadata.get("tool_requirement"),
             "steps": list(steps or []),
         }
+        if request.scope.role_id:
+            extra["role_id"] = request.scope.role_id
         memory_domain = self._resolve_memory_domain_for_write(request, memory_type)
         self._ensure_memory_domain_allowed(
             memory_domain,
@@ -1065,6 +1069,7 @@ class DefaultMemoryEngine:
         source_ref: str,
         scope_channel: str,
         scope_chat_id: str,
+        role_id: str = "",
         emotional_weight: int = 0,
     ) -> None:
         if self._memorizer is None:
@@ -1075,6 +1080,7 @@ class DefaultMemoryEngine:
             source_ref=source_ref,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
+            role_id=role_id,
             emotional_weight=emotional_weight,
         )
 
@@ -1105,6 +1111,7 @@ class DefaultMemoryEngine:
         source_ref: str,
         scope_channel: str,
         scope_chat_id: str,
+        role_id: str = "",
     ) -> dict[str, int]:
         saved_counts = {"profile": 0, "preference": 0, "procedure": 0}
 
@@ -1121,6 +1128,7 @@ class DefaultMemoryEngine:
                 memory_type="profile",
                 extra={
                     "category": category,
+                    "role_id": role_id,
                     "scope_channel": scope_channel,
                     "scope_chat_id": scope_chat_id,
                 },
@@ -1142,6 +1150,7 @@ class DefaultMemoryEngine:
                 extra: dict[str, object] = {
                     "tool_requirement": item.get("tool_requirement"),
                     "steps": item.get("steps") or [],
+                    "role_id": role_id,
                     "scope_channel": scope_channel,
                     "scope_chat_id": scope_chat_id,
                 }

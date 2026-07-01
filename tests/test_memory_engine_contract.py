@@ -788,6 +788,27 @@ async def test_default_memory_engine_remember_keeps_explicit_memory_domain():
     assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["memory_domain"] == "role_self"
 
 
+async def test_default_memory_engine_remember_role_scope_persists_role_id():
+    memorizer = SimpleNamespace(
+        save_item_with_supersede=AsyncMock(return_value="new:memu-1")
+    )
+    engine = _make_default_engine(
+        retriever=cast(Any, SimpleNamespace()),
+        memorizer=cast(Any, memorizer),
+    )
+
+    _ = await engine.mutate(
+        MemoryMutation(
+            kind="remember",
+            summary="角色视角下用户偏好中文回复",
+            memory_kind="preference",
+            scope=MemoryScope(role_id="mira"),
+        )
+    )
+
+    assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["role_id"] == "mira"
+
+
 async def test_default_memory_engine_query_passes_memory_domains():
     retriever = SimpleNamespace(
         retrieve=AsyncMock(return_value=[]),
@@ -938,6 +959,38 @@ async def test_default_memory_engine_consumes_markdown_consolidation_event():
 
     memorizer.save_from_consolidation.assert_awaited_once()
     memorizer.save_item_with_supersede.assert_awaited_once()
+
+
+async def test_default_memory_engine_consolidation_role_scope_persists_role_id():
+    memorizer = SimpleNamespace(
+        save_from_consolidation=AsyncMock(),
+        save_item_with_supersede=AsyncMock(return_value="new:memu-1"),
+    )
+    provider = SimpleNamespace(
+        chat=AsyncMock(
+            return_value=SimpleNamespace(
+                content='{"profile":[{"summary":"用户买了 Zigbee 网关","category":"purchase","emotional_weight":4}],"preference":[],"procedure":[]}'
+            )
+        )
+    )
+    engine = _make_default_engine(
+        provider=cast(Any, provider),
+        memorizer=cast(Any, memorizer),
+    )
+
+    await engine._on_consolidation_committed(
+        ConsolidationCommitted(
+            history_entry_payloads=[("[2026-03-15 10:00] 用户聊了 Zigbee", 6)],
+            source_ref='["m1"]',
+            scope_channel="cli",
+            scope_chat_id="1",
+            conversation="USER: 我买了 Zigbee 网关",
+            role_id="mira",
+        )
+    )
+
+    assert memorizer.save_from_consolidation.await_args.kwargs["role_id"] == "mira"
+    assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["role_id"] == "mira"
 
 
 async def test_default_memory_engine_reports_implicit_extraction_failure():

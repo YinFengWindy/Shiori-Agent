@@ -84,6 +84,7 @@ class Memorizer:
           的旧条目，防止同类状态事实堆积。
         """
         embedding = await self._embedder.embed(summary)
+        role_id = str((extra or {}).get("role_id") or "").strip() or None
 
         if memory_type in ("procedure", "preference"):
             similar = self._store.vector_search(
@@ -91,6 +92,7 @@ class Memorizer:
                 top_k=5,
                 memory_types=[memory_type],
                 score_threshold=min(merge_threshold, supersede_threshold),
+                role_id=role_id,
             )
             if memory_type == "procedure":
                 merge_target = self._pick_explicit_merge_target(similar, extra, merge_threshold)
@@ -131,6 +133,7 @@ class Memorizer:
                     top_k=5,
                     memory_types=["profile"],
                     score_threshold=supersede_threshold,
+                    role_id=role_id,
                 )
                 same_cat = [
                     item for item in similar
@@ -172,6 +175,7 @@ class Memorizer:
         source_ref: str,
         scope_channel: str,
         scope_chat_id: str,
+        role_id: str = "",
         emotional_weight: int = 0,
     ) -> None:
         """将 consolidation 的产出写入 SQLite"""
@@ -198,6 +202,7 @@ class Memorizer:
                         summary=text,
                         embedding=embedding,
                         extra={
+                            "role_id": role_id,
                             "scope_channel": scope_channel,
                             "scope_chat_id": scope_chat_id,
                         },

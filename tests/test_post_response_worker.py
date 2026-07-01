@@ -309,3 +309,56 @@ def test_merge_item_should_refresh_trigger_tags_for_procedure():
     extra = json.loads(row[0])
     tags = extra.get("trigger_tags") or {}
     assert "web_search" not in (tags.get("keywords") or []), "merge 后不应保留旧关键词"
+
+
+def test_save_item_with_supersede_does_not_cross_role_scope():
+    embedder = _StaticEmbedder(
+        {
+            "Mira 视角：用户偏好中文回复": [1.0, 0.0],
+            "Atlas 视角：用户偏好中文回复": [1.0, 0.0],
+            "Mira 视角：用户更偏好简洁中文回复": [1.0, 0.0],
+        }
+    )
+    store = MemoryStore2(":memory:")
+    memorizer = Memorizer(store, cast(Any, embedder))
+
+    asyncio.run(
+        memorizer.save_item_with_supersede(
+            summary="Mira 视角：用户偏好中文回复",
+            memory_type="preference",
+            extra={"role_id": "mira", "memory_domain": "relationship"},
+            source_ref="role:mira:seed",
+        )
+    )
+    asyncio.run(
+        memorizer.save_item_with_supersede(
+            summary="Atlas 视角：用户偏好中文回复",
+            memory_type="preference",
+            extra={"role_id": "atlas", "memory_domain": "relationship"},
+            source_ref="role:atlas:seed",
+        )
+    )
+    asyncio.run(
+        memorizer.save_item_with_supersede(
+            summary="Mira 视角：用户更偏好简洁中文回复",
+            memory_type="preference",
+            extra={"role_id": "mira", "memory_domain": "relationship"},
+            source_ref="role:mira:update",
+            supersede_threshold=0.0,
+        )
+    )
+
+    rows = store._db.execute(
+        "SELECT summary, status, extra_json FROM memory_items WHERE memory_type='preference'"
+    ).fetchall()
+
+    import json
+
+    items = []
+    for summary, status, extra_json in rows:
+        extra = json.loads(extra_json) if extra_json else {}
+        items.append((summary, status, extra.get("role_id")))
+
+    assert ("Atlas 视角：用户偏好中文回复", "active", "atlas") in items
+    assert ("Mira 视角：用户更偏好简洁中文回复", "active", "mira") in items
+    assert ("Mira 视角：用户偏好中文回复", "superseded", "mira") in items
