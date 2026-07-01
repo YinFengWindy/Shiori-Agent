@@ -241,10 +241,23 @@ def test_role_store_clears_selected_assets_when_underlying_asset_removed(tmp_pat
 
 
 def test_role_aggregate_service_initializes_role_session_and_memory_space(tmp_path: Path):
+    class _SelfSeed:
+        def generate(self, role) -> str:
+            return (
+                "# 角色自我认知\n\n"
+                "## 人格与形象\n"
+                f"- 我是{role.name}。\n\n"
+                "## 我对当前用户的理解\n"
+                "- 我会谨慎认识用户。\n\n"
+                "## 我们关系的定义\n"
+                "- 我们的关系仍在建立中。\n"
+            )
+
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
         session_manager=SessionManager(tmp_path),
+        self_seed_generator=_SelfSeed(),
     )
 
     aggregate = service.create_role(
@@ -257,9 +270,12 @@ def test_role_aggregate_service_initializes_role_session_and_memory_space(tmp_pa
     assert aggregate.session.key == f"role:{aggregate.role.id}"
     assert aggregate.session.metadata["role_id"] == aggregate.role.id
     assert aggregate.memory_root.is_dir()
-    assert (aggregate.memory_root / "SELF.md").read_text(encoding="utf-8").strip().endswith("来自深海城的向导。")
+    self_text = (aggregate.memory_root / "SELF.md").read_text(encoding="utf-8").strip()
+    assert self_text.startswith("# 角色自我认知")
+    assert "我是Mira。" in self_text
+    assert "内部底座" not in self_text
     assert (aggregate.memory_root / "MEMORY.md").read_text(encoding="utf-8")
-    assert aggregate.role.memory_init_state["seed_background_ready"] is True
+    assert aggregate.role.memory_init_state["seed_self_ready"] is True
     assert aggregate.role.memory_init_state["seed_first_impression_ready"] is True
     assert aggregate.role.runtime_config == {}
 
@@ -284,6 +300,33 @@ def test_role_aggregate_service_updates_background_without_losing_history(tmp_pa
     assert "新背景" in self_text
     assert "旧版本: 旧背景" in history_text
     assert "新版本: 新背景" in history_text
+
+
+def test_role_self_seed_generator_does_not_override_existing_self(tmp_path: Path):
+    class _SelfSeed:
+        def generate(self, role) -> str:
+            return "# 角色自我认知\n\n## 人格与形象\n- 新生成内容\n"
+
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        self_seed_generator=_SelfSeed(),
+    )
+    aggregate = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+
+    self_path = aggregate.memory_root / "SELF.md"
+    self_path.write_text("# 角色自我认知\n\n## 人格与形象\n- 旧内容\n", encoding="utf-8")
+
+    reopened = service.open_role("mira")
+
+    assert "旧内容" in (reopened.memory_root / "SELF.md").read_text(encoding="utf-8")
+    assert "新生成内容" not in (reopened.memory_root / "SELF.md").read_text(encoding="utf-8")
 
 
 def test_role_aggregate_service_user_edit_first_impression_becomes_baseline(tmp_path: Path):

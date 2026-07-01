@@ -11,6 +11,7 @@ from core.integrations.novelai import NovelAIClient, NovelAIService, NovelAIStor
 from core.integrations.novelai.models import GenerateImageRequest, NovelAISettings
 from core.net.http import get_default_http_requester
 from core.roles import RoleAggregateService, RoleStore
+from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from session.manager import Session, SessionManager
 
@@ -35,10 +36,12 @@ class DesktopBridgeService:
         self.agent_loop = agent_loop
         self.event_bus = event_bus
         self.config = config
+        self._self_seed_generator = self._build_self_seed_generator()
         self.role_service = role_service or RoleAggregateService.from_runtime(
             workspace=workspace,
             role_store=role_store,
             session_manager=session_manager,
+            self_seed_generator=self._self_seed_generator,
         )
         self.novelai_store = novelai_store or NovelAIStore(workspace)
         self.novelai_service = novelai_service or self._build_novelai_service()
@@ -501,3 +504,14 @@ class DesktopBridgeService:
             role_store=self.role_store,
             workspace=self.workspace,
         )
+
+    def _build_self_seed_generator(self) -> LlmRoleSelfSeedGenerator | None:
+        if self.config is None:
+            return None
+        try:
+            from bootstrap.providers import build_providers
+
+            provider, _light, _agent = build_providers(self.config)
+        except Exception:
+            return None
+        return LlmRoleSelfSeedGenerator(provider=provider, model=self.config.model)

@@ -4,7 +4,7 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from infra.persistence.json_store import atomic_save_json, load_json
 from session.manager import Session, SessionManager
@@ -33,6 +33,10 @@ def _binding_key(channel: str, chat_id: str) -> str:
     if not clean_chat_id:
         raise ValueError("chat_id 不能为空")
     return f"{clean_channel}:{clean_chat_id}"
+
+
+class RoleSelfSeedGenerator(Protocol):
+    def generate(self, role: "RoleRecord") -> str: ...
 
 
 @dataclass(frozen=True)
@@ -200,8 +204,14 @@ class RoleMemoryService:
         "RECENT_CONTEXT.md",
     )
 
-    def __init__(self, workspace: Path) -> None:
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        self_seed_generator: RoleSelfSeedGenerator | None = None,
+    ) -> None:
         self._workspace = Path(workspace)
+        self._self_seed_generator = self_seed_generator
 
     def memory_root(self, role_id: str) -> Path:
         return self._workspace / "roles" / _clean_role_id(role_id) / "memory"
@@ -220,9 +230,18 @@ class RoleMemoryService:
         state = dict(role.memory_init_state or {})
         changed = False
 
+        self_path = root / "SELF.md"
+        self_text = self_path.read_text(encoding="utf-8").strip() if self_path.exists() else ""
+        if not self_text and self._self_seed_generator is not None:
+            seeded_self = str(self._self_seed_generator.generate(role) or "").strip()
+            if seeded_self:
+                self_path.write_text(seeded_self + "\n", encoding="utf-8")
+                state["seed_self_ready"] = True
+                changed = True
+
         background = role.background.strip()
         previous_background = str(state.get("seed_background_value") or "").strip()
-        if background and background != previous_background:
+        if background and background != previous_background and not state.get("seed_self_ready"):
             self._write_stable_background(root / "SELF.md", background)
             if previous_background:
                 self._append_once(
@@ -506,9 +525,10 @@ class RoleAggregateService:
         workspace: Path,
         role_store: RoleStore,
         session_manager: SessionManager,
+        self_seed_generator: RoleSelfSeedGenerator | None = None,
     ) -> "RoleAggregateService":
         repository = RoleRepository(role_store)
-        memory = RoleMemoryService(workspace)
+        memory = RoleMemoryService(workspace, self_seed_generator=self_seed_generator)
         bindings = RoleBindingService(workspace, repository)
         return cls(
             repository=repository,

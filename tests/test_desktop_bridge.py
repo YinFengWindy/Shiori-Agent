@@ -124,6 +124,61 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_desktop_bridge_role_create_generates_initial_self(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    session_manager = SessionManager(tmp_path)
+    event_bus = EventBus()
+
+    class _SelfSeed:
+        def generate(self, role) -> str:
+            return (
+                "# 角色自我认知\n\n"
+                "## 人格与形象\n"
+                f"- 我是{role.name}。\n\n"
+                "## 我对当前用户的理解\n"
+                "- 我会谨慎认识用户。\n\n"
+                "## 我们关系的定义\n"
+                "- 我们的关系仍在建立中。\n"
+            )
+
+    from core.roles import RoleAggregateService
+
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=event_bus,
+        role_service=RoleAggregateService.from_runtime(
+            workspace=tmp_path,
+            role_store=role_store,
+            session_manager=session_manager,
+            self_seed_generator=_SelfSeed(),
+        ),
+    )
+
+    created = await service.handle(
+        {
+            "id": "1",
+            "method": "roles.create",
+            "payload": {
+                "name": "Mira",
+                "description": "desktop role",
+                "system_prompt": "you are mira",
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+
+    role_id = created.payload["role"]["id"]
+    self_path = tmp_path / "roles" / role_id / "memory" / "SELF.md"
+    self_text = self_path.read_text(encoding="utf-8")
+
+    assert self_text.startswith("# 角色自我认知")
+    assert "我是Mira。" in self_text
+
+
+@pytest.mark.asyncio
 async def test_desktop_bridge_returns_role_not_found(tmp_path: Path):
     service = DesktopBridgeService(
         workspace=tmp_path,
