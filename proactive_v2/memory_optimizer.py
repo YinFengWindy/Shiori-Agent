@@ -227,10 +227,13 @@ class MemoryOptimizer:
 
     async def optimize(self, *, role_id: str | None = None) -> None:
         """两步优化：合并 PENDING → MEMORY，更新 SELF。"""
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for memory optimizer")
         if self._lock.locked():
             raise MemoryOptimizerBusy("memory optimizer 正在运行")
         async with self._lock:
-            await self._optimize(role_id=role_id)
+            await self._optimize(role_id=clean_role_id)
 
     async def _optimize(self, *, role_id: str | None = None) -> None:
         memory_store = resolve_markdown_store(
@@ -366,7 +369,6 @@ class MemoryOptimizerLoop:
                 break
             try:
                 if self._optimizer:
-                    await self._optimizer.optimize()
                     workspace = getattr(self._optimizer, "_workspace", None)
                     if workspace:
                         role_store = RoleStore(Path(workspace))

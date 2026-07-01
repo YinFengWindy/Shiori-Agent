@@ -120,7 +120,13 @@ class _PromptWarmupModule:
                 chat_id=ctx.chat_id,
                 message_timestamp=ctx.timestamp,
                 retrieved_memory_block=ctx.retrieved_memory_block,
-            )
+            ),
+            session_metadata=(
+                dict(frame.input.state.session.metadata)
+                if frame.input.state.session is not None
+                and isinstance(frame.input.state.session.metadata, dict)
+                else None
+            ),
         )
         return frame
 

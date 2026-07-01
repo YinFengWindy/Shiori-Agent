@@ -1017,11 +1017,9 @@ def resolve_markdown_store(
     resolved_role_id = str(role_id or "").strip()
     if not resolved_role_id and isinstance(session_metadata, dict):
         resolved_role_id = str(session_metadata.get("role_id") or "").strip()
-    if resolved_role_id:
-        return MarkdownMemoryStore(workspace / "roles" / resolved_role_id)
-    if default_store is not None:
-        return default_store
-    return MarkdownMemoryStore(workspace)
+    if not resolved_role_id:
+        raise ValueError("role_id required for markdown memory access")
+    return MarkdownMemoryStore(workspace / "roles" / resolved_role_id)
 
 
 @dataclass
@@ -1136,7 +1134,6 @@ class MarkdownMemoryMaintenance:
         metadata = getattr(session, "metadata", {})
         return resolve_markdown_store(
             workspace=self._store.memory_dir.parent,
-            default_store=self._store,
             session_metadata=metadata if isinstance(metadata, dict) else None,
         )
 

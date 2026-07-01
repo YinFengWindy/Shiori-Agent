@@ -32,6 +32,7 @@ from core.memory.markdown import (
     MarkdownMemoryMaintenance,
     MarkdownMemoryStore,
     MemoryLifecycleBindRequest,
+    resolve_markdown_store,
 )
 from core.memory.plugin import MemoryPluginRuntime
 
@@ -96,7 +97,7 @@ async def test_default_memory_engine_retrieve_maps_hits_and_text_block():
         MemoryQuery(
             text="中文回复",
             intent="context",
-            scope=MemoryScope(channel="cli", chat_id="1"),
+            scope=MemoryScope(role_id="mira", channel="cli", chat_id="1"),
             filters=MemoryQueryFilters(
                 kinds=("preference",),
                 hints={"require_scope_match": True},
@@ -113,6 +114,11 @@ async def test_default_memory_engine_retrieve_maps_hits_and_text_block():
     assert result.records[0].kind == "preference"
     assert result.records[0].domain == "relationship"
     assert result.trace["profile"] == EngineProfile.RICH_MEMORY_ENGINE.value
+
+
+def test_resolve_markdown_store_requires_role_id(tmp_path: Path):
+    with pytest.raises(ValueError, match="role_id required for markdown memory access"):
+        resolve_markdown_store(workspace=tmp_path)
 
 
 async def test_default_memory_engine_retrieve_keeps_raw_items_and_mode_trace():
@@ -137,7 +143,7 @@ async def test_default_memory_engine_retrieve_keeps_raw_items_and_mode_trace():
         MemoryQuery(
             text="Fitbit 型号",
             intent="context",
-            scope=MemoryScope(session_key="telegram:1"),
+            scope=MemoryScope(role_id="mira", session_key="telegram:1"),
             filters=MemoryQueryFilters(
                 kinds=("event",),
                 hints={"require_scope_match": True},
@@ -178,7 +184,7 @@ async def test_default_memory_engine_interest_preserves_read_only_effect():
             text="中文回复",
             intent="interest",
             effect="read_only",
-            scope=MemoryScope(session_key="telegram:1"),
+            scope=MemoryScope(role_id="mira", session_key="telegram:1"),
             limit=2,
         )
     )
@@ -196,20 +202,15 @@ async def test_default_memory_engine_retrieve_falls_back_to_session_scope():
     )
     engine = _make_default_engine(retriever=cast(Any, retriever))
 
-    await engine.query(
-        MemoryQuery(
-            text="作用域测试",
-            intent="context",
-            scope=MemoryScope(session_key="telegram:test_user"),
-            filters=MemoryQueryFilters(hints={"require_scope_match": True}),
+    with pytest.raises(ValueError, match="role_id required for memory scope"):
+        await engine.query(
+            MemoryQuery(
+                text="作用域测试",
+                intent="context",
+                scope=MemoryScope(session_key="telegram:test_user"),
+                filters=MemoryQueryFilters(hints={"require_scope_match": True}),
+            )
         )
-    )
-
-    kwargs = retriever.retrieve.await_args.kwargs
-    assert kwargs["scope_channel"] == "telegram"
-    assert kwargs["scope_chat_id"] == "test_user"
-    assert kwargs["require_scope_match"] is True
-    assert "keyword_only_enabled" not in kwargs
 
 
 async def test_default_memory_engine_role_query_excludes_legacy_unscoped_memory(tmp_path: Path):
@@ -343,7 +344,7 @@ async def test_default_engine_keeps_history_injected_ids():
         MemoryQuery(
             text="Fitbit 型号",
             intent="context",
-            scope=MemoryScope(session_key="telegram:1", channel="telegram", chat_id="1"),
+            scope=MemoryScope(role_id="mira", session_key="telegram:1", channel="telegram", chat_id="1"),
             filters=MemoryQueryFilters(
                 kinds=("event",),
                 hints={"require_scope_match": True},
@@ -371,7 +372,7 @@ async def test_default_memory_engine_ingest_delegates_to_post_worker():
                 "tool_chain": [{"text": "memo", "calls": []}],
             },
             source_kind="conversation_turn",
-            scope=MemoryScope(session_key="cli:1"),
+            scope=MemoryScope(role_id="mira", session_key="role:mira"),
         )
     )
 
@@ -458,10 +459,11 @@ def test_markdown_maintenance_respects_skip_post_memory_event_flag():
     maintenance._enqueue_maintenance.assert_not_called()
 
 
-async def test_default_memory_engine_refreshes_recent_context_from_lifecycle():
+async def test_default_memory_engine_refreshes_recent_context_from_lifecycle_role_only():
     event_bus = EventBus()
     session = SimpleNamespace(
-        key="cli:1",
+        key="role:mira",
+        metadata={"role_id": "mira"},
         messages=[{"role": "user", "content": "u"}],
         last_consolidated=0,
     )
@@ -483,13 +485,14 @@ async def test_default_memory_engine_refreshes_recent_context_from_lifecycle():
 
     event_bus.enqueue(
         TurnCommitted(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
             input_message="hi",
             persisted_user_message="hi",
             assistant_response="ok",
             tools_used=[],
+            role_id="mira",
         )
     )
     await event_bus.drain()
@@ -555,7 +558,8 @@ async def test_default_memory_engine_refreshes_role_recent_context_in_role_memor
 async def test_default_memory_engine_consolidates_ready_session_from_lifecycle():
     event_bus = EventBus()
     session = SimpleNamespace(
-        key="cli:1",
+        key="role:mira",
+        metadata={"role_id": "mira"},
         messages=[{"role": "user", "content": "u"}] * 31,
         last_consolidated=0,
     )
@@ -579,13 +583,14 @@ async def test_default_memory_engine_consolidates_ready_session_from_lifecycle()
 
     event_bus.enqueue(
         TurnCommitted(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
             input_message="hi",
             persisted_user_message="hi",
             assistant_response="ok",
             tools_used=[],
+            role_id="mira",
         )
     )
     await event_bus.drain()
@@ -604,7 +609,8 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(tmp_pa
 
     event_bus.on(ConsolidationCommitted, _fail_consolidation)
     session = SimpleNamespace(
-        key="cli:1",
+        key="role:mira",
+        metadata={"role_id": "mira"},
         messages=[{"role": "user", "content": "u"}] * 12,
         last_consolidated=0,
     )
@@ -621,13 +627,13 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(tmp_pa
             keep_count=6,
             consolidate_up_to=6,
         ),
-        source_ref='["cli:1:0"]',
+        source_ref='["role:mira:0"]',
         history_entry_payloads=[("[2026-05-05 13:00] 用户测试记忆", 0)],
         pending_items="",
         conversation="USER: 测试记忆",
         recent_context_text="# Recent Context\n",
-        scope_channel="cli",
-        scope_chat_id="1",
+        scope_channel="desktop",
+        scope_chat_id="role:mira",
     )
     maintenance._worker.prepare_consolidation = AsyncMock(return_value=draft)
 
@@ -635,7 +641,7 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(tmp_pa
         await maintenance.consolidate(ConsolidateRequest(session=session))
 
     assert session.last_consolidated == 6
-    assert "用户测试记忆" in (tmp_path / "memory" / "HISTORY.md").read_text(
+    assert "用户测试记忆" in (tmp_path / "roles" / "mira" / "memory" / "HISTORY.md").read_text(
         encoding="utf-8"
     )
     await event_bus.aclose()
@@ -643,7 +649,8 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(tmp_pa
 
 async def test_markdown_consolidation_failure_trace_does_not_advance_cursor(tmp_path: Path):
     session = SimpleNamespace(
-        key="cli:1",
+        key="role:mira",
+        metadata={"role_id": "mira"},
         messages=[{"role": "user", "content": f"u{i}"} for i in range(8)],
         last_consolidated=0,
     )
@@ -676,7 +683,8 @@ async def test_markdown_consolidation_failure_trace_does_not_advance_cursor(tmp_
 async def test_default_memory_engine_serializes_lifecycle_maintenance():
     event_bus = EventBus()
     session = SimpleNamespace(
-        key="cli:1",
+        key="role:mira",
+        metadata={"role_id": "mira"},
         messages=[{"role": "user", "content": "u"}],
         last_consolidated=0,
     )
@@ -711,26 +719,28 @@ async def test_default_memory_engine_serializes_lifecycle_maintenance():
 
     event_bus.enqueue(
         TurnCommitted(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
             input_message="a",
             persisted_user_message="a",
             assistant_response="ok",
             tools_used=[],
+            role_id="mira",
         )
     )
     await event_bus.drain()
     await first_started.wait()
     event_bus.enqueue(
         TurnCommitted(
-            session_key="cli:1",
-            channel="cli",
-            chat_id="1",
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
             input_message="b",
             persisted_user_message="b",
             assistant_response="ok",
             tools_used=[],
+            role_id="mira",
         )
     )
     await event_bus.drain()
@@ -756,7 +766,7 @@ async def test_default_memory_engine_remember_uses_memorizer():
             kind="remember",
             summary="以后用中文回复",
             memory_kind="preference",
-            scope=MemoryScope(session_key="cli:1", channel="cli", chat_id="1"),
+            scope=MemoryScope(role_id="mira", session_key="role:mira", channel="desktop", chat_id="role:mira"),
         )
     )
 
@@ -921,7 +931,7 @@ async def test_default_memory_engine_remember_merged_keeps_target_id_alive():
             kind="remember",
             summary="以后用中文回复",
             memory_kind="preference",
-            scope=MemoryScope(session_key="cli:1", channel="cli", chat_id="1"),
+            scope=MemoryScope(role_id="mira", session_key="role:mira", channel="desktop", chat_id="role:mira"),
         )
     )
 
@@ -951,9 +961,10 @@ async def test_default_memory_engine_consumes_markdown_consolidation_event():
         ConsolidationCommitted(
             history_entry_payloads=[("[2026-03-15 10:00] 用户聊了 Zigbee", 6)],
             source_ref='["m1"]',
-            scope_channel="cli",
-            scope_chat_id="1",
+            scope_channel="desktop",
+            scope_chat_id="role:mira",
             conversation="USER: 我买了 Zigbee 网关",
+            role_id="mira",
         )
     )
 
@@ -1039,7 +1050,7 @@ async def test_default_memory_engine_ingest_accepts_conversation_batch_messages(
                 },
             ],
             source_kind="conversation_batch",
-            scope=MemoryScope(session_key="cli:1"),
+            scope=MemoryScope(role_id="mira", session_key="role:mira"),
         )
     )
 
@@ -1048,7 +1059,7 @@ async def test_default_memory_engine_ingest_accepts_conversation_batch_messages(
     assert kwargs["user_msg"] == "以后用中文"
     assert kwargs["agent_response"] == "好的"
     assert kwargs["tool_chain"] == [{"text": "memo", "calls": []}]
-    assert kwargs["session_key"] == "cli:1"
+    assert kwargs["session_key"] == "role:mira"
 
 
 async def test_default_memory_engine_ingest_falls_back_to_post_response_source_ref():
@@ -1065,14 +1076,14 @@ async def test_default_memory_engine_ingest_falls_back_to_post_response_source_r
                 "assistant_response": "好的",
             },
             source_kind="conversation_turn",
-            scope=MemoryScope(session_key="cli:1"),
+            scope=MemoryScope(role_id="mira", session_key="role:mira"),
         )
     )
 
     assert result.accepted is True
     kwargs = worker.run.await_args.kwargs
-    assert kwargs["source_ref"] == "cli:1@post_response"
-    assert kwargs["session_key"] == "cli:1"
+    assert kwargs["source_ref"] == "role:mira@post_response"
+    assert kwargs["session_key"] == "role:mira"
 
 
 async def test_default_memory_engine_ingest_rejects_unsupported_source_kind():
@@ -1086,7 +1097,7 @@ async def test_default_memory_engine_ingest_rejects_unsupported_source_kind():
         MemoryIngestRequest(
             content="以后用中文",
             source_kind="text",
-            scope=MemoryScope(session_key="cli:1"),
+            scope=MemoryScope(role_id="mira", session_key="role:mira"),
         )
     )
 
@@ -1108,7 +1119,7 @@ async def test_default_memory_engine_ingest_rejects_when_worker_missing():
                 "assistant_response": "好的",
             },
             source_kind="conversation_turn",
-            scope=MemoryScope(session_key="cli:1"),
+            scope=MemoryScope(role_id="mira", session_key="role:mira"),
         )
     )
 

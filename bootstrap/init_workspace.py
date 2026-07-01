@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from agent.config import Config
-from agent.memory import DEFAULT_SELF_MD, MemoryStore
+from agent.memory import MemoryStore
 from bootstrap.memory import ensure_memory_plugin_storage
 from infra.persistence.json_store import save_json
 from proactive_v2.anyaction import QuotaStore
@@ -13,16 +13,7 @@ from proactive_v2.loop import ProactiveLoop
 from proactive_v2.state import ProactiveStateStore
 from session.store import SessionStore
 
-_EMPTY_FILES: dict[str, str] = {
-    "memory/MEMORY.md": "",
-    "memory/HISTORY.md": "",
-    "memory/RECENT_CONTEXT.md": "",
-    "memory/PENDING.md": "",
-}
-
 _TEXT_FILES: dict[str, str] = {
-    **_EMPTY_FILES,
-    "memory/SELF.md": DEFAULT_SELF_MD,
     "PROACTIVE_CONTEXT.md": ProactiveLoop._PROACTIVE_CONTEXT_TEMPLATE,
 }
 

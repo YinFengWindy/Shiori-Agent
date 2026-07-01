@@ -113,18 +113,15 @@ class Sensor:
     def read_memory_text(self) -> str:
         if not self._memory:
             return ""
-        try:
-            bind_session_metadata = getattr(self._memory, "bind_session_metadata", None)
-            default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
-            if callable(bind_session_metadata):
-                bind_session_metadata(
-                    {"role_id": default_role_id} if default_role_id else None
-                )
-            return str(self._memory.read_long_term() or "").strip()
-        except Exception:
-            return ""
+        default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
+        if not default_role_id:
+            raise RuntimeError("default_role_id required for proactive memory access")
+        bind_session_metadata = getattr(self._memory, "bind_session_metadata", None)
+        if callable(bind_session_metadata):
+            bind_session_metadata({"role_id": default_role_id})
+        return str(self._memory.read_long_term() or "").strip()
 
-    def has_global_memory(self) -> bool:
+    def has_role_memory(self) -> bool:
         return bool(self.read_memory_text())
 
     def last_user_at(self) -> datetime | None:

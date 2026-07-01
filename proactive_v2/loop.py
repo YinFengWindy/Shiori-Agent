@@ -433,8 +433,8 @@ class ProactiveLoop:
             logger.warning("[proactive] 随机记忆抽取失败: %s", e)
             return []
 
-    def _has_global_memory(self) -> bool:
-        return self._sense.has_global_memory()
+    def _has_role_memory(self) -> bool:
+        return self._sense.has_role_memory()
 
     def _read_memory_text(self) -> str:
         return self._sense.read_memory_text()

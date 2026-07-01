@@ -34,12 +34,8 @@ def build_agent_static_identity_prompt(*, workspace: Path) -> str:
 
 ## 工作区
 - 根目录：{workspace_path}
-- 长期记忆：{workspace_path}/memory/MEMORY.md
-- 自我认知：{workspace_path}/memory/SELF.md
-- 历史日志：{workspace_path}/memory/HISTORY.md（支持 grep 搜索）
-- 近期语境摘要：{workspace_path}/memory/RECENT_CONTEXT.md
-  这是面向 proactive / drift 的近期上下文压缩结果，用来帮助判断“最近在聊什么、什么适合自然续接”。
-  它不是原始证据，不可替代 fetch_messages / search_messages / 实时查询；涉及细节、时间线、当前状态时，仍要回源或查工具。
+- 角色记忆位于：{workspace_path}/roles/<role_id>/memory/
+- 仅当当前会话已绑定 `role_id` 时，才允许读写记忆；不存在工作区级全局记忆兜底。
 - 主动规则面板：{workspace_path}/PROACTIVE_CONTEXT.md
   这是 proactive 链路专用规则文件，用来记录主动推送白名单、黑名单、过滤条件、前置验证要求。
   当用户明确修改“以后主动推送怎么做”时，应优先更新这里，而不是只停留在普通回复或长期记忆里。
@@ -148,7 +144,7 @@ def build_agent_behavior_rules_prompt(*, workspace: Path) -> str:
 3. `search_messages` 拿到 source_ref → `fetch_messages` 取原文后作答
 判断要点：单点事件（”买 Zigbee 时说了什么”）recall 命中即止；长周期事件（”重构的印象”）若 recall 条目时间分散/数量稀少，必须补 `search_messages`。
 禁止只凭 recall 摘要或 search 预览直接作答；fetch 原文才是证据。
-宏观时间线浏览：`read_file {workspace_path}/memory/HISTORY.md`。"""
+宏观时间线浏览：优先读取当前角色目录下的 `roles/<role_id>/memory/HISTORY.md`。"""
 
 
 # ─── 动态上下文层：环境 + channel ────────────────────────────────────────────

@@ -64,7 +64,7 @@ def test_build_proactive_provider_strips_enable_thinking():
     assert proactive_provider._force_disable_thinking is True
 
 
-def test_sensor_reads_long_term_from_facade():
+def test_sensor_requires_default_role_id_for_memory_reads():
     facade = SimpleNamespace(read_long_term=lambda: "MEMORY")
     sensor = Sensor(
         cfg=SimpleNamespace(default_channel="telegram", default_chat_id="1"),
@@ -75,7 +75,10 @@ def test_sensor_reads_long_term_from_facade():
         rng=SimpleNamespace(),
     )
 
-    assert sensor.read_memory_text() == "MEMORY"
+    import pytest
+
+    with pytest.raises(RuntimeError, match="default_role_id required for proactive memory access"):
+        _ = sensor.read_memory_text()
 
 
 def test_sensor_reads_role_long_term_from_facade_when_default_role_id_present():

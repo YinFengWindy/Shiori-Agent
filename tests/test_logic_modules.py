@@ -46,9 +46,12 @@ async def test_memory_optimizer_loop_and_memory_port_cover_paths(tmp_path: Path)
             LLMResponse(content="updated self"),
         ]
     )
-    opt = MemoryOptimizer(memory, provider, "m", max_tokens=100)
+    opt = MemoryOptimizer(memory, provider, "m", tmp_path, max_tokens=100)
     opt._STEP_DELAY_SECONDS = 0
-    await opt.optimize()
+    from unittest.mock import patch
+
+    with patch("proactive_v2.memory_optimizer.resolve_markdown_store", return_value=memory):
+        await opt.optimize(role_id="mira")
     memory.write_long_term.assert_called_once_with("merged")
     memory.write_self.assert_called_once()
 
@@ -109,7 +112,7 @@ async def test_session_manager_and_proactive_loop_cover_paths(tmp_path: Path):
     loop._sense = SimpleNamespace(
         target_session_key=lambda: "telegram:1",
         target_transport=lambda: ("telegram", "1"),
-        has_global_memory=lambda: True,
+        has_role_memory=lambda: True,
         read_memory_text=lambda: "mem",
         compute_energy=lambda: 0.5,
         compute_interruptibility=lambda **kwargs: (0.5, {"x": 1}),
@@ -512,7 +515,7 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
     loop._sense = SimpleNamespace(
         target_session_key=lambda: "telegram:1",
         target_transport=lambda: ("telegram", "1"),
-        has_global_memory=lambda: True,
+        has_role_memory=lambda: True,
         read_memory_text=lambda: "mem",
         compute_energy=lambda: 0.5,
         compute_interruptibility=lambda **kwargs: (0.5, {"x": 1}),
@@ -530,7 +533,7 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
     )
     loop._run_loop = AsyncMock(return_value=None)
 
-    assert loop._has_global_memory() is True
+    assert loop._has_role_memory() is True
     assert loop._read_memory_text() == "mem"
     assert loop._compute_energy() == 0.5
     assert loop._compute_interruptibility(

@@ -35,43 +35,47 @@ def test_optimize_skips_when_memory_pending_history_all_empty(tmp_path):
 
     optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
-    asyncio.run(optimizer.optimize())
+    with pytest.raises(ValueError, match="role_id required for memory optimizer"):
+        asyncio.run(optimizer.optimize())
 
     provider.chat.assert_not_called()
 
 
 def test_optimize_rewrites_memory_from_first_llm_call(tmp_path):
     memory = MarkdownMemoryStore(tmp_path)
-    memory.write_long_term("old profile")
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.write_long_term("old profile")
 
     provider = _provider_with_responses("## 用户画像\n- 新版本\n")
     optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
-    asyncio.run(optimizer.optimize())
+    asyncio.run(optimizer.optimize(role_id="mira"))
 
-    assert memory.read_long_term().strip() == "## 用户画像\n- 新版本"
+    assert role_memory.read_long_term().strip() == "## 用户画像\n- 新版本"
 
 
 def test_optimize_rolls_back_snapshot_when_merge_returns_empty(tmp_path):
     memory = MarkdownMemoryStore(tmp_path)
-    memory.write_long_term("old profile")
-    memory.append_pending("- pending fact")
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.write_long_term("old profile")
+    role_memory.append_pending("- pending fact")
 
     provider = _provider_with_responses("")
     optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
-    asyncio.run(optimizer.optimize())
+    asyncio.run(optimizer.optimize(role_id="mira"))
 
-    assert "pending fact" in memory.read_pending()
-    assert not memory._snapshot_path.exists()
+    assert "pending fact" in role_memory.read_pending()
+    assert not role_memory._snapshot_path.exists()
 
 
 def test_optimize_updates_self_using_pending_only(tmp_path):
     memory = MarkdownMemoryStore(tmp_path)
-    memory.write_long_term("old")
-    memory.write_self("## 原 SELF")
-    memory.append_pending("- [preference] 回复保持简洁。")
-    memory.append_history("[2026-03-03 10:00] USER: 这段历史不该进入 SELF")
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.write_long_term("old")
+    role_memory.write_self("## 原 SELF")
+    role_memory.append_pending("- [preference] 回复保持简洁。")
+    role_memory.append_history("[2026-03-03 10:00] USER: 这段历史不该进入 SELF")
 
     provider = _provider_with_responses(
         "## 新记忆",
@@ -79,10 +83,10 @@ def test_optimize_updates_self_using_pending_only(tmp_path):
     )
     optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
-    asyncio.run(optimizer.optimize())
+    asyncio.run(optimizer.optimize(role_id="mira"))
 
-    assert memory.read_self().strip().startswith("# 角色底座自我认知")
-    assert "新版理解" in memory.read_self()
+    assert role_memory.read_self().strip().startswith("# 角色底座自我认知")
+    assert "新版理解" in role_memory.read_self()
 
     self_prompt = provider.chat.await_args_list[1].kwargs["messages"][1]["content"]
     assert "- [preference] 回复保持简洁。" in self_prompt
@@ -91,14 +95,15 @@ def test_optimize_updates_self_using_pending_only(tmp_path):
 
 def test_merge_memory_ignores_history_and_only_uses_pending(tmp_path):
     memory = MarkdownMemoryStore(tmp_path)
-    memory.write_long_term("old profile")
-    memory.append_pending("- [identity] 新身份")
-    memory.append_history("[2026-03-03 10:00] USER: 这段历史不该进入长期记忆")
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.write_long_term("old profile")
+    role_memory.append_pending("- [identity] 新身份")
+    role_memory.append_history("[2026-03-03 10:00] USER: 这段历史不该进入长期记忆")
 
     provider = _provider_with_responses("## 用户画像\n- 新版本\n")
     optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
-    asyncio.run(optimizer.optimize())
+    asyncio.run(optimizer.optimize(role_id="mira"))
 
     call = provider.chat.await_args_list[0]
     prompt = call.kwargs["messages"][1]["content"]
@@ -141,12 +146,12 @@ def test_optimize_reports_busy_instead_of_waiting(tmp_path):
             await release.wait()
 
         optimizer._optimize = blocked_optimize  # type: ignore[method-assign]
-        running = asyncio.create_task(optimizer.optimize())
+        running = asyncio.create_task(optimizer.optimize(role_id="mira"))
         await started.wait()
 
         assert optimizer.is_running
         with pytest.raises(MemoryOptimizerBusy):
-            await optimizer.optimize()
+            await optimizer.optimize(role_id="mira")
 
         release.set()
         await running
@@ -228,4 +233,4 @@ def test_memory_optimizer_loop_runs_global_and_role_optimizations(tmp_path):
     finally:
         asyncio.sleep = original_sleep  # type: ignore[assignment]
 
-    assert calls == [None, "mira"]
+    assert calls == ["mira"]
