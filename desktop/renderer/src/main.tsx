@@ -17,7 +17,16 @@ import { SettingsPage } from "./settings/SettingsPage";
 import { SettingsSidebar, type SettingsSectionId } from "./settings/SettingsSidebar";
 import { toFileUrl } from "./shared/format";
 import { cx } from "./shared/styles";
-import type { AppMainView, EventLog, NewRoleFormState, RoleFormState, RoleRecord, RoleSearchResult, SessionPayload } from "./shared/types";
+import type {
+  AppMainView,
+  EventLog,
+  NewRoleFormState,
+  PendingRoleCardAction,
+  RoleFormState,
+  RoleRecord,
+  RoleSearchResult,
+  SessionPayload,
+} from "./shared/types";
 import { TitleBar } from "./shell/TitleBar";
 import "./styles.css";
 
@@ -110,6 +119,7 @@ function App(): React.ReactElement {
   const [savingRoleAssets, setSavingRoleAssets] = useState(false);
   const [deletingRole, setDeletingRole] = useState(false);
   const [sending, setSending] = useState(false);
+  const [pendingRoleCardAction, setPendingRoleCardAction] = useState<PendingRoleCardAction>(null);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [pendingDeleteRoleId, setPendingDeleteRoleId] = useState("");
   const [workspaceFeedback, setWorkspaceFeedback] = useState<WorkspaceFeedback | null>(null);
@@ -407,6 +417,25 @@ function App(): React.ReactElement {
       return mergedRoles;
     });
     return mergedRoles;
+  }
+
+  function applyRoleSnapshot(role: RoleRecord, sessionOverride: SessionPayload | null = null): void {
+    setActiveRoleId(role.id);
+    activeRoleIdRef.current = role.id;
+    updateRoleForm({
+      name: role.name,
+      description: role.description,
+      systemPrompt: role.system_prompt,
+      avatarSource: "",
+      illustrationSources: [],
+      removedIllustrations: [],
+    });
+    setSelectedAvatarAsset(role.avatar ?? "");
+    setSelectedFeaturedImage(role.featured_image ?? role.illustrations[0] ?? "");
+    setClearAvatar(false);
+    setClearIllustrations(false);
+    const savedIllustration = window.localStorage.getItem("miraDesktop.activeIllustration") ?? "";
+    setActiveIllustration(chooseIllustration(role, sessionOverride, savedIllustration));
   }
 
   async function buildSearchIndex(nextRoles: RoleRecord[]): Promise<void> {
@@ -782,6 +811,11 @@ function App(): React.ReactElement {
   ): Promise<void> {
     const requestId = openRoleRequestIdRef.current + 1;
     openRoleRequestIdRef.current = requestId;
+    const role = roleOverride ?? roles.find((item) => item.id === roleId) ?? null;
+    if (role) {
+      applyRoleSnapshot(role);
+      setError("");
+    }
     const { error: sessionError, session } = await fetchRoleSession(roleId);
     if (openRoleRequestIdRef.current !== requestId) {
       return;
@@ -797,29 +831,9 @@ function App(): React.ReactElement {
     setActiveRoleId(roleId);
     setActiveSession(session);
     setError("");
-    const role = roleOverride ?? latestRoles?.find((item) => item.id === roleId) ?? roles.find((item) => item.id === roleId) ?? null;
-    if (role) {
-      updateRoleForm({
-        name: role.name,
-        description: role.description,
-        systemPrompt: role.system_prompt,
-        avatarSource: "",
-        illustrationSources: [],
-        removedIllustrations: [],
-      });
-      setSelectedAvatarAsset(role.avatar ?? "");
-      setSelectedFeaturedImage(role.featured_image ?? role.illustrations[0] ?? "");
-      setClearAvatar(false);
-      setClearIllustrations(false);
-      const savedIllustration =
-        window.localStorage.getItem("miraDesktop.activeIllustration") ?? "";
-      setActiveIllustration(
-        chooseIllustration(
-          role,
-          session,
-          savedIllustration,
-        ),
-      );
+    const resolvedRole = roleOverride ?? latestRoles?.find((item) => item.id === roleId) ?? roles.find((item) => item.id === roleId) ?? null;
+    if (resolvedRole) {
+      applyRoleSnapshot(resolvedRole, session);
     } else {
       setActiveIllustration("");
       setSelectedAvatarAsset("");
@@ -833,19 +847,23 @@ function App(): React.ReactElement {
   }
 
   async function openRoleDetail(roleId: string): Promise<void> {
-    await openRole(roleId, null, { recordHistory: false });
+    const role = roles.find((item) => item.id === roleId) ?? null;
+    if (role) {
+      applyRoleSnapshot(role);
+    }
     openRoleWorkspace({ kind: "role-detail", roleId });
+    void openRole(roleId, role, { recordHistory: false });
   }
 
   async function openRoleAssets(roleId: string): Promise<void> {
-    if (activeRoleIdRef.current !== roleId) {
-      await openRole(roleId, null, { recordHistory: false });
-    } else {
-      const currentRole = roles.find((role) => role.id === roleId) ?? null;
-      setSelectedAvatarAsset(currentRole?.avatar ?? "");
-      setSelectedFeaturedImage(currentRole?.featured_image ?? currentRole?.illustrations[0] ?? "");
+    const role = roles.find((item) => item.id === roleId) ?? null;
+    if (role) {
+      applyRoleSnapshot(role);
     }
     openRoleWorkspace({ kind: "role-assets", roleId });
+    if (activeRoleIdRef.current !== roleId || !activeSessionRef.current) {
+      void openRole(roleId, role, { recordHistory: false });
+    }
   }
 
   async function sendMessage(contentOverride?: string): Promise<void> {
@@ -931,6 +949,7 @@ function App(): React.ReactElement {
     });
     setCreating(false);
     if (res.error) {
+      setPendingRoleCardAction(null);
       setError(res.error.message);
       setWorkspaceFeedback({ tone: "error", message: `角色创建失败：${res.error.message}` });
       return;
@@ -939,6 +958,7 @@ function App(): React.ReactElement {
     updateNewRoleForm(createEmptyNewRoleForm());
     activeRoleIdRef.current = role.id;
     setActiveRoleId(role.id);
+    setPendingRoleCardAction({ roleId: role.id, action: "create" });
     setRoles((current) => {
       const existing = current.find((item) => item.id === role.id);
       if (existing) {
@@ -946,17 +966,7 @@ function App(): React.ReactElement {
       }
       return [...current, role];
     });
-    updateRoleForm({
-      name: role.name,
-      description: role.description,
-      systemPrompt: role.system_prompt,
-      avatarSource: "",
-      illustrationSources: [],
-      removedIllustrations: [],
-    });
-    setClearAvatar(false);
-    setClearIllustrations(false);
-    setActiveIllustration("");
+    applyRoleSnapshot(role);
     const nextRoles = await loadRolesFromBridge();
     const resolvedRole = nextRoles?.find((item) => item.id === role.id) ?? role;
     if (!nextRoles?.some((item) => item.id === role.id)) {
@@ -971,6 +981,7 @@ function App(): React.ReactElement {
     await openRole(role.id, resolvedRole, { recordHistory: false });
     openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
     replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, resolvedRole.id));
+    setPendingRoleCardAction(null);
     setWorkspaceFeedback({ tone: "success", message: "角色创建成功。" });
   }
 
@@ -1049,6 +1060,7 @@ function App(): React.ReactElement {
     const roleId = roleIdOverride || activeRoleId;
     if (!roleId) return;
     setDeletingRole(true);
+    setPendingRoleCardAction({ roleId, action: "delete" });
     setError("");
     const res = await window.miraDesktop.invoke({
       method: "roles.delete",
@@ -1056,10 +1068,12 @@ function App(): React.ReactElement {
     });
     setDeletingRole(false);
     if (res.error) {
+      setPendingRoleCardAction(null);
       setError(res.error.message);
       return;
     }
     const nextRoles = (await loadRolesFromBridge()) ?? [];
+    setPendingRoleCardAction(null);
     if (!roleIdOverride || roleId === activeRoleId) {
       setActiveRoleId("");
       setActiveSession(null);
@@ -1183,8 +1197,9 @@ function App(): React.ReactElement {
         openRoleWorkspaceView({ kind: "roles-list" });
         return;
       }
-      await openRole(assetsView.roleId, assetsRole, { recordHistory: false });
+      applyRoleSnapshot(assetsRole);
       openRoleWorkspaceView(assetsView);
+      void openRole(assetsView.roleId, assetsRole, { recordHistory: false });
       return;
     }
     if (nextEntry.view.kind === "role-detail") {
@@ -1194,8 +1209,9 @@ function App(): React.ReactElement {
         openRoleWorkspaceView({ kind: "roles-list" });
         return;
       }
-      await openRole(detailView.roleId, detailRole, { recordHistory: false });
+      applyRoleSnapshot(detailRole);
       openRoleWorkspaceView(detailView);
+      void openRole(detailView.roleId, detailRole, { recordHistory: false });
       return;
     }
     if (nextEntry.activeRoleId) {
@@ -1436,6 +1452,7 @@ function App(): React.ReactElement {
             <RoleManagementPage
               activeRoleId={activeRoleId}
               bridgeReady={bridgeReady}
+              pendingCardAction={pendingRoleCardAction}
               roles={roles}
               onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
               onDeleteRole={(roleId) => setPendingDeleteRoleId(roleId)}

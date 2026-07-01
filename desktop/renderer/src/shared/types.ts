@@ -68,6 +68,11 @@ export type NewRoleFormState = {
   systemPrompt: string;
 };
 
+/** Pending role card action shown directly in the role list. */
+export type PendingRoleCardAction =
+  | { roleId: string; action: "create" | "delete" }
+  | null;
+
 /** Search result row shown in the desktop sidebar search dialog. */
 export type RoleSearchResult = {
   roleId: string;

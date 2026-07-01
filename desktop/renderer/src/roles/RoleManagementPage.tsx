@@ -1,11 +1,12 @@
 import { toFileUrl } from "../shared/format";
-import { DeleteIcon } from "../shared/icons";
+import { DeleteIcon, SpinnerIcon } from "../shared/icons";
 import { bodyTextClass, cardClass, cx } from "../shared/styles";
-import type { RoleRecord } from "../shared/types";
+import type { PendingRoleCardAction, RoleRecord } from "../shared/types";
 
 type RoleManagementPageProps = {
   activeRoleId: string;
   bridgeReady: boolean;
+  pendingCardAction: PendingRoleCardAction;
   roles: RoleRecord[];
   onOpenRoleDetail: (roleId: string) => void;
   onDeleteRole: (roleId: string) => void;
@@ -15,6 +16,7 @@ type RoleManagementPageProps = {
 export function RoleManagementPage({
   activeRoleId,
   bridgeReady,
+  pendingCardAction,
   roles,
   onOpenRoleDetail,
   onDeleteRole,
@@ -29,13 +31,16 @@ export function RoleManagementPage({
           <div className="grid grid-cols-3 gap-5">
             {roles.map((role) => {
               const isActive = role.id === activeRoleId;
+              const isPending = pendingCardAction?.roleId === role.id;
+              const isDeleting = isPending && pendingCardAction?.action === "delete";
+              const isCreating = isPending && pendingCardAction?.action === "create";
               const coverImage = role.illustrations_abs[0] ? toFileUrl(role.illustrations_abs[0]) : "";
               return (
                 <button
                   key={role.id}
                   data-testid={`role-management-card-${role.id}`}
                   type="button"
-                  disabled={!bridgeReady}
+                  disabled={!bridgeReady || isPending}
                   onClick={() => onOpenRoleDetail(role.id)}
                   className={cx(
                     "group relative grid h-[420px] w-full overflow-hidden rounded-[22px] border border-[#D9E0E8] bg-[#EEF1F5] text-left shadow-[0_14px_40px_rgba(31,41,55,0.06)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(31,41,55,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-default disabled:opacity-60",
@@ -43,6 +48,9 @@ export function RoleManagementPage({
                   )}
                   style={coverImage ? { backgroundImage: `url("${coverImage}")`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
                 >
+                  {isPending ? (
+                    <div className="absolute inset-0 z-[3] bg-[rgba(255,255,255,0.24)] backdrop-blur-[2px]" />
+                  ) : null}
                   {coverImage ? null : (
                     <div className="absolute inset-0 bg-[linear-gradient(180deg,#F6F8FB_0%,#E8EEF5_100%)]" />
                   )}
@@ -50,6 +58,7 @@ export function RoleManagementPage({
                     data-testid={`delete-role-card-${role.id}`}
                     className="absolute right-4 top-4 z-[2] grid h-9 w-9 place-items-center rounded-full border border-white/24 bg-[rgba(15,23,42,0.62)] text-lg text-white opacity-0 transition duration-200 hover:bg-[rgba(143,43,24,0.88)] group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white/30"
                     type="button"
+                    disabled={isPending}
                     onClick={(event) => {
                       event.stopPropagation();
                       onDeleteRole(role.id);
@@ -71,6 +80,15 @@ export function RoleManagementPage({
                           {role.name.slice(0, 1).toUpperCase()}
                         </span>
                       )}
+                      {isPending ? (
+                        <span
+                          data-testid={`role-card-spinner-${role.id}`}
+                          className="grid h-10 w-10 place-items-center rounded-full border border-white/30 bg-[rgba(15,23,42,0.62)] text-white shadow-[0_8px_18px_rgba(15,23,42,0.18)]"
+                          aria-label={isDeleting ? "正在删除角色" : isCreating ? "正在创建角色" : "正在处理中"}
+                        >
+                          <SpinnerIcon className="h-4 w-4 animate-spin stroke-current" />
+                        </span>
+                      ) : null}
                     </div>
                     <div className="min-w-0">
                       <div className="truncate text-[22px] font-semibold leading-none text-[#1f1f1f]">{role.name}</div>

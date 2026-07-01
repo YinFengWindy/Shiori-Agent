@@ -2,6 +2,16 @@ type DesktopIconProps = {
   className?: string;
 };
 
+/** Renders the shared desktop loading spinner glyph. */
+export function SpinnerIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
+      <circle cx="12" cy="12" r="8.5" className="opacity-20" strokeWidth="2.5" />
+      <path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5" strokeLinecap="round" strokeWidth="2.5" />
+    </svg>
+  );
+}
+
 /** Renders the shared desktop save glyph. */
 export function SaveIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProps) {
   return (
