@@ -63,6 +63,7 @@ def test_agent_tick_factory_build_requires_pool():
 
 def test_agent_tick_factory_build_returns_tick():
     deps = _build_deps(with_pool=True)
+    deps.cfg.default_role_id = "mira"
     tick = AgentTickFactory(deps).build()
     assert tick is not None
 
@@ -77,6 +78,7 @@ def test_agent_tick_factory_prefers_role_session_key_when_default_role_id_presen
 def test_agent_tick_factory_builds_drift_pipeline_when_enabled(tmp_path):
     deps = _build_deps(with_pool=True)
     deps.cfg = ProactiveConfig(
+        default_role_id="mira",
         default_chat_id="cid",
         drift_enabled=True,
     )
@@ -90,6 +92,7 @@ def test_agent_tick_factory_builds_drift_pipeline_when_enabled(tmp_path):
 def test_agent_tick_factory_binds_drift_step_recorder_to_tick_store(tmp_path):
     deps = _build_deps(with_pool=True)
     deps.cfg = ProactiveConfig(
+        default_role_id="mira",
         default_chat_id="cid",
         drift_enabled=True,
     )
@@ -122,6 +125,15 @@ def test_agent_tick_factory_binds_drift_step_recorder_to_tick_store(tmp_path):
     assert kwargs["tool_name"] == "read_file"
 
 
+def test_agent_tick_factory_requires_default_role_id():
+    deps = _build_deps(with_pool=True)
+    try:
+        AgentTickFactory(deps).build()
+        assert False, "expected RuntimeError"
+    except RuntimeError as e:
+        assert "default_role_id required for proactive session key" in str(e)
+
+
 def test_build_proactive_runtime_accepts_light_agent_loop_stub(tmp_path):
     cfg = SimpleNamespace(
         proactive=SimpleNamespace(
@@ -151,6 +163,7 @@ def test_build_proactive_runtime_accepts_light_agent_loop_stub(tmp_path):
 
 async def test_agent_tick_factory_llm_fn_forces_disable_thinking():
     deps = _build_deps(with_pool=True)
+    deps.cfg.default_role_id = "mira"
     provider = deps.provider
     tick = AgentTickFactory(deps).build()
 
@@ -166,6 +179,7 @@ async def test_agent_tick_factory_llm_fn_forces_disable_thinking():
 
 async def test_agent_tick_factory_llm_fn_honors_disable_thinking_without_schemas():
     deps = _build_deps(with_pool=True)
+    deps.cfg.default_role_id = "mira"
     provider = deps.provider
     tick = AgentTickFactory(deps).build()
 

@@ -32,8 +32,8 @@ def build_research_subagent_prompt(workspace: Path, task_dir: Path) -> str:
 - 任务描述中已提供足够上下文时，无需重复读取 SELF.md
 
 === 可用的上下文资源 ===
-- 用户偏好档案：{workspace_path}/memory/SELF.md
-- 历史日志：{workspace_path}/memory/HISTORY.md
+- 角色记忆目录：{workspace_path}/roles/<role_id>/memory/
+- 仅当任务上下文已经明确给出 `role_id` 时，才允许读取对应角色的 SELF.md / HISTORY.md
 - 技能目录：{workspace_path}/skills/
 
 === 输出要求 ===
@@ -109,8 +109,8 @@ def build_general_subagent_prompt(workspace: Path, task_dir: Path) -> str:
 - 任务描述中若已有用户上下文，优先使用；需要更多背景时可读取以下资源
 
 === 可用的上下文资源 ===
-- 用户偏好档案：{workspace_path}/memory/SELF.md
-- 历史日志：{workspace_path}/memory/HISTORY.md
+- 角色记忆目录：{workspace_path}/roles/<role_id>/memory/
+- 仅当任务上下文已经明确给出 `role_id` 时，才允许读取对应角色的 SELF.md / HISTORY.md
 - 技能目录：{workspace_path}/skills/
 
 === 输出要求 ===

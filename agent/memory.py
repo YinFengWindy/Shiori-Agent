@@ -27,13 +27,20 @@ DEFAULT_SELF_MD = """# 角色底座自我认知
 
 
 class MemoryStore:
-    """Five-layer memory:
-    - MEMORY.md   : stable user profile, sole writer = MemoryOptimizer
-    - SELF.md     : role self-model & relationship understanding, updated by Optimizer
-    - PENDING.md  : incremental facts extracted during conversations
-    - HISTORY.md  : grep-searchable event log, permanent append
-    - RECENT_CONTEXT.md : compacted recent context snapshot for proactive/drift
-    - journal/    : per-day event timeline, append-only YYYY-MM-DD.md
+    """Workspace-local markdown memory store.
+
+    This class only manages a `<root>/memory/` directory relative to the
+    provided workspace path. In strict role-first mode, production runtime
+    access must go through `core.memory.markdown.resolve_markdown_store()`
+    and bind to `roles/<role_id>/memory/`.
+
+    File layout:
+    - MEMORY.md
+    - SELF.md
+    - PENDING.md
+    - HISTORY.md
+    - RECENT_CONTEXT.md
+    - journal/
     """
 
     def __init__(self, workspace: Path):

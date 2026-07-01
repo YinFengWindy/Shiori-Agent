@@ -101,12 +101,15 @@ class AgentTickFactory:
 
     def _get_session_key(self) -> str:
         try:
-            return self._deps.sense.target_session_key()
+            session_key = str(self._deps.sense.target_session_key() or "").strip()
+            if session_key.startswith("role:"):
+                return session_key
         except Exception:
-            default_role_id = str(getattr(self._deps.cfg, "default_role_id", "") or "").strip()
-            if default_role_id:
-                return f"role:{default_role_id}"
-            return self._deps.cfg.default_chat_id or ""
+            pass
+        default_role_id = str(getattr(self._deps.cfg, "default_role_id", "") or "").strip()
+        if default_role_id:
+            return f"role:{default_role_id}"
+        raise RuntimeError("default_role_id required for proactive session key")
 
     def _build_last_user_at_fn(self, session_key: str) -> Callable[[], Any | None]:
         presence = self._deps.presence

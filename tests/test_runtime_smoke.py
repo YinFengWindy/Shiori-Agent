@@ -21,7 +21,6 @@ from agent.config import (
     TelegramChannelConfig,
     load_config,
 )
-from agent.memory import DEFAULT_SELF_MD
 from bus.event_bus import EventBus
 from core.net.http import SharedHttpResources
 
@@ -300,23 +299,23 @@ def test_init_workspace_respects_force_for_text_assets(tmp_path):
         config_path=config_path,
         workspace=workspace,
     )
-    self_path = workspace / "memory" / "SELF.md"
-    self_path.write_text("custom\n", encoding="utf-8")
+    proactive_path = workspace / "PROACTIVE_CONTEXT.md"
+    proactive_path.write_text("custom\n", encoding="utf-8")
 
     summary_skip = workspace_init.init_workspace(
         config_path=config_path,
         workspace=workspace,
     )
-    assert self_path.read_text(encoding="utf-8") == "custom\n"
-    assert any(path == self_path for path in summary_skip.skipped)
+    assert proactive_path.read_text(encoding="utf-8") == "custom\n"
+    assert any(path == proactive_path for path in summary_skip.skipped)
 
     summary_force = workspace_init.init_workspace(
         config_path=config_path,
         workspace=workspace,
         force=True,
     )
-    assert self_path.read_text(encoding="utf-8") == DEFAULT_SELF_MD
-    assert any(path == self_path for path in summary_force.overwritten)
+    assert "Proactive Context" in proactive_path.read_text(encoding="utf-8")
+    assert any(path == proactive_path for path in summary_force.overwritten)
 
 
 @pytest.mark.asyncio

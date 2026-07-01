@@ -17,6 +17,7 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path):
     proactive_cfg.enabled = True
     proactive_cfg.default_channel = "telegram"
     proactive_cfg.default_chat_id = "1"
+    proactive_cfg.default_role_id = "mira"
     cfg = SimpleNamespace(
         proactive=proactive_cfg,
         fitbit=SimpleNamespace(enabled=False),

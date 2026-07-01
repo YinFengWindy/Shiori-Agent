@@ -51,17 +51,17 @@ class PromptBlock(Protocol):
 #  20 SkillsCatalogPromptBlock → skills.build_skills_summary()
 #                              来源：skills/ 目录扫描结果、技能描述、依赖可用性
 #                              时机：技能文件或环境依赖变化时才变，低频
-#  30 SelfModelPromptBlock     → memory/SELF.md
-#                              来源：memory.read_self()
+#  30 SelfModelPromptBlock     → roles/<role_id>/memory/SELF.md
+#                              来源：memory.read_self()（严格要求 role_id）
 #                              时机：自我认知被写回时才变，低频
-#  35 LongTermMemoryPromptBlock→ memory/MEMORY.md
-#                              来源：memory.read_profile() / get_memory_context()
+#  35 LongTermMemoryPromptBlock→ roles/<role_id>/memory/MEMORY.md
+#                              来源：memory.read_profile() / get_memory_context()（严格要求 role_id）
 #                              时机：长期记忆 consolidate 或人工更新时才变，低频
 #  40 SessionContextPromptBlock→ 环境 + 当前 session
 #                              来源：platform.machine() + channel + chat_id
 #                              时机：切换机器架构、channel、chat_id 时才变；同 session 基本稳定
-#  45 RecentContextPromptBlock → memory/RECENT_CONTEXT.md（裁掉 Recent Turns）
-#                              来源：memory.read_recent_context()
+#  45 RecentContextPromptBlock → roles/<role_id>/memory/RECENT_CONTEXT.md（裁掉 Recent Turns）
+#                              来源：memory.read_recent_context()（严格要求 role_id）
 #                              时机：近期语境压缩摘要更新时变化；每轮 Recent Turns 刷新不会直接进入这里
 #  50 ActiveSkillsPromptBlock  → active skill 内容
 #                              来源：always skills + 本轮命中的 skill_names

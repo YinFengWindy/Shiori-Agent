@@ -2,8 +2,8 @@
 
 Uses build_core_runtime exactly as production so prompt assembly,
 tool dispatch, memory injection, and retrieval are identical.
-The only delta from a real user workspace: MEMORY.md / SELF.md start
-empty (honest baseline that forces all recall through the memory system).
+The only delta from a real user workspace: a dedicated benchmark role
+is created and its role memory starts from an empty baseline.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+_BENCHMARK_ROLE_ID = "benchmark"
 
 _BENCHMARK_SELF_MD = """\
 # Identity
@@ -82,13 +83,31 @@ async def create_runtime(config_path: Path, workspace: Path) -> BenchmarkRuntime
 
     config = load_config(config_path)
 
-    # 1. Initialise workspace files (empty memory/SELF.md etc.).
+    # 1. Initialise workspace files.
     #    force=False so repeated calls on same workspace are idempotent.
     init_workspace(config_path=config_path, workspace=workspace, force=False)
 
-    # 2. Always overwrite SELF.md with the current benchmark persona.
+    # 2. Ensure the dedicated benchmark role exists and overwrite its SELF.md.
     #    force=True so updated instructions propagate even on --qa-only reruns.
-    self_md = workspace / "memory" / "SELF.md"
+    from core.roles import RoleAggregateService, RoleStore
+    from session.manager import SessionManager
+
+    role_service = RoleAggregateService.from_runtime(
+        workspace=workspace,
+        role_store=RoleStore(workspace),
+        session_manager=SessionManager(workspace),
+    )
+    if role_service.repository.store.get_role(_BENCHMARK_ROLE_ID) is None:
+        _ = role_service.create_role(
+            role_id=_BENCHMARK_ROLE_ID,
+            name="Benchmark",
+            description="LongMemEval benchmark role",
+            system_prompt="You are a benchmark evaluation role.",
+        )
+
+    role_memory_root = workspace / "roles" / _BENCHMARK_ROLE_ID / "memory"
+    role_memory_root.mkdir(parents=True, exist_ok=True)
+    self_md = role_memory_root / "SELF.md"
     self_md.write_text(_BENCHMARK_SELF_MD, encoding="utf-8")
 
     # 3. Build the full production runtime (providers, tools, memory, loop).
