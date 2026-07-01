@@ -26,8 +26,8 @@ export function ImageHistoryPanel({
             <button
               key={item.id}
               className={cx(
-                "rounded-[16px] p-2 text-left transition focus:outline-none",
-                selected ? "bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)]" : "bg-white/60 hover:bg-white/85",
+                "rounded-[16px] border p-2 text-left transition focus:outline-none",
+                selected ? "border-black bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)]" : "border-transparent bg-white/60 hover:bg-white/85",
               )}
               type="button"
               onClick={() => onSelect(item)}
