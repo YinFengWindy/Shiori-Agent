@@ -14,7 +14,7 @@ export function ImageHistoryPanel({
   onSelect,
 }: ImageHistoryPanelProps) {
   return (
-    <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 rounded-[20px] border border-[#E4EAF0] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+    <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 border-0 bg-transparent p-0 shadow-none">
       <div className="flex items-center justify-between px-1 pt-1">
         <div className="text-sm font-medium text-[#20242A]">History</div>
       </div>
@@ -26,27 +26,27 @@ export function ImageHistoryPanel({
             <button
               key={item.id}
               className={cx(
-                "grid gap-2 rounded-[14px] border p-2 text-left transition focus:outline-none focus:ring-2 focus:ring-primary/20",
+                "grid w-full justify-items-center gap-2 rounded-[14px] border p-2 text-left transition focus:outline-none focus:ring-2 focus:ring-primary/20",
                 selected ? "border-[#272536] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)]" : "border-[#E4EAF0] bg-white/80 hover:border-[#9AA3B2]",
               )}
               type="button"
               onClick={() => onSelect(item)}
             >
-              <div className="h-[84px] w-full overflow-hidden rounded-[12px] bg-[#F1F5F9]">
+              <div className="h-[94px] w-full overflow-hidden rounded-[12px] bg-[#F1F5F9]">
                 {previewPath ? (
                   <img className="h-full w-full object-cover" src={toFileUrl(previewPath)} alt="history preview" />
                 ) : null}
               </div>
-              <div className="truncate text-[11px] text-[#6B7280]">{formatTimestamp(item.created_at)}</div>
+              <div className="w-full truncate text-center text-[11px] text-[#6B7280]">{formatTimestamp(item.created_at)}</div>
             </button>
           );
         }) : (
-          <div className="rounded-[14px] border border-dashed border-[#D8DCE2] bg-white px-3 py-5 text-center text-[12px] text-[#737781]">
+          <div className="w-full rounded-xl border border-dashed border-[#D8DCE2] bg-white px-3 py-5 text-center text-[12px] text-[#737781]">
             暂无绘图记录
           </div>
         )}
       </div>
-      <div className="grid gap-2 border-t border-[#EEF2F6] pt-2">
+      <div className="grid gap-2 border-t border-[#D6DCE3] pt-3">
         <button
           className="rounded-md border border-[#E4EAF0] bg-white px-3 py-2 text-[12px] text-[#B7BEC8] transition disabled:cursor-default"
           type="button"

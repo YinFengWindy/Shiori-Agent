@@ -11,8 +11,9 @@ type ImageStudioSidebarProps = {
   animating: boolean;
   width: number;
   form: ImageStudioFormState;
-  modelOptions: Array<{ id: string; label: string }>;
-  roleOptions: Array<{ id: string; label: string }>;
+  modelOptions: ReadonlyArray<{ id: string; label: string }>;
+  roleOptions: ReadonlyArray<{ id: string; label: string }>;
+  samplerOptions: ReadonlyArray<{ id: string; label: string }>;
   submitting: boolean;
   validationError: string;
   onBackToChat: () => void;
@@ -31,6 +32,7 @@ export function ImageStudioSidebar({
   form,
   modelOptions,
   roleOptions,
+  samplerOptions,
   submitting,
   validationError,
   onBackToChat,
@@ -67,6 +69,7 @@ export function ImageStudioSidebar({
           form={form}
           modelOptions={modelOptions}
           roleOptions={roleOptions}
+          samplerOptions={samplerOptions}
           validationError={validationError}
           submitting={submitting}
           onChange={onChange}

@@ -22,6 +22,11 @@ const initialForm: ImageStudioFormState = {
   sizePreset: "square",
   customWidth: "",
   customHeight: "",
+  steps: "23",
+  seed: "",
+  sampler: "k_euler_a",
+  strength: "0.70",
+  noise: "0.20",
   model: "nai-diffusion-4-5-curated",
 };
 
@@ -30,10 +35,33 @@ type ImageStudioModelOption = {
   label: string;
 };
 
+const samplerOptions = [
+  { id: "k_euler_a", label: "Euler Ancestral" },
+  { id: "k_euler", label: "Euler" },
+  { id: "k_dpmpp_2s_ancestral", label: "DPM++ 2S Ancestral" },
+  { id: "k_dpmpp_2m_sde", label: "DPM++ 2M SDE" },
+  { id: "k_dpmpp_2m", label: "DPM++ 2M" },
+  { id: "k_dpmpp_sde", label: "DPM++ SDE" },
+] as const;
+
 function parsePositiveInteger(value: string): number | null {
   if (!value.trim()) return null;
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function parseSeed(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) return null;
+  return parsed;
+}
+
+function parseRange(value: string, min: number, max: number): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) return null;
   return parsed;
 }
 
@@ -155,6 +183,12 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
     if (form.mode === "img2img" && !form.baseImagePath.trim()) {
       return "img2img 需要输入图";
     }
+    const steps = parsePositiveInteger(form.steps);
+    if (steps == null) return "steps 必须是正整数";
+    if (steps > 28) return "当前仅允许 steps 不超过 28";
+    if (form.seed.trim() && parseSeed(form.seed) == null) return "seed 必须是大于等于 0 的整数";
+    if (parseRange(form.strength, 0.01, 1) == null) return "strength 必须在 0.01 到 1 之间";
+    if (parseRange(form.noise, 0, 0.99) == null) return "noise 必须在 0 到 0.99 之间";
     if (form.sizePreset === "custom") {
       const width = parsePositiveInteger(form.customWidth);
       const height = parsePositiveInteger(form.customHeight);
@@ -173,6 +207,8 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
       width: form.sizePreset === "custom" ? (form.customWidth || "-") : presetSize.width,
       height: form.sizePreset === "custom" ? (form.customHeight || "-") : presetSize.height,
       model: form.model || "-",
+      steps: form.steps || "-",
+      sampler: form.sampler || "-",
     };
   }, [form]);
 
@@ -204,6 +240,9 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
           size_preset: form.sizePreset,
           custom_width: form.sizePreset === "custom" ? parsePositiveInteger(form.customWidth) : undefined,
           custom_height: form.sizePreset === "custom" ? parsePositiveInteger(form.customHeight) : undefined,
+          steps: parsePositiveInteger(form.steps),
+          seed: parseSeed(form.seed),
+          sampler: form.sampler,
           model: form.model,
         },
       });
@@ -232,6 +271,7 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
     modelOptions,
     requestSummary,
     roleOptions,
+    samplerOptions,
     selectedRecordId,
     submitting,
     validationError: attemptedSubmit && !form.prompt.trim() ? "prompt 不能为空" : validationError,
