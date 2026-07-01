@@ -9,7 +9,6 @@ type ChatSurfaceProps = {
   activeRoleId: string;
   activeSession: SessionPayload | null;
   bridgeReady: boolean;
-  chatLatestImageLoading: boolean;
   chatLatestImagePath: string;
   chatLatestImageSidebarAnimating: boolean;
   chatLatestImageSidebarCollapsed: boolean;
@@ -22,6 +21,7 @@ type ChatSurfaceProps = {
   sending: boolean;
   visibleIllustrationUrl: string;
   onBeginChatLatestImageSidebarResize: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onOpenChatImagePreview: (path: string) => void;
   onSendMessage: (contentOverride?: string) => void;
   onToggleChatLatestImageSidebar: () => void;
   onUpdateDraft: (value: string) => void;
@@ -33,7 +33,6 @@ export function ChatSurface({
   activeRoleId,
   activeSession,
   bridgeReady,
-  chatLatestImageLoading,
   chatLatestImagePath,
   chatLatestImageSidebarAnimating,
   chatLatestImageSidebarCollapsed,
@@ -46,6 +45,7 @@ export function ChatSurface({
   sending,
   visibleIllustrationUrl,
   onBeginChatLatestImageSidebarResize,
+  onOpenChatImagePreview,
   onSendMessage,
   onToggleChatLatestImageSidebar,
   onUpdateDraft,
@@ -264,9 +264,14 @@ export function ChatSurface({
                         <div className="mt-3 grid gap-2">
                           {media.map((item) => (
                             isImageAsset(item) ? (
-                              <a key={item} href={toFileUrl(item)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-[12px] border border-black/8 bg-white/70">
+                              <button
+                                key={item}
+                                className="block overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white focus:outline-none"
+                                type="button"
+                                onClick={() => onOpenChatImagePreview(item)}
+                              >
                                 <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" />
-                              </a>
+                              </button>
                             ) : (
                               <a key={item} href={toFileUrl(item)} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-[12px] border border-black/8 bg-white/70 px-3 py-2 text-[12px] text-[#4B5563] hover:bg-white">
                                 <span className="font-medium">附件</span>
@@ -358,10 +363,8 @@ export function ChatSurface({
                   <img
                     className="h-full w-full object-contain"
                     src={toFileUrl(chatLatestImagePath)}
-                    alt="latest generated result"
+                    alt="selected message image"
                   />
-                ) : chatLatestImageLoading ? (
-                  <div className="h-5 w-5 rounded-full border border-[#D6DCE5] border-t-[#747474]" />
                 ) : (
                   <div className="h-10 w-10 rounded-[14px] border border-[#D6DCE5] bg-white/70" />
                 )}

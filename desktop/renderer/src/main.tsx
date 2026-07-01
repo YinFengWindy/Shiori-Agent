@@ -187,8 +187,7 @@ function App(): React.ReactElement {
     defaultWidth: chatLatestImageSidebarDefaultWidth,
     animationDurationMs: sidebarAnimationDurationMs,
   });
-  const [chatLatestImagePath, setChatLatestImagePath] = useState("");
-  const [chatLatestImageLoading, setChatLatestImageLoading] = useState(false);
+  const [chatImagePreviewPath, setChatImagePreviewPath] = useState("");
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
@@ -557,46 +556,21 @@ function App(): React.ReactElement {
   }, [activeIllustration]);
 
   useEffect(() => {
+    setChatImagePreviewPath("");
+  }, [activeRoleId]);
+
+  useEffect(() => {
     if (!sidebarAnimating) return undefined;
     const timer = window.setTimeout(() => setSidebarAnimating(false), sidebarAnimationDurationMs + 40);
     return () => window.clearTimeout(timer);
   }, [sidebarAnimating]);
 
-  useEffect(() => {
-    if (!activeRoleId) {
-      setChatLatestImagePath("");
-      setChatLatestImageLoading(false);
-      return undefined;
-    }
-
-    let cancelled = false;
-    setChatLatestImageLoading(true);
-
-    void (async () => {
-      const response = await window.miraDesktop.invoke({
-        method: "novelai.history",
-        payload: {
-          role_id: activeRoleId,
-          limit: 1,
-        },
-      });
-      if (cancelled) return;
-      if (response.error) {
-        setChatLatestImagePath("");
-        setChatLatestImageLoading(false);
-        return;
-      }
-      const records = Array.isArray(response.payload.records)
-        ? response.payload.records as Array<{ output_paths?: string[] }>
-        : [];
-      setChatLatestImagePath(records[0]?.output_paths?.[0] ?? "");
-      setChatLatestImageLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRoleId, imageStudioState.latestResult?.record_id]);
+  function openChatImagePreview(path: string): void {
+    const cleanPath = path.trim();
+    if (!cleanPath) return;
+    setChatImagePreviewPath(cleanPath);
+    chatLatestImageSidebar.open();
+  }
 
   useEffect(() => {
     function collapseSidebarForNarrowWindow(): void {
@@ -1568,8 +1542,7 @@ function App(): React.ReactElement {
               activeRoleId={activeRoleId}
               activeSession={activeSession}
               bridgeReady={bridgeReady}
-              chatLatestImageLoading={chatLatestImageLoading}
-              chatLatestImagePath={chatLatestImagePath}
+              chatLatestImagePath={chatImagePreviewPath}
               chatLatestImageSidebarAnimating={chatLatestImageSidebar.animating && !chatLatestImageSidebar.resizing}
               chatLatestImageSidebarCollapsed={chatLatestImageSidebar.collapsed}
               chatLatestImageSidebarWidth={chatLatestImageSidebar.width}
@@ -1581,6 +1554,7 @@ function App(): React.ReactElement {
               sending={sending}
               visibleIllustrationUrl={visibleIllustrationUrl}
               onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
+              onOpenChatImagePreview={openChatImagePreview}
               onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
               onUpdateDraft={setDraft}
