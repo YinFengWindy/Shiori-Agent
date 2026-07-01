@@ -11,8 +11,8 @@ type ImageStudioSidebarProps = {
   animating: boolean;
   width: number;
   form: ImageStudioFormState;
-  modelOptions: Array<{ id: string; label: string }>;
-  roleOptions: Array<{ id: string; label: string }>;
+  nsfwEnabled: boolean;
+  roleItems: Array<{ id: string; label: string; avatarAbs: string | null }>;
   submitting: boolean;
   validationError: string;
   onBackToChat: () => void;
@@ -20,6 +20,7 @@ type ImageStudioSidebarProps = {
   onChange: (next: Partial<ImageStudioFormState>) => void;
   onPickBaseImage: () => void;
   onSubmit: () => void;
+  onToggleNsfwEnabled: () => void;
 };
 
 /** Renders the image studio workspace sidebar with generation parameters. */
@@ -29,8 +30,8 @@ export function ImageStudioSidebar({
   animating,
   width,
   form,
-  modelOptions,
-  roleOptions,
+  nsfwEnabled,
+  roleItems,
   submitting,
   validationError,
   onBackToChat,
@@ -38,6 +39,7 @@ export function ImageStudioSidebar({
   onChange,
   onPickBaseImage,
   onSubmit,
+  onToggleNsfwEnabled,
 }: ImageStudioSidebarProps) {
   const sidebarBackClass =
     "mb-3 flex h-8 items-center gap-2 rounded-md border border-transparent bg-transparent px-2 text-left text-sm text-[#6E737A] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
@@ -65,13 +67,14 @@ export function ImageStudioSidebar({
         <ImageFormPanel
           bridgeReady={bridgeReady}
           form={form}
-          modelOptions={modelOptions}
-          roleOptions={roleOptions}
+          nsfwEnabled={nsfwEnabled}
+          roleItems={roleItems}
           validationError={validationError}
           submitting={submitting}
           onChange={onChange}
           onPickBaseImage={onPickBaseImage}
           onSubmit={onSubmit}
+          onToggleNsfwEnabled={onToggleNsfwEnabled}
         />
       </div>
       <div

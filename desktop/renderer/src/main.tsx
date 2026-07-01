@@ -1443,8 +1443,8 @@ function App(): React.ReactElement {
               collapsed={sidebarCollapsed}
               width={sidebarWidth}
               form={imageStudioState.form}
-              modelOptions={imageStudioState.modelOptions}
-              roleOptions={imageStudioState.roleOptions}
+              nsfwEnabled={imageStudioState.nsfwEnabled}
+              roleItems={imageStudioState.roleItems}
               submitting={imageStudioState.submitting}
               validationError={imageStudioState.validationError}
               onBackToChat={() => openChatView()}
@@ -1452,6 +1452,7 @@ function App(): React.ReactElement {
               onChange={imageStudioState.onChange}
               onPickBaseImage={imageStudioState.onPickBaseImage}
               onSubmit={imageStudioState.onSubmit}
+              onToggleNsfwEnabled={imageStudioState.onToggleNsfwEnabled}
             />
           ) : roleWorkspaceViewActive ? (
             <RoleWorkspaceSidebar

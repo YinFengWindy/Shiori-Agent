@@ -25,11 +25,6 @@ const initialForm: ImageStudioFormState = {
   model: "nai-diffusion-4-5-curated",
 };
 
-type ImageStudioModelOption = {
-  id: string;
-  label: string;
-};
-
 function parsePositiveInteger(value: string): number | null {
   if (!value.trim()) return null;
   const parsed = Number(value);
@@ -62,25 +57,17 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
   const [selectedRecordId, setSelectedRecordId] = useState("");
   const [latestResult, setLatestResult] = useState<ImageGenerateResult | null>(null);
   const [error, setError] = useState("");
-  const [autoWritebackRoleAssets, setAutoWritebackRoleAssets] = useState(false);
   const [settingsFormData, setSettingsFormData] = useState<SettingsFormData | null>(null);
-  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
-  const roleOptions = useMemo(() => (
+  const roleItems = useMemo(() => (
     roles.map((role) => ({
       id: role.id,
       label: role.name,
+      avatarAbs: role.avatar_abs,
     }))
   ), [roles]);
 
-  const modelOptions = useMemo<ImageStudioModelOption[]>(() => {
-    const defaultModel = settingsFormData?.integrations.novelaiDefaultModel?.trim() || "nai-diffusion-4-5-curated";
-    const nsfwModel = settingsFormData?.integrations.novelaiNsfwModel?.trim() || "nai-diffusion-4-5-full";
-    return [
-      { id: defaultModel, label: "普通模型" },
-      { id: nsfwModel, label: "NSFW 模型" },
-    ];
-  }, [settingsFormData]);
+  const nsfwEnabled = Boolean(settingsFormData?.integrations.novelaiNsfwEnabled);
 
   async function loadHistory(): Promise<void> {
     const response = await window.miraDesktop.invoke({
@@ -119,12 +106,9 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
       ]);
       if (cancelled) return;
       setSettingsFormData(settingsResult.formData);
-      setAutoWritebackRoleAssets(settingsResult.formData.integrations.novelaiAutoWritebackRoleAssets);
-      const defaultModel = settingsResult.formData.integrations.novelaiDefaultModel?.trim() || "nai-diffusion-4-5-curated";
       setForm((current) => ({
         ...current,
         roleId: current.roleId || activeRole?.id || "",
-        model: current.model || defaultModel,
       }));
     })();
 
@@ -142,17 +126,15 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
     });
   }, [activeRole?.id, roles]);
 
-  useEffect(() => {
-    if (!modelOptions.length) return;
-    setForm((current) => (
-      modelOptions.some((option) => option.id === current.model)
-        ? current
-        : { ...current, model: modelOptions[0]?.id ?? current.model }
-    ));
-  }, [modelOptions]);
+  const resolvedMode = form.baseImagePath.trim() ? "img2img" : "txt2img";
+  const resolvedModel = useMemo(() => (
+    nsfwEnabled
+      ? (settingsFormData?.integrations.novelaiNsfwModel?.trim() || "nai-diffusion-4-5-full")
+      : (settingsFormData?.integrations.novelaiDefaultModel?.trim() || "nai-diffusion-4-5-curated")
+  ), [nsfwEnabled, settingsFormData]);
 
   const validationError = useMemo(() => {
-    if (form.mode === "img2img" && !form.baseImagePath.trim()) {
+    if (resolvedMode === "img2img" && !form.baseImagePath.trim()) {
       return "img2img 需要输入图";
     }
     if (form.sizePreset === "custom") {
@@ -169,12 +151,12 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
   const requestSummary = useMemo(() => {
     const presetSize = resolvePresetSize(form.sizePreset);
     return {
-      mode: form.mode,
+      mode: resolvedMode,
       width: form.sizePreset === "custom" ? (form.customWidth || "-") : presetSize.width,
       height: form.sizePreset === "custom" ? (form.customHeight || "-") : presetSize.height,
-      model: form.model || "-",
+      model: resolvedModel || "-",
     };
-  }, [form]);
+  }, [form, resolvedMode, resolvedModel]);
 
   async function handlePickBaseImage(): Promise<void> {
     const files = await window.miraDesktop.pickImages({ multiple: false });
@@ -183,7 +165,6 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
   }
 
   async function handleSubmit(): Promise<void> {
-    setAttemptedSubmit(true);
     if (!form.prompt.trim()) {
       setError("");
       return;
@@ -198,13 +179,13 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
           role_id: form.roleId,
           session_key: form.roleId ? `role:${form.roleId}` : "desktop:image-studio",
           prompt: form.prompt,
-          mode: form.mode,
+          mode: resolvedMode,
           base_image_path: form.baseImagePath,
           negative_prompt: form.negativePrompt,
           size_preset: form.sizePreset,
           custom_width: form.sizePreset === "custom" ? parsePositiveInteger(form.customWidth) : undefined,
           custom_height: form.sizePreset === "custom" ? parsePositiveInteger(form.customHeight) : undefined,
-          model: form.model,
+          model: resolvedModel,
         },
       });
       if (response.error) {
@@ -222,27 +203,44 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
     }
   }
 
+  async function handleToggleNsfwEnabled(): Promise<void> {
+    if (!settingsFormData) return;
+    const nextFormData: SettingsFormData = {
+      ...settingsFormData,
+      integrations: {
+        ...settingsFormData.integrations,
+        novelaiNsfwEnabled: !settingsFormData.integrations.novelaiNsfwEnabled,
+      },
+    };
+    setSettingsFormData(nextFormData);
+    try {
+      await window.miraDesktop.saveSettings(nextFormData);
+      const refreshed = await window.miraDesktop.readSettings();
+      setSettingsFormData(refreshed.formData);
+    } catch (saveError) {
+      setSettingsFormData(settingsFormData);
+      setError(saveError instanceof Error ? saveError.message : String(saveError));
+    }
+  }
+
   return {
     activeRecord,
-    autoWritebackRoleAssets,
     error,
     form,
     history,
     latestResult,
-    modelOptions,
+    nsfwEnabled,
     requestSummary,
-    roleOptions,
+    roleItems,
     selectedRecordId,
     submitting,
-    validationError: attemptedSubmit && !form.prompt.trim() ? "prompt 不能为空" : validationError,
+    validationError,
     onChange: (next: Partial<ImageStudioFormState>) => {
       setForm((current) => ({ ...current, ...next }));
-      if ("prompt" in next && String(next.prompt ?? "").trim()) {
-        setAttemptedSubmit(false);
-      }
     },
     onPickBaseImage: () => void handlePickBaseImage(),
     onSelectRecord: (record: ImageHistoryRecord) => setSelectedRecordId(record.id),
     onSubmit: () => void handleSubmit(),
+    onToggleNsfwEnabled: () => void handleToggleNsfwEnabled(),
   };
 }
