@@ -186,6 +186,7 @@ function App(): React.ReactElement {
     maxWidth: chatLatestImageSidebarMaxWidth,
     defaultWidth: chatLatestImageSidebarDefaultWidth,
     animationDurationMs: sidebarAnimationDurationMs,
+    defaultCollapsed: true,
   });
   const [chatImagePreviewPath, setChatImagePreviewPath] = useState("");
   const [chatImagePreviewLoading, setChatImagePreviewLoading] = useState(false);

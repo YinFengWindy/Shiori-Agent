@@ -7,6 +7,7 @@ type UseRightSidebarStateArgs = {
   maxWidth: number;
   defaultWidth: number;
   animationDurationMs: number;
+  defaultCollapsed?: boolean;
 };
 
 /** Manages a resizable right sidebar with persisted width, collapse state, and drag interactions. */
@@ -15,10 +16,11 @@ export function useRightSidebarState({
   maxWidth,
   defaultWidth,
   animationDurationMs,
+  defaultCollapsed = false,
 }: UseRightSidebarStateArgs) {
   const collapseThreshold = minWidth / 2;
   const [width, setWidth] = useState(defaultWidth);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [animating, setAnimating] = useState(false);
   const [resizing, setResizing] = useState(false);
 
