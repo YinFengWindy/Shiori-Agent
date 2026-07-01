@@ -160,6 +160,12 @@ def test_optimize_reports_busy_instead_of_waiting(tmp_path):
 
 
 def test_optimize_with_role_id_updates_role_markdown_memory(tmp_path):
+    _ = RoleStore(tmp_path).create_role(
+        role_id="mira",
+        name="Mira",
+        description="",
+        system_prompt="you are mira",
+    )
     global_memory = MarkdownMemoryStore(tmp_path)
     role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
     role_memory.write_long_term("角色旧记忆")
@@ -184,6 +190,9 @@ def test_optimize_with_role_id_updates_role_markdown_memory(tmp_path):
     assert "角色新版本" in role_memory.read_long_term()
     assert "角色理解" in role_memory.read_self()
     assert "全局旧记忆" in global_memory.read_long_term()
+    role = RoleStore(tmp_path).get_role("mira")
+    assert role is not None
+    assert role.memory_init_state.get("last_memory_optimized_at")
 
 
 def test_seconds_until_next_tick_aligns_to_interval_boundary():
@@ -232,5 +241,32 @@ def test_memory_optimizer_loop_runs_global_and_role_optimizations(tmp_path):
         asyncio.run(loop.run())
     finally:
         asyncio.sleep = original_sleep  # type: ignore[assignment]
+
+    assert calls == ["mira"]
+
+
+def test_memory_optimizer_loop_catches_up_overdue_roles_on_start(tmp_path):
+    role_store = RoleStore(tmp_path)
+    _ = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="",
+        system_prompt="you are mira",
+    )
+    optimizer = types.SimpleNamespace()
+    calls: list[str | None] = []
+
+    async def _optimize(*, role_id: str | None = None) -> None:
+        calls.append(role_id)
+
+    optimizer.optimize = _optimize
+    optimizer._workspace = tmp_path
+    loop = MemoryOptimizerLoop(
+        optimizer,
+        interval_seconds=3600,
+        _now_fn=lambda: datetime(2026, 2, 23, 12, 0, 0),
+    )
+
+    asyncio.run(loop._catch_up_overdue_roles())
 
     assert calls == ["mira"]

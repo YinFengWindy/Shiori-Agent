@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -23,6 +23,7 @@ from core.memory.markdown import resolve_markdown_store
 from core.roles import RoleStore
 
 logger = logging.getLogger(__name__)
+_LAST_OPTIMIZED_STATE_KEY = "last_memory_optimized_at"
 
 
 class MemoryOptimizerBusy(RuntimeError):
@@ -236,10 +237,13 @@ class MemoryOptimizer:
             await self._optimize(role_id=clean_role_id)
 
     async def _optimize(self, *, role_id: str | None = None) -> None:
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for memory optimizer")
         memory_store = resolve_markdown_store(
             workspace=self._workspace,
             default_store=self._memory,
-            role_id=role_id,
+            role_id=clean_role_id,
         )
         # ── Step 1: MEMORY.md 合并 ────────────────────────────────
         pending = memory_store.snapshot_pending()
@@ -274,6 +278,7 @@ class MemoryOptimizer:
         # ── Step 2: SELF.md 更新 ──────────────────────────────────
         await asyncio.sleep(self._STEP_DELAY_SECONDS)
         await self._update_self(memory_store, pending)
+        self._mark_role_optimized(clean_role_id)
 
     async def _merge_memory(self, memory: str, pending: str) -> str:
         today = datetime.now().strftime("%Y-%m-%d")
@@ -332,6 +337,20 @@ class MemoryOptimizer:
         )
         return (resp.content or "").strip()
 
+    def _mark_role_optimized(self, role_id: str) -> None:
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            return
+        store = RoleStore(self._workspace)
+        role = store.get_role(clean_role_id)
+        if role is None:
+            return
+        next_state = dict(role.memory_init_state or {})
+        next_state[_LAST_OPTIMIZED_STATE_KEY] = datetime.now().astimezone().isoformat()
+        if next_state == role.memory_init_state:
+            return
+        store.update_role(clean_role_id, memory_init_state=next_state)
+
 
 # ── MemoryOptimizerLoop ───────────────────────────────────────────
 
@@ -352,6 +371,7 @@ class MemoryOptimizerLoop:
 
     async def run(self) -> None:
         self._running = True
+        await self._catch_up_overdue_roles()
         logger.info(
             "[memory_optimizer] 优化循环已启动，间隔=%ds (%.1fh)，对齐整点",
             self._interval,
@@ -379,6 +399,37 @@ class MemoryOptimizerLoop:
 
     def stop(self) -> None:
         self._running = False
+
+    async def _catch_up_overdue_roles(self) -> None:
+        optimizer = self._optimizer
+        if optimizer is None:
+            return
+        workspace = getattr(optimizer, "_workspace", None)
+        if not workspace:
+            return
+        role_store = RoleStore(Path(workspace))
+        now = self._now_fn().astimezone()
+        for role in role_store.list_roles():
+            if not self._is_role_overdue(role, now=now):
+                continue
+            try:
+                logger.info("[memory_optimizer] 启动补跑过期角色: %s", role.id)
+                await optimizer.optimize(role_id=role.id)
+            except Exception:
+                logger.exception("[memory_optimizer] 启动补跑角色失败: %s", role.id)
+
+    def _is_role_overdue(self, role, *, now: datetime) -> bool:
+        state = role.memory_init_state if isinstance(role.memory_init_state, dict) else {}
+        raw = str(state.get(_LAST_OPTIMIZED_STATE_KEY) or "").strip()
+        if not raw:
+            return True
+        try:
+            last = datetime.fromisoformat(raw)
+        except ValueError:
+            return True
+        if last.tzinfo is None:
+            last = last.astimezone()
+        return now - last >= timedelta(seconds=self._interval)
 
     def _seconds_until_next_tick(self) -> float:
         """计算距下一个对齐整点的秒数。"""
