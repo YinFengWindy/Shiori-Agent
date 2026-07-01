@@ -25,7 +25,7 @@ export function ImagePreviewPanel({
 
   return (
     <section className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
-      <div className="grid min-h-[420px] min-w-0 place-items-center overflow-auto bg-white">
+      <div className="grid min-h-[420px] min-w-0 place-items-center overflow-hidden bg-white">
         {previewPath ? (
           <img
             className="block max-h-full max-w-full object-contain"
