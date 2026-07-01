@@ -1021,10 +1021,15 @@ def create_dashboard_app(
             optimizer_task is not None and not optimizer_task.done()
         ) or manual_memory_optimizer.is_running:
             raise HTTPException(status_code=409, detail="memory optimizer 正在运行")
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise HTTPException(
+                status_code=400,
+                detail="strict role-first memory requires role_id",
+            )
         logger.info("Manual memory optimizer triggered via dashboard")
         optimizer_last_status = "running"
         optimizer_last_error = None
-        clean_role_id = str(role_id or "").strip() or None
         optimizer_task = asyncio.create_task(
             _run_memory_optimizer(clean_role_id),
             name="manual_memory_optimizer",
@@ -1032,7 +1037,7 @@ def create_dashboard_app(
         return {
             "status": "started",
             "message": "Memory optimizer started",
-            "role_id": clean_role_id or "",
+            "role_id": clean_role_id,
         }
 
     @app.post("/api/dashboard/sessions/batch-delete")

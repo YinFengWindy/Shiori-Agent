@@ -480,11 +480,10 @@ def test_manual_memory_optimizer_uses_runtime_entrypoint(tmp_path) -> None:
     ) as client:
         resp = client.post("/api/dashboard/memory/optimize")
 
-    assert resp.status_code == 202
-    assert resp.json()["status"] == "started"
-    assert optimizer.started.wait(1.0)
-    assert optimizer.calls == 1
-    assert optimizer.role_ids == [None]
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "strict role-first memory requires role_id"
+    assert optimizer.calls == 0
+    assert optimizer.role_ids == []
 
 
 def test_manual_memory_optimizer_passes_role_id(tmp_path) -> None:
@@ -515,12 +514,12 @@ def test_manual_memory_optimizer_reports_busy_runtime(tmp_path) -> None:
     with TestClient(
         create_dashboard_app(tmp_path, manual_memory_optimizer=optimizer)
     ) as client:
-        first_resp = client.post("/api/dashboard/memory/optimize")
+        first_resp = client.post("/api/dashboard/memory/optimize", params={"role_id": "mira"})
         assert first_resp.status_code == 202
         assert optimizer.started.wait(1.0)
         status_resp = client.get("/api/dashboard/memory/optimizer")
 
-        busy_resp = client.post("/api/dashboard/memory/optimize")
+        busy_resp = client.post("/api/dashboard/memory/optimize", params={"role_id": "mira"})
         optimizer.release.set()
 
     assert status_resp.status_code == 200
@@ -537,7 +536,7 @@ def test_manual_memory_optimizer_skips_when_backend_reports_busy(tmp_path) -> No
     with TestClient(
         create_dashboard_app(tmp_path, manual_memory_optimizer=optimizer)
     ) as client:
-        start_resp = client.post("/api/dashboard/memory/optimize")
+        start_resp = client.post("/api/dashboard/memory/optimize", params={"role_id": "mira"})
         status_resp = client.get("/api/dashboard/memory/optimizer")
 
     assert start_resp.status_code == 202

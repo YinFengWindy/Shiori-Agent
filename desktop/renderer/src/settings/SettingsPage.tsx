@@ -719,7 +719,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 </Field>
                 <Field label="默认角色" hint="主动推送优先使用这个角色；如果该角色绑定了多个 transport，仍建议同时明确填写目标频道和 Chat ID。">
                   <select className={cx(inputClass, "bg-white")} value={draft.proactive.targetRoleId} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, targetRoleId: event.target.value } }))}>
-                    <option value="">不指定</option>
+                    <option value="" disabled={draft.proactive.enabled}>请选择角色</option>
                     {roles.map((role) => (
                       <option key={role.id} value={role.id}>{role.name}</option>
                     ))}

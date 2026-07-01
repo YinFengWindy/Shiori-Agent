@@ -655,6 +655,9 @@ function validateSettings(formData: SettingsFormData): void {
       throw new Error("embedding output_dimensionality 必须是正整数");
     }
   }
+  if (formData.proactive.enabled && !formData.proactive.targetRoleId.trim()) {
+    throw new Error("启用 proactive 时必须指定默认角色");
+  }
 }
 
 function sanitizeChannelRoleBindings(bindings: SettingsChannelRoleBinding[]): SettingsChannelRoleBinding[] {
