@@ -51,6 +51,17 @@ export function RoleManagementPage({
                   {isPending ? (
                     <div className="absolute inset-0 z-[3] bg-[rgba(255,255,255,0.24)] backdrop-blur-[2px]" />
                   ) : null}
+                  {isPending ? (
+                    <span
+                      data-testid={`role-card-spinner-${role.id}`}
+                      className="absolute inset-0 z-[4] grid place-items-center"
+                      aria-label={isDeleting ? "正在删除角色" : isCreating ? "正在创建角色" : "正在处理中"}
+                    >
+                      <span className="grid h-16 w-16 place-items-center rounded-full border border-white/30 bg-[rgba(15,23,42,0.62)] text-white shadow-[0_16px_34px_rgba(15,23,42,0.24)]">
+                        <SpinnerIcon className="h-7 w-7 animate-spin stroke-current" />
+                      </span>
+                    </span>
+                  ) : null}
                   {coverImage ? null : (
                     <div className="absolute inset-0 bg-[linear-gradient(180deg,#F6F8FB_0%,#E8EEF5_100%)]" />
                   )}
@@ -80,15 +91,6 @@ export function RoleManagementPage({
                           {role.name.slice(0, 1).toUpperCase()}
                         </span>
                       )}
-                      {isPending ? (
-                        <span
-                          data-testid={`role-card-spinner-${role.id}`}
-                          className="grid h-10 w-10 place-items-center rounded-full border border-white/30 bg-[rgba(15,23,42,0.62)] text-white shadow-[0_8px_18px_rgba(15,23,42,0.18)]"
-                          aria-label={isDeleting ? "正在删除角色" : isCreating ? "正在创建角色" : "正在处理中"}
-                        >
-                          <SpinnerIcon className="h-4 w-4 animate-spin stroke-current" />
-                        </span>
-                      ) : null}
                     </div>
                     <div className="min-w-0">
                       <div className="truncate text-[22px] font-semibold leading-none text-[#1f1f1f]">{role.name}</div>

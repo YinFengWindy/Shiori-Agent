@@ -974,7 +974,7 @@ function App(): React.ReactElement {
     setError("");
     setWorkspaceFeedback(null);
     setPendingRoleCardAction({ roleId: pendingRoleId, action: "create" });
-    setRoles((current) => [...current, pendingRole]);
+    setRoles((current) => [pendingRole, ...current]);
     applyRoleSnapshot(pendingRole);
     openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
     replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, pendingRoleId));
@@ -1007,9 +1007,9 @@ function App(): React.ReactElement {
       const withoutPending = current.filter((item) => item.id !== pendingRoleId);
       const existing = withoutPending.find((item) => item.id === role.id);
       if (existing) {
-        return withoutPending.map((item) => (item.id === role.id ? role : item));
+        return [role, ...withoutPending.filter((item) => item.id !== role.id)];
       }
-      return [...withoutPending, role];
+      return [role, ...withoutPending];
     });
     applyRoleSnapshot(role);
     const nextRoles = await loadRolesFromBridge();
@@ -1018,9 +1018,9 @@ function App(): React.ReactElement {
       setRoles((current) => {
         const existing = current.find((item) => item.id === role.id);
         if (existing) {
-          return current.map((item) => (item.id === role.id ? resolvedRole : item));
+          return [resolvedRole, ...current.filter((item) => item.id !== role.id)];
         }
-        return [...current, resolvedRole];
+        return [resolvedRole, ...current];
       });
     }
     await openRole(role.id, resolvedRole, { recordHistory: false });
