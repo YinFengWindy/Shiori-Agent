@@ -73,7 +73,7 @@ class DesktopBridgeService:
                     if isinstance(raw_illustrations, list)
                     else None
                 )
-                aggregate = self.role_service.create_role(
+                aggregate = await self.role_service.create_role_async(
                     role_id=str(payload.get("role_id") or "").strip() or None,
                     name=str(payload.get("name") or ""),
                     description=str(payload.get("description") or ""),
@@ -104,7 +104,7 @@ class DesktopBridgeService:
                     else None
                 )
                 featured_image = str(payload.get("featured_image") or "").strip() or None
-                aggregate = self.role_service.update_role(
+                aggregate = await self.role_service.update_role_async(
                     str(payload.get("role_id") or ""),
                     name=payload.get("name"),
                     description=payload.get("description"),
@@ -171,7 +171,7 @@ class DesktopBridgeService:
                 )
             if method == "session.openByRole":
                 role_id = str(payload.get("role_id") or "").strip()
-                aggregate = self.role_service.open_role(role_id)
+                aggregate = await self.role_service.open_role_async(role_id)
                 session = aggregate.session
                 await self._emit_session_updated(
                     request_id=request_id,
@@ -187,7 +187,7 @@ class DesktopBridgeService:
                 )
             if method == "session.updateDisplayState":
                 role_id = str(payload.get("role_id") or "").strip()
-                aggregate = self.role_service.open_role(role_id)
+                aggregate = await self.role_service.open_role_async(role_id)
                 active_illustration = payload.get("active_illustration")
                 session = self.role_service.sessions.update_display_state(
                     aggregate.role,
@@ -208,7 +208,7 @@ class DesktopBridgeService:
                 content = str(payload.get("content") or "").strip()
                 if not content:
                     return self._error(request_id, method, "invalid_request", "content 不能为空")
-                aggregate = self.role_service.open_role(role_id)
+                aggregate = await self.role_service.open_role_async(role_id)
                 session = aggregate.session
                 session, events = await self._run_chat_turn(
                     request_id=request_id,
@@ -226,7 +226,7 @@ class DesktopBridgeService:
                 )
             if method == "chat.cancel":
                 role_id = str(payload.get("role_id") or "").strip()
-                aggregate = self.role_service.open_role(role_id)
+                aggregate = await self.role_service.open_role_async(role_id)
                 result = self.agent_loop.request_interrupt(
                     self.role_service.sessions.derive_session_key(aggregate.role.id),
                     sender="desktop",

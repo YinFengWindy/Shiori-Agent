@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import threading
 from dataclasses import dataclass
 from datetime import datetime
@@ -226,6 +227,7 @@ class RoleMemoryService:
         return root
 
     def seed_role_memory(self, role: RoleRecord) -> dict[str, Any]:
+        """同步初始化角色记忆，供非事件循环调用方使用。"""
         root = self.ensure_initialized(role)
         state = dict(role.memory_init_state or {})
         changed = False
@@ -239,6 +241,32 @@ class RoleMemoryService:
                 state["seed_self_ready"] = True
                 changed = True
 
+        return self._finalize_seed_state(role, root, state, changed)
+
+    async def seed_role_memory_async(self, role: RoleRecord) -> dict[str, Any]:
+        """异步初始化角色记忆，避免在运行中的事件循环里再次调用 asyncio.run。"""
+        root = self.ensure_initialized(role)
+        state = dict(role.memory_init_state or {})
+        changed = False
+
+        self_path = root / "SELF.md"
+        self_text = self_path.read_text(encoding="utf-8").strip() if self_path.exists() else ""
+        if not self_text and self._self_seed_generator is not None:
+            seeded_self = str(await self._generate_self_async(role) or "").strip()
+            if seeded_self:
+                self_path.write_text(seeded_self + "\n", encoding="utf-8")
+                state["seed_self_ready"] = True
+                changed = True
+
+        return self._finalize_seed_state(role, root, state, changed)
+
+    def _finalize_seed_state(
+        self,
+        role: RoleRecord,
+        root: Path,
+        state: dict[str, Any],
+        changed: bool,
+    ) -> dict[str, Any]:
         background = role.background.strip()
         previous_background = str(state.get("seed_background_value") or "").strip()
         if background and background != previous_background and not state.get("seed_self_ready"):
@@ -270,6 +298,15 @@ class RoleMemoryService:
         if changed:
             state["last_memory_initialized_at"] = _now_iso()
         return state
+
+    async def _generate_self_async(self, role: RoleRecord) -> str:
+        generator = self._self_seed_generator
+        if generator is None:
+            return ""
+        agenerate = getattr(generator, "agenerate", None)
+        if callable(agenerate):
+            return str(await agenerate(role) or "")
+        return str(await asyncio.to_thread(generator.generate, role) or "")
 
     def update_relationship_baseline(
         self,
@@ -565,9 +602,47 @@ class RoleAggregateService:
         session = self.sessions.open_by_role(role)
         return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
 
+    async def create_role_async(
+        self,
+        *,
+        role_id: str | None = None,
+        name: str,
+        system_prompt: str,
+        description: str = "",
+        background: str = "",
+        runtime_config: dict[str, Any] | None = None,
+        avatar_source: str | Path | None = None,
+        illustration_sources: list[str | Path] | None = None,
+    ) -> RoleAggregate:
+        """异步创建角色，供运行中事件循环内的入口调用。"""
+        role = self.repository.create_role(
+            name=name,
+            description=description,
+            system_prompt=system_prompt,
+            background=background,
+            runtime_config=runtime_config,
+            role_id=role_id,
+            avatar_source=avatar_source,
+            illustration_sources=illustration_sources,
+        )
+        memory_state = await self.memory.seed_role_memory_async(role)
+        if memory_state != role.memory_init_state:
+            role = self.repository.update_role(role.id, memory_init_state=memory_state)
+        session = self.sessions.open_by_role(role)
+        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+
     def update_role(self, role_id: str, **updates: Any) -> RoleAggregate:
         role = self.repository.update_role(role_id, **updates)
         memory_state = self.memory.seed_role_memory(role)
+        if memory_state != role.memory_init_state:
+            role = self.repository.update_role(role.id, memory_init_state=memory_state)
+        session = self.sessions.open_by_role(role)
+        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+
+    async def update_role_async(self, role_id: str, **updates: Any) -> RoleAggregate:
+        """异步更新角色，供运行中事件循环内的入口调用。"""
+        role = self.repository.update_role(role_id, **updates)
+        memory_state = await self.memory.seed_role_memory_async(role)
         if memory_state != role.memory_init_state:
             role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
@@ -582,6 +657,15 @@ class RoleAggregateService:
     def open_role(self, role_id: str) -> RoleAggregate:
         role = self.repository.get_required(role_id)
         memory_state = self.memory.seed_role_memory(role)
+        if memory_state != role.memory_init_state:
+            role = self.repository.update_role(role.id, memory_init_state=memory_state)
+        session = self.sessions.open_by_role(role)
+        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+
+    async def open_role_async(self, role_id: str) -> RoleAggregate:
+        """异步打开角色，供运行中事件循环内的入口调用。"""
+        role = self.repository.get_required(role_id)
+        memory_state = await self.memory.seed_role_memory_async(role)
         if memory_state != role.memory_init_state:
             role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
