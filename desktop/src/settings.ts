@@ -101,6 +101,8 @@ export type SettingsFormData = {
     novelaiDefaultModel: string;
     novelaiNsfwModel: string;
     novelaiNsfwEnabled: boolean;
+    novelaiAddQualityTags: boolean;
+    novelaiUndesiredContentPreset: number;
     novelaiAllowTxt2img: boolean;
     novelaiAllowImg2img: boolean;
     novelaiAutoWritebackRoleAssets: boolean;
@@ -385,6 +387,8 @@ function loadSettingsData(): SettingsSnapshot {
         novelaiDefaultModel: String(novelai.default_model ?? "nai-diffusion-4-5-curated"),
         novelaiNsfwModel: String(novelai.nsfw_model ?? "nai-diffusion-4-5-full"),
         novelaiNsfwEnabled: Boolean(novelai.nsfw_enabled),
+        novelaiAddQualityTags: Boolean(novelai.add_quality_tags),
+        novelaiUndesiredContentPreset: Number(novelai.undesired_content_preset ?? 0),
         novelaiAllowTxt2img: Boolean(novelai.allow_txt2img ?? true),
         novelaiAllowImg2img: Boolean(novelai.allow_img2img ?? true),
         novelaiAutoWritebackRoleAssets: Boolean(novelai.auto_writeback_role_assets),
@@ -607,6 +611,8 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `default_model = ${quote(formData.integrations.novelaiDefaultModel.trim() || "nai-diffusion-4-5-curated")}`,
     `nsfw_model = ${quote(formData.integrations.novelaiNsfwModel.trim() || "nai-diffusion-4-5-full")}`,
     `nsfw_enabled = ${formData.integrations.novelaiNsfwEnabled ? "true" : "false"}`,
+    `add_quality_tags = ${formData.integrations.novelaiAddQualityTags ? "true" : "false"}`,
+    `undesired_content_preset = ${formData.integrations.novelaiUndesiredContentPreset}`,
     `allow_txt2img = ${formData.integrations.novelaiAllowTxt2img ? "true" : "false"}`,
     `allow_img2img = ${formData.integrations.novelaiAllowImg2img ? "true" : "false"}`,
     `auto_writeback_role_assets = ${formData.integrations.novelaiAutoWritebackRoleAssets ? "true" : "false"}`,
@@ -648,6 +654,9 @@ function validateSettings(formData: SettingsFormData): void {
   }
   if (formData.integrations.novelaiMaxPixels <= 0) {
     throw new Error("NovelAI 最大总像素必须大于 0");
+  }
+  if (!Number.isInteger(formData.integrations.novelaiUndesiredContentPreset) || formData.integrations.novelaiUndesiredContentPreset < 0) {
+    throw new Error("NovelAI undesired content preset 必须是非负整数");
   }
   if (formData.memory.outputDimensionality.trim()) {
     const value = Number(formData.memory.outputDimensionality);

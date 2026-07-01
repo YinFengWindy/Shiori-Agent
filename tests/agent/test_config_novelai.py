@@ -24,6 +24,8 @@ base_url = "https://image.novelai.net"
 default_model = "nai-diffusion-4-5-curated"
 nsfw_model = "nai-diffusion-4-5-full"
 nsfw_enabled = true
+add_quality_tags = true
+undesired_content_preset = 2
 allow_txt2img = true
 allow_img2img = false
 auto_writeback_role_assets = true
@@ -42,6 +44,8 @@ default_samples = 1
     assert config.novelai.default_model == "nai-diffusion-4-5-curated"
     assert config.novelai.nsfw_model == "nai-diffusion-4-5-full"
     assert config.novelai.nsfw_enabled is True
+    assert config.novelai.add_quality_tags is True
+    assert config.novelai.undesired_content_preset == 2
     assert config.novelai.allow_txt2img is True
     assert config.novelai.allow_img2img is False
     assert config.novelai.auto_writeback_role_assets is True

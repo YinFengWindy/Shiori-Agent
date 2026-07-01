@@ -123,6 +123,8 @@ export type SettingsFormData = {
     novelaiDefaultModel: string;
     novelaiNsfwModel: string;
     novelaiNsfwEnabled: boolean;
+    novelaiAddQualityTags: boolean;
+    novelaiUndesiredContentPreset: number;
     novelaiAllowTxt2img: boolean;
     novelaiAllowImg2img: boolean;
     novelaiAutoWritebackRoleAssets: boolean;

@@ -23,6 +23,8 @@ class NovelAISettings:
     max_pixels: int = 1024 * 1024
     max_steps: int = 28
     default_samples: int = 1
+    add_quality_tags: bool = False
+    undesired_content_preset: int = 0
 
 
 @dataclass(frozen=True)

@@ -785,6 +785,21 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiNsfwModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwModel: event.target.value } }))} placeholder="NSFW 模型" />
                     <div className="grid gap-3 md:grid-cols-2">
                       <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
+                        <input type="checkbox" checked={draft.integrations.novelaiAddQualityTags} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAddQualityTags: event.target.checked } }))} />
+                        <span>Add Quality Tags</span>
+                      </label>
+                      <select
+                        className="h-12 w-full rounded-md border border-[#D8DCE2] bg-white px-3.5 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0"
+                        value={String(draft.integrations.novelaiUndesiredContentPreset)}
+                        onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiUndesiredContentPreset: parseNumber(event.target.value, current.integrations.novelaiUndesiredContentPreset) } }))}
+                      >
+                        <option value="0">Undesired Content Preset: None</option>
+                        <option value="1">Undesired Content Preset: Light</option>
+                        <option value="2">Undesired Content Preset: Heavy</option>
+                      </select>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
                         <input type="checkbox" checked={draft.integrations.novelaiAllowTxt2img} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowTxt2img: event.target.checked } }))} />
                         <span>允许文生图</span>
                       </label>

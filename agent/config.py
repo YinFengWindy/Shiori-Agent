@@ -328,6 +328,8 @@ def _load_novelai_config(data: dict) -> NovelAISettings:
         max_pixels=int(raw.get("max_pixels", defaults.max_pixels)),
         max_steps=int(raw.get("max_steps", defaults.max_steps)),
         default_samples=int(raw.get("default_samples", defaults.default_samples)),
+        add_quality_tags=bool(raw.get("add_quality_tags", defaults.add_quality_tags)),
+        undesired_content_preset=int(raw.get("undesired_content_preset", defaults.undesired_content_preset)),
     )
 
 

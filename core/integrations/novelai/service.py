@@ -254,8 +254,6 @@ class NovelAIService:
                     "params_version": 3,
                     "noise_schedule": "native",
                     "cfg_rescale": 0,
-                    "ucPreset": 0,
-                    "qualityToggle": False,
                     "dynamic_thresholding": False,
                     "characterPrompts": [],
                     "controlnet_strength": 1,
@@ -266,6 +264,8 @@ class NovelAIService:
                     "reference_strength_multiple": [],
                     "skip_cfg_above_sigma": None,
                     "use_coords": False,
+                    "qualityToggle": self._settings.add_quality_tags,
+                    "ucPreset": self._settings.undesired_content_preset,
                     "v4_prompt": {
                         "caption": {
                             "base_caption": request.prompt,

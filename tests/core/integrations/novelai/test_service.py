@@ -55,7 +55,12 @@ def _error_response(status_code: int) -> httpx.Response:
 
 @pytest.mark.asyncio
 async def test_service_persists_generated_image_and_metadata(tmp_path: Path) -> None:
-    settings = NovelAISettings(enabled=True, token="novel-token")
+    settings = NovelAISettings(
+        enabled=True,
+        token="novel-token",
+        add_quality_tags=True,
+        undesired_content_preset=2,
+    )
     service = NovelAIService(
         settings=settings,
         client=_FakeClient(_json_response(), settings),
@@ -85,6 +90,8 @@ async def test_service_persists_generated_image_and_metadata(tmp_path: Path) -> 
     request_payload = json.loads(Path(result.request_path).read_text(encoding="utf-8"))
     assert request_payload["model"] == "nai-diffusion-4-5-curated"
     assert request_payload["parameters"]["negative_prompt"] == "blurry"
+    assert request_payload["parameters"]["qualityToggle"] is True
+    assert request_payload["parameters"]["ucPreset"] == 2
     assert request_payload["parameters"]["v4_prompt"]["caption"]["base_caption"] == "a girl under moonlight"
 
 
