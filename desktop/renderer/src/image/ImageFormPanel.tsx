@@ -38,7 +38,7 @@ export function ImageFormPanel({
   onSubmit,
 }: ImageFormPanelProps) {
   return (
-    <section className="grid min-h-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-[#FBFCFE] p-5">
+    <section className="grid min-h-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-[#FBFCFE] p-5 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
       <div className="grid gap-1">
         <div className="text-sm font-semibold text-[#20242A]">生成参数</div>
         <div className="text-[12px] leading-5 text-[#7B7F87]">
@@ -54,7 +54,7 @@ export function ImageFormPanel({
             <button
               key={option.id}
               className={cx(
-                "rounded-md border px-3 py-2 text-sm transition",
+                "rounded-md border px-3 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-primary/20",
                 form.mode === option.id
                   ? "border-[#272536] bg-[#272536] text-white"
                   : "border-[#D8DCE2] bg-white text-[#32363C] hover:border-[#9AA3B2]",
@@ -93,7 +93,7 @@ export function ImageFormPanel({
             <button
               key={option.id}
               className={cx(
-                "rounded-md border px-3 py-2 text-sm transition",
+                "rounded-md border px-3 py-2 text-sm transition focus:outline-none focus:ring-2 focus:ring-primary/20",
                 form.sizePreset === option.id
                   ? "border-[#272536] bg-[#272536] text-white"
                   : "border-[#D8DCE2] bg-white text-[#32363C] hover:border-[#9AA3B2]",
@@ -169,7 +169,7 @@ export function ImageFormPanel({
       ) : null}
 
       <button
-        className="rounded-md bg-[#1F1F1F] px-4 py-3 text-sm text-white transition hover:bg-[#2A2A2A] disabled:cursor-default disabled:opacity-40"
+        className="rounded-md bg-[#1F1F1F] px-4 py-3 text-sm text-white transition hover:bg-[#2A2A2A] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-default disabled:opacity-40"
         type="button"
         disabled={!bridgeReady || submitting || Boolean(validationError)}
         onClick={onSubmit}

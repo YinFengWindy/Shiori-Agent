@@ -14,8 +14,11 @@ export function ImageHistoryPanel({
   onSelect,
 }: ImageHistoryPanelProps) {
   return (
-    <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 rounded-[24px] border border-[#E4EAF0] bg-[#FBFCFE] p-4">
-      <div className="text-sm font-semibold text-[#20242A]">历史</div>
+    <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 rounded-[28px] border border-[#E4EAF0] bg-[#FBFCFE] p-4 shadow-[0_18px_38px_rgba(15,23,42,0.08)]">
+      <div className="grid gap-1">
+        <div className="text-sm font-semibold text-[#20242A]">历史记录</div>
+        <div className="text-[12px] leading-5 text-[#7B7F87]">最近生成的图片会显示在这里</div>
+      </div>
       <div className="scrollbar-soft grid min-h-0 content-start gap-2 overflow-y-auto pr-1">
         {items.length ? items.map((item) => {
           const previewPath = item.output_paths[0] ?? "";
@@ -24,7 +27,7 @@ export function ImageHistoryPanel({
             <button
               key={item.id}
               className={cx(
-                "grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-[18px] border p-2 text-left transition",
+                "grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-[18px] border p-2 text-left transition focus:outline-none focus:ring-2 focus:ring-primary/20",
                 selected ? "border-[#272536] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)]" : "border-[#E4EAF0] bg-white/80 hover:border-[#9AA3B2]",
               )}
               type="button"

@@ -30,8 +30,8 @@ export function ImagePreviewPanel({
   const previewPath = activeRecord?.output_paths[0] ?? latestResult?.output_paths[0] ?? "";
 
   return (
-    <section className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-4 rounded-[24px] border border-[#E4EAF0] bg-white p-5">
-      <div className="grid min-h-[420px] place-items-center overflow-hidden rounded-[20px] bg-[#F6F8FB]">
+    <section className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-5 rounded-[28px] border border-[#E7EAF0] bg-[rgba(255,255,255,0.88)] p-6 shadow-[0_18px_40px_rgba(15,23,42,0.06)] backdrop-blur-[8px]">
+      <div className="grid min-h-[420px] place-items-center overflow-hidden rounded-[24px] border border-[#EEF2F6] bg-[radial-gradient(circle_at_top,rgba(247,249,252,0.96),rgba(241,245,249,0.96))]">
         {previewPath ? (
           <img className="max-h-full w-full object-contain" src={toFileUrl(previewPath)} alt="generated result" />
         ) : generating ? (
@@ -48,7 +48,7 @@ export function ImagePreviewPanel({
           </div>
         ) : null}
         {requestSummary ? (
-          <div className="grid gap-2 rounded-[18px] border border-[#E7EAF0] bg-[#FBFCFE] px-4 py-3 text-[12px] leading-5 text-[#5B616A] md:grid-cols-2">
+          <div className="grid gap-2 rounded-[20px] border border-[#E7EAF0] bg-[#FBFCFE] px-4 py-3 text-[12px] leading-5 text-[#5B616A] md:grid-cols-2">
             <div>{`mode: ${requestSummary.mode}`}</div>
             <div>{`size: ${requestSummary.width} × ${requestSummary.height}`}</div>
             <div>{`steps: ${requestSummary.steps}`}</div>

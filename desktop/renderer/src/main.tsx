@@ -9,6 +9,8 @@ import { RoleCreatePage } from "./roles/RoleCreatePage";
 import { RoleDetailPage } from "./roles/RoleDetailPage";
 import { RoleManagementPage } from "./roles/RoleManagementPage";
 import { ImageStudioPage } from "./image/ImageStudioPage";
+import { ImageStudioSidebar, type ImageStudioSidebarSectionId } from "./image/ImageStudioSidebar";
+import { useImageStudioState } from "./image/useImageStudioState";
 import { reconcileRoles } from "./roles/roleListState";
 import { RoleSearchDialog } from "./roles/RoleSearchDialog";
 import { RoleSidebar } from "./roles/RoleSidebar";
@@ -166,6 +168,7 @@ function App(): React.ReactElement {
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
   const [settingsConfigPath, setSettingsConfigPath] = useState("");
   const [settingsDirty, setSettingsDirty] = useState(false);
+  const [imageHistoryDrawerOpen, setImageHistoryDrawerOpen] = useState(true);
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
@@ -207,14 +210,20 @@ function App(): React.ReactElement {
     || mainView.kind === "role-create"
     || mainView.kind === "role-detail"
     || mainView.kind === "role-assets";
+  const imageStudioViewActive = mainView.kind === "image-studio";
   const roleWorkspaceSection: RoleWorkspaceSectionId =
     mainView.kind === "role-create"
       ? "role-create"
       : mainView.kind === "role-assets"
         ? "role-assets"
-      : mainView.kind === "role-detail"
+        : mainView.kind === "role-detail"
         ? "role-detail"
         : "roles-list";
+  const imageStudioSection: ImageStudioSidebarSectionId = "generate";
+  const imageStudioState = useImageStudioState({
+    active: imageStudioViewActive,
+    activeRole: roles.find((role) => role.id === activeRoleId) ?? null,
+  });
 
   function buildNavigationEntry(
     view: AppMainView,
@@ -344,6 +353,7 @@ function App(): React.ReactElement {
     const nextView: AppMainView = { kind: "image-studio" };
     setSidebarAnimating(true);
     setSidebarCollapsed(false);
+    setImageHistoryDrawerOpen(true);
     setMainView(nextView);
     if (options?.recordHistory !== false) {
       pushNavigationEntry(buildNavigationEntry(nextView));
@@ -1426,6 +1436,24 @@ function App(): React.ReactElement {
               onBeginResize={beginSidebarResize}
               search={settingsSearch}
             />
+          ) : imageStudioViewActive ? (
+            <ImageStudioSidebar
+              activeRole={roles.find((role) => role.id === activeRoleId) ?? null}
+              activeSection={imageStudioSection}
+              autoWritebackRoleAssets={imageStudioState.autoWritebackRoleAssets}
+              bridgeReady={bridgeReady}
+              animating={sidebarAnimating && !resizingSidebar}
+              collapsed={sidebarCollapsed}
+              width={sidebarWidth}
+              form={imageStudioState.form}
+              submitting={imageStudioState.submitting}
+              validationError={imageStudioState.validationError}
+              onBackToChat={() => openChatView()}
+              onBeginResize={beginSidebarResize}
+              onChange={imageStudioState.onChange}
+              onPickBaseImage={imageStudioState.onPickBaseImage}
+              onSubmit={imageStudioState.onSubmit}
+            />
           ) : roleWorkspaceViewActive ? (
             <RoleWorkspaceSidebar
               activeSection={roleWorkspaceSection}
@@ -1493,7 +1521,16 @@ function App(): React.ReactElement {
           {mainView.kind === "image-studio" ? (
             <ImageStudioPage
               activeRole={activeRole}
-              bridgeReady={bridgeReady}
+              activeRecord={imageStudioState.activeRecord}
+              error={imageStudioState.error}
+              generating={imageStudioState.submitting}
+              history={imageStudioState.history}
+              latestResult={imageStudioState.latestResult}
+              requestSummary={imageStudioState.requestSummary}
+              selectedRecordId={imageStudioState.selectedRecordId}
+              historyDrawerOpen={imageHistoryDrawerOpen}
+              onSelectRecord={imageStudioState.onSelectRecord}
+              onToggleHistoryDrawer={() => setImageHistoryDrawerOpen((current) => !current)}
             />
           ) : null}
           {mainView.kind === "roles-list" ? (
