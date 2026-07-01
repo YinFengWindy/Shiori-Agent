@@ -14,7 +14,7 @@ export function ImageHistoryPanel({
   onSelect,
 }: ImageHistoryPanelProps) {
   return (
-    <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+    <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <div className="flex items-center justify-between px-1 pt-1">
         <div className="text-sm font-medium text-[#20242A]">History</div>
       </div>
@@ -44,22 +44,6 @@ export function ImageHistoryPanel({
             暂无绘图记录
           </div>
         )}
-      </div>
-      <div className="grid gap-2 pt-2">
-        <button
-          className="rounded-md bg-white px-3 py-2 text-[12px] text-[#B7BEC8] transition disabled:cursor-default"
-          type="button"
-          disabled
-        >
-          下载全部
-        </button>
-        <button
-          className="rounded-md bg-white px-3 py-2 text-[12px] text-[#B7BEC8] transition disabled:cursor-default"
-          type="button"
-          disabled
-        >
-          清空历史
-        </button>
       </div>
     </section>
   );

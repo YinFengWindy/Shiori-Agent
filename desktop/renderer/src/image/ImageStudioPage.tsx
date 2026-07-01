@@ -39,6 +39,8 @@ export function ImageStudioPage({
   onToggleHistoryDrawer,
 }: ImageStudioPageProps) {
   const [historyDrawerMounted, setHistoryDrawerMounted] = useState(historyDrawerOpen);
+  const historyToggleGlyphClass =
+    "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 
   useEffect(() => {
     if (historyDrawerOpen) {
@@ -65,23 +67,31 @@ export function ImageStudioPage({
         </div>
         <div
           className={cx(
-            "relative h-full border-l border-[#E0E6EE] bg-[rgba(244,247,251,0.92)] transition-[width] duration-300 ease-out",
-            historyDrawerOpen ? "w-[126px]" : "w-[56px]",
+            "relative h-full bg-[rgba(244,247,251,0.92)] transition-[width] duration-300 ease-out",
+            historyDrawerOpen ? "w-[126px]" : "w-[36px]",
           )}
         >
           <button
-            className="absolute right-3 top-3 z-[2] flex h-8 w-8 items-center justify-center rounded-md text-[#8A9099] transition hover:bg-white/70 hover:text-[#5B616A] focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="absolute left-1 top-3 z-[3] m-0 grid h-6 w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-[#747474] transition hover:bg-black/5 hover:text-[#4B4B4B] focus:outline-none"
             type="button"
             aria-label={historyDrawerOpen ? "收起历史抽屉" : "展开历史抽屉"}
+            aria-expanded={historyDrawerOpen}
             onClick={onToggleHistoryDrawer}
           >
-            <span className={cx("text-lg leading-none transition-transform duration-300", historyDrawerOpen ? "" : "rotate-180")}>›</span>
+            <span
+              className={cx(
+                historyToggleGlyphClass,
+                historyDrawerOpen
+                  ? "before:bottom-0 before:right-[3.3px] before:top-0"
+                  : "before:bottom-[2.2px] before:right-[0.8px] before:top-[2.2px]",
+              )}
+            />
           </button>
           {historyDrawerMounted ? (
             <div
               className={cx(
-                "h-full min-h-0 px-2 pb-3 pt-3 transition-[opacity,transform] duration-200",
-                historyDrawerOpen ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-8 opacity-0",
+                "h-full min-h-0 pb-3 pt-3 transition-[opacity,transform] duration-200",
+                historyDrawerOpen ? "translate-x-0 pl-8 pr-2 opacity-100" : "pointer-events-none translate-x-8 pl-0 pr-0 opacity-0",
               )}
             >
               <ImageHistoryPanel
