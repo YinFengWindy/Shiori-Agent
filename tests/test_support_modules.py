@@ -660,7 +660,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert "## Active Role: Mira" in role_prompt
     assert "你现在要用更温柔的风格说话。" in role_prompt
     assert "你是一个用户创建的角色" in role_prompt
-    assert "Akashic 是你的内部底座名" in role_prompt
+    assert "Akashic 是用户的一位朋友" in role_prompt
+    assert "不要把他解释成你的内部底座" in role_prompt
     assert "tool_search" in role_prompt
 
     role_prompt_cross_channel = builder.render(
