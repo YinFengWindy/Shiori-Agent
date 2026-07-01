@@ -24,10 +24,14 @@ export function ImagePreviewPanel({
   const previewPath = activeRecord?.output_paths[0] ?? latestResult?.output_paths[0] ?? "";
 
   return (
-    <section className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3 rounded-[22px] border border-[#E7EAF0] bg-[rgba(255,255,255,0.96)] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
-      <div className="grid min-h-[420px] place-items-center overflow-hidden rounded-[18px] bg-white">
+    <section className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
+      <div className="grid min-h-[420px] min-w-0 place-items-center overflow-auto bg-white">
         {previewPath ? (
-          <img className="max-h-full w-full object-contain" src={toFileUrl(previewPath)} alt="generated result" />
+          <img
+            className="block max-h-full max-w-full object-contain"
+            src={toFileUrl(previewPath)}
+            alt="generated result"
+          />
         ) : generating ? (
           <div className="text-sm text-[#6B7280]">生成中...</div>
         ) : (
