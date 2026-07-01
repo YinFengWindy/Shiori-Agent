@@ -9,7 +9,7 @@ import { RoleCreatePage } from "./roles/RoleCreatePage";
 import { RoleDetailPage } from "./roles/RoleDetailPage";
 import { RoleManagementPage } from "./roles/RoleManagementPage";
 import { ImageStudioPage } from "./image/ImageStudioPage";
-import { ImageStudioSidebar, type ImageStudioSidebarSectionId } from "./image/ImageStudioSidebar";
+import { ImageStudioSidebar } from "./image/ImageStudioSidebar";
 import { useImageStudioState } from "./image/useImageStudioState";
 import { reconcileRoles } from "./roles/roleListState";
 import { RoleSearchDialog } from "./roles/RoleSearchDialog";
@@ -219,7 +219,6 @@ function App(): React.ReactElement {
         : mainView.kind === "role-detail"
         ? "role-detail"
         : "roles-list";
-  const imageStudioSection: ImageStudioSidebarSectionId = "generate";
   const imageStudioState = useImageStudioState({
     active: imageStudioViewActive,
     activeRole: roles.find((role) => role.id === activeRoleId) ?? null,
@@ -1438,8 +1437,6 @@ function App(): React.ReactElement {
             />
           ) : imageStudioViewActive ? (
             <ImageStudioSidebar
-              activeRole={roles.find((role) => role.id === activeRoleId) ?? null}
-              activeSection={imageStudioSection}
               autoWritebackRoleAssets={imageStudioState.autoWritebackRoleAssets}
               bridgeReady={bridgeReady}
               animating={sidebarAnimating && !resizingSidebar}
@@ -1520,7 +1517,6 @@ function App(): React.ReactElement {
           ) : null}
           {mainView.kind === "image-studio" ? (
             <ImageStudioPage
-              activeRole={activeRole}
               activeRecord={imageStudioState.activeRecord}
               error={imageStudioState.error}
               generating={imageStudioState.submitting}

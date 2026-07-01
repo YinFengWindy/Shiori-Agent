@@ -1,14 +1,11 @@
 import type React from "react";
 import { ImageFormPanel } from "./ImageFormPanel";
 import type { ImageStudioFormState } from "./types";
-import type { RoleRecord } from "../shared/types";
 import { cx } from "../shared/styles";
 
 export type ImageStudioSidebarSectionId = "generate";
 
 type ImageStudioSidebarProps = {
-  activeRole: RoleRecord | null;
-  activeSection: ImageStudioSidebarSectionId;
   autoWritebackRoleAssets: boolean;
   bridgeReady: boolean;
   collapsed: boolean;
@@ -26,8 +23,6 @@ type ImageStudioSidebarProps = {
 
 /** Renders the image studio workspace sidebar with generation parameters. */
 export function ImageStudioSidebar({
-  activeRole,
-  activeSection,
   autoWritebackRoleAssets,
   bridgeReady,
   collapsed,
@@ -64,17 +59,9 @@ export function ImageStudioSidebar({
         <span className="text-base leading-none">←</span>
         <span>返回应用</span>
       </button>
-      <div className="mb-3 px-2">
-        <div className="rounded-2xl border border-[#D9E0E8] bg-white/75 px-4 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
-          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#8A9099]">Image Studio</div>
-          <div className="mt-1 text-sm font-semibold text-[#20242A]">
-            {activeSection === "generate" ? "生成参数" : "生图工作台"}
-          </div>
-        </div>
-      </div>
       <div className="scrollbar-soft min-h-0 overflow-y-auto px-2 pb-1">
         <ImageFormPanel
-          activeRole={activeRole}
+          activeRole={null}
           autoWritebackRoleAssets={autoWritebackRoleAssets}
           bridgeReady={bridgeReady}
           form={form}
