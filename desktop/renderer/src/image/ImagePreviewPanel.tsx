@@ -25,17 +25,19 @@ export function ImagePreviewPanel({
 
   return (
     <section className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
-      <div className="grid min-h-[420px] min-w-0 place-items-center overflow-hidden bg-white">
+      <div className="min-h-0 min-w-0 overflow-hidden bg-white">
         {previewPath ? (
-          <img
-            className="block max-h-full max-w-full object-contain"
-            src={toFileUrl(previewPath)}
-            alt="generated result"
-          />
+          <div className="grid h-full min-h-[420px] w-full min-w-0 place-items-center overflow-hidden">
+            <img
+              className="block h-full w-full min-h-0 min-w-0 object-contain"
+              src={toFileUrl(previewPath)}
+              alt="generated result"
+            />
+          </div>
         ) : generating ? (
-          <div className="text-sm text-[#6B7280]">生成中...</div>
+          <div className="grid h-full min-h-[420px] place-items-center text-sm text-[#6B7280]">生成中...</div>
         ) : (
-          <div className="text-sm text-[#6B7280]">等待生成</div>
+          <div className="grid h-full min-h-[420px] place-items-center text-sm text-[#6B7280]">等待生成</div>
         )}
       </div>
 
