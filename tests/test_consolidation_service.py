@@ -112,6 +112,76 @@ def test_consolidation_service_archive_all_and_profile_extract():
     assert session.last_consolidated == 0
 
 
+def test_consolidation_service_abstracts_nsfw_memory_conversation():
+    captured_prompts: list[str] = []
+    memory = SimpleNamespace(
+        read_long_term=MagicMock(return_value="MEM"),
+        read_history=MagicMock(return_value=""),
+        read_recent_context=MagicMock(return_value=""),
+        write_recent_context=MagicMock(),
+        append_history_once=MagicMock(return_value=True),
+        append_pending_once=MagicMock(return_value=True),
+        append_journal=MagicMock(),
+        save_from_consolidation=AsyncMock(),
+        save_item=AsyncMock(return_value="new:profile-1"),
+        save_item_with_supersede=AsyncMock(return_value="new:profile-1"),
+    )
+
+    async def _chat_side_effect(**kwargs):
+        text = _message_text(kwargs)
+        captured_prompts.append(text)
+        if "近期语境压缩代理" in text:
+            return _Resp(
+                '{"active_topics":["关系明显升温"],"user_preferences":["偏好更黏连、被回应的亲密相处"],"follow_ups":[],"avoidances":[]}'
+            )
+        return _Resp(
+            '{"history_entries":[{"summary":"[2026-07-01 23:16] 用户与角色的亲密关系继续升温","emotional_weight":7}],"pending_items":[]}'
+        )
+
+    provider = SimpleNamespace(chat=AsyncMock(side_effect=_chat_side_effect))
+    service = ConsolidationWorker(
+        profile_maint=cast(Any, memory),
+        provider=cast(Any, provider),
+        model="m",
+        keep_count=4,
+    )
+    session = SimpleNamespace(
+        key="role:mira",
+        metadata={
+            "role_id": "mira",
+            "role_runtime_config": {"nsfw_memory_enabled": True},
+        },
+        messages=[
+            {
+                "role": "user",
+                "content": "（用手抚摸你的脸，亲你，并将凶器塞入你的子宫）我爱你（这里来张NSFW图）",
+                "timestamp": "2026-07-01T23:16:51",
+            },
+            {
+                "role": "assistant",
+                "content": "……我也……爱你……抱紧我……别放开……",
+                "timestamp": "2026-07-01T23:16:52",
+            },
+        ],
+        last_consolidated=0,
+        _channel="desktop",
+        _chat_id="role:mira",
+    )
+
+    draft = _prepare(service, session, archive_all=True)
+
+    assert draft is not None
+    event_prompt = next(
+        prompt for prompt in captured_prompts if "记忆提取代理" in prompt
+    )
+    assert "主动推进更高强度的亲密互动" in event_prompt
+    assert "表达爱意与依恋" in event_prompt
+    assert "请求亲密场景配图" in event_prompt
+    assert "表现出害羞、依赖与占有欲倾向" in event_prompt
+    assert "子宫" not in event_prompt
+    assert "NSFW图" not in event_prompt
+
+
 def test_consolidation_service_uses_profile_maint_for_reads():
     memory_port = SimpleNamespace(
         save_from_consolidation=AsyncMock(),

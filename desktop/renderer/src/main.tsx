@@ -101,6 +101,7 @@ function createEmptyRoleForm(): RoleFormState {
     name: "",
     description: "",
     systemPrompt: "",
+    nsfwMemoryEnabled: false,
     avatarSource: "",
     illustrationSources: [],
     removedIllustrations: [],
@@ -125,6 +126,7 @@ function createPendingRoleRecord(
     name: form.name.trim() || "新角色",
     description: form.description,
     system_prompt: form.systemPrompt,
+    runtime_config: {},
     avatar: null,
     avatar_abs: null,
     featured_image: null,
@@ -489,6 +491,7 @@ function App(): React.ReactElement {
       name: role.name,
       description: role.description,
       systemPrompt: role.system_prompt,
+      nsfwMemoryEnabled: Boolean(role.runtime_config?.nsfw_memory_enabled),
       avatarSource: "",
       illustrationSources: [],
       removedIllustrations: [],
@@ -1134,6 +1137,10 @@ function App(): React.ReactElement {
         name: nextRoleForm.name,
         description: nextRoleForm.description,
         system_prompt: nextRoleForm.systemPrompt,
+        runtime_config: {
+          ...(detailRole?.runtime_config ?? {}),
+          nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
+        },
         avatar_source: nextRoleForm.avatarSource || undefined,
         illustration_sources: nextRoleForm.illustrationSources,
         removed_illustrations: nextRoleForm.removedIllustrations,
@@ -1412,6 +1419,7 @@ function App(): React.ReactElement {
         roleForm.name !== detailRole.name
         || roleForm.description !== detailRole.description
         || roleForm.systemPrompt !== detailRole.system_prompt
+        || roleForm.nsfwMemoryEnabled !== Boolean(detailRole.runtime_config?.nsfw_memory_enabled)
         || Boolean(roleForm.avatarSource)
         || roleForm.illustrationSources.length > 0
         || roleForm.removedIllustrations.length > 0
@@ -1484,6 +1492,7 @@ function App(): React.ReactElement {
       name: detailRole.name,
       description: detailRole.description,
       systemPrompt: detailRole.system_prompt,
+      nsfwMemoryEnabled: Boolean(detailRole.runtime_config?.nsfw_memory_enabled),
       avatarSource: "",
       illustrationSources: [],
       removedIllustrations: [],

@@ -71,6 +71,27 @@ def test_role_store_updates_and_deletes_role(tmp_path: Path):
     assert store.get_role("mira") is None
 
 
+def test_role_store_persists_runtime_config_updates(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    role = store.create_role(
+        name="Mira",
+        description="assistant role",
+        system_prompt="you are mira",
+        role_id="mira",
+        runtime_config={"nsfw_memory_enabled": False},
+    )
+
+    updated = store.update_role(
+        role.id,
+        runtime_config={"nsfw_memory_enabled": True},
+    )
+
+    assert updated.runtime_config["nsfw_memory_enabled"] is True
+    reloaded = store.get_role("mira")
+    assert reloaded is not None
+    assert reloaded.runtime_config["nsfw_memory_enabled"] is True
+
+
 def test_role_store_delete_role_removes_role_runtime_directory(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,

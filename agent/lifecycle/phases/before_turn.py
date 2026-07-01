@@ -48,6 +48,16 @@ _EXTRA_HINT_PREFIX = "session:extra_hint:"
 _ABORT_REPLY_SLOT = "session:abort_reply"
 
 
+def _is_nsfw_memory_enabled_session(session: object) -> bool:
+    metadata = getattr(session, "metadata", None)
+    if not isinstance(metadata, dict):
+        return False
+    runtime_config = metadata.get("role_runtime_config")
+    if not isinstance(runtime_config, dict):
+        return False
+    return bool(runtime_config.get("nsfw_memory_enabled"))
+
+
 class _AcquireSessionModule:
     slot = "before_turn.acquire_session"
     requires: tuple[str, ...] = ()
@@ -129,8 +139,24 @@ class _MemoryContextGuardModule:
                     pending,
                     self._threshold,
                 )
+                if _is_nsfw_memory_enabled_session(session):
+                    logger.warning(
+                        "memory context guard degraded to hot-window mode after consolidation exception: session=%s pending=%d threshold=%d",
+                        state.session_key,
+                        pending,
+                        self._threshold,
+                    )
+                    return frame
             else:
                 if triggered:
+                    return frame
+                if _is_nsfw_memory_enabled_session(session):
+                    logger.warning(
+                        "memory context guard degraded to hot-window mode after consolidation failure: session=%s pending=%d threshold=%d",
+                        state.session_key,
+                        pending,
+                        self._threshold,
+                    )
                     return frame
 
         logger.error(

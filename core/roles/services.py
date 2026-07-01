@@ -165,6 +165,7 @@ class RoleSessionService:
             role.id,
             role_name=role.name,
             role_prompt=role.system_prompt,
+            role_runtime_config=role.runtime_config,
             valid_illustrations=list(role.illustrations),
         )
 

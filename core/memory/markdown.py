@@ -203,18 +203,130 @@ def _build_entry_source_ref(base_source_ref: str, entry: str) -> str:
     return f"{base_source_ref}#h:{digest}"
 
 
-def _format_conversation_for_consolidation(old_messages: list[dict]) -> str:
+_NSFW_MEMORY_EXPLICIT_RE = re.compile(
+    r"(做爱|性爱|性行为|插入|抽插|高潮|射精|口交|乳交|内射|子宫|阴道|阴茎|肉棒|龟头|私处|下体)",
+    re.I,
+)
+_NSFW_MEMORY_AFFECTION_RE = re.compile(
+    r"(亲吻|接吻|亲你|抱住|拥抱|搂住|抚摸|摸你的|贴着|依偎|窝进)",
+    re.I,
+)
+_NSFW_MEMORY_LOVE_RE = re.compile(r"(爱你|喜欢你|想你|老婆|老公)", re.I)
+_NSFW_MEMORY_IMAGE_RE = re.compile(r"(NSFW|实景图|来张图|配图|图片|照片)", re.I)
+_NSFW_MEMORY_DEPENDENCY_RE = re.compile(
+    r"(抱紧我|别放开|别离开|依赖|离不开|吃醋|占有欲)",
+    re.I,
+)
+_NSFW_MEMORY_SHY_RE = re.compile(r"(害羞|脸红|耳尖|轻哼|别误会|嘴硬)", re.I)
+
+
+def _session_role_runtime_config(session: object) -> dict[str, Any]:
+    metadata = getattr(session, "metadata", None)
+    if not isinstance(metadata, dict):
+        return {}
+    config = metadata.get("role_runtime_config")
+    return config if isinstance(config, dict) else {}
+
+
+def _is_nsfw_memory_enabled_session(session: object) -> bool:
+    return bool(_session_role_runtime_config(session).get("nsfw_memory_enabled"))
+
+
+def _dedupe_semantic_items(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in items:
+        clean = str(item or "").strip()
+        if not clean or clean in seen:
+            continue
+        seen.add(clean)
+        ordered.append(clean)
+    return ordered
+
+
+def _abstract_nsfw_memory_content(role: str, content: str) -> str:
+    text = str(content or "").strip()
+    if not text:
+        return ""
+    explicit = bool(_NSFW_MEMORY_EXPLICIT_RE.search(text))
+    affection = bool(_NSFW_MEMORY_AFFECTION_RE.search(text))
+    romantic = bool(_NSFW_MEMORY_LOVE_RE.search(text))
+    dependency = bool(_NSFW_MEMORY_DEPENDENCY_RE.search(text))
+    shy = bool(_NSFW_MEMORY_SHY_RE.search(text))
+    lowered = text.lower()
+    image_request = bool(_NSFW_MEMORY_IMAGE_RE.search(text)) and (
+        explicit or affection or romantic or "nsfw" in lowered or "实景" in text
+    )
+    if not any((explicit, affection, romantic, dependency, shy, image_request)):
+        return text
+
+    summary: list[str] = []
+    if role == "user":
+        if romantic:
+            summary.append("表达爱意与依恋")
+        if explicit:
+            summary.append("主动推进更高强度的亲密互动")
+        elif affection:
+            summary.append("寻求身体上的亲近与安抚")
+        if image_request:
+            summary.append("请求亲密场景配图")
+        if dependency:
+            summary.append("偏好更黏连、被回应的亲密相处")
+        if not summary:
+            summary.append("描述了亲密互动相关需求")
+        return "；".join(_dedupe_semantic_items(summary))
+
+    if romantic:
+        summary.append("表达爱意与依恋")
+    if explicit:
+        summary.append("接受并回应亲密互动")
+    elif affection:
+        summary.append("回应身体上的亲近与安抚")
+    if dependency or shy:
+        summary.append("表现出害羞、依赖与占有欲倾向")
+    if not summary:
+        summary.append("回应了亲密互动")
+    return "；".join(_dedupe_semantic_items(summary))
+
+
+def _normalize_memory_content(
+    message: dict,
+    *,
+    nsfw_memory_enabled: bool,
+) -> str:
+    content = str(message.get("content") or "").strip()
+    if not content:
+        return ""
+    if not nsfw_memory_enabled:
+        return content
+    role = str(message.get("role") or "").lower()
+    if role not in {"user", "assistant"}:
+        return content
+    return _abstract_nsfw_memory_content(role, content)
+
+
+def _format_conversation_for_consolidation(
+    old_messages: list[dict],
+    *,
+    nsfw_memory_enabled: bool = False,
+) -> str:
     lines = []
     for message in old_messages:
         if _is_context_frame_message(message):
             continue
-        if not message.get("content") or message.get("role") == "tool":
+        if message.get("role") == "tool":
             continue
         if message.get("role") == "assistant" and message.get("proactive"):
             continue
+        content = _normalize_memory_content(
+            message,
+            nsfw_memory_enabled=nsfw_memory_enabled,
+        )
+        if not content:
+            continue
         role = str(message.get("role", "")).upper()
         ts = str(message.get("timestamp", "?"))[:16]
-        lines.append(f"[{ts}] {role}: {message['content']}")
+        lines.append(f"[{ts}] {role}: {content}")
     return "\n".join(lines)
 
 
@@ -316,12 +428,19 @@ def _is_memory_maintenance_assistant_message(message: dict) -> bool:
     return "memorize" in {str(item).strip() for item in tools_used if str(item).strip()}
 
 
-def _format_recent_context_messages(messages: list[dict]) -> str:
+def _format_recent_context_messages(
+    messages: list[dict],
+    *,
+    nsfw_memory_enabled: bool = False,
+) -> str:
     lines = []
     for message in messages:
         if _is_context_frame_message(message):
             continue
-        content = str(message.get("content") or "").strip()
+        content = _normalize_memory_content(
+            message,
+            nsfw_memory_enabled=nsfw_memory_enabled,
+        )
         role = str(message.get("role") or "").lower()
         if not content or role not in {"user", "assistant"}:
             continue
@@ -359,12 +478,19 @@ def _replace_recent_turns_block(existing_text: str, recent_turns: str) -> str:
     )
 
 
-def _format_conversation_for_recent_context(messages: list[dict]) -> str:
+def _format_conversation_for_recent_context(
+    messages: list[dict],
+    *,
+    nsfw_memory_enabled: bool = False,
+) -> str:
     lines = []
     for message in messages:
         if _is_context_frame_message(message):
             continue
-        content = str(message.get("content") or "").strip()
+        content = _normalize_memory_content(
+            message,
+            nsfw_memory_enabled=nsfw_memory_enabled,
+        )
         role = str(message.get("role") or "").upper()
         if not content or role not in {"USER", "ASSISTANT"}:
             continue
@@ -624,6 +750,7 @@ ongoing_threads 严格限制：
         profile_maint,
         window: _ConsolidationWindow | None,
         archive_all: bool,
+        nsfw_memory_enabled: bool = False,
     ) -> str | _ConsolidationFailure:
         tail = list(session.messages[-self._keep_count :]) if self._keep_count > 0 else []
         recent_count = min(len(tail), _recent_turn_count(self._keep_count))
@@ -636,14 +763,23 @@ ongoing_threads 严格限制：
             compact_source = list(window.old_messages) if window is not None else []
         compression_until = _message_time(compact_source[-1]) if compact_source else ""
         recent_turns = tail[-recent_count:] if recent_count > 0 else []
-        rendered_recent_turns = _format_recent_context_messages(recent_turns)
-        recent_turns_for_prompt = _format_conversation_for_recent_context(recent_turns)
+        rendered_recent_turns = _format_recent_context_messages(
+            recent_turns,
+            nsfw_memory_enabled=nsfw_memory_enabled,
+        )
+        recent_turns_for_prompt = _format_conversation_for_recent_context(
+            recent_turns,
+            nsfw_memory_enabled=nsfw_memory_enabled,
+        )
         old_recent_context = ""
         if hasattr(profile_maint, "read_recent_context"):
             old_recent_context = str(
                 await asyncio.to_thread(profile_maint.read_recent_context) or ""
             )
-        conversation = _format_conversation_for_recent_context(compact_source)
+        conversation = _format_conversation_for_recent_context(
+            compact_source,
+            nsfw_memory_enabled=nsfw_memory_enabled,
+        )
         compression: dict[str, list[str]] | None = None
         if conversation:
             prompt = self._build_recent_context_prompt(
@@ -723,7 +859,10 @@ ongoing_threads 严格限制：
         tail = list(session.messages[-self._keep_count :]) if self._keep_count > 0 else []
         recent_count = min(len(tail), _recent_turn_count(self._keep_count))
         recent_turns = tail[-recent_count:] if recent_count > 0 else []
-        rendered_recent_turns = _format_recent_context_messages(recent_turns)
+        rendered_recent_turns = _format_recent_context_messages(
+            recent_turns,
+            nsfw_memory_enabled=_is_nsfw_memory_enabled_session(session),
+        )
         existing_text = ""
         if hasattr(profile, "read_recent_context"):
             existing_text = str(await asyncio.to_thread(profile.read_recent_context) or "")
@@ -786,8 +925,12 @@ ongoing_threads 严格限制：
             return
 
         # 2. 把窗口消息格式化成一段对话文本，并准备好 source_ref / 现有长期记忆 / 最近 history。
+        nsfw_memory_enabled = _is_nsfw_memory_enabled_session(session)
         source_ref = _build_consolidation_source_ref(window)
-        conversation = _format_conversation_for_consolidation(window.old_messages)
+        conversation = _format_conversation_for_consolidation(
+            window.old_messages,
+            nsfw_memory_enabled=nsfw_memory_enabled,
+        )
         current_memory = await asyncio.to_thread(profile_maint.read_long_term)
         history_text = ""
         if hasattr(profile_maint, "read_history"):
@@ -974,6 +1117,7 @@ history_entries.emotional_weight 规则：
             profile_maint=profile_maint,
             window=window,
             archive_all=archive_all,
+            nsfw_memory_enabled=nsfw_memory_enabled,
         )
         if isinstance(recent_context_text, _ConsolidationFailure):
             return recent_context_text

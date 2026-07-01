@@ -150,6 +150,15 @@ export function RoleDetailPage({
                   placeholder="定义这个角色的行为、语气和边界"
                 />
               </label>
+              <label className="flex items-center gap-3 text-xs text-[#374151]">
+                <input
+                  className="h-4 w-4 rounded border-[#D8DFE7] text-[#111827] focus:ring-2 focus:ring-primary/20"
+                  type="checkbox"
+                  checked={roleForm.nsfwMemoryEnabled}
+                  onChange={(event) => onUpdateRoleForm((current) => ({ ...current, nsfwMemoryEnabled: event.target.checked }))}
+                />
+                <span>NSFW 记忆</span>
+              </label>
             </div>
           </div>
         </div>

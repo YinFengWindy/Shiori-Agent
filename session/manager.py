@@ -336,6 +336,7 @@ class SessionManager:
         role_id: str,
         *,
         role_name: str | None = None,
+        role_runtime_config: dict[str, Any] | None = None,
     ) -> Session:
         session_key = self.role_session_key(role_id)
         session = self.get_or_create(session_key)
@@ -343,6 +344,8 @@ class SessionManager:
             session.metadata["role_id"] = role_id
         if role_name:
             session.metadata["role_name"] = str(role_name)
+        if role_runtime_config is not None:
+            session.metadata["role_runtime_config"] = dict(role_runtime_config)
         self.save(session)
         return session
 
@@ -371,12 +374,15 @@ class SessionManager:
         *,
         role_name: str,
         role_prompt: str,
+        role_runtime_config: dict[str, Any] | None = None,
         valid_illustrations: list[str] | None = None,
     ) -> Session:
         session = self.get_or_create(self.role_session_key(role_id))
         session.metadata["role_id"] = role_id
         session.metadata["role_name"] = role_name
         session.metadata["role_prompt"] = role_prompt
+        if role_runtime_config is not None:
+            session.metadata["role_runtime_config"] = dict(role_runtime_config)
         if valid_illustrations is not None:
             active = str(session.metadata.get("active_illustration") or "").strip()
             if active and active not in valid_illustrations:

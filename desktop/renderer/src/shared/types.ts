@@ -14,6 +14,7 @@ export type RoleRecord = {
   name: string;
   description: string;
   system_prompt: string;
+  runtime_config: Record<string, unknown>;
   avatar: string | null;
   avatar_abs: string | null;
   featured_image: string | null;
@@ -56,6 +57,7 @@ export type RoleFormState = {
   name: string;
   description: string;
   systemPrompt: string;
+  nsfwMemoryEnabled: boolean;
   avatarSource: string;
   illustrationSources: string[];
   removedIllustrations: string[];

@@ -11,6 +11,7 @@ function createRole(overrides: Partial<RoleRecord> & Pick<RoleRecord, "id" | "na
     name: overrides.name,
     description: overrides.description ?? "",
     system_prompt: overrides.system_prompt ?? "",
+    runtime_config: overrides.runtime_config ?? {},
     avatar: overrides.avatar ?? null,
     avatar_abs: overrides.avatar_abs ?? null,
     featured_image: overrides.featured_image ?? null,
