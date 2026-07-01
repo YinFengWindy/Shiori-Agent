@@ -66,7 +66,7 @@ export function ImageStudioPage({
         <div
           className={cx(
             "relative h-full border-l border-[#E0E6EE] bg-[rgba(244,247,251,0.92)] transition-[width] duration-300 ease-out",
-            historyDrawerOpen ? "w-[160px]" : "w-[56px]",
+            historyDrawerOpen ? "w-[126px]" : "w-[56px]",
           )}
         >
           <button

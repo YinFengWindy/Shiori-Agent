@@ -1445,7 +1445,6 @@ function App(): React.ReactElement {
               form={imageStudioState.form}
               modelOptions={imageStudioState.modelOptions}
               roleOptions={imageStudioState.roleOptions}
-              samplerOptions={imageStudioState.samplerOptions}
               submitting={imageStudioState.submitting}
               validationError={imageStudioState.validationError}
               onBackToChat={() => openChatView()}

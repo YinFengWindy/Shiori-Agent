@@ -10,11 +10,6 @@ export type ImageStudioFormState = {
   sizePreset: ImageSizePreset;
   customWidth: string;
   customHeight: string;
-  steps: string;
-  seed: string;
-  sampler: string;
-  strength: string;
-  noise: string;
   model: string;
 };
 
