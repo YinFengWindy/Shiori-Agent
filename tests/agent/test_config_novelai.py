@@ -47,3 +47,32 @@ default_samples = 1
     assert config.novelai.auto_writeback_role_assets is True
     assert config.novelai.max_pixels == 524288
     assert config.novelai.max_steps == 20
+
+
+def test_load_config_disables_proactive_when_role_id_missing(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+[llm]
+provider = "openai"
+
+[llm.main]
+model = "gpt-4.1"
+api_key = "sk-test"
+base_url = "https://api.openai.com/v1"
+
+[proactive]
+enabled = true
+profile = "daily"
+
+[proactive.target]
+channel = "telegram"
+chat_id = "1"
+role_id = ""
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.proactive.enabled is False
