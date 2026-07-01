@@ -36,6 +36,10 @@ const sidebarMinWidth = 220;
 const sidebarMaxWidth = 400;
 const sidebarDefaultWidth = 220;
 const sidebarCollapseThreshold = sidebarMinWidth / 2;
+const historySidebarMinWidth = 126;
+const historySidebarMaxWidth = 280;
+const historySidebarDefaultWidth = 126;
+const historySidebarCollapseThreshold = historySidebarMinWidth / 2;
 const sidebarAnimationDurationMs = 480;
 const sidebarAutoCollapseWindowWidth = 980;
 const minRoleCardBusyMs = 600;
@@ -168,7 +172,10 @@ function App(): React.ReactElement {
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
   const [settingsConfigPath, setSettingsConfigPath] = useState("");
   const [settingsDirty, setSettingsDirty] = useState(false);
-  const [imageHistoryDrawerOpen, setImageHistoryDrawerOpen] = useState(true);
+  const [imageHistorySidebarWidth, setImageHistorySidebarWidth] = useState(historySidebarDefaultWidth);
+  const [imageHistorySidebarCollapsed, setImageHistorySidebarCollapsed] = useState(false);
+  const [imageHistorySidebarAnimating, setImageHistorySidebarAnimating] = useState(false);
+  const [resizingImageHistorySidebar, setResizingImageHistorySidebar] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
@@ -289,6 +296,16 @@ function App(): React.ReactElement {
     setSidebarCollapsed(true);
   }
 
+  function toggleImageHistorySidebar(): void {
+    setImageHistorySidebarAnimating(true);
+    if (imageHistorySidebarCollapsed) {
+      setImageHistorySidebarWidth((current) => Math.min(historySidebarMaxWidth, Math.max(historySidebarMinWidth, current)));
+      setImageHistorySidebarCollapsed(false);
+      return;
+    }
+    setImageHistorySidebarCollapsed(true);
+  }
+
   function openSettingsView(section: SettingsSectionId = "models"): void {
     lastNonSettingsViewRef.current = mainView;
     setSettingsSearch("");
@@ -358,7 +375,9 @@ function App(): React.ReactElement {
     const nextView: AppMainView = { kind: "image-studio" };
     setSidebarAnimating(true);
     setSidebarCollapsed(false);
-    setImageHistoryDrawerOpen(true);
+    setImageHistorySidebarAnimating(true);
+    setImageHistorySidebarCollapsed(false);
+    setImageHistorySidebarWidth((current) => Math.min(historySidebarMaxWidth, Math.max(historySidebarMinWidth, current)));
     setMainView(nextView);
     if (options?.recordHistory !== false) {
       pushNavigationEntry(buildNavigationEntry(nextView));
@@ -415,6 +434,45 @@ function App(): React.ReactElement {
       }
       setSidebarCollapsed(false);
       setSidebarWidth(Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, moveEvent.clientX)));
+    }
+
+    window.addEventListener("pointermove", resize);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+  }
+
+  function beginImageHistorySidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    flushSync(() => {
+      setImageHistorySidebarAnimating(false);
+      setResizingImageHistorySidebar(true);
+    });
+    let dragCollapsed = imageHistorySidebarCollapsed;
+
+    function stopResize(): void {
+      setResizingImageHistorySidebar(false);
+      window.removeEventListener("pointermove", resize);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+    }
+
+    function resize(moveEvent: PointerEvent): void {
+      const viewportWidth = window.innerWidth;
+      const nextWidth = viewportWidth - moveEvent.clientX;
+      if (nextWidth <= historySidebarCollapseThreshold) {
+        if (!dragCollapsed) {
+          setImageHistorySidebarAnimating(true);
+          dragCollapsed = true;
+        }
+        setImageHistorySidebarCollapsed(true);
+        return;
+      }
+      if (dragCollapsed) {
+        setImageHistorySidebarAnimating(true);
+        dragCollapsed = false;
+      }
+      setImageHistorySidebarCollapsed(false);
+      setImageHistorySidebarWidth(Math.min(historySidebarMaxWidth, Math.max(historySidebarMinWidth, nextWidth)));
     }
 
     window.addEventListener("pointermove", resize);
@@ -541,6 +599,12 @@ function App(): React.ReactElement {
     const timer = window.setTimeout(() => setSidebarAnimating(false), sidebarAnimationDurationMs + 40);
     return () => window.clearTimeout(timer);
   }, [sidebarAnimating]);
+
+  useEffect(() => {
+    if (!imageHistorySidebarAnimating) return undefined;
+    const timer = window.setTimeout(() => setImageHistorySidebarAnimating(false), sidebarAnimationDurationMs + 40);
+    return () => window.clearTimeout(timer);
+  }, [imageHistorySidebarAnimating]);
 
   useEffect(() => {
     function collapseSidebarForNarrowWindow(): void {
@@ -1415,7 +1479,7 @@ function App(): React.ReactElement {
       <div
         className={cx(
           "desktop-shell grid min-h-0 overflow-hidden bg-transparent",
-          resizingSidebar && "sidebar-resizing cursor-col-resize select-none",
+          (resizingSidebar || resizingImageHistorySidebar) && "sidebar-resizing cursor-col-resize select-none",
         )}
         style={{
           gridTemplateColumns: "minmax(0, auto) minmax(0, 1fr)",
@@ -1532,9 +1596,12 @@ function App(): React.ReactElement {
               latestResult={imageStudioState.latestResult}
               requestSummary={imageStudioState.requestSummary}
               selectedRecordId={imageStudioState.selectedRecordId}
-              historyDrawerOpen={imageHistoryDrawerOpen}
+              historySidebarCollapsed={imageHistorySidebarCollapsed}
+              historySidebarWidth={imageHistorySidebarWidth}
+              historySidebarAnimating={imageHistorySidebarAnimating && !resizingImageHistorySidebar}
               onSelectRecord={imageStudioState.onSelectRecord}
-              onToggleHistoryDrawer={() => setImageHistoryDrawerOpen((current) => !current)}
+              onToggleHistorySidebar={toggleImageHistorySidebar}
+              onBeginHistorySidebarResize={beginImageHistorySidebarResize}
             />
           ) : null}
           {mainView.kind === "roles-list" ? (
