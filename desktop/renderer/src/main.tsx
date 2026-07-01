@@ -195,6 +195,7 @@ function App(): React.ReactElement {
   const openRoleRequestIdRef = useRef(0);
   const activeRoleIdRef = useRef("");
   const activeSessionRef = useRef<SessionPayload | null>(null);
+  const rolesRef = useRef<RoleRecord[]>([]);
   const navigationHistoryRef = useRef<NavigationEntry[]>([]);
   const navigationHistoryIndexRef = useRef(-1);
   const draftRef = useRef("");
@@ -215,6 +216,10 @@ function App(): React.ReactElement {
   useEffect(() => {
     activeSessionRef.current = activeSession;
   }, [activeSession]);
+
+  useEffect(() => {
+    rolesRef.current = roles;
+  }, [roles]);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -755,8 +760,31 @@ function App(): React.ReactElement {
           setWindowMaximized(Boolean(event.payload.isMaximized));
           return;
         }
-        if (!activeSession) return;
-        if (String(event.payload.session_key ?? "") !== activeSession.key) return;
+
+        if (event.method === "bridge.exit") {
+          setSending(false);
+          setHealth("offline");
+          setError(String(event.payload.message ?? "bridge exited"));
+          setNotice("连接桥已停止。你可以刷新或重启它。");
+          return;
+        }
+
+        const currentSession = activeSessionRef.current;
+        if (!currentSession) return;
+
+        if (event.method === "session.updated") {
+          const session = event.payload.session as SessionPayload | undefined;
+          if (!session || session.key !== currentSession.key) return;
+          setActiveSession(session);
+          const activeRoleId = activeRoleIdRef.current;
+          const role = rolesRef.current.find((item) => item.id === activeRoleId) ?? null;
+          setActiveIllustration((current) =>
+            chooseIllustration(role, session, current),
+          );
+          return;
+        }
+
+        if (String(event.payload.session_key ?? "") !== currentSession.key) return;
 
         if (event.method === "chat.delta") {
           const delta = String(event.payload.content_delta ?? "");
@@ -775,17 +803,6 @@ function App(): React.ReactElement {
           return;
         }
 
-        if (event.method === "session.updated") {
-          const session = event.payload.session as SessionPayload | undefined;
-          if (!session || session.key !== activeSession.key) return;
-          setActiveSession(session);
-          const role = roles.find((item) => item.id === activeRoleId) ?? null;
-          setActiveIllustration((current) =>
-            chooseIllustration(role, session, current),
-          );
-          return;
-        }
-
         if (event.method === "chat.done") {
           setSending(false);
           return;
@@ -795,20 +812,12 @@ function App(): React.ReactElement {
           setSending(false);
           const message = String(event.payload.message ?? "对话失败");
           setError(message);
-          appendSessionErrorMessage(activeSession.key, message);
-          return;
-        }
-
-        if (event.method === "bridge.exit") {
-          setSending(false);
-          setHealth("offline");
-          setError(String(event.payload.message ?? "bridge exited"));
-          setNotice("连接桥已停止。你可以刷新或重启它。");
+          appendSessionErrorMessage(currentSession.key, message);
         }
       });
     });
     return off;
-  }, [activeSession]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1019,6 +1028,7 @@ function App(): React.ReactElement {
       setActiveSession((current) =>
         current?.key === nextSession.key ? nextSession : current,
       );
+      setSending(false);
     } catch (error) {
       setSending(false);
       const { session: recoveredSession } = await fetchRoleSession(roleId);
