@@ -684,7 +684,7 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert role_prefix == role_prefix_cross_channel
 
 
-def test_context_builder_injects_only_current_member_memory_section(tmp_path: Path):
+def test_context_builder_injects_full_member_memory_in_group_chat(tmp_path: Path):
     from core.roles import RoleStore
 
     role_store = RoleStore(tmp_path)
@@ -741,7 +741,7 @@ def test_context_builder_injects_only_current_member_memory_section(tmp_path: Pa
 
     assert "## 当前成员关系记忆" in role_prompt
     assert "常直接纠正我别话密" in role_prompt
-    assert "互动较少" not in role_prompt
+    assert "互动较少" in role_prompt
 
 
 def test_context_builder_reproduces_temporal_conflict_baseline(

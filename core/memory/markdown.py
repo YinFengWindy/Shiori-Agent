@@ -1245,13 +1245,12 @@ class MarkdownMemoryRuntime:
         session_metadata: dict[str, Any] | None = None,
         role_id: str | None = None,
     ) -> str:
-        member_key = _member_key_from_session_metadata(session_metadata)
-        if not member_key:
+        if not _is_group_chat_session_metadata(session_metadata):
             return ""
         return self.resolve_store(
             session_metadata=session_metadata,
             role_id=role_id,
-        ).read_member_memory_section(member_key)
+        ).read_member_memory().strip()
 
     def read_recent_context(
         self,

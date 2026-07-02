@@ -57,8 +57,8 @@ class PromptBlock(Protocol):
 #  35 LongTermMemoryPromptBlock→ roles/<role_id>/memory/MEMORY.md
 #                              来源：memory.read_profile() / get_memory_context()（严格要求 role_id）
 #                              时机：长期记忆 consolidate 或人工更新时才变，低频
-#  37 MemberMemoryPromptBlock  → roles/<role_id>/memory/Member.md（仅当前成员 section）
-#                              来源：memory.read_member_memory()（群聊成员上下文才返回）
+#  37 MemberMemoryPromptBlock  → roles/<role_id>/memory/Member.md（群聊时整份注入）
+#                              来源：memory.read_member_memory()（仅群聊上下文才返回）
 #                              时机：optimizer 更新成员关系记忆时变化，低频
 #  40 SessionContextPromptBlock→ 环境 + 当前 session
 #                              来源：platform.machine() + channel + chat_id

@@ -121,7 +121,7 @@ def test_resolve_markdown_store_requires_role_id(tmp_path: Path):
         resolve_markdown_store(workspace=tmp_path)
 
 
-def test_markdown_runtime_reads_only_current_member_section(tmp_path: Path):
+def test_markdown_runtime_reads_full_member_memory_for_group_chat(tmp_path: Path):
     runtime = build_memory_runtime(
         Config(
             provider="test",
@@ -147,15 +147,7 @@ def test_markdown_runtime_reads_only_current_member_section(tmp_path: Path):
         encoding="utf-8",
     )
 
-    assert runtime.markdown.read_member_memory(
-        session_metadata={
-            "role_id": "mira",
-            "is_group_chat": True,
-            "group_member_id": "u1",
-            "context_channel": "qq",
-        }
-    ).startswith("## qq:u1")
-    assert "qq:u2" not in runtime.markdown.read_member_memory(
+    rendered = runtime.markdown.read_member_memory(
         session_metadata={
             "role_id": "mira",
             "is_group_chat": True,
@@ -163,6 +155,9 @@ def test_markdown_runtime_reads_only_current_member_section(tmp_path: Path):
             "context_channel": "qq",
         }
     )
+    assert rendered.startswith("# Member Memory")
+    assert "## qq:u1" in rendered
+    assert "## qq:u2" in rendered
 
 
 async def test_default_memory_engine_retrieve_keeps_raw_items_and_mode_trace():
