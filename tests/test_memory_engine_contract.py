@@ -202,6 +202,7 @@ async def test_default_memory_engine_group_member_query_expands_to_other_groups_
     assert result.text_block.startswith("当前群里的支付偏好")
     assert "另一个群里提过支付习惯 [cross]" in result.text_block
     assert result.records[1].signals["scope_chat_id"] == "gqq:200"
+    assert result.records[1].signals["cross_group_reference"] is True
 
 
 async def test_default_memory_engine_non_group_query_keeps_single_scope_retrieval():

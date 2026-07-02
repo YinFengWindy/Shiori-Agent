@@ -1602,6 +1602,10 @@ class DefaultMemoryEngine:
     ) -> MemoryRecord:
         extra = item.get("extra_json")
         signals = dict(cast(dict[str, object], extra)) if isinstance(extra, dict) else {}
+        if "cross_group_reference" in item:
+            signals["cross_group_reference"] = bool(item.get("cross_group_reference"))
+        if "_score_debug" in item and isinstance(item.get("_score_debug"), dict):
+            signals["_score_debug"] = cast(dict[str, object], item.get("_score_debug"))
         memory_kind = str(item.get("memory_type", "") or "")
         item_id = str(item.get("id", "") or "")
         source_ref = str(item.get("source_ref", "") or "")
