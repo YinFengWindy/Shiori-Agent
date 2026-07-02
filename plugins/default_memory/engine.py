@@ -240,6 +240,44 @@ def _resolve_mutation_group_member_id(request: MemoryMutation) -> str:
     return _mapping_group_member_id(dict(request.metadata))
 
 
+def _is_cross_group_member_scope_enabled(
+    *,
+    scope_channel: str | None,
+    scope_chat_id: str | None,
+    group_member_id: str | None,
+    require_scope_match: bool,
+) -> bool:
+    return bool(
+        scope_channel
+        and scope_chat_id
+        and group_member_id
+        and require_scope_match
+    )
+
+
+def _mark_cross_group_reference(
+    item: dict[str, object],
+    *,
+    current_scope_chat_id: str | None,
+    group_member_id: str | None,
+) -> dict[str, object]:
+    normalized = dict(item)
+    extra = normalized.get("extra_json")
+    extra_json = dict(cast(dict[str, object], extra)) if isinstance(extra, dict) else {}
+    normalized["extra_json"] = extra_json
+    item_group_member_id = _clean_group_member_id(extra_json.get("group_member_id"))
+    item_scope_chat_id = str(extra_json.get("scope_chat_id") or "").strip()
+    is_cross_group = bool(
+        group_member_id
+        and item_group_member_id == str(group_member_id).strip()
+        and item_scope_chat_id
+        and item_scope_chat_id != str(current_scope_chat_id or "").strip()
+    )
+    if is_cross_group:
+        normalized["cross_group_reference"] = True
+    return normalized
+
+
 def _build_long_term_prompt(*, conversation: str, existing_profile: str) -> str:
     return f"""你是长期记忆提取专家。从对话窗口中一次性提取三类长期记忆，返回 JSON。
 
@@ -1421,7 +1459,33 @@ class DefaultMemoryEngine:
         retriever = self._retriever
         if retriever is None:
             return []
-        return cast(
+        if not _is_cross_group_member_scope_enabled(
+            scope_channel=scope_channel,
+            scope_chat_id=scope_chat_id,
+            group_member_id=group_member_id,
+            require_scope_match=require_scope_match,
+        ):
+            return cast(
+                list[dict[str, object]],
+                await retriever.retrieve(
+                    query,
+                    memory_types=memory_types,
+                    memory_domains=memory_domains,
+                    top_k=top_k,
+                    role_id=role_id,
+                    scope_channel=scope_channel,
+                    scope_chat_id=scope_chat_id,
+                    group_member_id=group_member_id,
+                    require_scope_match=require_scope_match,
+                    aux_queries=aux_queries,
+                    score_threshold=score_threshold,
+                    time_start=time_start,
+                    time_end=time_end,
+                    keyword_enabled=keyword_enabled,
+                ),
+            )
+
+        current_hits = cast(
             list[dict[str, object]],
             await retriever.retrieve(
                 query,
@@ -1432,7 +1496,7 @@ class DefaultMemoryEngine:
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
                 group_member_id=group_member_id,
-                require_scope_match=require_scope_match,
+                require_scope_match=True,
                 aux_queries=aux_queries,
                 score_threshold=score_threshold,
                 time_start=time_start,
@@ -1440,6 +1504,55 @@ class DefaultMemoryEngine:
                 keyword_enabled=keyword_enabled,
             ),
         )
+        cross_hits = cast(
+            list[dict[str, object]],
+            await retriever.retrieve(
+                query,
+                memory_types=memory_types,
+                memory_domains=memory_domains,
+                top_k=max(3, int(top_k or 8) // 2),
+                role_id=role_id,
+                scope_channel=scope_channel,
+                scope_chat_id=scope_chat_id,
+                group_member_id=group_member_id,
+                require_scope_match=False,
+                aux_queries=aux_queries,
+                score_threshold=score_threshold,
+                time_start=time_start,
+                time_end=time_end,
+                keyword_enabled=keyword_enabled,
+            ),
+        )
+        merged: list[dict[str, object]] = []
+        seen_ids: set[str] = set()
+        for item in current_hits:
+            item_id = str(item.get("id") or "").strip()
+            if item_id and item_id in seen_ids:
+                continue
+            if item_id:
+                seen_ids.add(item_id)
+            merged.append(
+                _mark_cross_group_reference(
+                    item,
+                    current_scope_chat_id=scope_chat_id,
+                    group_member_id=group_member_id,
+                )
+            )
+        for item in cross_hits:
+            tagged = _mark_cross_group_reference(
+                item,
+                current_scope_chat_id=scope_chat_id,
+                group_member_id=group_member_id,
+            )
+            if not bool(tagged.get("cross_group_reference")):
+                continue
+            item_id = str(tagged.get("id") or "").strip()
+            if item_id and item_id in seen_ids:
+                continue
+            if item_id:
+                seen_ids.add(item_id)
+            merged.append(tagged)
+        return merged
 
     async def _gen_hypothesis(self, query: str, style: str) -> str | None:
         prompt = _explicit_hypothesis_prompt(query, style)

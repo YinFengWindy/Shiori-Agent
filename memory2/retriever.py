@@ -623,6 +623,13 @@ def _format_memory_meta(
     confidence_label: str = "",
 ) -> str:
     parts: list[str] = []
+    if bool(item.get("cross_group_reference")):
+        parts.append("异群参考")
+        extra = item.get("extra_json")
+        extra_json = extra if isinstance(extra, dict) else {}
+        scope_chat_id = str(extra_json.get("scope_chat_id") or "").strip()
+        if scope_chat_id:
+            parts.append(f"来源会话: {scope_chat_id}")
     if confidence_label:
         parts.append(confidence_label)
     happened_at_raw = item.get("happened_at")

@@ -116,6 +116,125 @@ async def test_default_memory_engine_retrieve_maps_hits_and_text_block():
     assert result.trace["profile"] == EngineProfile.RICH_MEMORY_ENGINE.value
 
 
+async def test_default_memory_engine_group_member_query_expands_to_other_groups_as_reference():
+    retriever = SimpleNamespace(
+        retrieve=AsyncMock(
+            side_effect=[
+                [
+                    {
+                        "id": "cur1",
+                        "summary": "当前群里的支付偏好",
+                        "score": 0.9,
+                        "source_ref": "qq:gqq:100:1",
+                        "memory_domain": "relationship",
+                        "memory_type": "preference",
+                        "extra_json": {
+                            "group_member_id": "u1",
+                            "scope_channel": "qq",
+                            "scope_chat_id": "gqq:100",
+                        },
+                    }
+                ],
+                [
+                    {
+                        "id": "cur1",
+                        "summary": "当前群里的支付偏好",
+                        "score": 0.9,
+                        "source_ref": "qq:gqq:100:1",
+                        "memory_domain": "relationship",
+                        "memory_type": "preference",
+                        "extra_json": {
+                            "group_member_id": "u1",
+                            "scope_channel": "qq",
+                            "scope_chat_id": "gqq:100",
+                        },
+                    },
+                    {
+                        "id": "other1",
+                        "summary": "另一个群里提过支付习惯",
+                        "score": 0.7,
+                        "source_ref": "qq:gqq:200:1",
+                        "memory_domain": "relationship",
+                        "memory_type": "event",
+                        "extra_json": {
+                            "group_member_id": "u1",
+                            "scope_channel": "qq",
+                            "scope_chat_id": "gqq:200",
+                        },
+                    },
+                ],
+            ]
+        ),
+        build_injection_block=lambda items: (
+            "\n".join(
+                [
+                    item["summary"]
+                    + (" [cross]" if item.get("cross_group_reference") else "")
+                    for item in items
+                ]
+            ),
+            [str(item["id"]) for item in items],
+        ),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+
+    result = await engine.query(
+        MemoryQuery(
+            text="支付",
+            intent="context",
+            scope=MemoryScope(role_id="mira", channel="qq", chat_id="gqq:100"),
+            context={
+                "session_metadata": {
+                    "role_id": "mira",
+                    "is_group_chat": True,
+                    "group_member_id": "u1",
+                }
+            },
+            limit=5,
+        )
+    )
+
+    assert retriever.retrieve.await_count == 2
+    first_call = retriever.retrieve.await_args_list[0].kwargs
+    second_call = retriever.retrieve.await_args_list[1].kwargs
+    assert first_call["require_scope_match"] is True
+    assert second_call["require_scope_match"] is False
+    assert result.text_block.startswith("当前群里的支付偏好")
+    assert "另一个群里提过支付习惯 [cross]" in result.text_block
+    assert result.records[1].signals["scope_chat_id"] == "gqq:200"
+
+
+async def test_default_memory_engine_non_group_query_keeps_single_scope_retrieval():
+    retriever = SimpleNamespace(
+        retrieve=AsyncMock(
+            return_value=[
+                {
+                    "id": "m1",
+                    "summary": "普通命中",
+                    "score": 0.88,
+                    "source_ref": "cli:1@seed",
+                    "memory_domain": "relationship",
+                    "memory_type": "preference",
+                    "extra_json": {"origin": "test"},
+                }
+            ]
+        ),
+        build_injection_block=lambda items: ("注入块", ["m1"]),
+    )
+    engine = _make_default_engine(retriever=cast(Any, retriever))
+
+    _ = await engine.query(
+        MemoryQuery(
+            text="中文回复",
+            intent="context",
+            scope=MemoryScope(role_id="mira", channel="cli", chat_id="1"),
+            limit=3,
+        )
+    )
+
+    assert retriever.retrieve.await_count == 1
+
+
 def test_resolve_markdown_store_requires_role_id(tmp_path: Path):
     with pytest.raises(ValueError, match="role_id required for markdown memory access"):
         resolve_markdown_store(workspace=tmp_path)
