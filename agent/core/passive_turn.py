@@ -185,6 +185,26 @@ def _format_group_context_lines(
     return rendered[-limit:]
 
 
+def _build_group_member_block(metadata: dict[str, Any]) -> str:
+    if not bool(metadata.get("is_group_chat")):
+        return ""
+    member_id = str(
+        metadata.get("group_member_id")
+        or metadata.get("member_id")
+        or metadata.get("sender_id")
+        or ""
+    ).strip()
+    member_name = str(metadata.get("member_name") or "").strip()
+    if not member_id and not member_name:
+        return ""
+    lines = ["## 当前群成员"]
+    if member_name:
+        lines.append(f"- 名称: {member_name}")
+    if member_id:
+        lines.append(f"- ID: {member_id}")
+    return "\n".join(lines)
+
+
 class _NoopOutboundPort:
     async def dispatch(self, outbound: OutboundDispatch) -> bool:
         return False
@@ -744,8 +764,17 @@ class DefaultContextStore(ContextStore):
             msg.content,
             self._context.skills.list_skills(filter_unavailable=False),
         )
+        member_block = _build_group_member_block(
+            msg.metadata if isinstance(msg.metadata, dict) else {}
+        )
         group_context_block = self._build_group_context_block(msg)
         retrieved_block = retrieval_result.block or ""
+        if member_block:
+            retrieved_block = (
+                f"{retrieved_block}\n\n{member_block}".strip()
+                if retrieved_block
+                else member_block
+            )
         if group_context_block:
             retrieved_block = (
                 f"{retrieved_block}\n\n{group_context_block}".strip()

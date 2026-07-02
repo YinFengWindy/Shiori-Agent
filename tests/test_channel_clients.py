@@ -1017,7 +1017,14 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
     await channel._bot.startup_handler(SimpleNamespace())
     await channel._bot.private_handler(SimpleNamespace(user_id="1", raw_message="hi [CQ:image,url=http://x/a.jpg]"))
-    await channel._bot.group_handler(SimpleNamespace(group_id="100", user_id="1", raw_message="hello"))
+    await channel._bot.group_handler(
+        SimpleNamespace(
+            group_id="100",
+            user_id="1",
+            raw_message="hello",
+            sender=SimpleNamespace(card="群名片", nickname="昵称"),
+        )
+    )
     await channel._bot.private_handler(SimpleNamespace(user_id="1", raw_message="/stop"))
     await channel._bot.group_handler(SimpleNamespace(group_id="100", user_id="1", raw_message="/stop"))
     if scheduled:
@@ -1029,6 +1036,7 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert bus.inbound[0].metadata["role_id"] == "mira"
     assert bus.inbound[1].session_key == "role:mira:group:100:member:1"
     assert bus.inbound[1].metadata["group_member_id"] == "1"
+    assert bus.inbound[1].metadata["member_name"] == "群名片"
     assert bus.inbound[1].metadata["group_context_key"] == "groupctx:qq:100"
     assert channel._interrupt_controller.request_interrupt.call_count == 2
 

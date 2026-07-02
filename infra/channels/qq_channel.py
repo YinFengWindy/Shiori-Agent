@@ -81,6 +81,20 @@ def _group_context_key(group_id: str) -> str:
     return f"groupctx:{_CHANNEL}:{str(group_id).strip()}"
 
 
+def _group_member_name(event: Any) -> str:
+    sender = getattr(event, "sender", None)
+    if sender is not None:
+        for key in ("card", "nickname", "name"):
+            value = getattr(sender, key, None)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    for key in ("card", "nickname", "name"):
+        value = getattr(event, key, None)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
 def _truncate_trace_text(text: str, limit: int) -> str:
     raw = str(text or "").strip()
     if len(raw) <= limit:
@@ -427,6 +441,7 @@ class QQChannel:
 
             group_id = str(event.group_id)
             user_id = str(event.user_id)
+            member_name = _group_member_name(event)
 
             group_cfg = self._groups.get(group_id)
             if group_cfg is None:
@@ -452,7 +467,7 @@ class QQChannel:
             )
 
             self._submit_to_main_loop(
-                self._handle_group(group_id, user_id, text, img_urls)
+                self._handle_group(group_id, user_id, text, img_urls, member_name=member_name)
             )
 
         @cast(Any, self._bot.on_startup())
@@ -569,6 +584,7 @@ class QQChannel:
         user_id: str,
         content: str,
         img_urls: list[str] | None = None,
+        member_name: str = "",
     ) -> None:
         """群聊入站：chat_id = gqq:{group_id}，角色会话按群成员拆分。"""
         chat_id = f"{_GROUP_PREFIX}{group_id}"
@@ -590,6 +606,7 @@ class QQChannel:
                     "group_id": group_id,
                     "member_id": user_id,
                     "group_member_id": user_id,
+                    "member_name": member_name,
                     "sender_id": user_id,
                     "group_context_key": _group_context_key(group_id),
                 },
@@ -621,6 +638,7 @@ class QQChannel:
                         "group_id": group_id,
                         "member_id": user_id,
                         "group_member_id": user_id,
+                        "member_name": "",
                         "sender_id": user_id,
                         "group_context_key": _group_context_key(group_id),
                     },
@@ -697,6 +715,7 @@ class QQChannel:
                     or metadata.get("sender_id")
                     or message.sender
                 ).strip(),
+                "member_name": str(metadata.get("member_name") or "").strip(),
             },
         )
         await self._persist_group_context_session(session)

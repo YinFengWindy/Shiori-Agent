@@ -96,6 +96,7 @@ class _SyncSessionMetadataModule:
                 "group_id",
                 "group_member_id",
                 "member_id",
+                "member_name",
                 "group_context_key",
                 "context_channel",
                 "context_chat_id",

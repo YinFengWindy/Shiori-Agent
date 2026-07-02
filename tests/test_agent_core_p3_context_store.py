@@ -260,6 +260,7 @@ async def test_default_context_store_injects_group_shared_background_without_rep
             "is_group_chat": True,
             "group_id": "100",
             "group_member_id": "1",
+            "member_name": "花月",
             "group_context_key": "groupctx:qq:100",
         },
     )
@@ -267,6 +268,8 @@ async def test_default_context_store_injects_group_shared_background_without_rep
     bundle = await store.prepare(msg=msg, session_key="role:mira:group:100:member:1", session=cast(Any, session))
 
     assert "remembered" in bundle.retrieved_memory_block
+    assert "## 当前群成员" in bundle.retrieved_memory_block
+    assert "名称: 花月" in bundle.retrieved_memory_block
     assert "## 群聊共享背景" in bundle.retrieved_memory_block
     assert "[2] B 先前说过的话" in bundle.retrieved_memory_block
     assert "[角色] 角色刚才在群里的回复" in bundle.retrieved_memory_block
