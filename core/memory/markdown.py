@@ -59,6 +59,12 @@ class MemoryProfileApi(Protocol):
 
     def write_long_term(self, content: str) -> None: ...
 
+    def read_member_memory(self) -> str: ...
+
+    def write_member_memory(self, content: str) -> None: ...
+
+    def read_member_memory_section(self, member_key: str) -> str: ...
+
     def read_self(self) -> str: ...
 
     def write_self(self, content: str) -> None: ...
@@ -238,6 +244,21 @@ def _is_group_chat_session_metadata(metadata: object) -> bool:
 
 def _is_group_chat_session(session: object) -> bool:
     return _is_group_chat_session_metadata(getattr(session, "metadata", None))
+
+
+def _member_key_from_session_metadata(metadata: object) -> str:
+    if not isinstance(metadata, dict):
+        return ""
+    member_id = str(metadata.get("group_member_id") or metadata.get("member_id") or "").strip()
+    if not member_id:
+        return ""
+    channel = (
+        str(metadata.get("context_channel") or "").strip()
+        or str(metadata.get("transport_channel") or "").strip()
+    )
+    if not channel:
+        return ""
+    return f"{channel}:{member_id}"
 
 
 def _dedupe_semantic_items(items: list[str]) -> list[str]:
@@ -1120,15 +1141,18 @@ history_entries.emotional_weight 规则：
         )
         pending_items = _format_pending_items(result.get("pending_items", []))
         # 4. 归一化 markdown 产物，向量写入由 engine 订阅提交事件完成。
-        recent_context_text = await self._build_recent_context_snapshot(
-            session=session,
-            profile_maint=profile_maint,
-            window=window,
-            archive_all=archive_all,
-            nsfw_memory_enabled=nsfw_memory_enabled,
-        )
-        if isinstance(recent_context_text, _ConsolidationFailure):
-            return recent_context_text
+        if _is_group_chat_session(session):
+            recent_context_text = ""
+        else:
+            recent_context_text = await self._build_recent_context_snapshot(
+                session=session,
+                profile_maint=profile_maint,
+                window=window,
+                archive_all=archive_all,
+                nsfw_memory_enabled=nsfw_memory_enabled,
+            )
+            if isinstance(recent_context_text, _ConsolidationFailure):
+                return recent_context_text
         return _ConsolidationDraft(
             window=window,
             source_ref=source_ref,
@@ -1214,6 +1238,20 @@ class MarkdownMemoryRuntime:
             session_metadata=session_metadata,
             role_id=role_id,
         ).read_self()
+
+    def read_member_memory(
+        self,
+        *,
+        session_metadata: dict[str, Any] | None = None,
+        role_id: str | None = None,
+    ) -> str:
+        member_key = _member_key_from_session_metadata(session_metadata)
+        if not member_key:
+            return ""
+        return self.resolve_store(
+            session_metadata=session_metadata,
+            role_id=role_id,
+        ).read_member_memory_section(member_key)
 
     def read_recent_context(
         self,
@@ -1326,6 +1364,15 @@ class MarkdownMemoryMaintenance:
                 if session is None:
                     return
                 if _is_group_chat_session(session):
+                    if self._should_consolidate_session(session):
+                        result = await self._consolidate_group_member_unlocked(
+                            ConsolidateRequest(session=session)
+                        )
+                        if (
+                            result.trace.get("mode") == "member_markdown"
+                            and self._save_session
+                        ):
+                            await self._save_session(session)
                     continue
                 if self._should_consolidate_session(session):
                     result = await self._consolidate_unlocked(
@@ -1409,6 +1456,32 @@ class MarkdownMemoryMaintenance:
             trace={"mode": "markdown", "source_ref": draft.source_ref},
         )
 
+    async def _consolidate_group_member_unlocked(
+        self,
+        request: ConsolidateRequest,
+    ) -> ConsolidateResult:
+        draft = await self._worker.prepare_consolidation(
+            request.session,
+            archive_all=request.archive_all,
+            force=request.force,
+        )
+        if draft is None:
+            return ConsolidateResult(trace={"mode": "skipped"})
+        if isinstance(draft, _ConsolidationFailure):
+            return ConsolidateResult(
+                trace={
+                    "mode": "failed",
+                    "step": draft.step,
+                    "error": draft.error,
+                    "elapsed_ms": draft.elapsed_ms,
+                }
+            )
+        await self._commit_group_member_draft(request.session, draft)
+        return ConsolidateResult(
+            consolidated_count=len(draft.window.old_messages),
+            trace={"mode": "member_markdown", "source_ref": draft.source_ref},
+        )
+
     async def _commit_markdown_draft(
         self,
         session: object,
@@ -1446,6 +1519,45 @@ class MarkdownMemoryMaintenance:
                 target_store,
                 history_entries,
                 draft.source_ref,
+            )
+        if draft.archive_all:
+            session.last_consolidated = 0
+        else:
+            session.last_consolidated = draft.window.consolidate_up_to
+        if self._event_bus is not None:
+            await self._event_bus.emit(
+                ConsolidationCommitted(
+                    history_entry_payloads=list(draft.history_entry_payloads),
+                    source_ref=draft.source_ref,
+                    scope_channel=draft.scope_channel,
+                    scope_chat_id=draft.scope_chat_id,
+                    conversation=draft.conversation,
+                    role_id=role_id,
+                    group_member_id=group_member_id,
+                )
+            )
+
+    async def _commit_group_member_draft(
+        self,
+        session: object,
+        draft: "_ConsolidationDraft",
+    ) -> None:
+        target_store = self._resolve_store_for_session(session)
+        metadata = getattr(session, "metadata", {})
+        role_id = str(metadata.get("role_id") or "").strip() if isinstance(metadata, dict) else ""
+        group_member_id = (
+            str(metadata.get("group_member_id") or "").strip()
+            if isinstance(metadata, dict)
+            else ""
+        )
+        member_key = _member_key_from_session_metadata(metadata)
+        if member_key:
+            await asyncio.to_thread(
+                target_store.append_member_pending_entry,
+                member_key=member_key,
+                source_ref=draft.source_ref,
+                history_entry_payloads=list(draft.history_entry_payloads),
+                pending_items=draft.pending_items,
             )
         if draft.archive_all:
             session.last_consolidated = 0

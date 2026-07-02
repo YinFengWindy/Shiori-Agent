@@ -40,6 +40,11 @@ class MemoryRuntime:
     def read_self(self) -> str:
         return self.markdown.read_self(session_metadata=self._session_metadata)
 
+    def read_member_memory(self) -> str:
+        return self.markdown.read_member_memory(
+            session_metadata=self._session_metadata
+        )
+
     def read_recent_context(self) -> str:
         return self.markdown.read_recent_context(session_metadata=self._session_metadata)
 

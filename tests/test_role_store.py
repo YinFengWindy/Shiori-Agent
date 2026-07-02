@@ -297,6 +297,7 @@ def test_role_aggregate_service_initializes_role_session_and_memory_space(tmp_pa
     assert "我是Mira。" in self_text
     assert "内部底座" not in self_text
     assert (aggregate.memory_root / "MEMORY.md").read_text(encoding="utf-8")
+    assert (aggregate.memory_root / "Member.md").exists()
     assert aggregate.role.memory_init_state["seed_self_ready"] is True
     assert aggregate.role.memory_init_state["seed_first_impression_ready"] is True
     assert aggregate.role.runtime_config == {}

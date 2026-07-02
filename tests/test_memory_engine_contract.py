@@ -121,6 +121,50 @@ def test_resolve_markdown_store_requires_role_id(tmp_path: Path):
         resolve_markdown_store(workspace=tmp_path)
 
 
+def test_markdown_runtime_reads_only_current_member_section(tmp_path: Path):
+    runtime = build_memory_runtime(
+        Config(
+            provider="test",
+            model="test-model",
+            api_key="test-key",
+            system_prompt="test system prompt",
+            memory=MemoryConfig(enabled=False),
+        ),
+        tmp_path,
+        ToolRegistry(),
+        cast(Any, SimpleNamespace()),
+        None,
+        cast(Any, SimpleNamespace()),
+    )
+    member_path = tmp_path / "roles" / "mira" / "memory" / "Member.md"
+    member_path.parent.mkdir(parents=True, exist_ok=True)
+    member_path.write_text(
+        "# Member Memory\n\n"
+        "## qq:u1\n"
+        "- 关系: 常直接纠正我。\n\n"
+        "## qq:u2\n"
+        "- 关系: 互动较少。\n",
+        encoding="utf-8",
+    )
+
+    assert runtime.markdown.read_member_memory(
+        session_metadata={
+            "role_id": "mira",
+            "is_group_chat": True,
+            "group_member_id": "u1",
+            "context_channel": "qq",
+        }
+    ).startswith("## qq:u1")
+    assert "qq:u2" not in runtime.markdown.read_member_memory(
+        session_metadata={
+            "role_id": "mira",
+            "is_group_chat": True,
+            "group_member_id": "u1",
+            "context_channel": "qq",
+        }
+    )
+
+
 async def test_default_memory_engine_retrieve_keeps_raw_items_and_mode_trace():
     retriever = SimpleNamespace(
         retrieve=AsyncMock(
@@ -645,6 +689,80 @@ async def test_default_memory_engine_refreshes_role_recent_context_in_role_memor
     assert "嗯。" in role_recent_context_path.read_text(encoding="utf-8")
     assert not global_recent_context_path.exists()
     save_session.assert_not_awaited()
+    await event_bus.aclose()
+
+
+async def test_group_session_consolidation_appends_member_pending_without_root_markdown(
+    tmp_path: Path,
+):
+    event_bus = EventBus()
+    session = SimpleNamespace(
+        key="role:mira:group:100:member:u1",
+        metadata={
+            "role_id": "mira",
+            "is_group_chat": True,
+            "group_member_id": "u1",
+            "context_channel": "qq",
+        },
+        messages=[{"role": "user", "content": "u"}] * 12,
+        last_consolidated=0,
+    )
+    maintenance = MarkdownMemoryMaintenance(
+        store=MarkdownMemoryStore(tmp_path),
+        provider=cast(Any, SimpleNamespace()),
+        model="lm",
+        keep_count=6,
+        event_bus=event_bus,
+    )
+    save_session = AsyncMock()
+    maintenance.bind_lifecycle(
+        MemoryLifecycleBindRequest(
+            get_session=lambda _key: session,
+            save_session=save_session,
+        )
+    )
+    maintenance._worker.prepare_consolidation = AsyncMock(
+        return_value=_ConsolidationDraft(
+            window=_ConsolidationWindow(
+                old_messages=list(session.messages[:6]),
+                keep_count=6,
+                consolidate_up_to=6,
+            ),
+            source_ref='["role:mira:group:100:member:u1:0"]',
+            history_entry_payloads=[("[2026-07-02 15:00] 用户频繁纠正我别话密。", 6)],
+            pending_items="- [preference] 用户偏好短、脆、别乱猜。",
+            conversation="USER: 别话密",
+            recent_context_text="",
+            scope_channel="qq",
+            scope_chat_id="gqq:100",
+        )
+    )
+
+    event_bus.enqueue(
+        TurnCommitted(
+            session_key=session.key,
+            channel="qq",
+            chat_id="gqq:100",
+            input_message="hi",
+            persisted_user_message="hi",
+            assistant_response="ok",
+            tools_used=[],
+            role_id="mira",
+        )
+    )
+    await event_bus.drain()
+    await _drain_maintenance(maintenance)
+
+    role_store = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    member_pending = role_store.read_member_pending()
+    assert session.last_consolidated == 6
+    assert save_session.await_count == 1
+    assert role_store.read_history() == ""
+    assert role_store.read_pending() == ""
+    assert len(member_pending["items"]) == 1
+    item = member_pending["items"][0]
+    assert item["member_key"] == "qq:u1"
+    assert item["pending_items"] == ["- [preference] 用户偏好短、脆、别乱猜。"]
     await event_bus.aclose()
 
 

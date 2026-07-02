@@ -9,6 +9,7 @@ proactive/memory_optimizer.py — 记忆质量优化器
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -205,6 +206,48 @@ _SELF_PROMPT = """\
 {pending}
 """
 
+_MEMBER_SYSTEM = (
+    "你正在整理角色对群成员的长期关系记忆。"
+    "你只能输出稳定、可跨对话复用的人际关系信息，不要输出流水账。"
+)
+
+_MEMBER_PROMPT = """\
+今日日期：{today}
+
+你的任务是根据当前 `Member.md` 和新增的成员关系待归档事实，输出新的完整 `Member.md`。
+
+## Member.md 目标
+- 它记录“当前角色对不同群成员的长期印象与关系”
+- 只保留对未来互动有持续影响的信息：关系定位、稳定印象、偏好、长期互动约束
+- 不要写短期事件流水、一次性玩笑、动态情绪波动
+- 不要把角色共性写进成员条目
+- 不要把不同成员的信息混在一起
+
+## 输出格式
+- 文件必须以 `# Member Memory` 开头
+- 每个成员一个 section，标题格式固定为 `## <member_key>`
+- 每个 section 内使用 1-4 条 bullet，优先使用这些前缀：
+  - `- 关系:`
+  - `- 印象:`
+  - `- 偏好:`
+  - `- 互动约束:`
+- 只在确有内容时输出对应 bullet
+- 没有任何成员内容时，输出：
+  `# Member Memory`
+
+## 合并原则
+- 当前 `Member.md` 是基线，尽量保留仍然成立的成员关系描述
+- 新输入里同一成员的多条信息要合并去重
+- 若新输入与旧描述冲突，以新输入为准
+- 只更新出现于待归档事实中的成员；其他成员 section 原样保留
+
+当前 Member.md：
+{member_memory}
+
+待归档成员关系事实（JSON）：
+{member_pending}
+"""
+
 # ── MemoryOptimizer ───────────────────────────────────────────────
 
 
@@ -252,37 +295,66 @@ class MemoryOptimizer:
         )
         # ── Step 1: MEMORY.md 合并 ────────────────────────────────
         pending = memory_store.snapshot_pending()
+        member_pending = memory_store.snapshot_member_pending()
         current_memory = memory_store.read_long_term().strip()
+        current_member_memory = memory_store.read_member_memory().strip()
+        has_member_pending = bool(member_pending.get("items"))
 
-        if not current_memory and not pending:
+        if not current_memory and not pending and not current_member_memory and not has_member_pending:
             logger.info("[memory_optimizer] 记忆和 pending 均为空，跳过优化")
             return
 
-        merged_memory = await self._merge_memory(current_memory, pending)
-        if merged_memory:
-            if current_memory:
-                memory_store.backup_long_term()
-            memory_store.write_long_term(merged_memory)
-            logger.info(
-                "[memory_optimizer] 记忆已合并 before=%d after=%d chars",
-                len(current_memory),
-                len(merged_memory),
-            )
-            if pending:
-                memory_store.append_history(
-                    f"[memory_optimizer] PENDING 归档:\n{pending}"
+        root_merge_touched = bool(current_memory or pending)
+        if root_merge_touched:
+            merged_memory = await self._merge_memory(current_memory, pending)
+            if merged_memory:
+                if current_memory:
+                    memory_store.backup_long_term()
+                memory_store.write_long_term(merged_memory)
+                logger.info(
+                    "[memory_optimizer] 记忆已合并 before=%d after=%d chars",
+                    len(current_memory),
+                    len(merged_memory),
                 )
-            memory_store.commit_pending_snapshot()
-            logger.info("[memory_optimizer] PENDING 已归档，snapshot 已提交")
+                if pending:
+                    memory_store.append_history(
+                        f"[memory_optimizer] PENDING 归档:\n{pending}"
+                    )
+                memory_store.commit_pending_snapshot()
+                logger.info("[memory_optimizer] PENDING 已归档，snapshot 已提交")
+            else:
+                memory_store.rollback_pending_snapshot()
+                logger.warning(
+                    "[memory_optimizer] 合并返回空，保留原有内容，snapshot 已回滚"
+                )
         else:
-            memory_store.rollback_pending_snapshot()
-            logger.warning(
-                "[memory_optimizer] 合并返回空，保留原有内容，snapshot 已回滚"
+            memory_store.commit_pending_snapshot()
+
+        if has_member_pending:
+            merged_member_memory = await self._merge_member_memory(
+                current_member_memory,
+                member_pending,
             )
+            if merged_member_memory:
+                memory_store.write_member_memory(merged_member_memory)
+                memory_store.commit_member_pending_snapshot()
+                logger.info(
+                    "[memory_optimizer] Member.md 已更新 before=%d after=%d chars",
+                    len(current_member_memory),
+                    len(merged_member_memory),
+                )
+            else:
+                memory_store.rollback_member_pending_snapshot()
+                logger.warning(
+                    "[memory_optimizer] 成员关系记忆合并返回空，snapshot 已回滚"
+                )
+        else:
+            memory_store.commit_member_pending_snapshot()
 
         # ── Step 2: SELF.md 更新 ──────────────────────────────────
-        await asyncio.sleep(self._STEP_DELAY_SECONDS)
-        await self._update_self(memory_store, pending)
+        if root_merge_touched:
+            await asyncio.sleep(self._STEP_DELAY_SECONDS)
+            await self._update_self(memory_store, pending)
         self._mark_role_optimized(clean_role_id)
 
     async def _merge_memory(self, memory: str, pending: str) -> str:
@@ -300,6 +372,27 @@ class MemoryOptimizer:
             )
         except Exception as e:
             logger.error("[memory_optimizer] 记忆合并失败: %s", e)
+            return ""
+
+    async def _merge_member_memory(
+        self,
+        member_memory: str,
+        member_pending: dict[str, object],
+    ) -> str:
+        today = datetime.now().strftime("%Y-%m-%d")
+        prompt = _MEMBER_PROMPT.format(
+            today=today,
+            member_memory=member_memory or "# Member Memory",
+            member_pending=json.dumps(member_pending, ensure_ascii=False, indent=2),
+        )
+        try:
+            return await self._request_text_response(
+                system_content=_MEMBER_SYSTEM,
+                user_content=prompt,
+                max_tokens=self._max_tokens,
+            )
+        except Exception as e:
+            logger.error("[memory_optimizer] Member.md 合并失败: %s", e)
             return ""
 
     async def _update_self(self, memory_store: "MarkdownMemoryStore", pending: str) -> None:

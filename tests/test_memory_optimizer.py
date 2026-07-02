@@ -218,6 +218,42 @@ def test_optimize_with_role_id_updates_role_markdown_memory(tmp_path):
     assert role.memory_init_state.get("last_memory_optimized_at")
 
 
+def test_optimize_updates_member_memory_from_member_pending(tmp_path):
+    _ = RoleStore(tmp_path).create_role(
+        role_id="mira",
+        name="Mira",
+        description="",
+        system_prompt="you are mira",
+    )
+    global_memory = MarkdownMemoryStore(tmp_path)
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.write_member_memory("# Member Memory\n\n## qq:old\n- 关系: 老成员\n")
+    assert role_memory.append_member_pending_entry(
+        member_key="qq:3174898512",
+        source_ref='["msg-1"]',
+        history_entry_payloads=[("[2026-07-02 15:00] 用户频繁纠正我别话密。", 6)],
+        pending_items="- [preference] 用户偏好短、脆、别乱猜。",
+    )
+
+    provider = _provider_with_responses(
+        "# Member Memory\n\n## qq:old\n- 关系: 老成员\n\n## qq:3174898512\n- 关系: 互动频繁，常直接纠正我。\n- 偏好: 喜欢短、脆、别乱猜的回复。\n"
+    )
+    optimizer = MemoryOptimizer(
+        global_memory,
+        cast(Any, provider),
+        "test-model",
+        tmp_path,
+    )
+    optimizer._STEP_DELAY_SECONDS = 0
+
+    asyncio.run(optimizer.optimize(role_id="mira"))
+
+    updated = role_memory.read_member_memory()
+    assert "## qq:3174898512" in updated
+    assert "喜欢短、脆、别乱猜的回复" in updated
+    assert role_memory.read_member_pending()["items"] == []
+
+
 def test_seconds_until_next_tick_aligns_to_interval_boundary():
     now = datetime(2026, 2, 23, 12, 34, 56)
     loop = MemoryOptimizerLoop(None, interval_seconds=3600, _now_fn=lambda: now)

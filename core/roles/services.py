@@ -243,6 +243,7 @@ class RoleMemoryService:
 
     _FILES = (
         "MEMORY.md",
+        "Member.md",
         "SELF.md",
         "HISTORY.md",
         "PENDING.md",

@@ -19,9 +19,11 @@ from agent.tools.memorize import MemorizeTool
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolMeta, ToolRegistry
 from agent.tools.web_search import WebSearchTool
+from bootstrap.memory import build_memory_runtime
 from bus.events import InboundMessage, OutboundMessage
 from bus.queue import MessageBus
 from core.common import timekit
+from agent.config_models import Config, MemoryConfig
 from plugins.default_memory.engine import DefaultMemoryEngine
 from infra.persistence.json_store import atomic_save_json, load_json, save_json
 from memory2.memorizer import Memorizer
@@ -680,6 +682,66 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     role_prefix = role_prompt.split("## Active Role: Mira", 1)[0]
     role_prefix_cross_channel = role_prompt_cross_channel.split("## Active Role: Mira", 1)[0]
     assert role_prefix == role_prefix_cross_channel
+
+
+def test_context_builder_injects_only_current_member_memory_section(tmp_path: Path):
+    from core.roles import RoleStore
+
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="你现在要用更温柔的风格说话。",
+    )
+    role_memory_root = tmp_path / "roles" / "mira" / "memory"
+    role_memory_root.mkdir(parents=True, exist_ok=True)
+    (role_memory_root / "SELF.md").write_text("# 角色背景\n\n来自深海城的向导。\n", encoding="utf-8")
+    (role_memory_root / "MEMORY.md").write_text("# 关系基线\n\n来源: seed:first_impression\n", encoding="utf-8")
+    (role_memory_root / "Member.md").write_text(
+        "# Member Memory\n\n"
+        "## qq:u1\n"
+        "- 关系: 常直接纠正我别话密。\n\n"
+        "## qq:u2\n"
+        "- 关系: 互动较少。\n",
+        encoding="utf-8",
+    )
+
+    builder = ContextBuilder(tmp_path, build_memory_runtime(  # type: ignore[arg-type]
+        Config(
+            provider="test",
+            model="test-model",
+            api_key="test-key",
+            system_prompt="test system prompt",
+            memory=MemoryConfig(enabled=False),
+        ),
+        tmp_path,
+        ToolRegistry(),
+        cast(Any, SimpleNamespace()),
+        None,
+        cast(Any, SimpleNamespace()),
+    ))
+    now = datetime.now(timezone.utc)
+    role_prompt = builder.render(
+        ContextRequest(
+            history=[],
+            current_message="hello",
+            skill_names=["extra"],
+            channel="qq",
+            chat_id="gqq:100",
+            message_timestamp=now,
+        ),
+        session_metadata={
+            "role_id": "mira",
+            "is_group_chat": True,
+            "group_member_id": "u1",
+            "context_channel": "qq",
+        },
+    ).messages[0]["content"]
+
+    assert "## 当前成员关系记忆" in role_prompt
+    assert "常直接纠正我别话密" in role_prompt
+    assert "互动较少" not in role_prompt
 
 
 def test_context_builder_reproduces_temporal_conflict_baseline(
