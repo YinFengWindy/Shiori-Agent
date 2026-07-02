@@ -72,3 +72,4 @@ lme_error_log_*.txt
 /locks/
 /start.sh
 *.log
+todoList.md
