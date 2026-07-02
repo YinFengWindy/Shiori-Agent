@@ -1024,6 +1024,54 @@ def test_role_memory_migrate_script_prints_json_summary(
     assert payload["unresolved_session_keys"] == ["telegram:404"]
 
 
+def test_role_group_memory_repair_script_prints_json_summary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    import scripts.role_group_memory_repair as module
+
+    class _FakeRepairer:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def repair(self, **kwargs):
+            return SimpleNamespace(
+                role_id=kwargs["role_id"],
+                channel=kwargs["channel"],
+                group_chat_id=kwargs["group_chat_id"],
+                removed_history_blocks=2,
+                removed_pending_blocks=1,
+                removed_journal_blocks=3,
+                cleared_recent_context=True,
+                deleted_memory_item_ids=["mem-1", "mem-2"],
+            )
+
+    monkeypatch.setattr(module, "RoleGroupMemoryRepairer", _FakeRepairer)
+    monkeypatch.setattr(module, "MemoryStore2", lambda path: SimpleNamespace(close=lambda: None))
+
+    old_argv = sys.argv
+    try:
+        sys.argv = [
+            "role_group_memory_repair.py",
+            "--workspace",
+            str(tmp_path),
+            "--role-id",
+            "mira",
+            "--group-chat-id",
+            "100",
+        ]
+        exit_code = module.main()
+    finally:
+        sys.argv = old_argv
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["role_id"] == "mira"
+    assert payload["removed_history_blocks"] == 2
+    assert payload["deleted_memory_item_ids"] == ["mem-1", "mem-2"]
+
+
 def test_repository_entrypoints_are_desktop_first():
     repo_root = Path(__file__).resolve().parents[1]
     package_json = json.loads((repo_root / "package.json").read_text(encoding="utf-8"))

@@ -12,6 +12,8 @@ from session.manager import SessionManager
 from .services import RoleAggregateService, RoleChannelBinding
 
 _MIGRATION_STATE_VERSION = 1
+_CONSOLIDATION_MARKER_PREFIX = "<!-- consolidation:"
+_GROUP_MEMBER_ID_AMBIGUOUS = "__ambiguous__"
 
 
 @dataclass
@@ -21,6 +23,18 @@ class RoleMigrationSummary:
     migrated_bindings: list[str] = field(default_factory=list)
     unresolved_session_keys: list[str] = field(default_factory=list)
     unresolved_memory_item_ids: list[str] = field(default_factory=list)
+
+
+@dataclass
+class RoleGroupMemoryRepairSummary:
+    role_id: str
+    channel: str
+    group_chat_id: str
+    removed_history_blocks: int = 0
+    removed_pending_blocks: int = 0
+    removed_journal_blocks: int = 0
+    cleared_recent_context: bool = False
+    deleted_memory_item_ids: list[str] = field(default_factory=list)
 
 
 class RoleLegacyMigrator:
@@ -348,3 +362,202 @@ class RoleLegacyMigrator:
             },
             domain="role_migration",
         )
+
+
+class RoleGroupMemoryRepairer:
+    """清理历史遗留的群聊污染角色根记忆。"""
+
+    def __init__(
+        self,
+        *,
+        workspace: Path,
+        memory_store: MemoryStore2 | None = None,
+    ) -> None:
+        self._workspace = Path(workspace)
+        self._memory_store = memory_store
+
+    def repair(
+        self,
+        *,
+        role_id: str,
+        channel: str,
+        group_chat_id: str,
+    ) -> RoleGroupMemoryRepairSummary:
+        clean_role_id = str(role_id or "").strip()
+        clean_channel = str(channel or "").strip()
+        clean_group_chat_id = str(group_chat_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id 不能为空")
+        if not clean_channel:
+            raise ValueError("channel 不能为空")
+        if not clean_group_chat_id:
+            raise ValueError("group_chat_id 不能为空")
+
+        summary = RoleGroupMemoryRepairSummary(
+            role_id=clean_role_id,
+            channel=clean_channel,
+            group_chat_id=clean_group_chat_id,
+        )
+        group_source_prefix = (
+            f"role:{clean_role_id}:group:{clean_group_chat_id}:member:"
+        )
+        memory_root = self._workspace / "roles" / clean_role_id / "memory"
+
+        summary.removed_history_blocks = self._repair_markdown_file(
+            memory_root / "HISTORY.md",
+            group_source_prefix=group_source_prefix,
+        )
+        summary.removed_pending_blocks = self._repair_markdown_file(
+            memory_root / "PENDING.md",
+            group_source_prefix=group_source_prefix,
+        )
+
+        journal_dir = memory_root / "journal"
+        if journal_dir.exists():
+            for journal_file in sorted(journal_dir.glob("*.md")):
+                summary.removed_journal_blocks += self._repair_markdown_file(
+                    journal_file,
+                    group_source_prefix=group_source_prefix,
+                )
+
+        if (
+            summary.removed_history_blocks
+            or summary.removed_pending_blocks
+            or summary.removed_journal_blocks
+        ):
+            recent_context_path = memory_root / "RECENT_CONTEXT.md"
+            if recent_context_path.exists():
+                recent_context_path.write_text("", encoding="utf-8")
+                summary.cleared_recent_context = True
+
+        if self._memory_store is not None:
+            summary.deleted_memory_item_ids.extend(
+                self._repair_memory2_items(
+                    role_id=clean_role_id,
+                    channel=clean_channel,
+                    group_chat_id=clean_group_chat_id,
+                    group_source_prefix=group_source_prefix,
+                )
+            )
+        return summary
+
+    def _repair_markdown_file(
+        self,
+        path: Path,
+        *,
+        group_source_prefix: str,
+    ) -> int:
+        if not path.exists():
+            return 0
+        original = path.read_text(encoding="utf-8")
+        cleaned, removed_blocks = _strip_group_consolidation_blocks(
+            original,
+            group_source_prefix=group_source_prefix,
+        )
+        if removed_blocks:
+            path.write_text(cleaned, encoding="utf-8")
+        return removed_blocks
+
+    def _repair_memory2_items(
+        self,
+        *,
+        role_id: str,
+        channel: str,
+        group_chat_id: str,
+        group_source_prefix: str,
+    ) -> list[str]:
+        memory_store = self._memory_store
+        if memory_store is None:
+            return []
+
+        scope_chat_ids = {group_chat_id}
+        if channel == "qq":
+            scope_chat_ids.add(f"gqq:{group_chat_id}")
+
+        deleted_ids: list[str] = []
+        page = 1
+        page_size = 500
+        while True:
+            items, total = memory_store.list_items_for_dashboard(
+                role_id=role_id,
+                page=page,
+                page_size=page_size,
+                sort_by="created_at",
+                sort_order="asc",
+            )
+            if not items:
+                break
+            for item in items:
+                source_ref = str(item.get("source_ref") or "").strip()
+                if group_source_prefix not in source_ref:
+                    continue
+                item_id = str(item.get("id") or "").strip()
+                if not item_id:
+                    continue
+                full_item = memory_store.get_item_for_dashboard(item_id)
+                if full_item is None:
+                    continue
+                if not _should_delete_group_memory_item(
+                    full_item,
+                    channel=channel,
+                    scope_chat_ids=scope_chat_ids,
+                ):
+                    continue
+                deleted_ids.append(item_id)
+            if page * page_size >= total:
+                break
+            page += 1
+
+        if deleted_ids:
+            _ = memory_store.delete_items_batch(deleted_ids)
+        return deleted_ids
+
+
+def _strip_group_consolidation_blocks(
+    text: str,
+    *,
+    group_source_prefix: str,
+) -> tuple[str, int]:
+    lines = text.splitlines(keepends=True)
+    kept: list[str] = []
+    removed_blocks = 0
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if line.startswith(_CONSOLIDATION_MARKER_PREFIX) and group_source_prefix in line:
+            removed_blocks += 1
+            index += 1
+            while index < len(lines) and not lines[index].startswith(
+                _CONSOLIDATION_MARKER_PREFIX
+            ):
+                index += 1
+            continue
+        kept.append(line)
+        index += 1
+    return "".join(kept), removed_blocks
+
+
+def _should_delete_group_memory_item(
+    item: dict[str, Any],
+    *,
+    channel: str,
+    scope_chat_ids: set[str],
+) -> bool:
+    memory_type = str(item.get("memory_type") or "").strip()
+    extra = item.get("extra_json")
+    extra_json = extra if isinstance(extra, dict) else {}
+    group_member_id = str(extra_json.get("group_member_id") or "").strip()
+    scope_channel = str(extra_json.get("scope_channel") or "").strip()
+    scope_chat_id = str(extra_json.get("scope_chat_id") or "").strip()
+
+    if not memory_type:
+        return True
+    if not scope_channel or not scope_chat_id:
+        return True
+    if scope_channel != channel:
+        return True
+    if scope_chat_id not in scope_chat_ids:
+        return True
+    if group_member_id in {"", _GROUP_MEMBER_ID_AMBIGUOUS}:
+        return True
+    return False
