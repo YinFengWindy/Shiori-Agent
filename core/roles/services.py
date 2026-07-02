@@ -36,6 +36,16 @@ def _binding_key(channel: str, chat_id: str) -> str:
     return f"{clean_channel}:{clean_chat_id}"
 
 
+def _binding_lookup_keys(channel: str, chat_id: str) -> list[str]:
+    key = _binding_key(channel, chat_id)
+    keys = [key]
+    if channel == "qq" and chat_id.startswith("gqq:"):
+        legacy_group_id = chat_id[len("gqq:") :].strip()
+        if legacy_group_id:
+            keys.append(_binding_key(channel, legacy_group_id))
+    return keys
+
+
 class RoleSelfSeedGenerator(Protocol):
     def generate(self, role: "RoleRecord") -> str: ...
 
@@ -417,13 +427,13 @@ class RoleBindingService:
         self._lock = threading.RLock()
 
     def get_binding(self, channel: str, chat_id: str) -> RoleChannelBinding | None:
-        key = _binding_key(channel, chat_id)
         with self._lock:
             payload = self._load_payload()
-            item = payload["bindings"].get(key)
-        if not isinstance(item, dict):
-            return None
-        return RoleChannelBinding.from_dict(item)
+            for key in _binding_lookup_keys(channel, chat_id):
+                item = payload["bindings"].get(key)
+                if isinstance(item, dict):
+                    return RoleChannelBinding.from_dict(item)
+        return None
 
     def resolve_role_id(self, channel: str, chat_id: str) -> str:
         binding = self.get_binding(channel, chat_id)

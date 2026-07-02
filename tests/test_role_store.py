@@ -469,6 +469,43 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
     assert routed.metadata["transport_chat_id"] == "chat-1"
 
 
+def test_route_inbound_by_role_accepts_legacy_qq_group_binding_without_gqq_prefix(
+    tmp_path: Path,
+):
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    _ = service.bindings.bind("qq", "852463977", "mira")
+
+    routed = route_inbound_by_role(
+        service,
+        InboundMessage(
+            channel="qq",
+            sender="u1",
+            chat_id="gqq:852463977",
+            content="hello",
+            timestamp=datetime.now(),
+            metadata={"chat_type": "group", "group_id": "852463977"},
+        ),
+    )
+
+    assert routed.session_key == "role:mira"
+    assert routed.metadata["role_id"] == "mira"
+    assert routed.metadata["context_channel"] == "qq"
+    assert routed.metadata["context_chat_id"] == "gqq:852463977"
+    assert routed.metadata["transport_channel"] == "qq"
+    assert routed.metadata["transport_chat_id"] == "gqq:852463977"
+
+
 def test_route_inbound_by_role_leaves_unbound_legacy_channel_untouched(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
