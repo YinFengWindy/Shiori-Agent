@@ -499,6 +499,7 @@ def test_store_vector_batch_reuses_time_filtered_embedding_rows(
         role_id: str | None,
         scope_channel: str | None,
         scope_chat_id: str | None,
+        group_member_id: str | None,
         require_scope_match: bool,
         time_start: datetime | None,
         time_end: datetime | None,
@@ -512,6 +513,7 @@ def test_store_vector_batch_reuses_time_filtered_embedding_rows(
             role_id=role_id,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
+            group_member_id=group_member_id,
             require_scope_match=require_scope_match,
             time_start=time_start,
             time_end=time_end,
@@ -580,13 +582,14 @@ async def test_recall_memory_timeline_intent_lists_events_without_embedding() ->
     tool = _recall_tool(store, _FailingEmbedder(), provider)
 
     payload = json.loads(
-        await tool.execute(
-            query="今天我都做了什么",
-            intent="timeline",
-            time_filter="2026-04-25",
-            limit=80,
+            await tool.execute(
+                query="今天我都做了什么",
+                intent="timeline",
+                time_filter="2026-04-25",
+                limit=80,
+                role_id="mira",
+            )
         )
-    )
 
     assert payload["count"] == 2
     assert [item["id"] for item in payload["items"]] == ["e1", "e2"]
@@ -604,12 +607,13 @@ async def test_recall_memory_answer_intent_passes_time_range_to_searches() -> No
     tool = _recall_tool(store, _StaticEmbedder(), provider)
 
     payload = json.loads(
-        await tool.execute(
-            query="DeepSeek 缓存命中率",
-            intent="answer",
-            time_filter="2026-04-25",
+            await tool.execute(
+                query="DeepSeek 缓存命中率",
+                intent="answer",
+                time_filter="2026-04-25",
+                role_id="mira",
+            )
         )
-    )
 
     assert payload["items"][0]["id"] == "deepseek"
     assert store.vector_kwargs == []
@@ -630,7 +634,7 @@ async def test_recall_memory_falls_back_to_keyword_when_query_embed_fails() -> N
     provider = _FakeProvider("用户处理过支付相关问题")
     tool = _recall_tool(store, _FailingEmbedder(), provider)
 
-    payload = json.loads(await tool.execute(query="phase 支付"))
+    payload = json.loads(await tool.execute(query="phase 支付", role_id="mira"))
 
     assert payload["count"] == 1
     assert payload["items"][0]["id"] == "mem:1"
@@ -652,7 +656,7 @@ async def test_recall_memory_falls_back_to_keyword_when_query_embed_hangs(
     tool = _recall_tool(store, _HangingEmbedder(), provider)
 
     payload = json.loads(
-        await asyncio.wait_for(tool.execute(query="phase 支付"), timeout=0.5)
+        await asyncio.wait_for(tool.execute(query="phase 支付", role_id="mira"), timeout=0.5)
     )
 
     assert payload["count"] == 1

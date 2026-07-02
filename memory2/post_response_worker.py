@@ -49,6 +49,7 @@ class PostResponseMemoryWorker:
         self._current_run_channel = ""
         self._current_run_chat_id = ""
         self._current_run_role_id = ""
+        self._current_run_group_member_id = ""
 
     async def handle(self, event: TurnIngested) -> None:
         await self.run(
@@ -60,6 +61,7 @@ class PostResponseMemoryWorker:
             channel=event.channel,
             chat_id=event.chat_id,
             role_id=event.role_id,
+            group_member_id=event.group_member_id,
         )
 
     async def run(
@@ -72,12 +74,14 @@ class PostResponseMemoryWorker:
         channel: str = "",
         chat_id: str = "",
         role_id: str = "",
+        group_member_id: str = "",
     ) -> None:
         # 1. 初始化本轮异步提炼的上下文和 token 预算。
         self._current_run_session_key = session_key
         self._current_run_channel = channel
         self._current_run_chat_id = chat_id
         self._current_run_role_id = role_id
+        self._current_run_group_member_id = group_member_id
         token_budget = self.TOKEN_BUDGET_PER_RUN
         logger.debug(
             "post_response_memorize start session=%s source_ref=%s user_len=%d resp_len=%d tool_steps=%d",
@@ -202,6 +206,11 @@ class PostResponseMemoryWorker:
             candidates = await self._retriever.retrieve(
                 topic,
                 memory_types=["procedure", "preference"],
+                role_id=self._current_run_role_id or None,
+                scope_channel=self._current_run_channel or None,
+                scope_chat_id=self._current_run_chat_id or None,
+                group_member_id=self._current_run_group_member_id or None,
+                require_scope_match=bool(self._current_run_group_member_id),
             )
             high_sim = [
                 c
@@ -236,6 +245,7 @@ class PostResponseMemoryWorker:
                             action="supersede",
                             superseded_ids=supersede_ids,
                             role_id=self._current_run_role_id,
+                            group_member_id=self._current_run_group_member_id,
                         )
                     )
         return token_budget

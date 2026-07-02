@@ -498,8 +498,10 @@ def test_route_inbound_by_role_accepts_legacy_qq_group_binding_without_gqq_prefi
         ),
     )
 
-    assert routed.session_key == "role:mira"
+    assert routed.session_key == "role:mira:group:852463977:member:u1"
     assert routed.metadata["role_id"] == "mira"
+    assert routed.metadata["group_member_id"] == "u1"
+    assert routed.metadata["group_context_key"] == "groupctx:qq:852463977"
     assert routed.metadata["context_channel"] == "qq"
     assert routed.metadata["context_chat_id"] == "gqq:852463977"
     assert routed.metadata["transport_channel"] == "qq"

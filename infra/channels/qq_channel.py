@@ -77,6 +77,10 @@ def _session_key_for_chat(chat_id: str) -> str:
     return f"{_CHANNEL}:{chat_id}"
 
 
+def _group_context_key(group_id: str) -> str:
+    return f"groupctx:{_CHANNEL}:{str(group_id).strip()}"
+
+
 def _truncate_trace_text(text: str, limit: int) -> str:
     raw = str(text or "").strip()
     if len(raw) <= limit:
@@ -566,12 +570,8 @@ class QQChannel:
         content: str,
         img_urls: list[str] | None = None,
     ) -> None:
-        """群聊入站：chat_id = gqq:{group_id}，session 按群共享"""
+        """群聊入站：chat_id = gqq:{group_id}，角色会话按群成员拆分。"""
         chat_id = f"{_GROUP_PREFIX}{group_id}"
-        session = self._session_manager.get_or_create(f"{_CHANNEL}:{chat_id}")
-        if "group_id" not in session.metadata:
-            session.metadata["group_id"] = group_id
-            await self._session_manager.save_async(session)
         media = await _download_to_temp(
             img_urls or [],
             self._http_requester,
@@ -586,8 +586,12 @@ class QQChannel:
                 media=media,
                 metadata={
                     "chat_type": "group",
+                    "is_group_chat": True,
                     "group_id": group_id,
+                    "member_id": user_id,
+                    "group_member_id": user_id,
                     "sender_id": user_id,
+                    "group_context_key": _group_context_key(group_id),
                 },
             )
         )
@@ -595,6 +599,7 @@ class QQChannel:
     async def _publish_inbound(self, message: InboundMessage) -> None:
         if self._role_router is not None:
             message = self._role_router.route(message)
+        await self._append_group_context_user_message(message)
         await self._bus.publish_inbound(message)
 
     async def _handle_stop_group(self, group_id: str, user_id: str) -> None:
@@ -602,8 +607,28 @@ class QQChannel:
         if self._interrupt_controller is None:
             await self.send(chat_id, "当前未启用中断功能。")
             return
+        session_key = f"{_CHANNEL}:{chat_id}"
+        if self._role_router is not None:
+            routed = self._role_router.route(
+                InboundMessage(
+                    channel=_CHANNEL,
+                    sender=user_id,
+                    chat_id=chat_id,
+                    content="/stop",
+                    metadata={
+                        "chat_type": "group",
+                        "is_group_chat": True,
+                        "group_id": group_id,
+                        "member_id": user_id,
+                        "group_member_id": user_id,
+                        "sender_id": user_id,
+                        "group_context_key": _group_context_key(group_id),
+                    },
+                )
+            )
+            session_key = routed.session_key
         result = self._interrupt_controller.request_interrupt(
-            session_key=f"{_CHANNEL}:{chat_id}",
+            session_key=session_key,
             sender=user_id,
             command="/stop",
         )
@@ -637,12 +662,98 @@ class QQChannel:
                     )
             except Exception as e:
                 logger.error(f"[qq] 发送失败  chat_id={msg.chat_id}  错误: {e}")
+        await self._append_group_context_assistant_message(msg)
         for image in (msg.media or []):
             try:
                 await self.send_image(msg.chat_id, image)
             except Exception as e:
                 logger.error(f"[qq] meme 图片发送失败  chat_id={msg.chat_id}  path={image}  err={e}")
         self._trace_states.pop(session_key, None)
+
+    async def _append_group_context_user_message(self, message: InboundMessage) -> None:
+        metadata = message.metadata if isinstance(message.metadata, dict) else {}
+        group_context_key = str(metadata.get("group_context_key") or "").strip()
+        role_id = str(metadata.get("role_id") or "").strip()
+        if not group_context_key or not role_id:
+            return
+        session = self._session_manager.get_or_create(group_context_key)
+        session.metadata["group_context_key"] = group_context_key
+        session.metadata["is_group_chat"] = True
+        for key in ("group_id", "role_id", "context_channel", "context_chat_id"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                session.metadata[key] = value.strip()
+        self._append_group_context_message(
+            session,
+            role="user",
+            content=message.content,
+            media=message.media if message.media else None,
+            metadata={
+                "group_context": True,
+                "chat_type": "group",
+                "member_id": str(
+                    metadata.get("group_member_id")
+                    or metadata.get("member_id")
+                    or metadata.get("sender_id")
+                    or message.sender
+                ).strip(),
+            },
+        )
+        await self._persist_group_context_session(session)
+
+    async def _append_group_context_assistant_message(self, msg: OutboundMessage) -> None:
+        metadata = msg.metadata if isinstance(msg.metadata, dict) else {}
+        group_context_key = str(metadata.get("group_context_key") or "").strip()
+        role_id = str(metadata.get("role_id") or "").strip()
+        if not group_context_key or not role_id:
+            return
+        if not str(msg.content or "").strip():
+            return
+        session = self._session_manager.get_or_create(group_context_key)
+        session.metadata["group_context_key"] = group_context_key
+        session.metadata["is_group_chat"] = True
+        for key in ("group_id", "role_id", "context_channel", "context_chat_id"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                session.metadata[key] = value.strip()
+        self._append_group_context_message(
+            session,
+            role="assistant",
+            content=msg.content,
+            metadata={"group_context": True, "chat_type": "group"},
+        )
+        await self._persist_group_context_session(session)
+
+    @staticmethod
+    def _append_group_context_message(
+        session: Any,
+        *,
+        role: str,
+        content: str,
+        metadata: dict[str, Any],
+        media: list[str] | None = None,
+    ) -> None:
+        add_message = getattr(session, "add_message", None)
+        if callable(add_message):
+            add_message(role, content, media=media, metadata=metadata)
+            return
+        messages = getattr(session, "messages", None)
+        if not isinstance(messages, list):
+            messages = []
+            session.messages = messages
+        payload: dict[str, Any] = {"role": role, "content": content, "metadata": metadata}
+        if media:
+            payload["media"] = list(media)
+        messages.append(payload)
+
+    async def _persist_group_context_session(self, session: Any) -> None:
+        append_messages = getattr(self._session_manager, "append_messages", None)
+        if callable(append_messages):
+            await append_messages(session, [session.messages[-1]])
+            return
+        save_async = getattr(self._session_manager, "save_async", None)
+        if callable(save_async):
+            await save_async(session)
 
     async def _send_private_trace(
         self,

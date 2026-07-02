@@ -232,6 +232,14 @@ def _is_nsfw_memory_enabled_session(session: object) -> bool:
     return bool(_session_role_runtime_config(session).get("nsfw_memory_enabled"))
 
 
+def _is_group_chat_session_metadata(metadata: object) -> bool:
+    return isinstance(metadata, dict) and bool(metadata.get("is_group_chat"))
+
+
+def _is_group_chat_session(session: object) -> bool:
+    return _is_group_chat_session_metadata(getattr(session, "metadata", None))
+
+
 def _dedupe_semantic_items(items: list[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
@@ -1213,6 +1221,8 @@ class MarkdownMemoryRuntime:
         session_metadata: dict[str, Any] | None = None,
         role_id: str | None = None,
     ) -> str:
+        if _is_group_chat_session_metadata(session_metadata):
+            return ""
         return self.resolve_store(
             session_metadata=session_metadata,
             role_id=role_id,
@@ -1315,6 +1325,8 @@ class MarkdownMemoryMaintenance:
                 session = self._get_session(session_key) if self._get_session else None
                 if session is None:
                     return
+                if _is_group_chat_session(session):
+                    continue
                 if self._should_consolidate_session(session):
                     result = await self._consolidate_unlocked(
                         ConsolidateRequest(session=session)
@@ -1404,6 +1416,9 @@ class MarkdownMemoryMaintenance:
     ) -> None:
         target_store = self._resolve_store_for_session(session)
         role_id = str(getattr(session, "metadata", {}).get("role_id") or "").strip()
+        group_member_id = str(
+            getattr(session, "metadata", {}).get("group_member_id") or ""
+        ).strip()
         history_entries = [entry for entry, _ in draft.history_entry_payloads]
         if history_entries:
             await asyncio.to_thread(
@@ -1445,6 +1460,7 @@ class MarkdownMemoryMaintenance:
                     scope_chat_id=draft.scope_chat_id,
                     conversation=draft.conversation,
                     role_id=role_id,
+                    group_member_id=group_member_id,
                 )
             )
 

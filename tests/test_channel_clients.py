@@ -1027,7 +1027,9 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert bus.inbound[1].metadata["chat_type"] == "group"
     assert bus.inbound[0].session_key == "role:mira"
     assert bus.inbound[0].metadata["role_id"] == "mira"
-    assert bus.inbound[1].session_key == "role:mira"
+    assert bus.inbound[1].session_key == "role:mira:group:100:member:1"
+    assert bus.inbound[1].metadata["group_member_id"] == "1"
+    assert bus.inbound[1].metadata["group_context_key"] == "groupctx:qq:100"
     assert channel._interrupt_controller.request_interrupt.call_count == 2
 
     channel._run_on_bot_loop = AsyncMock(side_effect=_drain)

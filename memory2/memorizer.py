@@ -85,6 +85,7 @@ class Memorizer:
         """
         embedding = await self._embedder.embed(summary)
         role_id = str((extra or {}).get("role_id") or "").strip() or None
+        group_member_id = str((extra or {}).get("group_member_id") or "").strip() or None
 
         if memory_type in ("procedure", "preference"):
             similar = self._store.vector_search(
@@ -93,6 +94,7 @@ class Memorizer:
                 memory_types=[memory_type],
                 score_threshold=min(merge_threshold, supersede_threshold),
                 role_id=role_id,
+                group_member_id=group_member_id,
             )
             if memory_type == "procedure":
                 merge_target = self._pick_explicit_merge_target(similar, extra, merge_threshold)
@@ -134,6 +136,7 @@ class Memorizer:
                     memory_types=["profile"],
                     score_threshold=supersede_threshold,
                     role_id=role_id,
+                    group_member_id=group_member_id,
                 )
                 same_cat = [
                     item for item in similar
@@ -176,6 +179,7 @@ class Memorizer:
         scope_channel: str,
         scope_chat_id: str,
         role_id: str = "",
+        group_member_id: str = "",
         emotional_weight: int = 0,
     ) -> None:
         """将 consolidation 的产出写入 SQLite"""
@@ -194,6 +198,10 @@ class Memorizer:
                     if self._should_semantic_dedup_event(
                         embedding,
                         emotional_weight=emotional_weight,
+                        role_id=role_id,
+                        scope_channel=scope_channel,
+                        scope_chat_id=scope_chat_id,
+                        group_member_id=group_member_id,
                     ):
                         text = ""
                 if text:
@@ -205,6 +213,7 @@ class Memorizer:
                             "role_id": role_id,
                             "scope_channel": scope_channel,
                             "scope_chat_id": scope_chat_id,
+                            "group_member_id": group_member_id,
                         },
                         happened_at=_parse_history_entry_happened_at(text),
                         emotional_weight=emotional_weight,
@@ -231,6 +240,10 @@ class Memorizer:
         embedding: list[float] | None,
         *,
         emotional_weight: int = 0,
+        role_id: str = "",
+        scope_channel: str = "",
+        scope_chat_id: str = "",
+        group_member_id: str = "",
     ) -> bool:
         if embedding is None:
             return False
@@ -238,6 +251,10 @@ class Memorizer:
             embedding,
             threshold=0.92,
             days_back=7,
+            role_id=str(role_id or "").strip() or None,
+            scope_channel=str(scope_channel or "").strip() or None,
+            scope_chat_id=str(scope_chat_id or "").strip() or None,
+            group_member_id=str(group_member_id or "").strip() or None,
         )
         if not similar_ids:
             return False

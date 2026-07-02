@@ -48,6 +48,36 @@ class _DummySession:
         return self.messages[-max_messages:]
 
 
+class _GroupContextSessionManager:
+    def __init__(self) -> None:
+        self.sessions = {
+            "groupctx:qq:100": SimpleNamespace(
+                key="groupctx:qq:100",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "B 先前说过的话",
+                        "metadata": {"member_id": "2"},
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "角色刚才在群里的回复",
+                        "metadata": {"group_context": True},
+                    },
+                    {
+                        "role": "user",
+                        "content": "当前这条消息",
+                        "metadata": {"member_id": "1"},
+                    },
+                ],
+                metadata={},
+            )
+        }
+
+    def get_or_create(self, key: str):
+        return self.sessions.setdefault(key, SimpleNamespace(key=key, messages=[], metadata={}))
+
+
 @pytest.mark.asyncio
 async def test_default_context_store_prepare_returns_bundle_with_legacy_metadata():
     retrieval = SimpleNamespace(
@@ -191,6 +221,56 @@ async def test_default_context_store_uses_cli_context_override_for_retrieval():
     assert request.session_key == "telegram:7674283004"
     assert request.channel == "telegram"
     assert request.chat_id == "7674283004"
+
+
+@pytest.mark.asyncio
+async def test_default_context_store_injects_group_shared_background_without_repeating_current_message():
+    retrieval = SimpleNamespace(
+        retrieve=AsyncMock(
+            return_value=RetrievalResult(
+                block="remembered",
+                trace=RetrievalTrace(raw={"route": "RETRIEVE"}),
+            )
+        )
+    )
+    context = SimpleNamespace(
+        skills=SimpleNamespace(list_skills=MagicMock(return_value=[]))
+    )
+    store = DefaultContextStore(
+        retrieval=cast(Any, retrieval),
+        context=cast(Any, context),
+        session_manager=cast(Any, _GroupContextSessionManager()),
+    )
+    session = _DummySession()
+    session.metadata.update(
+        {
+            "role_id": "mira",
+            "is_group_chat": True,
+            "group_id": "100",
+            "group_member_id": "1",
+        }
+    )
+    msg = InboundMessage(
+        channel="qq",
+        sender="1",
+        chat_id="gqq:100",
+        content="当前这条消息",
+        metadata={
+            "role_id": "mira",
+            "is_group_chat": True,
+            "group_id": "100",
+            "group_member_id": "1",
+            "group_context_key": "groupctx:qq:100",
+        },
+    )
+
+    bundle = await store.prepare(msg=msg, session_key="role:mira:group:100:member:1", session=cast(Any, session))
+
+    assert "remembered" in bundle.retrieved_memory_block
+    assert "## 群聊共享背景" in bundle.retrieved_memory_block
+    assert "[2] B 先前说过的话" in bundle.retrieved_memory_block
+    assert "[角色] 角色刚才在群里的回复" in bundle.retrieved_memory_block
+    assert "当前这条消息" not in bundle.retrieved_memory_block
 
 
 def test_estimate_history_budget_returns_serialized_history_size():

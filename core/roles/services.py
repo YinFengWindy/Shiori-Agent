@@ -170,6 +170,39 @@ class RoleSessionService:
     def derive_session_key(self, role_id: str) -> str:
         return self._session_manager.role_session_key(_clean_role_id(role_id))
 
+    def derive_group_member_session_key(
+        self,
+        role_id: str,
+        *,
+        group_id: str,
+        member_id: str,
+    ) -> str:
+        clean_role_id = _clean_role_id(role_id)
+        clean_group_id = str(group_id).strip()
+        clean_member_id = str(member_id).strip()
+        if not clean_group_id:
+            raise ValueError("group_id 不能为空")
+        if not clean_member_id:
+            raise ValueError("member_id 不能为空")
+        return (
+            f"{self._session_manager.role_session_key(clean_role_id)}"
+            f":group:{clean_group_id}:member:{clean_member_id}"
+        )
+
+    @staticmethod
+    def derive_group_context_key(
+        *,
+        channel: str,
+        group_id: str,
+    ) -> str:
+        clean_channel = str(channel).strip()
+        clean_group_id = str(group_id).strip()
+        if not clean_channel:
+            raise ValueError("channel 不能为空")
+        if not clean_group_id:
+            raise ValueError("group_id 不能为空")
+        return f"groupctx:{clean_channel}:{clean_group_id}"
+
     def open_by_role(self, role: RoleRecord) -> Session:
         return self._session_manager.sync_role_session_metadata(
             role.id,

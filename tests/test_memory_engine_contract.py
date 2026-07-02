@@ -322,6 +322,99 @@ async def test_default_memory_engine_isolates_relationship_memory_between_roles(
     assert "Mira 视角：用户偏好中文回复" not in atlas_summaries
 
 
+async def test_default_memory_engine_isolates_group_member_relationship_memory(tmp_path: Path):
+    provider = SimpleNamespace()
+    runtime = build_memory_runtime(
+        config=Config(
+            provider="test",
+            model="gpt-test",
+            api_key="k",
+            system_prompt="hi",
+            memory=MemoryConfig(enabled=True),
+        ),
+        workspace=tmp_path,
+        tools=ToolRegistry(),
+        provider=cast(Any, provider),
+        light_provider=None,
+        http_resources=cast(Any, SimpleNamespace(external_default=SimpleNamespace())),
+    )
+    engine = cast(Any, runtime.engine)
+    store = engine._v2_store
+    assert store is not None
+
+    store.upsert_item(
+        "preference",
+        "成员 1 偏好中文回复",
+        [1.0, 0.0],
+        extra={
+            "role_id": "mira",
+            "memory_domain": "relationship",
+            "scope_channel": "qq",
+            "scope_chat_id": "gqq:100",
+            "group_member_id": "1",
+        },
+        source_ref="role:mira:g100:m1",
+    )
+    store.upsert_item(
+        "preference",
+        "成员 2 偏好英文回复",
+        [1.0, 0.0],
+        extra={
+            "role_id": "mira",
+            "memory_domain": "relationship",
+            "scope_channel": "qq",
+            "scope_chat_id": "gqq:100",
+            "group_member_id": "2",
+        },
+        source_ref="role:mira:g100:m2",
+    )
+    store.upsert_item(
+        "identity",
+        "角色坚持诚实表达",
+        [1.0, 0.0],
+        extra={"role_id": "mira", "memory_domain": "role_self"},
+        source_ref="role:mira:self",
+    )
+
+    result = await engine.query(
+        MemoryQuery(
+            text="这个成员偏好什么语言回复",
+            intent="interest",
+            scope=MemoryScope(role_id="mira", channel="qq", chat_id="gqq:100"),
+            context={"session_metadata": {"role_id": "mira", "is_group_chat": True, "group_member_id": "1"}},
+            limit=10,
+        )
+    )
+
+    summaries = [record.summary for record in result.records]
+    assert "成员 1 偏好中文回复" in summaries
+    assert "成员 2 偏好英文回复" not in summaries
+
+
+def test_markdown_runtime_skips_role_recent_context_for_group_chat(tmp_path: Path):
+    role_memory_root = tmp_path / "roles" / "mira" / "memory"
+    role_memory_root.mkdir(parents=True, exist_ok=True)
+    (role_memory_root / "RECENT_CONTEXT.md").write_text("# Recent Context\n\n旧上下文\n", encoding="utf-8")
+
+    runtime = build_memory_runtime(
+        config=Config(
+            provider="test",
+            model="gpt-test",
+            api_key="k",
+            system_prompt="hi",
+            memory=MemoryConfig(enabled=True),
+        ),
+        workspace=tmp_path,
+        tools=ToolRegistry(),
+        provider=cast(Any, SimpleNamespace()),
+        light_provider=None,
+        http_resources=cast(Any, SimpleNamespace(external_default=SimpleNamespace())),
+    )
+
+    runtime.bind_session_metadata({"role_id": "mira", "is_group_chat": True})
+    assert runtime.read_recent_context() == ""
+
+
 async def test_default_engine_keeps_history_injected_ids():
     retriever = SimpleNamespace(
         retrieve=AsyncMock(

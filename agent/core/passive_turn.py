@@ -148,6 +148,43 @@ def _disabled_tools_from_msg(msg: object) -> set[str]:
     return set()
 
 
+def _format_group_context_lines(
+    messages: list[dict[str, Any]],
+    *,
+    current_message: str,
+    current_member_id: str,
+    limit: int = 12,
+) -> list[str]:
+    rendered: list[str] = []
+    normalized_current = str(current_message or "").strip()
+    normalized_member = str(current_member_id or "").strip()
+    recent = list(messages[-max(1, limit + 1) :])
+    for index, message in enumerate(recent):
+        content = str(message.get("content") or "").strip()
+        if not content:
+            continue
+        role = str(message.get("role") or "").strip().lower()
+        metadata = message.get("metadata")
+        item_metadata = metadata if isinstance(metadata, dict) else {}
+        if (
+            index == len(recent) - 1
+            and role == "user"
+            and normalized_current
+            and content == normalized_current
+            and str(item_metadata.get("member_id") or "").strip() == normalized_member
+        ):
+            continue
+        if role == "assistant":
+            rendered.append(f"- [角色] {content}")
+            continue
+        member_id = str(item_metadata.get("member_id") or "").strip()
+        speaker = member_id or "群成员"
+        if len(content) > 120:
+            content = support.log_preview(content, limit=120)
+        rendered.append(f"- [{speaker}] {content}")
+    return rendered[-limit:]
+
+
 class _NoopOutboundPort:
     async def dispatch(self, outbound: OutboundDispatch) -> bool:
         return False
@@ -665,10 +702,12 @@ class DefaultContextStore(ContextStore):
         *,
         retrieval: "MemoryRetrievalPipeline",
         context: "ContextBuilder",
+        session_manager: "SessionManager | None" = None,
         history_window: int = 500,
     ) -> None:
         self._retrieval = retrieval
         self._context = context
+        self._session_manager = session_manager
         self._history_window = max(1, int(history_window))
 
     async def prepare(
@@ -705,11 +744,19 @@ class DefaultContextStore(ContextStore):
             msg.content,
             self._context.skills.list_skills(filter_unavailable=False),
         )
+        group_context_block = self._build_group_context_block(msg)
+        retrieved_block = retrieval_result.block or ""
+        if group_context_block:
+            retrieved_block = (
+                f"{retrieved_block}\n\n{group_context_block}".strip()
+                if retrieved_block
+                else group_context_block
+            )
         return ContextBundle(
             history=support.to_chat_messages(raw_history),
-            memory_blocks=[retrieval_result.block] if retrieval_result.block else [],
+            memory_blocks=[retrieved_block] if retrieved_block else [],
             skill_mentions=skill_mentions,
-            retrieved_memory_block=retrieval_result.block or "",
+            retrieved_memory_block=retrieved_block,
             retrieval_trace_raw=(
                 retrieval_result.trace.raw
                 if retrieval_result.trace is not None
@@ -718,6 +765,26 @@ class DefaultContextStore(ContextStore):
             retrieval_metadata=dict(retrieval_result.metadata or {}),
             history_messages=history_messages,
         )
+
+    def _build_group_context_block(self, msg: "InboundMessage") -> str:
+        metadata = msg.metadata if isinstance(msg.metadata, dict) else {}
+        group_context_key = str(metadata.get("group_context_key") or "").strip()
+        if not group_context_key or self._session_manager is None:
+            return ""
+        session = self._session_manager.get_or_create(group_context_key)
+        lines = _format_group_context_lines(
+            session.messages,
+            current_message=msg.content,
+            current_member_id=str(
+                metadata.get("group_member_id")
+                or metadata.get("member_id")
+                or metadata.get("sender_id")
+                or msg.sender
+            ).strip(),
+        )
+        if not lines:
+            return ""
+        return "## 群聊共享背景\n" + "\n".join(lines)
 
 class Reasoner(ABC):
 
