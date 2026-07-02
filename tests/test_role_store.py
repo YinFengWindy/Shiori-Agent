@@ -564,6 +564,99 @@ def test_role_legacy_migrator_moves_confirmed_session_into_role_session(tmp_path
     assert binding.role_id == "mira"
 
 
+def test_role_legacy_migrator_splits_legacy_group_session_by_member(tmp_path: Path):
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    legacy = session_manager.get_or_create("qq:gqq:100")
+    legacy.metadata["role_id"] = "mira"
+    legacy.metadata["group_id"] = "100"
+    legacy.add_message("user", "u1-hello", metadata={"member_id": "u1"})
+    legacy.add_message("assistant", "a1")
+    legacy.add_message("user", "u2-hello", metadata={"member_id": "u2"})
+    legacy.add_message("assistant", "a2")
+    session_manager.save(legacy)
+
+    migrator = RoleLegacyMigrator(
+        workspace=tmp_path,
+        roles=service,
+        session_manager=session_manager,
+    )
+    summary = migrator.migrate()
+
+    member1 = session_manager.get_or_create("role:mira:group:100:member:u1")
+    member2 = session_manager.get_or_create("role:mira:group:100:member:u2")
+    assert "qq:gqq:100" in summary.migrated_session_keys
+    assert [item["content"] for item in member1.messages] == ["u1-hello", "a1"]
+    assert [item["content"] for item in member2.messages] == ["u2-hello", "a2"]
+    assert member1.metadata["group_member_id"] == "u1"
+    assert member2.metadata["group_member_id"] == "u2"
+
+
+def test_role_legacy_migrator_marks_ambiguous_group_memory_unresolved(tmp_path: Path):
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+
+    memory_store = MemoryStore2(tmp_path / "memory" / "memory2.db", vec_dim=2)
+    unresolved_result = memory_store.upsert_item(
+        memory_type="preference",
+        summary="群里某人偏好中文回复",
+        embedding=[1.0, 0.0],
+        extra={
+            "role_id": "mira",
+            "memory_domain": "relationship",
+            "scope_channel": "qq",
+            "scope_chat_id": "gqq:100",
+        },
+        source_ref="legacy:group:pref",
+    )
+    resolved_result = memory_store.upsert_item(
+        memory_type="preference",
+        summary="成员 u1 偏好中文回复",
+        embedding=[1.0, 0.0],
+        extra={
+            "role_id": "mira",
+            "memory_domain": "relationship",
+            "scope_channel": "qq",
+            "scope_chat_id": "gqq:100",
+            "group_member_id": "u1",
+        },
+        source_ref="legacy:group:member-pref",
+    )
+    unresolved_item_id = unresolved_result.split(":", 1)[1]
+    resolved_item_id = resolved_result.split(":", 1)[1]
+
+    migrator = RoleLegacyMigrator(
+        workspace=tmp_path,
+        roles=service,
+        session_manager=session_manager,
+        memory_store=memory_store,
+    )
+    summary = migrator.migrate()
+
+    assert unresolved_item_id in summary.unresolved_memory_item_ids
+    assert resolved_item_id in summary.migrated_memory_item_ids
+
+
 def test_role_legacy_migrator_keeps_unconfirmed_session_in_unresolved(tmp_path: Path):
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(

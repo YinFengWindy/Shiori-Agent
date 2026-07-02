@@ -81,6 +81,127 @@ class RoleLegacyMigrator:
         }
         return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
+    @staticmethod
+    def _session_group_id(
+        source_key: str,
+        metadata: dict[str, Any] | None,
+    ) -> str:
+        if isinstance(metadata, dict):
+            group_id = str(metadata.get("group_id") or "").strip()
+            if group_id:
+                return group_id
+        binding = RoleLegacyMigrator._source_binding_from_session_key(source_key)
+        if binding is None:
+            return ""
+        _channel, chat_id = binding
+        if chat_id.startswith("gqq:"):
+            return chat_id[len("gqq:") :].strip()
+        return ""
+
+    @staticmethod
+    def _message_member_id(message: dict[str, Any]) -> str:
+        metadata = message.get("metadata")
+        msg_metadata = metadata if isinstance(metadata, dict) else {}
+        for key in ("group_member_id", "member_id", "sender_id"):
+            value = str(msg_metadata.get(key) or message.get(key) or "").strip()
+            if value:
+                return value
+        return ""
+
+    def _group_target_session(
+        self,
+        *,
+        role_id: str,
+        channel: str,
+        group_id: str,
+        member_id: str,
+    ):
+        target_key = self._roles.sessions.derive_group_member_session_key(
+            role_id,
+            group_id=group_id,
+            member_id=member_id,
+        )
+        session = self._session_manager.get_or_create(target_key)
+        session.metadata["role_id"] = role_id
+        session.metadata["is_group_chat"] = True
+        session.metadata["group_id"] = group_id
+        session.metadata["group_member_id"] = member_id
+        session.metadata["member_id"] = member_id
+        session.metadata["group_context_key"] = self._roles.sessions.derive_group_context_key(
+            channel=channel,
+            group_id=group_id,
+        )
+        session.metadata.setdefault("context_channel", channel)
+        source_chat_id = f"gqq:{group_id}" if channel == "qq" else group_id
+        session.metadata.setdefault("context_chat_id", source_chat_id)
+        session.metadata.setdefault("transport_channel", channel)
+        session.metadata.setdefault("transport_chat_id", source_chat_id)
+        return session
+
+    def _migrate_group_session_messages(
+        self,
+        *,
+        source_key: str,
+        role_id: str,
+        group_id: str,
+        source_messages: list[dict[str, Any]],
+        summary: RoleMigrationSummary,
+    ) -> bool:
+        binding = self._source_binding_from_session_key(source_key)
+        if binding is None:
+            summary.unresolved_session_keys.append(source_key)
+            return False
+        channel, _chat_id = binding
+        pending_by_member: dict[str, list[dict[str, Any]]] = {}
+        current_member_id = ""
+        for message in source_messages:
+            role = str(message.get("role") or "").strip().lower()
+            if role == "user":
+                current_member_id = self._message_member_id(message)
+                if not current_member_id:
+                    summary.unresolved_session_keys.append(source_key)
+                    return False
+            elif role == "assistant":
+                if not current_member_id:
+                    summary.unresolved_session_keys.append(source_key)
+                    return False
+            else:
+                continue
+            copied = dict(message)
+            copied.pop("id", None)
+            copied.pop("session_key", None)
+            copied.pop("seq", None)
+            pending_by_member.setdefault(current_member_id, []).append(copied)
+
+        for member_id, messages in pending_by_member.items():
+            target = self._group_target_session(
+                role_id=role_id,
+                channel=channel,
+                group_id=group_id,
+                member_id=member_id,
+            )
+            existing_signatures = {
+                self._message_signature(item)
+                for item in self._session_manager._store.fetch_session_messages(target.key)
+            }
+            for copied in messages:
+                signature = self._message_signature(copied)
+                if signature in existing_signatures:
+                    continue
+                target.messages.append(copied)
+                existing_signatures.add(signature)
+            self._session_manager.save(target)
+        return True
+
+    @staticmethod
+    def _is_group_relationship_memory(extra: dict[str, Any]) -> bool:
+        if str(extra.get("memory_domain") or "").strip() != "relationship":
+            return False
+        scope_chat_id = str(extra.get("scope_chat_id") or "").strip()
+        if scope_chat_id.startswith("gqq:"):
+            return True
+        return bool(str(extra.get("group_id") or "").strip())
+
     def _migrate_sessions(
         self,
         state: dict[str, Any],
@@ -109,23 +230,35 @@ class RoleLegacyMigrator:
                     self._roles.bindings.bind(channel, chat_id, role.id)
                     state.setdefault("migrated_bindings", []).append(binding_key)
                     summary.migrated_bindings.append(binding_key)
-            target = self._roles.sessions.open_by_role(role)
             source_messages = self._session_manager._store.fetch_session_messages(source_key)
-            existing_signatures = {
-                self._message_signature(item)
-                for item in self._session_manager._store.fetch_session_messages(target.key)
-            }
-            for message in source_messages:
-                signature = self._message_signature(message)
-                if signature in existing_signatures:
+            group_id = self._session_group_id(source_key, metadata if isinstance(metadata, dict) else None)
+            if group_id:
+                migrated_group = self._migrate_group_session_messages(
+                    source_key=source_key,
+                    role_id=role.id,
+                    group_id=group_id,
+                    source_messages=source_messages,
+                    summary=summary,
+                )
+                if not migrated_group:
                     continue
-                copied = dict(message)
-                copied.pop("id", None)
-                copied.pop("session_key", None)
-                copied.pop("seq", None)
-                target.messages.append(copied)
-                existing_signatures.add(signature)
-            self._session_manager.save(target)
+            else:
+                target = self._roles.sessions.open_by_role(role)
+                existing_signatures = {
+                    self._message_signature(item)
+                    for item in self._session_manager._store.fetch_session_messages(target.key)
+                }
+                for message in source_messages:
+                    signature = self._message_signature(message)
+                    if signature in existing_signatures:
+                        continue
+                    copied = dict(message)
+                    copied.pop("id", None)
+                    copied.pop("session_key", None)
+                    copied.pop("seq", None)
+                    target.messages.append(copied)
+                    existing_signatures.add(signature)
+                self._session_manager.save(target)
             state.setdefault("migrated_session_keys", []).append(source_key)
             migrated.append(source_key)
         return migrated
@@ -150,6 +283,11 @@ class RoleLegacyMigrator:
             extra = dict(full.get("extra_json") or {})
             role_id = str(extra.get("role_id") or "").strip()
             if not role_id:
+                summary.unresolved_memory_item_ids.append(item_id)
+                continue
+            if self._is_group_relationship_memory(extra) and not str(
+                extra.get("group_member_id") or ""
+            ).strip():
                 summary.unresolved_memory_item_ids.append(item_id)
                 continue
             _ = self._roles.repository.get_required(role_id)
