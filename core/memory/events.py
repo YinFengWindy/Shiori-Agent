@@ -52,7 +52,6 @@ class MemoryWritten:
     superseded_ids: list[str] = field(default_factory=_empty_str_list)
     error: str | None = None
     role_id: str = ""
-    group_member_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -65,7 +64,6 @@ class TurnIngested:
     tool_chain: list[dict[str, object]]
     source_ref: str
     role_id: str = ""
-    group_member_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -76,4 +74,3 @@ class ConsolidationCommitted:
     scope_chat_id: str
     conversation: str
     role_id: str = ""
-    group_member_id: str = ""

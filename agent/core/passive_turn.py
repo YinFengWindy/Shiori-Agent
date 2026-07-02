@@ -148,108 +148,6 @@ def _disabled_tools_from_msg(msg: object) -> set[str]:
     return set()
 
 
-def _format_group_context_lines(
-    messages: list[dict[str, Any]],
-    *,
-    current_message: str,
-    current_member_id: str,
-    limit: int = 12,
-) -> list[str]:
-    normalized_current = str(current_message or "").strip()
-    normalized_member = str(current_member_id or "").strip()
-    candidate_window = max(limit * 3, limit + 1)
-    recent = list(messages[-max(1, candidate_window) :])
-    candidates: list[tuple[int, int, str]] = []
-    for index, message in enumerate(recent):
-        content = str(message.get("content") or "").strip()
-        if not content:
-            continue
-        role = str(message.get("role") or "").strip().lower()
-        metadata = message.get("metadata")
-        item_metadata = metadata if isinstance(metadata, dict) else {}
-        if (
-            index == len(recent) - 1
-            and role == "user"
-            and normalized_current
-            and content == normalized_current
-            and str(item_metadata.get("member_id") or "").strip() == normalized_member
-        ):
-            continue
-        member_id = str(item_metadata.get("member_id") or "").strip()
-        if _is_low_signal_group_context_message(
-            role=role,
-            content=content,
-            member_id=member_id,
-            current_member_id=normalized_member,
-        ):
-            continue
-        if role == "assistant":
-            candidates.append((1, index, f"- [角色] {content}"))
-            continue
-        speaker = member_id or "群成员"
-        if len(content) > 120:
-            content = support.log_preview(content, limit=120)
-        priority = 0 if member_id and member_id == normalized_member else 2
-        candidates.append((priority, index, f"- [{speaker}] {content}"))
-
-    selected = sorted(
-        candidates,
-        key=lambda item: (item[0], -item[1]),
-    )[: max(1, limit)]
-    selected.sort(key=lambda item: item[1])
-    return [item[2] for item in selected]
-
-
-def _is_low_signal_group_context_message(
-    *,
-    role: str,
-    content: str,
-    member_id: str,
-    current_member_id: str,
-) -> bool:
-    normalized = "".join(str(content or "").split())
-    if not normalized:
-        return True
-    lowered = normalized.lower()
-    if lowered in {"[图片]", "[image]", "<image>", "图片", "image", "img"}:
-        return True
-    if all(not _is_meaningful_text_char(char) for char in normalized):
-        return True
-    if (
-        role == "user"
-        and member_id != current_member_id
-        and len(normalized) <= 3
-    ):
-        return True
-    return False
-
-
-def _is_meaningful_text_char(char: str) -> bool:
-    if char.isalnum():
-        return True
-    return "\u4e00" <= char <= "\u9fff"
-
-
-def _build_group_member_block(metadata: dict[str, Any]) -> str:
-    if not bool(metadata.get("is_group_chat")):
-        return ""
-    member_id = str(
-        metadata.get("group_member_id")
-        or metadata.get("member_id")
-        or metadata.get("sender_id")
-        or ""
-    ).strip()
-    member_name = str(metadata.get("member_name") or "").strip()
-    if not member_id and not member_name:
-        return ""
-    lines = ["## 当前群成员"]
-    if member_name:
-        lines.append(f"- 名称: {member_name}")
-    if member_id:
-        lines.append(f"- ID: {member_id}")
-    return "\n".join(lines)
-
-
 class _NoopOutboundPort:
     async def dispatch(self, outbound: OutboundDispatch) -> bool:
         return False
@@ -767,12 +665,10 @@ class DefaultContextStore(ContextStore):
         *,
         retrieval: "MemoryRetrievalPipeline",
         context: "ContextBuilder",
-        session_manager: "SessionManager | None" = None,
         history_window: int = 500,
     ) -> None:
         self._retrieval = retrieval
         self._context = context
-        self._session_manager = session_manager
         self._history_window = max(1, int(history_window))
 
     async def prepare(
@@ -809,28 +705,11 @@ class DefaultContextStore(ContextStore):
             msg.content,
             self._context.skills.list_skills(filter_unavailable=False),
         )
-        member_block = _build_group_member_block(
-            msg.metadata if isinstance(msg.metadata, dict) else {}
-        )
-        group_context_block = self._build_group_context_block(msg)
-        retrieved_block = retrieval_result.block or ""
-        if member_block:
-            retrieved_block = (
-                f"{retrieved_block}\n\n{member_block}".strip()
-                if retrieved_block
-                else member_block
-            )
-        if group_context_block:
-            retrieved_block = (
-                f"{retrieved_block}\n\n{group_context_block}".strip()
-                if retrieved_block
-                else group_context_block
-            )
         return ContextBundle(
             history=support.to_chat_messages(raw_history),
-            memory_blocks=[retrieved_block] if retrieved_block else [],
+            memory_blocks=[retrieval_result.block] if retrieval_result.block else [],
             skill_mentions=skill_mentions,
-            retrieved_memory_block=retrieved_block,
+            retrieved_memory_block=retrieval_result.block or "",
             retrieval_trace_raw=(
                 retrieval_result.trace.raw
                 if retrieval_result.trace is not None
@@ -839,26 +718,6 @@ class DefaultContextStore(ContextStore):
             retrieval_metadata=dict(retrieval_result.metadata or {}),
             history_messages=history_messages,
         )
-
-    def _build_group_context_block(self, msg: "InboundMessage") -> str:
-        metadata = msg.metadata if isinstance(msg.metadata, dict) else {}
-        group_context_key = str(metadata.get("group_context_key") or "").strip()
-        if not group_context_key or self._session_manager is None:
-            return ""
-        session = self._session_manager.get_or_create(group_context_key)
-        lines = _format_group_context_lines(
-            session.messages,
-            current_message=msg.content,
-            current_member_id=str(
-                metadata.get("group_member_id")
-                or metadata.get("member_id")
-                or metadata.get("sender_id")
-                or msg.sender
-            ).strip(),
-        )
-        if not lines:
-            return ""
-        return "## 群聊共享背景\n" + "\n".join(lines)
 
 class Reasoner(ABC):
 

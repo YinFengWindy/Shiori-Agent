@@ -211,73 +211,6 @@ def _dict_items(value: object) -> list[dict[str, object]]:
     ]
 
 
-def _clean_group_member_id(value: object) -> str:
-    return str(value or "").strip()
-
-
-def _mapping_group_member_id(value: object) -> str:
-    if not isinstance(value, dict):
-        return ""
-    for key in ("group_member_id", "member_id", "sender_id"):
-        item = _clean_group_member_id(value.get(key))
-        if item:
-            return item
-    return ""
-
-
-def _resolve_query_group_member_id(request: MemoryQuery) -> str:
-    direct = _mapping_group_member_id(request.context)
-    if direct:
-        return direct
-    session_metadata = request.context.get("session_metadata")
-    from_session = _mapping_group_member_id(session_metadata)
-    if from_session:
-        return from_session
-    return _mapping_group_member_id(dict(request.filters.hints))
-
-
-def _resolve_mutation_group_member_id(request: MemoryMutation) -> str:
-    return _mapping_group_member_id(dict(request.metadata))
-
-
-def _is_cross_group_member_scope_enabled(
-    *,
-    scope_channel: str | None,
-    scope_chat_id: str | None,
-    group_member_id: str | None,
-    require_scope_match: bool,
-) -> bool:
-    return bool(
-        scope_channel
-        and scope_chat_id
-        and group_member_id
-        and require_scope_match
-    )
-
-
-def _mark_cross_group_reference(
-    item: dict[str, object],
-    *,
-    current_scope_chat_id: str | None,
-    group_member_id: str | None,
-) -> dict[str, object]:
-    normalized = dict(item)
-    extra = normalized.get("extra_json")
-    extra_json = dict(cast(dict[str, object], extra)) if isinstance(extra, dict) else {}
-    normalized["extra_json"] = extra_json
-    item_group_member_id = _clean_group_member_id(extra_json.get("group_member_id"))
-    item_scope_chat_id = str(extra_json.get("scope_chat_id") or "").strip()
-    is_cross_group = bool(
-        group_member_id
-        and item_group_member_id == str(group_member_id).strip()
-        and item_scope_chat_id
-        and item_scope_chat_id != str(current_scope_chat_id or "").strip()
-    )
-    if is_cross_group:
-        normalized["cross_group_reference"] = True
-    return normalized
-
-
 def _build_long_term_prompt(*, conversation: str, existing_profile: str) -> str:
     return f"""你是长期记忆提取专家。从对话窗口中一次性提取三类长期记忆，返回 JSON。
 
@@ -734,7 +667,6 @@ class DefaultMemoryEngine:
                 tool_chain=cast(list[dict[str, object]], event.tool_chain_raw),
                 source_ref=source_ref,
                 role_id=event.role_id,
-                group_member_id=str(event.extra.get("group_member_id") or "").strip(),
             )
         )
 
@@ -750,7 +682,6 @@ class DefaultMemoryEngine:
                 scope_channel=event.scope_channel,
                 scope_chat_id=event.scope_chat_id,
                 role_id=event.role_id,
-                group_member_id=event.group_member_id,
                 emotional_weight=emotional_weight,
             )
             for entry, emotional_weight in event.history_entry_payloads
@@ -768,7 +699,6 @@ class DefaultMemoryEngine:
                 scope_channel=event.scope_channel,
                 scope_chat_id=event.scope_chat_id,
                 role_id=event.role_id,
-                group_member_id=event.group_member_id,
             )
 
     async def _extract_implicit_long_term(
@@ -830,7 +760,6 @@ class DefaultMemoryEngine:
         if retriever is None:
             return MemoryQueryResult(raw={"items": []})
         scope = resolve_memory_scope(request.scope)
-        group_member_id = _resolve_query_group_member_id(request)
         queries = self._resolve_queries(request)
         memory_types = self._resolve_memory_types(request)
         requested_domains = self._resolve_memory_domains(request)
@@ -859,11 +788,7 @@ class DefaultMemoryEngine:
             role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
             scope_chat_id=scope.chat_id or None,
-            group_member_id=group_member_id or None,
-            require_scope_match=bool(
-                request.filters.hints.get("require_scope_match", False)
-                or group_member_id
-            ),
+            require_scope_match=bool(request.filters.hints.get("require_scope_match", False)),
             aux_queries=queries[1:],
             time_start=request.filters.time_start,
             time_end=request.filters.time_end,
@@ -921,7 +846,6 @@ class DefaultMemoryEngine:
             channel=scope.channel,
             chat_id=scope.chat_id,
             role_id=scope.role_id,
-            group_member_id=_mapping_group_member_id(request.metadata),
         )
         return MemoryIngestResult(
             accepted=True,
@@ -957,9 +881,6 @@ class DefaultMemoryEngine:
         }
         if request.scope.role_id:
             extra["role_id"] = request.scope.role_id
-        group_member_id = _resolve_mutation_group_member_id(request)
-        if group_member_id:
-            extra["group_member_id"] = group_member_id
         memory_domain = self._resolve_memory_domain_for_write(request, memory_type)
         self._ensure_memory_domain_allowed(
             memory_domain,
@@ -967,11 +888,6 @@ class DefaultMemoryEngine:
         )
         if memory_domain:
             extra["memory_domain"] = memory_domain
-        if memory_domain == "relationship":
-            if group_member_id:
-                extra["group_member_id"] = group_member_id
-        else:
-            extra.pop("group_member_id", None)
         if memory_type == "procedure":
             extra["rule_schema"] = build_procedure_rule_schema(
                 summary=request.summary,
@@ -1001,21 +917,6 @@ class DefaultMemoryEngine:
         store = self._require_v2_store()
         clean_ids = _dedupe_ids(list(request.ids))
         items = store.get_items_by_ids(clean_ids)
-        group_member_id = _resolve_mutation_group_member_id(request)
-        if group_member_id:
-            filtered_items: list[dict[str, object]] = []
-            for item in items:
-                extra = item.get("extra_json")
-                extra_json = extra if isinstance(extra, dict) else {}
-                memory_domain = str(extra_json.get("memory_domain") or "").strip()
-                item_group_member = _clean_group_member_id(
-                    extra_json.get("group_member_id")
-                )
-                if memory_domain == "relationship":
-                    if item_group_member != group_member_id:
-                        continue
-                filtered_items.append(item)
-            items = filtered_items
         found_ids = [str(item.get("id") or "") for item in items if item.get("id")]
 
         # 2. 只失效能确认存在的条目，缺失 id 返回给调用方展示。
@@ -1056,30 +957,11 @@ class DefaultMemoryEngine:
         time_end: datetime,
         *,
         limit: int = 200,
-        role_id: str = "",
-        scope_channel: str = "",
-        scope_chat_id: str = "",
-        group_member_id: str = "",
     ) -> list[dict[str, object]]:
         store = self._v2_store
         if store is None:
             return []
-        try:
-            return store.list_events_by_time_range(
-                time_start,
-                time_end,
-                limit=limit,
-                role_id=role_id,
-                scope_channel=scope_channel,
-                scope_chat_id=scope_chat_id,
-                group_member_id=group_member_id,
-            )
-        except TypeError:
-            return store.list_events_by_time_range(
-                time_start,
-                time_end,
-                limit=limit,
-            )
+        return store.list_events_by_time_range(time_start, time_end, limit=limit)
 
     def list_items_for_dashboard(
         self,
@@ -1188,7 +1070,6 @@ class DefaultMemoryEngine:
         scope_channel: str,
         scope_chat_id: str,
         role_id: str = "",
-        group_member_id: str = "",
         emotional_weight: int = 0,
     ) -> None:
         if self._memorizer is None:
@@ -1200,7 +1081,6 @@ class DefaultMemoryEngine:
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
             role_id=role_id,
-            group_member_id=group_member_id,
             emotional_weight=emotional_weight,
         )
 
@@ -1232,7 +1112,6 @@ class DefaultMemoryEngine:
         scope_channel: str,
         scope_chat_id: str,
         role_id: str = "",
-        group_member_id: str = "",
     ) -> dict[str, int]:
         saved_counts = {"profile": 0, "preference": 0, "procedure": 0}
 
@@ -1252,7 +1131,6 @@ class DefaultMemoryEngine:
                     "role_id": role_id,
                     "scope_channel": scope_channel,
                     "scope_chat_id": scope_chat_id,
-                    "group_member_id": group_member_id,
                 },
                 source_ref=f"{source_ref}#profile",
                 happened_at=happened_at,
@@ -1275,7 +1153,6 @@ class DefaultMemoryEngine:
                     "role_id": role_id,
                     "scope_channel": scope_channel,
                     "scope_chat_id": scope_chat_id,
-                    "group_member_id": group_member_id,
                 }
                 if memory_type == "procedure" and isinstance(
                     item.get("rule_schema"), dict
@@ -1307,7 +1184,6 @@ class DefaultMemoryEngine:
         hyp1, hyp2 = await asyncio.gather(hyp1_task, hyp2_task)
         aux_queries = [text for text in (hyp1, hyp2) if text]
         scope = resolve_memory_scope(request.scope)
-        group_member_id = _resolve_query_group_member_id(request)
         types = self._resolve_memory_types(request)
         requested_domains = self._resolve_memory_domains(request)
         memory_domains = self._guard_shared_memory_domains(
@@ -1336,7 +1212,6 @@ class DefaultMemoryEngine:
             role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
             scope_chat_id=scope.chat_id or None,
-            group_member_id=group_member_id or None,
             require_scope_match=should_require_scope_match(request, scope),
             aux_queries=aux_queries,
             score_threshold=_VECTOR_SCORE_THRESHOLD,
@@ -1369,15 +1244,10 @@ class DefaultMemoryEngine:
                     "effect": request.effect,
                 }
             )
-        scope = resolve_memory_scope(request.scope)
         hits = self.list_events_by_time_range(
             request.filters.time_start,
             request.filters.time_end,
             limit=request.limit,
-            role_id=scope.role_id,
-            scope_channel=scope.channel,
-            scope_chat_id=scope.chat_id,
-            group_member_id=_resolve_query_group_member_id(request),
         )
         return MemoryQueryResult(
             records=[self._build_record(item) for item in hits if isinstance(item, dict)],
@@ -1395,7 +1265,6 @@ class DefaultMemoryEngine:
         request: MemoryQuery,
     ) -> MemoryQueryResult:
         scope = resolve_memory_scope(request.scope)
-        group_member_id = _resolve_query_group_member_id(request)
         requested_domains = self._resolve_memory_domains(request)
         memory_domains = self._guard_shared_memory_domains(
             requested_domains,
@@ -1422,7 +1291,6 @@ class DefaultMemoryEngine:
             role_id=scope.role_id or None,
             scope_channel=scope.channel or None,
             scope_chat_id=scope.chat_id or None,
-            group_member_id=group_member_id or None,
             require_scope_match=should_require_scope_match(request, scope),
         )
         records = [self._build_record(item) for item in hits if isinstance(item, dict)]
@@ -1448,7 +1316,6 @@ class DefaultMemoryEngine:
         role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
-        group_member_id: str | None = None,
         require_scope_match: bool = False,
         aux_queries: list[str] | None = None,
         score_threshold: float | None = None,
@@ -1459,33 +1326,7 @@ class DefaultMemoryEngine:
         retriever = self._retriever
         if retriever is None:
             return []
-        if not _is_cross_group_member_scope_enabled(
-            scope_channel=scope_channel,
-            scope_chat_id=scope_chat_id,
-            group_member_id=group_member_id,
-            require_scope_match=require_scope_match,
-        ):
-            return cast(
-                list[dict[str, object]],
-                await retriever.retrieve(
-                    query,
-                    memory_types=memory_types,
-                    memory_domains=memory_domains,
-                    top_k=top_k,
-                    role_id=role_id,
-                    scope_channel=scope_channel,
-                    scope_chat_id=scope_chat_id,
-                    group_member_id=group_member_id,
-                    require_scope_match=require_scope_match,
-                    aux_queries=aux_queries,
-                    score_threshold=score_threshold,
-                    time_start=time_start,
-                    time_end=time_end,
-                    keyword_enabled=keyword_enabled,
-                ),
-            )
-
-        current_hits = cast(
+        return cast(
             list[dict[str, object]],
             await retriever.retrieve(
                 query,
@@ -1495,8 +1336,7 @@ class DefaultMemoryEngine:
                 role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
-                group_member_id=group_member_id,
-                require_scope_match=True,
+                require_scope_match=require_scope_match,
                 aux_queries=aux_queries,
                 score_threshold=score_threshold,
                 time_start=time_start,
@@ -1504,55 +1344,6 @@ class DefaultMemoryEngine:
                 keyword_enabled=keyword_enabled,
             ),
         )
-        cross_hits = cast(
-            list[dict[str, object]],
-            await retriever.retrieve(
-                query,
-                memory_types=memory_types,
-                memory_domains=memory_domains,
-                top_k=max(3, int(top_k or 8) // 2),
-                role_id=role_id,
-                scope_channel=scope_channel,
-                scope_chat_id=scope_chat_id,
-                group_member_id=group_member_id,
-                require_scope_match=False,
-                aux_queries=aux_queries,
-                score_threshold=score_threshold,
-                time_start=time_start,
-                time_end=time_end,
-                keyword_enabled=keyword_enabled,
-            ),
-        )
-        merged: list[dict[str, object]] = []
-        seen_ids: set[str] = set()
-        for item in current_hits:
-            item_id = str(item.get("id") or "").strip()
-            if item_id and item_id in seen_ids:
-                continue
-            if item_id:
-                seen_ids.add(item_id)
-            merged.append(
-                _mark_cross_group_reference(
-                    item,
-                    current_scope_chat_id=scope_chat_id,
-                    group_member_id=group_member_id,
-                )
-            )
-        for item in cross_hits:
-            tagged = _mark_cross_group_reference(
-                item,
-                current_scope_chat_id=scope_chat_id,
-                group_member_id=group_member_id,
-            )
-            if not bool(tagged.get("cross_group_reference")):
-                continue
-            item_id = str(tagged.get("id") or "").strip()
-            if item_id and item_id in seen_ids:
-                continue
-            if item_id:
-                seen_ids.add(item_id)
-            merged.append(tagged)
-        return merged
 
     async def _gen_hypothesis(self, query: str, style: str) -> str | None:
         prompt = _explicit_hypothesis_prompt(query, style)
@@ -1602,10 +1393,6 @@ class DefaultMemoryEngine:
     ) -> MemoryRecord:
         extra = item.get("extra_json")
         signals = dict(cast(dict[str, object], extra)) if isinstance(extra, dict) else {}
-        if "cross_group_reference" in item:
-            signals["cross_group_reference"] = bool(item.get("cross_group_reference"))
-        if "_score_debug" in item and isinstance(item.get("_score_debug"), dict):
-            signals["_score_debug"] = cast(dict[str, object], item.get("_score_debug"))
         memory_kind = str(item.get("memory_type", "") or "")
         item_id = str(item.get("id", "") or "")
         source_ref = str(item.get("source_ref", "") or "")

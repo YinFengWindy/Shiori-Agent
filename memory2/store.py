@@ -271,21 +271,6 @@ def _domain_json_filter(column: str = "extra_json") -> str:
     return f"COALESCE(TRIM(json_extract({column}, '$.memory_domain')), '') = ?"
 
 
-def _group_member_json_filter(column: str = "extra_json") -> str:
-    return f"COALESCE(TRIM(json_extract({column}, '$.group_member_id')), '') = ?"
-
-
-def _group_member_scope_filter(
-    column: str = "extra_json",
-) -> str:
-    return (
-        f"({ _group_member_json_filter(column) } OR ("
-        f"COALESCE(TRIM(json_extract({column}, '$.group_member_id')), '') = '' "
-        f"AND COALESCE(TRIM(json_extract({column}, '$.memory_domain')), '') != 'relationship'"
-        f"))"
-    )
-
-
 class MemoryStore2:
     def __init__(self, db_path: str | Path, vec_dim: int = VEC_DIM) -> None:
         self.db_path = Path(db_path)
@@ -731,7 +716,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         role_id: str = "",
         scope_channel: str = "",
         scope_chat_id: str = "",
-        group_member_id: str = "",
         has_embedding: bool | None = None,
         page: int = 1,
         page_size: int = 50,
@@ -784,9 +768,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                     "COALESCE(TRIM(json_extract(extra_json, '$.scope_chat_id')), '') = ?"
                 )
                 params.append(scope_chat_id.strip())
-            if group_member_id:
-                where_parts.append(_group_member_json_filter())
-                params.append(group_member_id.strip())
             if has_embedding is True:
                 where_parts.append("embedding IS NOT NULL")
             elif has_embedding is False:
@@ -1009,10 +990,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         filtered = [item for item in results if item.get("id") != item_id]
         return filtered[: max(1, top_k)]
 
-    def get_all_with_embedding(
-        self,
-        include_superseded: bool = False,
-    ) -> list[_EmbeddingRow]:
+    def get_all_with_embedding(self, include_superseded: bool = False) -> list[_EmbeddingRow]:
         """返回 [(id, memory_type, summary, embedding_list, extra_json_dict, happened_at, source_ref)]
         extra_json_dict 中注入 _reinforcement / _updated_at / _emotional_weight
         （_ 前缀，不污染用户字段）。
@@ -1064,7 +1042,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         role_id: str | None,
         scope_channel: str | None,
         scope_chat_id: str | None,
-        group_member_id: str | None,
         require_scope_match: bool,
         time_start: datetime | None,
         time_end: datetime | None,
@@ -1086,9 +1063,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         if role_id:
             where_parts.append(_role_json_filter())
             params.append(role_id.strip())
-        if group_member_id:
-            where_parts.append(_group_member_scope_filter())
-            params.append(group_member_id.strip())
         if require_scope_match:
             where_parts.append(
                 "COALESCE(TRIM(json_extract(extra_json, '$.scope_channel')), '') = ?"
@@ -1154,7 +1128,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
-        group_member_id: str | None = None,
         require_scope_match: bool = False,
         hotness_alpha: float = 0.0,
         hotness_half_life_days: float = 14.0,
@@ -1175,7 +1148,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
-                group_member_id=group_member_id,
                 require_scope_match=require_scope_match,
                 hotness_alpha=hotness_alpha,
                 hotness_half_life_days=hotness_half_life_days,
@@ -1192,7 +1164,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
-                group_member_id=group_member_id,
                 require_scope_match=require_scope_match,
                 hotness_alpha=hotness_alpha,
                 hotness_half_life_days=hotness_half_life_days,
@@ -1211,7 +1182,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             role_id=role_id,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
-            group_member_id=group_member_id,
             require_scope_match=require_scope_match,
             hotness_alpha=hotness_alpha,
             hotness_half_life_days=hotness_half_life_days,
@@ -1228,7 +1198,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
-        group_member_id: str | None = None,
         require_scope_match: bool = False,
         hotness_alpha: float = 0.0,
         hotness_half_life_days: float = 14.0,
@@ -1249,7 +1218,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                     role_id=role_id,
                     scope_channel=scope_channel,
                     scope_chat_id=scope_chat_id,
-                    group_member_id=group_member_id,
                     require_scope_match=require_scope_match,
                     hotness_alpha=hotness_alpha,
                     hotness_half_life_days=hotness_half_life_days,
@@ -1264,7 +1232,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             role_id=role_id,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
-            group_member_id=group_member_id,
             require_scope_match=require_scope_match,
             time_start=time_start,
             time_end=time_end,
@@ -1292,7 +1259,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
-        group_member_id: str | None = None,
         require_scope_match: bool = False,
         hotness_alpha: float = 0.0,
         hotness_half_life_days: float = 14.0,
@@ -1312,7 +1278,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
-                group_member_id=group_member_id,
                 require_scope_match=require_scope_match,
                 hotness_alpha=hotness_alpha,
                 hotness_half_life_days=hotness_half_life_days,
@@ -1350,12 +1315,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         else:
             role_filter = ""
 
-        if group_member_id:
-            group_member_filter = f"AND {_group_member_scope_filter('m.extra_json')}"
-            params.append(group_member_id.strip())
-        else:
-            group_member_filter = ""
-
         # scope 推入 SQL，用 json_extract 读取 extra_json 字段
         if require_scope_match:
             s_channel = (scope_channel or "").strip()
@@ -1379,7 +1338,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                   AND k = ?
             ) v
             JOIN memory_items m ON m.rowid = v.rowid
-            WHERE 1=1 {status_filter} {type_filter} {domain_filter} {role_filter} {group_member_filter} {scope_filter}
+            WHERE 1=1 {status_filter} {type_filter} {domain_filter} {role_filter} {scope_filter}
             ORDER BY v.distance ASC
         """
         rows = cast(list[tuple[object, ...]], self._db.execute(sql, tuple(params)).fetchall())
@@ -1459,7 +1418,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
-        group_member_id: str | None = None,
         require_scope_match: bool = False,
         hotness_alpha: float = 0.0,
         hotness_half_life_days: float = 14.0,
@@ -1476,7 +1434,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
-                group_member_id=group_member_id,
                 require_scope_match=require_scope_match,
                 time_start=time_start,
                 time_end=time_end,
@@ -1503,18 +1460,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 r
                 for r in rows
                 if str((r[4] or {}).get("role_id", "")).strip() == clean_role_id
-            ]
-
-        if group_member_id and not has_time_filter:
-            clean_group_member_id = group_member_id.strip()
-            rows = [
-                r
-                for r in rows
-                if (
-                    str((r[4] or {}).get("group_member_id", "")).strip()
-                    == clean_group_member_id
-                )
-                or str((r[4] or {}).get("memory_domain", "")).strip() != "relationship"
             ]
 
         if require_scope_match and not has_time_filter:
@@ -1696,37 +1641,16 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         time_start: datetime,
         time_end: datetime,
         limit: int = 200,
-        role_id: str = "",
-        scope_channel: str = "",
-        scope_chat_id: str = "",
-        group_member_id: str = "",
     ) -> list[dict[str, object]]:
         time_clauses, time_params = _time_prefilter_clauses(
             "happened_at", time_start, time_end
         )
-        where_parts = ["memory_type='event'", "status='active'", *time_clauses]
-        params: list[object] = list(time_params)
-        if role_id:
-            where_parts.append(_role_json_filter())
-            params.append(role_id.strip())
-        if scope_channel:
-            where_parts.append(
-                "COALESCE(TRIM(json_extract(extra_json, '$.scope_channel')), '') = ?"
-            )
-            params.append(scope_channel.strip())
-        if scope_chat_id:
-            where_parts.append(
-                "COALESCE(TRIM(json_extract(extra_json, '$.scope_chat_id')), '') = ?"
-            )
-            params.append(scope_chat_id.strip())
-        if group_member_id:
-            where_parts.append(_group_member_scope_filter())
-            params.append(group_member_id.strip())
         rows = cast(list[tuple[object, ...]], self._db.execute(
             "SELECT id, memory_type, summary, source_ref, happened_at "
             "FROM memory_items "
-            f"WHERE {' AND '.join(where_parts)}",
-            tuple(params),
+            "WHERE memory_type='event' AND status='active' "
+            f"AND {' AND '.join(time_clauses)}",
+            tuple(time_params),
         ).fetchall())
 
         hits: list[tuple[datetime, dict[str, object]]] = []
@@ -1763,41 +1687,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         days_back: int = 7,
         threshold: float = 0.92,
         top_k: int = 3,
-        role_id: str | None = None,
-        scope_channel: str | None = None,
-        scope_chat_id: str | None = None,
-        group_member_id: str | None = None,
     ) -> list[str]:
         cutoff = (
             datetime.now(timezone.utc) - timedelta(days=max(1, int(days_back)))
         ).isoformat()
-        where_parts = [
-            "memory_type='event'",
-            "status='active'",
-            "embedding IS NOT NULL",
-            "created_at >= ?",
-        ]
-        params: list[object] = [cutoff]
-        if role_id:
-            where_parts.append(_role_json_filter())
-            params.append(role_id.strip())
-        if scope_channel:
-            where_parts.append(
-                "COALESCE(TRIM(json_extract(extra_json, '$.scope_channel')), '') = ?"
-            )
-            params.append(scope_channel.strip())
-        if scope_chat_id:
-            where_parts.append(
-                "COALESCE(TRIM(json_extract(extra_json, '$.scope_chat_id')), '') = ?"
-            )
-            params.append(scope_chat_id.strip())
-        if group_member_id:
-            where_parts.append(_group_member_json_filter())
-            params.append(group_member_id.strip())
         rows = self._db.execute(
             "SELECT id, embedding FROM memory_items "
-            f"WHERE {' AND '.join(where_parts)}",
-            tuple(params),
+            "WHERE memory_type='event' AND status='active' "
+            "AND embedding IS NOT NULL AND created_at >= ?",
+            (cutoff,),
         ).fetchall()
         scored: list[tuple[str, float]] = []
         for row_id, emb_json in rows:
@@ -1915,7 +1813,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         time_end: datetime | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
-        group_member_id: str | None = None,
         require_scope_match: bool = False,
     ) -> list[dict[str, object]]:
         """对 summary 字段做 OR-LIKE 关键字检索，按命中词数降序排列。
@@ -1949,12 +1846,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             role_filter = f" AND {_role_json_filter()}"
             role_params = [role_id.strip()]
 
-        group_member_filter = ""
-        group_member_params: list[str] = []
-        if group_member_id:
-            group_member_filter = f" AND {_group_member_scope_filter()}"
-            group_member_params = [group_member_id.strip()]
-
         scope_filter = ""
         scope_params: list[str] = []
         if require_scope_match:
@@ -1987,7 +1878,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             f"SELECT id, memory_type, summary, extra_json, source_ref, happened_at, created_at, "
             f"reinforcement, ({score_expr}) AS kw_score "
             f"FROM memory_items "
-            f"WHERE status='active' AND ({or_conditions}){type_filter}{domain_filter}{role_filter}{group_member_filter}{scope_filter}{time_filter} "
+            f"WHERE status='active' AND ({or_conditions}){type_filter}{domain_filter}{role_filter}{scope_filter}{time_filter} "
             f"ORDER BY kw_score DESC, reinforcement DESC, id ASC "
             f"LIMIT ? OFFSET ?"
         )
@@ -2000,7 +1891,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 + type_params
                 + domain_params
                 + role_params
-                + group_member_params
                 + scope_params
                 + time_params
                 + [batch_size, offset]

@@ -89,7 +89,6 @@ class Retriever:
         role_id: str | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
-        group_member_id: str | None = None,
         require_scope_match: bool = False,
         aux_queries: list[str] | None = None,
         score_threshold: float | None = None,
@@ -112,7 +111,6 @@ class Retriever:
             role_id=role_id,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
-            group_member_id=group_member_id,
             require_scope_match=require_scope_match,
             time_start=time_start,
             time_end=time_end,
@@ -129,7 +127,6 @@ class Retriever:
                 role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
-                group_member_id=group_member_id,
                 require_scope_match=require_scope_match,
                 time_start=time_start,
                 time_end=time_end,
@@ -157,7 +154,6 @@ class Retriever:
         role_id: str | None,
         scope_channel: str | None,
         scope_chat_id: str | None,
-        group_member_id: str | None,
         require_scope_match: bool,
         time_start: datetime | None,
         time_end: datetime | None,
@@ -178,7 +174,6 @@ class Retriever:
                 role_id=role_id,
                 scope_channel=scope_channel,
                 scope_chat_id=scope_chat_id,
-                group_member_id=group_member_id,
                 require_scope_match=require_scope_match,
                 hotness_alpha=self._hotness_alpha,
                 hotness_half_life_days=self._hotness_half_life_days,
@@ -206,7 +201,6 @@ class Retriever:
                     role_id=role_id,
                     scope_channel=scope_channel,
                     scope_chat_id=scope_chat_id,
-                    group_member_id=group_member_id,
                     require_scope_match=require_scope_match,
                     hotness_alpha=self._hotness_alpha,
                     hotness_half_life_days=self._hotness_half_life_days,
@@ -249,7 +243,6 @@ class Retriever:
         role_id: str | None,
         scope_channel: str | None,
         scope_chat_id: str | None,
-        group_member_id: str | None,
         require_scope_match: bool,
         time_start: datetime | None,
         time_end: datetime | None,
@@ -267,7 +260,6 @@ class Retriever:
             time_end=time_end,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
-            group_member_id=group_member_id,
             require_scope_match=require_scope_match,
         )
 
@@ -282,7 +274,6 @@ class Retriever:
         top_k: int | None = None,
         scope_channel: str | None = None,
         scope_chat_id: str | None = None,
-        group_member_id: str | None = None,
         require_scope_match: bool = False,
     ) -> list[dict]:
         """复用已有 query_vec 做本地 vector_search，跳过 embedding 步骤。"""
@@ -294,7 +285,6 @@ class Retriever:
             score_threshold=self._score_threshold,
             scope_channel=scope_channel,
             scope_chat_id=scope_chat_id,
-            group_member_id=group_member_id,
             require_scope_match=require_scope_match,
             hotness_alpha=self._hotness_alpha,
             hotness_half_life_days=self._hotness_half_life_days,
@@ -623,13 +613,6 @@ def _format_memory_meta(
     confidence_label: str = "",
 ) -> str:
     parts: list[str] = []
-    if bool(item.get("cross_group_reference")):
-        parts.append("异群参考")
-        extra = item.get("extra_json")
-        extra_json = extra if isinstance(extra, dict) else {}
-        scope_chat_id = str(extra_json.get("scope_chat_id") or "").strip()
-        if scope_chat_id:
-            parts.append(f"来源会话: {scope_chat_id}")
     if confidence_label:
         parts.append(confidence_label)
     happened_at_raw = item.get("happened_at")

@@ -86,18 +86,11 @@ class _BuildTurnWorkModule:
             history_window=hw,
         )
         frame.slots[_REACT_STATS_SLOT] = extract_react_stats(snap.ctx.context_retry)
-        extra: dict[str, object] = (
+        frame.slots[_EXTRA_SLOT] = (
             {"skip_post_memory": True}
             if (msg.metadata or {}).get("skip_post_memory")
             else {}
         )
-        if bool((msg.metadata or {}).get("is_group_chat")):
-            extra["is_group_chat"] = True
-            for key in ("group_id", "group_member_id", "member_id", "group_context_key"):
-                value = (msg.metadata or {}).get(key)
-                if isinstance(value, str) and value.strip():
-                    extra[key] = value.strip()
-        frame.slots[_EXTRA_SLOT] = extra
         frame.slots[_TOOL_CHAIN_SLOT] = list(snap.ctx.tool_chain)
         frame.slots[_OMIT_USER_TURN_SLOT] = bool(
             (msg.metadata or {}).get("omit_user_turn")

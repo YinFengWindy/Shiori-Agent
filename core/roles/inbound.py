@@ -9,30 +9,6 @@ from .services import RoleAggregateService
 from .store import RoleStore
 
 
-def _is_group_chat(metadata: dict[str, Any]) -> bool:
-    return str(metadata.get("chat_type") or "").strip() == "group" or bool(
-        metadata.get("is_group_chat")
-    )
-
-
-def _group_id(metadata: dict[str, Any], message: InboundMessage) -> str:
-    value = str(metadata.get("group_id") or "").strip()
-    if value:
-        return value
-    chat_id = str(message.chat_id or "").strip()
-    if chat_id.startswith("gqq:"):
-        return chat_id[len("gqq:") :].strip()
-    return ""
-
-
-def _member_id(metadata: dict[str, Any], message: InboundMessage) -> str:
-    for key in ("group_member_id", "member_id", "sender_id"):
-        value = str(metadata.get(key) or "").strip()
-        if value:
-            return value
-    return str(message.sender or "").strip()
-
-
 class InboundRoleRouter:
     """将 legacy channel 入站解析为 role-first 业务消息。"""
 
@@ -60,27 +36,7 @@ class InboundRoleRouter:
             role_id = self._service.bindings.resolve_role_id(message.channel, message.chat_id)
         except KeyError:
             return message
-        if _is_group_chat(metadata):
-            group_id = _group_id(metadata, message)
-            member_id = _member_id(metadata, message)
-            if group_id and member_id:
-                session_key = self._service.sessions.derive_group_member_session_key(
-                    role_id,
-                    group_id=group_id,
-                    member_id=member_id,
-                )
-                metadata["is_group_chat"] = True
-                metadata["group_id"] = group_id
-                metadata["group_member_id"] = member_id
-                metadata.setdefault("member_id", member_id)
-                metadata["group_context_key"] = self._service.sessions.derive_group_context_key(
-                    channel=message.channel,
-                    group_id=group_id,
-                )
-            else:
-                session_key = self._service.sessions.derive_session_key(role_id)
-        else:
-            session_key = self._service.sessions.derive_session_key(role_id)
+        session_key = self._service.sessions.derive_session_key(role_id)
         metadata["role_id"] = role_id
         metadata["session_key_override"] = session_key
         metadata.setdefault("context_channel", message.channel)

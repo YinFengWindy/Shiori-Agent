@@ -36,16 +36,6 @@ def _binding_key(channel: str, chat_id: str) -> str:
     return f"{clean_channel}:{clean_chat_id}"
 
 
-def _binding_lookup_keys(channel: str, chat_id: str) -> list[str]:
-    key = _binding_key(channel, chat_id)
-    keys = [key]
-    if channel == "qq" and chat_id.startswith("gqq:"):
-        legacy_group_id = chat_id[len("gqq:") :].strip()
-        if legacy_group_id:
-            keys.append(_binding_key(channel, legacy_group_id))
-    return keys
-
-
 class RoleSelfSeedGenerator(Protocol):
     def generate(self, role: "RoleRecord") -> str: ...
 
@@ -170,39 +160,6 @@ class RoleSessionService:
     def derive_session_key(self, role_id: str) -> str:
         return self._session_manager.role_session_key(_clean_role_id(role_id))
 
-    def derive_group_member_session_key(
-        self,
-        role_id: str,
-        *,
-        group_id: str,
-        member_id: str,
-    ) -> str:
-        clean_role_id = _clean_role_id(role_id)
-        clean_group_id = str(group_id).strip()
-        clean_member_id = str(member_id).strip()
-        if not clean_group_id:
-            raise ValueError("group_id 不能为空")
-        if not clean_member_id:
-            raise ValueError("member_id 不能为空")
-        return (
-            f"{self._session_manager.role_session_key(clean_role_id)}"
-            f":group:{clean_group_id}:member:{clean_member_id}"
-        )
-
-    @staticmethod
-    def derive_group_context_key(
-        *,
-        channel: str,
-        group_id: str,
-    ) -> str:
-        clean_channel = str(channel).strip()
-        clean_group_id = str(group_id).strip()
-        if not clean_channel:
-            raise ValueError("channel 不能为空")
-        if not clean_group_id:
-            raise ValueError("group_id 不能为空")
-        return f"groupctx:{clean_channel}:{clean_group_id}"
-
     def open_by_role(self, role: RoleRecord) -> Session:
         return self._session_manager.sync_role_session_metadata(
             role.id,
@@ -243,7 +200,6 @@ class RoleMemoryService:
 
     _FILES = (
         "MEMORY.md",
-        "Member.md",
         "SELF.md",
         "HISTORY.md",
         "PENDING.md",
@@ -461,13 +417,13 @@ class RoleBindingService:
         self._lock = threading.RLock()
 
     def get_binding(self, channel: str, chat_id: str) -> RoleChannelBinding | None:
+        key = _binding_key(channel, chat_id)
         with self._lock:
             payload = self._load_payload()
-            for key in _binding_lookup_keys(channel, chat_id):
-                item = payload["bindings"].get(key)
-                if isinstance(item, dict):
-                    return RoleChannelBinding.from_dict(item)
-        return None
+            item = payload["bindings"].get(key)
+        if not isinstance(item, dict):
+            return None
+        return RoleChannelBinding.from_dict(item)
 
     def resolve_role_id(self, channel: str, chat_id: str) -> str:
         binding = self.get_binding(channel, chat_id)

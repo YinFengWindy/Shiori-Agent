@@ -8,7 +8,6 @@ from datetime import datetime
 from bus.events import InboundMessage
 from core.roles import (
     RoleAggregateService,
-    RoleGroupMemoryRepairer,
     RoleLegacyMigrator,
     RoleStore,
     route_inbound_by_role,
@@ -297,7 +296,6 @@ def test_role_aggregate_service_initializes_role_session_and_memory_space(tmp_pa
     assert "我是Mira。" in self_text
     assert "内部底座" not in self_text
     assert (aggregate.memory_root / "MEMORY.md").read_text(encoding="utf-8")
-    assert (aggregate.memory_root / "Member.md").exists()
     assert aggregate.role.memory_init_state["seed_self_ready"] is True
     assert aggregate.role.memory_init_state["seed_first_impression_ready"] is True
     assert aggregate.role.runtime_config == {}
@@ -471,45 +469,6 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
     assert routed.metadata["transport_chat_id"] == "chat-1"
 
 
-def test_route_inbound_by_role_accepts_legacy_qq_group_binding_without_gqq_prefix(
-    tmp_path: Path,
-):
-    session_manager = SessionManager(tmp_path)
-    service = RoleAggregateService.from_runtime(
-        workspace=tmp_path,
-        role_store=RoleStore(tmp_path),
-        session_manager=session_manager,
-    )
-    _ = service.create_role(
-        role_id="mira",
-        name="Mira",
-        description="desktop role",
-        system_prompt="you are mira",
-    )
-    _ = service.bindings.bind("qq", "852463977", "mira")
-
-    routed = route_inbound_by_role(
-        service,
-        InboundMessage(
-            channel="qq",
-            sender="u1",
-            chat_id="gqq:852463977",
-            content="hello",
-            timestamp=datetime.now(),
-            metadata={"chat_type": "group", "group_id": "852463977"},
-        ),
-    )
-
-    assert routed.session_key == "role:mira:group:852463977:member:u1"
-    assert routed.metadata["role_id"] == "mira"
-    assert routed.metadata["group_member_id"] == "u1"
-    assert routed.metadata["group_context_key"] == "groupctx:qq:852463977"
-    assert routed.metadata["context_channel"] == "qq"
-    assert routed.metadata["context_chat_id"] == "gqq:852463977"
-    assert routed.metadata["transport_channel"] == "qq"
-    assert routed.metadata["transport_chat_id"] == "gqq:852463977"
-
-
 def test_route_inbound_by_role_leaves_unbound_legacy_channel_untouched(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
@@ -564,99 +523,6 @@ def test_role_legacy_migrator_moves_confirmed_session_into_role_session(tmp_path
     binding = service.bindings.get_binding("telegram", "123")
     assert binding is not None
     assert binding.role_id == "mira"
-
-
-def test_role_legacy_migrator_splits_legacy_group_session_by_member(tmp_path: Path):
-    session_manager = SessionManager(tmp_path)
-    service = RoleAggregateService.from_runtime(
-        workspace=tmp_path,
-        role_store=RoleStore(tmp_path),
-        session_manager=session_manager,
-    )
-    _ = service.create_role(
-        role_id="mira",
-        name="Mira",
-        description="desktop role",
-        system_prompt="you are mira",
-    )
-    legacy = session_manager.get_or_create("qq:gqq:100")
-    legacy.metadata["role_id"] = "mira"
-    legacy.metadata["group_id"] = "100"
-    legacy.add_message("user", "u1-hello", metadata={"member_id": "u1"})
-    legacy.add_message("assistant", "a1")
-    legacy.add_message("user", "u2-hello", metadata={"member_id": "u2"})
-    legacy.add_message("assistant", "a2")
-    session_manager.save(legacy)
-
-    migrator = RoleLegacyMigrator(
-        workspace=tmp_path,
-        roles=service,
-        session_manager=session_manager,
-    )
-    summary = migrator.migrate()
-
-    member1 = session_manager.get_or_create("role:mira:group:100:member:u1")
-    member2 = session_manager.get_or_create("role:mira:group:100:member:u2")
-    assert "qq:gqq:100" in summary.migrated_session_keys
-    assert [item["content"] for item in member1.messages] == ["u1-hello", "a1"]
-    assert [item["content"] for item in member2.messages] == ["u2-hello", "a2"]
-    assert member1.metadata["group_member_id"] == "u1"
-    assert member2.metadata["group_member_id"] == "u2"
-
-
-def test_role_legacy_migrator_marks_ambiguous_group_memory_unresolved(tmp_path: Path):
-    session_manager = SessionManager(tmp_path)
-    service = RoleAggregateService.from_runtime(
-        workspace=tmp_path,
-        role_store=RoleStore(tmp_path),
-        session_manager=session_manager,
-    )
-    _ = service.create_role(
-        role_id="mira",
-        name="Mira",
-        description="desktop role",
-        system_prompt="you are mira",
-    )
-
-    memory_store = MemoryStore2(tmp_path / "memory" / "memory2.db", vec_dim=2)
-    unresolved_result = memory_store.upsert_item(
-        memory_type="preference",
-        summary="群里某人偏好中文回复",
-        embedding=[1.0, 0.0],
-        extra={
-            "role_id": "mira",
-            "memory_domain": "relationship",
-            "scope_channel": "qq",
-            "scope_chat_id": "gqq:100",
-        },
-        source_ref="legacy:group:pref",
-    )
-    resolved_result = memory_store.upsert_item(
-        memory_type="preference",
-        summary="成员 u1 偏好中文回复",
-        embedding=[1.0, 0.0],
-        extra={
-            "role_id": "mira",
-            "memory_domain": "relationship",
-            "scope_channel": "qq",
-            "scope_chat_id": "gqq:100",
-            "group_member_id": "u1",
-        },
-        source_ref="legacy:group:member-pref",
-    )
-    unresolved_item_id = unresolved_result.split(":", 1)[1]
-    resolved_item_id = resolved_result.split(":", 1)[1]
-
-    migrator = RoleLegacyMigrator(
-        workspace=tmp_path,
-        roles=service,
-        session_manager=session_manager,
-        memory_store=memory_store,
-    )
-    summary = migrator.migrate()
-
-    assert unresolved_item_id in summary.unresolved_memory_item_ids
-    assert resolved_item_id in summary.migrated_memory_item_ids
 
 
 def test_role_legacy_migrator_keeps_unconfirmed_session_in_unresolved(tmp_path: Path):
@@ -762,104 +628,3 @@ def test_role_legacy_migrator_avoids_duplicate_messages_when_state_file_missing(
     migrated = session_manager.get_or_create("role:mira")
     assert second.migrated_session_keys == ["telegram:123"]
     assert [item["content"] for item in migrated.messages] == ["hello"]
-
-
-def test_role_group_memory_repairer_cleans_root_markdown_and_invalid_group_memory2(
-    tmp_path: Path,
-):
-    role_memory_root = tmp_path / "roles" / "mira" / "memory"
-    journal_dir = role_memory_root / "journal"
-    journal_dir.mkdir(parents=True, exist_ok=True)
-
-    history_marker = (
-        "<!-- consolidation:[\"role:mira:group:100:member:u1:0\"]:history_entry -->\n"
-    )
-    pending_marker = (
-        "<!-- consolidation:[\"role:mira:group:100:member:u1:1\"]:pending_items -->\n"
-    )
-    keep_marker = "<!-- consolidation:[\"role:mira:200\"]:history_entry -->\n"
-    (role_memory_root / "HISTORY.md").write_text(
-        keep_marker + "[2026-07-02 10:00] 保留的根会话\n\n" + history_marker + "[2026-07-02 11:00] 群聊污染\n",
-        encoding="utf-8",
-    )
-    (role_memory_root / "PENDING.md").write_text(
-        pending_marker + "- [preference] 群聊污染待处理\n",
-        encoding="utf-8",
-    )
-    (journal_dir / "2026-07-02.md").write_text(
-        "# 2026-07-02\n\n"
-        + history_marker
-        + "[2026-07-02 11:00] 群聊污染\n",
-        encoding="utf-8",
-    )
-    (role_memory_root / "RECENT_CONTEXT.md").write_text(
-        "旧的群聊 recent context",
-        encoding="utf-8",
-    )
-
-    memory_store = MemoryStore2(tmp_path / "memory" / "memory2.db", vec_dim=2)
-    kept_result = memory_store.upsert_item(
-        memory_type="event",
-        summary="成员 u1 的正常 scoped 记忆",
-        embedding=[1.0, 0.0],
-        extra={
-            "role_id": "mira",
-            "scope_channel": "qq",
-            "scope_chat_id": "gqq:100",
-            "group_member_id": "u1",
-        },
-        source_ref="role:mira:group:100:member:u1:9",
-    )
-    ambiguous_result = memory_store.upsert_item(
-        memory_type="event",
-        summary="混合成员事件",
-        embedding=[1.0, 0.0],
-        extra={
-            "role_id": "mira",
-            "memory_domain": "relationship",
-            "scope_channel": "qq",
-            "scope_chat_id": "gqq:100",
-            "group_member_id": "__ambiguous__",
-        },
-        source_ref='["role:mira:group:100:member:u1:0","role:mira:group:100:member:u2:0"]#h:x',
-    )
-    unscoped_result = memory_store.upsert_item(
-        memory_type="",
-        summary="坏的无类型群聊画像",
-        embedding=[1.0, 0.0],
-        extra={"role_id": "mira"},
-        source_ref="role:mira:group:100:member:u1:10",
-    )
-
-    kept_id = kept_result.split(":", 1)[1]
-    ambiguous_id = ambiguous_result.split(":", 1)[1]
-    unscoped_id = unscoped_result.split(":", 1)[1]
-
-    summary = RoleGroupMemoryRepairer(
-        workspace=tmp_path,
-        memory_store=memory_store,
-    ).repair(
-        role_id="mira",
-        channel="qq",
-        group_chat_id="100",
-    )
-
-    history_text = (role_memory_root / "HISTORY.md").read_text(encoding="utf-8")
-    pending_text = (role_memory_root / "PENDING.md").read_text(encoding="utf-8")
-    journal_text = (journal_dir / "2026-07-02.md").read_text(encoding="utf-8")
-
-    assert summary.removed_history_blocks == 1
-    assert summary.removed_pending_blocks == 1
-    assert summary.removed_journal_blocks == 1
-    assert summary.cleared_recent_context is True
-    assert keep_marker.strip() in history_text
-    assert "保留的根会话" in history_text
-    assert "群聊污染" not in history_text
-    assert "群聊污染待处理" not in pending_text
-    assert "群聊污染" not in journal_text
-    assert (role_memory_root / "RECENT_CONTEXT.md").read_text(encoding="utf-8") == ""
-
-    assert memory_store.get_item_for_dashboard(kept_id) is not None
-    assert memory_store.get_item_for_dashboard(ambiguous_id) is None
-    assert memory_store.get_item_for_dashboard(unscoped_id) is None
-    assert set(summary.deleted_memory_item_ids) == {ambiguous_id, unscoped_id}

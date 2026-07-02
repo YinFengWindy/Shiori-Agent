@@ -923,7 +923,6 @@ class SessionStore:
         query: str,
         *,
         session_key: str | None = None,
-        session_keys: list[str] | None = None,
         role: str | None = None,
         limit: int = 10,
         offset: int = 0,
@@ -935,13 +934,6 @@ class SessionStore:
         if session_key:
             where_parts.append("m.session_key = ?")
             params.append(session_key)
-        elif session_keys:
-            clean_session_keys = [str(key).strip() for key in session_keys if str(key).strip()]
-            if not clean_session_keys:
-                return [], 0
-            placeholders = ",".join("?" for _ in clean_session_keys)
-            where_parts.append(f"m.session_key IN ({placeholders})")
-            params.extend(clean_session_keys)
         if role:
             where_parts.append("m.role = ?")
             params.append(role)

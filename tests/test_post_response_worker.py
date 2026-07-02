@@ -109,7 +109,6 @@ def test_post_worker_handle_delegates_turn_ingested_event():
         channel="cli",
         chat_id="1",
         role_id="",
-        group_member_id="",
     )
 
 

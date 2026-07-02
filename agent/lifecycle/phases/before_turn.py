@@ -74,61 +74,9 @@ class _AcquireSessionModule:
         return frame
 
 
-class _SyncSessionMetadataModule:
-    slot = "before_turn.sync_session_metadata"
-    requires = ("before_turn.acquire_session", _SESSION_SLOT)
-    produces = (_SESSION_SLOT,)
-
-    def __init__(self, session_manager: SessionManager) -> None:
-        self._session_manager = session_manager
-
-    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
-        state = frame.input
-        session = cast(SessionLike, frame.slots[_SESSION_SLOT])
-        metadata = state.msg.metadata if isinstance(state.msg.metadata, dict) else {}
-        session_metadata = getattr(session, "metadata", None)
-        if not isinstance(session_metadata, dict):
-            session_metadata = {}
-            session.metadata = session_metadata
-        role_id = str(metadata.get("role_id") or "").strip()
-        if role_id:
-            session_metadata["role_id"] = role_id
-            runtime_config = session_metadata.get("role_runtime_config")
-            if not isinstance(runtime_config, dict):
-                role_session = self._session_manager.get_or_create(
-                    self._session_manager.role_session_key(role_id)
-                )
-                role_session_metadata = getattr(role_session, "metadata", None)
-                role_runtime_config = (
-                    role_session_metadata.get("role_runtime_config")
-                    if isinstance(role_session_metadata, dict)
-                    else None
-                )
-                if isinstance(role_runtime_config, dict):
-                    session_metadata["role_runtime_config"] = dict(role_runtime_config)
-        if bool(metadata.get("is_group_chat")):
-            session_metadata["is_group_chat"] = True
-            for key in (
-                "group_id",
-                "group_member_id",
-                "member_id",
-                "member_name",
-                "group_context_key",
-                "context_channel",
-                "context_chat_id",
-                "transport_channel",
-                "transport_chat_id",
-            ):
-                value = metadata.get(key)
-                if isinstance(value, str) and value.strip():
-                    session_metadata[key] = value.strip()
-        frame.slots[_SESSION_SLOT] = session
-        return frame
-
-
 class _PrepareContextModule:
     slot = "before_turn.prepare_context"
-    requires = ("before_turn.sync_session_metadata", _SESSION_SLOT)
+    requires = ("before_turn.acquire_session", _SESSION_SLOT)
     produces = (_CONTEXT_BUNDLE_SLOT,)
 
     def __init__(self, context_store: ContextStore) -> None:
@@ -325,7 +273,6 @@ def default_before_turn_modules(
 ) -> BeforeTurnModules:
     builtins: BeforeTurnModules = [
         _AcquireSessionModule(session_manager),
-        _SyncSessionMetadataModule(session_manager),
         _MemoryContextGuardModule(keep_count, consolidator),
         _PrepareContextModule(context_store),
         _BuildBeforeTurnCtxModule(),

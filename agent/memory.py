@@ -4,7 +4,6 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from infra.persistence.json_store import atomic_save_json, load_json
 from utils.helpers import ensure_dir
 
 logger = logging.getLogger(__name__)
@@ -13,7 +12,6 @@ _CONSOLIDATION_MARKER_PREFIX = "<!-- consolidation:"
 _CONSOLIDATION_MARKER_SUFFIX = " -->"
 _CONSOLIDATION_TAIL_BYTES = 1024 * 1024
 _JOURNAL_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_MEMBER_PENDING_VERSION = 1
 DEFAULT_SELF_MD = """# 角色自我认知
 
 ## 人格与形象
@@ -38,10 +36,8 @@ class MemoryStore:
 
     File layout:
     - MEMORY.md
-    - Member.md
     - SELF.md
     - PENDING.md
-    - Member.pending.json
     - HISTORY.md
     - RECENT_CONTEXT.md
     - journal/
@@ -51,11 +47,9 @@ class MemoryStore:
         self.memory_dir = ensure_dir(workspace / "memory")
         self.journal_dir = ensure_dir(self.memory_dir / "journal")
         self.memory_file = self.memory_dir / "MEMORY.md"
-        self.member_file = self.memory_dir / "Member.md"
         self.history_file = self.memory_dir / "HISTORY.md"
         self.recent_context_file = self.memory_dir / "RECENT_CONTEXT.md"
         self.pending_file = self.memory_dir / "PENDING.md"
-        self.member_pending_file = self.memory_dir / "Member.pending.json"
         self.self_file = self.memory_dir / "SELF.md"
         self._consolidation_db = self.memory_dir / "consolidation_writes.db"
         self._consolidation_lock = threading.Lock()
@@ -65,7 +59,6 @@ class MemoryStore:
         self._init_consolidation_db()
         # 崩溃恢复：启动时若遗留 snapshot，回滚合并
         self._recover_pending_snapshot()
-        self._recover_member_pending_snapshot()
 
     # ── long-term memory (MEMORY.md) ─────────────────────────────
 
@@ -76,35 +69,6 @@ class MemoryStore:
 
     def write_long_term(self, content: str) -> None:
         self.memory_file.write_text(content, encoding="utf-8")
-
-    def read_member_memory(self) -> str:
-        if self.member_file.exists():
-            return self.member_file.read_text(encoding="utf-8")
-        return ""
-
-    def write_member_memory(self, content: str) -> None:
-        self.member_file.write_text(content, encoding="utf-8")
-
-    def read_member_memory_section(self, member_key: str) -> str:
-        text = self.read_member_memory()
-        clean_member_key = str(member_key or "").strip()
-        if not text or not clean_member_key:
-            return ""
-        target_header = f"## {clean_member_key}"
-        lines = text.splitlines()
-        section_lines: list[str] = []
-        in_section = False
-        for line in lines:
-            if line.startswith("## "):
-                if in_section:
-                    break
-                if line.strip() == target_header:
-                    in_section = True
-                    section_lines.append(line)
-                continue
-            if in_section:
-                section_lines.append(line)
-        return "\n".join(section_lines).strip()
 
     def append_history(self, entry: str) -> None:
         with open(self.history_file, "a", encoding="utf-8") as f:
@@ -226,99 +190,6 @@ class MemoryStore:
     def clear_pending(self) -> None:
         """optimizer 归档后清空 PENDING.md。"""
         self.pending_file.write_text("", encoding="utf-8")
-
-    # ── member pending facts (group member → optimizer buffer) ───────────
-
-    @property
-    def _member_snapshot_path(self) -> Path:
-        return self.member_pending_file.with_name("Member.pending.snapshot.json")
-
-    def read_member_pending(self) -> dict[str, object]:
-        self._recover_member_pending_snapshot()
-        return self._load_member_pending_payload(self.member_pending_file)
-
-    def append_member_pending_entry(
-        self,
-        *,
-        member_key: str,
-        source_ref: str,
-        history_entry_payloads: list[tuple[str, int]],
-        pending_items: str,
-    ) -> bool:
-        clean_member_key = str(member_key or "").strip()
-        clean_source_ref = str(source_ref or "").strip()
-        normalized_history = [
-            {"summary": str(summary or "").strip(), "emotional_weight": int(weight)}
-            for summary, weight in history_entry_payloads
-            if str(summary or "").strip()
-        ]
-        pending_lines = [
-            line.strip()
-            for line in str(pending_items or "").splitlines()
-            if line.strip()
-        ]
-        if (
-            not clean_member_key
-            or not clean_source_ref
-            or (not normalized_history and not pending_lines)
-        ):
-            return False
-
-        self._recover_member_pending_snapshot()
-        payload = self._load_member_pending_payload(self.member_pending_file)
-        items = list(payload.get("items") or [])
-        if any(
-            isinstance(item, dict)
-            and str(item.get("member_key") or "").strip() == clean_member_key
-            and str(item.get("source_ref") or "").strip() == clean_source_ref
-            for item in items
-        ):
-            return False
-        items.append(
-            {
-                "member_key": clean_member_key,
-                "source_ref": clean_source_ref,
-                "history_entries": normalized_history,
-                "pending_items": pending_lines,
-            }
-        )
-        self._save_member_pending_payload(
-            self.member_pending_file,
-            {"version": _MEMBER_PENDING_VERSION, "items": items},
-        )
-        return True
-
-    def snapshot_member_pending(self) -> dict[str, object]:
-        self._recover_member_pending_snapshot()
-        payload = self._load_member_pending_payload(self.member_pending_file)
-        if not payload.get("items"):
-            return self._empty_member_pending_payload()
-        self.member_pending_file.rename(self._member_snapshot_path)
-        return self._load_member_pending_payload(self._member_snapshot_path)
-
-    def commit_member_pending_snapshot(self) -> None:
-        if self._member_snapshot_path.exists():
-            self._member_snapshot_path.unlink()
-        if not self.member_pending_file.exists():
-            self._save_member_pending_payload(
-                self.member_pending_file,
-                self._empty_member_pending_payload(),
-            )
-
-    def rollback_member_pending_snapshot(self) -> None:
-        if not self._member_snapshot_path.exists():
-            return
-        snapshot_payload = self._load_member_pending_payload(self._member_snapshot_path)
-        current_payload = self._load_member_pending_payload(self.member_pending_file)
-        merged = self._merge_member_pending_payloads(snapshot_payload, current_payload)
-        self._save_member_pending_payload(self.member_pending_file, merged)
-        self._member_snapshot_path.unlink()
-        logger.info("[memory] Member.pending snapshot 已回滚合并")
-
-    def _recover_member_pending_snapshot(self) -> None:
-        if self._member_snapshot_path.exists():
-            logger.warning("[memory] 检测到遗留 Member.pending.snapshot.json，执行崩溃回滚")
-            self.rollback_member_pending_snapshot()
 
     # ── 两阶段提交（供 MemoryOptimizer 使用）──────────────────────
 
@@ -506,89 +377,6 @@ class MemoryStore:
                 return marker in tail
         except Exception:
             return False
-
-    @staticmethod
-    def _empty_member_pending_payload() -> dict[str, object]:
-        return {"version": _MEMBER_PENDING_VERSION, "items": []}
-
-    def _load_member_pending_payload(self, path: Path) -> dict[str, object]:
-        payload = load_json(
-            path,
-            default=self._empty_member_pending_payload(),
-            domain="member_pending",
-        )
-        if not isinstance(payload, dict):
-            return self._empty_member_pending_payload()
-        version = int(payload.get("version") or _MEMBER_PENDING_VERSION)
-        raw_items = payload.get("items")
-        items: list[dict[str, object]] = []
-        if isinstance(raw_items, list):
-            for item in raw_items:
-                if not isinstance(item, dict):
-                    continue
-                member_key = str(item.get("member_key") or "").strip()
-                source_ref = str(item.get("source_ref") or "").strip()
-                if not member_key or not source_ref:
-                    continue
-                history_entries: list[dict[str, object]] = []
-                for entry in item.get("history_entries") or []:
-                    if not isinstance(entry, dict):
-                        continue
-                    summary = str(entry.get("summary") or "").strip()
-                    if not summary:
-                        continue
-                    try:
-                        emotional_weight = int(entry.get("emotional_weight") or 0)
-                    except (TypeError, ValueError):
-                        emotional_weight = 0
-                    history_entries.append(
-                        {
-                            "summary": summary,
-                            "emotional_weight": emotional_weight,
-                        }
-                    )
-                pending_items = [
-                    str(line).strip()
-                    for line in (item.get("pending_items") or [])
-                    if str(line).strip()
-                ]
-                items.append(
-                    {
-                        "member_key": member_key,
-                        "source_ref": source_ref,
-                        "history_entries": history_entries,
-                        "pending_items": pending_items,
-                    }
-                )
-        return {"version": version, "items": items}
-
-    def _save_member_pending_payload(self, path: Path, payload: dict[str, object]) -> None:
-        atomic_save_json(
-            path,
-            payload,
-            domain="member_pending",
-        )
-
-    def _merge_member_pending_payloads(
-        self,
-        older: dict[str, object],
-        newer: dict[str, object],
-    ) -> dict[str, object]:
-        merged_items: list[dict[str, object]] = []
-        seen: set[tuple[str, str]] = set()
-        for payload in (older, newer):
-            for item in payload.get("items") or []:
-                if not isinstance(item, dict):
-                    continue
-                key = (
-                    str(item.get("member_key") or "").strip(),
-                    str(item.get("source_ref") or "").strip(),
-                )
-                if not key[0] or not key[1] or key in seen:
-                    continue
-                seen.add(key)
-                merged_items.append(item)
-        return {"version": _MEMBER_PENDING_VERSION, "items": merged_items}
 
     @staticmethod
     def _file_contains_marker(path: Path, marker: str) -> bool:

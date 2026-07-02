@@ -57,9 +57,6 @@ class PromptBlock(Protocol):
 #  35 LongTermMemoryPromptBlock→ roles/<role_id>/memory/MEMORY.md
 #                              来源：memory.read_profile() / get_memory_context()（严格要求 role_id）
 #                              时机：长期记忆 consolidate 或人工更新时才变，低频
-#  37 MemberMemoryPromptBlock  → roles/<role_id>/memory/Member.md（群聊时整份注入）
-#                              来源：memory.read_member_memory()（仅群聊上下文才返回）
-#                              时机：optimizer 更新成员关系记忆时变化，低频
 #  40 SessionContextPromptBlock→ 环境 + 当前 session
 #                              来源：platform.machine() + channel + chat_id
 #                              时机：切换机器架构、channel、chat_id 时才变；同 session 基本稳定
@@ -145,25 +142,6 @@ class LongTermMemoryPromptBlock:
     def render(self, ctx: TurnContext, cached_signature: str | None = None) -> str | None:
         memory = ctx.memory.get_memory_context()
         return str(memory).strip() if memory else None
-
-    def cache_signature(self, ctx: TurnContext) -> str | None:
-        return None
-
-
-class MemberMemoryPromptBlock:
-    priority = 37
-    label = "member_memory"
-    is_static = False
-
-    def render(self, ctx: TurnContext, cached_signature: str | None = None) -> str | None:
-        reader = getattr(ctx.memory, "read_member_memory", None)
-        if not callable(reader):
-            return None
-        memory = reader()
-        memory_text = str(memory).strip() if memory else ""
-        if not memory_text:
-            return None
-        return f"## 当前成员关系记忆\n\n{memory_text}"
 
     def cache_signature(self, ctx: TurnContext) -> str | None:
         return None

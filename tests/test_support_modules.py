@@ -19,11 +19,9 @@ from agent.tools.memorize import MemorizeTool
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolMeta, ToolRegistry
 from agent.tools.web_search import WebSearchTool
-from bootstrap.memory import build_memory_runtime
 from bus.events import InboundMessage, OutboundMessage
 from bus.queue import MessageBus
 from core.common import timekit
-from agent.config_models import Config, MemoryConfig
 from plugins.default_memory.engine import DefaultMemoryEngine
 from infra.persistence.json_store import atomic_save_json, load_json, save_json
 from memory2.memorizer import Memorizer
@@ -684,66 +682,6 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert role_prefix == role_prefix_cross_channel
 
 
-def test_context_builder_injects_full_member_memory_in_group_chat(tmp_path: Path):
-    from core.roles import RoleStore
-
-    role_store = RoleStore(tmp_path)
-    role_store.create_role(
-        role_id="mira",
-        name="Mira",
-        description="desktop role",
-        system_prompt="你现在要用更温柔的风格说话。",
-    )
-    role_memory_root = tmp_path / "roles" / "mira" / "memory"
-    role_memory_root.mkdir(parents=True, exist_ok=True)
-    (role_memory_root / "SELF.md").write_text("# 角色背景\n\n来自深海城的向导。\n", encoding="utf-8")
-    (role_memory_root / "MEMORY.md").write_text("# 关系基线\n\n来源: seed:first_impression\n", encoding="utf-8")
-    (role_memory_root / "Member.md").write_text(
-        "# Member Memory\n\n"
-        "## qq:u1\n"
-        "- 关系: 常直接纠正我别话密。\n\n"
-        "## qq:u2\n"
-        "- 关系: 互动较少。\n",
-        encoding="utf-8",
-    )
-
-    builder = ContextBuilder(tmp_path, build_memory_runtime(  # type: ignore[arg-type]
-        Config(
-            provider="test",
-            model="test-model",
-            api_key="test-key",
-            system_prompt="test system prompt",
-            memory=MemoryConfig(enabled=False),
-        ),
-        tmp_path,
-        ToolRegistry(),
-        cast(Any, SimpleNamespace()),
-        None,
-        cast(Any, SimpleNamespace()),
-    ))
-    now = datetime.now(timezone.utc)
-    role_prompt = builder.render(
-        ContextRequest(
-            history=[],
-            current_message="hello",
-            skill_names=["extra"],
-            channel="qq",
-            chat_id="gqq:100",
-            message_timestamp=now,
-        ),
-        session_metadata={
-            "role_id": "mira",
-            "is_group_chat": True,
-            "group_member_id": "u1",
-            "context_channel": "qq",
-        },
-    ).messages[0]["content"]
-
-    assert "## 当前成员关系记忆" in role_prompt
-    assert "常直接纠正我别话密" in role_prompt
-    assert "互动较少" in role_prompt
-
-
 def test_context_builder_reproduces_temporal_conflict_baseline(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
@@ -1084,54 +1022,6 @@ def test_role_memory_migrate_script_prints_json_summary(
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["migrated_session_keys"] == ["telegram:1"]
     assert payload["unresolved_session_keys"] == ["telegram:404"]
-
-
-def test_role_group_memory_repair_script_prints_json_summary(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-):
-    import scripts.role_group_memory_repair as module
-
-    class _FakeRepairer:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        def repair(self, **kwargs):
-            return SimpleNamespace(
-                role_id=kwargs["role_id"],
-                channel=kwargs["channel"],
-                group_chat_id=kwargs["group_chat_id"],
-                removed_history_blocks=2,
-                removed_pending_blocks=1,
-                removed_journal_blocks=3,
-                cleared_recent_context=True,
-                deleted_memory_item_ids=["mem-1", "mem-2"],
-            )
-
-    monkeypatch.setattr(module, "RoleGroupMemoryRepairer", _FakeRepairer)
-    monkeypatch.setattr(module, "MemoryStore2", lambda path: SimpleNamespace(close=lambda: None))
-
-    old_argv = sys.argv
-    try:
-        sys.argv = [
-            "role_group_memory_repair.py",
-            "--workspace",
-            str(tmp_path),
-            "--role-id",
-            "mira",
-            "--group-chat-id",
-            "100",
-        ]
-        exit_code = module.main()
-    finally:
-        sys.argv = old_argv
-
-    assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out.strip())
-    assert payload["role_id"] == "mira"
-    assert payload["removed_history_blocks"] == 2
-    assert payload["deleted_memory_item_ids"] == ["mem-1", "mem-2"]
 
 
 def test_repository_entrypoints_are_desktop_first():
