@@ -155,10 +155,11 @@ def _format_group_context_lines(
     current_member_id: str,
     limit: int = 12,
 ) -> list[str]:
-    rendered: list[str] = []
     normalized_current = str(current_message or "").strip()
     normalized_member = str(current_member_id or "").strip()
-    recent = list(messages[-max(1, limit + 1) :])
+    candidate_window = max(limit * 3, limit + 1)
+    recent = list(messages[-max(1, candidate_window) :])
+    candidates: list[tuple[int, int, str]] = []
     for index, message in enumerate(recent):
         content = str(message.get("content") or "").strip()
         if not content:
@@ -174,15 +175,59 @@ def _format_group_context_lines(
             and str(item_metadata.get("member_id") or "").strip() == normalized_member
         ):
             continue
-        if role == "assistant":
-            rendered.append(f"- [角色] {content}")
-            continue
         member_id = str(item_metadata.get("member_id") or "").strip()
+        if _is_low_signal_group_context_message(
+            role=role,
+            content=content,
+            member_id=member_id,
+            current_member_id=normalized_member,
+        ):
+            continue
+        if role == "assistant":
+            candidates.append((1, index, f"- [角色] {content}"))
+            continue
         speaker = member_id or "群成员"
         if len(content) > 120:
             content = support.log_preview(content, limit=120)
-        rendered.append(f"- [{speaker}] {content}")
-    return rendered[-limit:]
+        priority = 0 if member_id and member_id == normalized_member else 2
+        candidates.append((priority, index, f"- [{speaker}] {content}"))
+
+    selected = sorted(
+        candidates,
+        key=lambda item: (item[0], -item[1]),
+    )[: max(1, limit)]
+    selected.sort(key=lambda item: item[1])
+    return [item[2] for item in selected]
+
+
+def _is_low_signal_group_context_message(
+    *,
+    role: str,
+    content: str,
+    member_id: str,
+    current_member_id: str,
+) -> bool:
+    normalized = "".join(str(content or "").split())
+    if not normalized:
+        return True
+    lowered = normalized.lower()
+    if lowered in {"[图片]", "[image]", "<image>", "图片", "image", "img"}:
+        return True
+    if all(not _is_meaningful_text_char(char) for char in normalized):
+        return True
+    if (
+        role == "user"
+        and member_id != current_member_id
+        and len(normalized) <= 3
+    ):
+        return True
+    return False
+
+
+def _is_meaningful_text_char(char: str) -> bool:
+    if char.isalnum():
+        return True
+    return "\u4e00" <= char <= "\u9fff"
 
 
 def _build_group_member_block(metadata: dict[str, Any]) -> str:

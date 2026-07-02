@@ -11,7 +11,7 @@ from agent.core.passive_support import (
     build_post_reply_context_budget,
     estimate_history_budget,
 )
-from agent.core.passive_turn import DefaultContextStore
+from agent.core.passive_turn import DefaultContextStore, _format_group_context_lines
 from agent.core.types import RetrievalTrace
 from agent.retrieval.protocol import RetrievalResult
 from bus.events import InboundMessage
@@ -274,6 +274,57 @@ async def test_default_context_store_injects_group_shared_background_without_rep
     assert "[2] B 先前说过的话" in bundle.retrieved_memory_block
     assert "[角色] 角色刚才在群里的回复" in bundle.retrieved_memory_block
     assert "当前这条消息" not in bundle.retrieved_memory_block
+
+
+def test_format_group_context_lines_filters_low_signal_and_prioritizes_current_member():
+    lines = _format_group_context_lines(
+        [
+            {
+                "role": "user",
+                "content": "路人早些时候的背景",
+                "metadata": {"member_id": "9"},
+            },
+            {
+                "role": "user",
+                "content": "我刚才说想继续看支付记录",
+                "metadata": {"member_id": "1"},
+            },
+            {
+                "role": "user",
+                "content": "[图片]",
+                "metadata": {"member_id": "2"},
+            },
+            {
+                "role": "user",
+                "content": "哈哈",
+                "metadata": {"member_id": "3"},
+            },
+            {
+                "role": "user",
+                "content": "其他成员补充了支付背景",
+                "metadata": {"member_id": "2"},
+            },
+            {
+                "role": "assistant",
+                "content": "角色刚才提醒先核对账单",
+                "metadata": {"group_context": True},
+            },
+            {
+                "role": "user",
+                "content": "当前这条消息",
+                "metadata": {"member_id": "1"},
+            },
+        ],
+        current_message="当前这条消息",
+        current_member_id="1",
+        limit=3,
+    )
+
+    assert lines == [
+        "- [1] 我刚才说想继续看支付记录",
+        "- [2] 其他成员补充了支付背景",
+        "- [角色] 角色刚才提醒先核对账单",
+    ]
 
 
 def test_estimate_history_budget_returns_serialized_history_size():
