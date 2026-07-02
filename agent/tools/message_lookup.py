@@ -221,10 +221,20 @@ class SearchMessagesTool(Tool):
 
         limit = max(1, min(int(kwargs.get("limit", 10)), 50))
         offset = max(0, int(kwargs.get("offset", 0)))
+        explicit_session_key = (kwargs.get("session_key") or "").strip() or None
+        session_keys = _resolve_search_session_keys(
+            explicit_session_key=explicit_session_key,
+            role_id=str(kwargs.get("role_id") or "").strip(),
+            channel=str(kwargs.get("channel") or "").strip(),
+            group_member_id=str(kwargs.get("group_member_id") or "").strip(),
+            is_group_chat=str(kwargs.get("is_group_chat") or "").strip(),
+            store=self._store,
+        )
 
         matched, total = self._store.search_messages(
             term,
-            session_key=(kwargs.get("session_key") or "").strip() or None,
+            session_key=explicit_session_key,
+            session_keys=session_keys,
             role=(kwargs.get("role") or "").strip() or None,
             limit=limit,
             offset=offset,
@@ -270,6 +280,37 @@ def _build_search_preview(message: dict[str, Any], query_terms: list[str] | None
         "truncated": truncated,
     }
     return result
+
+
+def _resolve_search_session_keys(
+    *,
+    explicit_session_key: str | None,
+    role_id: str,
+    channel: str,
+    group_member_id: str,
+    is_group_chat: str,
+    store: SessionStore,
+) -> list[str] | None:
+    if explicit_session_key:
+        return None
+    if str(is_group_chat).strip().lower() != "true":
+        return None
+    clean_role_id = role_id.strip()
+    clean_channel = channel.strip()
+    clean_group_member_id = group_member_id.strip()
+    if not clean_role_id or not clean_channel or not clean_group_member_id:
+        return None
+    prefix = (
+        f"role:{clean_role_id}:group:"
+    )
+    suffix = f":member:{clean_group_member_id}"
+    matched = [
+        key
+        for row in store.list_sessions()
+        if (key := str(row.get("key") or "").strip()).startswith(prefix)
+        and key.endswith(suffix)
+    ]
+    return matched or None
 
 
 def _preview_lines(content: str, *, max_lines: int) -> tuple[str, int, bool]:

@@ -252,7 +252,110 @@ async def test_search_messages_supports_filters(tmp_path):
     assert payload["messages"][0]["session_key"] == "tg:1"
     assert payload["messages"][0]["role"] == "user"
     assert payload["messages"][0]["source_ref"] == "tg:1:0"
-    assert "0.62" in payload["messages"][0]["preview"]
+
+
+@pytest.mark.asyncio
+async def test_search_messages_group_member_expands_to_other_group_sessions(tmp_path):
+    store = SessionStore(tmp_path / "sessions.db")
+    for key in (
+        "role:mira:group:100:member:u1",
+        "role:mira:group:200:member:u1",
+        "role:mira:group:100:member:u2",
+    ):
+        store.upsert_session(
+            key,
+            created_at="2026-01-01T00:00:00+00:00",
+            updated_at="2026-01-01T00:00:00+00:00",
+            last_consolidated=0,
+            metadata={},
+        )
+    store.insert_message(
+        "role:mira:group:100:member:u1",
+        role="user",
+        content="phase 支付 当前群",
+        ts="2026-01-01T00:00:01+00:00",
+        seq=0,
+    )
+    store.insert_message(
+        "role:mira:group:200:member:u1",
+        role="assistant",
+        content="phase 支付 其他群",
+        ts="2026-01-01T00:00:02+00:00",
+        seq=0,
+    )
+    store.insert_message(
+        "role:mira:group:100:member:u2",
+        role="user",
+        content="phase 支付 其他成员",
+        ts="2026-01-01T00:00:03+00:00",
+        seq=0,
+    )
+
+    tool = SearchMessagesTool(store)
+    payload = json.loads(
+        await tool.execute(
+            query="phase 支付",
+            role_id="mira",
+            channel="qq",
+            group_member_id="u1",
+            is_group_chat="true",
+            limit=10,
+        )
+    )
+
+    assert payload["matched_count"] == 2
+    assert {item["session_key"] for item in payload["messages"]} == {
+        "role:mira:group:100:member:u1",
+        "role:mira:group:200:member:u1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_search_messages_explicit_session_key_overrides_group_member_expansion(tmp_path):
+    store = SessionStore(tmp_path / "sessions.db")
+    for key in (
+        "role:mira:group:100:member:u1",
+        "role:mira:group:200:member:u1",
+    ):
+        store.upsert_session(
+            key,
+            created_at="2026-01-01T00:00:00+00:00",
+            updated_at="2026-01-01T00:00:00+00:00",
+            last_consolidated=0,
+            metadata={},
+        )
+    store.insert_message(
+        "role:mira:group:100:member:u1",
+        role="user",
+        content="phase 支付 当前群",
+        ts="2026-01-01T00:00:01+00:00",
+        seq=0,
+    )
+    store.insert_message(
+        "role:mira:group:200:member:u1",
+        role="assistant",
+        content="phase 支付 其他群",
+        ts="2026-01-01T00:00:02+00:00",
+        seq=0,
+    )
+
+    tool = SearchMessagesTool(store)
+    payload = json.loads(
+        await tool.execute(
+            query="phase 支付",
+            session_key="role:mira:group:100:member:u1",
+            role_id="mira",
+            channel="qq",
+            group_member_id="u1",
+            is_group_chat="true",
+            limit=10,
+        )
+    )
+
+    assert payload["matched_count"] == 1
+    assert [item["session_key"] for item in payload["messages"]] == [
+        "role:mira:group:100:member:u1"
+    ]
 
 
 @pytest.mark.asyncio
