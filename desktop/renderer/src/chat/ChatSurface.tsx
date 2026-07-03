@@ -1,7 +1,8 @@
 import type React from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { isChatImageAsset } from "./chatImageHistory";
 import { formatTimestamp, toFileUrl } from "../shared/format";
-import { cx, ghostButtonClass } from "../shared/styles";
+import { cx } from "../shared/styles";
 import type { RoleRecord, SessionPayload } from "../shared/types";
 
 type ChatSurfaceProps = {
@@ -9,10 +10,11 @@ type ChatSurfaceProps = {
   activeRoleId: string;
   activeSession: SessionPayload | null;
   bridgeReady: boolean;
-  chatLatestImageLoading: boolean;
   chatLatestImagePath: string;
+  chatLatestImagePosition: number;
   chatLatestImageSidebarAnimating: boolean;
   chatLatestImageSidebarCollapsed: boolean;
+  chatLatestImageSidebarCount: number;
   chatLatestImageSidebarWidth: number;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   draft: string;
@@ -22,6 +24,8 @@ type ChatSurfaceProps = {
   sending: boolean;
   visibleIllustrationUrl: string;
   onBeginChatLatestImageSidebarResize: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onGoToNextChatImage: () => void;
+  onGoToPreviousChatImage: () => void;
   onOpenChatImagePreview: (path: string) => void;
   onSendMessage: (contentOverride?: string) => void;
   onToggleChatLatestImageSidebar: () => void;
@@ -34,10 +38,11 @@ export function ChatSurface({
   activeRoleId,
   activeSession,
   bridgeReady,
-  chatLatestImageLoading,
   chatLatestImagePath,
+  chatLatestImagePosition,
   chatLatestImageSidebarAnimating,
   chatLatestImageSidebarCollapsed,
+  chatLatestImageSidebarCount,
   chatLatestImageSidebarWidth,
   conversationEndRef,
   draft,
@@ -47,6 +52,8 @@ export function ChatSurface({
   sending,
   visibleIllustrationUrl,
   onBeginChatLatestImageSidebarResize,
+  onGoToNextChatImage,
+  onGoToPreviousChatImage,
   onOpenChatImagePreview,
   onSendMessage,
   onToggleChatLatestImageSidebar,
@@ -119,12 +126,17 @@ export function ChatSurface({
   const chatMinorTextClass = "text-[12px]";
   const chatContentTrackClass = "mx-auto w-full max-w-[860px] px-5 md:px-6";
   const composerTrackClass = "mx-auto w-full max-w-[700px] px-5 md:px-6";
+  const sidebarNavButtonClass =
+    "grid h-8 w-8 place-items-center rounded-md border border-[#D8DFE7] bg-white/88 text-[#4B5563] transition hover:border-[#C9D3DF] hover:bg-white hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40";
   const assistantMessageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(228,228,228,0.66)] bg-[rgba(255,255,255,0.48)] px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-[10px] transition-colors duration-150 group-hover:bg-[rgba(255,255,255,0.72)]";
   const userMessageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
   const hasIllustration = Boolean(visibleIllustrationUrl);
   const showScrollToBottom = scrollState.isScrollable && !scrollState.isAtBottom;
+  const hasChatImageHistory = chatLatestImageSidebarCount > 0;
+  const canGoToPreviousChatImage = chatLatestImagePosition > 1;
+  const canGoToNextChatImage = hasChatImageHistory && chatLatestImagePosition < chatLatestImageSidebarCount;
 
   const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter") return;
@@ -141,13 +153,6 @@ export function ChatSurface({
     if (!container) return;
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   };
-
-  function isImageAsset(path: string): boolean {
-    const cleanPath = path.split(/[?#]/)[0] ?? "";
-    const dotIndex = cleanPath.lastIndexOf(".");
-    const ext = dotIndex >= 0 ? cleanPath.slice(dotIndex).toLowerCase() : "";
-    return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"].includes(ext);
-  }
 
   function getMessageSourceLabel(message: SessionPayload["messages"][number]): string | null {
     const metadata = message.metadata ?? {};
@@ -265,7 +270,7 @@ export function ChatSurface({
                       {media.length ? (
                         <div className="mt-3 grid gap-2">
                           {media.map((item) => (
-                            isImageAsset(item) ? (
+                            isChatImageAsset(item) ? (
                               <button
                                 key={item}
                                 className="block overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white focus:outline-none"
@@ -360,6 +365,38 @@ export function ChatSurface({
             )}
           >
             <div className="grid h-full min-h-0 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+              <div className="mb-3 flex items-center justify-between gap-3 px-1">
+                <div className="min-w-0">
+                  <div className="text-[12px] font-medium text-[#374151]">聊天图片历史</div>
+                  <div className="text-[11px] text-[#6B7280]">
+                    {hasChatImageHistory ? `${chatLatestImagePosition} / ${chatLatestImageSidebarCount}` : "当前聊天还没有图片"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className={sidebarNavButtonClass}
+                    type="button"
+                    aria-label="查看上一张聊天图片"
+                    onClick={onGoToPreviousChatImage}
+                    disabled={!canGoToPreviousChatImage}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m15 18-6-6 6-6" />
+                    </svg>
+                  </button>
+                  <button
+                    className={sidebarNavButtonClass}
+                    type="button"
+                    aria-label="查看下一张聊天图片"
+                    onClick={onGoToNextChatImage}
+                    disabled={!canGoToNextChatImage}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
               <div className="grid h-full min-h-0 place-items-center overflow-hidden rounded-[16px] bg-[#F1F5F9]">
                 {chatLatestImagePath ? (
                   <img
@@ -367,10 +404,11 @@ export function ChatSurface({
                     src={toFileUrl(chatLatestImagePath)}
                     alt="selected message image"
                   />
-                ) : chatLatestImageLoading ? (
-                  <div className="h-5 w-5 rounded-full border border-[#D6DCE5] border-t-[#747474]" />
                 ) : (
-                  <div className="h-10 w-10 rounded-[14px] border border-[#D6DCE5] bg-white/70" />
+                  <div className="grid gap-2 px-6 text-center">
+                    <div className="mx-auto h-10 w-10 rounded-[14px] border border-[#D6DCE5] bg-white/70" />
+                    <div className="text-[12px] text-[#6B7280]">当前聊天里出现的图片会显示在这里</div>
+                  </div>
                 )}
               </div>
             </div>

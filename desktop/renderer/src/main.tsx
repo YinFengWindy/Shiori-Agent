@@ -3,6 +3,11 @@ import { startTransition, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { ChatSurface } from "./chat/ChatSurface";
+import {
+  collectChatImageHistory,
+  findChatImageHistoryIndex,
+  resolveChatImageSelection,
+} from "./chat/chatImageHistory";
 import { ConfirmDialog } from "./roles/ConfirmDialog";
 import { RoleAssetsPage } from "./roles/RoleAssetsPage";
 import { RoleCreatePage } from "./roles/RoleCreatePage";
@@ -188,10 +193,10 @@ function App(): React.ReactElement {
     animationDurationMs: sidebarAnimationDurationMs,
     defaultCollapsed: true,
   });
-  const [chatImagePreviewPath, setChatImagePreviewPath] = useState("");
-  const [chatImagePreviewLoading, setChatImagePreviewLoading] = useState(false);
+  const [selectedChatImagePath, setSelectedChatImagePath] = useState("");
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
+  const latestChatImageRef = useRef<{ sessionKey: string; latestPath: string }>({ sessionKey: "", latestPath: "" });
   const openRoleRequestIdRef = useRef(0);
   const activeRoleIdRef = useRef("");
   const activeSessionRef = useRef<SessionPayload | null>(null);
@@ -571,48 +576,25 @@ function App(): React.ReactElement {
     return () => window.clearTimeout(timer);
   }, [sidebarAnimating]);
 
-  useEffect(() => {
-    if (!activeRoleId) {
-      setChatImagePreviewPath("");
-      setChatImagePreviewLoading(false);
-      return undefined;
-    }
-
-    let cancelled = false;
-    setChatImagePreviewLoading(true);
-
-    void (async () => {
-      const response = await window.miraDesktop.invoke({
-        method: "novelai.history",
-        payload: {
-          role_id: activeRoleId,
-          limit: 1,
-        },
-      });
-      if (cancelled) return;
-      if (response.error) {
-        setChatImagePreviewPath("");
-        setChatImagePreviewLoading(false);
-        return;
-      }
-      const records = Array.isArray(response.payload.records)
-        ? response.payload.records as Array<{ output_paths?: string[] }>
-        : [];
-      setChatImagePreviewPath(records[0]?.output_paths?.[0] ?? "");
-      setChatImagePreviewLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRoleId]);
-
   function openChatImagePreview(path: string): void {
     const cleanPath = path.trim();
     if (!cleanPath) return;
-    setChatImagePreviewPath(cleanPath);
-    setChatImagePreviewLoading(false);
+    setSelectedChatImagePath(cleanPath);
     chatLatestImageSidebar.open();
+  }
+
+  function selectPreviousChatImage(): void {
+    if (selectedChatImageIndex <= 0) return;
+    const previousPath = chatImageHistory[selectedChatImageIndex - 1]?.path ?? "";
+    if (!previousPath) return;
+    setSelectedChatImagePath(previousPath);
+  }
+
+  function selectNextChatImage(): void {
+    if (selectedChatImageIndex < 0 || selectedChatImageIndex >= chatImageHistory.length - 1) return;
+    const nextPath = chatImageHistory[selectedChatImageIndex + 1]?.path ?? "";
+    if (!nextPath) return;
+    setSelectedChatImagePath(nextPath);
   }
 
   useEffect(() => {
@@ -1449,36 +1431,32 @@ function App(): React.ReactElement {
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
   const chatBackgroundUrl = visibleIllustrationUrl;
   const headerTitle = sending && activeRole ? "正在输入中..." : (activeRole ? activeRole.name : "选择一个角色");
-  const latestChatGeneratedImagePath = (() => {
-    const messages = activeSession?.messages ?? [];
-    for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-      const media = messages[messageIndex]?.media;
-      if (!Array.isArray(media)) continue;
-      for (let mediaIndex = media.length - 1; mediaIndex >= 0; mediaIndex -= 1) {
-        const path = String(media[mediaIndex] ?? "").trim();
-        if (!path) continue;
-        const lower = path.toLowerCase();
-        if (
-          lower.endsWith(".png")
-          || lower.endsWith(".jpg")
-          || lower.endsWith(".jpeg")
-          || lower.endsWith(".webp")
-          || lower.endsWith(".gif")
-          || lower.endsWith(".bmp")
-        ) {
-          return path;
-        }
-      }
-    }
-    return "";
-  })();
+  const chatImageHistory = collectChatImageHistory(activeSession);
+  const resolvedChatImagePath = resolveChatImageSelection(chatImageHistory, selectedChatImagePath);
+  const selectedChatImageIndex = findChatImageHistoryIndex(chatImageHistory, resolvedChatImagePath);
+  const latestChatGeneratedImagePath = chatImageHistory[chatImageHistory.length - 1]?.path ?? "";
+  const selectedChatImagePosition = selectedChatImageIndex >= 0 ? selectedChatImageIndex + 1 : 0;
 
   useEffect(() => {
-    if (!latestChatGeneratedImagePath) return;
-    setChatImagePreviewPath((current) => (current === latestChatGeneratedImagePath ? current : latestChatGeneratedImagePath));
-    setChatImagePreviewLoading(false);
-    chatLatestImageSidebar.open();
-  }, [latestChatGeneratedImagePath]);
+    const sessionKey = activeSession?.key ?? "";
+    if (!sessionKey) {
+      latestChatImageRef.current = { sessionKey: "", latestPath: "" };
+      return;
+    }
+
+    const previous = latestChatImageRef.current;
+    if (previous.sessionKey !== sessionKey) {
+      latestChatImageRef.current = { sessionKey, latestPath: latestChatGeneratedImagePath };
+      return;
+    }
+
+    // Only auto-open when the active chat produces a newer image during this session.
+    if (latestChatGeneratedImagePath && latestChatGeneratedImagePath !== previous.latestPath) {
+      setSelectedChatImagePath(latestChatGeneratedImagePath);
+      chatLatestImageSidebar.open();
+    }
+    latestChatImageRef.current = { sessionKey, latestPath: latestChatGeneratedImagePath };
+  }, [activeSession?.key, latestChatGeneratedImagePath]);
 
   useEffect(() => {
     if (previewIllustrations.length === 0) {
@@ -1639,10 +1617,11 @@ function App(): React.ReactElement {
               activeRoleId={activeRoleId}
               activeSession={activeSession}
               bridgeReady={bridgeReady}
-              chatLatestImageLoading={chatImagePreviewLoading}
-              chatLatestImagePath={chatImagePreviewPath}
+              chatLatestImagePath={resolvedChatImagePath}
+              chatLatestImagePosition={selectedChatImagePosition}
               chatLatestImageSidebarAnimating={chatLatestImageSidebar.animating && !chatLatestImageSidebar.resizing}
               chatLatestImageSidebarCollapsed={chatLatestImageSidebar.collapsed}
+              chatLatestImageSidebarCount={chatImageHistory.length}
               chatLatestImageSidebarWidth={chatLatestImageSidebar.width}
               conversationEndRef={conversationEndRef}
               draft={draft}
@@ -1652,6 +1631,8 @@ function App(): React.ReactElement {
               sending={sending}
               visibleIllustrationUrl={visibleIllustrationUrl}
               onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
+              onGoToNextChatImage={selectNextChatImage}
+              onGoToPreviousChatImage={selectPreviousChatImage}
               onOpenChatImagePreview={openChatImagePreview}
               onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
