@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { BrowserWindow, dialog, ipcMain, nativeImage } from "electron";
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import type { IpcMainInvokeEvent } from "electron";
@@ -15,7 +15,9 @@ type RegisterDesktopIpcOptions = {
 
 /** Registers all IPC handlers exposed through the desktop preload bridge. */
 export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOptions): void {
-  const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
+  const transparentDragIcon = nativeImage.createFromDataURL(
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wn0n7kAAAAASUVORK5CYII=",
+  );
 
   ipcMain.handle("desktop:invoke", async (_event: IpcMainInvokeEvent, request: { method: string; payload: Record<string, unknown> }) => {
     return await bridge.invoke(request);
@@ -27,7 +29,7 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     }
     event.sender.startDrag({
       file: filePath,
-      icon: dragPreviewIconPath,
+      icon: transparentDragIcon,
     });
   });
   ipcMain.handle("desktop:bridge-status", async () => {
@@ -153,20 +155,6 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     const [window] = BrowserWindow.getAllWindows();
     return {
       isMaximized: window?.isMaximized() ?? false,
-    };
-  });
-  ipcMain.handle("desktop:open-path", async (_event: IpcMainInvokeEvent, path?: string) => {
-    const targetPath = String(path ?? "").trim();
-    if (!targetPath || !isAbsolute(targetPath) || !existsSync(targetPath)) {
-      return {
-        ok: false,
-        message: "文件不存在。",
-      };
-    }
-    const result = await shell.openPath(targetPath);
-    return {
-      ok: result === "",
-      message: result || "ok",
     };
   });
   ipcMain.handle("desktop:pick-images", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {

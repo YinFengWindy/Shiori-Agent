@@ -77,7 +77,6 @@ function renderChatSurface(
       onJumpToMessage={() => undefined}
       onClearChatReplyTarget={() => undefined}
       onBeginAttachmentDrag={() => undefined}
-      onOpenAttachment={() => undefined}
       onCopyMessage={() => undefined}
       onQuoteMessage={() => undefined}
       onRemovePendingChatAttachment={() => undefined}
@@ -128,7 +127,7 @@ describe("ChatSurface", () => {
     const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
 
     assert.match(markup, />yinfeng-chat-history\.md</);
-    assert.doesNotMatch(markup, /href=/);
+    assert.doesNotMatch(markup, />附件</);
   });
 
   it("renders the pending reply target above the composer", () => {

@@ -181,18 +181,12 @@ export type StartAttachmentDragRequest = {
   path: string;
 };
 
-export type OpenPathResult = {
-  ok: boolean;
-  message: string;
-};
-
 export type DesktopApi = {
   invoke(request: Omit<BridgeRequest, "id">): Promise<BridgeResponse>;
   onEvent(listener: (event: BridgeEvent) => void): () => void;
   pickImages(options?: { multiple?: boolean }): Promise<string[]>;
   pickChatAttachments(options?: { multiple?: boolean }): Promise<string[]>;
   startAttachmentDrag(request: StartAttachmentDragRequest): void;
-  openPath(path: string): Promise<OpenPathResult>;
   bridgeStatus(): Promise<{ running: boolean; lastError: string | null }>;
   restartBridge(): Promise<{ ok: boolean; running: boolean; lastError: string | null }>;
   readSettings(): Promise<SettingsSnapshot>;

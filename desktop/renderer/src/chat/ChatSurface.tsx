@@ -16,19 +16,6 @@ type MessageContextMenuState = {
   sender: string;
 };
 
-let hiddenDragPreviewCanvas: HTMLCanvasElement | null = null;
-
-function getHiddenDragPreviewCanvas(): HTMLCanvasElement {
-  if (hiddenDragPreviewCanvas) {
-    return hiddenDragPreviewCanvas;
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = 1;
-  canvas.height = 1;
-  hiddenDragPreviewCanvas = canvas;
-  return canvas;
-}
-
 type ChatSurfaceProps = {
   activeRole: RoleRecord | null;
   activeRoleId: string;
@@ -59,7 +46,6 @@ type ChatSurfaceProps = {
   onJumpToMessage: (messageKey: string) => void;
   onClearChatReplyTarget: () => void;
   onBeginAttachmentDrag: (path: string) => void;
-  onOpenAttachment: (path: string) => void;
   onCopyMessage: (content: string) => void;
   onQuoteMessage: (target: ChatReplyTarget) => void;
   onRemovePendingChatAttachment: (path: string) => void;
@@ -99,7 +85,6 @@ export function ChatSurface({
   onJumpToMessage,
   onClearChatReplyTarget,
   onBeginAttachmentDrag,
-  onOpenAttachment,
   onCopyMessage,
   onQuoteMessage,
   onRemovePendingChatAttachment,
@@ -320,9 +305,7 @@ export function ChatSurface({
   function handleAttachmentDragStart(event: React.DragEvent<HTMLElement>, path: string): void {
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer.clearData();
     event.dataTransfer.effectAllowed = "copy";
-    event.dataTransfer.setDragImage(getHiddenDragPreviewCanvas(), 0, 0);
     onBeginAttachmentDrag(path);
   }
 
@@ -558,22 +541,23 @@ export function ChatSurface({
                                 onDragStart={(event) => handleAttachmentDragStart(event, item)}
                                 onClick={() => onOpenChatImagePreview(item)}
                               >
-                                <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" draggable={false} />
+                                <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" />
                               </button>
                             ) : (
-                              <button
+                              <a
                                 key={item}
+                                href={toFileUrl(item)}
+                                target="_blank"
+                                rel="noreferrer"
                                 className="inline-flex max-w-[280px] cursor-grab items-center gap-2.5 rounded-full border border-black/8 bg-[#F7F7F8] px-3 py-2 text-[12px] text-[#1F2937] transition hover:bg-white active:cursor-grabbing focus:outline-none"
-                                type="button"
                                 draggable
                                 onDragStart={(event) => handleAttachmentDragStart(event, item)}
-                                onClick={() => onOpenAttachment(item)}
                               >
                                 <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-transparent text-[#8B95A7]">
                                   <DocumentIcon className="h-[13px] w-[13px] stroke-current" />
                                 </span>
                                 <span className="truncate font-medium">{getAttachmentName(item)}</span>
-                              </button>
+                              </a>
                             )
                           ))}
                         </div>

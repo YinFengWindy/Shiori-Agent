@@ -1106,17 +1106,6 @@ function App(): React.ReactElement {
     window.miraDesktop.startAttachmentDrag({ path: normalizedPath });
   }
 
-  async function openAttachment(path: string): Promise<void> {
-    const normalizedPath = path.trim();
-    if (!normalizedPath) {
-      return;
-    }
-    const result = await window.miraDesktop.openPath(normalizedPath);
-    if (!result.ok) {
-      setError(result.message);
-    }
-  }
-
   function removePendingChatAttachment(path: string): void {
     setPendingChatAttachments((current) => current.filter((item) => item !== path));
   }
@@ -1881,7 +1870,6 @@ function App(): React.ReactElement {
               onJumpToMessage={jumpToChatMessage}
               onClearChatReplyTarget={clearChatReplyTarget}
               onBeginAttachmentDrag={beginAttachmentDrag}
-              onOpenAttachment={(path) => void openAttachment(path)}
               onCopyMessage={(content) => void copyChatMessage(content)}
               onQuoteMessage={quoteChatMessage}
               onRemovePendingChatAttachment={removePendingChatAttachment}
