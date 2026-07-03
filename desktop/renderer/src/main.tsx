@@ -1777,9 +1777,13 @@ function App(): React.ReactElement {
         onConfirm={() => void confirmDeleteRole()}
       />
       <ChatImageLightbox
+        canGoToNext={selectedChatImageIndex >= 0 && selectedChatImageIndex < chatImageHistory.length - 1}
+        canGoToPrevious={selectedChatImageIndex > 0}
         imagePath={resolvedChatImagePath}
         open={chatImageLightboxOpen}
         onClose={closeSelectedChatImageLightbox}
+        onGoToNext={selectNextChatImage}
+        onGoToPrevious={selectPreviousChatImage}
       />
     </div>
   );
