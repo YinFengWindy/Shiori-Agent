@@ -16,6 +16,9 @@ const api: DesktopApi = {
   pickChatAttachments(options) {
     return ipcRenderer.invoke("desktop:pick-chat-attachments", options) as Promise<string[]>;
   },
+  startAttachmentDrag(request) {
+    ipcRenderer.send("desktop:start-attachment-drag", request);
+  },
   bridgeStatus() {
     return ipcRenderer.invoke("desktop:bridge-status") as Promise<{ running: boolean; lastError: string | null }>;
   },

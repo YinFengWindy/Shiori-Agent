@@ -37,6 +37,7 @@ declare module "electron" {
       send(channel: string, payload: unknown): void;
       on(event: string, handler: (...args: unknown[]) => void): void;
       executeJavaScript(code: string): Promise<unknown>;
+      startDrag(item: { file: string; icon: string }): void;
     };
   }
 
@@ -73,10 +74,18 @@ declare module "electron" {
         ...args: any[]
       ) => Promise<unknown> | unknown,
     ): void;
+    on(
+      channel: string,
+      listener: (
+        event: IpcMainInvokeEvent & { sender: BrowserWindowInstance["webContents"] },
+        ...args: any[]
+      ) => void,
+    ): void;
   };
 
   export const ipcRenderer: {
     invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+    send(channel: string, ...args: unknown[]): void;
     on(
       channel: string,
       listener: (event: unknown, payload: unknown) => void,

@@ -74,7 +74,9 @@ function renderChatSurface(
       onOpenChatImagePreview={() => undefined}
       onPickChatAttachments={() => undefined}
       onOpenRoleDetail={() => undefined}
+      onJumpToMessage={() => undefined}
       onClearChatReplyTarget={() => undefined}
+      onBeginAttachmentDrag={() => undefined}
       onCopyMessage={() => undefined}
       onQuoteMessage={() => undefined}
       onRemovePendingChatAttachment={() => undefined}
@@ -162,6 +164,24 @@ describe("ChatSurface", () => {
     assert.match(markup, />Mira</);
     assert.match(markup, />她停顿了一下，然后把声音放轻。</);
     assert.match(markup, />继续</);
+    assert.match(markup, /aria-label="跳转到被引用消息"/);
+  });
+
+  it("marks sent attachments as draggable so they can be dragged out of the desktop app", () => {
+    const session = createSession();
+    session.messages = [
+      {
+        role: "assistant",
+        content: "",
+        media: ["D:\\files\\scene.png", "D:\\files\\notes.md"],
+      },
+    ];
+
+    const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
+
+    assert.match(markup, /draggable="true"/);
+    assert.match(markup, /scene\.png/);
+    assert.match(markup, /notes\.md/);
   });
 
   it("allows sending when attachments exist even if the draft is empty", () => {

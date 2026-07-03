@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { extname, isAbsolute, resolve } from "node:path";
 import type { IpcMainInvokeEvent } from "electron";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
 import { runBridgeSmoke } from "./smoke.js";
@@ -15,8 +15,22 @@ type RegisterDesktopIpcOptions = {
 
 /** Registers all IPC handlers exposed through the desktop preload bridge. */
 export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOptions): void {
+  const defaultDragIconPath = resolve(desktopRoot, "..", "assets", "akashic-qq.jpg");
+  const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"]);
+
   ipcMain.handle("desktop:invoke", async (_event: IpcMainInvokeEvent, request: { method: string; payload: Record<string, unknown> }) => {
     return await bridge.invoke(request);
+  });
+  ipcMain.on("desktop:start-attachment-drag", (event: IpcMainInvokeEvent, request?: { path?: unknown }) => {
+    const filePath = String(request?.path ?? "").trim();
+    if (!filePath || !isAbsolute(filePath) || !existsSync(filePath)) {
+      return;
+    }
+    const iconPath = imageExtensions.has(extname(filePath).toLowerCase()) ? filePath : defaultDragIconPath;
+    event.sender.startDrag({
+      file: filePath,
+      icon: existsSync(iconPath) ? iconPath : filePath,
+    });
   });
   ipcMain.handle("desktop:bridge-status", async () => {
     return {

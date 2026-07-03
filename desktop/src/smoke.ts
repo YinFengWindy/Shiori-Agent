@@ -786,6 +786,28 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 reason: "message-context-menu-quote-did-not-open-reply-bar",
               };
             }
+            const replyJumpButton = document.querySelector('[aria-label="跳转到引用来源消息"]');
+            if (!(replyJumpButton instanceof HTMLButtonElement)) {
+              return {
+                ok: false,
+                reason: "reply-bar-jump-button-missing",
+              };
+            }
+            replyJumpButton.click();
+            let replyTargetHighlighted = false;
+            for (let i = 0; i < 20; i++) {
+              await sleep(50);
+              replyTargetHighlighted = latestUserMessage.classList.contains("message-hit-anchor");
+              if (replyTargetHighlighted) {
+                break;
+              }
+            }
+            if (!replyTargetHighlighted) {
+              return {
+                ok: false,
+                reason: "reply-bar-jump-did-not-highlight-message",
+              };
+            }
             console.log("[desktop-ui-smoke] stage:chat-reply-finished");
             window.__desktopUiSmokeStage = "chat-reply-finished";
             if (!clickByText("搜索")) {

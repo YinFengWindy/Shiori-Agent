@@ -177,11 +177,16 @@ export type WindowState = {
   isMaximized: boolean;
 };
 
+export type StartAttachmentDragRequest = {
+  path: string;
+};
+
 export type DesktopApi = {
   invoke(request: Omit<BridgeRequest, "id">): Promise<BridgeResponse>;
   onEvent(listener: (event: BridgeEvent) => void): () => void;
   pickImages(options?: { multiple?: boolean }): Promise<string[]>;
   pickChatAttachments(options?: { multiple?: boolean }): Promise<string[]>;
+  startAttachmentDrag(request: StartAttachmentDragRequest): void;
   bridgeStatus(): Promise<{ running: boolean; lastError: string | null }>;
   restartBridge(): Promise<{ ok: boolean; running: boolean; lastError: string | null }>;
   readSettings(): Promise<SettingsSnapshot>;

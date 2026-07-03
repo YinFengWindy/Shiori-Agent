@@ -43,7 +43,9 @@ type ChatSurfaceProps = {
   onOpenChatImagePreview: (path: string) => void;
   onPickChatAttachments: () => void;
   onOpenRoleDetail: () => void;
+  onJumpToMessage: (messageKey: string) => void;
   onClearChatReplyTarget: () => void;
+  onBeginAttachmentDrag: (path: string) => void;
   onCopyMessage: (content: string) => void;
   onQuoteMessage: (target: ChatReplyTarget) => void;
   onRemovePendingChatAttachment: (path: string) => void;
@@ -80,7 +82,9 @@ export function ChatSurface({
   onOpenChatImagePreview,
   onPickChatAttachments,
   onOpenRoleDetail,
+  onJumpToMessage,
   onClearChatReplyTarget,
+  onBeginAttachmentDrag,
   onCopyMessage,
   onQuoteMessage,
   onRemovePendingChatAttachment,
@@ -273,10 +277,7 @@ export function ChatSurface({
   }
 
   function getMessageCopyText(message: SessionMessage): string {
-    const content = message.content.trim();
-    if (content) return content;
-    const media = Array.isArray(message.media) ? message.media.filter((item) => item.trim()) : [];
-    return media.join("\n");
+    return message.content.trim();
   }
 
   function getMessageReplyContent(message: SessionMessage): string {
@@ -299,6 +300,11 @@ export function ChatSurface({
       sender,
       preview: summarizeChatReplyContent(replyContent),
     };
+  }
+
+  function handleAttachmentDragStart(event: React.DragEvent<HTMLElement>, path: string): void {
+    event.dataTransfer.effectAllowed = "copy";
+    onBeginAttachmentDrag(path);
   }
 
   function openMessageContextMenu(
@@ -376,7 +382,7 @@ export function ChatSurface({
             onClick={copyContextMessage}
             disabled={!getMessageCopyText(messageContextMenu.message)}
           >
-            <CopyIcon className="h-[14px] w-[14px] stroke-current" />
+            <CopyIcon className="h-[14px] w-[14px] fill-current" />
             <span>复制</span>
           </button>
           <button
@@ -387,7 +393,7 @@ export function ChatSurface({
             onClick={quoteContextMessage}
             disabled={!getMessageReplyContent(messageContextMenu.message) || sending}
           >
-            <QuoteIcon className="h-[14px] w-[14px] stroke-current" />
+            <QuoteIcon className="h-[14px] w-[14px] fill-current" />
             <span>引用</span>
           </button>
         </div>
@@ -497,12 +503,28 @@ export function ChatSurface({
                     ) : null}
                     <div className={cx(bubbleClass, isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10")}>
                       {storedReplyPreview ? (
-                        <div className="mb-2 max-w-[420px] border-l-2 border-[#AEB7C5] pl-2.5 text-left">
-                          {storedReplyPreview.sender ? (
-                            <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{storedReplyPreview.sender}</div>
-                          ) : null}
-                          <div className="line-clamp-2 text-[12px] leading-5 text-[#7B8190]">{storedReplyPreview.preview}</div>
-                        </div>
+                        storedReplyPreview.messageId ? (
+                          <button
+                            className="mb-2 block max-w-[420px] border-0 bg-transparent p-0 text-left transition hover:opacity-85 focus:outline-none"
+                            type="button"
+                            aria-label="跳转到被引用消息"
+                            onClick={() => onJumpToMessage(storedReplyPreview.messageId)}
+                          >
+                            <div className="border-l-2 border-[#AEB7C5] pl-2.5">
+                              {storedReplyPreview.sender ? (
+                                <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{storedReplyPreview.sender}</div>
+                              ) : null}
+                              <div className="line-clamp-2 text-[12px] leading-5 text-[#7B8190]">{storedReplyPreview.preview}</div>
+                            </div>
+                          </button>
+                        ) : (
+                          <div className="mb-2 max-w-[420px] border-l-2 border-[#AEB7C5] pl-2.5 text-left">
+                            {storedReplyPreview.sender ? (
+                              <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{storedReplyPreview.sender}</div>
+                            ) : null}
+                            <div className="line-clamp-2 text-[12px] leading-5 text-[#7B8190]">{storedReplyPreview.preview}</div>
+                          </div>
+                        )
                       ) : null}
                       <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
                       {media.length ? (
@@ -511,8 +533,10 @@ export function ChatSurface({
                             isChatImageAsset(item) ? (
                               <button
                                 key={item}
-                                className="block overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white focus:outline-none"
+                                className="block cursor-grab overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white active:cursor-grabbing focus:outline-none"
                                 type="button"
+                                draggable
+                                onDragStart={(event) => handleAttachmentDragStart(event, item)}
                                 onClick={() => onOpenChatImagePreview(item)}
                               >
                                 <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" />
@@ -523,7 +547,9 @@ export function ChatSurface({
                                 href={toFileUrl(item)}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex max-w-[280px] items-center gap-2.5 rounded-full border border-black/8 bg-[#F7F7F8] px-3 py-2 text-[12px] text-[#1F2937] transition hover:bg-white focus:outline-none"
+                                className="inline-flex max-w-[280px] cursor-grab items-center gap-2.5 rounded-full border border-black/8 bg-[#F7F7F8] px-3 py-2 text-[12px] text-[#1F2937] transition hover:bg-white active:cursor-grabbing focus:outline-none"
+                                draggable
+                                onDragStart={(event) => handleAttachmentDragStart(event, item)}
                               >
                                 <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-transparent text-[#8B95A7]">
                                   <DocumentIcon className="h-[13px] w-[13px] stroke-current" />
@@ -569,10 +595,24 @@ export function ChatSurface({
             <div className="composer grid w-full flex-none gap-1.5 rounded-[18px] border border-[#E4E4E4] bg-[#FFFEFF] px-3 pb-2 pt-2.5">
               {chatReplyTarget ? (
                 <div className="flex min-w-0 items-start gap-2 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-2.5 py-2 text-left">
-                  <div className="min-w-0 flex-1 border-l-2 border-[#AEB7C5] pl-2.5">
-                    <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{chatReplyTarget.sender || "历史消息"}</div>
-                    <div className="line-clamp-2 text-[12px] leading-5 text-[#4B5563]">{chatReplyTarget.preview}</div>
-                  </div>
+                  {chatReplyTarget.messageId ? (
+                    <button
+                      className="min-w-0 flex-1 border-0 bg-transparent p-0 text-left transition hover:opacity-85 focus:outline-none"
+                      type="button"
+                      aria-label="跳转到引用来源消息"
+                      onClick={() => onJumpToMessage(chatReplyTarget.messageId)}
+                    >
+                      <div className="border-l-2 border-[#AEB7C5] pl-2.5">
+                        <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{chatReplyTarget.sender || "历史消息"}</div>
+                        <div className="line-clamp-2 text-[12px] leading-5 text-[#4B5563]">{chatReplyTarget.preview}</div>
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="min-w-0 flex-1 border-l-2 border-[#AEB7C5] pl-2.5">
+                      <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{chatReplyTarget.sender || "历史消息"}</div>
+                      <div className="line-clamp-2 text-[12px] leading-5 text-[#4B5563]">{chatReplyTarget.preview}</div>
+                    </div>
+                  )}
                   <button
                     className="grid h-6 w-6 flex-none place-items-center rounded-md border-0 bg-transparent p-0 text-[#7C8797] transition hover:bg-black/5 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
                     type="button"

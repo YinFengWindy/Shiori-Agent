@@ -1098,6 +1098,14 @@ function App(): React.ReactElement {
     setPendingChatAttachments((current) => normalizeChatAttachmentPaths([...current, ...files]));
   }
 
+  function beginAttachmentDrag(path: string): void {
+    const normalizedPath = path.trim();
+    if (!normalizedPath) {
+      return;
+    }
+    window.miraDesktop.startAttachmentDrag({ path: normalizedPath });
+  }
+
   function removePendingChatAttachment(path: string): void {
     setPendingChatAttachments((current) => current.filter((item) => item !== path));
   }
@@ -1140,6 +1148,22 @@ function App(): React.ReactElement {
 
   function clearChatReplyTarget(): void {
     setChatReplyTarget((current) => (current ? null : current));
+  }
+
+  function jumpToChatMessage(messageKey: string): void {
+    const normalizedMessageKey = messageKey.trim();
+    if (!normalizedMessageKey) {
+      return;
+    }
+    if (highlightedMessageKey === normalizedMessageKey) {
+      setHighlightedMessageKey("");
+    }
+    window.requestAnimationFrame(() => {
+      setHighlightedMessageKey(normalizedMessageKey);
+      const target = Array.from(document.querySelectorAll<HTMLElement>("[data-message-key]"))
+        .find((item) => item.dataset.messageKey === normalizedMessageKey);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   }
 
   async function sendMessage(contentOverride?: string): Promise<void> {
@@ -1843,7 +1867,9 @@ function App(): React.ReactElement {
               onOpenChatImagePreview={openChatImagePreview}
               onPickChatAttachments={() => void pickChatAttachments()}
               onOpenRoleDetail={() => void openRoleDetail(activeRoleId)}
+              onJumpToMessage={jumpToChatMessage}
               onClearChatReplyTarget={clearChatReplyTarget}
+              onBeginAttachmentDrag={beginAttachmentDrag}
               onCopyMessage={(content) => void copyChatMessage(content)}
               onQuoteMessage={quoteChatMessage}
               onRemovePendingChatAttachment={removePendingChatAttachment}
