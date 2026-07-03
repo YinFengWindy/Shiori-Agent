@@ -79,11 +79,11 @@ export function ImageFormPanel({
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectClass = cx(
     inputClass,
-    "h-11 appearance-none bg-white py-0 pr-10 text-sm leading-5",
+    "h-11 appearance-none bg-white py-0 pr-10 text-sm leading-5 focus:border-[#D8DCE2] focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:ring-0",
   );
   const promptTextareaClass = cx(
     textareaClass,
-    "min-h-[176px] resize-none rounded-none border-[#D6DCE3] bg-[#F3F5F7] px-3 py-2 leading-7 shadow-none hover:border-primary focus:border-primary focus:bg-primary/[0.03]",
+    "min-h-[96px] resize-none overflow-hidden rounded-none border-[#D6DCE3] bg-[#F3F5F7] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus:bg-[#F3F5F7] focus:ring-0 focus-visible:border-[#D6DCE3] focus-visible:ring-0",
   );
   const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-xl bg-[#F5F6F8] p-1";
   const segmentedButtonBaseClassName = "min-w-0 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition";
@@ -133,7 +133,7 @@ export function ImageFormPanel({
       <div className="relative" ref={rolePanelRef}>
         <button
           type="button"
-          className="flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-[#D8DCE2] bg-white px-3 pr-4 text-left transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-[#D8DCE2] bg-white px-3 pr-4 text-left transition hover:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2]"
           aria-expanded={rolePanelOpen}
           onClick={() => setRolePanelOpen((current) => !current)}
         >
@@ -161,7 +161,7 @@ export function ImageFormPanel({
                   key={item.id}
                   type="button"
                   className={cx(
-                    "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-[#F5F6F8] focus:outline-none focus:ring-2 focus:ring-primary/20",
+                    "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-[#F5F6F8] focus:outline-none focus:ring-0",
                     form.roleId === item.id && "bg-[#F5F6F8]",
                   )}
                   onClick={() => {
@@ -216,7 +216,7 @@ export function ImageFormPanel({
             <div className="relative ml-auto flex-none" ref={settingsPanelRef}>
               <button
                 type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-primary/40 hover:text-[#20242A] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-[#D6DCE3] hover:text-[#20242A] focus:outline-none focus:ring-0 focus-visible:border-[#D6DCE3]"
                 aria-label="Prompt 设置"
                 aria-expanded={settingsOpen}
                 onClick={() => setSettingsOpen((current) => !current)}
@@ -294,6 +294,7 @@ export function ImageFormPanel({
           <textarea
             ref={promptTextareaRef}
             className={promptTextareaClass}
+            rows={4}
             value={promptTab === "prompt" ? form.prompt : form.negativePrompt}
             onChange={(event) => (
               promptTab === "prompt"
@@ -373,12 +374,12 @@ export function ImageFormPanel({
               <div className="flex min-w-0 items-center justify-between gap-3 border-t border-[#E7EAF0] pt-3">
                 <div className="min-w-0 flex-1 text-[15px] text-[#5B616A]">Add a Base Img (Optional)</div>
                 <div className="flex flex-none items-center gap-2">
-                  <button
-                    type="button"
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-primary/40 hover:text-[#20242A] focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    aria-label="上传 Base Img"
-                    onClick={onPickBaseImage}
-                  >
+                    <button
+                      type="button"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-[#D6DCE3] hover:text-[#20242A] focus:outline-none focus:ring-0 focus-visible:border-[#D6DCE3]"
+                      aria-label="上传 Base Img"
+                      onClick={onPickBaseImage}
+                    >
                     <UploadIcon className="h-4.5 w-4.5 fill-current" />
                   </button>
                 </div>
