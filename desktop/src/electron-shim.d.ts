@@ -1,5 +1,6 @@
 declare module "electron" {
   export type IpcMainInvokeEvent = unknown;
+  export type NativeImage = unknown;
 
   export type Privileges = {
     standard?: boolean;
@@ -37,7 +38,7 @@ declare module "electron" {
       send(channel: string, payload: unknown): void;
       on(event: string, handler: (...args: unknown[]) => void): void;
       executeJavaScript(code: string): Promise<unknown>;
-      startDrag(item: { file: string; icon: string }): void;
+      startDrag(item: { file: string; icon: NativeImage | string }): void;
     };
   }
 
@@ -98,5 +99,9 @@ declare module "electron" {
 
   export const contextBridge: {
     exposeInMainWorld(key: string, api: unknown): void;
+  };
+
+  export const nativeImage: {
+    createFromDataURL(dataURL: string): NativeImage;
   };
 }
