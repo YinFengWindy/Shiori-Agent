@@ -129,8 +129,8 @@ function createPendingRoleRecord(
     runtime_config: {},
     avatar: null,
     avatar_abs: null,
-    featured_image: null,
-    featured_image_abs: null,
+    chat_background: null,
+    chat_background_abs: null,
     illustrations: [],
     illustrations_abs: [],
     created_at: timestamp,
@@ -168,7 +168,7 @@ function App(): React.ReactElement {
   const [sidebarAnimating, setSidebarAnimating] = useState(false);
   const [activeIllustration, setActiveIllustration] = useState("");
   const [selectedAvatarAsset, setSelectedAvatarAsset] = useState("");
-  const [selectedFeaturedImage, setSelectedFeaturedImage] = useState("");
+  const [selectedChatBackground, setSelectedChatBackground] = useState("");
   const [clearAvatar, setClearAvatar] = useState(false);
   const [clearIllustrations, setClearIllustrations] = useState(false);
   const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
@@ -463,7 +463,11 @@ function App(): React.ReactElement {
     if (role.illustrations_abs.includes(fallbackIllustration)) {
       return fallbackIllustration;
     }
-    return role.illustrations_abs[0] ?? "";
+    const roleChatBackground = String(role.chat_background_abs ?? "");
+    if (role.illustrations_abs.includes(roleChatBackground)) {
+      return roleChatBackground;
+    }
+    return "";
   }
 
   async function loadRolesFromBridge(): Promise<RoleRecord[] | null> {
@@ -497,7 +501,7 @@ function App(): React.ReactElement {
       removedIllustrations: [],
     });
     setSelectedAvatarAsset(role.avatar ?? "");
-    setSelectedFeaturedImage(role.featured_image ?? role.illustrations[0] ?? "");
+    setSelectedChatBackground(role.chat_background ?? "");
     setClearAvatar(false);
     setClearIllustrations(false);
     const savedIllustration = window.localStorage.getItem("miraDesktop.activeIllustration") ?? "";
@@ -959,7 +963,7 @@ function App(): React.ReactElement {
     } else {
       setActiveIllustration("");
       setSelectedAvatarAsset("");
-      setSelectedFeaturedImage("");
+      setSelectedChatBackground("");
     }
     if (options?.recordHistory !== false) {
       pushNavigationEntry(buildNavigationEntry({ kind: "chat" }, roleId));
@@ -1167,20 +1171,32 @@ function App(): React.ReactElement {
 
   async function saveRoleAssets(nextSelection?: {
     avatarAsset?: string;
-    featuredImage?: string;
+    chatBackground?: string;
   }): Promise<void> {
     if (!detailRoleId) return;
     setSavingRoleAssets(true);
     setError("");
     const pendingRoleForm = roleFormRef.current;
-    const avatarAsset = nextSelection?.avatarAsset ?? selectedAvatarAsset;
-    const featuredImage = nextSelection?.featuredImage ?? selectedFeaturedImage;
+    const hasAvatarSelection = Boolean(
+      nextSelection && Object.prototype.hasOwnProperty.call(nextSelection, "avatarAsset"),
+    );
+    const hasChatBackgroundSelection = Boolean(
+      nextSelection && Object.prototype.hasOwnProperty.call(nextSelection, "chatBackground"),
+    );
+    const avatarAsset = hasAvatarSelection
+      ? (nextSelection?.avatarAsset ?? "")
+      : selectedAvatarAsset;
+    const chatBackground = hasChatBackgroundSelection
+      ? (nextSelection?.chatBackground ?? "")
+      : selectedChatBackground;
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
         role_id: detailRoleId,
         avatar_asset: avatarAsset || undefined,
-        featured_image: featuredImage || undefined,
+        chat_background: chatBackground || undefined,
+        clear_avatar: hasAvatarSelection && !avatarAsset,
+        clear_chat_background: hasChatBackgroundSelection && !chatBackground,
       },
     });
     setSavingRoleAssets(false);
@@ -1191,7 +1207,12 @@ function App(): React.ReactElement {
     const updated = res.payload.role as RoleRecord;
     await loadRolesFromBridge();
     setSelectedAvatarAsset(updated.avatar ?? "");
-    setSelectedFeaturedImage(updated.featured_image ?? updated.illustrations[0] ?? "");
+    setSelectedChatBackground(updated.chat_background ?? "");
+    if (hasChatBackgroundSelection) {
+      const nextIllustration = updated.chat_background_abs ?? "";
+      setActiveIllustration(nextIllustration);
+      await rememberIllustration(updated.id, nextIllustration);
+    }
     setNotice("角色素材已更新。");
     updateRoleForm({
       ...pendingRoleForm,
@@ -1278,7 +1299,39 @@ function App(): React.ReactElement {
     const updated = res.payload.role as RoleRecord;
     await loadRolesFromBridge();
     setSelectedAvatarAsset(updated.avatar ?? "");
-    setSelectedFeaturedImage(updated.featured_image ?? updated.illustrations[0] ?? "");
+    setSelectedChatBackground(updated.chat_background ?? "");
+    openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
+  }
+
+  async function removeRoleAsset(relPath: string): Promise<void> {
+    const cleanPath = relPath.trim();
+    if (!cleanPath || !detailRoleId || !detailRole) return;
+    const removedIndex = detailRole.illustrations.findIndex((item) => item === cleanPath);
+    const removedAbsPath = removedIndex >= 0 ? (detailRole.illustrations_abs[removedIndex] ?? "") : "";
+    setSavingRoleAssets(true);
+    setError("");
+    const res = await window.miraDesktop.invoke({
+      method: "roles.update",
+      payload: {
+        role_id: detailRoleId,
+        removed_illustrations: [cleanPath],
+      },
+    });
+    setSavingRoleAssets(false);
+    if (res.error) {
+      setError(res.error.message);
+      return;
+    }
+    const updated = res.payload.role as RoleRecord;
+    await loadRolesFromBridge();
+    setSelectedAvatarAsset(updated.avatar ?? "");
+    setSelectedChatBackground(updated.chat_background ?? "");
+    if (!removedAbsPath || activeIllustration === removedAbsPath) {
+      const nextIllustration = updated.chat_background_abs ?? "";
+      setActiveIllustration(nextIllustration);
+      await rememberIllustration(updated.id, nextIllustration);
+    }
+    setNotice("角色素材已删除。");
     openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
   }
 
@@ -1439,9 +1492,10 @@ function App(): React.ReactElement {
         : (detailRole?.illustrations_abs ?? []).filter(
           (path) => !roleForm.removedIllustrations.includes(path),
         ));
-  const visibleIllustration = activeIllustration || previewIllustrations[0] || "";
+  const roleChatBackground = detailRole?.chat_background_abs ?? "";
+  const visibleIllustration = activeIllustration || roleChatBackground;
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
-  const featuredImageUrl = detailRole?.featured_image_abs || visibleIllustrationUrl;
+  const chatBackgroundUrl = visibleIllustrationUrl;
   const headerTitle = sending && activeRole ? "正在输入中..." : (activeRole ? activeRole.name : "选择一个角色");
   const latestChatGeneratedImagePath = (() => {
     const messages = activeSession?.messages ?? [];
@@ -1482,9 +1536,14 @@ function App(): React.ReactElement {
       return;
     }
     if (!previewIllustrations.includes(activeIllustration)) {
-      setActiveIllustration(previewIllustrations[0] ?? "");
+      const persistedChatBackground = detailRole?.chat_background_abs ?? "";
+      if (persistedChatBackground && previewIllustrations.includes(persistedChatBackground)) {
+        setActiveIllustration(persistedChatBackground);
+        return;
+      }
+      setActiveIllustration("");
     }
-  }, [previewIllustrations, activeIllustration]);
+  }, [previewIllustrations, activeIllustration, detailRole?.chat_background_abs]);
 
   function resetRoleForm(): void {
     if (!detailRole) return;
@@ -1690,7 +1749,7 @@ function App(): React.ReactElement {
               activeIllustration={activeIllustration}
               bridgeReady={bridgeReady}
               previewAvatar={previewAvatar}
-              featuredImageUrl={featuredImageUrl}
+              chatBackgroundUrl={chatBackgroundUrl}
               roleForm={roleForm}
               roleFormDirty={roleFormDirty}
               savingRole={savingRole}
@@ -1707,11 +1766,12 @@ function App(): React.ReactElement {
               bridgeReady={bridgeReady}
               savingSelection={savingRoleAssets}
               selectedAvatarAsset={selectedAvatarAsset}
-              selectedFeaturedImage={selectedFeaturedImage}
+              selectedChatBackground={selectedChatBackground}
               onBackToDetail={() => openRoleWorkspace({ kind: "role-detail", roleId: detailRoleId })}
               onPickAssets={() => void pickRoleAssets()}
+              onRemoveAsset={(path) => void removeRoleAsset(path)}
               onSelectAvatarAsset={setSelectedAvatarAsset}
-              onSelectFeaturedImage={setSelectedFeaturedImage}
+              onSelectChatBackground={setSelectedChatBackground}
               onSaveSelections={(nextSelection) => void saveRoleAssets(nextSelection)}
             />
           ) : null}

@@ -149,7 +149,7 @@ async def test_service_auto_writeback_updates_role_assets(tmp_path: Path) -> Non
     assert updated is not None
     assert result.wrote_back_to_role is True
     assert len(updated.illustrations) == 1
-    assert updated.featured_image == updated.illustrations[0]
+    assert updated.chat_background == updated.illustrations[0]
 
 
 @pytest.mark.asyncio

@@ -536,7 +536,7 @@ async def test_desktop_bridge_role_update_removes_selected_illustration(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_desktop_bridge_role_update_selects_avatar_and_featured_image_from_library(tmp_path: Path):
+async def test_desktop_bridge_role_update_selects_avatar_and_chat_background_from_library(tmp_path: Path):
     ill1 = tmp_path / "ill-1.png"
     ill1.write_bytes(b"ill-1")
     ill2 = tmp_path / "ill-2.png"
@@ -572,7 +572,7 @@ async def test_desktop_bridge_role_update_selects_avatar_and_featured_image_from
             "payload": {
                 "role_id": role["id"],
                 "avatar_asset": role["illustrations"][0],
-                "featured_image": role["illustrations"][1],
+                "chat_background": role["illustrations"][1],
             },
         },
         emit_event=lambda payload: None,
@@ -582,8 +582,72 @@ async def test_desktop_bridge_role_update_selects_avatar_and_featured_image_from
     updated_role = updated.payload["role"]
     assert updated_role["avatar"] == role["illustrations"][0]
     assert updated_role["avatar_abs"] == role["illustrations_abs"][0]
-    assert updated_role["featured_image"] == role["illustrations"][1]
-    assert updated_role["featured_image_abs"] == role["illustrations_abs"][1]
+    assert updated_role["chat_background"] == role["illustrations"][1]
+    assert updated_role["chat_background_abs"] == role["illustrations_abs"][1]
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_role_update_clears_selected_slots_when_asset_removed(tmp_path: Path):
+    ill1 = tmp_path / "ill-1.png"
+    ill1.write_bytes(b"ill-1")
+    ill2 = tmp_path / "ill-2.png"
+    ill2.write_bytes(b"ill-2")
+
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+
+    created = await service.handle(
+        {
+            "id": "1",
+            "method": "roles.create",
+            "payload": {
+                "name": "Mira",
+                "description": "desktop role",
+                "system_prompt": "you are mira",
+                "illustration_sources": [str(ill1), str(ill2)],
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+    role = created.payload["role"]
+
+    selected = await service.handle(
+        {
+            "id": "2",
+            "method": "roles.update",
+            "payload": {
+                "role_id": role["id"],
+                "avatar_asset": role["illustrations"][0],
+                "chat_background": role["illustrations"][0],
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+    assert selected.error is None
+
+    updated = await service.handle(
+        {
+            "id": "3",
+            "method": "roles.update",
+            "payload": {
+                "role_id": role["id"],
+                "removed_illustrations": [role["illustrations"][0]],
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert updated.error is None
+    updated_role = updated.payload["role"]
+    assert updated_role["avatar"] is None
+    assert updated_role["avatar_abs"] is None
+    assert updated_role["chat_background"] is None
+    assert updated_role["chat_background_abs"] is None
 
 
 @pytest.mark.asyncio

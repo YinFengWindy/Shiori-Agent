@@ -1,12 +1,19 @@
 /** Resolve which asset should be highlighted in the asset library for the current mode. */
 export function getSelectedRoleAssetPath(
-  selectionMode: "avatar" | "featured",
+  selectionMode: "avatar" | "chat-background",
   selectedAvatarAsset: string,
-  selectedFeaturedImage: string,
-  fallbackAssetPath: string,
+  selectedChatBackground: string,
 ): string {
   if (selectionMode === "avatar") {
-    return selectedAvatarAsset || fallbackAssetPath;
+    return selectedAvatarAsset;
   }
-  return selectedFeaturedImage || fallbackAssetPath;
+  return selectedChatBackground;
+}
+
+/** Toggle a single-select asset choice. Clicking the selected asset clears the slot. */
+export function getNextRoleAssetSelection(
+  currentSelectedPath: string,
+  clickedPath: string,
+): string {
+  return currentSelectedPath === clickedPath ? "" : clickedPath;
 }

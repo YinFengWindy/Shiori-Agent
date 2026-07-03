@@ -17,8 +17,8 @@ export type RoleRecord = {
   runtime_config: Record<string, unknown>;
   avatar: string | null;
   avatar_abs: string | null;
-  featured_image: string | null;
-  featured_image_abs: string | null;
+  chat_background: string | null;
+  chat_background_abs: string | null;
   illustrations: string[];
   illustrations_abs: string[];
   created_at: string;

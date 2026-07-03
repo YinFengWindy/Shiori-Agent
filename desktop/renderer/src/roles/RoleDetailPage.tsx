@@ -10,7 +10,7 @@ type RoleDetailPageProps = {
   activeRoleId: string;
   bridgeReady: boolean;
   previewAvatar: string | null;
-  featuredImageUrl: string;
+  chatBackgroundUrl: string;
   roleForm: RoleFormState;
   roleFormDirty: boolean;
   savingRole: boolean;
@@ -26,7 +26,7 @@ export function RoleDetailPage({
   activeRole,
   bridgeReady,
   previewAvatar,
-  featuredImageUrl,
+  chatBackgroundUrl,
   roleForm,
   roleFormDirty,
   savingRole,
@@ -56,12 +56,12 @@ export function RoleDetailPage({
     <section
       className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-white"
       data-testid="role-detail-page"
-      data-has-featured-image={featuredImageUrl ? "true" : "false"}
+      data-has-featured-image={chatBackgroundUrl ? "true" : "false"}
     >
-      {featuredImageUrl ? (
+      {chatBackgroundUrl ? (
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url("${featuredImageUrl}")` }}
+          style={{ backgroundImage: `url("${chatBackgroundUrl}")` }}
           data-testid="role-illustration-hero"
         />
       ) : (

@@ -3,19 +3,20 @@ import { toFileUrl } from "../shared/format";
 import { UploadIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
-import { getSelectedRoleAssetPath } from "./roleAssetSelection";
+import { getNextRoleAssetSelection, getSelectedRoleAssetPath } from "./roleAssetSelection";
 
 type RoleAssetsPageProps = {
   activeRole: RoleRecord | null;
   bridgeReady: boolean;
   savingSelection: boolean;
   selectedAvatarAsset: string;
-  selectedFeaturedImage: string;
+  selectedChatBackground: string;
   onBackToDetail: () => void;
   onPickAssets: () => void;
+  onRemoveAsset: (path: string) => void;
   onSelectAvatarAsset: (path: string) => void;
-  onSelectFeaturedImage: (path: string) => void;
-  onSaveSelections: (nextSelection?: { avatarAsset?: string; featuredImage?: string }) => void;
+  onSelectChatBackground: (path: string) => void;
+  onSaveSelections: (nextSelection?: { avatarAsset?: string; chatBackground?: string }) => void;
 };
 
 export function RoleAssetsPage({
@@ -23,11 +24,12 @@ export function RoleAssetsPage({
   bridgeReady,
   savingSelection,
   selectedAvatarAsset,
-  selectedFeaturedImage,
+  selectedChatBackground,
   onBackToDetail,
   onPickAssets,
+  onRemoveAsset,
   onSelectAvatarAsset,
-  onSelectFeaturedImage,
+  onSelectChatBackground,
   onSaveSelections,
 }: RoleAssetsPageProps) {
   const backIcon = (
@@ -39,23 +41,23 @@ export function RoleAssetsPage({
     relPath,
     absPath: activeRole?.illustrations_abs[index] ?? "",
   }));
-  const [selectionMode, setSelectionMode] = useState<"avatar" | "featured">("avatar");
-  const fallbackAssetPath = assetPairs[0]?.relPath ?? "";
+  const [selectionMode, setSelectionMode] = useState<"avatar" | "chat-background">("avatar");
   const selectedAssetPath = getSelectedRoleAssetPath(
     selectionMode,
     selectedAvatarAsset,
-    selectedFeaturedImage,
-    fallbackAssetPath,
+    selectedChatBackground,
   );
-  const selectedAsset = assetPairs.find((item) => item.relPath === selectedAssetPath) ?? assetPairs[0] ?? null;
+  const selectedAsset = assetPairs.find((item) => item.relPath === selectedAssetPath) ?? null;
 
   async function applyAsset(relPath: string): Promise<void> {
     if (selectionMode === "avatar") {
-      onSelectAvatarAsset(relPath);
-      onSaveSelections({ avatarAsset: relPath });
+      const nextPath = getNextRoleAssetSelection(selectedAssetPath, relPath);
+      onSelectAvatarAsset(nextPath);
+      onSaveSelections({ avatarAsset: nextPath });
     } else {
-      onSelectFeaturedImage(relPath);
-      onSaveSelections({ featuredImage: relPath });
+      const nextPath = getNextRoleAssetSelection(selectedAssetPath, relPath);
+      onSelectChatBackground(nextPath);
+      onSaveSelections({ chatBackground: nextPath });
     }
   }
 
@@ -79,18 +81,37 @@ export function RoleAssetsPage({
               {assetPairs.map(({ relPath, absPath }, index) => {
                 const isSelected = (selectedAsset?.relPath ?? "") === relPath;
                 return (
-                  <button
+                  <div
                     key={relPath}
-                    data-testid={`role-asset-card-${index}`}
-                    className={cx(
-                      "h-[90px] w-[90px] overflow-hidden rounded-[18px] border p-0 text-left transition",
-                      isSelected ? "border-[#272536] shadow-[0_8px_24px_rgba(39,37,54,0.16)]" : "border-[#D8DFE7] bg-white hover:border-[#9AA3B2]",
-                    )}
-                    type="button"
-                    onClick={() => void applyAsset(relPath)}
+                    className="relative h-[90px] w-[90px]"
                   >
-                    <img className="h-full w-full object-cover" src={toFileUrl(absPath)} alt="role asset" />
-                  </button>
+                    <button
+                      data-testid={`role-asset-card-${index}`}
+                      className={cx(
+                        "h-[90px] w-[90px] overflow-hidden rounded-[18px] border p-0 text-left transition",
+                        isSelected ? "border-[#272536] shadow-[0_8px_24px_rgba(39,37,54,0.16)]" : "border-[#D8DFE7] bg-white hover:border-[#9AA3B2]",
+                      )}
+                      type="button"
+                      disabled={!bridgeReady || savingSelection}
+                      onClick={() => void applyAsset(relPath)}
+                    >
+                      <img className="h-full w-full object-cover" src={toFileUrl(absPath)} alt="role asset" />
+                    </button>
+                    <button
+                      className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536]"
+                      type="button"
+                      aria-label="删除素材"
+                      disabled={!bridgeReady || savingSelection}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRemoveAsset(relPath);
+                      }}
+                    >
+                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
+                        <path d="M7.5 2.5a1 1 0 0 0-.92.61L6.38 3.5H4a.75.75 0 0 0 0 1.5h.54l.64 9.04A2 2 0 0 0 7.18 16h5.64a2 2 0 0 0 1.99-1.96L15.46 5H16a.75.75 0 0 0 0-1.5h-2.38l-.2-.39a1 1 0 0 0-.92-.61h-5Zm.42 3.5a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5A.75.75 0 0 1 7.92 6Zm4.16 0a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75Z" />
+                      </svg>
+                    </button>
+                  </div>
                 );
               })}
               <button
@@ -128,10 +149,10 @@ export function RoleAssetsPage({
                       data-testid="selection-mode-featured"
                       className={cx(
                         "rounded-full px-4 py-2 text-sm transition",
-                        selectionMode === "featured" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
+                        selectionMode === "chat-background" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
                       )}
                       type="button"
-                      onClick={() => setSelectionMode("featured")}
+                      onClick={() => setSelectionMode("chat-background")}
                     >
                       立绘
                     </button>
@@ -153,7 +174,7 @@ export function RoleAssetsPage({
                   )
                 ) : (
                   <div className="grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-[#F2F5F8] text-sm text-[#74808D]">
-                    选择左侧素材以预览
+                    {selectionMode === "avatar" ? "当前未设置头像" : "当前未设置立绘"}
                   </div>
                 )}
               </div>

@@ -2,27 +2,43 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getSelectedRoleAssetPath } from "./roleAssetSelection";
+import { getNextRoleAssetSelection, getSelectedRoleAssetPath } from "./roleAssetSelection";
 
 describe("getSelectedRoleAssetPath", () => {
   it("uses the avatar selection when the library is in avatar mode", () => {
     assert.equal(
-      getSelectedRoleAssetPath("avatar", "avatars/mira.png", "featured/mira.png", "fallback.png"),
+      getSelectedRoleAssetPath("avatar", "avatars/mira.png", "backgrounds/mira.png"),
       "avatars/mira.png",
     );
   });
 
-  it("uses the featured selection when the library is in featured mode", () => {
+  it("uses the chat background selection when the library is in chat background mode", () => {
     assert.equal(
-      getSelectedRoleAssetPath("featured", "avatars/mira.png", "featured/mira.png", "fallback.png"),
-      "featured/mira.png",
+      getSelectedRoleAssetPath("chat-background", "avatars/mira.png", "backgrounds/mira.png"),
+      "backgrounds/mira.png",
     );
   });
 
-  it("falls back to the first asset when the current mode has no saved selection", () => {
+  it("keeps the current mode empty when nothing is selected", () => {
     assert.equal(
-      getSelectedRoleAssetPath("avatar", "", "featured/mira.png", "fallback.png"),
-      "fallback.png",
+      getSelectedRoleAssetPath("avatar", "", "backgrounds/mira.png"),
+      "",
+    );
+  });
+});
+
+describe("getNextRoleAssetSelection", () => {
+  it("selects a new asset when clicking a different image", () => {
+    assert.equal(
+      getNextRoleAssetSelection("avatars/mira.png", "backgrounds/other.png"),
+      "backgrounds/other.png",
+    );
+  });
+
+  it("clears the slot when clicking the currently selected image", () => {
+    assert.equal(
+      getNextRoleAssetSelection("avatars/mira.png", "avatars/mira.png"),
+      "",
     );
   });
 });

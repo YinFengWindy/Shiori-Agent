@@ -48,6 +48,46 @@ def test_role_store_creates_role_and_copies_assets(tmp_path: Path):
     assert ill_path.read_bytes() == b"ill"
 
 
+def test_role_store_migrates_featured_image_to_chat_background(tmp_path: Path):
+    roles_dir = tmp_path / "roles"
+    assets_dir = roles_dir / "assets" / "mira"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    asset_rel = "assets/mira/illustration-1.png"
+    (roles_dir / asset_rel).write_bytes(b"ill")
+    manifest = {
+        "version": 1,
+        "roles": [
+            {
+                "id": "mira",
+                "name": "Mira",
+                "description": "assistant role",
+                "system_prompt": "you are mira",
+                "background": "",
+                "avatar": None,
+                "featured_image": asset_rel,
+                "illustrations": [asset_rel],
+                "runtime_config": {},
+                "memory_init_state": {},
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-01T00:00:00+00:00",
+            }
+        ],
+    }
+    (roles_dir / "roles.json").write_text(
+        json.dumps(manifest, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    store = RoleStore(tmp_path)
+    role = store.get_role("mira")
+
+    assert role is not None
+    assert role.chat_background == asset_rel
+    payload = json.loads((roles_dir / "roles.json").read_text(encoding="utf-8"))
+    assert payload["roles"][0]["chat_background"] == asset_rel
+    assert "featured_image" not in payload["roles"][0]
+
+
 def test_role_store_updates_and_deletes_role(tmp_path: Path):
     store = RoleStore(tmp_path)
     role = store.create_role(
@@ -207,7 +247,7 @@ def test_role_store_removes_selected_illustration_only(tmp_path: Path):
     assert second_path.exists()
 
 
-def test_role_store_can_select_avatar_and_featured_image_from_asset_library(tmp_path: Path):
+def test_role_store_can_select_avatar_and_chat_background_from_asset_library(tmp_path: Path):
     ill1 = tmp_path / "ill-1.png"
     ill1.write_bytes(b"ill-1")
     ill2 = tmp_path / "ill-2.png"
@@ -225,11 +265,11 @@ def test_role_store_can_select_avatar_and_featured_image_from_asset_library(tmp_
     updated = store.update_role(
         "mira",
         avatar_asset=role.illustrations[0],
-        featured_image=role.illustrations[1],
+        chat_background=role.illustrations[1],
     )
 
     assert updated.avatar == role.illustrations[0]
-    assert updated.featured_image == role.illustrations[1]
+    assert updated.chat_background == role.illustrations[1]
 
 
 def test_role_store_clears_selected_assets_when_underlying_asset_removed(tmp_path: Path):
@@ -249,7 +289,7 @@ def test_role_store_clears_selected_assets_when_underlying_asset_removed(tmp_pat
     selected = store.update_role(
         "mira",
         avatar_asset=role.illustrations[0],
-        featured_image=role.illustrations[0],
+        chat_background=role.illustrations[0],
     )
 
     updated = store.update_role(
@@ -258,7 +298,7 @@ def test_role_store_clears_selected_assets_when_underlying_asset_removed(tmp_pat
     )
 
     assert updated.avatar is None
-    assert updated.featured_image is None
+    assert updated.chat_background is None
 
 
 def test_role_aggregate_service_initializes_role_session_and_memory_space(tmp_path: Path):

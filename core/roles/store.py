@@ -33,7 +33,7 @@ class RoleRecord:
     system_prompt: str
     background: str
     avatar: str | None
-    featured_image: str | None
+    chat_background: str | None
     illustrations: list[str]
     runtime_config: dict[str, Any]
     memory_init_state: dict[str, Any]
@@ -43,7 +43,7 @@ class RoleRecord:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["avatar"] = _normalize_rel_path(self.avatar)
-        payload["featured_image"] = _normalize_rel_path(self.featured_image)
+        payload["chat_background"] = _normalize_rel_path(self.chat_background)
         payload["illustrations"] = [
             _normalize_rel_path(path) or "" for path in self.illustrations
         ]
@@ -58,7 +58,7 @@ class RoleRecord:
             system_prompt=str(payload.get("system_prompt") or ""),
             background=str(payload.get("background") or ""),
             avatar=_normalize_rel_path(payload.get("avatar")),
-            featured_image=_normalize_rel_path(payload.get("featured_image")),
+            chat_background=_normalize_rel_path(payload.get("chat_background")),
             illustrations=[
                 _normalize_rel_path(str(item)) or ""
                 for item in payload.get("illustrations", [])
@@ -97,9 +97,29 @@ class RoleStore:
         roles = payload.get("roles")
         if not isinstance(roles, list):
             roles = []
+        migrated = False
+        normalized_roles: list[dict[str, Any]] = []
+        for item in roles:
+            role_payload = dict(item) if isinstance(item, dict) else {}
+            if "featured_image" in role_payload:
+                if "chat_background" not in role_payload:
+                    role_payload["chat_background"] = role_payload.get("featured_image")
+                del role_payload["featured_image"]
+                migrated = True
+            normalized_roles.append(role_payload)
+        if migrated:
+            payload = {
+                "version": int(payload.get("version") or _MANIFEST_VERSION),
+                "roles": normalized_roles,
+            }
+            atomic_save_json(
+                self.manifest_path,
+                payload,
+                domain="roles",
+            )
         return {
             "version": int(payload.get("version") or _MANIFEST_VERSION),
-            "roles": roles,
+            "roles": normalized_roles,
         }
 
     def _save_roles(self, roles: list[RoleRecord]) -> None:
@@ -170,7 +190,7 @@ class RoleStore:
                 system_prompt=clean_prompt,
                 background=str(background),
                 avatar=None,
-                featured_image=None,
+                chat_background=None,
                 illustrations=[],
                 runtime_config=dict(runtime_config or {}),
                 memory_init_state={},
@@ -204,8 +224,8 @@ class RoleStore:
         memory_init_state: dict[str, Any] | None = None,
         avatar_source: str | Path | None = None,
         avatar_asset: str | None = None,
-        featured_image: str | None = None,
-        clear_featured_image: bool = False,
+        chat_background: str | None = None,
+        clear_chat_background: bool = False,
         clear_avatar: bool = False,
         illustration_sources: list[str | Path] | None = None,
         removed_illustrations: list[str] | None = None,
@@ -245,13 +265,13 @@ class RoleStore:
                     if clean_avatar_asset and not self._is_role_asset_path(role.id, clean_avatar_asset):
                         raise ValueError(f"角色素材不存在: {clean_avatar_asset}")
                     role.avatar = clean_avatar_asset
-                if clear_featured_image:
-                    role.featured_image = None
-                if featured_image is not None:
-                    clean_featured_image = _normalize_rel_path(featured_image)
-                    if clean_featured_image and not self._is_role_asset_path(role.id, clean_featured_image):
-                        raise ValueError(f"角色素材不存在: {clean_featured_image}")
-                    role.featured_image = clean_featured_image
+                if clear_chat_background:
+                    role.chat_background = None
+                if chat_background is not None:
+                    clean_chat_background = _normalize_rel_path(chat_background)
+                    if clean_chat_background and not self._is_role_asset_path(role.id, clean_chat_background):
+                        raise ValueError(f"角色素材不存在: {clean_chat_background}")
+                    role.chat_background = clean_chat_background
                 if clear_illustrations:
                     for rel_path in role.illustrations:
                         self._remove_asset_relpath(rel_path)
@@ -269,8 +289,8 @@ class RoleStore:
                             if normalized in removed_set:
                                 if role.avatar == normalized:
                                     role.avatar = None
-                                if role.featured_image == normalized:
-                                    role.featured_image = None
+                                if role.chat_background == normalized:
+                                    role.chat_background = None
                                 self._remove_asset_relpath(normalized)
                                 continue
                             kept_illustrations.append(rel_path)

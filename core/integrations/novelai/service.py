@@ -128,7 +128,7 @@ class NovelAIService:
             role_asset_path = updated_with_asset.illustrations[-1]
             updated = self._role_store.update_role(
                 clean_role_id,
-                featured_image=role_asset_path,
+                chat_background=role_asset_path,
             )
             role_asset_paths = [role_asset_path]
             wrote_back_to_role = role_asset_path in updated.illustrations
