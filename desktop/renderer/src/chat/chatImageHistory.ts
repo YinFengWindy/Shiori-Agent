@@ -75,3 +75,14 @@ export function findChatImageHistoryIndex(
   }
   return history.length - 1;
 }
+
+/** Returns the history entry for the selected chat image path so callers can navigate back to its source message. */
+export function findChatImageHistoryEntry(
+  history: ChatImageHistoryEntry[],
+  selectedPath: string,
+): ChatImageHistoryEntry | null {
+  if (!selectedPath) {
+    return null;
+  }
+  return history.find((entry) => entry.path === selectedPath) ?? null;
+}

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   collectChatImageHistory,
+  findChatImageHistoryEntry,
   findChatImageHistoryIndex,
   isChatImageAsset,
   resolveChatImageSelection,
@@ -70,6 +71,25 @@ describe("collectChatImageHistory", () => {
       },
     ]);
   });
+
+  it("falls back to the rendered message key when the source message has no id", () => {
+    const session = createSession([
+      {
+        role: "assistant",
+        content: "first",
+        media: ["outputs/cover.png"],
+      },
+    ]);
+
+    assert.deepEqual(collectChatImageHistory(session), [
+      {
+        path: "outputs/cover.png",
+        messageId: "assistant-0",
+        mediaIndex: 0,
+        timestamp: null,
+      },
+    ]);
+  });
 });
 
 describe("resolveChatImageSelection", () => {
@@ -125,5 +145,38 @@ describe("findChatImageHistoryIndex", () => {
     ]));
 
     assert.equal(findChatImageHistoryIndex(history, ""), 1);
+  });
+});
+
+describe("findChatImageHistoryEntry", () => {
+  it("returns the selected entry so callers can locate the source message", () => {
+    const history = collectChatImageHistory(createSession([
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "first",
+        media: ["outputs/cover.png", "outputs/render.jpg"],
+      },
+    ]));
+
+    assert.deepEqual(findChatImageHistoryEntry(history, "outputs/render.jpg"), {
+      path: "outputs/render.jpg",
+      messageId: "message-1",
+      mediaIndex: 1,
+      timestamp: null,
+    });
+  });
+
+  it("returns null when the selected image is not in history", () => {
+    const history = collectChatImageHistory(createSession([
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "first",
+        media: ["outputs/cover.png"],
+      },
+    ]));
+
+    assert.equal(findChatImageHistoryEntry(history, "outputs/unknown.png"), null);
   });
 });

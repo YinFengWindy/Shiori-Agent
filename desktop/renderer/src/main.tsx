@@ -6,6 +6,7 @@ import { ChatSurface } from "./chat/ChatSurface";
 import { ChatImageLightbox } from "./chat/ChatImageLightbox";
 import {
   collectChatImageHistory,
+  findChatImageHistoryEntry,
   findChatImageHistoryIndex,
   resolveChatImageSelection,
 } from "./chat/chatImageHistory";
@@ -69,6 +70,11 @@ type NavigationEntry = {
 type WorkspaceFeedback = {
   tone: "success" | "error";
   message: string;
+};
+
+type PendingMessageNavigation = {
+  roleId: string;
+  messageKey: string;
 };
 
 function cloneView(view: AppMainView): AppMainView {
@@ -181,7 +187,7 @@ function App(): React.ReactElement {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchingSessions, setSearchingSessions] = useState(false);
   const [searchIndex, setSearchIndex] = useState<SearchableSessionRecord[]>([]);
-  const [pendingSearchTarget, setPendingSearchTarget] = useState<RoleSearchResult | null>(null);
+  const [pendingMessageNavigation, setPendingMessageNavigation] = useState<PendingMessageNavigation | null>(null);
   const [highlightedMessageKey, setHighlightedMessageKey] = useState("");
   const [mainView, setMainView] = useState<AppMainView>({ kind: "chat" });
   const [sidebarWidth, setSidebarWidth] = useState(sidebarDefaultWidth);
@@ -330,6 +336,14 @@ function App(): React.ReactElement {
     const message = session?.messages[messageIndex];
     if (!message) return "";
     return String(message.id ?? `${message.role}-${messageIndex}`);
+  }
+
+  function queueMessageNavigation(roleId: string, messageKey: string): void {
+    const nextMessageKey = messageKey.trim();
+    if (!roleId || !nextMessageKey) {
+      return;
+    }
+    setPendingMessageNavigation({ roleId, messageKey: nextMessageKey });
   }
 
   function truncateSearchPreview(value: string, query: string): string {
@@ -637,6 +651,14 @@ function App(): React.ReactElement {
     setChatImageLightboxOpen(false);
   }
 
+  function locateSelectedChatImageMessage(): void {
+    if (!activeRoleId || !selectedChatImageEntry?.messageId) {
+      return;
+    }
+    setChatImageLightboxOpen(false);
+    queueMessageNavigation(activeRoleId, selectedChatImageEntry.messageId);
+  }
+
   async function addSelectedChatImageToAssetLibrary(): Promise<void> {
     if (!activeRoleId || !resolvedChatImagePath) return;
     if (activeRole?.illustrations_abs.includes(resolvedChatImagePath)) {
@@ -771,17 +793,8 @@ function App(): React.ReactElement {
   }, [roles, showSearchDialog]);
 
   useEffect(() => {
-    if (!activeSession || !pendingSearchTarget) return;
-    if (pendingSearchTarget.roleId !== activeRoleId) return;
-    const messageKey = getMessageKey(
-      pendingSearchTarget.roleId,
-      pendingSearchTarget.matchedMessageId,
-      pendingSearchTarget.matchedMessageIndex,
-    );
-    if (!messageKey) {
-      setPendingSearchTarget(null);
-      return;
-    }
+    if (!activeSession || !pendingMessageNavigation) return;
+    if (pendingMessageNavigation.roleId !== activeRoleId) return;
     let cancelled = false;
     let attempts = 0;
     const maxAttempts = 12;
@@ -789,16 +802,16 @@ function App(): React.ReactElement {
     const tryHighlight = () => {
       if (cancelled) return;
       const target = Array.from(document.querySelectorAll<HTMLElement>("[data-message-key]"))
-        .find((item) => item.dataset.messageKey === messageKey);
+        .find((item) => item.dataset.messageKey === pendingMessageNavigation.messageKey);
       if (target) {
-        setHighlightedMessageKey(messageKey);
+        setHighlightedMessageKey(pendingMessageNavigation.messageKey);
         target.scrollIntoView({ behavior: "smooth", block: "center" });
-        setPendingSearchTarget(null);
+        setPendingMessageNavigation(null);
         return;
       }
       attempts += 1;
       if (attempts >= maxAttempts) {
-        setPendingSearchTarget(null);
+        setPendingMessageNavigation(null);
         return;
       }
       window.setTimeout(tryHighlight, 80);
@@ -809,7 +822,7 @@ function App(): React.ReactElement {
       cancelled = true;
       window.cancelAnimationFrame(frame);
     };
-  }, [activeRoleId, activeSession, pendingSearchTarget, searchIndex]);
+  }, [activeRoleId, activeSession, pendingMessageNavigation]);
 
   useEffect(() => {
     const off = window.miraDesktop.onEvent((event) => {
@@ -1526,6 +1539,7 @@ function App(): React.ReactElement {
   const chatImageHistory = collectChatImageHistory(activeSession);
   const resolvedChatImagePath = resolveChatImageSelection(chatImageHistory, selectedChatImagePath);
   const selectedChatImageIndex = findChatImageHistoryIndex(chatImageHistory, resolvedChatImagePath);
+  const selectedChatImageEntry = findChatImageHistoryEntry(chatImageHistory, resolvedChatImagePath);
   const latestChatGeneratedImagePath = chatImageHistory[chatImageHistory.length - 1]?.path ?? "";
   const selectedChatImagePosition = selectedChatImageIndex >= 0 ? selectedChatImageIndex + 1 : 0;
 
@@ -1838,9 +1852,16 @@ function App(): React.ReactElement {
           setShowSearchDialog(false);
           setSearchQuery("");
           if (result.matchedField === "message") {
-            setPendingSearchTarget(result);
+            const messageKey = getMessageKey(
+              result.roleId,
+              result.matchedMessageId,
+              result.matchedMessageIndex,
+            );
+            if (messageKey) {
+              queueMessageNavigation(result.roleId, messageKey);
+            }
           } else {
-            setPendingSearchTarget(null);
+            setPendingMessageNavigation(null);
             setHighlightedMessageKey("");
           }
           void openRole(result.roleId, null, { recordHistory: true });
@@ -1863,6 +1884,7 @@ function App(): React.ReactElement {
         canAddToAssetLibrary={Boolean(activeRoleId && resolvedChatImagePath)}
         canGoToNext={selectedChatImageIndex >= 0 && selectedChatImageIndex < chatImageHistory.length - 1}
         canGoToPrevious={selectedChatImageIndex > 0}
+        canLocateMessage={Boolean(activeRoleId && selectedChatImageEntry?.messageId)}
         imagePath={resolvedChatImagePath}
         addingToAssetLibrary={addingChatImageToAssetLibrary}
         open={chatImageLightboxOpen}
@@ -1870,6 +1892,7 @@ function App(): React.ReactElement {
         onClose={closeSelectedChatImageLightbox}
         onGoToNext={selectNextChatImage}
         onGoToPrevious={selectPreviousChatImage}
+        onLocateMessage={locateSelectedChatImageMessage}
       />
     </div>
   );
