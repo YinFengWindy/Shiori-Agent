@@ -1,5 +1,10 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import {
+  clampChatImageOffset,
+  fitChatImageToStage,
+  type ChatImageLightboxSize,
+} from "./chatImageLightboxLayout";
 import { clampChatImageZoom, getNextChatImageZoom } from "./chatImageLightboxState";
 import { toFileUrl } from "../shared/format";
 
@@ -26,14 +31,18 @@ export function ChatImageLightbox({
   const [zoom, setZoom] = useState(1);
   const [dragging, setDragging] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [imageNaturalSize, setImageNaturalSize] = useState<ChatImageLightboxSize>({ width: 0, height: 0 });
+  const [stageSize, setStageSize] = useState<ChatImageLightboxSize>({ width: 0, height: 0 });
   const dragStateRef = useRef<{
     originX: number;
     originY: number;
     startX: number;
     startY: number;
   } | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const navigationButtonClass =
     "pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-transparent bg-transparent text-[#4B5563] transition hover:border-black hover:bg-white/92 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40";
+  const fittedImageSize = fitChatImageToStage(stageSize, imageNaturalSize);
 
   useEffect(() => {
     if (!open) return;
@@ -72,13 +81,47 @@ export function ChatImageLightbox({
     setDragging(false);
   }, [imagePath, open]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    const stage = stageRef.current;
+    if (!stage) return undefined;
+
+    const updateStageSize = () => {
+      const rect = stage.getBoundingClientRect();
+      const nextSize = { width: rect.width, height: rect.height };
+      setStageSize((currentSize) => (
+        currentSize.width === nextSize.width && currentSize.height === nextSize.height
+          ? currentSize
+          : nextSize
+      ));
+    };
+
+    updateStageSize();
+
+    const resizeObserver = new ResizeObserver(() => updateStageSize());
+    resizeObserver.observe(stage);
+    window.addEventListener("resize", updateStageSize);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateStageSize);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    setOffset((currentOffset) => {
+      const nextOffset = clampChatImageOffset(currentOffset, stageSize, fittedImageSize, clampChatImageZoom(zoom));
+      return currentOffset.x === nextOffset.x && currentOffset.y === nextOffset.y ? currentOffset : nextOffset;
+    });
+  }, [fittedImageSize, stageSize, zoom]);
+
   if (!open || !imagePath) {
     return null;
   }
 
   function handleWheel(event: React.WheelEvent<HTMLDivElement>): void {
     event.preventDefault();
-    setZoom((currentZoom) => getNextChatImageZoom(currentZoom, event.deltaY));
+    setZoom((currentZoom) => clampChatImageZoom(getNextChatImageZoom(currentZoom, event.deltaY)));
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>): void {
@@ -98,10 +141,11 @@ export function ChatImageLightbox({
     const dragState = dragStateRef.current;
     if (!dragState) return;
 
-    const nextOffset = {
+    const unclampedOffset = {
       x: dragState.originX + event.clientX - dragState.startX,
       y: dragState.originY + event.clientY - dragState.startY,
     };
+    const nextOffset = clampChatImageOffset(unclampedOffset, stageSize, fittedImageSize, clampChatImageZoom(zoom));
     setOffset((currentOffset) => (
       currentOffset.x === nextOffset.x && currentOffset.y === nextOffset.y
         ? currentOffset
@@ -128,7 +172,11 @@ export function ChatImageLightbox({
         aria-modal="true"
         aria-label="聊天图片放大预览"
       >
-        <div className="relative grid h-full w-full min-h-0 min-w-0 place-items-center overflow-hidden rounded-[22px] bg-[#F4F7FB]" onWheel={handleWheel}>
+        <div
+          ref={stageRef}
+          className="relative grid h-full w-full min-h-0 min-w-0 place-items-center overflow-hidden rounded-[22px] bg-[#F4F7FB]"
+          onWheel={handleWheel}
+        >
           <div className="pointer-events-none absolute inset-y-0 left-0 z-[2] flex items-center pl-4">
             <button
               className={navigationButtonClass}
@@ -152,9 +200,21 @@ export function ChatImageLightbox({
             onLostPointerCapture={stopDragging}
           >
             <img
-              className="block h-full w-full min-h-0 min-w-0 object-contain"
+              className="block object-contain"
               src={toFileUrl(imagePath)}
               alt="enlarged chat preview"
+              style={{ width: fittedImageSize.width || undefined, height: fittedImageSize.height || undefined }}
+              onLoad={(event) => {
+                const nextSize = {
+                  width: event.currentTarget.naturalWidth,
+                  height: event.currentTarget.naturalHeight,
+                };
+                setImageNaturalSize((currentSize) => (
+                  currentSize.width === nextSize.width && currentSize.height === nextSize.height
+                    ? currentSize
+                    : nextSize
+                ));
+              }}
             />
           </div>
           <div className="pointer-events-none absolute inset-y-0 right-0 z-[2] flex items-center pr-4">
