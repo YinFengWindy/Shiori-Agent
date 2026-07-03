@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef } from "react";
 import { ResetIcon, SaveIcon } from "../shared/icons";
 import { cx, inputClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
+import { captureRoleDetailScrollTop, restoreRoleDetailScrollTop } from "./roleDetailScrollState";
 
 type RoleDetailPageProps = {
   activeIllustration: string;
@@ -36,7 +37,9 @@ export function RoleDetailPage({
   onResetRoleForm,
   onSaveRole,
 }: RoleDetailPageProps) {
+  const pageRef = useRef<HTMLElement | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingScrollTopRef = useRef<number | null>(null);
   const backIcon = (
     <svg viewBox="0 0 1024 1024" className="h-5 w-5 fill-[#111111]" aria-hidden="true">
       <path d="M631.04 161.941333a42.666667 42.666667 0 0 1 63.061333 57.386667l-2.474666 2.730667-289.962667 292.245333 289.706667 287.402667a42.666667 42.666667 0 0 1 2.730666 57.6l-2.474666 2.752a42.666667 42.666667 0 0 1-57.6 2.709333l-2.752-2.474667-320-317.44a42.666667 42.666667 0 0 1-2.709334-57.6l2.474667-2.752 320-322.56z" />
@@ -52,8 +55,20 @@ export function RoleDetailPage({
     textarea.style.height = `${textarea.scrollHeight}px`;
   }, [roleForm.systemPrompt]);
 
+  useLayoutEffect(() => {
+    pendingScrollTopRef.current = restoreRoleDetailScrollTop(pageRef.current, pendingScrollTopRef.current);
+  }, [roleForm.name, roleForm.description, roleForm.systemPrompt, roleForm.nsfwMemoryEnabled]);
+
+  function preserveScrollDuringFormUpdate(
+    next: React.SetStateAction<RoleFormState>,
+  ): void {
+    pendingScrollTopRef.current = captureRoleDetailScrollTop(pageRef.current);
+    onUpdateRoleForm(next);
+  }
+
   return (
     <section
+      ref={pageRef}
       className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-white"
       data-testid="role-detail-page"
       data-has-featured-image={chatBackgroundUrl ? "true" : "false"}
@@ -125,7 +140,7 @@ export function RoleDetailPage({
                   data-testid="edit-role-name"
                   className={cx(inputClass, "border-[#D8DFE7] bg-white/82 text-[#111827] placeholder:text-[#9CA3AF]")}
                   value={roleForm.name}
-                  onChange={(event) => onUpdateRoleForm((current) => ({ ...current, name: event.target.value }))}
+                  onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, name: event.target.value }))}
                   placeholder="输入角色名称"
                 />
               </label>
@@ -135,7 +150,7 @@ export function RoleDetailPage({
                   data-testid="edit-role-description"
                   className={cx(inputClass, "border-[#D8DFE7] bg-white/82 text-[#111827] placeholder:text-[#9CA3AF]")}
                   value={roleForm.description}
-                  onChange={(event) => onUpdateRoleForm((current) => ({ ...current, description: event.target.value }))}
+                  onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, description: event.target.value }))}
                   placeholder="简短描述这个角色"
                 />
               </label>
@@ -146,7 +161,7 @@ export function RoleDetailPage({
                   data-testid="edit-role-prompt"
                   className={cx(inputClass, "min-h-[20px] resize-none overflow-hidden border-[#D8DFE7] bg-white/82 text-[#111827] placeholder:text-[#9CA3AF]")}
                   value={roleForm.systemPrompt}
-                  onChange={(event) => onUpdateRoleForm((current) => ({ ...current, systemPrompt: event.target.value }))}
+                  onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, systemPrompt: event.target.value }))}
                   placeholder="定义这个角色的行为、语气和边界"
                 />
               </label>
@@ -155,7 +170,7 @@ export function RoleDetailPage({
                   className="h-4 w-4 rounded border-[#D8DFE7] text-[#111827] focus:ring-2 focus:ring-primary/20"
                   type="checkbox"
                   checked={roleForm.nsfwMemoryEnabled}
-                  onChange={(event) => onUpdateRoleForm((current) => ({ ...current, nsfwMemoryEnabled: event.target.checked }))}
+                  onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, nsfwMemoryEnabled: event.target.checked }))}
                 />
                 <span>NSFW 记忆</span>
               </label>
