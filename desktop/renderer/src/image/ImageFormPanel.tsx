@@ -271,8 +271,8 @@ export function ImageFormPanel({
           />
           <div className="mt-3 border-t border-[#E7EAF0] pt-3">
             {form.baseImagePath ? (
-              <div className="relative overflow-hidden rounded-[18px] border border-[#D6DCE3] bg-[#1B1E25]">
-                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,18,28,0.18)_0%,rgba(13,18,28,0.42)_58%,rgba(13,18,28,0.72)_100%)]" />
+              <div className="relative overflow-hidden rounded-[18px] border border-[#D6DCE3] bg-transparent">
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,18,28,0.08)_0%,rgba(13,18,28,0.16)_56%,rgba(13,18,28,0.22)_100%)]" />
                 <img
                   className="block h-[220px] w-full object-cover"
                   src={toFileUrl(form.baseImagePath)}
@@ -280,32 +280,32 @@ export function ImageFormPanel({
                 />
                 <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4">
                   <div className="min-w-0">
-                    <div className="text-[22px] font-semibold leading-none tracking-[-0.02em] text-white">Image2Image</div>
-                    <div className="mt-1.5 text-[13px] text-white/72">Transform your image.</div>
+                    <div className="text-[20px] font-semibold leading-none tracking-[-0.02em] text-white">Image2Image</div>
+                    <div className="mt-1 text-[12px] text-white/72">Transform your image.</div>
                   </div>
                   <div className="flex flex-none items-center gap-2">
                     <button
                       type="button"
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/12 bg-[rgba(21,25,34,0.82)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.92)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
                       aria-label="重新选择 Base Img"
                       onClick={onPickBaseImage}
                     >
-                      <ResetIcon className="h-4.5 w-4.5 fill-current" />
+                      <ResetIcon className="h-4 w-4 fill-current" />
                     </button>
                     <button
                       type="button"
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/12 bg-[rgba(21,25,34,0.82)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.92)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
                       aria-label="移除 Base Img"
                       onClick={() => onChange({ baseImagePath: "" })}
                     >
-                      <DeleteIcon className="h-4.5 w-4.5 fill-current" />
+                      <DeleteIcon className="h-4 w-4 fill-current" />
                     </button>
                   </div>
                 </div>
                 <div className="absolute inset-x-0 bottom-0 p-4">
-                  <div className="grid gap-4 rounded-[18px] bg-[rgba(17,21,29,0.42)] px-4 py-3 backdrop-blur-[8px]">
+                  <div className="grid gap-3 rounded-[18px] bg-transparent px-1 py-1">
                     <label className="grid gap-2">
-                      <div className="flex items-center justify-between gap-3 text-sm font-semibold text-white">
+                      <div className="flex items-center justify-between gap-3 text-[13px] font-semibold text-white">
                         <span>Strength</span>
                         <span className="text-white/80">{form.strength.toFixed(1)}</span>
                       </div>
@@ -320,7 +320,7 @@ export function ImageFormPanel({
                       />
                     </label>
                     <label className="grid gap-2">
-                      <div className="flex items-center justify-between gap-3 text-sm font-semibold text-white">
+                      <div className="flex items-center justify-between gap-3 text-[13px] font-semibold text-white">
                         <span>Noise</span>
                         <span className="text-white/80">{form.noise.toFixed(1)}</span>
                       </div>
