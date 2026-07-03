@@ -303,6 +303,8 @@ export function ChatSurface({
   }
 
   function handleAttachmentDragStart(event: React.DragEvent<HTMLElement>, path: string): void {
+    event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.effectAllowed = "copy";
     onBeginAttachmentDrag(path);
   }
