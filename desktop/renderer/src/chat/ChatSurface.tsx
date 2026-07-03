@@ -4,7 +4,7 @@ import { isChatImageAsset } from "./chatImageHistory";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { canSubmitChatMessage } from "./chatComposerState";
 import { formatTimestamp, toFileUrl } from "../shared/format";
-import { DeleteIcon, SendIcon, UploadIcon } from "../shared/icons";
+import { DeleteIcon, PlusIcon, SendIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 import type { RoleRecord, SessionPayload } from "../shared/types";
 
@@ -422,13 +422,13 @@ export function ChatSurface({
               />
               <div className="composer-actions flex items-center gap-2">
                 <button
-                  className="grid h-[30px] w-[30px] place-items-center rounded-full border border-[#E4E4E4] bg-white p-0 text-[#4B5563] transition hover:border-[#d5d5d5] hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
+                  className="grid h-[30px] w-[30px] place-items-center rounded-full border-0 bg-transparent p-0 text-[#4B5563] transition hover:bg-black/5 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
                   type="button"
                   aria-label="添加附件"
                   onClick={onPickChatAttachments}
                   disabled={!activeRoleId || sending || !bridgeReady}
                 >
-                  <UploadIcon className="h-[14px] w-[14px] fill-current" />
+                  <PlusIcon className="h-[14px] w-[14px] fill-current" />
                 </button>
                 <div className="composer-spacer flex-1" />
                 <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="发送消息" onClick={() => onSendMessage(textareaRef.current?.value)} disabled={!activeRoleId || !canSubmit || sending || !bridgeReady}>

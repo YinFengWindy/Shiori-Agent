@@ -66,3 +66,12 @@ export function SendIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProp
     </svg>
   );
 }
+
+/** Renders the shared desktop plus glyph used by chat attachment creation actions. */
+export function PlusIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 1024 1024" className={className} aria-hidden="true">
+      <path d="M847.0528 491.52H532.48V176.9472c0-11.264-9.216-20.48-20.48-20.48s-20.48 9.216-20.48 20.48V491.52H176.9472c-11.264 0-20.48 9.216-20.48 20.48s9.216 20.48 20.48 20.48H491.52v314.5728c0 11.264 9.216 20.48 20.48 20.48s20.48-9.216 20.48-20.48V532.48h314.5728c11.264 0 20.48-9.216 20.48-20.48s-9.216-20.48-20.48-20.48z" />
+    </svg>
+  );
+}
