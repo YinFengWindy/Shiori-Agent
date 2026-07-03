@@ -72,50 +72,6 @@ export function ChatImageLightbox({
     setDragging(false);
   }, [imagePath, open]);
 
-  useEffect(() => {
-    if (zoom > 1) return;
-    dragStateRef.current = null;
-    setDragging(false);
-    setOffset((currentOffset) => (
-      currentOffset.x === 0 && currentOffset.y === 0
-        ? currentOffset
-        : { x: 0, y: 0 }
-    ));
-  }, [zoom]);
-
-  useEffect(() => {
-    if (!dragging) return undefined;
-
-    function handlePointerMove(event: PointerEvent): void {
-      const dragState = dragStateRef.current;
-      if (!dragState) return;
-
-      const nextOffset = {
-        x: dragState.originX + event.clientX - dragState.startX,
-        y: dragState.originY + event.clientY - dragState.startY,
-      };
-      setOffset((currentOffset) => (
-        currentOffset.x === nextOffset.x && currentOffset.y === nextOffset.y
-          ? currentOffset
-          : nextOffset
-      ));
-    }
-
-    function stopDragging(): void {
-      dragStateRef.current = null;
-      setDragging(false);
-    }
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopDragging);
-    window.addEventListener("pointercancel", stopDragging);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopDragging);
-      window.removeEventListener("pointercancel", stopDragging);
-    };
-  }, [dragging]);
-
   if (!open || !imagePath) {
     return null;
   }
@@ -126,8 +82,9 @@ export function ChatImageLightbox({
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>): void {
-    if (zoom <= 1 || event.button !== 0) return;
+    if (event.button !== 0) return;
     event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
     dragStateRef.current = {
       originX: offset.x,
       originY: offset.y,
@@ -135,6 +92,26 @@ export function ChatImageLightbox({
       startY: event.clientY,
     };
     setDragging(true);
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>): void {
+    const dragState = dragStateRef.current;
+    if (!dragState) return;
+
+    const nextOffset = {
+      x: dragState.originX + event.clientX - dragState.startX,
+      y: dragState.originY + event.clientY - dragState.startY,
+    };
+    setOffset((currentOffset) => (
+      currentOffset.x === nextOffset.x && currentOffset.y === nextOffset.y
+        ? currentOffset
+        : nextOffset
+    ));
+  }
+
+  function stopDragging(): void {
+    dragStateRef.current = null;
+    setDragging(false);
   }
 
   return (
@@ -166,9 +143,13 @@ export function ChatImageLightbox({
             </button>
           </div>
           <div
-            className={`grid h-full w-full min-h-0 min-w-0 place-items-center transition-transform duration-150 ${zoom > 1 ? (dragging ? "cursor-grabbing" : "cursor-grab") : "cursor-default"}`}
+            className={`grid h-full w-full min-h-0 min-w-0 place-items-center select-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
             style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${clampChatImageZoom(zoom)})` }}
             onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={stopDragging}
+            onPointerCancel={stopDragging}
+            onLostPointerCapture={stopDragging}
           >
             <img
               className="block h-full w-full min-h-0 min-w-0 object-contain"
