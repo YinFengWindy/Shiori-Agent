@@ -98,12 +98,16 @@ export function ChatImageLightbox({
               </svg>
             </button>
           </div>
-          <img
-            className="block max-h-full max-w-full object-contain transition-transform duration-150"
-            src={toFileUrl(imagePath)}
-            alt="enlarged chat preview"
+          <div
+            className="grid h-full w-full min-h-0 min-w-0 place-items-center transition-transform duration-150"
             style={{ transform: `scale(${clampChatImageZoom(zoom)})` }}
-          />
+          >
+            <img
+              className="block h-full w-full min-h-0 min-w-0 object-contain"
+              src={toFileUrl(imagePath)}
+              alt="enlarged chat preview"
+            />
+          </div>
           <div className="pointer-events-none absolute inset-y-0 right-0 z-[2] flex items-center pr-4">
             <button
               className={navigationButtonClass}
