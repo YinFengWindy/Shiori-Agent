@@ -629,6 +629,38 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert "read_image_vision" in text_media_content
     assert "image_url" not in text_media_content
 
+    note_path = tmp_path / "chat-note.md"
+    note_path.write_text("# note\n\nhello\n", encoding="utf-8")
+    text_attachment_messages = builder.render(
+        ContextRequest(
+            history=[],
+            current_message="这是附件",
+            media=[str(note_path)],
+            skill_names=["extra"],
+            message_timestamp=now,
+        )
+    ).messages
+    text_attachment_content = text_attachment_messages[-1]["content"]
+    assert isinstance(text_attachment_content, str)
+    assert "[附加文件]" in text_attachment_content
+    assert str(note_path) in text_attachment_content
+    assert "read_file(path=" in text_attachment_content
+
+    mixed_media_messages = builder.render(
+        ContextRequest(
+            history=[],
+            current_message="图和文档都在这",
+            media=[str(image), str(note_path)],
+            skill_names=["extra"],
+            message_timestamp=now,
+        )
+    ).messages
+    mixed_media_content = mixed_media_messages[-1]["content"]
+    assert isinstance(mixed_media_content, list)
+    assert mixed_media_content[-1]["type"] == "text"
+    assert str(note_path) in mixed_media_content[-1]["text"]
+    assert "read_file(path=" in mixed_media_content[-1]["text"]
+
     from core.roles import RoleStore
 
     role_store = RoleStore(tmp_path)

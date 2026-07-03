@@ -44,6 +44,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("agent.context")
 
+_READABLE_TEXT_ATTACHMENT_SUFFIXES = {".md", ".txt"}
+
 
 class ChannelPolicy(Protocol):
     channel: str
@@ -149,9 +151,10 @@ class MessageEnvelopeBuilder:
                 }
             )
 
+        text_with_refs = self._append_text_attachment_refs(text, media)
         if not images:
-            return text
-        return images + [{"type": "text", "text": text}]
+            return text_with_refs
+        return images + [{"type": "text", "text": text_with_refs}]
 
     def _build_text_with_media_refs(self, text: str, media: list[str]) -> str:
         refs: list[str] = []
@@ -169,10 +172,9 @@ class MessageEnvelopeBuilder:
             refs.append(f"- 图片路径: {value}")
             local_image_paths.append(value)
 
-        if not refs:
-            return text
-
-        lines = [text, "", "[附加媒体]", *refs]
+        lines = [self._append_text_attachment_refs(text, media)]
+        if refs:
+            lines.extend(["", "[附加媒体]", *refs])
         if self._vl_available and local_image_paths:
             lines.append(
                 "当前主模型不能直接接收图片内容；需要识别图片时，调用 read_image_vision 工具。"
@@ -186,8 +188,27 @@ class MessageEnvelopeBuilder:
             lines.append(
                 "当前主模型不能直接接收图片内容；远程图片需先取得本地路径后再读图。"
             )
-        else:
+        elif refs:
             lines.append("当前主模型不能直接接收图片内容，且未配置 VL 视觉模型。")
+        if len(lines) == 1:
+            return lines[0]
+        return "\n".join(lines)
+
+    def _append_text_attachment_refs(self, text: str, media: list[str]) -> str:
+        file_refs: list[str] = []
+        for item in media:
+            value = str(item)
+            if value.startswith(("http://", "https://")):
+                continue
+            path = Path(value)
+            if not path.is_file() or path.suffix.lower() not in _READABLE_TEXT_ATTACHMENT_SUFFIXES:
+                continue
+            quoted_path = json.dumps(value, ensure_ascii=False)
+            file_refs.append(f"- 文件路径: {value}")
+            file_refs.append(f"- 如需读取内容，请调用 read_file(path={quoted_path})")
+        if not file_refs:
+            return text
+        lines = [text, "", "[附加文件]", *file_refs]
         return "\n".join(lines)
 
     def _stamp_current_message(
