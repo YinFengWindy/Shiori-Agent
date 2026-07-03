@@ -38,13 +38,6 @@ const sizeOptions: Array<ImageSelectOption<ImageSizePreset>> = [
   { id: "custom", label: "自定义" },
 ];
 
-function getFileLabel(path: string): string {
-  const cleanPath = path.trim();
-  if (!cleanPath) return "Add a Base Img (Optional)";
-  const segments = cleanPath.split(/[\\/]/);
-  return segments[segments.length - 1] || cleanPath;
-}
-
 export function ImageFormPanel({
   bridgeReady,
   form,
@@ -275,33 +268,53 @@ export function ImageFormPanel({
                 : onChange({ negativePrompt: event.target.value })
             )}
           />
-          <div className="mt-3 flex min-w-0 items-center justify-between gap-3 border-t border-[#E7EAF0] pt-3">
-            <div className="min-w-0 flex-1 truncate text-[15px] text-[#5B616A]">{getFileLabel(form.baseImagePath)}</div>
-            <div className="flex flex-none items-center gap-2">
-              {form.baseImagePath ? (
-                <button
-                  type="button"
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-primary/40 hover:text-[#20242A] focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  aria-label="移除 Base Img"
-                  onClick={() => onChange({ baseImagePath: "" })}
-                >
-                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
-                    <path d="M7 21a2 2 0 0 1-2-2V7h14v12a2 2 0 0 1-2 2H7Zm3-10v7h2v-7h-2Zm4 0v7h2v-7h-2ZM7 4h3.5l1-1h1l1 1H17v2H7V4Z" />
-                  </svg>
-                </button>
-              ) : null}
+          <div className="mt-3 border-t border-[#E7EAF0] pt-3">
+            {form.baseImagePath ? (
+              <div className="relative overflow-hidden rounded-[18px] border border-[#D6DCE3] bg-[#1B1E25]">
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,18,28,0.18)_0%,rgba(13,18,28,0.42)_58%,rgba(13,18,28,0.72)_100%)]" />
+                <img
+                  className="block h-[220px] w-full object-cover"
+                  src={toFileUrl(form.baseImagePath)}
+                  alt="Base image preview"
+                />
+                <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <div className="text-[28px] font-semibold leading-none tracking-[-0.02em] text-white">Image2Image</div>
+                    <div className="mt-2 text-sm text-white/72">Transform your image.</div>
+                  </div>
+                  <div className="flex flex-none items-center gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/12 bg-[rgba(21,25,34,0.82)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.92)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
+                      aria-label="重新选择 Base Img"
+                      onClick={onPickBaseImage}
+                    >
+                      <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+                        <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-4.9 6h-2.02A7 7 0 1 0 17.65 6.35Z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/12 bg-[rgba(21,25,34,0.82)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.92)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
+                      aria-label="移除 Base Img"
+                      onClick={() => onChange({ baseImagePath: "" })}
+                    >
+                      <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+                        <path d="M7 21a2 2 0 0 1-2-2V7h14v12a2 2 0 0 1-2 2H7Zm3-10v7h2v-7h-2Zm4 0v7h2v-7h-2ZM7 4h3.5l1-1h1l1 1H17v2H7V4Z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
               <button
                 type="button"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-primary/40 hover:text-[#20242A] focus:outline-none focus:ring-2 focus:ring-primary/20"
-                aria-label="上传 Base Img"
+                className="flex h-[72px] w-full items-center justify-center rounded-[18px] border border-dashed border-[#D6DCE3] bg-[#F3F5F7] px-4 text-sm font-medium text-[#5B616A] transition hover:border-primary/40 hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
                 onClick={onPickBaseImage}
               >
-                <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7v2H5v14h14V12h2v7a2 2 0 0 1-2 2Z" />
-                  <path d="M17 3h-2v4h-4v2h4v4h2V9h4V7h-4V3Z" />
-                </svg>
+                Add Img
               </button>
-            </div>
+            )}
           </div>
         </div>
       </div>
