@@ -15,6 +15,7 @@ from core.net.http import get_default_http_requester
 from core.roles import RoleAggregateService, RoleStore
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
+from infra.channels.reply_context import build_inbound_text_with_reply_context
 from session.manager import Session, SessionManager
 
 
@@ -297,15 +298,33 @@ class DesktopBridgeService:
                     if isinstance(raw_media, list)
                     else []
                 )
+                reply_to_message_id = str(payload.get("reply_to_message_id") or "").strip()
+                reply_to_content = str(payload.get("reply_to_content") or "").strip()
+                reply_to_sender = str(payload.get("reply_to_sender") or "").strip()
                 if not content and not media:
                     return self._error(request_id, method, "invalid_request", "content 和 media 不能同时为空")
                 aggregate = await self.role_service.open_role_async(role_id)
                 session = aggregate.session
+                inbound_content = content
+                metadata: dict[str, object] = {}
+                if reply_to_message_id:
+                    metadata["reply_to_message_id"] = reply_to_message_id
+                if reply_to_sender:
+                    metadata["reply_to_sender"] = reply_to_sender
+                if reply_to_content:
+                    metadata["reply_to_content"] = reply_to_content
+                    metadata["persisted_user_content"] = content
+                    inbound_content = build_inbound_text_with_reply_context(
+                        user_text=content,
+                        reply_text=reply_to_content,
+                        reply_sender=reply_to_sender,
+                    )
                 session, events = await self._run_chat_turn(
                     request_id=request_id,
                     session_key=session.key,
-                    content=content,
+                    content=inbound_content,
                     media=media,
+                    metadata=metadata,
                     emit_event=emit_event,
                 )
                 return self._ok(
@@ -413,6 +432,7 @@ class DesktopBridgeService:
         session_key: str,
         content: str,
         media: list[str],
+        metadata: dict[str, object] | None,
         emit_event,
     ) -> tuple[Session, list[BridgeEvent]]:
         collected: list[BridgeEvent] = []
@@ -461,6 +481,7 @@ class DesktopBridgeService:
                 channel="desktop",
                 chat_id=session_key,
                 media=media,
+                metadata=metadata,
                 stream_events=True,
             )
             await asyncio.sleep(0)

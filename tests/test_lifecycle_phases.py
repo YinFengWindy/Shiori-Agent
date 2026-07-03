@@ -1474,6 +1474,49 @@ async def test_after_reasoning_collects_persist_and_outbound_slots():
 
 
 @pytest.mark.asyncio
+async def test_after_reasoning_persists_user_display_content_without_internal_metadata():
+    session = _DummySession("desktop:role:mira")
+    msg = InboundMessage(
+        channel="desktop",
+        sender="user",
+        chat_id="desktop:role:mira",
+        content="【你正在回复一条历史消息】\n被回复消息：\nold\n\n【你当前新消息】\nnew",
+        timestamp=_now,
+        metadata={
+            "persisted_user_content": "new",
+            "reply_to_message_id": "message-1",
+            "reply_to_content": "old",
+        },
+    )
+    state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=True)
+    state.session = session
+    services = SimpleNamespace(
+        presence=Mock(),
+        session_manager=SimpleNamespace(append_messages=AsyncMock()),
+    )
+    turn_result = TurnRunResult(
+        reply="reply",
+        tool_chain=[],
+        tools_used=[],
+        thinking=None,
+        streamed=False,
+        context_retry={},
+    )
+    phase = Phase(
+        default_after_reasoning_modules(EventBus(), cast(Any, services)),
+        frame_factory=AfterReasoningFrame,
+    )
+
+    await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
+
+    assert session.messages[0]["content"] == "new"
+    metadata = cast(dict[str, object], session.messages[0]["metadata"])
+    assert metadata["reply_to_message_id"] == "message-1"
+    assert metadata["reply_to_content"] == "old"
+    assert "persisted_user_content" not in metadata
+
+
+@pytest.mark.asyncio
 async def test_after_turn_collects_extra_and_telemetry_slots():
     committed_extra: list[dict[str, object]] = []
     after_turn_metadata: list[dict[str, object]] = []

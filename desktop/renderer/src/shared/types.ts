@@ -36,6 +36,14 @@ export type SessionMessage = {
   metadata?: Record<string, unknown>;
 };
 
+/** Referenced chat message shown above the composer before sending. */
+export type ChatReplyTarget = {
+  messageId: string;
+  content: string;
+  sender: string;
+  preview: string;
+};
+
 /** Session payload returned by the desktop bridge. */
 export type SessionPayload = {
   key: string;

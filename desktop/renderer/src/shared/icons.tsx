@@ -86,3 +86,23 @@ export function DocumentIcon({ className = "h-4 w-4 stroke-current" }: DesktopIc
     </svg>
   );
 }
+
+/** Renders the shared desktop copy glyph. */
+export function CopyIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
+      <rect x="8" y="7" width="10" height="12" rx="2.5" strokeWidth="1.7" />
+      <path d="M6.5 15.5H6A2.5 2.5 0 0 1 3.5 13V6A2.5 2.5 0 0 1 6 3.5h7A2.5 2.5 0 0 1 15.5 6v.5" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Renders the shared desktop quote glyph. */
+export function QuoteIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
+      <path d="M9.25 7.5H7a3.5 3.5 0 0 0-3.5 3.5v1.25A3.25 3.25 0 0 0 6.75 15.5H9a1 1 0 0 1 1 1V18a2.5 2.5 0 0 1-2.5 2.5" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M20.5 7.5h-2.25a3.5 3.5 0 0 0-3.5 3.5v1.25A3.25 3.25 0 0 0 18 15.5h2.25a1 1 0 0 1 1 1V18a2.5 2.5 0 0 1-2.5 2.5" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

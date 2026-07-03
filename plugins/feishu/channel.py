@@ -32,6 +32,7 @@ from bus.events_lifecycle import (
 from bus.queue import MessageBus
 from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
+from infra.channels.reply_context import build_inbound_text_with_reply_context
 from plugins.feishu.cards import (
     ToolLiveLine,
     build_live_card,
@@ -350,12 +351,10 @@ class FeishuChannel:
         reply_text = await self._fetch_message_text(parent_id)
         if not reply_text:
             return text, {"reply_to_message_id": parent_id}
-        merged = (
-            "【你正在回复一条历史消息】\n"
-            f"被回复消息：\n{reply_text}\n\n"
-            "【你当前新消息】\n"
-            f"{text}"
-        ).strip()
+        merged = build_inbound_text_with_reply_context(
+            user_text=text,
+            reply_text=reply_text,
+        )
         return merged, {"reply_to_message_id": parent_id}
 
     async def _handle_stop(self, chat_id: str, sender: str) -> None:

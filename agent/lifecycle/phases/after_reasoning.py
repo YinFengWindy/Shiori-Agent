@@ -44,6 +44,8 @@ _OUTBOUND_METADATA_PREFIX = "outbound:metadata:"
 _OUTBOUND_MEDIA_PREFIX = "outbound:media:"
 _ASSISTANT_FIXED_FIELDS = {"tools_used", "tool_chain", "reasoning_content"}
 _USER_FIXED_FIELDS = {"media"}
+_PERSISTED_USER_CONTENT_METADATA_KEY = "persisted_user_content"
+_INTERNAL_USER_METADATA_KEYS = frozenset({_PERSISTED_USER_CONTENT_METADATA_KEY})
 
 
 def _build_synced_message_metadata(
@@ -53,6 +55,8 @@ def _build_synced_message_metadata(
     metadata: dict[str, Any] | None,
 ) -> dict[str, Any]:
     next_metadata = dict(metadata or {})
+    for key in _INTERNAL_USER_METADATA_KEYS:
+        next_metadata.pop(key, None)
     if channel == "desktop":
         next_metadata.setdefault("source", "desktop")
     else:
@@ -148,9 +152,11 @@ class _PersistUserMessageModule:
         if isinstance(llm_context_frame, str) and llm_context_frame.strip():
             user_kwargs["llm_context_frame"] = llm_context_frame
         user_kwargs.update(_collect_persist_user_slots(frame.slots))
+        persisted_user_content = msg.metadata.get(_PERSISTED_USER_CONTENT_METADATA_KEY)
+        user_content = persisted_user_content if isinstance(persisted_user_content, str) else msg.content
         session.add_message(
             "user",
-            msg.content,
+            user_content,
             media=msg.media if msg.media else None,
             **user_kwargs,
         )

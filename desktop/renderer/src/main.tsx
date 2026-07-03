@@ -33,6 +33,7 @@ import { cx } from "./shared/styles";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
 import type {
   AppMainView,
+  ChatReplyTarget,
   EventLog,
   NewRoleFormState,
   PendingRoleCardAction,
@@ -176,6 +177,7 @@ function App(): React.ReactElement {
   const [activeRoleId, setActiveRoleId] = useState("");
   const [activeSession, setActiveSession] = useState<SessionPayload | null>(null);
   const [draft, setDraft] = useState("");
+  const [chatReplyTarget, setChatReplyTarget] = useState<ChatReplyTarget | null>(null);
   const [pendingChatAttachments, setPendingChatAttachments] = useState<string[]>([]);
   const [events, setEvents] = useState<EventLog[]>([]);
   const [error, setError] = useState("");
@@ -1030,6 +1032,9 @@ function App(): React.ReactElement {
   ): Promise<void> {
     const requestId = openRoleRequestIdRef.current + 1;
     openRoleRequestIdRef.current = requestId;
+    if (activeRoleIdRef.current !== roleId) {
+      setChatReplyTarget(null);
+    }
     const role = roleOverride ?? roles.find((item) => item.id === roleId) ?? null;
     if (role) {
       applyRoleSnapshot(role);
@@ -1097,10 +1102,51 @@ function App(): React.ReactElement {
     setPendingChatAttachments((current) => current.filter((item) => item !== path));
   }
 
+  async function copyChatMessage(content: string): Promise<void> {
+    const normalizedContent = content.trim();
+    if (!normalizedContent) {
+      setNotice("当前消息没有可复制的文本。");
+      return;
+    }
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(normalizedContent);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = normalizedContent;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      setNotice("已复制消息。");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function quoteChatMessage(target: ChatReplyTarget): void {
+    setChatReplyTarget((current) => (
+      current
+      && current.messageId === target.messageId
+      && current.content === target.content
+      && current.sender === target.sender
+      ? current
+      : target
+    ));
+  }
+
+  function clearChatReplyTarget(): void {
+    setChatReplyTarget((current) => (current ? null : current));
+  }
+
   async function sendMessage(contentOverride?: string): Promise<void> {
     const draftValue = contentOverride ?? draftRef.current;
     const content = draftValue.trim();
     const media = normalizeChatAttachmentPaths(pendingChatAttachmentsRef.current);
+    const replyTarget = chatReplyTarget;
     const roleId = activeRoleIdRef.current;
     const previousSession = activeSessionRef.current;
     const sessionKey = previousSession?.key ?? "";
@@ -1109,20 +1155,28 @@ function App(): React.ReactElement {
     setError("");
     setDraft("");
     draftRef.current = "";
+    setChatReplyTarget(null);
     setPendingChatAttachments([]);
     pendingChatAttachmentsRef.current = [];
     setActiveSession((current) =>
       current?.key === sessionKey
         ? {
             ...current,
-            messages: [...current.messages, buildOptimisticUserChatMessage(content, media)],
+            messages: [...current.messages, buildOptimisticUserChatMessage(content, media, replyTarget)],
           }
         : current,
     );
     try {
       const res = await window.miraDesktop.invoke({
         method: "chat.send",
-        payload: { role_id: roleId, content, media },
+        payload: {
+          role_id: roleId,
+          content,
+          media,
+          reply_to_message_id: replyTarget?.messageId ?? "",
+          reply_to_content: replyTarget?.content ?? "",
+          reply_to_sender: replyTarget?.sender ?? "",
+        },
       });
       if (res.error) {
         setSending(false);
@@ -1138,6 +1192,7 @@ function App(): React.ReactElement {
         }
         setDraft(draftValue);
         draftRef.current = draftValue;
+        setChatReplyTarget(replyTarget);
         setPendingChatAttachments(media);
         pendingChatAttachmentsRef.current = media;
         setError(res.error.message);
@@ -1163,6 +1218,7 @@ function App(): React.ReactElement {
       }
       setDraft(draftValue);
       draftRef.current = draftValue;
+      setChatReplyTarget(replyTarget);
       setPendingChatAttachments(media);
       pendingChatAttachmentsRef.current = media;
       const message = error instanceof Error ? error.message : String(error);
@@ -1777,6 +1833,7 @@ function App(): React.ReactElement {
               highlightedMessageKey={highlightedMessageKey}
               notice={notice}
               pendingChatAttachments={pendingChatAttachments}
+              chatReplyTarget={chatReplyTarget}
               sending={sending}
               visibleIllustrationUrl={visibleIllustrationUrl}
               onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
@@ -1786,6 +1843,9 @@ function App(): React.ReactElement {
               onOpenChatImagePreview={openChatImagePreview}
               onPickChatAttachments={() => void pickChatAttachments()}
               onOpenRoleDetail={() => void openRoleDetail(activeRoleId)}
+              onClearChatReplyTarget={clearChatReplyTarget}
+              onCopyMessage={(content) => void copyChatMessage(content)}
+              onQuoteMessage={quoteChatMessage}
               onRemovePendingChatAttachment={removePendingChatAttachment}
               onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}

@@ -6,6 +6,7 @@ import {
   buildOptimisticUserChatMessage,
   canSubmitChatMessage,
   normalizeChatAttachmentPaths,
+  summarizeChatReplyContent,
 } from "./chatComposerState";
 
 describe("normalizeChatAttachmentPaths", () => {
@@ -37,5 +38,33 @@ describe("buildOptimisticUserChatMessage", () => {
         media: ["D:\\files\\note.md", "D:\\files\\pic.png"],
       },
     );
+  });
+
+  it("includes reply metadata on optimistic user messages", () => {
+    assert.deepEqual(
+      buildOptimisticUserChatMessage("  继续  ", [], {
+        messageId: "message-1",
+        sender: "Mira",
+        content: "她停顿了一下。",
+        preview: "她停顿了一下。",
+      }),
+      {
+        role: "user",
+        content: "继续",
+        metadata: {
+          reply_to_message_id: "message-1",
+          reply_to_content: "她停顿了一下。",
+          reply_to_sender: "Mira",
+        },
+      },
+    );
+  });
+});
+
+describe("summarizeChatReplyContent", () => {
+  it("compacts whitespace and truncates long reply previews", () => {
+    const preview = summarizeChatReplyContent(`  ${"a".repeat(120)}\n next `);
+
+    assert.equal(preview, `${"a".repeat(96)}...`);
   });
 });

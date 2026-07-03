@@ -621,25 +621,26 @@ class AgentLoop:
         stream_events: bool = False,
         disabled_tools: list[str] | None = None,
         media: list[str] | None = None,
+        metadata: dict[str, object] | None = None,
     ) -> str:
-        metadata: dict[str, object] = {}
+        merged_metadata: dict[str, object] = dict(metadata or {})
         if omit_user_turn:
-            metadata["omit_user_turn"] = True
+            merged_metadata["omit_user_turn"] = True
         if skip_post_memory:
-            metadata["skip_post_memory"] = True
+            merged_metadata["skip_post_memory"] = True
         if skip_memory_retrieval:
-            metadata["skip_memory_retrieval"] = True
+            merged_metadata["skip_memory_retrieval"] = True
         if not stream_events:
-            metadata["suppress_stream_events"] = True
+            merged_metadata["suppress_stream_events"] = True
         if disabled_tools:
-            metadata["disabled_tools"] = list(disabled_tools)
+            merged_metadata["disabled_tools"] = list(disabled_tools)
         msg = InboundMessage(
             channel=channel,
             sender="user",
             chat_id=chat_id,
             content=content,
             media=list(media or []),
-            metadata=metadata,
+            metadata=merged_metadata,
         )
         response = await self._process(
             msg,

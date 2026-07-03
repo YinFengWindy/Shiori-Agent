@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChatSurface } from "./ChatSurface";
-import type { RoleRecord, SessionPayload } from "../shared/types";
+import type { ChatReplyTarget, RoleRecord, SessionPayload } from "../shared/types";
 
 function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
   return {
@@ -43,6 +43,7 @@ function renderChatSurface(
     draft?: string;
     pendingChatAttachments?: string[];
     activeSession?: SessionPayload;
+    chatReplyTarget?: ChatReplyTarget | null;
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -63,6 +64,7 @@ function renderChatSurface(
       highlightedMessageKey=""
       notice=""
       pendingChatAttachments={options.pendingChatAttachments ?? []}
+      chatReplyTarget={options.chatReplyTarget ?? null}
       sending={false}
       visibleIllustrationUrl=""
       onBeginChatLatestImageSidebarResize={() => undefined}
@@ -72,6 +74,9 @@ function renderChatSurface(
       onOpenChatImagePreview={() => undefined}
       onPickChatAttachments={() => undefined}
       onOpenRoleDetail={() => undefined}
+      onClearChatReplyTarget={() => undefined}
+      onCopyMessage={() => undefined}
+      onQuoteMessage={() => undefined}
       onRemovePendingChatAttachment={() => undefined}
       onSendMessage={() => undefined}
       onToggleChatLatestImageSidebar={() => undefined}
@@ -121,6 +126,42 @@ describe("ChatSurface", () => {
 
     assert.match(markup, />yinfeng-chat-history\.md</);
     assert.doesNotMatch(markup, />附件</);
+  });
+
+  it("renders the pending reply target above the composer", () => {
+    const markup = renderChatSurface(createRole(), "mira", {
+      chatReplyTarget: {
+        messageId: "message-1",
+        sender: "Mira",
+        content: "她停顿了一下，然后把声音放轻。",
+        preview: "她停顿了一下，然后把声音放轻。",
+      },
+    });
+
+    assert.match(markup, />Mira</);
+    assert.match(markup, />她停顿了一下，然后把声音放轻。</);
+    assert.match(markup, /aria-label="取消引用"/);
+  });
+
+  it("renders persisted reply previews inside message bubbles", () => {
+    const session = createSession();
+    session.messages = [
+      {
+        role: "user",
+        content: "继续",
+        metadata: {
+          reply_to_message_id: "message-1",
+          reply_to_sender: "Mira",
+          reply_to_content: "她停顿了一下，然后把声音放轻。",
+        },
+      },
+    ];
+
+    const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
+
+    assert.match(markup, />Mira</);
+    assert.match(markup, />她停顿了一下，然后把声音放轻。</);
+    assert.match(markup, />继续</);
   });
 
   it("allows sending when attachments exist even if the draft is empty", () => {

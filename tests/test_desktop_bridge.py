@@ -128,6 +128,87 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    event_bus = EventBus()
+    seen: dict[str, object] = {}
+
+    async def _process_direct(
+        content: str,
+        *,
+        session_key: str,
+        media: list[str],
+        metadata: dict[str, object],
+        **kwargs,
+    ) -> str:
+        seen["content"] = content
+        seen["metadata"] = dict(metadata)
+        session = session_manager.get_or_create(session_key)
+        session.add_message(
+            "user",
+            str(metadata.get("persisted_user_content") or content),
+            media=media or None,
+            metadata={
+                key: value
+                for key, value in metadata.items()
+                if key != "persisted_user_content"
+            },
+        )
+        session.add_message("assistant", "继续")
+        await session_manager.save_async(session)
+        return "继续"
+
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=event_bus,
+    )
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "chat.send",
+            "payload": {
+                "role_id": role.id,
+                "content": "再展开一点",
+                "reply_to_message_id": "message-1",
+                "reply_to_content": "她沉默了很久。",
+                "reply_to_sender": "Mira",
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert response.error is None
+    assert seen["content"] == (
+        "【你正在回复一条历史消息】\n"
+        "被回复消息（来自 Mira）：\n"
+        "她沉默了很久。\n\n"
+        "【你当前新消息】\n"
+        "再展开一点"
+    )
+    assert seen["metadata"] == {
+        "reply_to_message_id": "message-1",
+        "reply_to_sender": "Mira",
+        "reply_to_content": "她沉默了很久。",
+        "persisted_user_content": "再展开一点",
+    }
+    user_message = response.payload["session"]["messages"][0]
+    assert user_message["content"] == "再展开一点"
+    assert user_message["metadata"]["reply_to_message_id"] == "message-1"
+    assert user_message["metadata"]["reply_to_content"] == "她沉默了很久。"
+
+
+@pytest.mark.asyncio
 async def test_desktop_bridge_role_create_generates_initial_self(tmp_path: Path):
     role_store = RoleStore(tmp_path)
     session_manager = SessionManager(tmp_path)

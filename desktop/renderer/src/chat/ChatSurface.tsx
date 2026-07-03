@@ -2,11 +2,19 @@ import type React from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isChatImageAsset } from "./chatImageHistory";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
-import { canSubmitChatMessage } from "./chatComposerState";
+import { canSubmitChatMessage, summarizeChatReplyContent } from "./chatComposerState";
 import { formatTimestamp, toFileUrl } from "../shared/format";
-import { DeleteIcon, DocumentIcon, PlusIcon, SendIcon } from "../shared/icons";
+import { CopyIcon, DeleteIcon, DocumentIcon, PlusIcon, QuoteIcon, SendIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
-import type { RoleRecord, SessionPayload } from "../shared/types";
+import type { ChatReplyTarget, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
+
+type MessageContextMenuState = {
+  x: number;
+  y: number;
+  message: SessionMessage;
+  messageKey: string;
+  sender: string;
+};
 
 type ChatSurfaceProps = {
   activeRole: RoleRecord | null;
@@ -25,6 +33,7 @@ type ChatSurfaceProps = {
   highlightedMessageKey: string;
   notice: string;
   pendingChatAttachments: string[];
+  chatReplyTarget: ChatReplyTarget | null;
   sending: boolean;
   visibleIllustrationUrl: string;
   onBeginChatLatestImageSidebarResize: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -34,6 +43,9 @@ type ChatSurfaceProps = {
   onOpenChatImagePreview: (path: string) => void;
   onPickChatAttachments: () => void;
   onOpenRoleDetail: () => void;
+  onClearChatReplyTarget: () => void;
+  onCopyMessage: (content: string) => void;
+  onQuoteMessage: (target: ChatReplyTarget) => void;
   onRemovePendingChatAttachment: (path: string) => void;
   onSendMessage: (contentOverride?: string) => void;
   onToggleChatLatestImageSidebar: () => void;
@@ -58,6 +70,7 @@ export function ChatSurface({
   highlightedMessageKey,
   notice,
   pendingChatAttachments,
+  chatReplyTarget,
   sending,
   visibleIllustrationUrl,
   onBeginChatLatestImageSidebarResize,
@@ -67,6 +80,9 @@ export function ChatSurface({
   onOpenChatImagePreview,
   onPickChatAttachments,
   onOpenRoleDetail,
+  onClearChatReplyTarget,
+  onCopyMessage,
+  onQuoteMessage,
   onRemovePendingChatAttachment,
   onSendMessage,
   onToggleChatLatestImageSidebar,
@@ -77,6 +93,7 @@ export function ChatSurface({
   const previousMessageCountRef = useRef(0);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
+  const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 
@@ -131,6 +148,31 @@ export function ChatSurface({
     const timer = window.setTimeout(() => setChatLatestImageSidebarMounted(false), 240);
     return () => window.clearTimeout(timer);
   }, [chatLatestImageSidebarCollapsed]);
+
+  useEffect(() => {
+    if (!messageContextMenu) return undefined;
+
+    const closeContextMenu = () => setMessageContextMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeContextMenu();
+      }
+    };
+
+    window.addEventListener("click", closeContextMenu);
+    window.addEventListener("contextmenu", closeContextMenu);
+    window.addEventListener("scroll", closeContextMenu, true);
+    window.addEventListener("resize", closeContextMenu);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("click", closeContextMenu);
+      window.removeEventListener("contextmenu", closeContextMenu);
+      window.removeEventListener("scroll", closeContextMenu, true);
+      window.removeEventListener("resize", closeContextMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [messageContextMenu]);
 
   useEffect(() => {
     previousMessageCountRef.current = activeSession?.messages.length ?? 0;
@@ -224,6 +266,70 @@ export function ChatSurface({
     return attachmentName.slice(dotIndex + 1).toUpperCase();
   }
 
+  function getMessageCopyText(message: SessionMessage): string {
+    const content = message.content.trim();
+    if (content) return content;
+    const media = Array.isArray(message.media) ? message.media.filter((item) => item.trim()) : [];
+    return media.join("\n");
+  }
+
+  function getMessageReplyContent(message: SessionMessage): string {
+    const content = message.content.trim();
+    if (content) return content;
+    const media = Array.isArray(message.media) ? message.media.filter((item) => item.trim()) : [];
+    if (!media.length) return "";
+    return media.some((item) => isChatImageAsset(item)) ? "[图片]" : "[附件]";
+  }
+
+  function getStoredReplyPreview(message: SessionMessage): ChatReplyTarget | null {
+    const metadata = message.metadata ?? {};
+    const replyContent = String(metadata.reply_to_content ?? "").trim();
+    if (!replyContent) return null;
+    const messageId = String(metadata.reply_to_message_id ?? "").trim();
+    const sender = String(metadata.reply_to_sender ?? "").trim();
+    return {
+      messageId,
+      content: replyContent,
+      sender,
+      preview: summarizeChatReplyContent(replyContent),
+    };
+  }
+
+  function openMessageContextMenu(
+    event: React.MouseEvent<HTMLElement>,
+    message: SessionMessage,
+    messageKey: string,
+    sender: string,
+  ): void {
+    event.preventDefault();
+    setMessageContextMenu({
+      x: Math.min(event.clientX, Math.max(12, window.innerWidth - 148)),
+      y: Math.min(event.clientY, Math.max(12, window.innerHeight - 84)),
+      message,
+      messageKey,
+      sender,
+    });
+  }
+
+  function copyContextMessage(): void {
+    if (!messageContextMenu) return;
+    onCopyMessage(getMessageCopyText(messageContextMenu.message));
+    setMessageContextMenu(null);
+  }
+
+  function quoteContextMessage(): void {
+    if (!messageContextMenu) return;
+    const content = getMessageReplyContent(messageContextMenu.message);
+    if (!content) return;
+    onQuoteMessage({
+      messageId: messageContextMenu.messageKey,
+      content,
+      sender: messageContextMenu.sender,
+      preview: summarizeChatReplyContent(content),
+    });
+    setMessageContextMenu(null);
+  }
+
   return (
     <section className="chat-surface relative grid h-full min-h-0 grid-cols-[minmax(0,1fr)_auto] overflow-hidden bg-[var(--chat-bg)]">
       <button
@@ -242,6 +348,34 @@ export function ChatSurface({
           )}
         />
       </button>
+      {messageContextMenu ? (
+        <div
+          className="fixed z-50 min-w-[132px] overflow-hidden rounded-md border border-[#E4E7EC] bg-white py-1 text-sm text-[#1F2937] shadow-[0_16px_40px_rgba(15,23,42,0.16)]"
+          style={{ left: messageContextMenu.x, top: messageContextMenu.y }}
+          role="menu"
+        >
+          <button
+            className="flex h-8 w-full items-center gap-2 px-3 text-left transition hover:bg-[#F5F7FA] focus:bg-[#F5F7FA] focus:outline-none disabled:cursor-default disabled:opacity-45"
+            type="button"
+            role="menuitem"
+            onClick={copyContextMessage}
+            disabled={!getMessageCopyText(messageContextMenu.message)}
+          >
+            <CopyIcon className="h-[14px] w-[14px] stroke-current" />
+            <span>复制</span>
+          </button>
+          <button
+            className="flex h-8 w-full items-center gap-2 px-3 text-left transition hover:bg-[#F5F7FA] focus:bg-[#F5F7FA] focus:outline-none disabled:cursor-default disabled:opacity-45"
+            type="button"
+            role="menuitem"
+            onClick={quoteContextMessage}
+            disabled={!getMessageReplyContent(messageContextMenu.message) || sending}
+          >
+            <QuoteIcon className="h-[14px] w-[14px] stroke-current" />
+            <span>引用</span>
+          </button>
+        </div>
+      ) : null}
       <div className="relative grid h-full min-h-0 grid-rows-chat overflow-hidden">
       {hasIllustration ? (
         <div
@@ -302,11 +436,12 @@ export function ChatSurface({
             {activeSession?.messages.map((message, index) => {
               const isUser = message.role === "user";
               const isError = message.role === "error";
-              const authorLabel = isError ? "系统提示" : (activeRole?.name || "Agent");
+              const authorLabel = isError ? "系统提示" : (isUser ? "你" : (activeRole?.name || "Agent"));
               const messageKey = String(message.id ?? `${message.role}-${index}`);
               const isHighlighted = highlightedMessageKey === messageKey;
               const sourceLabel = getMessageSourceLabel(message);
               const media = Array.isArray(message.media) ? message.media : [];
+              const storedReplyPreview = getStoredReplyPreview(message);
               const bubbleClass = isError
                 ? "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(176,58,58,0.22)] bg-[rgba(255,244,244,0.96)] px-3.5 py-2.5 text-left text-[#8f2d2d] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
                 : isUser
@@ -322,6 +457,7 @@ export function ChatSurface({
                   isHighlighted && "message-hit-anchor",
                   isUser ? "ml-auto translate-x-[2px] text-right" : "mr-auto -translate-x-[2px]",
                 )}
+                onContextMenu={(event) => openMessageContextMenu(event, message, messageKey, authorLabel)}
               >
                 <div className={cx("message-row flex items-start gap-3", isUser && "flex-row-reverse")}>
                   {!isUser ? (
@@ -344,6 +480,14 @@ export function ChatSurface({
                       </div>
                     ) : null}
                     <div className={cx(bubbleClass, isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10")}>
+                      {storedReplyPreview ? (
+                        <div className="mb-2 max-w-[420px] border-l-2 border-[#AEB7C5] pl-2.5 text-left">
+                          {storedReplyPreview.sender ? (
+                            <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{storedReplyPreview.sender}</div>
+                          ) : null}
+                          <div className="line-clamp-2 text-[12px] leading-5 text-[#7B8190]">{storedReplyPreview.preview}</div>
+                        </div>
+                      ) : null}
                       <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
                       {media.length ? (
                         <div className="mt-3 grid gap-2">
@@ -407,6 +551,23 @@ export function ChatSurface({
               </div>
             ) : null}
             <div className="composer grid w-full flex-none gap-1.5 rounded-[18px] border border-[#E4E4E4] bg-[#FFFEFF] px-3 pb-2 pt-2.5">
+              {chatReplyTarget ? (
+                <div className="flex min-w-0 items-start gap-2 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-2.5 py-2 text-left">
+                  <div className="min-w-0 flex-1 border-l-2 border-[#AEB7C5] pl-2.5">
+                    <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{chatReplyTarget.sender || "历史消息"}</div>
+                    <div className="line-clamp-2 text-[12px] leading-5 text-[#4B5563]">{chatReplyTarget.preview}</div>
+                  </div>
+                  <button
+                    className="grid h-6 w-6 flex-none place-items-center rounded-md border-0 bg-transparent p-0 text-[#7C8797] transition hover:bg-black/5 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
+                    type="button"
+                    aria-label="取消引用"
+                    onClick={onClearChatReplyTarget}
+                    disabled={sending}
+                  >
+                    <DeleteIcon className="h-[10px] w-[10px] fill-current" />
+                  </button>
+                </div>
+              ) : null}
               {pendingChatAttachments.length ? (
                 <div className="flex flex-wrap gap-2">
                   {pendingChatAttachments.map((path) => (
