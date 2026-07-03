@@ -88,21 +88,20 @@ export function DocumentIcon({ className = "h-4 w-4 stroke-current" }: DesktopIc
 }
 
 /** Renders the shared desktop copy glyph. */
-export function CopyIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+export function CopyIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProps) {
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
-      <rect x="8" y="7" width="10" height="12" rx="2.5" strokeWidth="1.7" />
-      <path d="M6.5 15.5H6A2.5 2.5 0 0 1 3.5 13V6A2.5 2.5 0 0 1 6 3.5h7A2.5 2.5 0 0 1 15.5 6v.5" strokeWidth="1.7" strokeLinecap="round" />
+    <svg viewBox="0 0 1024 1024" className={className} aria-hidden="true">
+      <path d="M337.28 138.688a27.968 27.968 0 0 0-27.968 27.968v78.72h377.344c50.816 0 92.032 41.152 92.032 91.968v377.344h78.656a28.032 28.032 0 0 0 27.968-28.032V166.656a28.032 28.032 0 0 0-27.968-27.968H337.28z m441.408 640v78.656c0 50.816-41.216 91.968-92.032 91.968H166.656a92.032 92.032 0 0 1-91.968-91.968V337.28c0-50.816 41.152-92.032 91.968-92.032h78.72V166.656c0-50.816 41.152-91.968 91.968-91.968h520c50.816 0 91.968 41.152 91.968 91.968v520c0 50.816-41.152 92.032-91.968 92.032h-78.72zM166.656 309.312a27.968 27.968 0 0 0-27.968 28.032v520c0 15.424 12.544 27.968 27.968 27.968h520a28.032 28.032 0 0 0 28.032-27.968V337.28a28.032 28.032 0 0 0-28.032-28.032H166.656z" />
     </svg>
   );
 }
 
 /** Renders the shared desktop quote glyph. */
-export function QuoteIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+export function QuoteIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProps) {
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
-      <path d="M9.25 7.5H7a3.5 3.5 0 0 0-3.5 3.5v1.25A3.25 3.25 0 0 0 6.75 15.5H9a1 1 0 0 1 1 1V18a2.5 2.5 0 0 1-2.5 2.5" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M20.5 7.5h-2.25a3.5 3.5 0 0 0-3.5 3.5v1.25A3.25 3.25 0 0 0 18 15.5h2.25a1 1 0 0 1 1 1V18a2.5 2.5 0 0 1-2.5 2.5" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 1024 1024" className={className} aria-hidden="true">
+      <path d="M128 472.896h341.344v341.344H128zM128 472.896L272.096 192h110.08l-144.128 280.896z" />
+      <path d="M544 472.896h341.344v341.344H544zM544 472.896L688.096 192h110.08l-144.128 280.896z" />
     </svg>
   );
 }
