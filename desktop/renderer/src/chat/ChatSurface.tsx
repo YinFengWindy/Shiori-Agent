@@ -127,7 +127,7 @@ export function ChatSurface({
   const chatContentTrackClass = "mx-auto w-full max-w-[860px] px-5 md:px-6";
   const composerTrackClass = "mx-auto w-full max-w-[700px] px-5 md:px-6";
   const sidebarNavButtonClass =
-    "pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-transparent bg-transparent text-[#4B5563] transition hover:border-[#C9D3DF] hover:bg-white/92 hover:text-[#1F2937] focus:outline-none focus:border-[#C9D3DF] focus:bg-white/92 disabled:cursor-default disabled:opacity-40";
+    "pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-transparent bg-transparent text-[#4B5563] transition hover:border-black hover:bg-white/92 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40";
   const assistantMessageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(228,228,228,0.66)] bg-[rgba(255,255,255,0.48)] px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-[10px] transition-colors duration-150 group-hover:bg-[rgba(255,255,255,0.72)]";
   const userMessageBubbleClass =
