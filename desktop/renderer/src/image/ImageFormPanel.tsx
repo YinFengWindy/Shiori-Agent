@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toFileUrl } from "../shared/format";
 import { DeleteIcon, ResetIcon, UploadIcon } from "../shared/icons";
 import { cx, inputClass, textareaClass } from "../shared/styles";
@@ -76,6 +76,7 @@ export function ImageFormPanel({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const rolePanelRef = useRef<HTMLDivElement | null>(null);
   const settingsPanelRef = useRef<HTMLDivElement | null>(null);
+  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectClass = cx(
     inputClass,
     "h-11 appearance-none bg-white py-0 pr-10 text-sm leading-5",
@@ -115,6 +116,13 @@ export function ImageFormPanel({
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, []);
+
+  useLayoutEffect(() => {
+    const textarea = promptTextareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [promptTab, form.prompt, form.negativePrompt]);
 
   function formatSliderValue(value: number): string {
     return value.toFixed(2).replace(/\.?0+$/, "");
@@ -178,8 +186,8 @@ export function ImageFormPanel({
 
       <div className="grid gap-2">
         <div className="rounded-[18px] border border-[#E4EAF0] bg-white p-3">
-          <div className="mb-3 flex flex-wrap items-start gap-3">
-            <div className={segmentedControlClassName}>
+          <div className="mb-3 flex items-start gap-2">
+            <div className={cx(segmentedControlClassName, "max-w-[calc(100%-2.75rem)]")}>
               <button
                 type="button"
                 className={cx(
@@ -205,7 +213,7 @@ export function ImageFormPanel({
                 <span className="block truncate">Undesired Content</span>
               </button>
             </div>
-            <div className="relative flex w-full justify-end" ref={settingsPanelRef}>
+            <div className="relative ml-auto flex-none" ref={settingsPanelRef}>
               <button
                 type="button"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-primary/40 hover:text-[#20242A] focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -284,6 +292,7 @@ export function ImageFormPanel({
             </div>
           </div>
           <textarea
+            ref={promptTextareaRef}
             className={promptTextareaClass}
             value={promptTab === "prompt" ? form.prompt : form.negativePrompt}
             onChange={(event) => (
