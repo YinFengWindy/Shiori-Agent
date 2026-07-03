@@ -422,7 +422,7 @@ export function ChatSurface({
               />
               <div className="composer-actions flex items-center gap-2">
                 <button
-                  className="grid h-[30px] w-[30px] place-items-center rounded-full border-0 bg-transparent p-0 text-[#4B5563] transition hover:bg-black/5 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
+                  className="grid h-[30px] w-[30px] place-items-center rounded-full border-0 bg-transparent p-0 text-[#4B5563] transition focus:outline-none disabled:cursor-default disabled:opacity-40"
                   type="button"
                   aria-label="添加附件"
                   onClick={onPickChatAttachments}
