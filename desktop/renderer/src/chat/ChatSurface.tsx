@@ -26,6 +26,7 @@ type ChatSurfaceProps = {
   onBeginChatLatestImageSidebarResize: (event: React.PointerEvent<HTMLDivElement>) => void;
   onGoToNextChatImage: () => void;
   onGoToPreviousChatImage: () => void;
+  onOpenChatImageLightbox: () => void;
   onOpenChatImagePreview: (path: string) => void;
   onSendMessage: (contentOverride?: string) => void;
   onToggleChatLatestImageSidebar: () => void;
@@ -54,6 +55,7 @@ export function ChatSurface({
   onBeginChatLatestImageSidebarResize,
   onGoToNextChatImage,
   onGoToPreviousChatImage,
+  onOpenChatImageLightbox,
   onOpenChatImagePreview,
   onSendMessage,
   onToggleChatLatestImageSidebar,
@@ -380,11 +382,18 @@ export function ChatSurface({
                   </button>
                 </div>
                 {chatLatestImagePath ? (
-                  <img
-                    className="max-h-full max-w-full object-contain"
-                    src={toFileUrl(chatLatestImagePath)}
-                    alt="selected message image"
-                  />
+                  <button
+                    className="grid h-full w-full place-items-center border-0 bg-transparent p-0"
+                    type="button"
+                    aria-label="放大查看当前聊天图片"
+                    onClick={onOpenChatImageLightbox}
+                  >
+                    <img
+                      className="max-h-full max-w-full object-contain"
+                      src={toFileUrl(chatLatestImagePath)}
+                      alt="selected message image"
+                    />
+                  </button>
                 ) : (
                   <div className="grid gap-2 px-6 text-center">
                     <div className="mx-auto h-10 w-10 rounded-[14px] border border-[#D6DCE5] bg-white/70" />

@@ -3,6 +3,7 @@ import { startTransition, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { ChatSurface } from "./chat/ChatSurface";
+import { ChatImageLightbox } from "./chat/ChatImageLightbox";
 import {
   collectChatImageHistory,
   findChatImageHistoryIndex,
@@ -194,6 +195,7 @@ function App(): React.ReactElement {
     defaultCollapsed: true,
   });
   const [selectedChatImagePath, setSelectedChatImagePath] = useState("");
+  const [chatImageLightboxOpen, setChatImageLightboxOpen] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const latestChatImageRef = useRef<{ sessionKey: string; latestPath: string }>({ sessionKey: "", latestPath: "" });
@@ -581,6 +583,15 @@ function App(): React.ReactElement {
     if (!cleanPath) return;
     setSelectedChatImagePath(cleanPath);
     chatLatestImageSidebar.open();
+  }
+
+  function openSelectedChatImageLightbox(): void {
+    if (!resolvedChatImagePath) return;
+    setChatImageLightboxOpen(true);
+  }
+
+  function closeSelectedChatImageLightbox(): void {
+    setChatImageLightboxOpen(false);
   }
 
   function selectPreviousChatImage(): void {
@@ -1459,6 +1470,13 @@ function App(): React.ReactElement {
   }, [activeSession?.key, latestChatGeneratedImagePath]);
 
   useEffect(() => {
+    if (resolvedChatImagePath) return;
+    if (chatImageLightboxOpen) {
+      setChatImageLightboxOpen(false);
+    }
+  }, [chatImageLightboxOpen, resolvedChatImagePath]);
+
+  useEffect(() => {
     if (previewIllustrations.length === 0) {
       if (activeIllustration) {
         setActiveIllustration("");
@@ -1633,6 +1651,7 @@ function App(): React.ReactElement {
               onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
               onGoToNextChatImage={selectNextChatImage}
               onGoToPreviousChatImage={selectPreviousChatImage}
+              onOpenChatImageLightbox={openSelectedChatImageLightbox}
               onOpenChatImagePreview={openChatImagePreview}
               onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
@@ -1756,6 +1775,11 @@ function App(): React.ReactElement {
           setPendingDeleteRoleId("");
         }}
         onConfirm={() => void confirmDeleteRole()}
+      />
+      <ChatImageLightbox
+        imagePath={resolvedChatImagePath}
+        open={chatImageLightboxOpen}
+        onClose={closeSelectedChatImageLightbox}
       />
     </div>
   );
