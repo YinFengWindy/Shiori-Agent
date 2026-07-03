@@ -95,6 +95,7 @@ class AgentTickFactory:
                 rng=self._deps.rng,
                 recent_proactive_fn=recent_proactive_fn,
                 drift_pipeline=drift_pipeline,
+                target_transport_fn=self._deps.sense.target_transport,
                 tool_hooks=self._deps.tool_hooks,
             )
         )

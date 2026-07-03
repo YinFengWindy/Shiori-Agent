@@ -288,6 +288,33 @@ def test_sensor_role_target_requires_explicit_transport_when_multiple_bindings_a
         _ = sensor.target_transport()
 
 
+def test_sensor_role_target_supports_desktop_without_binding(tmp_path: Path):
+    session_manager = SessionManager(tmp_path)
+    role_service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = role_service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+
+    sensor = Sensor(
+        cfg=SimpleNamespace(default_role_id="mira", default_channel="desktop", default_chat_id="", recent_chat_messages=5),
+        sessions=session_manager,
+        state=SimpleNamespace(),
+        memory=None,
+        presence=None,
+        rng=None,
+        role_bindings=role_service.bindings,
+    )
+
+    assert sensor.target_transport() == ("desktop", "role:mira")
+
+
 def test_session_get_history_skips_cached_llm_frame_by_default():
     session = Session("cli:1")
     session.add_message("user", "old")

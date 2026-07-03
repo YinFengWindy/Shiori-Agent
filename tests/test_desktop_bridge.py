@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
 from core.integrations.novelai.models import (
@@ -311,6 +312,48 @@ async def test_desktop_bridge_chat_listeners_are_removed_after_send(tmp_path: Pa
 
     assert event_bus._handlers.get(StreamDeltaReady, []) == []
     assert event_bus._handlers.get(TurnCommitted, []) == []
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_emits_session_updated_for_background_desktop_push(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.open_role_session(
+        role.id,
+        role_name=role.name,
+    )
+    session.add_message("assistant", "主动消息", proactive=True)
+    await session_manager.save_async(session)
+    push_tool = MessagePushTool()
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+        push_tool=push_tool,
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+
+    result = await push_tool.execute(
+        channel="desktop",
+        chat_id=role.id,
+        message="主动消息",
+    )
+
+    assert "已发送" in result
+    assert len(emitted) == 1
+    assert emitted[0]["method"] == "session.updated"
+    messages = emitted[0]["payload"]["session"]["messages"]
+    assert messages[-1]["content"] == "主动消息"
+    assert messages[-1]["metadata"]["proactive"] is True
 
 
 @pytest.mark.asyncio

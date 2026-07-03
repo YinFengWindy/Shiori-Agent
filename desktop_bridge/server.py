@@ -23,22 +23,32 @@ class DesktopBridgeServer:
             event_bus=runtime.event_bus,
             config=getattr(runtime, "config", None),
             novelai_store=NovelAIStore(runtime.session_manager.workspace),
+            push_tool=getattr(runtime, "push_tool", None),
         )
 
     async def serve_streams(self, *, read_line, write_payload) -> None:
-        async def _emit_event(payload: dict[str, Any]) -> None:
-            await write_payload(payload)
+        write_lock = asyncio.Lock()
 
-        while True:
-            raw = await read_line()
-            if raw is None:
-                break
-            raw = raw.strip()
-            if not raw:
-                continue
-            request = json.loads(raw)
-            response = await self.service.handle(request, emit_event=_emit_event)
-            await write_payload(response.to_dict())
+        async def _emit_event(payload: dict[str, Any]) -> None:
+            async with write_lock:
+                await write_payload(payload)
+
+        self.service.add_event_listener(_emit_event)
+
+        try:
+            while True:
+                raw = await read_line()
+                if raw is None:
+                    break
+                raw = raw.strip()
+                if not raw:
+                    continue
+                request = json.loads(raw)
+                response = await self.service.handle(request, emit_event=_emit_event)
+                async with write_lock:
+                    await write_payload(response.to_dict())
+        finally:
+            self.service.remove_event_listener(_emit_event)
 
     async def serve_stdio(self) -> None:
         async def _read_line() -> str | None:

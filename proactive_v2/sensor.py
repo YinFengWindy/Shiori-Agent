@@ -77,6 +77,10 @@ class Sensor:
     def target_transport(self) -> tuple[str, str]:
         default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
         if default_role_id:
+            preferred_channel = str(getattr(self._cfg, "default_channel", "") or "").strip()
+            preferred_chat_id = str(getattr(self._cfg, "default_chat_id", "") or "").strip()
+            if preferred_channel == "desktop":
+                return preferred_channel, preferred_chat_id or f"role:{default_role_id}"
             if self._role_bindings is None:
                 raise RuntimeError(f"default_role_id 缺少 binding 服务: {default_role_id}")
             role_bindings = [
@@ -86,8 +90,6 @@ class Sensor:
             ]
             if not role_bindings:
                 raise KeyError(f"default_role_id 未绑定 transport: {default_role_id}")
-            preferred_channel = str(getattr(self._cfg, "default_channel", "") or "").strip()
-            preferred_chat_id = str(getattr(self._cfg, "default_chat_id", "") or "").strip()
             if preferred_channel and preferred_chat_id:
                 for binding in role_bindings:
                     if (

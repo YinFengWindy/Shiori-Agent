@@ -277,6 +277,7 @@ class ProactiveTurnPipelineDeps:
     rng: Any | None
     recent_proactive_fn: Callable[[], list] | None
     drift_pipeline: DriftTurnPipeline | None
+    target_transport_fn: Callable[[], tuple[str, str]] | None = None
     tool_hooks: list[ToolHook] | None = None
 
 
@@ -316,6 +317,7 @@ class ProactiveTurnPipeline:
         self._rng = deps.rng if deps.rng is not None else _random_module.Random()
         self._recent_proactive_fn = deps.recent_proactive_fn
         self._drift_pipeline = deps.drift_pipeline
+        self._target_transport_fn = deps.target_transport_fn
         self._tool_executor = ToolExecutor(deps.tool_hooks or [])
 
         # 1. drift_pipeline 的 step_recorder 指向本 pipeline 的记录方法。
@@ -457,10 +459,12 @@ class ProactiveTurnPipeline:
     def _gate_check(self, ctx: AgentTickContext) -> GateResult:
         """准入检查：逐条件判断本轮是否应该启动主动处理。"""
 
-        # 1.1 没有目标 chat_id → 跳过。
-        if not str(self._cfg.default_chat_id or "").strip():
+        # 1.1 没有可解析的目标 transport → 跳过。
+        transport = self._resolve_target_transport()
+        if transport is None:
             logger.debug("[proactive_v2] gate: no chat_id → blocked")
             return GateResult(blocked=True, reason="no_target", base_score=None)
+        ctx.target_channel, ctx.target_chat_id = transport
 
         # 1.2 被动链路忙 → 不打扰。
         if self._passive_busy_fn and self._passive_busy_fn(self._session_key):
@@ -933,14 +937,38 @@ class ProactiveTurnPipeline:
         self._record_tick_log_finish(ctx, result=decision.result)
         if self._turn_orchestrator is None:
             raise RuntimeError("proactive turn_orchestrator is required")
+        target_channel = str(ctx.target_channel or "").strip()
+        target_chat_id = str(ctx.target_chat_id or "").strip()
+        if not target_channel or not target_chat_id:
+            transport = self._resolve_target_transport()
+            if transport is None:
+                raise RuntimeError("proactive target transport unavailable at delivery time")
+            target_channel, target_chat_id = transport
         # 5.2 再统一交给 TurnOrchestrator。
         await self._turn_orchestrator.handle_proactive_turn(
             result=decision.result,
             session_key=self._session_key,
-            channel=str(self._cfg.default_channel or "").strip(),
-            chat_id=str(self._cfg.default_chat_id or "").strip(),
+            channel=target_channel,
+            chat_id=target_chat_id,
         )
         return 0.0
+
+    def _resolve_target_transport(self) -> tuple[str, str] | None:
+        if self._target_transport_fn is not None:
+            try:
+                channel, chat_id = self._target_transport_fn()
+            except Exception as exc:
+                logger.debug("[proactive_v2] target_transport unavailable: %s", exc)
+            else:
+                resolved_channel = str(channel or "").strip()
+                resolved_chat_id = str(chat_id or "").strip()
+                if resolved_channel and resolved_chat_id:
+                    return resolved_channel, resolved_chat_id
+        fallback_channel = str(self._cfg.default_channel or "").strip()
+        fallback_chat_id = str(self._cfg.default_chat_id or "").strip()
+        if fallback_channel and fallback_chat_id:
+            return fallback_channel, fallback_chat_id
+        return None
 
     # ── drift 收尾 ────────────────────────────────────────────────────
 

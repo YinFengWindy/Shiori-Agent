@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from agent.looping.core import AgentLoop
+from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
 from core.integrations.novelai import NovelAIClient, NovelAIService, NovelAIStore
@@ -29,6 +31,7 @@ class DesktopBridgeService:
         config: Any = None,
         novelai_service: NovelAIService | None = None,
         novelai_store: NovelAIStore | None = None,
+        push_tool: MessagePushTool | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -36,6 +39,7 @@ class DesktopBridgeService:
         self.agent_loop = agent_loop
         self.event_bus = event_bus
         self.config = config
+        self._event_listeners: set[Callable[[dict[str, Any]], Awaitable[None] | None]] = set()
         self._self_seed_generator = self._build_self_seed_generator()
         self.role_service = role_service or RoleAggregateService.from_runtime(
             workspace=workspace,
@@ -45,6 +49,38 @@ class DesktopBridgeService:
         )
         self.novelai_store = novelai_store or NovelAIStore(workspace)
         self.novelai_service = novelai_service or self._build_novelai_service()
+        if push_tool is not None:
+            self.register_desktop_push_channel(push_tool)
+
+    def add_event_listener(
+        self,
+        listener: Callable[[dict[str, Any]], Awaitable[None] | None],
+    ) -> None:
+        self._event_listeners.add(listener)
+
+    def remove_event_listener(
+        self,
+        listener: Callable[[dict[str, Any]], Awaitable[None] | None],
+    ) -> None:
+        self._event_listeners.discard(listener)
+
+    def register_desktop_push_channel(self, push_tool: MessagePushTool) -> None:
+        """Registers the desktop proactive transport against the bridge event stream."""
+
+        async def _emit_session_for_chat(chat_id: str) -> None:
+            session_key = self._normalize_desktop_session_key(chat_id)
+            session = self.session_manager.get_or_create(session_key)
+            await self._broadcast_session_updated(
+                request_id="proactive",
+                session=session,
+            )
+
+        push_tool.register_channel(
+            "desktop",
+            text=lambda chat_id, _message: _emit_session_for_chat(chat_id),
+            file=lambda chat_id, _file_path, _name=None: _emit_session_for_chat(chat_id),
+            image=lambda chat_id, _image_path: _emit_session_for_chat(chat_id),
+        )
 
     async def handle(
         self,
@@ -460,6 +496,11 @@ class DesktopBridgeService:
         if inspect.isawaitable(result):
             await result
 
+    async def _broadcast_event(self, payload: dict[str, Any]) -> None:
+        listeners = list(self._event_listeners)
+        for listener in listeners:
+            await self._emit_event(listener, payload)
+
     async def _emit_session_updated(
         self,
         *,
@@ -474,6 +515,28 @@ class DesktopBridgeService:
             payload={"session": self._serialize_session(session)},
         )
         await self._emit_event(emit_event, event.to_dict())
+
+    async def _broadcast_session_updated(
+        self,
+        *,
+        request_id: str,
+        session: Session,
+    ) -> None:
+        event = BridgeEvent(
+            id=request_id,
+            type="event",
+            method="session.updated",
+            payload={"session": self._serialize_session(session)},
+        )
+        await self._broadcast_event(event.to_dict())
+
+    def _normalize_desktop_session_key(self, chat_id: str) -> str:
+        normalized = str(chat_id or "").strip()
+        if normalized.startswith("role:"):
+            return normalized
+        if normalized:
+            return self.role_service.sessions.derive_session_key(normalized)
+        raise ValueError("desktop proactive chat_id 不能为空")
 
     def _serialize_role(self, role) -> dict[str, Any]:
         payload = role.to_dict()

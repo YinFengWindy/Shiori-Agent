@@ -64,6 +64,16 @@ async def test_passive_busy_receives_session_key():
     assert received == ["my_session"]
 
 
+@pytest.mark.asyncio
+async def test_target_transport_allows_role_only_desktop_target():
+    tick = make_proactive_pipeline(
+        cfg=cfg_with(default_channel="desktop", default_chat_id=""),
+        target_transport_fn=lambda: ("desktop", "role:mira"),
+    )
+    result = await tick.run()
+    assert result is not None
+
+
 # ── delivery_cooldown ─────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
