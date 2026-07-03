@@ -97,6 +97,10 @@ export function ImageFormPanel({
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, []);
 
+  function formatSliderValue(value: number): string {
+    return value.toFixed(2).replace(/\.?0+$/, "");
+  }
+
   return (
     <section className="grid min-h-0 min-w-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-[#FBFCFE] p-5">
       <div className="relative" ref={rolePanelRef}>
@@ -307,14 +311,14 @@ export function ImageFormPanel({
                     <label className="grid gap-2">
                       <div className="flex items-center justify-between gap-3 text-[13px] font-semibold text-white">
                         <span>Strength</span>
-                        <span className="text-white/80">{form.strength.toFixed(1)}</span>
+                        <span className="text-white/80">{formatSliderValue(form.strength)}</span>
                       </div>
                       <input
                         className="accent-white"
                         type="range"
                         min="0.01"
                         max="1"
-                        step="0.1"
+                        step="0.01"
                         value={form.strength}
                         onChange={(event) => onChange({ strength: Number(event.target.value) })}
                       />
@@ -322,14 +326,14 @@ export function ImageFormPanel({
                     <label className="grid gap-2">
                       <div className="flex items-center justify-between gap-3 text-[13px] font-semibold text-white">
                         <span>Noise</span>
-                        <span className="text-white/80">{form.noise.toFixed(1)}</span>
+                        <span className="text-white/80">{formatSliderValue(form.noise)}</span>
                       </div>
                       <input
                         className="accent-white"
                         type="range"
                         min="0"
                         max="0.99"
-                        step="0.1"
+                        step="0.01"
                         value={form.noise}
                         onChange={(event) => onChange({ noise: Number(event.target.value) })}
                       />
