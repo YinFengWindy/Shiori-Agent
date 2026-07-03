@@ -36,7 +36,14 @@ function createSession(): SessionPayload {
   };
 }
 
-function renderChatSurface(activeRole: RoleRecord | null, activeRoleId: string): string {
+function renderChatSurface(
+  activeRole: RoleRecord | null,
+  activeRoleId: string,
+  options: {
+    draft?: string;
+    pendingChatAttachments?: string[];
+  } = {},
+): string {
   return renderToStaticMarkup(
     <ChatSurface
       activeRole={activeRole}
@@ -50,10 +57,11 @@ function renderChatSurface(activeRole: RoleRecord | null, activeRoleId: string):
       chatLatestImageSidebarCount={0}
       chatLatestImageSidebarWidth={320}
       conversationEndRef={React.createRef<HTMLDivElement>()}
-      draft=""
+      draft={options.draft ?? ""}
       headerTitle={activeRole?.name ?? "Mira"}
       highlightedMessageKey=""
       notice=""
+      pendingChatAttachments={options.pendingChatAttachments ?? []}
       sending={false}
       visibleIllustrationUrl=""
       onBeginChatLatestImageSidebarResize={() => undefined}
@@ -61,7 +69,9 @@ function renderChatSurface(activeRole: RoleRecord | null, activeRoleId: string):
       onGoToPreviousChatImage={() => undefined}
       onOpenChatImageLightbox={() => undefined}
       onOpenChatImagePreview={() => undefined}
+      onPickChatAttachments={() => undefined}
       onOpenRoleDetail={() => undefined}
+      onRemovePendingChatAttachment={() => undefined}
       onSendMessage={() => undefined}
       onToggleChatLatestImageSidebar={() => undefined}
       onUpdateDraft={() => undefined}
@@ -82,5 +92,24 @@ describe("ChatSurface", () => {
 
     assert.doesNotMatch(markup, /data-testid="chat-header-avatar-button"/);
     assert.doesNotMatch(markup, /aria-label="查看角色 .* 详情"/);
+  });
+
+  it("renders the chat attachment picker and pending attachment labels", () => {
+    const markup = renderChatSurface(createRole(), "mira", {
+      pendingChatAttachments: ["D:\\files\\scene.png", "D:\\files\\notes.md"],
+    });
+
+    assert.match(markup, /aria-label="添加附件"/);
+    assert.match(markup, />scene\.png</);
+    assert.match(markup, />notes\.md</);
+  });
+
+  it("allows sending when attachments exist even if the draft is empty", () => {
+    const markup = renderChatSurface(createRole(), "mira", {
+      pendingChatAttachments: ["D:\\files\\notes.md"],
+    });
+
+    assert.match(markup, /aria-label="发送消息"/);
+    assert.doesNotMatch(markup, /aria-label="发送消息"[^>]*disabled=""/);
   });
 });

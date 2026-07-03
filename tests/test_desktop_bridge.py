@@ -35,14 +35,16 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
         channel: str,
         chat_id: str,
         stream_events: bool,
+        media: list[str],
         **kwargs,
     ) -> str:
         assert session_key == f"role:{role_id}"
         assert channel == "desktop"
         assert chat_id == f"role:{role_id}"
         assert stream_events is True
+        assert media == ["D:\\files\\scene.png"]
         session = session_manager.get_or_create(session_key)
-        session.add_message("user", content)
+        session.add_message("user", content, media=media or None)
         session.add_message("assistant", "hello")
         await session_manager.save_async(session)
         await event_bus.observe(
@@ -108,7 +110,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
         {
             "id": "3",
             "method": "chat.send",
-            "payload": {"role_id": role_id, "content": "hi"},
+            "payload": {"role_id": role_id, "content": "hi", "media": ["D:\\files\\scene.png"]},
         },
         emit_event=emitted.append,
     )
@@ -116,6 +118,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
     assert response.error is None
     assert response.payload["session"]["key"] == f"role:{role_id}"
     assert [item["role"] for item in response.payload["session"]["messages"]] == ["user", "assistant"]
+    assert response.payload["session"]["messages"][0]["media"] == ["D:\\files\\scene.png"]
     methods = [item["method"] for item in emitted]
     assert methods == ["session.updated", "chat.delta", "chat.done", "session.updated"]
     delta_event = next(item for item in emitted if item["method"] == "chat.delta")
@@ -312,6 +315,97 @@ async def test_desktop_bridge_chat_listeners_are_removed_after_send(tmp_path: Pa
 
     assert event_bus._handlers.get(StreamDeltaReady, []) == []
     assert event_bus._handlers.get(TurnCommitted, []) == []
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_chat_send_accepts_media_only(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    event_bus = EventBus()
+
+    async def _process_direct(
+        content: str,
+        *,
+        session_key: str,
+        media: list[str],
+        **kwargs,
+    ) -> str:
+        assert content == ""
+        assert media == ["D:\\files\\notes.md"]
+        session = session_manager.get_or_create(session_key)
+        session.add_message("user", content, media=media or None)
+        session.add_message("assistant", "收到")
+        await session_manager.save_async(session)
+        await event_bus.observe(
+            TurnCommitted(
+                session_key=session_key,
+                channel="desktop",
+                chat_id=session_key,
+                input_message=content,
+                persisted_user_message=content,
+                assistant_response="收到",
+                tools_used=[],
+                thinking=None,
+            )
+        )
+        return "收到"
+
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=event_bus,
+    )
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "chat.send",
+            "payload": {"role_id": role.id, "content": "", "media": ["D:\\files\\notes.md"]},
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert response.error is None
+    assert response.payload["session"]["messages"][0]["media"] == ["D:\\files\\notes.md"]
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_chat_send_rejects_empty_content_and_media(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "chat.send",
+            "payload": {"role_id": role.id, "content": "", "media": []},
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert response.error is not None
+    assert response.error.code == "invalid_request"
+    assert response.error.message == "content 和 media 不能同时为空"
 
 
 @pytest.mark.asyncio

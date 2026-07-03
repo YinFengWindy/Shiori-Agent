@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { IpcMainInvokeEvent } from "electron";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
@@ -160,6 +160,31 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
         {
           name: "Images",
           extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+        },
+      ],
+    });
+    if (result.canceled) {
+      return [];
+    }
+    return result.filePaths;
+  });
+  ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
+    if (process.env.MIRA_DESKTOP_PICK_IMAGES_FIXTURE === "1") {
+      const fixtureDir = resolve(desktopRoot, ".smoke-fixtures");
+      mkdirSync(fixtureDir, { recursive: true });
+      const sourceImagePath = resolve(desktopRoot, "..", "assets", "akashic-qq.jpg");
+      const imagePath = resolve(fixtureDir, "chat-image-smoke.jpg");
+      const textPath = resolve(fixtureDir, "chat-note-smoke.md");
+      copyFileSync(sourceImagePath, imagePath);
+      writeFileSync(textPath, "# smoke attachment\n\nfixture note\n", { encoding: "utf-8" });
+      return options?.multiple ? [imagePath, textPath] : [imagePath];
+    }
+    const result = await dialog.showOpenDialog({
+      properties: options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],
+      filters: [
+        {
+          name: "Chat Attachments",
+          extensions: ["png", "jpg", "jpeg", "webp", "gif", "md", "txt"],
         },
       ],
     });

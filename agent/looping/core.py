@@ -620,6 +620,7 @@ class AgentLoop:
         skip_memory_retrieval: bool = False,
         stream_events: bool = False,
         disabled_tools: list[str] | None = None,
+        media: list[str] | None = None,
     ) -> str:
         metadata: dict[str, object] = {}
         if omit_user_turn:
@@ -637,6 +638,7 @@ class AgentLoop:
             sender="user",
             chat_id=chat_id,
             content=content,
+            media=list(media or []),
             metadata=metadata,
         )
         response = await self._process(

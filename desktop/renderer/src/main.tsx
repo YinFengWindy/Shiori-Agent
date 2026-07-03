@@ -5,6 +5,10 @@ import { flushSync } from "react-dom";
 import { ChatSurface } from "./chat/ChatSurface";
 import { ChatImageLightbox } from "./chat/ChatImageLightbox";
 import {
+  buildOptimisticUserChatMessage,
+  normalizeChatAttachmentPaths,
+} from "./chat/chatComposerState";
+import {
   collectChatImageHistory,
   findChatImageHistoryEntry,
   findChatImageHistoryIndex,
@@ -172,6 +176,7 @@ function App(): React.ReactElement {
   const [activeRoleId, setActiveRoleId] = useState("");
   const [activeSession, setActiveSession] = useState<SessionPayload | null>(null);
   const [draft, setDraft] = useState("");
+  const [pendingChatAttachments, setPendingChatAttachments] = useState<string[]>([]);
   const [events, setEvents] = useState<EventLog[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -231,6 +236,7 @@ function App(): React.ReactElement {
   const navigationHistoryRef = useRef<NavigationEntry[]>([]);
   const navigationHistoryIndexRef = useRef(-1);
   const draftRef = useRef("");
+  const pendingChatAttachmentsRef = useRef<string[]>([]);
   const roleFormRef = useRef<RoleFormState>(createEmptyRoleForm());
   const newRoleFormRef = useRef<NewRoleFormState>(createEmptyNewRoleForm());
   const lastNonSettingsViewRef = useRef<AppMainView>({ kind: "chat" });
@@ -256,6 +262,10 @@ function App(): React.ReactElement {
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
+
+  useEffect(() => {
+    pendingChatAttachmentsRef.current = pendingChatAttachments;
+  }, [pendingChatAttachments]);
 
   useEffect(() => {
     if (mainView.kind !== "settings") {
@@ -1075,28 +1085,44 @@ function App(): React.ReactElement {
     }
   }
 
+  async function pickChatAttachments(): Promise<void> {
+    const files = await window.miraDesktop.pickChatAttachments({ multiple: true });
+    if (!files.length) {
+      return;
+    }
+    setPendingChatAttachments((current) => normalizeChatAttachmentPaths([...current, ...files]));
+  }
+
+  function removePendingChatAttachment(path: string): void {
+    setPendingChatAttachments((current) => current.filter((item) => item !== path));
+  }
+
   async function sendMessage(contentOverride?: string): Promise<void> {
-    const content = (contentOverride ?? draftRef.current).trim();
+    const draftValue = contentOverride ?? draftRef.current;
+    const content = draftValue.trim();
+    const media = normalizeChatAttachmentPaths(pendingChatAttachmentsRef.current);
     const roleId = activeRoleIdRef.current;
     const previousSession = activeSessionRef.current;
     const sessionKey = previousSession?.key ?? "";
-    if (!content || !roleId || !sessionKey) return;
+    if ((!content && media.length === 0) || !roleId || !sessionKey) return;
     setSending(true);
     setError("");
     setDraft("");
     draftRef.current = "";
+    setPendingChatAttachments([]);
+    pendingChatAttachmentsRef.current = [];
     setActiveSession((current) =>
       current?.key === sessionKey
         ? {
             ...current,
-            messages: [...current.messages, { role: "user", content }],
+            messages: [...current.messages, buildOptimisticUserChatMessage(content, media)],
           }
         : current,
     );
     try {
       const res = await window.miraDesktop.invoke({
         method: "chat.send",
-        payload: { role_id: roleId, content },
+        payload: { role_id: roleId, content, media },
       });
       if (res.error) {
         setSending(false);
@@ -1110,6 +1136,10 @@ function App(): React.ReactElement {
             current?.key === sessionKey ? previousSession : current,
           );
         }
+        setDraft(draftValue);
+        draftRef.current = draftValue;
+        setPendingChatAttachments(media);
+        pendingChatAttachmentsRef.current = media;
         setError(res.error.message);
         appendSessionErrorMessage(sessionKey, res.error.message);
         return;
@@ -1131,6 +1161,10 @@ function App(): React.ReactElement {
           current?.key === sessionKey ? previousSession : current,
         );
       }
+      setDraft(draftValue);
+      draftRef.current = draftValue;
+      setPendingChatAttachments(media);
+      pendingChatAttachmentsRef.current = media;
       const message = error instanceof Error ? error.message : String(error);
       setError(message);
       appendSessionErrorMessage(sessionKey, message);
@@ -1742,6 +1776,7 @@ function App(): React.ReactElement {
               headerTitle={headerTitle}
               highlightedMessageKey={highlightedMessageKey}
               notice={notice}
+              pendingChatAttachments={pendingChatAttachments}
               sending={sending}
               visibleIllustrationUrl={visibleIllustrationUrl}
               onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
@@ -1749,7 +1784,9 @@ function App(): React.ReactElement {
               onGoToPreviousChatImage={selectPreviousChatImage}
               onOpenChatImageLightbox={openSelectedChatImageLightbox}
               onOpenChatImagePreview={openChatImagePreview}
+              onPickChatAttachments={() => void pickChatAttachments()}
               onOpenRoleDetail={() => void openRoleDetail(activeRoleId)}
+              onRemovePendingChatAttachment={removePendingChatAttachment}
               onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
               onUpdateDraft={setDraft}

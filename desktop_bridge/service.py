@@ -291,14 +291,21 @@ class DesktopBridgeService:
             if method == "chat.send":
                 role_id = str(payload.get("role_id") or "").strip()
                 content = str(payload.get("content") or "").strip()
-                if not content:
-                    return self._error(request_id, method, "invalid_request", "content 不能为空")
+                raw_media = payload.get("media")
+                media = (
+                    [str(item).strip() for item in raw_media if str(item).strip()]
+                    if isinstance(raw_media, list)
+                    else []
+                )
+                if not content and not media:
+                    return self._error(request_id, method, "invalid_request", "content 和 media 不能同时为空")
                 aggregate = await self.role_service.open_role_async(role_id)
                 session = aggregate.session
                 session, events = await self._run_chat_turn(
                     request_id=request_id,
                     session_key=session.key,
                     content=content,
+                    media=media,
                     emit_event=emit_event,
                 )
                 return self._ok(
@@ -405,6 +412,7 @@ class DesktopBridgeService:
         request_id: str,
         session_key: str,
         content: str,
+        media: list[str],
         emit_event,
     ) -> tuple[Session, list[BridgeEvent]]:
         collected: list[BridgeEvent] = []
@@ -452,6 +460,7 @@ class DesktopBridgeService:
                 session_key=session_key,
                 channel="desktop",
                 chat_id=session_key,
+                media=media,
                 stream_events=True,
             )
             await asyncio.sleep(0)

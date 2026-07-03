@@ -13,6 +13,9 @@ const api: DesktopApi = {
   pickImages(options) {
     return ipcRenderer.invoke("desktop:pick-images", options) as Promise<string[]>;
   },
+  pickChatAttachments(options) {
+    return ipcRenderer.invoke("desktop:pick-chat-attachments", options) as Promise<string[]>;
+  },
   bridgeStatus() {
     return ipcRenderer.invoke("desktop:bridge-status") as Promise<{ running: boolean; lastError: string | null }>;
   },

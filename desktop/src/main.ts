@@ -1,8 +1,9 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { extname, isAbsolute, resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { app, BrowserWindow, protocol } from "electron";
+import { getLocalAssetMimeType } from "./assetMime.js";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 import { startBridge, wireBridgeEvents } from "./bridgeLifecycle.js";
 import { registerDesktopIpc } from "./ipc.js";
@@ -11,13 +12,6 @@ import { createDesktopWindow } from "./window.js";
 
 const bridge = new DesktopBridgeClient();
 const assetScheme = "mira-asset";
-const assetMimeTypes = new Map([
-  [".gif", "image/gif"],
-  [".jpg", "image/jpeg"],
-  [".jpeg", "image/jpeg"],
-  [".png", "image/png"],
-  [".webp", "image/webp"],
-]);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -57,11 +51,11 @@ function ensureDesktopConfig(): void {
   copyFileSync(templatePath, configPath);
 }
 
-async function loadLocalImageAsset(assetPath: string): Promise<Response> {
+async function loadLocalAsset(assetPath: string): Promise<Response> {
   if (!isAbsolute(assetPath)) {
     return new Response("asset path must be absolute", { status: 400 });
   }
-  const mimeType = assetMimeTypes.get(extname(assetPath).toLowerCase());
+  const mimeType = getLocalAssetMimeType(assetPath);
   if (!mimeType) {
     return new Response("unsupported asset type", { status: 415 });
   }
@@ -80,7 +74,7 @@ function registerAssetProtocol(): void {
     if (!assetPath) {
       return new Response("missing asset path", { status: 400 });
     }
-    return await loadLocalImageAsset(assetPath);
+    return await loadLocalAsset(assetPath);
   });
 }
 
