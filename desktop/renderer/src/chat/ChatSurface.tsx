@@ -28,6 +28,7 @@ type ChatSurfaceProps = {
   onGoToPreviousChatImage: () => void;
   onOpenChatImageLightbox: () => void;
   onOpenChatImagePreview: (path: string) => void;
+  onOpenRoleDetail: () => void;
   onSendMessage: (contentOverride?: string) => void;
   onToggleChatLatestImageSidebar: () => void;
   onUpdateDraft: (value: string) => void;
@@ -57,6 +58,7 @@ export function ChatSurface({
   onGoToPreviousChatImage,
   onOpenChatImageLightbox,
   onOpenChatImagePreview,
+  onOpenRoleDetail,
   onSendMessage,
   onToggleChatLatestImageSidebar,
   onUpdateDraft,
@@ -139,6 +141,8 @@ export function ChatSurface({
   const hasChatImageHistory = chatLatestImageSidebarCount > 0;
   const canGoToPreviousChatImage = chatLatestImagePosition > 1;
   const canGoToNextChatImage = hasChatImageHistory && chatLatestImagePosition < chatLatestImageSidebarCount;
+  const canOpenRoleDetail = Boolean(activeRole && activeRoleId);
+  const detailRole = canOpenRoleDetail ? activeRole : null;
 
   const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter") return;
@@ -154,6 +158,11 @@ export function ChatSurface({
     const container = conversationListRef.current;
     if (!container) return;
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+  };
+
+  const handleOpenRoleDetail = () => {
+    if (!canOpenRoleDetail) return;
+    onOpenRoleDetail();
   };
 
   function getMessageSourceLabel(message: SessionPayload["messages"][number]): string | null {
@@ -200,7 +209,27 @@ export function ChatSurface({
         </div>
       ) : null}
       <header className="chat-header relative z-[1] flex min-w-0 items-center gap-3 border-b border-[#E4E4E4] bg-[rgba(255,255,255,0.55)] pl-[23px] pr-6 backdrop-blur-[3px]" data-testid="session-hero">
-        {activeRole?.avatar_abs ? (
+        {detailRole ? (
+          <button
+            className="rounded-full transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            type="button"
+            aria-label={`查看角色 ${detailRole.name} 详情`}
+            data-testid="chat-header-avatar-button"
+            onClick={handleOpenRoleDetail}
+          >
+            {detailRole.avatar_abs ? (
+              <img
+                className={headerAvatarClass}
+                src={toFileUrl(detailRole.avatar_abs)}
+                alt={`${detailRole.name} avatar`}
+              />
+            ) : (
+              <span className={cx(headerAvatarClass, "chat-header-avatar-fallback bg-[#f6f6f6] text-sm font-bold text-[#333333]")}>
+                {detailRole.name.slice(0, 1).toUpperCase()}
+              </span>
+            )}
+          </button>
+        ) : activeRole?.avatar_abs ? (
           <img
             className={headerAvatarClass}
             src={toFileUrl(activeRole.avatar_abs)}

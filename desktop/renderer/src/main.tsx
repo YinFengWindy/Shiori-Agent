@@ -1679,6 +1679,7 @@ function App(): React.ReactElement {
               onGoToPreviousChatImage={selectPreviousChatImage}
               onOpenChatImageLightbox={openSelectedChatImageLightbox}
               onOpenChatImagePreview={openChatImagePreview}
+              onOpenRoleDetail={() => void openRoleDetail(activeRoleId)}
               onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
               onUpdateDraft={setDraft}
