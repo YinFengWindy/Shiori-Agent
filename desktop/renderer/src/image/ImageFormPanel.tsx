@@ -104,11 +104,11 @@ export function ImageFormPanel({
   }, []);
 
   return (
-    <section className="grid min-h-0 min-w-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-[#FBFCFE] p-5 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
+    <section className="grid min-h-0 min-w-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-[#FBFCFE] p-5">
       <div className="relative" ref={rolePanelRef}>
         <button
           type="button"
-          className="flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-[#D8DCE2] bg-white px-3 pr-4 text-left shadow-sm transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-[#D8DCE2] bg-white px-3 pr-4 text-left transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
           aria-expanded={rolePanelOpen}
           onClick={() => setRolePanelOpen((current) => !current)}
         >
@@ -129,7 +129,7 @@ export function ImageFormPanel({
           </svg>
         </button>
         {rolePanelOpen ? (
-          <div className="absolute inset-x-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-[#D8DCE2] bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.12)]">
+          <div className="absolute inset-x-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-[#D8DCE2] bg-white p-2">
             <div className="grid gap-1">
               {roleItems.map((item) => (
                 <button
@@ -201,9 +201,9 @@ export function ImageFormPanel({
                 </svg>
               </button>
               {settingsOpen ? (
-                <div className="absolute inset-x-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-[#D6DCE3] bg-[#F3F5F7] p-4 shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
+                <div className="absolute inset-x-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-[#D6DCE3] bg-[#F3F5F7] p-4">
                   <div className="mb-4 flex items-center gap-2 border-b border-[#D6DCE3] pb-3">
-                    <div className="rounded-md bg-white px-2 py-1 text-xs font-medium text-[#20242A] shadow-sm">Settings</div>
+                    <div className="rounded-md bg-white px-2 py-1 text-xs font-medium text-[#20242A]">Settings</div>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-semibold text-[#20242A]">NSFW</div>
@@ -275,9 +275,9 @@ export function ImageFormPanel({
                 : onChange({ negativePrompt: event.target.value })
             )}
           />
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-[#E7EAF0] pt-3">
-            <div className="truncate text-[15px] text-[#5B616A]">{getFileLabel(form.baseImagePath)}</div>
-            <div className="flex items-center gap-2">
+          <div className="mt-3 flex min-w-0 items-center justify-between gap-3 border-t border-[#E7EAF0] pt-3">
+            <div className="min-w-0 flex-1 truncate text-[15px] text-[#5B616A]">{getFileLabel(form.baseImagePath)}</div>
+            <div className="flex flex-none items-center gap-2">
               {form.baseImagePath ? (
                 <button
                   type="button"
