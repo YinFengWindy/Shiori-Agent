@@ -15,8 +15,13 @@ type RegisterDesktopIpcOptions = {
 
 /** Registers all IPC handlers exposed through the desktop preload bridge. */
 export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOptions): void {
-  const transparentDragIcon = nativeImage.createFromDataURL(
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wn0n7kAAAAASUVORK5CYII=",
+  const dragPreviewIcon = nativeImage.createFromDataURL(
+    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'>"
+      + "<rect x='6' y='3' width='20' height='26' rx='4' fill='#ffffff' stroke='#b8c0cc' stroke-width='1.5'/>"
+      + "<path d='M11 11h10M11 16h10M11 21h7' stroke='#7b8794' stroke-width='1.8' stroke-linecap='round'/>"
+      + "</svg>",
+    )}`,
   );
 
   ipcMain.handle("desktop:invoke", async (_event: IpcMainInvokeEvent, request: { method: string; payload: Record<string, unknown> }) => {
@@ -29,7 +34,7 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     }
     event.sender.startDrag({
       file: filePath,
-      icon: transparentDragIcon,
+      icon: dragPreviewIcon,
     });
   });
   ipcMain.handle("desktop:bridge-status", async () => {
