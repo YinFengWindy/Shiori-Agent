@@ -231,14 +231,14 @@ class NovelAIService:
 
     def _resolve_img2img_strength(self, request: GenerateImageRequest) -> float:
         value = _DEFAULT_IMG2IMG_STRENGTH if request.strength is None else float(request.strength)
-        if value < 0 or value > 1:
-            raise ValueError("strength 必须在 0 到 1 之间")
+        if value < 0.01 or value > 1:
+            raise ValueError("strength 必须在 0.01 到 1 之间")
         return value
 
     def _resolve_img2img_noise(self, request: GenerateImageRequest) -> float:
         value = _DEFAULT_IMG2IMG_NOISE if request.noise is None else float(request.noise)
-        if value < 0 or value > 1:
-            raise ValueError("noise 必须在 0 到 1 之间")
+        if value < 0 or value > 0.99:
+            raise ValueError("noise 必须在 0 到 0.99 之间")
         return value
 
     def _build_parameters(

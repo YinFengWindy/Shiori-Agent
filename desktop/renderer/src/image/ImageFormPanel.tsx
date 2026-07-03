@@ -280,8 +280,8 @@ export function ImageFormPanel({
                 />
                 <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4">
                   <div className="min-w-0">
-                    <div className="text-[20px] font-semibold leading-none tracking-[-0.02em] text-white">Image2Image</div>
-                    <div className="mt-1 text-[12px] text-white/72">Transform your image.</div>
+                    <div className="text-[18px] font-semibold leading-none tracking-[-0.02em] text-white">Image2Image</div>
+                    <div className="mt-1 text-[11px] text-white/72">Transform your image.</div>
                   </div>
                   <div className="flex flex-none items-center gap-2">
                     <button
@@ -312,7 +312,7 @@ export function ImageFormPanel({
                       <input
                         className="accent-white"
                         type="range"
-                        min="0"
+                        min="0.01"
                         max="1"
                         step="0.1"
                         value={form.strength}
@@ -328,7 +328,7 @@ export function ImageFormPanel({
                         className="accent-white"
                         type="range"
                         min="0"
-                        max="1"
+                        max="0.99"
                         step="0.1"
                         value={form.noise}
                         onChange={(event) => onChange({ noise: Number(event.target.value) })}
