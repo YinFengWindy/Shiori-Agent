@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { clampChatImageZoom, getNextChatImageZoom } from "./chatImageLightboxState";
 import { toFileUrl } from "../shared/format";
 
@@ -24,6 +24,14 @@ export function ChatImageLightbox({
   onGoToPrevious,
 }: ChatImageLightboxProps) {
   const [zoom, setZoom] = useState(1);
+  const [dragging, setDragging] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const dragStateRef = useRef<{
+    originX: number;
+    originY: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
   const navigationButtonClass =
     "pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-transparent bg-transparent text-[#4B5563] transition hover:border-black hover:bg-white/92 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40";
 
@@ -59,7 +67,54 @@ export function ChatImageLightbox({
   useEffect(() => {
     if (!open) return;
     setZoom(1);
+    setOffset({ x: 0, y: 0 });
+    dragStateRef.current = null;
+    setDragging(false);
   }, [imagePath, open]);
+
+  useEffect(() => {
+    if (zoom > 1) return;
+    dragStateRef.current = null;
+    setDragging(false);
+    setOffset((currentOffset) => (
+      currentOffset.x === 0 && currentOffset.y === 0
+        ? currentOffset
+        : { x: 0, y: 0 }
+    ));
+  }, [zoom]);
+
+  useEffect(() => {
+    if (!dragging) return undefined;
+
+    function handlePointerMove(event: PointerEvent): void {
+      const dragState = dragStateRef.current;
+      if (!dragState) return;
+
+      const nextOffset = {
+        x: dragState.originX + event.clientX - dragState.startX,
+        y: dragState.originY + event.clientY - dragState.startY,
+      };
+      setOffset((currentOffset) => (
+        currentOffset.x === nextOffset.x && currentOffset.y === nextOffset.y
+          ? currentOffset
+          : nextOffset
+      ));
+    }
+
+    function stopDragging(): void {
+      dragStateRef.current = null;
+      setDragging(false);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopDragging);
+    window.addEventListener("pointercancel", stopDragging);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopDragging);
+      window.removeEventListener("pointercancel", stopDragging);
+    };
+  }, [dragging]);
 
   if (!open || !imagePath) {
     return null;
@@ -68,6 +123,18 @@ export function ChatImageLightbox({
   function handleWheel(event: React.WheelEvent<HTMLDivElement>): void {
     event.preventDefault();
     setZoom((currentZoom) => getNextChatImageZoom(currentZoom, event.deltaY));
+  }
+
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>): void {
+    if (zoom <= 1 || event.button !== 0) return;
+    event.preventDefault();
+    dragStateRef.current = {
+      originX: offset.x,
+      originY: offset.y,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    setDragging(true);
   }
 
   return (
@@ -99,8 +166,9 @@ export function ChatImageLightbox({
             </button>
           </div>
           <div
-            className="grid h-full w-full min-h-0 min-w-0 place-items-center transition-transform duration-150"
-            style={{ transform: `scale(${clampChatImageZoom(zoom)})` }}
+            className={`grid h-full w-full min-h-0 min-w-0 place-items-center transition-transform duration-150 ${zoom > 1 ? (dragging ? "cursor-grabbing" : "cursor-grab") : "cursor-default"}`}
+            style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${clampChatImageZoom(zoom)})` }}
+            onPointerDown={handlePointerDown}
           >
             <img
               className="block h-full w-full min-h-0 min-w-0 object-contain"
