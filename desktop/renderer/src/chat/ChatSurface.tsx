@@ -393,21 +393,43 @@ export function ChatSurface({
               {pendingChatAttachments.length ? (
                 <div className="flex flex-wrap gap-2">
                   {pendingChatAttachments.map((path) => (
-                    <span
-                      key={path}
-                      className="inline-flex max-w-full items-center gap-2 rounded-md border border-black/8 bg-[#F6F7FA] px-2.5 py-1 text-[12px] text-[#4B5563]"
-                    >
-                      <span className="truncate">{getAttachmentName(path)}</span>
-                      <button
-                        className="grid h-4 w-4 place-items-center rounded-full border-0 bg-transparent p-0 text-[#7C8797] transition hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
-                        type="button"
-                        aria-label={`移除附件 ${getAttachmentName(path)}`}
-                        onClick={() => onRemovePendingChatAttachment(path)}
-                        disabled={sending}
+                    isChatImageAsset(path) ? (
+                      <span
+                        key={path}
+                        className="relative h-14 w-14 overflow-hidden rounded-md border border-black/8 bg-[#F6F7FA]"
                       >
-                        <DeleteIcon className="h-[10px] w-[10px] fill-current" />
-                      </button>
-                    </span>
+                        <img
+                          className="h-full w-full object-cover"
+                          src={toFileUrl(path)}
+                          alt=""
+                        />
+                        <button
+                          className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-white/92 p-0 text-[#7C8797] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
+                          type="button"
+                          aria-label="移除图片附件"
+                          onClick={() => onRemovePendingChatAttachment(path)}
+                          disabled={sending}
+                        >
+                          <DeleteIcon className="h-[10px] w-[10px] fill-current" />
+                        </button>
+                      </span>
+                    ) : (
+                      <span
+                        key={path}
+                        className="inline-flex max-w-full items-center gap-2 rounded-md border border-black/8 bg-[#F6F7FA] px-2.5 py-1 text-[12px] text-[#4B5563]"
+                      >
+                        <span className="truncate">{getAttachmentName(path)}</span>
+                        <button
+                          className="grid h-4 w-4 place-items-center rounded-full border-0 bg-transparent p-0 text-[#7C8797] transition hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
+                          type="button"
+                          aria-label={`移除附件 ${getAttachmentName(path)}`}
+                          onClick={() => onRemovePendingChatAttachment(path)}
+                          disabled={sending}
+                        >
+                          <DeleteIcon className="h-[10px] w-[10px] fill-current" />
+                        </button>
+                      </span>
+                    )
                   ))}
                 </div>
               ) : null}

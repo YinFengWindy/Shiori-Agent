@@ -94,13 +94,14 @@ describe("ChatSurface", () => {
     assert.doesNotMatch(markup, /aria-label="查看角色 .* 详情"/);
   });
 
-  it("renders the chat attachment picker and pending attachment labels", () => {
+  it("renders image attachments as thumbnails and keeps text attachments as labels", () => {
     const markup = renderChatSurface(createRole(), "mira", {
       pendingChatAttachments: ["D:\\files\\scene.png", "D:\\files\\notes.md"],
     });
 
     assert.match(markup, /aria-label="添加附件"/);
-    assert.match(markup, />scene\.png</);
+    assert.match(markup, /mira-asset:\/\/local\?path=D%3A%5Cfiles%5Cscene\.png/);
+    assert.doesNotMatch(markup, />scene\.png</);
     assert.match(markup, />notes\.md</);
   });
 
