@@ -8,6 +8,7 @@ import {
   buildOptimisticUserChatMessage,
   normalizeChatAttachmentPaths,
 } from "./chat/chatComposerState";
+import { resolveChatHeaderTitle } from "./chat/chatHeaderState";
 import {
   collectChatImageHistory,
   findChatImageHistoryEntry,
@@ -187,6 +188,7 @@ function App(): React.ReactElement {
   const [savingRoleAssets, setSavingRoleAssets] = useState(false);
   const [deletingRole, setDeletingRole] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingRoleId, setSendingRoleId] = useState("");
   const [pendingRoleCardAction, setPendingRoleCardAction] = useState<PendingRoleCardAction>(null);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [pendingDeleteRoleId, setPendingDeleteRoleId] = useState("");
@@ -847,6 +849,7 @@ function App(): React.ReactElement {
 
         if (event.method === "bridge.exit") {
           setSending(false);
+          setSendingRoleId("");
           setHealth("offline");
           setError(String(event.payload.message ?? "bridge exited"));
           setNotice("连接桥已停止。你可以刷新或重启它。");
@@ -907,11 +910,13 @@ function App(): React.ReactElement {
 
         if (event.method === "chat.done") {
           setSending(false);
+          setSendingRoleId("");
           return;
         }
 
         if (event.method === "chat.error") {
           setSending(false);
+          setSendingRoleId("");
           const message = String(event.payload.message ?? "对话失败");
           setError(message);
           appendSessionErrorMessage(currentSession.key, message);
@@ -1176,6 +1181,7 @@ function App(): React.ReactElement {
     const sessionKey = previousSession?.key ?? "";
     if ((!content && media.length === 0) || !roleId || !sessionKey) return;
     setSending(true);
+    setSendingRoleId(roleId);
     setError("");
     setDraft("");
     draftRef.current = "";
@@ -1204,6 +1210,7 @@ function App(): React.ReactElement {
       });
       if (res.error) {
         setSending(false);
+        setSendingRoleId("");
         const { session: recoveredSession } = await fetchRoleSession(roleId);
         if (recoveredSession) {
           setActiveSession((current) =>
@@ -1228,8 +1235,10 @@ function App(): React.ReactElement {
         current?.key === nextSession.key ? nextSession : current,
       );
       setSending(false);
+      setSendingRoleId("");
     } catch (error) {
       setSending(false);
+      setSendingRoleId("");
       const { session: recoveredSession } = await fetchRoleSession(roleId);
       if (recoveredSession) {
         setActiveSession((current) =>
@@ -1649,7 +1658,12 @@ function App(): React.ReactElement {
   const visibleIllustration = activeIllustration || roleChatBackground;
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
   const chatBackgroundUrl = visibleIllustrationUrl;
-  const headerTitle = sending && activeRole ? "正在输入中..." : (activeRole ? activeRole.name : "选择一个角色");
+  const headerTitle = resolveChatHeaderTitle({
+    activeRoleId,
+    activeRoleName: activeRole?.name ?? null,
+    sending,
+    sendingRoleId,
+  });
   const chatImageHistory = collectChatImageHistory(activeSession);
   const resolvedChatImagePath = resolveChatImageSelection(chatImageHistory, selectedChatImagePath);
   const selectedChatImageIndex = findChatImageHistoryIndex(chatImageHistory, resolvedChatImagePath);
