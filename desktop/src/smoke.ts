@@ -711,6 +711,81 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
                 hero: hero.textContent || "",
               };
             }
+            const latestUserMessage = Array.from(document.querySelectorAll("article[data-message-key]"))
+              .reverse()
+              .find((item) => (item.textContent || "").includes("send via enter"));
+            if (!latestUserMessage) {
+              return {
+                ok: false,
+                reason: "right-click-target-message-missing",
+              };
+            }
+            const bubble = latestUserMessage.querySelector(".message-bubble");
+            if (!bubble) {
+              return {
+                ok: false,
+                reason: "right-click-target-bubble-missing",
+              };
+            }
+            const bubbleRect = bubble.getBoundingClientRect();
+            const menuOpened = bubble.dispatchEvent(new MouseEvent("contextmenu", {
+              bubbles: true,
+              cancelable: true,
+              button: 2,
+              buttons: 2,
+              clientX: Math.round(bubbleRect.left + Math.min(24, bubbleRect.width / 2)),
+              clientY: Math.round(bubbleRect.top + Math.min(24, bubbleRect.height / 2)),
+            }));
+            if (menuOpened !== false) {
+              return {
+                ok: false,
+                reason: "message-contextmenu-default-not-cancelled",
+              };
+            }
+            let messageContextMenu = null;
+            for (let i = 0; i < 20; i++) {
+              messageContextMenu = document.querySelector('[data-testid="message-context-menu"]');
+              if (messageContextMenu) {
+                break;
+              }
+              await sleep(50);
+            }
+            if (!messageContextMenu) {
+              return {
+                ok: false,
+                reason: "message-context-menu-missing",
+              };
+            }
+            const menuText = messageContextMenu.textContent || "";
+            if (!menuText.includes("复制") || !menuText.includes("引用")) {
+              return {
+                ok: false,
+                reason: "message-context-menu-actions-missing",
+                menuText,
+              };
+            }
+            const quoteMenuItem = document.querySelector('[data-testid="message-context-menu-quote"]');
+            if (!(quoteMenuItem instanceof HTMLButtonElement) || quoteMenuItem.disabled) {
+              return {
+                ok: false,
+                reason: "message-context-menu-quote-disabled",
+              };
+            }
+            quoteMenuItem.click();
+            let replyBarVisible = false;
+            for (let i = 0; i < 20; i++) {
+              await sleep(50);
+              replyBarVisible = Boolean(document.querySelector('[aria-label="取消引用"]'));
+              if (replyBarVisible) {
+                break;
+              }
+            }
+            if (!replyBarVisible) {
+              return {
+                ok: false,
+                reason: "message-context-menu-quote-did-not-open-reply-bar",
+              };
+            }
             console.log("[desktop-ui-smoke] stage:chat-reply-finished");
             window.__desktopUiSmokeStage = "chat-reply-finished";
             if (!clickByText("搜索")) {

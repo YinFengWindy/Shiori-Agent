@@ -90,6 +90,7 @@ export function ChatSurface({
 }: ChatSurfaceProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationListRef = useRef<HTMLDivElement | null>(null);
+  const messageContextMenuRef = useRef<HTMLDivElement | null>(null);
   const previousMessageCountRef = useRef(0);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
@@ -153,21 +154,26 @@ export function ChatSurface({
     if (!messageContextMenu) return undefined;
 
     const closeContextMenu = () => setMessageContextMenu(null);
+    const handlePointerDown = (event: PointerEvent) => {
+      const menu = messageContextMenuRef.current;
+      if (menu && event.target instanceof Node && menu.contains(event.target)) {
+        return;
+      }
+      closeContextMenu();
+    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         closeContextMenu();
       }
     };
 
-    window.addEventListener("click", closeContextMenu);
-    window.addEventListener("contextmenu", closeContextMenu);
+    window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("scroll", closeContextMenu, true);
     window.addEventListener("resize", closeContextMenu);
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      window.removeEventListener("click", closeContextMenu);
-      window.removeEventListener("contextmenu", closeContextMenu);
+      window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("scroll", closeContextMenu, true);
       window.removeEventListener("resize", closeContextMenu);
       window.removeEventListener("keydown", handleKeyDown);
@@ -302,6 +308,7 @@ export function ChatSurface({
     sender: string,
   ): void {
     event.preventDefault();
+    event.stopPropagation();
     setMessageContextMenu({
       x: Math.min(event.clientX, Math.max(12, window.innerWidth - 148)),
       y: Math.min(event.clientY, Math.max(12, window.innerHeight - 84)),
@@ -350,11 +357,19 @@ export function ChatSurface({
       </button>
       {messageContextMenu ? (
         <div
+          ref={messageContextMenuRef}
+          data-testid="message-context-menu"
           className="fixed z-50 min-w-[132px] overflow-hidden rounded-md border border-[#E4E7EC] bg-white py-1 text-sm text-[#1F2937] shadow-[0_16px_40px_rgba(15,23,42,0.16)]"
           style={{ left: messageContextMenu.x, top: messageContextMenu.y }}
           role="menu"
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
         >
           <button
+            data-testid="message-context-menu-copy"
             className="flex h-8 w-full items-center gap-2 px-3 text-left transition hover:bg-[#F5F7FA] focus:bg-[#F5F7FA] focus:outline-none disabled:cursor-default disabled:opacity-45"
             type="button"
             role="menuitem"
@@ -365,6 +380,7 @@ export function ChatSurface({
             <span>复制</span>
           </button>
           <button
+            data-testid="message-context-menu-quote"
             className="flex h-8 w-full items-center gap-2 px-3 text-left transition hover:bg-[#F5F7FA] focus:bg-[#F5F7FA] focus:outline-none disabled:cursor-default disabled:opacity-45"
             type="button"
             role="menuitem"
