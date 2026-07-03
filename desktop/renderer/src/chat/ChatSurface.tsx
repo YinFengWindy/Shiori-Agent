@@ -16,6 +16,19 @@ type MessageContextMenuState = {
   sender: string;
 };
 
+let hiddenDragPreviewCanvas: HTMLCanvasElement | null = null;
+
+function getHiddenDragPreviewCanvas(): HTMLCanvasElement {
+  if (hiddenDragPreviewCanvas) {
+    return hiddenDragPreviewCanvas;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  hiddenDragPreviewCanvas = canvas;
+  return canvas;
+}
+
 type ChatSurfaceProps = {
   activeRole: RoleRecord | null;
   activeRoleId: string;
@@ -309,6 +322,7 @@ export function ChatSurface({
     event.stopPropagation();
     event.dataTransfer.clearData();
     event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setDragImage(getHiddenDragPreviewCanvas(), 0, 0);
     onBeginAttachmentDrag(path);
   }
 
