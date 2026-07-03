@@ -1,3 +1,12 @@
+/** Resolves the session key for the chat currently shown in the desktop surface. */
+export function resolveVisibleChatSessionKey(activeRoleId: string, activeSessionKey: string): string {
+  const normalizedRoleId = activeRoleId.trim();
+  if (normalizedRoleId) {
+    return `role:${normalizedRoleId}`;
+  }
+  return activeSessionKey;
+}
+
 type ResolveChatHeaderTitleOptions = {
   activeRoleName: string | null;
   activeSessionKey: string;

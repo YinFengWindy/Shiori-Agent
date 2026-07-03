@@ -8,7 +8,7 @@ import {
   buildOptimisticUserChatMessage,
   normalizeChatAttachmentPaths,
 } from "./chat/chatComposerState";
-import { resolveChatHeaderTitle } from "./chat/chatHeaderState";
+import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "./chat/chatHeaderState";
 import {
   collectChatImageHistory,
   findChatImageHistoryEntry,
@@ -1692,10 +1692,11 @@ function App(): React.ReactElement {
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
   const chatBackgroundUrl = visibleIllustrationUrl;
   const activeSessionKey = activeSession?.key ?? "";
-  const isActiveSessionSending = Boolean(activeSessionKey && sendingSessions[activeSessionKey]);
+  const visibleChatSessionKey = resolveVisibleChatSessionKey(activeRoleId, activeSessionKey);
+  const isVisibleChatSending = Boolean(visibleChatSessionKey && sendingSessions[visibleChatSessionKey]);
   const headerTitle = resolveChatHeaderTitle({
     activeRoleName: activeRole?.name ?? null,
-    activeSessionKey,
+    activeSessionKey: visibleChatSessionKey,
     sendingSessions,
   });
   const chatImageHistory = collectChatImageHistory(activeSession);
@@ -1906,7 +1907,7 @@ function App(): React.ReactElement {
               notice={notice}
               pendingChatAttachments={pendingChatAttachments}
               chatReplyTarget={chatReplyTarget}
-              sending={isActiveSessionSending}
+              sending={isVisibleChatSending}
               visibleIllustrationUrl={visibleIllustrationUrl}
               onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
               onGoToNextChatImage={selectNextChatImage}
