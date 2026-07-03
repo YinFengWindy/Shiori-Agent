@@ -34,7 +34,7 @@ export function RoleManagementPage({
               const isPending = pendingCardAction?.roleId === role.id;
               const isDeleting = isPending && pendingCardAction?.action === "delete";
               const isCreating = isPending && pendingCardAction?.action === "create";
-              const coverImage = role.illustrations_abs[0] ? toFileUrl(role.illustrations_abs[0]) : "";
+              const coverImage = role.chat_background_abs ? toFileUrl(role.chat_background_abs) : "";
               return (
                 <button
                   key={role.id}
