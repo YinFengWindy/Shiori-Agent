@@ -169,8 +169,6 @@ function App(): React.ReactElement {
   const [activeIllustration, setActiveIllustration] = useState("");
   const [selectedAvatarAsset, setSelectedAvatarAsset] = useState("");
   const [selectedChatBackground, setSelectedChatBackground] = useState("");
-  const [clearAvatar, setClearAvatar] = useState(false);
-  const [clearIllustrations, setClearIllustrations] = useState(false);
   const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
   const [newRoleForm, setNewRoleForm] = useState(createEmptyNewRoleForm);
   const [settingsSearch, setSettingsSearch] = useState("");
@@ -502,8 +500,6 @@ function App(): React.ReactElement {
     });
     setSelectedAvatarAsset(role.avatar ?? "");
     setSelectedChatBackground(role.chat_background ?? "");
-    setClearAvatar(false);
-    setClearIllustrations(false);
     const savedIllustration = window.localStorage.getItem("miraDesktop.activeIllustration") ?? "";
     setActiveIllustration(chooseIllustration(role, sessionOverride, savedIllustration));
   }
@@ -1148,8 +1144,6 @@ function App(): React.ReactElement {
         avatar_source: nextRoleForm.avatarSource || undefined,
         illustration_sources: nextRoleForm.illustrationSources,
         removed_illustrations: nextRoleForm.removedIllustrations,
-        clear_avatar: clearAvatar,
-        clear_illustrations: clearIllustrations,
       },
     });
     setSavingRole(false);
@@ -1161,8 +1155,6 @@ function App(): React.ReactElement {
     const updated = res.payload.role as RoleRecord;
     const nextRoles = await loadRolesFromBridge();
     updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [], removedIllustrations: [] }));
-    setClearAvatar(false);
-    setClearIllustrations(false);
     await openRole(updated.id, nextRoles?.find((item) => item.id === updated.id) ?? updated, { recordHistory: false });
     openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
     replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, updated.id));
@@ -1268,14 +1260,12 @@ function App(): React.ReactElement {
   async function pickAvatar(): Promise<void> {
     const files = await window.miraDesktop.pickImages({ multiple: false });
     if (!files[0]) return;
-    setClearAvatar(false);
     updateRoleForm((current) => ({ ...current, avatarSource: files[0] }));
   }
 
   async function pickIllustrations(): Promise<void> {
     const files = await window.miraDesktop.pickImages({ multiple: true });
     if (!files.length) return;
-    setClearIllustrations(false);
     updateRoleForm((current) => ({ ...current, illustrationSources: files, removedIllustrations: [] }));
   }
 
@@ -1333,38 +1323,6 @@ function App(): React.ReactElement {
     }
     setNotice("角色素材已删除。");
     openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
-  }
-
-  function clearAvatarSelection(): void {
-    setClearAvatar(true);
-    updateRoleForm((current) => ({ ...current, avatarSource: "" }));
-  }
-
-  function removeIllustrationSelection(path: string): void {
-    const cleanPath = path.trim();
-    if (!cleanPath) return;
-    const isPendingLocalFile = roleFormRef.current.illustrationSources.includes(cleanPath);
-    if (isPendingLocalFile) {
-      updateRoleForm((current) => ({
-        ...current,
-        illustrationSources: current.illustrationSources.filter((item) => item !== cleanPath),
-      }));
-    } else {
-      setClearIllustrations(false);
-      updateRoleForm((current) => ({
-        ...current,
-        removedIllustrations: current.removedIllustrations.includes(cleanPath)
-          ? current.removedIllustrations
-          : [...current.removedIllustrations, cleanPath],
-      }));
-    }
-    setActiveIllustration((current) => (current === cleanPath ? "" : current));
-  }
-
-  function clearIllustrationsSelection(): void {
-    setClearIllustrations(true);
-    updateRoleForm((current) => ({ ...current, illustrationSources: [], removedIllustrations: [] }));
-    setActiveIllustration("");
   }
 
   async function navigateHistory(direction: "back" | "forward"): Promise<void> {
@@ -1476,22 +1434,16 @@ function App(): React.ReactElement {
         || Boolean(roleForm.avatarSource)
         || roleForm.illustrationSources.length > 0
         || roleForm.removedIllustrations.length > 0
-        || clearAvatar
-        || clearIllustrations
       )
   );
 
-  const previewAvatar = clearAvatar
-    ? null
-    : (roleForm.avatarSource || detailRole?.avatar_abs || null);
+  const previewAvatar = roleForm.avatarSource || detailRole?.avatar_abs || null;
 
-  const previewIllustrations = clearIllustrations
-    ? []
-    : (roleForm.illustrationSources.length
-        ? roleForm.illustrationSources
-        : (detailRole?.illustrations_abs ?? []).filter(
-          (path) => !roleForm.removedIllustrations.includes(path),
-        ));
+  const previewIllustrations = roleForm.illustrationSources.length
+    ? roleForm.illustrationSources
+    : (detailRole?.illustrations_abs ?? []).filter(
+      (path) => !roleForm.removedIllustrations.includes(path),
+    );
   const roleChatBackground = detailRole?.chat_background_abs ?? "";
   const visibleIllustration = activeIllustration || roleChatBackground;
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
@@ -1556,8 +1508,6 @@ function App(): React.ReactElement {
       illustrationSources: [],
       removedIllustrations: [],
     });
-    setClearAvatar(false);
-    setClearIllustrations(false);
     setNotice("角色表单已重置。");
   }
 
@@ -1657,7 +1607,7 @@ function App(): React.ReactElement {
               collapsed={sidebarCollapsed}
               width={sidebarWidth}
               onOpenSearch={() => setShowSearchDialog(true)}
-              onToggleRoleEditor={() => openRoleWorkspace({ kind: "roles-list" })}
+              onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
               onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
               onOpenImageStudio={() => openImageStudio()}
               onOpenSettings={() => openSettingsWorkspace()}
