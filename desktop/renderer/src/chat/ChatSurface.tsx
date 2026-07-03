@@ -4,7 +4,7 @@ import { isChatImageAsset } from "./chatImageHistory";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { canSubmitChatMessage } from "./chatComposerState";
 import { formatTimestamp, toFileUrl } from "../shared/format";
-import { DeleteIcon, PlusIcon, SendIcon } from "../shared/icons";
+import { DeleteIcon, DocumentIcon, PlusIcon, SendIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 import type { RoleRecord, SessionPayload } from "../shared/types";
 
@@ -215,6 +215,15 @@ export function ChatSurface({
     return path.split(/[\\/]/).pop() || path;
   }
 
+  function getAttachmentExtensionLabel(path: string): string {
+    const attachmentName = getAttachmentName(path);
+    const dotIndex = attachmentName.lastIndexOf(".");
+    if (dotIndex < 0 || dotIndex === attachmentName.length - 1) {
+      return "FILE";
+    }
+    return attachmentName.slice(dotIndex + 1).toUpperCase();
+  }
+
   return (
     <section className="chat-surface relative grid h-full min-h-0 grid-cols-[minmax(0,1fr)_auto] overflow-hidden bg-[var(--chat-bg)]">
       <button
@@ -349,9 +358,17 @@ export function ChatSurface({
                                 <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" />
                               </button>
                             ) : (
-                              <a key={item} href={toFileUrl(item)} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-[12px] border border-black/8 bg-white/70 px-3 py-2 text-[12px] text-[#4B5563] hover:bg-white">
-                                <span className="font-medium">附件</span>
-                                <span className="truncate">{item.split(/[\\/]/).pop() || item}</span>
+                              <a
+                                key={item}
+                                href={toFileUrl(item)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex max-w-[280px] items-center gap-2.5 rounded-full border border-black/8 bg-[#F7F7F8] px-3 py-2 text-[12px] text-[#1F2937] transition hover:bg-white focus:outline-none"
+                              >
+                                <span className="grid h-5 w-5 flex-none place-items-center rounded-full border border-black/8 bg-white text-[#8B95A7]">
+                                  <DocumentIcon className="h-[11px] w-[11px] stroke-current" />
+                                </span>
+                                <span className="truncate font-medium">{getAttachmentName(item)}</span>
                               </a>
                             )
                           ))}
@@ -416,11 +433,21 @@ export function ChatSurface({
                     ) : (
                       <span
                         key={path}
-                        className="inline-flex max-w-full items-center gap-2 rounded-md border border-black/8 bg-[#F6F7FA] px-2.5 py-1 text-[12px] text-[#4B5563]"
+                        className="relative inline-flex max-w-[220px] items-center gap-3 rounded-[16px] border border-black/8 bg-[#F6F7FA] px-3 py-2 text-left text-[#4B5563]"
                       >
-                        <span className="truncate">{getAttachmentName(path)}</span>
+                        <span className="grid h-9 w-9 flex-none place-items-center rounded-[12px] bg-white text-[#6B7280] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)]">
+                          <DocumentIcon className="h-4 w-4 stroke-current" />
+                        </span>
+                        <span className="min-w-0 flex-1 pr-4">
+                          <span className="block truncate text-[12px] font-medium leading-[1.2] text-[#1F2937]">
+                            {getAttachmentName(path)}
+                          </span>
+                          <span className="mt-1 block text-[11px] leading-none text-[#8B95A7]">
+                            {getAttachmentExtensionLabel(path)}
+                          </span>
+                        </span>
                         <button
-                          className="grid h-4 w-4 place-items-center rounded-full border-0 bg-transparent p-0 text-[#7C8797] transition hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
+                          className="absolute right-2 top-2 grid h-4 w-4 place-items-center rounded-full border-0 bg-transparent p-0 text-[#7C8797] transition hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
                           type="button"
                           aria-label={`移除附件 ${getAttachmentName(path)}`}
                           onClick={() => onRemovePendingChatAttachment(path)}

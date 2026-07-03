@@ -75,3 +75,14 @@ export function PlusIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProp
     </svg>
   );
 }
+
+/** Renders the shared desktop document glyph. */
+export function DocumentIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
+      <rect x="5" y="3.5" width="14" height="17" rx="3.25" strokeWidth="1.7" />
+      <path d="M9 9.25h6" strokeLinecap="round" strokeWidth="1.7" />
+      <path d="M9 13h6" strokeLinecap="round" strokeWidth="1.7" />
+    </svg>
+  );
+}

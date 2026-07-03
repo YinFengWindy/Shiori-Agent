@@ -42,13 +42,14 @@ function renderChatSurface(
   options: {
     draft?: string;
     pendingChatAttachments?: string[];
+    activeSession?: SessionPayload;
   } = {},
 ): string {
   return renderToStaticMarkup(
     <ChatSurface
       activeRole={activeRole}
       activeRoleId={activeRoleId}
-      activeSession={createSession()}
+      activeSession={options.activeSession ?? createSession()}
       bridgeReady
       chatLatestImagePath=""
       chatLatestImagePosition={0}
@@ -94,7 +95,7 @@ describe("ChatSurface", () => {
     assert.doesNotMatch(markup, /aria-label="查看角色 .* 详情"/);
   });
 
-  it("renders image attachments as thumbnails and keeps text attachments as labels", () => {
+  it("renders image attachments as thumbnails and keeps text attachments as pending cards", () => {
     const markup = renderChatSurface(createRole(), "mira", {
       pendingChatAttachments: ["D:\\files\\scene.png", "D:\\files\\notes.md"],
     });
@@ -103,6 +104,23 @@ describe("ChatSurface", () => {
     assert.match(markup, /mira-asset:\/\/local\?path=D%3A%5Cfiles%5Cscene\.png/);
     assert.doesNotMatch(markup, />scene\.png</);
     assert.match(markup, />notes\.md</);
+    assert.match(markup, />MD</);
+  });
+
+  it("renders sent text attachments as compact file pills", () => {
+    const session = createSession();
+    session.messages = [
+      {
+        role: "assistant",
+        content: "给你文件",
+        media: ["D:\\files\\yinfeng-chat-history.md"],
+      },
+    ];
+
+    const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
+
+    assert.match(markup, />yinfeng-chat-history\.md</);
+    assert.doesNotMatch(markup, />附件</);
   });
 
   it("allows sending when attachments exist even if the draft is empty", () => {
