@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import type { IpcMainInvokeEvent } from "electron";
@@ -153,6 +153,20 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     const [window] = BrowserWindow.getAllWindows();
     return {
       isMaximized: window?.isMaximized() ?? false,
+    };
+  });
+  ipcMain.handle("desktop:open-path", async (_event: IpcMainInvokeEvent, path?: string) => {
+    const targetPath = String(path ?? "").trim();
+    if (!targetPath || !isAbsolute(targetPath) || !existsSync(targetPath)) {
+      return {
+        ok: false,
+        message: "文件不存在。",
+      };
+    }
+    const result = await shell.openPath(targetPath);
+    return {
+      ok: result === "",
+      message: result || "ok",
     };
   });
   ipcMain.handle("desktop:pick-images", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {

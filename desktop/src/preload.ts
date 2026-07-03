@@ -19,6 +19,9 @@ const api: DesktopApi = {
   startAttachmentDrag(request) {
     ipcRenderer.send("desktop:start-attachment-drag", request);
   },
+  openPath(path) {
+    return ipcRenderer.invoke("desktop:open-path", path) as Promise<import("./shared.js").OpenPathResult>;
+  },
   bridgeStatus() {
     return ipcRenderer.invoke("desktop:bridge-status") as Promise<{ running: boolean; lastError: string | null }>;
   },

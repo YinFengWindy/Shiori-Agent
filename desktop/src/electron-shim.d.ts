@@ -104,4 +104,8 @@ declare module "electron" {
   export const nativeImage: {
     createFromDataURL(dataURL: string): NativeImage;
   };
+
+  export const shell: {
+    openPath(path: string): Promise<string>;
+  };
 }
