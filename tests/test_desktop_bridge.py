@@ -324,12 +324,6 @@ async def test_desktop_bridge_emits_session_updated_for_background_desktop_push(
         system_prompt="you are mira",
     )
     session_manager = SessionManager(tmp_path)
-    session = session_manager.open_role_session(
-        role.id,
-        role_name=role.name,
-    )
-    session.add_message("assistant", "主动消息", proactive=True)
-    await session_manager.save_async(session)
     push_tool = MessagePushTool()
     service = DesktopBridgeService(
         workspace=tmp_path,
@@ -354,6 +348,43 @@ async def test_desktop_bridge_emits_session_updated_for_background_desktop_push(
     messages = emitted[0]["payload"]["session"]["messages"]
     assert messages[-1]["content"] == "主动消息"
     assert messages[-1]["metadata"]["proactive"] is True
+    assert messages[-1]["metadata"]["tools_used"] == ["message_push"]
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_desktop_push_does_not_duplicate_existing_proactive_message(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.open_role_session(
+        role.id,
+        role_name=role.name,
+    )
+    session.add_message("assistant", "主动消息", proactive=True, tools_used=["message_push"])
+    await session_manager.save_async(session)
+    push_tool = MessagePushTool()
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+        push_tool=push_tool,
+    )
+
+    _ = await push_tool.execute(
+        channel="desktop",
+        chat_id=role.id,
+        message="主动消息",
+    )
+
+    session_after = session_manager.get_or_create("role:mira")
+    assert len(session_after.messages) == 1
 
 
 @pytest.mark.asyncio

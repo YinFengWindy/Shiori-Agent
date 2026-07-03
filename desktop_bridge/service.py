@@ -67,20 +67,69 @@ class DesktopBridgeService:
     def register_desktop_push_channel(self, push_tool: MessagePushTool) -> None:
         """Registers the desktop proactive transport against the bridge event stream."""
 
-        async def _emit_session_for_chat(chat_id: str) -> None:
-            session_key = self._normalize_desktop_session_key(chat_id)
-            session = self.session_manager.get_or_create(session_key)
-            await self._broadcast_session_updated(
-                request_id="proactive",
-                session=session,
+        async def _emit_session_for_chat(
+            chat_id: str,
+            *,
+            message: str = "",
+            media: list[str] | None = None,
+        ) -> None:
+            session = await self._apply_desktop_push(
+                chat_id,
+                message=message,
+                media=media,
             )
+            await self._broadcast_session_updated(request_id="proactive", session=session)
 
         push_tool.register_channel(
             "desktop",
-            text=lambda chat_id, _message: _emit_session_for_chat(chat_id),
-            file=lambda chat_id, _file_path, _name=None: _emit_session_for_chat(chat_id),
-            image=lambda chat_id, _image_path: _emit_session_for_chat(chat_id),
+            text=lambda chat_id, message: _emit_session_for_chat(chat_id, message=message),
+            file=lambda chat_id, file_path, _name=None: _emit_session_for_chat(chat_id, media=[file_path]),
+            image=lambda chat_id, image_path: _emit_session_for_chat(chat_id, media=[image_path]),
         )
+
+    async def _apply_desktop_push(
+        self,
+        chat_id: str,
+        *,
+        message: str = "",
+        media: list[str] | None = None,
+    ) -> Session:
+        session_key = self._normalize_desktop_session_key(chat_id)
+        session = self.session_manager.get_or_create(session_key)
+        normalized_message = str(message or "")
+        normalized_media = [item for item in (media or []) if str(item).strip()]
+        if self._is_existing_desktop_push(
+            session,
+            message=normalized_message,
+            media=normalized_media,
+        ):
+            return session
+        session.add_message(
+            "assistant",
+            normalized_message,
+            media=normalized_media or None,
+            proactive=True,
+            tools_used=["message_push"],
+        )
+        await self.session_manager.save_async(session)
+        return session
+
+    def _is_existing_desktop_push(
+        self,
+        session: Session,
+        *,
+        message: str,
+        media: list[str],
+    ) -> bool:
+        if not session.messages:
+            return False
+        last_message = session.messages[-1]
+        if last_message.get("role") != "assistant" or not last_message.get("proactive"):
+            return False
+        if str(last_message.get("content") or "") != message:
+            return False
+        last_media = [str(item).strip() for item in list(last_message.get("media") or []) if str(item).strip()]
+        return all(item in last_media for item in media)
 
     async def handle(
         self,
