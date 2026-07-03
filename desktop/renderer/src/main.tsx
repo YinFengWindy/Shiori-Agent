@@ -760,11 +760,6 @@ function App(): React.ReactElement {
   }, [workspaceFeedback]);
 
   useEffect(() => {
-    if (highlightedMessageKey) return;
-    conversationEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [activeSession?.messages.length, highlightedMessageKey, sending]);
-
-  useEffect(() => {
     if (!highlightedMessageKey) return;
     const timer = window.setTimeout(() => setHighlightedMessageKey(""), 2400);
     return () => window.clearTimeout(timer);

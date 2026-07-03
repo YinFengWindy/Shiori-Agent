@@ -1,6 +1,7 @@
 import type React from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isChatImageAsset } from "./chatImageHistory";
+import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { cx } from "../shared/styles";
 import type { RoleRecord, SessionPayload } from "../shared/types";
@@ -65,6 +66,7 @@ export function ChatSurface({
 }: ChatSurfaceProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationListRef = useRef<HTMLDivElement | null>(null);
+  const previousMessageCountRef = useRef(0);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const sidebarToggleGlyphClass =
@@ -121,6 +123,29 @@ export function ChatSurface({
     const timer = window.setTimeout(() => setChatLatestImageSidebarMounted(false), 240);
     return () => window.clearTimeout(timer);
   }, [chatLatestImageSidebarCollapsed]);
+
+  useEffect(() => {
+    previousMessageCountRef.current = activeSession?.messages.length ?? 0;
+    const container = conversationListRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+  }, [activeSession?.key]);
+
+  useEffect(() => {
+    const currentMessageCount = activeSession?.messages.length ?? 0;
+    const previousMessageCount = previousMessageCountRef.current;
+    previousMessageCountRef.current = currentMessageCount;
+    if (!shouldAutoScrollOnNewMessage({
+      currentMessageCount,
+      previousMessageCount,
+      highlightedMessageKey,
+      sending,
+      wasAtBottom: scrollState.isAtBottom,
+    })) {
+      return;
+    }
+    conversationEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [activeSession?.messages.length, conversationEndRef, highlightedMessageKey, scrollState.isAtBottom, sending]);
 
   const headerAvatarClass =
     "chat-header-avatar grid h-[34px] w-[34px] flex-none place-items-center rounded-full border border-black/10 object-cover";
