@@ -365,8 +365,8 @@ export function ChatSurface({
                                 rel="noreferrer"
                                 className="inline-flex max-w-[280px] items-center gap-2.5 rounded-full border border-black/8 bg-[#F7F7F8] px-3 py-2 text-[12px] text-[#1F2937] transition hover:bg-white focus:outline-none"
                               >
-                                <span className="grid h-5 w-5 flex-none place-items-center rounded-full border border-black/8 bg-white text-[#8B95A7]">
-                                  <DocumentIcon className="h-[11px] w-[11px] stroke-current" />
+                                <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-transparent text-[#8B95A7]">
+                                  <DocumentIcon className="h-[13px] w-[13px] stroke-current" />
                                 </span>
                                 <span className="truncate font-medium">{getAttachmentName(item)}</span>
                               </a>
@@ -433,7 +433,7 @@ export function ChatSurface({
                     ) : (
                       <span
                         key={path}
-                        className="relative inline-flex max-w-[220px] items-center gap-3 rounded-[16px] border border-black/8 bg-[#F6F7FA] px-3 py-2 text-left text-[#4B5563]"
+                        className="relative inline-flex max-w-[220px] items-center gap-2 rounded-[16px] border border-black/8 bg-[#F6F7FA] px-3 py-2 text-left text-[#4B5563]"
                       >
                         <span className="grid h-9 w-9 flex-none place-items-center rounded-[12px] bg-white text-[#6B7280] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)]">
                           <DocumentIcon className="h-4 w-4 stroke-current" />
