@@ -7,8 +7,8 @@ import {
   findChatImageHistoryIndex,
   isChatImageAsset,
   resolveChatImageSelection,
-} from "./chatImageHistory.ts";
-import type { SessionPayload } from "../shared/types.ts";
+} from "./chatImageHistory";
+import type { SessionPayload } from "../shared/types";
 
 function createSession(messages: SessionPayload["messages"]): SessionPayload {
   return {
