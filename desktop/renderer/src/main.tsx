@@ -187,8 +187,8 @@ function App(): React.ReactElement {
   const [savingRole, setSavingRole] = useState(false);
   const [savingRoleAssets, setSavingRoleAssets] = useState(false);
   const [deletingRole, setDeletingRole] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [sendingRoleId, setSendingRoleId] = useState("");
+  // Track in-flight chat turns by session so role switches don't leak typing state into other chats.
+  const [sendingSessions, setSendingSessions] = useState<Record<string, string>>({});
   const [pendingRoleCardAction, setPendingRoleCardAction] = useState<PendingRoleCardAction>(null);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [pendingDeleteRoleId, setPendingDeleteRoleId] = useState("");
@@ -241,6 +241,7 @@ function App(): React.ReactElement {
   const navigationHistoryIndexRef = useRef(-1);
   const draftRef = useRef("");
   const pendingChatAttachmentsRef = useRef<string[]>([]);
+  const sendingSessionsRef = useRef<Record<string, string>>({});
   const roleFormRef = useRef<RoleFormState>(createEmptyRoleForm());
   const newRoleFormRef = useRef<NewRoleFormState>(createEmptyNewRoleForm());
   const lastNonSettingsViewRef = useRef<AppMainView>({ kind: "chat" });
@@ -270,6 +271,10 @@ function App(): React.ReactElement {
   useEffect(() => {
     pendingChatAttachmentsRef.current = pendingChatAttachments;
   }, [pendingChatAttachments]);
+
+  useEffect(() => {
+    sendingSessionsRef.current = sendingSessions;
+  }, [sendingSessions]);
 
   useEffect(() => {
     if (mainView.kind !== "settings") {
@@ -848,8 +853,7 @@ function App(): React.ReactElement {
         }
 
         if (event.method === "bridge.exit") {
-          setSending(false);
-          setSendingRoleId("");
+          clearAllSendingSessions();
           setHealth("offline");
           setError(String(event.payload.message ?? "bridge exited"));
           setNotice("连接桥已停止。你可以刷新或重启它。");
@@ -886,12 +890,12 @@ function App(): React.ReactElement {
           return;
         }
 
-        const currentSession = activeSessionRef.current;
-        if (!currentSession) return;
-
-        if (String(event.payload.session_key ?? "") !== currentSession.key) return;
+        const eventSessionKey = String(event.payload.session_key ?? "");
 
         if (event.method === "chat.delta") {
+          const currentSession = activeSessionRef.current;
+          if (!currentSession) return;
+          if (eventSessionKey !== currentSession.key) return;
           const delta = String(event.payload.content_delta ?? "");
           if (!delta) return;
           setActiveSession((current) => {
@@ -909,14 +913,14 @@ function App(): React.ReactElement {
         }
 
         if (event.method === "chat.done") {
-          setSending(false);
-          setSendingRoleId("");
+          clearSessionSending(eventSessionKey);
           return;
         }
 
         if (event.method === "chat.error") {
-          setSending(false);
-          setSendingRoleId("");
+          clearSessionSending(eventSessionKey);
+          const currentSession = activeSessionRef.current;
+          if (!currentSession || eventSessionKey !== currentSession.key) return;
           const message = String(event.payload.message ?? "对话失败");
           setError(message);
           appendSessionErrorMessage(currentSession.key, message);
@@ -1155,6 +1159,37 @@ function App(): React.ReactElement {
     setChatReplyTarget((current) => (current ? null : current));
   }
 
+  function markSessionSending(sessionKey: string, roleId: string): void {
+    if (!sessionKey || !roleId) {
+      return;
+    }
+    setSendingSessions((current) => (
+      current[sessionKey] === roleId
+        ? current
+        : { ...current, [sessionKey]: roleId }
+    ));
+  }
+
+  function clearSessionSending(sessionKey: string): void {
+    if (!sessionKey) {
+      return;
+    }
+    setSendingSessions((current) => {
+      if (!current[sessionKey]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[sessionKey];
+      return next;
+    });
+  }
+
+  function clearAllSendingSessions(): void {
+    setSendingSessions((current) => (
+      Object.keys(current).length ? {} : current
+    ));
+  }
+
   function jumpToChatMessage(messageKey: string): void {
     const normalizedMessageKey = messageKey.trim();
     if (!normalizedMessageKey) {
@@ -1180,8 +1215,9 @@ function App(): React.ReactElement {
     const previousSession = activeSessionRef.current;
     const sessionKey = previousSession?.key ?? "";
     if ((!content && media.length === 0) || !roleId || !sessionKey) return;
-    setSending(true);
-    setSendingRoleId(roleId);
+    // Keep the existing single-flight desktop send behavior even though typing state is tracked per session.
+    if (Object.keys(sendingSessionsRef.current).length > 0) return;
+    markSessionSending(sessionKey, roleId);
     setError("");
     setDraft("");
     draftRef.current = "";
@@ -1209,8 +1245,7 @@ function App(): React.ReactElement {
         },
       });
       if (res.error) {
-        setSending(false);
-        setSendingRoleId("");
+        clearSessionSending(sessionKey);
         const { session: recoveredSession } = await fetchRoleSession(roleId);
         if (recoveredSession) {
           setActiveSession((current) =>
@@ -1234,11 +1269,9 @@ function App(): React.ReactElement {
       setActiveSession((current) =>
         current?.key === nextSession.key ? nextSession : current,
       );
-      setSending(false);
-      setSendingRoleId("");
+      clearSessionSending(sessionKey);
     } catch (error) {
-      setSending(false);
-      setSendingRoleId("");
+      clearSessionSending(sessionKey);
       const { session: recoveredSession } = await fetchRoleSession(roleId);
       if (recoveredSession) {
         setActiveSession((current) =>
@@ -1658,11 +1691,12 @@ function App(): React.ReactElement {
   const visibleIllustration = activeIllustration || roleChatBackground;
   const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
   const chatBackgroundUrl = visibleIllustrationUrl;
+  const activeSessionKey = activeSession?.key ?? "";
+  const isActiveSessionSending = Boolean(activeSessionKey && sendingSessions[activeSessionKey]);
   const headerTitle = resolveChatHeaderTitle({
-    activeRoleId,
     activeRoleName: activeRole?.name ?? null,
-    sending,
-    sendingRoleId,
+    activeSessionKey,
+    sendingSessions,
   });
   const chatImageHistory = collectChatImageHistory(activeSession);
   const resolvedChatImagePath = resolveChatImageSelection(chatImageHistory, selectedChatImagePath);
@@ -1872,7 +1906,7 @@ function App(): React.ReactElement {
               notice={notice}
               pendingChatAttachments={pendingChatAttachments}
               chatReplyTarget={chatReplyTarget}
-              sending={sending}
+              sending={isActiveSessionSending}
               visibleIllustrationUrl={visibleIllustrationUrl}
               onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
               onGoToNextChatImage={selectNextChatImage}
