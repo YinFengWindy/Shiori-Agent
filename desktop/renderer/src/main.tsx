@@ -196,6 +196,7 @@ function App(): React.ReactElement {
   });
   const [selectedChatImagePath, setSelectedChatImagePath] = useState("");
   const [chatImageLightboxOpen, setChatImageLightboxOpen] = useState(false);
+  const [addingChatImageToAssetLibrary, setAddingChatImageToAssetLibrary] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const latestChatImageRef = useRef<{ sessionKey: string; latestPath: string }>({ sessionKey: "", latestPath: "" });
@@ -592,6 +593,31 @@ function App(): React.ReactElement {
 
   function closeSelectedChatImageLightbox(): void {
     setChatImageLightboxOpen(false);
+  }
+
+  async function addSelectedChatImageToAssetLibrary(): Promise<void> {
+    if (!activeRoleId || !resolvedChatImagePath) return;
+    if (activeRole?.illustrations_abs.includes(resolvedChatImagePath)) {
+      setNotice("当前图片已在素材库中。");
+      return;
+    }
+
+    setAddingChatImageToAssetLibrary(true);
+    setError("");
+    const res = await window.miraDesktop.invoke({
+      method: "roles.update",
+      payload: {
+        role_id: activeRoleId,
+        illustration_sources: [resolvedChatImagePath],
+      },
+    });
+    setAddingChatImageToAssetLibrary(false);
+    if (res.error) {
+      setError(res.error.message);
+      return;
+    }
+    await loadRolesFromBridge();
+    setNotice("已加入素材库。");
   }
 
   function selectPreviousChatImage(): void {
@@ -1777,10 +1803,13 @@ function App(): React.ReactElement {
         onConfirm={() => void confirmDeleteRole()}
       />
       <ChatImageLightbox
+        canAddToAssetLibrary={Boolean(activeRoleId && resolvedChatImagePath)}
         canGoToNext={selectedChatImageIndex >= 0 && selectedChatImageIndex < chatImageHistory.length - 1}
         canGoToPrevious={selectedChatImageIndex > 0}
         imagePath={resolvedChatImagePath}
+        addingToAssetLibrary={addingChatImageToAssetLibrary}
         open={chatImageLightboxOpen}
+        onAddToAssetLibrary={() => void addSelectedChatImageToAssetLibrary()}
         onClose={closeSelectedChatImageLightbox}
         onGoToNext={selectNextChatImage}
         onGoToPrevious={selectPreviousChatImage}

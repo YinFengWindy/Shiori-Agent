@@ -9,10 +9,13 @@ import { clampChatImageZoom, getNextChatImageZoom } from "./chatImageLightboxSta
 import { toFileUrl } from "../shared/format";
 
 type ChatImageLightboxProps = {
+  canAddToAssetLibrary: boolean;
   canGoToNext: boolean;
   canGoToPrevious: boolean;
   imagePath: string;
+  addingToAssetLibrary: boolean;
   open: boolean;
+  onAddToAssetLibrary: () => void;
   onClose: () => void;
   onGoToNext: () => void;
   onGoToPrevious: () => void;
@@ -20,10 +23,13 @@ type ChatImageLightboxProps = {
 
 /** Renders the enlarged chat image preview dialog for the selected sidebar image. */
 export function ChatImageLightbox({
+  canAddToAssetLibrary,
   canGoToNext,
   canGoToPrevious,
   imagePath,
+  addingToAssetLibrary,
   open,
+  onAddToAssetLibrary,
   onClose,
   onGoToNext,
   onGoToPrevious,
@@ -228,6 +234,16 @@ export function ChatImageLightbox({
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="m9 18 6-6-6-6" />
               </svg>
+            </button>
+          </div>
+          <div className="pointer-events-none absolute bottom-4 right-4 z-[2]">
+            <button
+              className="pointer-events-auto rounded-md border border-black/12 bg-white/94 px-3.5 py-2 text-sm text-[#1F2937] shadow-[0_10px_24px_rgba(15,23,42,0.12)] transition hover:border-black hover:bg-white disabled:cursor-default disabled:opacity-40"
+              type="button"
+              onClick={onAddToAssetLibrary}
+              disabled={!canAddToAssetLibrary || addingToAssetLibrary}
+            >
+              {addingToAssetLibrary ? "加入中..." : "加入素材库"}
             </button>
           </div>
         </div>
