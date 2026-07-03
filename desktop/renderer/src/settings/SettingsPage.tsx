@@ -35,6 +35,11 @@ type SettingsPageProps = {
   onMetaChange?: (meta: { configPath: string; dirty: boolean }) => void;
 };
 
+type ProactiveTargetOption = {
+  value: string;
+  label: string;
+};
+
 function joinLines(values: string[]): string {
   return values.join("\n");
 }
@@ -73,6 +78,12 @@ function parseNumber(value: string, fallback: number): number {
 
 function getBindingChatIdMeta(channel: string): { label: string; placeholder: string; hint: string } {
   switch (channel) {
+    case "desktop":
+      return {
+        label: "Desktop Session",
+        placeholder: "自动使用 role:<role_id>",
+        hint: "桌面端会把主动消息直接写入该角色会话，不需要手填 chat_id。",
+      };
     case "telegram":
       return {
         label: "Telegram Chat ID",
@@ -111,6 +122,15 @@ function getBindingChatIdMeta(channel: string): { label: string; placeholder: st
       };
   }
 }
+
+const proactiveTargetOptions: ProactiveTargetOption[] = [
+  { value: "desktop", label: "桌面端" },
+  { value: "telegram", label: "Telegram" },
+  { value: "qq", label: "QQ" },
+  { value: "qqbot", label: "QQBot" },
+  { value: "feishu", label: "Feishu" },
+  { value: "cli", label: "CLI" },
+];
 
 function getMemoryEngineOptions(currentValue: string): Array<{ value: string; label: string }> {
   const normalized = currentValue.trim();
@@ -241,6 +261,9 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
   const floatingActionClass =
     "grid h-10 w-10 place-items-center rounded-full border bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-default disabled:border-black/6 disabled:bg-white/60 disabled:text-[#b8b8b8] disabled:shadow-none";
+  const desktopTargetRoleId = draft?.proactive.targetRoleId.trim() ?? "";
+  const desktopTargetChatId = desktopTargetRoleId ? `role:${desktopTargetRoleId}` : "";
+  const proactiveTargetMeta = getBindingChatIdMeta(draft?.proactive.targetChannel ?? "");
 
   useEffect(() => {
     let cancelled = false;
@@ -278,6 +301,44 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
       cancelled = true;
     };
   }, []);
+
+  function updateProactiveTargetChannel(nextChannel: string): void {
+    setDraft((current) => {
+      if (!current) return current;
+      const currentRoleId = current.proactive.targetRoleId.trim();
+      const currentDesktopChatId = currentRoleId ? `role:${currentRoleId}` : "";
+      const currentChatId = current.proactive.targetChatId;
+      const nextChatId = nextChannel === "desktop"
+        ? currentDesktopChatId
+        : (current.proactive.targetChannel === "desktop" && currentChatId === currentDesktopChatId ? "" : currentChatId);
+      return {
+        ...current,
+        proactive: {
+          ...current.proactive,
+          targetChannel: nextChannel,
+          targetChatId: nextChatId,
+        },
+      };
+    });
+  }
+
+  function updateProactiveTargetRoleId(nextRoleId: string): void {
+    setDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        proactive: {
+          ...current.proactive,
+          targetRoleId: nextRoleId,
+          targetChatId: current.proactive.targetChannel === "desktop" && nextRoleId.trim()
+            ? `role:${nextRoleId.trim()}`
+            : current.proactive.targetChannel === "desktop"
+              ? ""
+              : current.proactive.targetChatId,
+        },
+      };
+    });
+  }
 
   useEffect(() => {
     if (!snapshot || !draft) return;
@@ -711,20 +772,31 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "target":
             return (
               <SectionCard>
-                <Field label="目标频道与 Chat ID">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <input className={cx(inputClass, "bg-white")} value={draft.proactive.targetChannel} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, targetChannel: event.target.value } }))} placeholder="频道名" />
-                    <input className={cx(inputClass, "bg-white")} value={draft.proactive.targetChatId} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, targetChatId: event.target.value } }))} placeholder="会话 ID" />
-                  </div>
+                <Field label="主动推送目标">
+                  <select className={cx(inputClass, "bg-white")} value={draft.proactive.targetChannel} onChange={(event) => updateProactiveTargetChannel(event.target.value)}>
+                    <option value="">请选择目标</option>
+                    {proactiveTargetOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
                 </Field>
                 <Field label="默认角色" hint="主动推送优先使用这个角色；如果该角色绑定了多个 transport，仍建议同时明确填写目标频道和 Chat ID。">
-                  <select className={cx(inputClass, "bg-white")} value={draft.proactive.targetRoleId} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, targetRoleId: event.target.value } }))}>
+                  <select className={cx(inputClass, "bg-white")} value={draft.proactive.targetRoleId} onChange={(event) => updateProactiveTargetRoleId(event.target.value)}>
                     <option value="" disabled={draft.proactive.enabled}>请选择角色</option>
                     {roles.map((role) => (
                       <option key={role.id} value={role.id}>{role.name}</option>
                     ))}
                   </select>
                 </Field>
+                {draft.proactive.targetChannel ? (
+                  <Field label={proactiveTargetMeta.label} hint={proactiveTargetMeta.hint}>
+                    {draft.proactive.targetChannel === "desktop" ? (
+                      <input className={cx(inputClass, "bg-[#F6F7F9] text-[#6D737D]")} value={desktopTargetChatId} readOnly placeholder={proactiveTargetMeta.placeholder} />
+                    ) : (
+                      <input className={cx(inputClass, "bg-white")} value={draft.proactive.targetChatId} onChange={(event) => updateDraft((current) => current ? ({ ...current, proactive: { ...current.proactive, targetChatId: event.target.value } }) : current)} placeholder={proactiveTargetMeta.placeholder} />
+                    )}
+                  </Field>
+                ) : null}
               </SectionCard>
             );
           case "agent":

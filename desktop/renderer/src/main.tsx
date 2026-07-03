@@ -144,6 +144,22 @@ function createPendingRoleRecord(
   };
 }
 
+function getRoleIdFromSession(session: SessionPayload): string {
+  const metadataRoleId = String(session.metadata.role_id ?? "").trim();
+  if (metadataRoleId) {
+    return metadataRoleId;
+  }
+  return session.key.startsWith("role:") ? session.key.slice(5) : "";
+}
+
+function isProactiveAssistantMessage(session: SessionPayload): boolean {
+  const lastMessage = session.messages[session.messages.length - 1];
+  if (!lastMessage || lastMessage.role !== "assistant") {
+    return false;
+  }
+  return Boolean(lastMessage.metadata?.proactive);
+}
+
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
   const [roles, setRoles] = useState<RoleRecord[]>([]);
@@ -181,6 +197,7 @@ function App(): React.ReactElement {
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
   const [settingsConfigPath, setSettingsConfigPath] = useState("");
   const [settingsDirty, setSettingsDirty] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const imageHistorySidebar = useRightSidebarState({
     minWidth: historySidebarMinWidth,
     maxWidth: historySidebarMaxWidth,
@@ -203,6 +220,7 @@ function App(): React.ReactElement {
   const openRoleRequestIdRef = useRef(0);
   const activeRoleIdRef = useRef("");
   const activeSessionRef = useRef<SessionPayload | null>(null);
+  const mainViewRef = useRef<AppMainView>({ kind: "chat" });
   const rolesRef = useRef<RoleRecord[]>([]);
   const navigationHistoryRef = useRef<NavigationEntry[]>([]);
   const navigationHistoryIndexRef = useRef(-1);
@@ -237,7 +255,22 @@ function App(): React.ReactElement {
     if (mainView.kind !== "settings") {
       lastNonSettingsViewRef.current = mainView;
     }
+    mainViewRef.current = mainView;
   }, [mainView]);
+
+  useEffect(() => {
+    if (mainView.kind !== "chat" || !activeRoleId) {
+      return;
+    }
+    setUnreadCounts((current) => {
+      if (!current[activeRoleId]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[activeRoleId];
+      return next;
+    });
+  }, [mainView.kind, activeRoleId]);
 
   const roleWorkspaceViewActive =
     mainView.kind === "roles-list"
@@ -490,6 +523,15 @@ function App(): React.ReactElement {
     setRoles((current) => {
       mergedRoles = reconcileRoles(current, nextRoles);
       return mergedRoles;
+    });
+    setUnreadCounts((current) => {
+      const next: Record<string, number> = {};
+      nextRoles.forEach((role) => {
+        if (current[role.id]) {
+          next[role.id] = current[role.id];
+        }
+      });
+      return next;
     });
     return mergedRoles;
   }
@@ -791,20 +833,38 @@ function App(): React.ReactElement {
           return;
         }
 
-        const currentSession = activeSessionRef.current;
-        if (!currentSession) return;
-
         if (event.method === "session.updated") {
           const session = event.payload.session as SessionPayload | undefined;
-          if (!session || session.key !== currentSession.key) return;
-          setActiveSession(session);
-          const activeRoleId = activeRoleIdRef.current;
-          const role = rolesRef.current.find((item) => item.id === activeRoleId) ?? null;
-          setActiveIllustration((current) =>
-            chooseIllustration(role, session, current),
-          );
+          if (!session) return;
+          const currentSession = activeSessionRef.current;
+          const currentView = mainViewRef.current;
+          const roleId = getRoleIdFromSession(session);
+          const isActiveSession = currentSession?.key === session.key;
+          const isVisibleChat = isActiveSession && currentView.kind === "chat";
+          if (isActiveSession) {
+            setActiveSession(session);
+            const activeRoleId = activeRoleIdRef.current;
+            const role = rolesRef.current.find((item) => item.id === activeRoleId) ?? null;
+            setActiveIllustration((current) =>
+              chooseIllustration(role, session, current),
+            );
+          }
+          if (
+            event.id === "proactive"
+            && roleId
+            && isProactiveAssistantMessage(session)
+            && !isVisibleChat
+          ) {
+            setUnreadCounts((current) => ({
+              ...current,
+              [roleId]: (current[roleId] ?? 0) + 1,
+            }));
+          }
           return;
         }
+
+        const currentSession = activeSessionRef.current;
+        if (!currentSession) return;
 
         if (String(event.payload.session_key ?? "") !== currentSession.key) return;
 
@@ -1628,6 +1688,7 @@ function App(): React.ReactElement {
             <RoleSidebar
               roles={roles}
               activeRoleId={activeRoleId}
+              unreadCounts={unreadCounts}
               animating={sidebarAnimating && !resizingSidebar}
               bridgeReady={bridgeReady}
               collapsed={sidebarCollapsed}

@@ -7,6 +7,7 @@ import type { RoleRecord } from "../shared/types";
 type RoleSidebarProps = {
   roles: RoleRecord[];
   activeRoleId: string;
+  unreadCounts: Record<string, number>;
   bridgeReady: boolean;
   collapsed: boolean;
   animating: boolean;
@@ -23,6 +24,7 @@ type RoleSidebarProps = {
 export function RoleSidebar({
   roles,
   activeRoleId,
+  unreadCounts,
   bridgeReady,
   collapsed,
   animating,
@@ -37,7 +39,7 @@ export function RoleSidebar({
   const sidebarEntryClass =
     "sidebar-entry grid min-h-[38px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] text-[#3f3f3f] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-[0.45]";
   const roleCardClass =
-    "role-card grid min-h-[42px] grid-cols-[32px_1fr] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] leading-none text-[#404040] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-60";
+    "role-card grid min-h-[42px] grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] leading-none text-[#404040] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-60";
   const roleAvatarClass =
     "role-avatar grid h-8 w-8 place-items-center rounded-full border border-[rgba(76,48,24,0.12)] object-cover";
 
@@ -108,6 +110,15 @@ export function RoleSidebar({
               <span className={cx(roleAvatarClass, "bg-white/55 text-sm font-bold text-accent-deep")}>{role.name.slice(0, 1).toUpperCase()}</span>
             )}
             <span className="role-name min-w-0 truncate font-semibold leading-none">{role.name}</span>
+            <span className="grid min-h-5 min-w-5 place-items-center">
+              {unreadCounts[role.id] ? (
+                <span
+                  className="h-2.5 w-2.5 rounded-full bg-[#DA4B4B]"
+                  aria-label={`${role.name} 有未读主动消息`}
+                  title={`${role.name} 有未读主动消息`}
+                />
+              ) : null}
+            </span>
           </button>
         )) : (
           null

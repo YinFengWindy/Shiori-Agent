@@ -267,6 +267,17 @@ function pickPreferredRecord(primary: Record<string, unknown>, fallback: Record<
   return Object.keys(primary).length > 0 ? primary : fallback;
 }
 
+function normalizeDesktopProactiveChatId(channel: string, roleId: string, chatId: string): string {
+  if (channel !== "desktop") {
+    return chatId;
+  }
+  const cleanRoleId = roleId.trim();
+  if (!cleanRoleId) {
+    return "";
+  }
+  return `role:${cleanRoleId}`;
+}
+
 function loadSettingsData(): SettingsSnapshot {
   const content = existsSync(configPath)
     ? readFileSync(configPath, "utf-8")
@@ -299,6 +310,13 @@ function loadSettingsData(): SettingsSnapshot {
   const qqbot = pickPreferredRecord(asRecord(plugins.qqbot), qqbotLegacy);
   const feishu = asRecord(plugins.feishu);
   const cli = asRecord(channels.cli);
+  const targetChannel = String(proactiveTarget.channel ?? "");
+  const targetRoleId = String(proactiveTarget.role_id ?? proactive.default_role_id ?? "");
+  const targetChatId = normalizeDesktopProactiveChatId(
+    targetChannel,
+    targetRoleId,
+    String(proactiveTarget.chat_id ?? ""),
+  );
 
   return {
     configPath,
@@ -367,9 +385,9 @@ function loadSettingsData(): SettingsSnapshot {
       proactive: {
         enabled: Boolean(proactive.enabled),
         profile: String(proactive.profile ?? ""),
-        targetChannel: String(proactiveTarget.channel ?? ""),
-        targetChatId: String(proactiveTarget.chat_id ?? ""),
-        targetRoleId: String(proactiveTarget.role_id ?? proactive.default_role_id ?? ""),
+        targetChannel,
+        targetChatId,
+        targetRoleId,
         agentMaxSteps: Number(proactiveAgent.max_steps ?? 35),
         agentContentLimit: Number(proactiveAgent.content_limit ?? 5),
         agentWebFetchMaxChars: Number(proactiveAgent.web_fetch_max_chars ?? 8000),
@@ -453,6 +471,13 @@ function renderPluginSection(name: string, value: Record<string, unknown>): stri
 }
 
 function renderSettingsToml(formData: SettingsFormData): string {
+  const proactiveTargetChannel = formData.proactive.targetChannel.trim();
+  const proactiveTargetRoleId = formData.proactive.targetRoleId.trim();
+  const proactiveTargetChatId = normalizeDesktopProactiveChatId(
+    proactiveTargetChannel,
+    proactiveTargetRoleId,
+    formData.proactive.targetChatId.trim(),
+  );
   const qqGroupBlocks = formData.channels.qqGroups
     .filter((group) => group.groupId.trim())
     .map((group) => [
@@ -585,9 +610,9 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `profile = ${quote(formData.proactive.profile)}`,
     "",
     "[proactive.target]",
-    `channel = ${quote(formData.proactive.targetChannel)}`,
-    `chat_id = ${quote(formData.proactive.targetChatId)}`,
-    `role_id = ${quote(formData.proactive.targetRoleId)}`,
+    `channel = ${quote(proactiveTargetChannel)}`,
+    `chat_id = ${quote(proactiveTargetChatId)}`,
+    `role_id = ${quote(proactiveTargetRoleId)}`,
     "",
     "[proactive.agent]",
     `max_steps = ${formData.proactive.agentMaxSteps}`,
