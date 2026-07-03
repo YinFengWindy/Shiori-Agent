@@ -1572,6 +1572,8 @@ function App(): React.ReactElement {
               width={sidebarWidth}
               form={imageStudioState.form}
               nsfwEnabled={imageStudioState.nsfwEnabled}
+              addQualityTags={imageStudioState.addQualityTags}
+              undesiredContentPreset={imageStudioState.undesiredContentPreset}
               roleItems={imageStudioState.roleItems}
               submitting={imageStudioState.submitting}
               validationError={imageStudioState.validationError}
@@ -1580,6 +1582,8 @@ function App(): React.ReactElement {
               onChange={imageStudioState.onChange}
               onPickBaseImage={imageStudioState.onPickBaseImage}
               onSubmit={imageStudioState.onSubmit}
+              onToggleAddQualityTags={imageStudioState.onToggleAddQualityTags}
+              onChangeUndesiredContentPreset={imageStudioState.onChangeUndesiredContentPreset}
               onToggleNsfwEnabled={imageStudioState.onToggleNsfwEnabled}
             />
           ) : roleWorkspaceViewActive ? (

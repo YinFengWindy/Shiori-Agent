@@ -12,6 +12,8 @@ type ImageStudioSidebarProps = {
   width: number;
   form: ImageStudioFormState;
   nsfwEnabled: boolean;
+  addQualityTags: boolean;
+  undesiredContentPreset: number;
   roleItems: Array<{ id: string; label: string; avatarAbs: string | null }>;
   submitting: boolean;
   validationError: string;
@@ -21,6 +23,8 @@ type ImageStudioSidebarProps = {
   onPickBaseImage: () => void;
   onSubmit: () => void;
   onToggleNsfwEnabled: () => void;
+  onToggleAddQualityTags: () => void;
+  onChangeUndesiredContentPreset: (value: number) => void;
 };
 
 /** Renders the image studio workspace sidebar with generation parameters. */
@@ -31,6 +35,8 @@ export function ImageStudioSidebar({
   width,
   form,
   nsfwEnabled,
+  addQualityTags,
+  undesiredContentPreset,
   roleItems,
   submitting,
   validationError,
@@ -40,6 +46,8 @@ export function ImageStudioSidebar({
   onPickBaseImage,
   onSubmit,
   onToggleNsfwEnabled,
+  onToggleAddQualityTags,
+  onChangeUndesiredContentPreset,
 }: ImageStudioSidebarProps) {
   const sidebarBackClass =
     "mb-3 flex h-8 items-center gap-2 rounded-md border border-transparent bg-transparent px-2 text-left text-sm text-[#6E737A] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
@@ -68,6 +76,8 @@ export function ImageStudioSidebar({
           bridgeReady={bridgeReady}
           form={form}
           nsfwEnabled={nsfwEnabled}
+          addQualityTags={addQualityTags}
+          undesiredContentPreset={undesiredContentPreset}
           roleItems={roleItems}
           validationError={validationError}
           submitting={submitting}
@@ -75,6 +85,8 @@ export function ImageStudioSidebar({
           onPickBaseImage={onPickBaseImage}
           onSubmit={onSubmit}
           onToggleNsfwEnabled={onToggleNsfwEnabled}
+          onToggleAddQualityTags={onToggleAddQualityTags}
+          onChangeUndesiredContentPreset={onChangeUndesiredContentPreset}
         />
       </div>
       <div

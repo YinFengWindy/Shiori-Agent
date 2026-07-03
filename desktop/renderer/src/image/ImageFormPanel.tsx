@@ -13,6 +13,8 @@ type ImageFormPanelProps = {
   bridgeReady: boolean;
   form: ImageStudioFormState;
   nsfwEnabled: boolean;
+  addQualityTags: boolean;
+  undesiredContentPreset: number;
   roleItems: RolePickerItem[];
   validationError: string;
   submitting: boolean;
@@ -20,6 +22,8 @@ type ImageFormPanelProps = {
   onPickBaseImage: () => void;
   onSubmit: () => void;
   onToggleNsfwEnabled: () => void;
+  onToggleAddQualityTags: () => void;
+  onChangeUndesiredContentPreset: (value: number) => void;
 };
 
 type ImageSelectOption<T extends string> = {
@@ -45,6 +49,8 @@ export function ImageFormPanel({
   bridgeReady,
   form,
   nsfwEnabled,
+  addQualityTags,
+  undesiredContentPreset,
   roleItems,
   validationError,
   submitting,
@@ -52,6 +58,8 @@ export function ImageFormPanel({
   onPickBaseImage,
   onSubmit,
   onToggleNsfwEnabled,
+  onToggleAddQualityTags,
+  onChangeUndesiredContentPreset,
 }: ImageFormPanelProps) {
   const [promptTab, setPromptTab] = useState<"prompt" | "negative">("prompt");
   const [rolePanelOpen, setRolePanelOpen] = useState(false);
@@ -215,6 +223,44 @@ export function ImageFormPanel({
                         )}
                       />
                     </button>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-[#20242A]">Add Quality Tags</div>
+                    <button
+                      type="button"
+                      className={cx(
+                        "relative inline-flex h-7 w-12 rounded-full transition focus:outline-none focus:ring-2 focus:ring-primary/20",
+                        addQualityTags ? "bg-[#20242A]" : "bg-[#BFC6D0]",
+                      )}
+                      aria-pressed={addQualityTags}
+                      onClick={onToggleAddQualityTags}
+                    >
+                      <span
+                        className={cx(
+                          "absolute top-1 h-5 w-5 rounded-full bg-white transition",
+                          addQualityTags ? "left-6" : "left-1",
+                        )}
+                      />
+                    </button>
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    <div className="text-sm font-semibold text-[#20242A]">Undesired Content Preset</div>
+                    <div className="relative">
+                      <select
+                        className={selectClass}
+                        value={String(undesiredContentPreset)}
+                        onChange={(event) => onChangeUndesiredContentPreset(Number(event.target.value) || 0)}
+                      >
+                        <option value="0">None</option>
+                        <option value="1">Light</option>
+                        <option value="2">Heavy</option>
+                      </select>
+                      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[#737781]" aria-hidden="true">
+                        <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 fill-current">
+                          <path d="M2.2 4.2 6 8l3.8-3.8.8.8L6 9.8 1.4 5z" />
+                        </svg>
+                      </span>
+                    </div>
                   </div>
                 </div>
               ) : null}

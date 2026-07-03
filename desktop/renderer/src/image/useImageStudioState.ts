@@ -132,6 +132,8 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
       ? (settingsFormData?.integrations.novelaiNsfwModel?.trim() || "nai-diffusion-4-5-full")
       : (settingsFormData?.integrations.novelaiDefaultModel?.trim() || "nai-diffusion-4-5-curated")
   ), [nsfwEnabled, settingsFormData]);
+  const addQualityTags = Boolean(settingsFormData?.integrations.novelaiAddQualityTags);
+  const undesiredContentPreset = Number(settingsFormData?.integrations.novelaiUndesiredContentPreset ?? 0);
 
   const validationError = useMemo(() => {
     if (resolvedMode === "img2img" && !form.baseImagePath.trim()) {
@@ -223,13 +225,55 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
     }
   }
 
+  async function handleToggleAddQualityTags(): Promise<void> {
+    if (!settingsFormData) return;
+    const nextFormData: SettingsFormData = {
+      ...settingsFormData,
+      integrations: {
+        ...settingsFormData.integrations,
+        novelaiAddQualityTags: !settingsFormData.integrations.novelaiAddQualityTags,
+      },
+    };
+    setSettingsFormData(nextFormData);
+    try {
+      await window.miraDesktop.saveSettings(nextFormData);
+      const refreshed = await window.miraDesktop.readSettings();
+      setSettingsFormData(refreshed.formData);
+    } catch (saveError) {
+      setSettingsFormData(settingsFormData);
+      setError(saveError instanceof Error ? saveError.message : String(saveError));
+    }
+  }
+
+  async function handleChangeUndesiredContentPreset(value: number): Promise<void> {
+    if (!settingsFormData) return;
+    const nextFormData: SettingsFormData = {
+      ...settingsFormData,
+      integrations: {
+        ...settingsFormData.integrations,
+        novelaiUndesiredContentPreset: value,
+      },
+    };
+    setSettingsFormData(nextFormData);
+    try {
+      await window.miraDesktop.saveSettings(nextFormData);
+      const refreshed = await window.miraDesktop.readSettings();
+      setSettingsFormData(refreshed.formData);
+    } catch (saveError) {
+      setSettingsFormData(settingsFormData);
+      setError(saveError instanceof Error ? saveError.message : String(saveError));
+    }
+  }
+
   return {
     activeRecord,
+    addQualityTags,
     error,
     form,
     history,
     latestResult,
     nsfwEnabled,
+    undesiredContentPreset,
     requestSummary,
     roleItems,
     selectedRecordId,
@@ -241,6 +285,8 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
     onPickBaseImage: () => void handlePickBaseImage(),
     onSelectRecord: (record: ImageHistoryRecord) => setSelectedRecordId(record.id),
     onSubmit: () => void handleSubmit(),
+    onChangeUndesiredContentPreset: (value: number) => void handleChangeUndesiredContentPreset(value),
+    onToggleAddQualityTags: () => void handleToggleAddQualityTags(),
     onToggleNsfwEnabled: () => void handleToggleNsfwEnabled(),
   };
 }

@@ -14,11 +14,12 @@ export function ImageHistoryPanel({
   onSelect,
 }: ImageHistoryPanelProps) {
   return (
-    <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+    <section className="flex h-full min-h-0 flex-col gap-3 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <div className="flex items-center justify-between px-1 pt-1">
         <div className="text-sm font-medium text-[#20242A]">History</div>
       </div>
-      <div className="scrollbar-soft grid min-h-0 content-start gap-2 overflow-y-auto pr-1">
+      <div className="scrollbar-soft flex-1 min-h-0 overflow-y-auto pr-1">
+        <div className="grid content-start gap-2">
         {items.length ? items.map((item) => {
           const previewPath = item.output_paths[0] ?? "";
           const selected = item.id === selectedRecordId;
@@ -44,6 +45,7 @@ export function ImageHistoryPanel({
             暂无绘图记录
           </div>
         )}
+        </div>
       </div>
     </section>
   );

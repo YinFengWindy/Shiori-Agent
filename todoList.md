@@ -4,9 +4,9 @@ fix：
 
 [x] 角色素材库的头像和立绘切换有问题，不能恢复到空白状态。
 
-[] 生图界面的设置接入。
+[x] 生图界面的Add Quality Tags和Undesired Content Preset设置接入。
 
-[] 生图的图片删除功能。
+[x] 生图的右侧栏滚动。
 
 [] 桌面端proactive功能无效。
 
