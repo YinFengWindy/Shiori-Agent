@@ -116,6 +116,36 @@ async def test_service_img2img_requires_base_image_path(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_service_img2img_uses_custom_strength_and_noise(tmp_path: Path) -> None:
+    settings = NovelAISettings(enabled=True, token="novel-token")
+    client = _FakeClient(_json_response(), settings)
+    service = NovelAIService(
+        settings=settings,
+        client=client,
+        store=NovelAIStore(tmp_path),
+        role_store=RoleStore(tmp_path),
+        workspace=tmp_path,
+    )
+    base_image = tmp_path / "base.png"
+    base_image.write_bytes(_TINY_PNG)
+
+    _ = await service.generate(
+        GenerateImageRequest(
+            prompt="repaint this portrait",
+            mode="img2img",
+            base_image_path=str(base_image),
+            strength=0.4,
+            noise=0.6,
+        )
+    )
+
+    parameters = client.last_generate_kwargs["parameters"]
+    assert isinstance(parameters, dict)
+    assert parameters["strength"] == 0.4
+    assert parameters["noise"] == 0.6
+
+
+@pytest.mark.asyncio
 async def test_service_auto_writeback_updates_role_assets(tmp_path: Path) -> None:
     role_store = RoleStore(tmp_path)
     _ = role_store.create_role(

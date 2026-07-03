@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toFileUrl } from "../shared/format";
+import { DeleteIcon, ResetIcon, UploadIcon } from "../shared/icons";
 import { cx, inputClass, textareaClass } from "../shared/styles";
 import type { ImageSizePreset, ImageStudioFormState } from "./types";
 
@@ -279,8 +280,8 @@ export function ImageFormPanel({
                 />
                 <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4">
                   <div className="min-w-0">
-                    <div className="text-[28px] font-semibold leading-none tracking-[-0.02em] text-white">Image2Image</div>
-                    <div className="mt-2 text-sm text-white/72">Transform your image.</div>
+                    <div className="text-[22px] font-semibold leading-none tracking-[-0.02em] text-white">Image2Image</div>
+                    <div className="mt-1.5 text-[13px] text-white/72">Transform your image.</div>
                   </div>
                   <div className="flex flex-none items-center gap-2">
                     <button
@@ -289,9 +290,7 @@ export function ImageFormPanel({
                       aria-label="重新选择 Base Img"
                       onClick={onPickBaseImage}
                     >
-                      <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
-                        <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-4.9 6h-2.02A7 7 0 1 0 17.65 6.35Z" />
-                      </svg>
+                      <ResetIcon className="h-4.5 w-4.5 fill-current" />
                     </button>
                     <button
                       type="button"
@@ -299,21 +298,59 @@ export function ImageFormPanel({
                       aria-label="移除 Base Img"
                       onClick={() => onChange({ baseImagePath: "" })}
                     >
-                      <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
-                        <path d="M7 21a2 2 0 0 1-2-2V7h14v12a2 2 0 0 1-2 2H7Zm3-10v7h2v-7h-2Zm4 0v7h2v-7h-2ZM7 4h3.5l1-1h1l1 1H17v2H7V4Z" />
-                      </svg>
+                      <DeleteIcon className="h-4.5 w-4.5 fill-current" />
                     </button>
+                  </div>
+                </div>
+                <div className="absolute inset-x-0 bottom-0 p-4">
+                  <div className="grid gap-4 rounded-[18px] bg-[rgba(17,21,29,0.42)] px-4 py-3 backdrop-blur-[8px]">
+                    <label className="grid gap-2">
+                      <div className="flex items-center justify-between gap-3 text-sm font-semibold text-white">
+                        <span>Strength</span>
+                        <span className="text-white/80">{form.strength.toFixed(1)}</span>
+                      </div>
+                      <input
+                        className="accent-white"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        value={form.strength}
+                        onChange={(event) => onChange({ strength: Number(event.target.value) })}
+                      />
+                    </label>
+                    <label className="grid gap-2">
+                      <div className="flex items-center justify-between gap-3 text-sm font-semibold text-white">
+                        <span>Noise</span>
+                        <span className="text-white/80">{form.noise.toFixed(1)}</span>
+                      </div>
+                      <input
+                        className="accent-white"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        value={form.noise}
+                        onChange={(event) => onChange({ noise: Number(event.target.value) })}
+                      />
+                    </label>
                   </div>
                 </div>
               </div>
             ) : (
-              <button
-                type="button"
-                className="flex h-[72px] w-full items-center justify-center rounded-[18px] border border-dashed border-[#D6DCE3] bg-[#F3F5F7] px-4 text-sm font-medium text-[#5B616A] transition hover:border-primary/40 hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
-                onClick={onPickBaseImage}
-              >
-                Add Img
-              </button>
+              <div className="flex min-w-0 items-center justify-between gap-3 border-t border-[#E7EAF0] pt-3">
+                <div className="min-w-0 flex-1 text-[15px] text-[#5B616A]">Add a Base Img (Optional)</div>
+                <div className="flex flex-none items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-primary/40 hover:text-[#20242A] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    aria-label="上传 Base Img"
+                    onClick={onPickBaseImage}
+                  >
+                    <UploadIcon className="h-4.5 w-4.5 fill-current" />
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

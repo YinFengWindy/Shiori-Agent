@@ -36,6 +36,18 @@ class GenerateImageTool(Tool):
                 "type": "string",
                 "description": "负向提示词，可选。",
             },
+            "strength": {
+                "type": "number",
+                "description": "img2img 强度，范围 0 到 1。",
+                "minimum": 0,
+                "maximum": 1,
+            },
+            "noise": {
+                "type": "number",
+                "description": "img2img 噪声，范围 0 到 1。",
+                "minimum": 0,
+                "maximum": 1,
+            },
             "size_preset": {
                 "type": "string",
                 "enum": ["square", "landscape", "portrait", "custom"],
@@ -81,6 +93,16 @@ class GenerateImageTool(Tool):
             mode=str(kwargs.get("mode") or "txt2img"),  # type: ignore[arg-type]
             negative_prompt=str(kwargs.get("negative_prompt") or ""),
             base_image_path=str(kwargs.get("base_image_path") or ""),
+            strength=(
+                float(kwargs["strength"])
+                if kwargs.get("strength") is not None
+                else None
+            ),
+            noise=(
+                float(kwargs["noise"])
+                if kwargs.get("noise") is not None
+                else None
+            ),
             size_preset=str(kwargs.get("size_preset") or "square"),  # type: ignore[arg-type]
             custom_width=(
                 int(kwargs["custom_width"])

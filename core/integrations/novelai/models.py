@@ -35,6 +35,8 @@ class GenerateImageRequest:
     mode: NovelAIMode = "txt2img"
     negative_prompt: str = ""
     base_image_path: str = ""
+    strength: float | None = None
+    noise: float | None = None
     size_preset: NovelAISizePreset = "square"
     custom_width: int | None = None
     custom_height: int | None = None

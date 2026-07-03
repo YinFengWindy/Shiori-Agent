@@ -253,6 +253,16 @@ class DesktopBridgeService:
                         prompt=str(payload.get("prompt") or ""),
                         mode=str(payload.get("mode") or "txt2img"),  # type: ignore[arg-type]
                         base_image_path=str(payload.get("base_image_path") or ""),
+                        strength=(
+                            float(payload["strength"])
+                            if payload.get("strength") is not None
+                            else None
+                        ),
+                        noise=(
+                            float(payload["noise"])
+                            if payload.get("noise") is not None
+                            else None
+                        ),
                         negative_prompt=str(payload.get("negative_prompt") or ""),
                         size_preset=str(payload.get("size_preset") or "square"),  # type: ignore[arg-type]
                         custom_width=(

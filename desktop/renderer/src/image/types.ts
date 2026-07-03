@@ -7,6 +7,8 @@ export type ImageStudioFormState = {
   negativePrompt: string;
   mode: ImageMode;
   baseImagePath: string;
+  strength: number;
+  noise: number;
   sizePreset: ImageSizePreset;
   customWidth: string;
   customHeight: string;

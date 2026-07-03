@@ -81,8 +81,8 @@ class NovelAIService:
             parameters["seed"] = request.seed
         if base_image_b64:
             parameters["image"] = base_image_b64
-            parameters["strength"] = _DEFAULT_IMG2IMG_STRENGTH
-            parameters["noise"] = _DEFAULT_IMG2IMG_NOISE
+            parameters["strength"] = self._resolve_img2img_strength(request)
+            parameters["noise"] = self._resolve_img2img_noise(request)
 
         try:
             response = await self._client.generate_image(
@@ -228,6 +228,18 @@ class NovelAIService:
             if self._settings.nsfw_enabled
             else self._settings.default_model
         )
+
+    def _resolve_img2img_strength(self, request: GenerateImageRequest) -> float:
+        value = _DEFAULT_IMG2IMG_STRENGTH if request.strength is None else float(request.strength)
+        if value < 0 or value > 1:
+            raise ValueError("strength 必须在 0 到 1 之间")
+        return value
+
+    def _resolve_img2img_noise(self, request: GenerateImageRequest) -> float:
+        value = _DEFAULT_IMG2IMG_NOISE if request.noise is None else float(request.noise)
+        if value < 0 or value > 1:
+            raise ValueError("noise 必须在 0 到 1 之间")
+        return value
 
     def _build_parameters(
         self,
