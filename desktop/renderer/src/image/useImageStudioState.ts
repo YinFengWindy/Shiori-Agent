@@ -144,8 +144,7 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
     if (form.sizePreset === "custom") {
       const width = parsePositiveInteger(form.customWidth);
       const height = parsePositiveInteger(form.customHeight);
-      if (width == null || height == null) return "自定义尺寸必须是正整数";
-      if (width > 1024 || height > 1024) return "自定义尺寸单边不能超过 1024";
+      if (width == null || height == null) return "";
       if (width * height > 1024 * 1024) return "自定义尺寸总像素不能超过 1024 × 1024";
     }
     return "";

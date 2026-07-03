@@ -39,6 +39,22 @@ const sizeOptions: Array<ImageSelectOption<ImageSizePreset>> = [
   { id: "custom", label: "自定义" },
 ];
 
+function clampCustomDimensionInput(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const digitsOnly = trimmed.replace(/[^\d]/g, "");
+  if (!digitsOnly) return "";
+  const parsed = Number(digitsOnly);
+  if (!Number.isFinite(parsed) || parsed <= 0) return "";
+  return String(Math.min(1024, Math.trunc(parsed)));
+}
+
+function hasPositiveIntegerText(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return /^\d+$/.test(trimmed) && Number(trimmed) > 0;
+}
+
 export function ImageFormPanel({
   bridgeReady,
   form,
@@ -70,10 +86,13 @@ export function ImageFormPanel({
   );
   const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-xl bg-[#F5F6F8] p-1";
   const segmentedButtonBaseClassName = "min-w-0 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition";
+  const customSizeReady = form.sizePreset !== "custom"
+    || (hasPositiveIntegerText(form.customWidth) && hasPositiveIntegerText(form.customHeight));
   const generateDisabled =
     !bridgeReady
     || submitting
     || Boolean(validationError)
+    || !customSizeReady
     || !form.prompt.trim();
 
   const activeRole = useMemo(
@@ -383,13 +402,13 @@ export function ImageFormPanel({
             <input
               className={cx(inputClass, "bg-white")}
               value={form.customWidth}
-              onChange={(event) => onChange({ customWidth: event.target.value })}
+              onChange={(event) => onChange({ customWidth: clampCustomDimensionInput(event.target.value) })}
               placeholder="宽度"
             />
             <input
               className={cx(inputClass, "bg-white")}
               value={form.customHeight}
-              onChange={(event) => onChange({ customHeight: event.target.value })}
+              onChange={(event) => onChange({ customHeight: clampCustomDimensionInput(event.target.value) })}
               placeholder="高度"
             />
           </div>
