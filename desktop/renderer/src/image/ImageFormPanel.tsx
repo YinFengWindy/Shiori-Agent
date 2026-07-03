@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toFileUrl } from "../shared/format";
 import { DeleteIcon, ResetIcon, UploadIcon } from "../shared/icons";
-import { cx, inputClass, textareaClass } from "../shared/styles";
+import { cx, inputClass } from "../shared/styles";
 import type { ImageSizePreset, ImageStudioFormState } from "./types";
 
 type RolePickerItem = {
@@ -82,7 +82,7 @@ export function ImageFormPanel({
     "h-11 appearance-none bg-white py-0 pr-10 text-sm leading-5 focus:border-[#D8DCE2] focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:ring-0",
   );
   const promptTextareaClass = cx(
-    textareaClass,
+    inputClass,
     "min-h-[96px] resize-none overflow-hidden rounded-none border-[#D6DCE3] bg-[#F3F5F7] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus:bg-[#F3F5F7] focus:ring-0 focus-visible:border-[#D6DCE3] focus-visible:ring-0",
   );
   const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-xl bg-[#F5F6F8] p-1";
@@ -226,7 +226,7 @@ export function ImageFormPanel({
                 </svg>
               </button>
               {settingsOpen ? (
-                <div className="absolute inset-x-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-[#D6DCE3] bg-[#F3F5F7] p-4">
+                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-[320px] max-w-[calc(100vw-2rem)] rounded-2xl border border-[#D6DCE3] bg-[#F3F5F7] p-4">
                   <div className="mb-4 flex items-center gap-2 border-b border-[#D6DCE3] pb-3">
                     <div className="rounded-md bg-white px-2 py-1 text-xs font-medium text-[#20242A]">Settings</div>
                   </div>
