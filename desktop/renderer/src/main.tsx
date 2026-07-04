@@ -10,6 +10,14 @@ import {
 } from "./chat/chatComposerState";
 import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "./chat/chatHeaderState";
 import {
+  readRoleSessionCache,
+  removeRoleSessionCache,
+  resolveImmediateRoleSession,
+  retainRoleSessionCache,
+  writeRoleSessionCache,
+  type RoleSessionCache,
+} from "./chat/roleSessionCache";
+import {
   collectChatImageHistory,
   findChatImageHistoryEntry,
   findChatImageHistoryIndex,
@@ -235,6 +243,7 @@ function App(): React.ReactElement {
   const openRoleRequestIdRef = useRef(0);
   const activeRoleIdRef = useRef("");
   const activeSessionRef = useRef<SessionPayload | null>(null);
+  const roleSessionCacheRef = useRef<RoleSessionCache>({});
   const mainViewRef = useRef<AppMainView>({ kind: "chat" });
   const rolesRef = useRef<RoleRecord[]>([]);
   const navigationHistoryRef = useRef<NavigationEntry[]>([]);
@@ -542,6 +551,52 @@ function App(): React.ReactElement {
     return "";
   }
 
+  function cacheRoleSession(roleId: string, session: SessionPayload): void {
+    roleSessionCacheRef.current = writeRoleSessionCache(roleSessionCacheRef.current, roleId, session);
+  }
+
+  function readCachedRoleSession(roleId: string): SessionPayload | null {
+    return readRoleSessionCache(roleSessionCacheRef.current, roleId);
+  }
+
+  function removeCachedRoleSession(roleId: string): void {
+    roleSessionCacheRef.current = removeRoleSessionCache(roleSessionCacheRef.current, roleId);
+  }
+
+  function retainCachedRoleSessions(nextRoles: readonly RoleRecord[]): void {
+    roleSessionCacheRef.current = retainRoleSessionCache(
+      roleSessionCacheRef.current,
+      nextRoles.map((role) => role.id),
+    );
+  }
+
+  function commitActiveSession(nextSession: SessionPayload | null): void {
+    activeSessionRef.current = nextSession;
+    if (nextSession) {
+      const roleId = getRoleIdFromSession(nextSession) || activeRoleIdRef.current;
+      if (roleId) {
+        cacheRoleSession(roleId, nextSession);
+      }
+    }
+    setActiveSession(nextSession);
+  }
+
+  function updateCommittedActiveSession(
+    updater: (current: SessionPayload | null) => SessionPayload | null,
+  ): void {
+    setActiveSession((current) => {
+      const nextSession = updater(current);
+      activeSessionRef.current = nextSession;
+      if (nextSession) {
+        const roleId = getRoleIdFromSession(nextSession) || activeRoleIdRef.current;
+        if (roleId) {
+          cacheRoleSession(roleId, nextSession);
+        }
+      }
+      return nextSession;
+    });
+  }
+
   async function loadRolesFromBridge(): Promise<RoleRecord[] | null> {
     const rolesRes = await window.miraDesktop.invoke({
       method: "roles.list",
@@ -566,6 +621,7 @@ function App(): React.ReactElement {
       });
       return next;
     });
+    retainCachedRoleSessions(nextRoles);
     return mergedRoles;
   }
 
@@ -606,6 +662,7 @@ function App(): React.ReactElement {
         nextRoles.map(async (role) => {
           const { session } = await fetchRoleSession(role.id);
           if (!session) return null;
+          cacheRoleSession(role.id, session);
           return {
             roleId: role.id,
             roleName: role.name,
@@ -772,7 +829,7 @@ function App(): React.ReactElement {
   function appendSessionErrorMessage(sessionKey: string, message: string): void {
     const content = message.trim();
     if (!content) return;
-    setActiveSession((current) => {
+    updateCommittedActiveSession((current) => {
       if (!current || current.key !== sessionKey) return current;
       return {
         ...current,
@@ -868,8 +925,11 @@ function App(): React.ReactElement {
           const roleId = getRoleIdFromSession(session);
           const isActiveSession = currentSession?.key === session.key;
           const isVisibleChat = isActiveSession && currentView.kind === "chat";
+          if (roleId) {
+            cacheRoleSession(roleId, session);
+          }
           if (isActiveSession) {
-            setActiveSession(session);
+            commitActiveSession(session);
             const activeRoleId = activeRoleIdRef.current;
             const role = rolesRef.current.find((item) => item.id === activeRoleId) ?? null;
             setActiveIllustration((current) =>
@@ -898,7 +958,7 @@ function App(): React.ReactElement {
           if (eventSessionKey !== currentSession.key) return;
           const delta = String(event.payload.content_delta ?? "");
           if (!delta) return;
-          setActiveSession((current) => {
+          updateCommittedActiveSession((current) => {
             if (!current) return current;
             const messages = [...current.messages];
             const last = messages[messages.length - 1];
@@ -1012,7 +1072,7 @@ function App(): React.ReactElement {
         await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
       } else {
         setActiveRoleId("");
-        setActiveSession(null);
+        commitActiveSession(null);
         setActiveIllustration("");
       }
     } else if (nextRoles[0]) {
@@ -1041,13 +1101,25 @@ function App(): React.ReactElement {
   ): Promise<void> {
     const requestId = openRoleRequestIdRef.current + 1;
     openRoleRequestIdRef.current = requestId;
-    if (activeRoleIdRef.current !== roleId) {
+    const switchingRole = activeRoleIdRef.current !== roleId;
+    const cachedSession = readCachedRoleSession(roleId);
+    const immediateSession = resolveImmediateRoleSession({
+      currentRoleId: activeRoleIdRef.current,
+      nextRoleId: roleId,
+      currentSession: activeSessionRef.current,
+      cachedSession,
+    });
+    if (switchingRole) {
       setChatReplyTarget(null);
     }
     const role = roleOverride ?? roles.find((item) => item.id === roleId) ?? null;
     if (role) {
-      applyRoleSnapshot(role);
+      applyRoleSnapshot(role, cachedSession);
       setError("");
+    }
+    if (immediateSession !== activeSessionRef.current) {
+      // Show the last cached chat for this role immediately while the bridge refreshes it in the background.
+      commitActiveSession(immediateSession);
     }
     const { error: sessionError, session } = await fetchRoleSession(roleId);
     if (openRoleRequestIdRef.current !== requestId) {
@@ -1061,8 +1133,9 @@ function App(): React.ReactElement {
     if (openRoleRequestIdRef.current !== requestId) {
       return;
     }
+    cacheRoleSession(roleId, session);
     setActiveRoleId(roleId);
-    setActiveSession(session);
+    commitActiveSession(session);
     setError("");
     const resolvedRole = roleOverride ?? latestRoles?.find((item) => item.id === roleId) ?? roles.find((item) => item.id === roleId) ?? null;
     if (resolvedRole) {
@@ -1224,7 +1297,7 @@ function App(): React.ReactElement {
     setChatReplyTarget(null);
     setPendingChatAttachments([]);
     pendingChatAttachmentsRef.current = [];
-    setActiveSession((current) =>
+    updateCommittedActiveSession((current) =>
       current?.key === sessionKey
         ? {
             ...current,
@@ -1248,11 +1321,12 @@ function App(): React.ReactElement {
         clearSessionSending(sessionKey);
         const { session: recoveredSession } = await fetchRoleSession(roleId);
         if (recoveredSession) {
-          setActiveSession((current) =>
+          cacheRoleSession(roleId, recoveredSession);
+          updateCommittedActiveSession((current) =>
             current?.key === sessionKey ? recoveredSession : current,
           );
         } else if (previousSession) {
-          setActiveSession((current) =>
+          updateCommittedActiveSession((current) =>
             current?.key === sessionKey ? previousSession : current,
           );
         }
@@ -1266,7 +1340,8 @@ function App(): React.ReactElement {
         return;
       }
       const nextSession = res.payload.session as SessionPayload;
-      setActiveSession((current) =>
+      cacheRoleSession(roleId, nextSession);
+      updateCommittedActiveSession((current) =>
         current?.key === nextSession.key ? nextSession : current,
       );
       clearSessionSending(sessionKey);
@@ -1274,11 +1349,12 @@ function App(): React.ReactElement {
       clearSessionSending(sessionKey);
       const { session: recoveredSession } = await fetchRoleSession(roleId);
       if (recoveredSession) {
-        setActiveSession((current) =>
+        cacheRoleSession(roleId, recoveredSession);
+        updateCommittedActiveSession((current) =>
           current?.key === sessionKey ? recoveredSession : current,
         );
       } else if (previousSession) {
-        setActiveSession((current) =>
+        updateCommittedActiveSession((current) =>
           current?.key === sessionKey ? previousSession : current,
         );
       }
@@ -1477,9 +1553,10 @@ function App(): React.ReactElement {
     setPendingRoleCardAction(null);
     if (!roleIdOverride || roleId === activeRoleId) {
       setActiveRoleId("");
-      setActiveSession(null);
+      commitActiveSession(null);
       setActiveIllustration("");
     }
+    removeCachedRoleSession(roleId);
     setNotice("角色已删除。");
     if (nextRoles[0]) {
       await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
