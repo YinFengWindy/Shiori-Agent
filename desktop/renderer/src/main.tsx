@@ -2,8 +2,33 @@ import type React from "react";
 import { startTransition, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { ChatSurface } from "./chat/ChatSurface";
-import { ChatImageLightbox } from "./chat/ChatImageLightbox";
+import { DesktopAppFrame } from "./app/DesktopAppFrame";
+import {
+  chatLatestImageSidebarDefaultWidth,
+  chatLatestImageSidebarMaxWidth,
+  chatLatestImageSidebarMinWidth,
+  cloneView,
+  createEmptyNewRoleForm,
+  createEmptyRoleForm,
+  createPendingRoleRecord,
+  getRoleIdFromSession,
+  historySidebarDefaultWidth,
+  historySidebarMaxWidth,
+  historySidebarMinWidth,
+  isProactiveAssistantMessage,
+  minRoleCardBusyMs,
+  navigationEntriesEqual,
+  sidebarAnimationDurationMs,
+  sidebarAutoCollapseWindowWidth,
+  sidebarCollapseThreshold,
+  sidebarDefaultWidth,
+  sidebarMaxWidth,
+  sidebarMinWidth,
+  type NavigationEntry,
+  type PendingMessageNavigation,
+  type SearchableSessionRecord,
+  type WorkspaceFeedback,
+} from "./app/appState";
 import {
   buildOptimisticUserChatMessage,
   normalizeChatAttachmentPaths,
@@ -23,22 +48,11 @@ import {
   findChatImageHistoryIndex,
   resolveChatImageSelection,
 } from "./chat/chatImageHistory";
-import { ConfirmDialog } from "./roles/ConfirmDialog";
-import { RoleAssetsPage } from "./roles/RoleAssetsPage";
-import { RoleCreatePage } from "./roles/RoleCreatePage";
-import { RoleDetailPage } from "./roles/RoleDetailPage";
-import { RoleManagementPage } from "./roles/RoleManagementPage";
-import { ImageStudioPage } from "./image/ImageStudioPage";
-import { ImageStudioSidebar } from "./image/ImageStudioSidebar";
 import { useImageStudioState } from "./image/useImageStudioState";
 import { reconcileRoles } from "./roles/roleListState";
-import { RoleSearchDialog } from "./roles/RoleSearchDialog";
-import { RoleSidebar } from "./roles/RoleSidebar";
 import { RoleWorkspaceSidebar, type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
-import { SettingsPage } from "./settings/SettingsPage";
-import { SettingsSidebar, type SettingsSectionId } from "./settings/SettingsSidebar";
+import { type SettingsSectionId } from "./settings/SettingsSidebar";
 import { toFileUrl } from "./shared/format";
-import { cx } from "./shared/styles";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
 import type {
   AppMainView,
@@ -51,134 +65,7 @@ import type {
   RoleSearchResult,
   SessionPayload,
 } from "./shared/types";
-import { TitleBar } from "./shell/TitleBar";
 import "./styles.css";
-
-const sidebarMinWidth = 220;
-const sidebarMaxWidth = 400;
-const sidebarDefaultWidth = 220;
-const sidebarCollapseThreshold = sidebarMinWidth / 2;
-const historySidebarMinWidth = 126;
-const historySidebarMaxWidth = 280;
-const historySidebarDefaultWidth = 126;
-const chatLatestImageSidebarMinWidth = 180;
-const chatLatestImageSidebarMaxWidth = 360;
-const chatLatestImageSidebarDefaultWidth = 220;
-const sidebarAnimationDurationMs = 480;
-const sidebarAutoCollapseWindowWidth = 980;
-const minRoleCardBusyMs = 600;
-
-type SearchableSessionRecord = {
-  roleId: string;
-  roleName: string;
-  roleAvatarAbs: string | null;
-  session: SessionPayload;
-};
-
-type NavigationEntry = {
-  view: AppMainView;
-  activeRoleId: string;
-  settingsSection: SettingsSectionId;
-};
-
-type WorkspaceFeedback = {
-  tone: "success" | "error";
-  message: string;
-};
-
-type PendingMessageNavigation = {
-  roleId: string;
-  messageKey: string;
-};
-
-function cloneView(view: AppMainView): AppMainView {
-  if (view.kind === "role-detail") {
-    return { kind: "role-detail", roleId: view.roleId };
-  }
-  if (view.kind === "role-assets") {
-    return { kind: "role-assets", roleId: view.roleId };
-  }
-  return { kind: view.kind };
-}
-
-function viewsEqual(left: AppMainView, right: AppMainView): boolean {
-  if (left.kind !== right.kind) {
-    return false;
-  }
-  if (left.kind === "role-detail" && right.kind === "role-detail") {
-    return left.roleId === right.roleId;
-  }
-  if (left.kind === "role-assets" && right.kind === "role-assets") {
-    return left.roleId === right.roleId;
-  }
-  return true;
-}
-
-function navigationEntriesEqual(left: NavigationEntry, right: NavigationEntry): boolean {
-  return (
-    viewsEqual(left.view, right.view)
-    && left.activeRoleId === right.activeRoleId
-    && left.settingsSection === right.settingsSection
-  );
-}
-
-function createEmptyRoleForm(): RoleFormState {
-  return {
-    name: "",
-    description: "",
-    systemPrompt: "",
-    nsfwMemoryEnabled: false,
-    avatarSource: "",
-    illustrationSources: [],
-    removedIllustrations: [],
-  };
-}
-
-function createEmptyNewRoleForm(): NewRoleFormState {
-  return {
-    name: "",
-    description: "",
-    systemPrompt: "",
-  };
-}
-
-function createPendingRoleRecord(
-  roleId: string,
-  form: NewRoleFormState,
-): RoleRecord {
-  const timestamp = new Date().toISOString();
-  return {
-    id: roleId,
-    name: form.name.trim() || "新角色",
-    description: form.description,
-    system_prompt: form.systemPrompt,
-    runtime_config: {},
-    avatar: null,
-    avatar_abs: null,
-    chat_background: null,
-    chat_background_abs: null,
-    illustrations: [],
-    illustrations_abs: [],
-    created_at: timestamp,
-    updated_at: timestamp,
-  };
-}
-
-function getRoleIdFromSession(session: SessionPayload): string {
-  const metadataRoleId = String(session.metadata.role_id ?? "").trim();
-  if (metadataRoleId) {
-    return metadataRoleId;
-  }
-  return session.key.startsWith("role:") ? session.key.slice(5) : "";
-}
-
-function isProactiveAssistantMessage(session: SessionPayload): boolean {
-  const lastMessage = session.messages[session.messages.length - 1];
-  if (!lastMessage || lastMessage.role !== "assistant") {
-    return false;
-  }
-  return Boolean(lastMessage.metadata?.proactive);
-}
 
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
@@ -1848,302 +1735,165 @@ function App(): React.ReactElement {
   }
 
   return (
-    <div className="app-frame grid h-screen grid-rows-app overflow-hidden bg-[var(--app-bg)]">
-      <TitleBar
-        sidebarCollapsed={sidebarCollapsed}
-        windowMaximized={windowMaximized}
-        canGoBack={canGoBack}
-        canGoForward={canGoForward}
-        canRefreshSession={Boolean(activeRoleId)}
-        canEditRole={Boolean(activeRoleId)}
-        onToggleSidebar={toggleSidebar}
-        onGoBack={() => void navigateHistory("back")}
-        onGoForward={() => void navigateHistory("forward")}
-        onRefreshSession={() => void refreshSession()}
-        onCreateRole={() => openRoleWorkspace({ kind: "role-create" })}
-        onEditRole={() => openRoleWorkspace(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
-        onOpenSettings={() => openSettingsWorkspace()}
-        onRefreshBridge={() => void refreshBridge()}
-        onRestartBridge={() => void restartBridge()}
-      />
-      <div
-        className={cx(
-          "desktop-shell grid min-h-0 overflow-hidden bg-transparent",
-          (resizingSidebar || imageHistorySidebar.resizing || chatLatestImageSidebar.resizing) && "sidebar-resizing cursor-col-resize select-none",
-        )}
-        style={{
-          gridTemplateColumns: "minmax(0, auto) minmax(0, 1fr)",
-        }}
-      >
-        <div
-          className={cx(
-            "sidebar-track relative min-h-0 overflow-hidden",
-            sidebarAnimating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-          )}
-          style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
-        >
-          {mainView.kind === "settings" ? (
-            <SettingsSidebar
-              activeSection={settingsSection}
-              animating={sidebarAnimating && !resizingSidebar}
-              collapsed={sidebarCollapsed}
-              dirty={settingsDirty}
-              width={sidebarWidth}
-              onBackToChat={() => openChatView()}
-              onOpenSection={(section) => openSettingsWorkspace(section)}
-              onSearchChange={setSettingsSearch}
-              onBeginResize={beginSidebarResize}
-              search={settingsSearch}
-            />
-          ) : imageStudioViewActive ? (
-            <ImageStudioSidebar
-              bridgeReady={bridgeReady}
-              animating={sidebarAnimating && !resizingSidebar}
-              collapsed={sidebarCollapsed}
-              width={sidebarWidth}
-              form={imageStudioState.form}
-              nsfwEnabled={imageStudioState.nsfwEnabled}
-              addQualityTags={imageStudioState.addQualityTags}
-              undesiredContentPreset={imageStudioState.undesiredContentPreset}
-              roleItems={imageStudioState.roleItems}
-              submitting={imageStudioState.submitting}
-              validationError={imageStudioState.validationError}
-              onBackToChat={() => openChatView()}
-              onBeginResize={beginSidebarResize}
-              onChange={imageStudioState.onChange}
-              onPickBaseImage={imageStudioState.onPickBaseImage}
-              onSubmit={imageStudioState.onSubmit}
-              onToggleAddQualityTags={imageStudioState.onToggleAddQualityTags}
-              onChangeUndesiredContentPreset={imageStudioState.onChangeUndesiredContentPreset}
-              onToggleNsfwEnabled={imageStudioState.onToggleNsfwEnabled}
-            />
-          ) : roleWorkspaceViewActive ? (
-            <RoleWorkspaceSidebar
-              activeSection={roleWorkspaceSection}
-              animating={sidebarAnimating && !resizingSidebar}
-              collapsed={sidebarCollapsed}
-              width={sidebarWidth}
-              onBackToChat={() => openChatView()}
-              onOpenSection={(section) => {
-                if (section === "role-create") {
-                  openRoleWorkspace({ kind: "role-create" });
-                  return;
-                }
-                openRoleWorkspace({ kind: "roles-list" });
-              }}
-              onBeginResize={beginSidebarResize}
-            />
-          ) : (
-            <RoleSidebar
-              roles={roles}
-              activeRoleId={activeRoleId}
-              unreadCounts={unreadCounts}
-              animating={sidebarAnimating && !resizingSidebar}
-              bridgeReady={bridgeReady}
-              collapsed={sidebarCollapsed}
-              width={sidebarWidth}
-              onOpenSearch={() => setShowSearchDialog(true)}
-              onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
-              onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
-              onOpenImageStudio={() => openImageStudio()}
-              onOpenSettings={() => openSettingsWorkspace()}
-              onBeginResize={beginSidebarResize}
-            />
-          )}
-        </div>
-        <main className="chat-pane relative grid min-h-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-l-[16px] border-b border-l border-t border-[#E4E4E4] bg-[var(--chat-bg)]">
-          {roleWorkspaceViewActive && workspaceFeedback ? (
-            <div
-              className={cx(
-                "absolute left-1/2 top-4 z-[6] -translate-x-1/2 rounded-[14px] border px-4 py-2.5 text-sm shadow-[0_8px_24px_rgba(15,23,42,0.08)]",
-                workspaceFeedback.tone === "success"
-                  ? "border-[rgba(26,106,58,0.18)] bg-[#edf8f0] text-[#1a6a3a]"
-                  : "border-[rgba(176,58,58,0.18)] bg-[#fff1f1] text-[#9a2f2f]",
-              )}
-              aria-live="polite"
-            >
-              {workspaceFeedback.message}
-            </div>
-          ) : null}
-          {mainView.kind === "chat" ? (
-            <ChatSurface
-              activeRole={activeRole}
-              activeRoleId={activeRoleId}
-              activeSession={activeSession}
-              bridgeReady={bridgeReady}
-              chatLatestImagePath={resolvedChatImagePath}
-              chatLatestImagePosition={selectedChatImagePosition}
-              chatLatestImageSidebarAnimating={chatLatestImageSidebar.animating && !chatLatestImageSidebar.resizing}
-              chatLatestImageSidebarCollapsed={chatLatestImageSidebar.collapsed}
-              chatLatestImageSidebarCount={chatImageHistory.length}
-              chatLatestImageSidebarWidth={chatLatestImageSidebar.width}
-              conversationEndRef={conversationEndRef}
-              draft={draft}
-              headerTitle={headerTitle}
-              highlightedMessageKey={highlightedMessageKey}
-              notice={notice}
-              pendingChatAttachments={pendingChatAttachments}
-              chatReplyTarget={chatReplyTarget}
-              sending={isVisibleChatSending}
-              visibleIllustrationUrl={visibleIllustrationUrl}
-              onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
-              onGoToNextChatImage={selectNextChatImage}
-              onGoToPreviousChatImage={selectPreviousChatImage}
-              onOpenChatImageLightbox={openSelectedChatImageLightbox}
-              onOpenChatImagePreview={openChatImagePreview}
-              onPickChatAttachments={() => void pickChatAttachments()}
-              onOpenRoleDetail={() => void openRoleDetail(activeRoleId)}
-              onJumpToMessage={jumpToChatMessage}
-              onClearChatReplyTarget={clearChatReplyTarget}
-              onBeginAttachmentDrag={beginAttachmentDrag}
-              onCopyMessage={(content) => void copyChatMessage(content)}
-              onQuoteMessage={quoteChatMessage}
-              onRemovePendingChatAttachment={removePendingChatAttachment}
-              onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
-              onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
-              onUpdateDraft={setDraft}
-            />
-          ) : null}
-          {mainView.kind === "image-studio" ? (
-            <ImageStudioPage
-              activeRecord={imageStudioState.activeRecord}
-              error={imageStudioState.error}
-              generating={imageStudioState.submitting}
-              history={imageStudioState.history}
-              latestResult={imageStudioState.latestResult}
-              requestSummary={imageStudioState.requestSummary}
-              selectedRecordId={imageStudioState.selectedRecordId}
-              historySidebarCollapsed={imageHistorySidebar.collapsed}
-              historySidebarWidth={imageHistorySidebar.width}
-              historySidebarAnimating={imageHistorySidebar.animating && !imageHistorySidebar.resizing}
-              onSelectRecord={imageStudioState.onSelectRecord}
-              onToggleHistorySidebar={imageHistorySidebar.toggle}
-              onBeginHistorySidebarResize={imageHistorySidebar.beginResize}
-            />
-          ) : null}
-          {mainView.kind === "roles-list" ? (
-            <RoleManagementPage
-              activeRoleId={activeRoleId}
-              bridgeReady={bridgeReady}
-              pendingCardAction={pendingRoleCardAction}
-              roles={roles}
-              onOpenRoleDetail={(roleId) => void openRoleDetail(roleId)}
-              onDeleteRole={(roleId) => setPendingDeleteRoleId(roleId)}
-            />
-          ) : null}
-          {mainView.kind === "role-create" ? (
-            <RoleCreatePage
-              bridgeReady={bridgeReady}
-              creating={creating}
-              form={newRoleForm}
-              onBackToList={() => openRoleWorkspace({ kind: "roles-list" })}
-              onCreateRole={() => void createRole()}
-              onResetForm={resetNewRoleForm}
-              onUpdateForm={updateNewRoleForm}
-            />
-          ) : null}
-          {mainView.kind === "role-detail" ? (
-            <RoleDetailPage
-              activeRole={detailRole}
-              activeRoleId={detailRoleId}
-              activeIllustration={activeIllustration}
-              bridgeReady={bridgeReady}
-              previewAvatar={previewAvatar}
-              chatBackgroundUrl={chatBackgroundUrl}
-              roleForm={roleForm}
-              roleFormDirty={roleFormDirty}
-              savingRole={savingRole}
-              onBackToList={() => openRoleWorkspace({ kind: "roles-list" })}
-              onOpenAssetsPage={() => void openRoleAssets(detailRoleId)}
-              onUpdateRoleForm={updateRoleForm}
-              onResetRoleForm={resetRoleForm}
-              onSaveRole={() => void saveRole()}
-            />
-          ) : null}
-          {mainView.kind === "role-assets" ? (
-            <RoleAssetsPage
-              activeRole={detailRole}
-              bridgeReady={bridgeReady}
-              savingSelection={savingRoleAssets}
-              selectedAvatarAsset={selectedAvatarAsset}
-              selectedChatBackground={selectedChatBackground}
-              onBackToDetail={() => openRoleWorkspace({ kind: "role-detail", roleId: detailRoleId })}
-              onPickAssets={() => void pickRoleAssets()}
-              onRemoveAsset={(path) => void removeRoleAsset(path)}
-              onSelectAvatarAsset={setSelectedAvatarAsset}
-              onSelectChatBackground={setSelectedChatBackground}
-              onSaveSelections={(nextSelection) => void saveRoleAssets(nextSelection)}
-            />
-          ) : null}
-          {mainView.kind === "settings" ? (
-            <SettingsPage
-              bridgeReady={bridgeReady}
-              search={settingsSearch}
-              section={settingsSection}
-              onMetaChange={({ configPath, dirty }) => {
-                setSettingsConfigPath(configPath);
-                setSettingsDirty(dirty);
-              }}
-            />
-          ) : null}
-        </main>
-      </div>
-      <RoleSearchDialog
-        open={showSearchDialog}
-        query={searchQuery}
-        searching={searchingSessions}
-        results={searchResults}
-        onClose={() => {
-          setShowSearchDialog(false);
-          setSearchQuery("");
-        }}
-        onSelectResult={(result) => {
-          setShowSearchDialog(false);
-          setSearchQuery("");
-          if (result.matchedField === "message") {
-            const messageKey = getMessageKey(
-              result.roleId,
-              result.matchedMessageId,
-              result.matchedMessageIndex,
-            );
-            if (messageKey) {
-              queueMessageNavigation(result.roleId, messageKey);
-            }
-          } else {
-            setPendingMessageNavigation(null);
-            setHighlightedMessageKey("");
+    <DesktopAppFrame
+      sidebarCollapsed={sidebarCollapsed}
+      windowMaximized={windowMaximized}
+      canGoBack={canGoBack}
+      canGoForward={canGoForward}
+      canRefreshSession={Boolean(activeRoleId)}
+      canEditRole={Boolean(activeRoleId)}
+      onToggleSidebar={toggleSidebar}
+      onGoBack={() => void navigateHistory("back")}
+      onGoForward={() => void navigateHistory("forward")}
+      onRefreshSession={() => void refreshSession()}
+      onCreateRole={() => openRoleWorkspace({ kind: "role-create" })}
+      onEditRole={() => openRoleWorkspace(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
+      onOpenSettings={() => openSettingsWorkspace()}
+      onRefreshBridge={() => void refreshBridge()}
+      onRestartBridge={() => void restartBridge()}
+      shellResizing={resizingSidebar || imageHistorySidebar.resizing || chatLatestImageSidebar.resizing}
+      sidebarState={{
+        collapsed: sidebarCollapsed,
+        width: sidebarWidth,
+        animating: sidebarAnimating,
+        resizing: resizingSidebar,
+        onBeginResize: beginSidebarResize,
+      }}
+      mainView={mainView}
+      settingsSection={settingsSection}
+      settingsDirty={settingsDirty}
+      settingsSearch={settingsSearch}
+      onSettingsSearchChange={setSettingsSearch}
+      onBackToChat={() => openChatView()}
+      onOpenSettingsSection={(section) => openSettingsWorkspace(section)}
+      imageStudioViewActive={imageStudioViewActive}
+      roleWorkspaceViewActive={roleWorkspaceViewActive}
+      roleWorkspaceSection={roleWorkspaceSection}
+      onOpenRoleWorkspaceSection={(section) => {
+        if (section === "role-create") {
+          openRoleWorkspace({ kind: "role-create" });
+          return;
+        }
+        openRoleWorkspace({ kind: "roles-list" });
+      }}
+      roles={roles}
+      activeRoleId={activeRoleId}
+      unreadCounts={unreadCounts}
+      bridgeReady={bridgeReady}
+      onOpenSearch={() => setShowSearchDialog(true)}
+      onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
+      onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
+      onOpenImageStudio={() => openImageStudio()}
+      imageStudioState={imageStudioState}
+      workspaceFeedback={workspaceFeedback}
+      activeRole={activeRole}
+      activeSession={activeSession}
+      chatLatestImagePath={resolvedChatImagePath}
+      chatLatestImagePosition={selectedChatImagePosition}
+      chatLatestImageSidebar={chatLatestImageSidebar}
+      chatLatestImageSidebarCount={chatImageHistory.length}
+      conversationEndRef={conversationEndRef}
+      draft={draft}
+      headerTitle={headerTitle}
+      highlightedMessageKey={highlightedMessageKey}
+      notice={notice}
+      pendingChatAttachments={pendingChatAttachments}
+      chatReplyTarget={chatReplyTarget}
+      isVisibleChatSending={isVisibleChatSending}
+      visibleIllustrationUrl={visibleIllustrationUrl}
+      onGoToNextChatImage={selectNextChatImage}
+      onGoToPreviousChatImage={selectPreviousChatImage}
+      onOpenChatImageLightbox={openSelectedChatImageLightbox}
+      onOpenChatImagePreview={openChatImagePreview}
+      onPickChatAttachments={() => void pickChatAttachments()}
+      onOpenRoleDetail={() => void openRoleDetail(activeRoleId)}
+      onJumpToMessage={jumpToChatMessage}
+      onClearChatReplyTarget={clearChatReplyTarget}
+      onBeginAttachmentDrag={beginAttachmentDrag}
+      onCopyMessage={(content) => void copyChatMessage(content)}
+      onQuoteMessage={quoteChatMessage}
+      onRemovePendingChatAttachment={removePendingChatAttachment}
+      onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
+      onUpdateDraft={setDraft}
+      imageHistorySidebar={imageHistorySidebar}
+      detailRole={detailRole}
+      pendingRoleCardAction={pendingRoleCardAction}
+      onOpenRoleManagementDetail={(roleId) => void openRoleDetail(roleId)}
+      onRequestDeleteRole={setPendingDeleteRoleId}
+      creating={creating}
+      newRoleForm={newRoleForm}
+      onBackToRoleList={() => openRoleWorkspace({ kind: "roles-list" })}
+      onCreateNewRole={() => void createRole()}
+      onResetNewRoleForm={resetNewRoleForm}
+      onUpdateNewRoleForm={updateNewRoleForm}
+      detailRoleId={detailRoleId}
+      activeIllustration={activeIllustration}
+      previewAvatar={previewAvatar}
+      chatBackgroundUrl={chatBackgroundUrl}
+      roleForm={roleForm}
+      roleFormDirty={roleFormDirty}
+      savingRole={savingRole}
+      onOpenAssetsPage={() => void openRoleAssets(detailRoleId)}
+      onUpdateRoleForm={updateRoleForm}
+      onResetRoleForm={resetRoleForm}
+      onSaveRole={() => void saveRole()}
+      savingRoleAssets={savingRoleAssets}
+      selectedAvatarAsset={selectedAvatarAsset}
+      selectedChatBackground={selectedChatBackground}
+      onBackToRoleDetail={() => openRoleWorkspace({ kind: "role-detail", roleId: detailRoleId })}
+      onPickRoleAssets={() => void pickRoleAssets()}
+      onRemoveRoleAsset={(path) => void removeRoleAsset(path)}
+      onSelectAvatarAsset={setSelectedAvatarAsset}
+      onSelectChatBackground={setSelectedChatBackground}
+      onSaveRoleAssets={(nextSelection) => void saveRoleAssets(nextSelection)}
+      onSettingsMetaChange={({ configPath, dirty }) => {
+        setSettingsConfigPath(configPath);
+        setSettingsDirty(dirty);
+      }}
+      showSearchDialog={showSearchDialog}
+      searchQuery={searchQuery}
+      searchingSessions={searchingSessions}
+      searchResults={searchResults}
+      onCloseSearchDialog={() => {
+        setShowSearchDialog(false);
+        setSearchQuery("");
+      }}
+      onSelectSearchResult={(result) => {
+        setShowSearchDialog(false);
+        setSearchQuery("");
+        if (result.matchedField === "message") {
+          const messageKey = getMessageKey(
+            result.roleId,
+            result.matchedMessageId,
+            result.matchedMessageIndex,
+          );
+          if (messageKey) {
+            queueMessageNavigation(result.roleId, messageKey);
           }
-          void openRole(result.roleId, null, { recordHistory: true });
-        }}
-        onUpdateQuery={setSearchQuery}
-      />
-      <ConfirmDialog
-        open={Boolean(pendingDeleteRole)}
-        title="确认删除角色"
-        description={pendingDeleteRole ? `“${pendingDeleteRole.name}” 删除后会移除角色会话与相关素材。` : ""}
-        confirmLabel="确认删除"
-        busy={deletingRole}
-        onClose={() => {
-          if (deletingRole) return;
-          setPendingDeleteRoleId("");
-        }}
-        onConfirm={() => void confirmDeleteRole()}
-      />
-      <ChatImageLightbox
-        canAddToAssetLibrary={Boolean(activeRoleId && resolvedChatImagePath)}
-        canGoToNext={selectedChatImageIndex >= 0 && selectedChatImageIndex < chatImageHistory.length - 1}
-        canGoToPrevious={selectedChatImageIndex > 0}
-        canLocateMessage={Boolean(activeRoleId && selectedChatImageEntry?.messageId)}
-        imagePath={resolvedChatImagePath}
-        addingToAssetLibrary={addingChatImageToAssetLibrary}
-        open={chatImageLightboxOpen}
-        onAddToAssetLibrary={() => void addSelectedChatImageToAssetLibrary()}
-        onClose={closeSelectedChatImageLightbox}
-        onGoToNext={selectNextChatImage}
-        onGoToPrevious={selectPreviousChatImage}
-        onLocateMessage={locateSelectedChatImageMessage}
-      />
-    </div>
+        } else {
+          setPendingMessageNavigation(null);
+          setHighlightedMessageKey("");
+        }
+        void openRole(result.roleId, null, { recordHistory: true });
+      }}
+      onUpdateSearchQuery={setSearchQuery}
+      pendingDeleteRole={pendingDeleteRole}
+      deletingRole={deletingRole}
+      onCloseDeleteDialog={() => {
+        if (deletingRole) return;
+        setPendingDeleteRoleId("");
+      }}
+      onConfirmDeleteRole={() => void confirmDeleteRole()}
+      canAddToAssetLibrary={Boolean(activeRoleId && resolvedChatImagePath)}
+      canGoToNextLightboxImage={selectedChatImageIndex >= 0 && selectedChatImageIndex < chatImageHistory.length - 1}
+      canGoToPreviousLightboxImage={selectedChatImageIndex > 0}
+      canLocateLightboxMessage={Boolean(activeRoleId && selectedChatImageEntry?.messageId)}
+      addingChatImageToAssetLibrary={addingChatImageToAssetLibrary}
+      chatImageLightboxOpen={chatImageLightboxOpen}
+      onAddSelectedChatImageToAssetLibrary={() => void addSelectedChatImageToAssetLibrary()}
+      onCloseSelectedChatImageLightbox={closeSelectedChatImageLightbox}
+      onLocateSelectedChatImageMessage={locateSelectedChatImageMessage}
+    />
   );
 }
 
