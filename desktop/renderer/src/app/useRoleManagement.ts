@@ -90,6 +90,27 @@ export function useRoleManagement({
   removeCachedRoleSession,
   rememberIllustration,
 }: UseRoleManagementArgs) {
+  async function refreshRolesAndResolveRole(updated: RoleRecord): Promise<{
+    resolvedRole: RoleRecord;
+    nextRoles: RoleRecord[] | null;
+  }> {
+    const nextRoles = await loadRolesFromBridge();
+    return {
+      resolvedRole: nextRoles?.find((item) => item.id === updated.id) ?? updated,
+      nextRoles,
+    };
+  }
+
+  function syncRoleAssetSelections(updated: RoleRecord): void {
+    setSelectedAvatarAsset(updated.avatar ?? "");
+    setSelectedChatBackground(updated.chat_background ?? "");
+  }
+
+  function navigateToRolesList(roleId: string): void {
+    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
+    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, roleId));
+  }
+
   async function createRole(): Promise<void> {
     const name = newRoleFormRef.current.name.trim();
     const systemPrompt = newRoleFormRef.current.systemPrompt.trim();
@@ -145,8 +166,7 @@ export function useRoleManagement({
       return [role, ...withoutPending];
     });
     applyRoleSnapshot(role);
-    const nextRoles = await loadRolesFromBridge();
-    const resolvedRole = nextRoles?.find((item) => item.id === role.id) ?? role;
+    const { resolvedRole, nextRoles } = await refreshRolesAndResolveRole(role);
     if (!nextRoles?.some((item) => item.id === role.id)) {
       setRoles((current) => {
         const existing = current.find((item) => item.id === role.id);
@@ -157,8 +177,7 @@ export function useRoleManagement({
       });
     }
     await openRole(role.id, resolvedRole, { recordHistory: false });
-    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
-    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, resolvedRole.id));
+    navigateToRolesList(resolvedRole.id);
     setPendingRoleCardAction(null);
     updateNewRoleForm(createEmptyNewRoleForm());
     setWorkspaceFeedback({ tone: "success", message: "角色创建成功。" });
@@ -193,11 +212,10 @@ export function useRoleManagement({
       return;
     }
     const updated = res.payload.role as RoleRecord;
-    const nextRoles = await loadRolesFromBridge();
+    const { resolvedRole } = await refreshRolesAndResolveRole(updated);
     updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [], removedIllustrations: [] }));
-    await openRole(updated.id, nextRoles?.find((item) => item.id === updated.id) ?? updated, { recordHistory: false });
-    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
-    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, updated.id));
+    await openRole(updated.id, resolvedRole, { recordHistory: false });
+    navigateToRolesList(updated.id);
     setWorkspaceFeedback({ tone: "success", message: "角色保存成功。" });
   }
 
@@ -237,17 +255,16 @@ export function useRoleManagement({
       return;
     }
     const updated = res.payload.role as RoleRecord;
-    await loadRolesFromBridge();
-    setSelectedAvatarAsset(updated.avatar ?? "");
-    setSelectedChatBackground(updated.chat_background ?? "");
+    const { resolvedRole } = await refreshRolesAndResolveRole(updated);
+    syncRoleAssetSelections(resolvedRole);
     if (hasChatBackgroundSelection) {
-      const nextIllustration = updated.chat_background_abs ?? "";
+      const nextIllustration = resolvedRole.chat_background_abs ?? "";
       setActiveIllustration(nextIllustration);
-      await rememberIllustration(updated.id, nextIllustration);
+      await rememberIllustration(resolvedRole.id, nextIllustration);
     }
     setNotice("角色素材已更新。");
     updateRoleForm({ ...pendingRoleForm });
-    openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
+    openRoleWorkspace({ kind: "role-assets", roleId: resolvedRole.id }, { recordHistory: false });
   }
 
   async function deleteRole(roleIdOverride?: string): Promise<void> {
@@ -279,12 +296,10 @@ export function useRoleManagement({
     setNotice("角色已删除。");
     if (nextRoles[0]) {
       await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
-      openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
-      replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, nextRoles[0].id));
+      navigateToRolesList(nextRoles[0].id);
       return;
     }
-    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
-    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, ""));
+    navigateToRolesList("");
   }
 
   async function confirmDeleteRole(pendingDeleteRoleId: string, clearPendingDeleteRoleId: () => void): Promise<void> {
@@ -292,15 +307,6 @@ export function useRoleManagement({
     const targetRoleId = pendingDeleteRoleId;
     clearPendingDeleteRoleId();
     await deleteRole(targetRoleId);
-  }
-
-  async function pickAvatar(): Promise<string | null> {
-    const files = await window.miraDesktop.pickImages({ multiple: false });
-    return files[0] ?? null;
-  }
-
-  async function pickIllustrations(): Promise<string[]> {
-    return window.miraDesktop.pickImages({ multiple: true });
   }
 
   async function pickRoleAssets(): Promise<void> {
@@ -321,10 +327,9 @@ export function useRoleManagement({
       return;
     }
     const updated = res.payload.role as RoleRecord;
-    await loadRolesFromBridge();
-    setSelectedAvatarAsset(updated.avatar ?? "");
-    setSelectedChatBackground(updated.chat_background ?? "");
-    openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
+    const { resolvedRole } = await refreshRolesAndResolveRole(updated);
+    syncRoleAssetSelections(resolvedRole);
+    openRoleWorkspace({ kind: "role-assets", roleId: resolvedRole.id }, { recordHistory: false });
   }
 
   async function removeRoleAsset(relPath: string): Promise<void> {
@@ -347,26 +352,22 @@ export function useRoleManagement({
       return;
     }
     const updated = res.payload.role as RoleRecord;
-    await loadRolesFromBridge();
-    setSelectedAvatarAsset(updated.avatar ?? "");
-    setSelectedChatBackground(updated.chat_background ?? "");
+    const { resolvedRole } = await refreshRolesAndResolveRole(updated);
+    syncRoleAssetSelections(resolvedRole);
     if (!removedAbsPath || activeIllustration === removedAbsPath) {
-      const nextIllustration = updated.chat_background_abs ?? "";
+      const nextIllustration = resolvedRole.chat_background_abs ?? "";
       setActiveIllustration(nextIllustration);
-      await rememberIllustration(updated.id, nextIllustration);
+      await rememberIllustration(resolvedRole.id, nextIllustration);
     }
     setNotice("角色素材已删除。");
-    openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
+    openRoleWorkspace({ kind: "role-assets", roleId: resolvedRole.id }, { recordHistory: false });
   }
 
   return {
     createRole,
     saveRole,
     saveRoleAssets,
-    deleteRole,
     confirmDeleteRole,
-    pickAvatar,
-    pickIllustrations,
     pickRoleAssets,
     removeRoleAsset,
   };

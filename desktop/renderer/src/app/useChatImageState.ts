@@ -10,7 +10,6 @@ type UseChatImageStateArgs = {
   activeRoleId: string;
   activeRole: RoleRecord | null;
   activeSessionKey: string;
-  selectedChatImagePath: string;
   setSelectedChatImagePath: React.Dispatch<React.SetStateAction<string>>;
   chatImageLightboxOpen: boolean;
   setChatImageLightboxOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -20,14 +19,11 @@ type UseChatImageStateArgs = {
   selectedChatImageEntry: ChatImageHistoryEntry | null;
   chatImageHistory: ChatImageHistoryEntry[];
   latestChatGeneratedImagePath: string;
-  sidebarAutoCollapseWindowWidth: number;
   openChatLatestImageSidebar: () => void;
   loadRolesFromBridge: () => Promise<unknown>;
   queueMessageNavigation: (roleId: string, messageKey: string) => void;
   setError: React.Dispatch<React.SetStateAction<string>>;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
-  setSidebarAnimating: React.Dispatch<React.SetStateAction<boolean>>;
-  setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 /** Owns chat image preview, lightbox, and right-rail state for the desktop chat surface. */
@@ -35,7 +31,6 @@ export function useChatImageState({
   activeRoleId,
   activeRole,
   activeSessionKey,
-  selectedChatImagePath,
   setSelectedChatImagePath,
   chatImageLightboxOpen,
   setChatImageLightboxOpen,
@@ -45,14 +40,11 @@ export function useChatImageState({
   selectedChatImageEntry,
   chatImageHistory,
   latestChatGeneratedImagePath,
-  sidebarAutoCollapseWindowWidth,
   openChatLatestImageSidebar,
   loadRolesFromBridge,
   queueMessageNavigation,
   setError,
   setNotice,
-  setSidebarAnimating,
-  setSidebarCollapsed,
 }: UseChatImageStateArgs) {
   const latestChatImageRef = useRef<{ sessionKey: string; latestPath: string }>({ sessionKey: "", latestPath: "" });
 
@@ -145,19 +137,6 @@ export function useChatImageState({
       setChatImageLightboxOpen(false);
     }
   }, [chatImageLightboxOpen, resolvedChatImagePath]);
-
-  useEffect(() => {
-    function collapseSidebarForNarrowWindow(): void {
-      if (window.innerWidth < sidebarAutoCollapseWindowWidth) {
-        setSidebarAnimating(true);
-        setSidebarCollapsed(true);
-      }
-    }
-
-    collapseSidebarForNarrowWindow();
-    window.addEventListener("resize", collapseSidebarForNarrowWindow);
-    return () => window.removeEventListener("resize", collapseSidebarForNarrowWindow);
-  }, [setSidebarAnimating, setSidebarCollapsed, sidebarAutoCollapseWindowWidth]);
 
   return {
     openChatImagePreview,

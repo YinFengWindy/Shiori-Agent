@@ -18,9 +18,6 @@ type UseNavigationHistoryArgs = {
   settingsSection: SettingsSectionId;
   activeRoleIdRef: React.MutableRefObject<string>;
   lastNonSettingsViewRef: React.MutableRefObject<AppMainView>;
-  openRoleRef: React.MutableRefObject<(
-    (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<void>
-  ) | null>;
   roles: RoleRecord[];
   setError: React.Dispatch<React.SetStateAction<string>>;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
@@ -40,7 +37,6 @@ export function useNavigationHistory({
   settingsSection,
   activeRoleIdRef,
   lastNonSettingsViewRef,
-  openRoleRef,
   roles,
   setError,
   setNotice,
@@ -167,7 +163,10 @@ export function useNavigationHistory({
     }
   }
 
-  async function navigateHistory(direction: "back" | "forward"): Promise<void> {
+  async function navigateHistory(
+    direction: "back" | "forward",
+    openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<void>,
+  ): Promise<void> {
     const delta = direction === "back" ? -1 : 1;
     const nextIndex = navigationHistoryIndexRef.current + delta;
     const nextEntry = navigationHistoryRef.current[nextIndex];
@@ -197,7 +196,7 @@ export function useNavigationHistory({
       }
       applyRoleSnapshot(assetsRole);
       openRoleWorkspaceView(assetsView);
-      void openRoleRef.current?.(assetsView.roleId, assetsRole, { recordHistory: false });
+      void openRole(assetsView.roleId, assetsRole, { recordHistory: false });
       return;
     }
     if (nextEntry.view.kind === "role-detail") {
@@ -209,13 +208,13 @@ export function useNavigationHistory({
       }
       applyRoleSnapshot(detailRole);
       openRoleWorkspaceView(detailView);
-      void openRoleRef.current?.(detailView.roleId, detailRole, { recordHistory: false });
+      void openRole(detailView.roleId, detailRole, { recordHistory: false });
       return;
     }
     if (nextEntry.activeRoleId) {
       const nextRole = roles.find((role) => role.id === nextEntry.activeRoleId) ?? null;
       if (nextRole) {
-        await openRoleRef.current?.(nextRole.id, nextRole, { recordHistory: false });
+        await openRole(nextRole.id, nextRole, { recordHistory: false });
       }
     }
     setMainView({ kind: "chat" });

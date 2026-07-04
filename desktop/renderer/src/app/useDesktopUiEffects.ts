@@ -20,6 +20,8 @@ type UseDesktopUiEffectsArgs = {
   persistedChatBackground: string;
   setActiveIllustration: React.Dispatch<React.SetStateAction<string>>;
   sidebarAnimationDurationMs: number;
+  sidebarAutoCollapseWindowWidth: number;
+  setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 /** Runs UI-only desktop effects such as dismiss timers and message highlight retries. */
@@ -41,12 +43,27 @@ export function useDesktopUiEffects({
   persistedChatBackground,
   setActiveIllustration,
   sidebarAnimationDurationMs,
+  sidebarAutoCollapseWindowWidth,
+  setSidebarCollapsed,
 }: UseDesktopUiEffectsArgs) {
   useEffect(() => {
     if (!sidebarAnimating) return undefined;
     const timer = window.setTimeout(() => setSidebarAnimating(false), sidebarAnimationDurationMs + 40);
     return () => window.clearTimeout(timer);
   }, [setSidebarAnimating, sidebarAnimating, sidebarAnimationDurationMs]);
+
+  useEffect(() => {
+    function collapseSidebarForNarrowWindow(): void {
+      if (window.innerWidth < sidebarAutoCollapseWindowWidth) {
+        setSidebarAnimating(true);
+        setSidebarCollapsed(true);
+      }
+    }
+
+    collapseSidebarForNarrowWindow();
+    window.addEventListener("resize", collapseSidebarForNarrowWindow);
+    return () => window.removeEventListener("resize", collapseSidebarForNarrowWindow);
+  }, [setSidebarAnimating, setSidebarCollapsed, sidebarAutoCollapseWindowWidth]);
 
   useEffect(() => {
     if (!notice) return;

@@ -22,6 +22,7 @@ import {
   type WorkspaceFeedback,
 } from "./app/appState";
 import { useDesktopSessionState } from "./app/useDesktopSessionState";
+import { useDesktopBridgeLifecycle } from "./app/useDesktopBridgeLifecycle";
 import { useDesktopUiEffects } from "./app/useDesktopUiEffects";
 import { useChatImageState } from "./app/useChatImageState";
 import { useChatInteractions } from "./app/useChatInteractions";
@@ -33,6 +34,7 @@ import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { useImageStudioState } from "./image/useImageStudioState";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
+import { useLatestRef } from "./shared/useLatestRef";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
 import type {
   AppMainView,
@@ -103,55 +105,23 @@ function App(): React.ReactElement {
   const [addingChatImageToAssetLibrary, setAddingChatImageToAssetLibrary] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
-  const openRoleRef = useRef<(
-    (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<void>
-  ) | null>(null);
   const openRoleRequestIdRef = useRef(0);
-  const activeRoleIdRef = useRef("");
-  const activeSessionRef = useRef<SessionPayload | null>(null);
+  const activeRoleIdRef = useLatestRef(activeRoleId);
+  const activeSessionRef = useLatestRef(activeSession);
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
-  const mainViewRef = useRef<AppMainView>({ kind: "chat" });
-  const rolesRef = useRef<RoleRecord[]>([]);
-  const draftRef = useRef("");
-  const pendingChatAttachmentsRef = useRef<string[]>([]);
-  const sendingSessionsRef = useRef<Record<string, string>>({});
-  const roleFormRef = useRef<RoleFormState>(createEmptyRoleForm());
-  const newRoleFormRef = useRef<NewRoleFormState>(createEmptyNewRoleForm());
+  const mainViewRef = useLatestRef<AppMainView>(mainView);
+  const rolesRef = useLatestRef(roles);
+  const draftRef = useLatestRef(draft);
+  const pendingChatAttachmentsRef = useLatestRef(pendingChatAttachments);
+  const sendingSessionsRef = useLatestRef(sendingSessions);
+  const roleFormRef = useLatestRef(roleForm);
+  const newRoleFormRef = useLatestRef(newRoleForm);
   const lastNonSettingsViewRef = useRef<AppMainView>({ kind: "chat" });
-
-  useEffect(() => {
-    roleFormRef.current = roleForm;
-  }, [roleForm]);
-
-  useEffect(() => {
-    newRoleFormRef.current = newRoleForm;
-  }, [newRoleForm]);
-
-  useEffect(() => {
-    activeSessionRef.current = activeSession;
-  }, [activeSession]);
-
-  useEffect(() => {
-    rolesRef.current = roles;
-  }, [roles]);
-
-  useEffect(() => {
-    draftRef.current = draft;
-  }, [draft]);
-
-  useEffect(() => {
-    pendingChatAttachmentsRef.current = pendingChatAttachments;
-  }, [pendingChatAttachments]);
-
-  useEffect(() => {
-    sendingSessionsRef.current = sendingSessions;
-  }, [sendingSessions]);
 
   useEffect(() => {
     if (mainView.kind !== "settings") {
       lastNonSettingsViewRef.current = mainView;
     }
-    mainViewRef.current = mainView;
   }, [mainView]);
 
   useEffect(() => {
@@ -313,7 +283,6 @@ function App(): React.ReactElement {
     settingsSection,
     activeRoleIdRef,
     lastNonSettingsViewRef,
-    openRoleRef,
     roles,
     setError,
     setNotice,
@@ -333,8 +302,9 @@ function App(): React.ReactElement {
     loadRolesFromBridge,
     fetchRoleSession,
     refreshSession,
-    refreshBridge,
-    restartBridge,
+    clearAllSendingSessions,
+    clearSessionSending,
+    appendSessionErrorMessage,
     openRole,
     sendMessage,
     commitActiveSession,
@@ -342,15 +312,11 @@ function App(): React.ReactElement {
   } = useDesktopSessionState({
     roles,
     mainView,
-    activeRoleId,
-    activeIllustration,
-    setHealth,
     setRoles,
     setActiveRoleId,
     setActiveSession,
     setChatReplyTarget,
     setPendingChatAttachments,
-    setEvents,
     setError,
     setNotice,
     setDraft,
@@ -358,7 +324,6 @@ function App(): React.ReactElement {
     setSelectedAvatarAsset,
     setSelectedChatBackground,
     setActiveIllustration,
-    setWindowMaximized,
     setSendingSessions,
     chatReplyTarget,
     chooseIllustration,
@@ -377,7 +342,33 @@ function App(): React.ReactElement {
     openRoleRequestIdRef,
   });
 
-  openRoleRef.current = openRole;
+  const { refreshBridge, restartBridge } = useDesktopBridgeLifecycle({
+    activeRoleId,
+    activeIllustration,
+    setActiveRoleId,
+    setActiveIllustration,
+    setHealth,
+    setError,
+    setNotice,
+    setEvents,
+    setWindowMaximized,
+    setUnreadCounts,
+    activeRoleIdRef,
+    activeSessionRef,
+    mainViewRef,
+    rolesRef,
+    chooseIllustration,
+    cacheRoleSession,
+    clearAllSendingSessions,
+    clearSessionSending,
+    commitActiveSession,
+    updateCommittedActiveSession,
+    appendSessionErrorMessage,
+    loadRolesFromBridge,
+    openRole,
+    buildNavigationEntry,
+    pushNavigationEntry,
+  });
 
   const { searchingSessions, searchResults, getMessageKey } = useRoleSearch({
     roles,
@@ -444,7 +435,6 @@ function App(): React.ReactElement {
     activeRoleId,
     activeRole,
     activeSessionKey,
-    selectedChatImagePath,
     setSelectedChatImagePath,
     chatImageLightboxOpen,
     setChatImageLightboxOpen,
@@ -454,14 +444,11 @@ function App(): React.ReactElement {
     selectedChatImageEntry,
     chatImageHistory,
     latestChatGeneratedImagePath,
-    sidebarAutoCollapseWindowWidth,
     openChatLatestImageSidebar: chatLatestImageSidebar.open,
     loadRolesFromBridge,
     queueMessageNavigation,
     setError,
     setNotice,
-    setSidebarAnimating,
-    setSidebarCollapsed,
   });
 
   const {
@@ -549,6 +536,8 @@ function App(): React.ReactElement {
     persistedChatBackground: detailRole?.chat_background_abs ?? "",
     setActiveIllustration,
     sidebarAnimationDurationMs,
+    sidebarAutoCollapseWindowWidth,
+    setSidebarCollapsed,
   });
 
   function resetRoleForm(): void {
@@ -579,8 +568,8 @@ function App(): React.ReactElement {
       canRefreshSession={Boolean(activeRoleId)}
       canEditRole={Boolean(activeRoleId)}
       onToggleSidebar={toggleSidebar}
-      onGoBack={() => void navigateHistory("back")}
-      onGoForward={() => void navigateHistory("forward")}
+      onGoBack={() => void navigateHistory("back", openRole)}
+      onGoForward={() => void navigateHistory("forward", openRole)}
       onRefreshSession={() => void refreshSession()}
       onCreateRole={() => openRoleWorkspace({ kind: "role-create" })}
       onEditRole={() => openRoleWorkspace(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
