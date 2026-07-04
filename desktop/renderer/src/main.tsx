@@ -1,5 +1,5 @@
 import type React from "react";
-import { startTransition, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { DesktopAppFrame } from "./app/DesktopAppFrame";
@@ -9,13 +9,9 @@ import {
   chatLatestImageSidebarMinWidth,
   createEmptyNewRoleForm,
   createEmptyRoleForm,
-  createPendingRoleRecord,
-  getRoleIdFromSession,
   historySidebarDefaultWidth,
   historySidebarMaxWidth,
   historySidebarMinWidth,
-  isProactiveAssistantMessage,
-  minRoleCardBusyMs,
   sidebarAnimationDurationMs,
   sidebarAutoCollapseWindowWidth,
   sidebarCollapseThreshold,
@@ -26,13 +22,15 @@ import {
   type WorkspaceFeedback,
 } from "./app/appState";
 import { useDesktopSessionState } from "./app/useDesktopSessionState";
+import { useDesktopUiEffects } from "./app/useDesktopUiEffects";
+import { useChatImageState } from "./app/useChatImageState";
+import { useChatInteractions } from "./app/useChatInteractions";
 import { useNavigationHistory } from "./app/useNavigationHistory";
+import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleSearch } from "./app/roleSearch";
-import { normalizeChatAttachmentPaths } from "./chat/chatComposerState";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { useImageStudioState } from "./image/useImageStudioState";
-import { reconcileRoles } from "./roles/roleListState";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
@@ -105,7 +103,6 @@ function App(): React.ReactElement {
   const [addingChatImageToAssetLibrary, setAddingChatImageToAssetLibrary] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
-  const latestChatImageRef = useRef<{ sessionKey: string; latestPath: string }>({ sessionKey: "", latestPath: "" });
   const openRoleRef = useRef<(
     (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<void>
   ) | null>(null);
@@ -392,96 +389,6 @@ function App(): React.ReactElement {
     cacheRoleSession,
   });
 
-  async function waitForMinimumRoleCardBusy(startedAt: number): Promise<void> {
-    const elapsed = Date.now() - startedAt;
-    if (elapsed >= minRoleCardBusyMs) {
-      return;
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, minRoleCardBusyMs - elapsed));
-  }
-
-  useEffect(() => {
-    if (!sidebarAnimating) return undefined;
-    const timer = window.setTimeout(() => setSidebarAnimating(false), sidebarAnimationDurationMs + 40);
-    return () => window.clearTimeout(timer);
-  }, [sidebarAnimating]);
-
-  function openChatImagePreview(path: string): void {
-    const cleanPath = path.trim();
-    if (!cleanPath) return;
-    setSelectedChatImagePath(cleanPath);
-    chatLatestImageSidebar.open();
-  }
-
-  function openSelectedChatImageLightbox(): void {
-    if (!resolvedChatImagePath) return;
-    setChatImageLightboxOpen(true);
-  }
-
-  function closeSelectedChatImageLightbox(): void {
-    setChatImageLightboxOpen(false);
-  }
-
-  function locateSelectedChatImageMessage(): void {
-    if (!activeRoleId || !selectedChatImageEntry?.messageId) {
-      return;
-    }
-    setChatImageLightboxOpen(false);
-    queueMessageNavigation(activeRoleId, selectedChatImageEntry.messageId);
-  }
-
-  async function addSelectedChatImageToAssetLibrary(): Promise<void> {
-    if (!activeRoleId || !resolvedChatImagePath) return;
-    if (activeRole?.illustrations_abs.includes(resolvedChatImagePath)) {
-      setNotice("当前图片已在素材库中。");
-      return;
-    }
-
-    setAddingChatImageToAssetLibrary(true);
-    setError("");
-    const res = await window.miraDesktop.invoke({
-      method: "roles.update",
-      payload: {
-        role_id: activeRoleId,
-        illustration_sources: [resolvedChatImagePath],
-      },
-    });
-    setAddingChatImageToAssetLibrary(false);
-    if (res.error) {
-      setError(res.error.message);
-      return;
-    }
-    await loadRolesFromBridge();
-    setNotice("已加入素材库。");
-  }
-
-  function selectPreviousChatImage(): void {
-    if (selectedChatImageIndex <= 0) return;
-    const previousPath = chatImageHistory[selectedChatImageIndex - 1]?.path ?? "";
-    if (!previousPath) return;
-    setSelectedChatImagePath(previousPath);
-  }
-
-  function selectNextChatImage(): void {
-    if (selectedChatImageIndex < 0 || selectedChatImageIndex >= chatImageHistory.length - 1) return;
-    const nextPath = chatImageHistory[selectedChatImageIndex + 1]?.path ?? "";
-    if (!nextPath) return;
-    setSelectedChatImagePath(nextPath);
-  }
-
-  useEffect(() => {
-    function collapseSidebarForNarrowWindow(): void {
-      if (window.innerWidth < sidebarAutoCollapseWindowWidth) {
-        setSidebarAnimating(true);
-        setSidebarCollapsed(true);
-      }
-    }
-
-    collapseSidebarForNarrowWindow();
-    window.addEventListener("resize", collapseSidebarForNarrowWindow);
-    return () => window.removeEventListener("resize", collapseSidebarForNarrowWindow);
-  }, []);
-
   async function rememberIllustration(roleId: string, illustration: string): Promise<void> {
     await window.miraDesktop.invoke({
       method: "session.updateDisplayState",
@@ -492,427 +399,7 @@ function App(): React.ReactElement {
     });
   }
 
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(""), 2200);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
-
-  useEffect(() => {
-    if (!workspaceFeedback) return;
-    const timer = window.setTimeout(() => setWorkspaceFeedback(null), 2200);
-    return () => window.clearTimeout(timer);
-  }, [workspaceFeedback]);
-
-  useEffect(() => {
-    if (!highlightedMessageKey) return;
-    const timer = window.setTimeout(() => setHighlightedMessageKey(""), 2400);
-    return () => window.clearTimeout(timer);
-  }, [highlightedMessageKey]);
-
-  useEffect(() => {
-    if (!activeSession || !pendingMessageNavigation) return;
-    if (pendingMessageNavigation.roleId !== activeRoleId) return;
-    let cancelled = false;
-    let attempts = 0;
-    const maxAttempts = 12;
-
-    const tryHighlight = () => {
-      if (cancelled) return;
-      const target = Array.from(document.querySelectorAll<HTMLElement>("[data-message-key]"))
-        .find((item) => item.dataset.messageKey === pendingMessageNavigation.messageKey);
-      if (target) {
-        setHighlightedMessageKey(pendingMessageNavigation.messageKey);
-        target.scrollIntoView({ behavior: "smooth", block: "center" });
-        setPendingMessageNavigation(null);
-        return;
-      }
-      attempts += 1;
-      if (attempts >= maxAttempts) {
-        setPendingMessageNavigation(null);
-        return;
-      }
-      window.setTimeout(tryHighlight, 80);
-    };
-
-    const frame = window.requestAnimationFrame(tryHighlight);
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(frame);
-    };
-  }, [activeRoleId, activeSession, pendingMessageNavigation]);
-
-  async function openRoleDetail(roleId: string): Promise<void> {
-    const role = roles.find((item) => item.id === roleId) ?? null;
-    if (role) {
-      applyRoleSnapshot(role);
-    }
-    openRoleWorkspace({ kind: "role-detail", roleId });
-    void openRole(roleId, role, { recordHistory: false });
-  }
-
-  async function openRoleAssets(roleId: string): Promise<void> {
-    const role = roles.find((item) => item.id === roleId) ?? null;
-    if (role) {
-      applyRoleSnapshot(role);
-    }
-    openRoleWorkspace({ kind: "role-assets", roleId });
-    if (activeRoleIdRef.current !== roleId || !activeSessionRef.current) {
-      void openRole(roleId, role, { recordHistory: false });
-    }
-  }
-
-  async function pickChatAttachments(): Promise<void> {
-    const files = await window.miraDesktop.pickChatAttachments({ multiple: true });
-    if (!files.length) {
-      return;
-    }
-    setPendingChatAttachments((current) => normalizeChatAttachmentPaths([...current, ...files]));
-  }
-
-  function beginAttachmentDrag(path: string): void {
-    const normalizedPath = path.trim();
-    if (!normalizedPath) {
-      return;
-    }
-    window.miraDesktop.startAttachmentDrag({ path: normalizedPath });
-  }
-
-  function removePendingChatAttachment(path: string): void {
-    setPendingChatAttachments((current) => current.filter((item) => item !== path));
-  }
-
-  async function copyChatMessage(content: string): Promise<void> {
-    const normalizedContent = content.trim();
-    if (!normalizedContent) {
-      setNotice("当前消息没有可复制的文本。");
-      return;
-    }
-    try {
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(normalizedContent);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = normalizedContent;
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        textarea.remove();
-      }
-      setNotice("已复制消息。");
-    } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  function quoteChatMessage(target: ChatReplyTarget): void {
-    setChatReplyTarget((current) => (
-      current
-      && current.messageId === target.messageId
-      && current.content === target.content
-      && current.sender === target.sender
-      ? current
-      : target
-    ));
-  }
-
-  function clearChatReplyTarget(): void {
-    setChatReplyTarget((current) => (current ? null : current));
-  }
-
-  function jumpToChatMessage(messageKey: string): void {
-    const normalizedMessageKey = messageKey.trim();
-    if (!normalizedMessageKey) {
-      return;
-    }
-    if (highlightedMessageKey === normalizedMessageKey) {
-      setHighlightedMessageKey("");
-    }
-    window.requestAnimationFrame(() => {
-      setHighlightedMessageKey(normalizedMessageKey);
-      const target = Array.from(document.querySelectorAll<HTMLElement>("[data-message-key]"))
-        .find((item) => item.dataset.messageKey === normalizedMessageKey);
-      target?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  }
-
-  async function createRole(): Promise<void> {
-    const name = newRoleFormRef.current.name.trim();
-    const systemPrompt = newRoleFormRef.current.systemPrompt.trim();
-    if (!name || !systemPrompt) {
-      const message = "角色名称和系统提示词不能为空。";
-      setError(message);
-      setWorkspaceFeedback({ tone: "error", message: `角色创建失败：${message}` });
-      return;
-    }
-    const pendingRoleId = `pending-create:${Date.now()}`;
-    const pendingRole = createPendingRoleRecord(pendingRoleId, newRoleFormRef.current);
-    const previousActiveRoleId = activeRoleIdRef.current;
-    const startedAt = Date.now();
-    setCreating(true);
-    setError("");
-    setWorkspaceFeedback(null);
-    setPendingRoleCardAction({ roleId: pendingRoleId, action: "create" });
-    setRoles((current) => [pendingRole, ...current]);
-    applyRoleSnapshot(pendingRole);
-    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
-    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, pendingRoleId));
-    const res = await window.miraDesktop.invoke({
-      method: "roles.create",
-      payload: {
-        name,
-        description: newRoleFormRef.current.description,
-        system_prompt: systemPrompt,
-      },
-    });
-    await waitForMinimumRoleCardBusy(startedAt);
-    setCreating(false);
-    if (res.error) {
-      setPendingRoleCardAction(null);
-      setRoles((current) => current.filter((item) => item.id !== pendingRoleId));
-      setActiveRoleId(previousActiveRoleId);
-      activeRoleIdRef.current = previousActiveRoleId;
-      openRoleWorkspace({ kind: "role-create" }, { recordHistory: false });
-      replaceNavigationEntry(buildNavigationEntry({ kind: "role-create" }, previousActiveRoleId));
-      setError(res.error.message);
-      setWorkspaceFeedback({ tone: "error", message: `角色创建失败：${res.error.message}` });
-      return;
-    }
-    const role = res.payload.role as RoleRecord;
-    activeRoleIdRef.current = role.id;
-    setActiveRoleId(role.id);
-    setPendingRoleCardAction({ roleId: role.id, action: "create" });
-    setRoles((current) => {
-      const withoutPending = current.filter((item) => item.id !== pendingRoleId);
-      const existing = withoutPending.find((item) => item.id === role.id);
-      if (existing) {
-        return [role, ...withoutPending.filter((item) => item.id !== role.id)];
-      }
-      return [role, ...withoutPending];
-    });
-    applyRoleSnapshot(role);
-    const nextRoles = await loadRolesFromBridge();
-    const resolvedRole = nextRoles?.find((item) => item.id === role.id) ?? role;
-    if (!nextRoles?.some((item) => item.id === role.id)) {
-      setRoles((current) => {
-        const existing = current.find((item) => item.id === role.id);
-        if (existing) {
-          return [resolvedRole, ...current.filter((item) => item.id !== role.id)];
-        }
-        return [resolvedRole, ...current];
-      });
-    }
-    await openRole(role.id, resolvedRole, { recordHistory: false });
-    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
-    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, resolvedRole.id));
-    setPendingRoleCardAction(null);
-    updateNewRoleForm(createEmptyNewRoleForm());
-    setWorkspaceFeedback({ tone: "success", message: "角色创建成功。" });
-  }
-
-  async function saveRole(): Promise<void> {
-    if (!activeRoleId) return;
-    setSavingRole(true);
-    setError("");
-    setWorkspaceFeedback(null);
-    const nextRoleForm = roleFormRef.current;
-    const res = await window.miraDesktop.invoke({
-      method: "roles.update",
-      payload: {
-        role_id: activeRoleId,
-        name: nextRoleForm.name,
-        description: nextRoleForm.description,
-        system_prompt: nextRoleForm.systemPrompt,
-        runtime_config: {
-          ...(detailRole?.runtime_config ?? {}),
-          nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
-        },
-        avatar_source: nextRoleForm.avatarSource || undefined,
-        illustration_sources: nextRoleForm.illustrationSources,
-        removed_illustrations: nextRoleForm.removedIllustrations,
-      },
-    });
-    setSavingRole(false);
-    if (res.error) {
-      setError(res.error.message);
-      setWorkspaceFeedback({ tone: "error", message: `角色保存失败：${res.error.message}` });
-      return;
-    }
-    const updated = res.payload.role as RoleRecord;
-    const nextRoles = await loadRolesFromBridge();
-    updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [], removedIllustrations: [] }));
-    await openRole(updated.id, nextRoles?.find((item) => item.id === updated.id) ?? updated, { recordHistory: false });
-    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
-    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, updated.id));
-    setWorkspaceFeedback({ tone: "success", message: "角色保存成功。" });
-  }
-
-  async function saveRoleAssets(nextSelection?: {
-    avatarAsset?: string;
-    chatBackground?: string;
-  }): Promise<void> {
-    if (!detailRoleId) return;
-    setSavingRoleAssets(true);
-    setError("");
-    const pendingRoleForm = roleFormRef.current;
-    const hasAvatarSelection = Boolean(
-      nextSelection && Object.prototype.hasOwnProperty.call(nextSelection, "avatarAsset"),
-    );
-    const hasChatBackgroundSelection = Boolean(
-      nextSelection && Object.prototype.hasOwnProperty.call(nextSelection, "chatBackground"),
-    );
-    const avatarAsset = hasAvatarSelection
-      ? (nextSelection?.avatarAsset ?? "")
-      : selectedAvatarAsset;
-    const chatBackground = hasChatBackgroundSelection
-      ? (nextSelection?.chatBackground ?? "")
-      : selectedChatBackground;
-    const res = await window.miraDesktop.invoke({
-      method: "roles.update",
-      payload: {
-        role_id: detailRoleId,
-        avatar_asset: avatarAsset || undefined,
-        chat_background: chatBackground || undefined,
-        clear_avatar: hasAvatarSelection && !avatarAsset,
-        clear_chat_background: hasChatBackgroundSelection && !chatBackground,
-      },
-    });
-    setSavingRoleAssets(false);
-    if (res.error) {
-      setError(res.error.message);
-      return;
-    }
-    const updated = res.payload.role as RoleRecord;
-    await loadRolesFromBridge();
-    setSelectedAvatarAsset(updated.avatar ?? "");
-    setSelectedChatBackground(updated.chat_background ?? "");
-    if (hasChatBackgroundSelection) {
-      const nextIllustration = updated.chat_background_abs ?? "";
-      setActiveIllustration(nextIllustration);
-      await rememberIllustration(updated.id, nextIllustration);
-    }
-    setNotice("角色素材已更新。");
-    updateRoleForm({
-      ...pendingRoleForm,
-    });
-    openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
-  }
-
-  async function deleteRole(roleIdOverride?: string): Promise<void> {
-    const roleId = roleIdOverride || activeRoleId;
-    if (!roleId) return;
-    const startedAt = Date.now();
-    setDeletingRole(true);
-    setPendingRoleCardAction({ roleId, action: "delete" });
-    setError("");
-    const res = await window.miraDesktop.invoke({
-      method: "roles.delete",
-      payload: { role_id: roleId },
-    });
-    await waitForMinimumRoleCardBusy(startedAt);
-    setDeletingRole(false);
-    if (res.error) {
-      setPendingRoleCardAction(null);
-      setError(res.error.message);
-      return;
-    }
-    const nextRoles = (await loadRolesFromBridge()) ?? [];
-    setPendingRoleCardAction(null);
-    if (!roleIdOverride || roleId === activeRoleId) {
-      setActiveRoleId("");
-      commitActiveSession(null);
-      setActiveIllustration("");
-    }
-    removeCachedRoleSession(roleId);
-    setNotice("角色已删除。");
-    if (nextRoles[0]) {
-      await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
-      openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
-      replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, nextRoles[0].id));
-      return;
-    }
-    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
-    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, ""));
-  }
-
   const pendingDeleteRole = roles.find((role) => role.id === pendingDeleteRoleId) ?? null;
-
-  async function confirmDeleteRole(): Promise<void> {
-    if (!pendingDeleteRoleId) return;
-    const targetRoleId = pendingDeleteRoleId;
-    setPendingDeleteRoleId("");
-    await deleteRole(targetRoleId);
-  }
-
-  async function pickAvatar(): Promise<void> {
-    const files = await window.miraDesktop.pickImages({ multiple: false });
-    if (!files[0]) return;
-    updateRoleForm((current) => ({ ...current, avatarSource: files[0] }));
-  }
-
-  async function pickIllustrations(): Promise<void> {
-    const files = await window.miraDesktop.pickImages({ multiple: true });
-    if (!files.length) return;
-    updateRoleForm((current) => ({ ...current, illustrationSources: files, removedIllustrations: [] }));
-  }
-
-  async function pickRoleAssets(): Promise<void> {
-    const files = await window.miraDesktop.pickImages({ multiple: true });
-    if (!files.length || !detailRoleId) return;
-    setSavingRoleAssets(true);
-    setError("");
-    const res = await window.miraDesktop.invoke({
-      method: "roles.update",
-      payload: {
-        role_id: detailRoleId,
-        illustration_sources: files,
-      },
-    });
-    setSavingRoleAssets(false);
-    if (res.error) {
-      setError(res.error.message);
-      return;
-    }
-    const updated = res.payload.role as RoleRecord;
-    await loadRolesFromBridge();
-    setSelectedAvatarAsset(updated.avatar ?? "");
-    setSelectedChatBackground(updated.chat_background ?? "");
-    openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
-  }
-
-  async function removeRoleAsset(relPath: string): Promise<void> {
-    const cleanPath = relPath.trim();
-    if (!cleanPath || !detailRoleId || !detailRole) return;
-    const removedIndex = detailRole.illustrations.findIndex((item) => item === cleanPath);
-    const removedAbsPath = removedIndex >= 0 ? (detailRole.illustrations_abs[removedIndex] ?? "") : "";
-    setSavingRoleAssets(true);
-    setError("");
-    const res = await window.miraDesktop.invoke({
-      method: "roles.update",
-      payload: {
-        role_id: detailRoleId,
-        removed_illustrations: [cleanPath],
-      },
-    });
-    setSavingRoleAssets(false);
-    if (res.error) {
-      setError(res.error.message);
-      return;
-    }
-    const updated = res.payload.role as RoleRecord;
-    await loadRolesFromBridge();
-    setSelectedAvatarAsset(updated.avatar ?? "");
-    setSelectedChatBackground(updated.chat_background ?? "");
-    if (!removedAbsPath || activeIllustration === removedAbsPath) {
-      const nextIllustration = updated.chat_background_abs ?? "";
-      setActiveIllustration(nextIllustration);
-      await rememberIllustration(updated.id, nextIllustration);
-    }
-    setNotice("角色素材已删除。");
-    openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
-  }
 
   const {
     activeRole,
@@ -924,6 +411,7 @@ function App(): React.ReactElement {
     previewIllustrations,
     visibleIllustrationUrl,
     chatBackgroundUrl,
+    activeSessionKey,
     isVisibleChatSending,
     headerTitle,
     chatImageHistory,
@@ -944,50 +432,124 @@ function App(): React.ReactElement {
     sendingSessions,
   });
 
-  useEffect(() => {
-    const sessionKey = activeSession?.key ?? "";
-    if (!sessionKey) {
-      latestChatImageRef.current = { sessionKey: "", latestPath: "" };
-      return;
-    }
+  const {
+    openChatImagePreview,
+    openSelectedChatImageLightbox,
+    closeSelectedChatImageLightbox,
+    locateSelectedChatImageMessage,
+    addSelectedChatImageToAssetLibrary,
+    selectPreviousChatImage,
+    selectNextChatImage,
+  } = useChatImageState({
+    activeRoleId,
+    activeRole,
+    activeSessionKey,
+    selectedChatImagePath,
+    setSelectedChatImagePath,
+    chatImageLightboxOpen,
+    setChatImageLightboxOpen,
+    setAddingChatImageToAssetLibrary,
+    resolvedChatImagePath,
+    selectedChatImageIndex,
+    selectedChatImageEntry,
+    chatImageHistory,
+    latestChatGeneratedImagePath,
+    sidebarAutoCollapseWindowWidth,
+    openChatLatestImageSidebar: chatLatestImageSidebar.open,
+    loadRolesFromBridge,
+    queueMessageNavigation,
+    setError,
+    setNotice,
+    setSidebarAnimating,
+    setSidebarCollapsed,
+  });
 
-    const previous = latestChatImageRef.current;
-    if (previous.sessionKey !== sessionKey) {
-      latestChatImageRef.current = { sessionKey, latestPath: latestChatGeneratedImagePath };
-      return;
-    }
+  const {
+    createRole,
+    saveRole,
+    saveRoleAssets,
+    confirmDeleteRole,
+    pickRoleAssets,
+    removeRoleAsset,
+  } = useRoleManagement({
+    activeRoleId,
+    detailRoleId,
+    detailRole,
+    activeIllustration,
+    selectedAvatarAsset,
+    selectedChatBackground,
+    roleFormRef,
+    newRoleFormRef,
+    activeRoleIdRef,
+    setCreating,
+    setSavingRole,
+    setSavingRoleAssets,
+    setDeletingRole,
+    setPendingRoleCardAction,
+    setWorkspaceFeedback,
+    setError,
+    setNotice,
+    setRoles,
+    setActiveRoleId,
+    setSelectedAvatarAsset,
+    setSelectedChatBackground,
+    setActiveIllustration,
+    updateRoleForm,
+    updateNewRoleForm,
+    openRoleWorkspace,
+    buildNavigationEntry,
+    replaceNavigationEntry,
+    loadRolesFromBridge,
+    openRole,
+    applyRoleSnapshot,
+    commitActiveSession,
+    removeCachedRoleSession,
+    rememberIllustration,
+  });
 
-    // Only auto-open when the active chat produces a newer image during this session.
-    if (latestChatGeneratedImagePath && latestChatGeneratedImagePath !== previous.latestPath) {
-      setSelectedChatImagePath(latestChatGeneratedImagePath);
-      chatLatestImageSidebar.open();
-    }
-    latestChatImageRef.current = { sessionKey, latestPath: latestChatGeneratedImagePath };
-  }, [activeSession?.key, latestChatGeneratedImagePath]);
+  const {
+    openRoleDetail,
+    openRoleAssets,
+    pickChatAttachments,
+    beginAttachmentDrag,
+    removePendingChatAttachment,
+    copyChatMessage,
+    quoteChatMessage,
+    clearChatReplyTarget,
+    jumpToChatMessage,
+  } = useChatInteractions({
+    activeRoleId,
+    roles,
+    activeSessionRef,
+    applyRoleSnapshot,
+    openRoleWorkspace,
+    openRole,
+    setNotice,
+    setError,
+    setPendingChatAttachments,
+    setChatReplyTarget,
+    setHighlightedMessageKey,
+  });
 
-  useEffect(() => {
-    if (resolvedChatImagePath) return;
-    if (chatImageLightboxOpen) {
-      setChatImageLightboxOpen(false);
-    }
-  }, [chatImageLightboxOpen, resolvedChatImagePath]);
-
-  useEffect(() => {
-    if (previewIllustrations.length === 0) {
-      if (activeIllustration) {
-        setActiveIllustration("");
-      }
-      return;
-    }
-    if (!previewIllustrations.includes(activeIllustration)) {
-      const persistedChatBackground = detailRole?.chat_background_abs ?? "";
-      if (persistedChatBackground && previewIllustrations.includes(persistedChatBackground)) {
-        setActiveIllustration(persistedChatBackground);
-        return;
-      }
-      setActiveIllustration("");
-    }
-  }, [previewIllustrations, activeIllustration, detailRole?.chat_background_abs]);
+  useDesktopUiEffects({
+    sidebarAnimating,
+    setSidebarAnimating,
+    activeSessionKey,
+    pendingMessageNavigation,
+    activeRoleId,
+    setHighlightedMessageKey,
+    setPendingMessageNavigation,
+    notice,
+    setNotice,
+    workspaceFeedback,
+    setWorkspaceFeedback,
+    highlightedMessageKey,
+    previewIllustrations,
+    activeIllustration,
+    persistedChatBackground: detailRole?.chat_background_abs ?? "",
+    setActiveIllustration,
+    sidebarAnimationDurationMs,
+  });
 
   function resetRoleForm(): void {
     if (!detailRole) return;
@@ -1157,7 +719,7 @@ function App(): React.ReactElement {
         if (deletingRole) return;
         setPendingDeleteRoleId("");
       }}
-      onConfirmDeleteRole={() => void confirmDeleteRole()}
+      onConfirmDeleteRole={() => void confirmDeleteRole(pendingDeleteRoleId, () => setPendingDeleteRoleId(""))}
       canAddToAssetLibrary={Boolean(activeRoleId && resolvedChatImagePath)}
       canGoToNextLightboxImage={selectedChatImageIndex >= 0 && selectedChatImageIndex < chatImageHistory.length - 1}
       canGoToPreviousLightboxImage={selectedChatImageIndex > 0}
