@@ -18,6 +18,9 @@ type UseNavigationHistoryArgs = {
   settingsSection: SettingsSectionId;
   activeRoleIdRef: React.MutableRefObject<string>;
   lastNonSettingsViewRef: React.MutableRefObject<AppMainView>;
+  openRoleRef: React.MutableRefObject<(
+    (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<void>
+  ) | null>;
   roles: RoleRecord[];
   setError: React.Dispatch<React.SetStateAction<string>>;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
@@ -29,7 +32,6 @@ type UseNavigationHistoryArgs = {
   setMainView: React.Dispatch<React.SetStateAction<AppMainView>>;
   imageHistorySidebarOpen: () => void;
   applyRoleSnapshot: (role: RoleRecord, sessionOverride?: SessionPayload | null) => void;
-  openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<void>;
 };
 
 /** Manages desktop view history and route-style transitions between major surfaces. */
@@ -38,6 +40,7 @@ export function useNavigationHistory({
   settingsSection,
   activeRoleIdRef,
   lastNonSettingsViewRef,
+  openRoleRef,
   roles,
   setError,
   setNotice,
@@ -49,7 +52,6 @@ export function useNavigationHistory({
   setMainView,
   imageHistorySidebarOpen,
   applyRoleSnapshot,
-  openRole,
 }: UseNavigationHistoryArgs) {
   const navigationHistoryRef = useRef<NavigationEntry[]>([]);
   const navigationHistoryIndexRef = useRef(-1);
@@ -195,7 +197,7 @@ export function useNavigationHistory({
       }
       applyRoleSnapshot(assetsRole);
       openRoleWorkspaceView(assetsView);
-      void openRole(assetsView.roleId, assetsRole, { recordHistory: false });
+      void openRoleRef.current?.(assetsView.roleId, assetsRole, { recordHistory: false });
       return;
     }
     if (nextEntry.view.kind === "role-detail") {
@@ -207,13 +209,13 @@ export function useNavigationHistory({
       }
       applyRoleSnapshot(detailRole);
       openRoleWorkspaceView(detailView);
-      void openRole(detailView.roleId, detailRole, { recordHistory: false });
+      void openRoleRef.current?.(detailView.roleId, detailRole, { recordHistory: false });
       return;
     }
     if (nextEntry.activeRoleId) {
       const nextRole = roles.find((role) => role.id === nextEntry.activeRoleId) ?? null;
       if (nextRole) {
-        await openRole(nextRole.id, nextRole, { recordHistory: false });
+        await openRoleRef.current?.(nextRole.id, nextRole, { recordHistory: false });
       }
     }
     setMainView({ kind: "chat" });
