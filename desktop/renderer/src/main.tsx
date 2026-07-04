@@ -7,7 +7,6 @@ import {
   chatLatestImageSidebarDefaultWidth,
   chatLatestImageSidebarMaxWidth,
   chatLatestImageSidebarMinWidth,
-  cloneView,
   createEmptyNewRoleForm,
   createEmptyRoleForm,
   createPendingRoleRecord,
@@ -17,23 +16,21 @@ import {
   historySidebarMinWidth,
   isProactiveAssistantMessage,
   minRoleCardBusyMs,
-  navigationEntriesEqual,
   sidebarAnimationDurationMs,
   sidebarAutoCollapseWindowWidth,
   sidebarCollapseThreshold,
   sidebarDefaultWidth,
   sidebarMaxWidth,
   sidebarMinWidth,
-  type NavigationEntry,
   type PendingMessageNavigation,
-  type SearchableSessionRecord,
   type WorkspaceFeedback,
 } from "./app/appState";
+import { useNavigationHistory } from "./app/useNavigationHistory";
+import { useRoleSearch } from "./app/roleSearch";
 import {
   buildOptimisticUserChatMessage,
   normalizeChatAttachmentPaths,
 } from "./chat/chatComposerState";
-import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "./chat/chatHeaderState";
 import {
   readRoleSessionCache,
   removeRoleSessionCache,
@@ -42,17 +39,11 @@ import {
   writeRoleSessionCache,
   type RoleSessionCache,
 } from "./chat/roleSessionCache";
-import {
-  collectChatImageHistory,
-  findChatImageHistoryEntry,
-  findChatImageHistoryIndex,
-  resolveChatImageSelection,
-} from "./chat/chatImageHistory";
+import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useImageStudioState } from "./image/useImageStudioState";
 import { reconcileRoles } from "./roles/roleListState";
-import { RoleWorkspaceSidebar, type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
+import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
-import { toFileUrl } from "./shared/format";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
 import type {
   AppMainView,
@@ -62,7 +53,6 @@ import type {
   PendingRoleCardAction,
   RoleFormState,
   RoleRecord,
-  RoleSearchResult,
   SessionPayload,
 } from "./shared/types";
 import "./styles.css";
@@ -89,8 +79,6 @@ function App(): React.ReactElement {
   const [pendingDeleteRoleId, setPendingDeleteRoleId] = useState("");
   const [workspaceFeedback, setWorkspaceFeedback] = useState<WorkspaceFeedback | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchingSessions, setSearchingSessions] = useState(false);
-  const [searchIndex, setSearchIndex] = useState<SearchableSessionRecord[]>([]);
   const [pendingMessageNavigation, setPendingMessageNavigation] = useState<PendingMessageNavigation | null>(null);
   const [highlightedMessageKey, setHighlightedMessageKey] = useState("");
   const [mainView, setMainView] = useState<AppMainView>({ kind: "chat" });
@@ -133,16 +121,12 @@ function App(): React.ReactElement {
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
   const mainViewRef = useRef<AppMainView>({ kind: "chat" });
   const rolesRef = useRef<RoleRecord[]>([]);
-  const navigationHistoryRef = useRef<NavigationEntry[]>([]);
-  const navigationHistoryIndexRef = useRef(-1);
   const draftRef = useRef("");
   const pendingChatAttachmentsRef = useRef<string[]>([]);
   const sendingSessionsRef = useRef<Record<string, string>>({});
   const roleFormRef = useRef<RoleFormState>(createEmptyRoleForm());
   const newRoleFormRef = useRef<NewRoleFormState>(createEmptyNewRoleForm());
   const lastNonSettingsViewRef = useRef<AppMainView>({ kind: "chat" });
-  const [canGoBack, setCanGoBack] = useState(false);
-  const [canGoForward, setCanGoForward] = useState(false);
 
   useEffect(() => {
     roleFormRef.current = roleForm;
@@ -213,19 +197,6 @@ function App(): React.ReactElement {
     roles,
   });
 
-  function buildNavigationEntry(
-    view: AppMainView,
-    roleId = activeRoleIdRef.current,
-    section = settingsSection,
-  ): NavigationEntry {
-    const resolvedRoleId = view.kind === "role-detail" || view.kind === "role-assets" ? view.roleId : roleId;
-    return {
-      view: cloneView(view),
-      activeRoleId: resolvedRoleId,
-      settingsSection: section,
-    };
-  }
-
   function updateRoleForm(next: React.SetStateAction<RoleFormState>): void {
     const resolved = typeof next === "function"
       ? next(roleFormRef.current)
@@ -242,17 +213,6 @@ function App(): React.ReactElement {
     setNewRoleForm(resolved);
   }
 
-  function getMessageKey(roleId: string, messageId: string | null, messageIndex: number | null): string {
-    if (messageId) return String(messageId);
-    if (messageIndex == null) return "";
-    const session = activeRoleId === roleId
-      ? (activeSession ?? searchIndex.find((item) => item.roleId === roleId)?.session ?? null)
-      : (searchIndex.find((item) => item.roleId === roleId)?.session ?? null);
-    const message = session?.messages[messageIndex];
-    if (!message) return "";
-    return String(message.id ?? `${message.role}-${messageIndex}`);
-  }
-
   function queueMessageNavigation(roleId: string, messageKey: string): void {
     const nextMessageKey = messageKey.trim();
     if (!roleId || !nextMessageKey) {
@@ -261,19 +221,45 @@ function App(): React.ReactElement {
     setPendingMessageNavigation({ roleId, messageKey: nextMessageKey });
   }
 
-  function truncateSearchPreview(value: string, query: string): string {
-    const compactValue = value.replace(/\s+/g, " ").trim();
-    if (!compactValue) return "空消息";
-    const compactQuery = query.trim().toLowerCase();
-    if (!compactQuery) return compactValue.slice(0, 88);
-    const hitIndex = compactValue.toLowerCase().indexOf(compactQuery);
-    if (hitIndex < 0) return compactValue.slice(0, 88);
-    const start = Math.max(0, hitIndex - 16);
-    const end = Math.min(compactValue.length, hitIndex + compactQuery.length + 44);
-    const prefix = start > 0 ? "..." : "";
-    const suffix = end < compactValue.length ? "..." : "";
-    return `${prefix}${compactValue.slice(start, end)}${suffix}`;
-  }
+  const { searchingSessions, searchResults, getMessageKey } = useRoleSearch({
+    roles,
+    showSearchDialog,
+    searchQuery,
+    activeRoleId,
+    activeSession,
+    fetchRoleSession,
+    cacheRoleSession,
+  });
+
+  const {
+    canGoBack,
+    canGoForward,
+    buildNavigationEntry,
+    replaceNavigationEntry,
+    openChatView,
+    openImageStudio,
+    openSettingsWorkspace,
+    openRoleWorkspace,
+    navigateHistory,
+    pushNavigationEntry,
+  } = useNavigationHistory({
+    mainView,
+    settingsSection,
+    activeRoleIdRef,
+    lastNonSettingsViewRef,
+    roles,
+    setError,
+    setNotice,
+    setSettingsSearch,
+    setSettingsSection,
+    setSidebarAnimating,
+    setSidebarCollapsed,
+    setSidebarWidth,
+    setMainView,
+    imageHistorySidebarOpen: imageHistorySidebar.open,
+    applyRoleSnapshot,
+    openRole,
+  });
 
   function toggleSidebar(): void {
     setSidebarAnimating(true);
@@ -283,102 +269,6 @@ function App(): React.ReactElement {
       return;
     }
     setSidebarCollapsed(true);
-  }
-
-  function openSettingsView(section: SettingsSectionId = "models"): void {
-    lastNonSettingsViewRef.current = mainView;
-    setSettingsSearch("");
-    setSettingsSection(section);
-    setSidebarAnimating(true);
-    setSidebarCollapsed(false);
-    setSidebarWidth((current) => Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, current)));
-    setMainView({ kind: "settings" });
-  }
-
-  function openRoleWorkspaceView(nextView: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" | "role-assets" }>): void {
-    setSidebarAnimating(true);
-    setSidebarCollapsed(false);
-    setMainView(nextView);
-  }
-
-  function syncNavigationState(): void {
-    setCanGoBack(navigationHistoryIndexRef.current > 0);
-    setCanGoForward(
-      navigationHistoryIndexRef.current >= 0
-      && navigationHistoryIndexRef.current < navigationHistoryRef.current.length - 1,
-    );
-  }
-
-  function pushNavigationEntry(entry: NavigationEntry): void {
-    const nextHistory = navigationHistoryRef.current.slice(0, navigationHistoryIndexRef.current + 1);
-    const previous = nextHistory[nextHistory.length - 1];
-    if (previous && navigationEntriesEqual(previous, entry)) {
-      navigationHistoryRef.current = nextHistory;
-      navigationHistoryIndexRef.current = nextHistory.length - 1;
-      syncNavigationState();
-      return;
-    }
-    nextHistory.push(entry);
-    navigationHistoryRef.current = nextHistory;
-    navigationHistoryIndexRef.current = nextHistory.length - 1;
-    syncNavigationState();
-  }
-
-  function replaceNavigationEntry(entry: NavigationEntry): void {
-    if (navigationHistoryIndexRef.current < 0) {
-      navigationHistoryRef.current = [entry];
-      navigationHistoryIndexRef.current = 0;
-      syncNavigationState();
-      return;
-    }
-    const nextHistory = [...navigationHistoryRef.current];
-    nextHistory[navigationHistoryIndexRef.current] = entry;
-    navigationHistoryRef.current = nextHistory;
-    syncNavigationState();
-  }
-
-  function openChatView(options?: { recordHistory?: boolean }): void {
-    const nextView: AppMainView = { kind: "chat" };
-    setMainView(nextView);
-    if (options?.recordHistory !== false) {
-      pushNavigationEntry(buildNavigationEntry(nextView));
-    }
-  }
-
-  function openImageStudio(options?: { recordHistory?: boolean }): void {
-    if (!roles.length) {
-      setError("请先创建至少一个角色，再进入生图。");
-      setNotice("");
-      return;
-    }
-    const nextView: AppMainView = { kind: "image-studio" };
-    setSidebarAnimating(true);
-    setSidebarCollapsed(false);
-    imageHistorySidebar.open();
-    setMainView(nextView);
-    if (options?.recordHistory !== false) {
-      pushNavigationEntry(buildNavigationEntry(nextView));
-    }
-  }
-
-  function openSettingsWorkspace(
-    section: SettingsSectionId = "models",
-    options?: { recordHistory?: boolean },
-  ): void {
-    openSettingsView(section);
-    if (options?.recordHistory !== false) {
-      pushNavigationEntry(buildNavigationEntry({ kind: "settings" }, activeRoleIdRef.current, section));
-    }
-  }
-
-  function openRoleWorkspace(
-    nextView: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" | "role-assets" }>,
-    options?: { recordHistory?: boolean },
-  ): void {
-    openRoleWorkspaceView(nextView);
-    if (options?.recordHistory !== false) {
-      pushNavigationEntry(buildNavigationEntry(nextView));
-    }
   }
 
   function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
@@ -536,32 +426,6 @@ function App(): React.ReactElement {
       return;
     }
     await new Promise((resolve) => window.setTimeout(resolve, minRoleCardBusyMs - elapsed));
-  }
-
-  async function buildSearchIndex(nextRoles: RoleRecord[]): Promise<void> {
-    if (!nextRoles.length) {
-      setSearchIndex([]);
-      return;
-    }
-    setSearchingSessions(true);
-    try {
-      const sessionRecords = await Promise.all(
-        nextRoles.map(async (role) => {
-          const { session } = await fetchRoleSession(role.id);
-          if (!session) return null;
-          cacheRoleSession(role.id, session);
-          return {
-            roleId: role.id,
-            roleName: role.name,
-            roleAvatarAbs: role.avatar_abs,
-            session,
-          } satisfies SearchableSessionRecord;
-        }),
-      );
-      setSearchIndex(sessionRecords.filter((item): item is SearchableSessionRecord => item !== null));
-    } finally {
-      setSearchingSessions(false);
-    }
   }
 
   useEffect(() => {
@@ -749,11 +613,6 @@ function App(): React.ReactElement {
     const timer = window.setTimeout(() => setHighlightedMessageKey(""), 2400);
     return () => window.clearTimeout(timer);
   }, [highlightedMessageKey]);
-
-  useEffect(() => {
-    if (!showSearchDialog) return;
-    void buildSearchIndex(roles);
-  }, [roles, showSearchDialog]);
 
   useEffect(() => {
     if (!activeSession || !pendingMessageNavigation) return;
@@ -1532,143 +1391,35 @@ function App(): React.ReactElement {
     openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
   }
 
-  async function navigateHistory(direction: "back" | "forward"): Promise<void> {
-    const delta = direction === "back" ? -1 : 1;
-    const nextIndex = navigationHistoryIndexRef.current + delta;
-    const nextEntry = navigationHistoryRef.current[nextIndex];
-    if (!nextEntry) return;
-    navigationHistoryIndexRef.current = nextIndex;
-    syncNavigationState();
-
-    setSettingsSection(nextEntry.settingsSection);
-    if (nextEntry.view.kind === "settings") {
-      openSettingsView(nextEntry.settingsSection);
-      return;
-    }
-    if (nextEntry.view.kind === "image-studio") {
-      openImageStudio({ recordHistory: false });
-      return;
-    }
-    if (nextEntry.view.kind === "roles-list" || nextEntry.view.kind === "role-create") {
-      openRoleWorkspaceView(nextEntry.view);
-      return;
-    }
-    if (nextEntry.view.kind === "role-assets") {
-      const assetsView = nextEntry.view;
-      const assetsRole = roles.find((role) => role.id === assetsView.roleId) ?? null;
-      if (!assetsRole) {
-        openRoleWorkspaceView({ kind: "roles-list" });
-        return;
-      }
-      applyRoleSnapshot(assetsRole);
-      openRoleWorkspaceView(assetsView);
-      void openRole(assetsView.roleId, assetsRole, { recordHistory: false });
-      return;
-    }
-    if (nextEntry.view.kind === "role-detail") {
-      const detailView = nextEntry.view;
-      const detailRole = roles.find((role) => role.id === detailView.roleId) ?? null;
-      if (!detailRole) {
-        openRoleWorkspaceView({ kind: "roles-list" });
-        return;
-      }
-      applyRoleSnapshot(detailRole);
-      openRoleWorkspaceView(detailView);
-      void openRole(detailView.roleId, detailRole, { recordHistory: false });
-      return;
-    }
-    if (nextEntry.activeRoleId) {
-      const nextRole = roles.find((role) => role.id === nextEntry.activeRoleId) ?? null;
-      if (nextRole) {
-        await openRole(nextRole.id, nextRole, { recordHistory: false });
-      }
-    }
-    setMainView({ kind: "chat" });
-  }
-
-  const searchResults = (() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return [] satisfies RoleSearchResult[];
-
-    const results: RoleSearchResult[] = [];
-    for (const record of searchIndex) {
-      if (record.roleName.toLowerCase().includes(query)) {
-        results.push({
-          roleId: record.roleId,
-          roleName: record.roleName,
-          roleAvatarAbs: record.roleAvatarAbs,
-          sessionKey: record.session.key,
-          matchedMessageTimestamp: record.session.updated_at ?? null,
-          matchedMessageId: null,
-          matchedMessageIndex: null,
-          matchedMessagePreview: `角色 ${record.roleName}`,
-          matchedField: "role",
-        });
-      }
-
-      record.session.messages.forEach((message, messageIndex) => {
-        const content = message.content.trim();
-        if (!content) return;
-        if (!content.toLowerCase().includes(query)) return;
-        results.push({
-          roleId: record.roleId,
-          roleName: record.roleName,
-          roleAvatarAbs: record.roleAvatarAbs,
-          sessionKey: record.session.key,
-          matchedMessageTimestamp: message.timestamp ?? null,
-          matchedMessageId: message.id ?? null,
-          matchedMessageIndex: messageIndex,
-          matchedMessagePreview: truncateSearchPreview(content, query),
-          matchedField: "message",
-        });
-      });
-    }
-
-    return results.slice(0, 60);
-  })();
-
-  const activeRole = roles.find((role) => role.id === activeRoleId) ?? null;
-  const detailRoleId = mainView.kind === "role-detail" ? mainView.roleId : activeRoleId;
-  const detailRole = roles.find((role) => role.id === detailRoleId) ?? null;
-  const bridgeReady = health === "online";
-  const roleFormDirty = Boolean(
-    detailRole
-      && (
-        roleForm.name !== detailRole.name
-        || roleForm.description !== detailRole.description
-        || roleForm.systemPrompt !== detailRole.system_prompt
-        || roleForm.nsfwMemoryEnabled !== Boolean(detailRole.runtime_config?.nsfw_memory_enabled)
-        || Boolean(roleForm.avatarSource)
-        || roleForm.illustrationSources.length > 0
-        || roleForm.removedIllustrations.length > 0
-      )
-  );
-
-  const previewAvatar = roleForm.avatarSource || detailRole?.avatar_abs || null;
-
-  const previewIllustrations = roleForm.illustrationSources.length
-    ? roleForm.illustrationSources
-    : (detailRole?.illustrations_abs ?? []).filter(
-      (path) => !roleForm.removedIllustrations.includes(path),
-    );
-  const roleChatBackground = detailRole?.chat_background_abs ?? "";
-  const visibleIllustration = activeIllustration || roleChatBackground;
-  const visibleIllustrationUrl = visibleIllustration ? toFileUrl(visibleIllustration) : "";
-  const chatBackgroundUrl = visibleIllustrationUrl;
-  const activeSessionKey = activeSession?.key ?? "";
-  const visibleChatSessionKey = resolveVisibleChatSessionKey(activeRoleId, activeSessionKey);
-  const isVisibleChatSending = Boolean(visibleChatSessionKey && sendingSessions[visibleChatSessionKey]);
-  const headerTitle = resolveChatHeaderTitle({
-    activeRoleName: activeRole?.name ?? null,
-    activeSessionKey: visibleChatSessionKey,
+  const {
+    activeRole,
+    detailRoleId,
+    detailRole,
+    bridgeReady,
+    roleFormDirty,
+    previewAvatar,
+    previewIllustrations,
+    visibleIllustrationUrl,
+    chatBackgroundUrl,
+    isVisibleChatSending,
+    headerTitle,
+    chatImageHistory,
+    resolvedChatImagePath,
+    selectedChatImageIndex,
+    selectedChatImageEntry,
+    latestChatGeneratedImagePath,
+    selectedChatImagePosition,
+  } = buildDesktopViewModel({
+    roles,
+    activeRoleId,
+    mainView,
+    roleForm,
+    activeIllustration,
+    activeSession,
+    selectedChatImagePath,
+    health,
     sendingSessions,
   });
-  const chatImageHistory = collectChatImageHistory(activeSession);
-  const resolvedChatImagePath = resolveChatImageSelection(chatImageHistory, selectedChatImagePath);
-  const selectedChatImageIndex = findChatImageHistoryIndex(chatImageHistory, resolvedChatImagePath);
-  const selectedChatImageEntry = findChatImageHistoryEntry(chatImageHistory, resolvedChatImagePath);
-  const latestChatGeneratedImagePath = chatImageHistory[chatImageHistory.length - 1]?.path ?? "";
-  const selectedChatImagePosition = selectedChatImageIndex >= 0 ? selectedChatImageIndex + 1 : 0;
 
   useEffect(() => {
     const sessionKey = activeSession?.key ?? "";
