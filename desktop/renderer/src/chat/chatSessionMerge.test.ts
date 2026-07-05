@@ -1,0 +1,133 @@
+/// <reference types="node" />
+
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { mergeIncomingSessionDuringSend } from "./chatSessionMerge";
+import type { SessionMessage, SessionPayload } from "../shared/types";
+
+function createSession(messages: SessionMessage[]): SessionPayload {
+  return {
+    key: "role:mira",
+    created_at: "2026-07-05T11:00:00+08:00",
+    updated_at: "2026-07-05T11:00:00+08:00",
+    last_consolidated: 0,
+    metadata: { role_id: "mira" },
+    messages,
+  };
+}
+
+describe("mergeIncomingSessionDuringSend", () => {
+  it("keeps the local optimistic tail when a shorter stale session snapshot arrives during sending", () => {
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        role: "user",
+        content: "刚发出去的消息",
+      },
+      {
+        role: "assistant",
+        content: "回",
+      },
+    ]);
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
+
+    assert.equal(merged?.messages, currentSession.messages);
+  });
+
+  it("accepts the incoming session once sending has already finished", () => {
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        role: "user",
+        content: "刚发出去的消息",
+      },
+    ]);
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, false);
+
+    assert.equal(merged, incomingSession);
+  });
+
+  it("accepts divergent incoming snapshots instead of hiding real session changes", () => {
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        role: "user",
+        content: "刚发出去的消息",
+      },
+    ]);
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息（已变更）",
+      },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
+
+    assert.equal(merged, incomingSession);
+  });
+
+  it("accepts authoritative sessions that already include the newly sent message", () => {
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        role: "user",
+        content: "刚发出去的消息",
+      },
+    ]);
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        id: "role:mira:2",
+        role: "user",
+        content: "刚发出去的消息",
+      },
+      {
+        id: "role:mira:3",
+        role: "assistant",
+        content: "收到",
+      },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
+
+    assert.equal(merged, incomingSession);
+  });
+});
