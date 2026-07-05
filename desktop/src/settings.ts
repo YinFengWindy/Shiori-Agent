@@ -97,14 +97,9 @@ export type SettingsFormData = {
     fitbitEnabled: boolean;
     novelaiEnabled: boolean;
     novelaiToken: string;
-    novelaiBaseUrl: string;
-    novelaiDefaultModel: string;
-    novelaiNsfwModel: string;
     novelaiNsfwEnabled: boolean;
     novelaiAddQualityTags: boolean;
     novelaiUndesiredContentPreset: number;
-    novelaiAllowTxt2img: boolean;
-    novelaiAllowImg2img: boolean;
     novelaiAutoWritebackRoleAssets: boolean;
     peerAgents: SettingsPeerAgent[];
   };
@@ -399,14 +394,9 @@ function loadSettingsData(): SettingsSnapshot {
         fitbitEnabled: Boolean(fitbit.enabled),
         novelaiEnabled: Boolean(novelai.enabled),
         novelaiToken: String(novelai.token ?? ""),
-        novelaiBaseUrl: String(novelai.base_url ?? "https://image.novelai.net"),
-        novelaiDefaultModel: String(novelai.default_model ?? "nai-diffusion-4-5-curated"),
-        novelaiNsfwModel: String(novelai.nsfw_model ?? "nai-diffusion-4-5-full"),
         novelaiNsfwEnabled: Boolean(novelai.nsfw_enabled),
         novelaiAddQualityTags: Boolean(novelai.add_quality_tags),
         novelaiUndesiredContentPreset: Number(novelai.undesired_content_preset ?? 0),
-        novelaiAllowTxt2img: Boolean(novelai.allow_txt2img ?? true),
-        novelaiAllowImg2img: Boolean(novelai.allow_img2img ?? true),
         novelaiAutoWritebackRoleAssets: Boolean(novelai.auto_writeback_role_assets),
         peerAgents: asArray(integrations.peer_agents, (item) => {
           const peer = asRecord(item);
@@ -628,14 +618,14 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "[integrations.novelai]",
     `enabled = ${formData.integrations.novelaiEnabled ? "true" : "false"}`,
     `token = ${quote(formData.integrations.novelaiToken)}`,
-    `base_url = ${quote(formData.integrations.novelaiBaseUrl.trim() || "https://image.novelai.net")}`,
-    `default_model = ${quote(formData.integrations.novelaiDefaultModel.trim() || "nai-diffusion-4-5-curated")}`,
-    `nsfw_model = ${quote(formData.integrations.novelaiNsfwModel.trim() || "nai-diffusion-4-5-full")}`,
+    'base_url = "https://image.novelai.net"',
+    'default_model = "nai-diffusion-4-5-curated"',
+    'nsfw_model = "nai-diffusion-4-5-full"',
     `nsfw_enabled = ${formData.integrations.novelaiNsfwEnabled ? "true" : "false"}`,
     `add_quality_tags = ${formData.integrations.novelaiAddQualityTags ? "true" : "false"}`,
     `undesired_content_preset = ${formData.integrations.novelaiUndesiredContentPreset}`,
-    `allow_txt2img = ${formData.integrations.novelaiAllowTxt2img ? "true" : "false"}`,
-    `allow_img2img = ${formData.integrations.novelaiAllowImg2img ? "true" : "false"}`,
+    "allow_txt2img = true",
+    "allow_img2img = true",
     `auto_writeback_role_assets = ${formData.integrations.novelaiAutoWritebackRoleAssets ? "true" : "false"}`,
     "max_pixels = 1048576",
     "max_steps = 28",

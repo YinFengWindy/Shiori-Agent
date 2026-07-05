@@ -119,14 +119,9 @@ export type SettingsFormData = {
     fitbitEnabled: boolean;
     novelaiEnabled: boolean;
     novelaiToken: string;
-    novelaiBaseUrl: string;
-    novelaiDefaultModel: string;
-    novelaiNsfwModel: string;
     novelaiNsfwEnabled: boolean;
     novelaiAddQualityTags: boolean;
     novelaiUndesiredContentPreset: number;
-    novelaiAllowTxt2img: boolean;
-    novelaiAllowImg2img: boolean;
     novelaiAutoWritebackRoleAssets: boolean;
     peerAgents: SettingsPeerAgent[];
   };

@@ -916,15 +916,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="Token">
                   <SecretInput value={draft.integrations.novelaiToken} onChange={(value) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiToken: value } }))} />
                 </Field>
-                <Field label="Base URL">
-                  <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiBaseUrl: event.target.value } }))} placeholder="Base URL" />
-                </Field>
-                <Field label="普通模型">
-                  <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiDefaultModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiDefaultModel: event.target.value } }))} placeholder="普通模型" />
-                </Field>
-                <Field label="NSFW 模型">
-                  <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiNsfwModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwModel: event.target.value } }))} placeholder="NSFW 模型" />
-                </Field>
                 <ToggleField label="Add Quality Tags" checked={draft.integrations.novelaiAddQualityTags} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAddQualityTags: checked } }))} />
                 <Field label="内容过滤预设" hint="控制默认 undesired content 强度。">
                   <select
@@ -937,8 +928,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <option value="2">Undesired Content Preset: Heavy</option>
                   </select>
                 </Field>
-                <ToggleField label="允许文生图" checked={draft.integrations.novelaiAllowTxt2img} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowTxt2img: checked } }))} />
-                <ToggleField label="允许图生图" checked={draft.integrations.novelaiAllowImg2img} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowImg2img: checked } }))} />
                 <ToggleField label="生成后自动写回角色素材" checked={draft.integrations.novelaiAutoWritebackRoleAssets} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAutoWritebackRoleAssets: checked } }))} />
                 <ToggleField label="NSFW 模式（开启时使用 Full）" checked={draft.integrations.novelaiNsfwEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwEnabled: checked } }))} />
               </SectionCard>

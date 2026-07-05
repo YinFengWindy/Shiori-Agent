@@ -27,6 +27,9 @@ const initialForm: ImageStudioFormState = {
   model: "nai-diffusion-4-5-curated",
 };
 
+const NOVELAI_DEFAULT_MODEL = "nai-diffusion-4-5-curated";
+const NOVELAI_NSFW_MODEL = "nai-diffusion-4-5-full";
+
 function parsePositiveInteger(value: string): number | null {
   if (!value.trim()) return null;
   const parsed = Number(value);
@@ -131,9 +134,9 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
   const resolvedMode = form.baseImagePath.trim() ? "img2img" : "txt2img";
   const resolvedModel = useMemo(() => (
     nsfwEnabled
-      ? (settingsFormData?.integrations.novelaiNsfwModel?.trim() || "nai-diffusion-4-5-full")
-      : (settingsFormData?.integrations.novelaiDefaultModel?.trim() || "nai-diffusion-4-5-curated")
-  ), [nsfwEnabled, settingsFormData]);
+      ? NOVELAI_NSFW_MODEL
+      : NOVELAI_DEFAULT_MODEL
+  ), [nsfwEnabled]);
   const addQualityTags = Boolean(settingsFormData?.integrations.novelaiAddQualityTags);
   const undesiredContentPreset = Number(settingsFormData?.integrations.novelaiUndesiredContentPreset ?? 0);
 
