@@ -1,6 +1,7 @@
 import type React from "react";
 import { useDeferredValue, useEffect, useState } from "react";
 import { type SettingsSectionId, settingsSections } from "./SettingsSidebar";
+import { SettingsToggleCard } from "./SettingsToggleCard";
 import {
   cardClass,
   cx,
@@ -205,6 +206,34 @@ function Field({
         {hint ? <div className="max-w-[560px] text-[13px] leading-6 text-[#7B7F87]">{hint}</div> : null}
       </div>
       <div className="w-full md:justify-self-end">{children}</div>
+    </div>
+  );
+}
+
+function ToggleField({
+  label,
+  hint,
+  title,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  title?: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="border-b border-[#ECEEF2] py-5 last:border-b-0">
+      <SettingsToggleCard
+        title={title ?? label}
+        description={hint}
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+      />
     </div>
   );
 }
@@ -570,14 +599,16 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 </Field>
                 <Field label="主模型开关">
                   <div className="grid gap-3 md:grid-cols-2">
-                    <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                      <input type="checkbox" checked={formData.models.enableThinking} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, enableThinking: event.target.checked } }))} />
-                      <span>启用 Thinking</span>
-                    </label>
-                    <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                      <input type="checkbox" checked={formData.models.multimodal} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, multimodal: event.target.checked } }))} />
-                      <span>启用多模态</span>
-                    </label>
+                    <SettingsToggleCard
+                      title="启用 Thinking"
+                      checked={formData.models.enableThinking}
+                      onChange={(checked) => updateDraft((current) => ({ ...current, models: { ...current.models, enableThinking: checked } }))}
+                    />
+                    <SettingsToggleCard
+                      title="启用多模态"
+                      checked={formData.models.multimodal}
+                      onChange={(checked) => updateDraft((current) => ({ ...current, models: { ...current.models, multimodal: checked } }))}
+                    />
                   </div>
                 </Field>
               </SectionCard>
@@ -760,12 +791,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "general":
             return (
               <SectionCard>
-                <Field label="启用记忆">
-                  <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                    <input type="checkbox" checked={draft.memory.enabled} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, enabled: event.target.checked } }))} />
-                    <span>memory.enabled</span>
-                  </label>
-                </Field>
+                <ToggleField label="启用记忆" checked={draft.memory.enabled} onChange={(checked) => updateDraft((current) => ({ ...current, memory: { ...current.memory, enabled: checked } }))} />
                 <Field label="记忆引擎" hint="default 对应 default_memory 插件。">
                   <select className={cx(inputClass, "bg-white")} value={draft.memory.engine} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, engine: event.target.value } }))}>
                     {getMemoryEngineOptions(draft.memory.engine).map((option) => (
@@ -800,12 +826,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "general":
             return (
               <SectionCard>
-                <Field label="主动推送">
-                  <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                    <input type="checkbox" checked={draft.proactive.enabled} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, enabled: event.target.checked } }))} />
-                    <span>proactive.enabled</span>
-                  </label>
-                </Field>
+                <ToggleField label="主动推送" checked={draft.proactive.enabled} onChange={(checked) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, enabled: checked } }))} />
                 <Field label="推送周期">
                   <input className={cx(inputClass, "bg-white")} value={draft.proactive.profile} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, profile: event.target.value } }))} />
                 </Field>
@@ -872,10 +893,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
               <SectionCard>
                 <Field label="Drift">
                   <div className="grid gap-3">
-                    <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                      <input type="checkbox" checked={draft.proactive.driftEnabled} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftEnabled: event.target.checked } }))} />
-                      <span>proactive.drift.enabled</span>
-                    </label>
+                    <SettingsToggleCard
+                      title="启用 Drift"
+                      checked={draft.proactive.driftEnabled}
+                      onChange={(checked) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftEnabled: checked } }))}
+                    />
                     <div className="grid gap-3 md:grid-cols-2">
                       <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMaxSteps: parseNumber(event.target.value, current.proactive.driftMaxSteps) } }))} placeholder="最大步数" />
                       <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMinIntervalHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMinIntervalHours: parseNumber(event.target.value, current.proactive.driftMinIntervalHours) } }))} placeholder="最小间隔小时数" />
@@ -894,19 +916,21 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
               <SectionCard>
                 <Field label="NovelAI">
                   <div className="grid gap-3">
-                    <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                      <input type="checkbox" checked={draft.integrations.novelaiEnabled} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiEnabled: event.target.checked } }))} />
-                      <span>integrations.novelai.enabled</span>
-                    </label>
+                    <SettingsToggleCard
+                      title="启用 NovelAI"
+                      checked={draft.integrations.novelaiEnabled}
+                      onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiEnabled: checked } }))}
+                    />
                     <SecretInput value={draft.integrations.novelaiToken} onChange={(value) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiToken: value } }))} />
                     <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiBaseUrl: event.target.value } }))} placeholder="Base URL" />
                     <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiDefaultModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiDefaultModel: event.target.value } }))} placeholder="普通模型" />
                     <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiNsfwModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwModel: event.target.value } }))} placeholder="NSFW 模型" />
                     <div className="grid gap-3 md:grid-cols-2">
-                      <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                        <input type="checkbox" checked={draft.integrations.novelaiAddQualityTags} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAddQualityTags: event.target.checked } }))} />
-                        <span>Add Quality Tags</span>
-                      </label>
+                      <SettingsToggleCard
+                        title="Add Quality Tags"
+                        checked={draft.integrations.novelaiAddQualityTags}
+                        onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAddQualityTags: checked } }))}
+                      />
                       <select
                         className="h-12 w-full rounded-md border border-[#D8DCE2] bg-white px-3.5 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0"
                         value={String(draft.integrations.novelaiUndesiredContentPreset)}
@@ -918,22 +942,30 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                       </select>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
-                      <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                        <input type="checkbox" checked={draft.integrations.novelaiAllowTxt2img} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowTxt2img: event.target.checked } }))} />
-                        <span>允许文生图</span>
-                      </label>
-                      <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                        <input type="checkbox" checked={draft.integrations.novelaiAllowImg2img} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowImg2img: event.target.checked } }))} />
-                        <span>允许图生图</span>
-                      </label>
-                      <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3 md:col-span-2">
-                        <input type="checkbox" checked={draft.integrations.novelaiAutoWritebackRoleAssets} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAutoWritebackRoleAssets: event.target.checked } }))} />
-                        <span>生成后自动写回角色素材</span>
-                      </label>
-                      <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3 md:col-span-2">
-                        <input type="checkbox" checked={draft.integrations.novelaiNsfwEnabled} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwEnabled: event.target.checked } }))} />
-                        <span>NSFW 模式（开启时使用 Full）</span>
-                      </label>
+                      <SettingsToggleCard
+                        title="允许文生图"
+                        checked={draft.integrations.novelaiAllowTxt2img}
+                        onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowTxt2img: checked } }))}
+                      />
+                      <SettingsToggleCard
+                        title="允许图生图"
+                        checked={draft.integrations.novelaiAllowImg2img}
+                        onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowImg2img: checked } }))}
+                      />
+                      <div className="md:col-span-2">
+                        <SettingsToggleCard
+                          title="生成后自动写回角色素材"
+                          checked={draft.integrations.novelaiAutoWritebackRoleAssets}
+                          onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAutoWritebackRoleAssets: checked } }))}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <SettingsToggleCard
+                          title="NSFW 模式（开启时使用 Full）"
+                          checked={draft.integrations.novelaiNsfwEnabled}
+                          onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwEnabled: checked } }))}
+                        />
+                      </div>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
                       <input className={cx(inputClass, "bg-white")} value={String(draft.integrations.novelaiMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiMaxSteps: parseNumber(event.target.value, current.integrations.novelaiMaxSteps) } }))} placeholder="最大步数" />
@@ -946,12 +978,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "fitbit":
             return (
               <SectionCard>
-                <Field label="Fitbit">
-                  <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                    <input type="checkbox" checked={draft.integrations.fitbitEnabled} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, fitbitEnabled: event.target.checked } }))} />
-                    <span>integrations.fitbit.enabled</span>
-                  </label>
-                </Field>
+                <ToggleField label="Fitbit" title="启用 Fitbit" checked={draft.integrations.fitbitEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, fitbitEnabled: checked } }))} />
               </SectionCard>
             );
           case "peer-agents":
@@ -1023,22 +1050,26 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 </Field>
                 <Field label="高级开关">
                   <div className="grid gap-3 md:grid-cols-2">
-                    <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                      <input type="checkbox" checked={draft.advanced.devMode} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, devMode: event.target.checked } }))} />
-                      <span>dev_mode</span>
-                    </label>
-                    <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                      <input type="checkbox" checked={draft.advanced.searchEnabled} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, searchEnabled: event.target.checked } }))} />
-                      <span>search_enabled</span>
-                    </label>
-                    <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                      <input type="checkbox" checked={draft.advanced.spawnEnabled} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, spawnEnabled: event.target.checked } }))} />
-                      <span>spawn_enabled</span>
-                    </label>
-                    <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
-                      <input type="checkbox" checked={draft.advanced.memoryOptimizerEnabled} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerEnabled: event.target.checked } }))} />
-                      <span>memory_optimizer_enabled</span>
-                    </label>
+                    <SettingsToggleCard
+                      title="dev_mode"
+                      checked={draft.advanced.devMode}
+                      onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, devMode: checked } }))}
+                    />
+                    <SettingsToggleCard
+                      title="search_enabled"
+                      checked={draft.advanced.searchEnabled}
+                      onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, searchEnabled: checked } }))}
+                    />
+                    <SettingsToggleCard
+                      title="spawn_enabled"
+                      checked={draft.advanced.spawnEnabled}
+                      onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, spawnEnabled: checked } }))}
+                    />
+                    <SettingsToggleCard
+                      title="memory_optimizer_enabled"
+                      checked={draft.advanced.memoryOptimizerEnabled}
+                      onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerEnabled: checked } }))}
+                    />
                   </div>
                 </Field>
               </SectionCard>
@@ -1178,10 +1209,7 @@ function GroupEditor({
       </div>
       <input className={cx(inputClass, "bg-white")} value={group.groupId} onChange={(event) => onChange({ ...group, groupId: event.target.value })} placeholder="群组 ID" />
       <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
-      <label className="flex items-center gap-3 text-sm text-[#4A4F57]">
-        <input type="checkbox" checked={group.requireAt} onChange={(event) => onChange({ ...group, requireAt: event.target.checked })} />
-        <span>require_at</span>
-      </label>
+      <SettingsToggleCard compact title="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
     </div>
   );
 }
@@ -1204,14 +1232,8 @@ function QQBotGroupEditor({
       <input className={cx(inputClass, "bg-white")} value={group.groupOpenid} onChange={(event) => onChange({ ...group, groupOpenid: event.target.value })} placeholder="群组 OpenID" />
       <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
       <div className="grid gap-3 md:grid-cols-2">
-        <label className="flex items-center gap-3 text-sm text-[#4A4F57]">
-          <input type="checkbox" checked={group.requireAt} onChange={(event) => onChange({ ...group, requireAt: event.target.checked })} />
-          <span>require_at</span>
-        </label>
-        <label className="flex items-center gap-3 text-sm text-[#4A4F57]">
-          <input type="checkbox" checked={group.allowProactive} onChange={(event) => onChange({ ...group, allowProactive: event.target.checked })} />
-          <span>allow_proactive</span>
-        </label>
+        <SettingsToggleCard compact title="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
+        <SettingsToggleCard compact title="allow_proactive" checked={group.allowProactive} onChange={(checked) => onChange({ ...group, allowProactive: checked })} />
       </div>
     </div>
   );
