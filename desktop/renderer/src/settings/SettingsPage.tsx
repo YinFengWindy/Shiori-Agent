@@ -1131,10 +1131,10 @@ function GroupEditor({
 }) {
   return (
     <EditorCard title="QQ 群组" onRemove={onRemove}>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_minmax(320px,1.4fr)_220px] xl:items-start">
+      <div className="grid gap-3">
         <input className={cx(inputClass, "bg-white")} value={group.groupId} onChange={(event) => onChange({ ...group, groupId: event.target.value })} placeholder="群组 ID" />
-        <textarea className={cx(textareaClass, "min-h-16 bg-white md:col-span-2 xl:col-auto")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
-        <div className="grid gap-3 self-start md:col-span-2 xl:col-auto">
+        <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
+        <div className="grid gap-3">
           <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
         </div>
       </div>
@@ -1153,10 +1153,10 @@ function QQBotGroupEditor({
 }) {
   return (
     <EditorCard title="QQBot 群组" onRemove={onRemove}>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_minmax(320px,1.4fr)_320px] xl:items-start">
+      <div className="grid gap-3">
         <input className={cx(inputClass, "bg-white")} value={group.groupOpenid} onChange={(event) => onChange({ ...group, groupOpenid: event.target.value })} placeholder="群组 OpenID" />
-        <textarea className={cx(textareaClass, "min-h-16 bg-white md:col-span-2 xl:col-auto")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
-        <div className="grid gap-3 md:col-span-2 md:grid-cols-2 self-start xl:col-auto">
+        <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
+        <div className="grid gap-3 md:grid-cols-2">
           <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
           <CompactToggleField label="allow_proactive" checked={group.allowProactive} onChange={(checked) => onChange({ ...group, allowProactive: checked })} />
         </div>
@@ -1182,7 +1182,7 @@ function ChannelRoleBindingEditor({
 
   return (
     <EditorCard title="渠道角色绑定" onRemove={onRemove}>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3">
         <div className="grid gap-1.5">
           <div className="text-xs font-medium text-[#4A4F57]">{chatIdMeta.label}</div>
           <input className={cx(inputClass, "bg-white")} value={binding.chatId} onChange={(event) => onChange({ ...binding, channel, chatId: event.target.value })} placeholder={chatIdMeta.placeholder} />
@@ -1213,7 +1213,7 @@ function PeerAgentEditor({
 }) {
   return (
     <EditorCard title="Peer Agent" onRemove={onRemove}>
-      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid gap-3">
         <input className={cx(inputClass, "bg-white")} value={agent.name} onChange={(event) => onChange({ ...agent, name: event.target.value })} placeholder="名称" />
         <input className={cx(inputClass, "bg-white")} value={agent.baseUrl} onChange={(event) => onChange({ ...agent, baseUrl: event.target.value })} placeholder="基础地址" />
         <input className={cx(inputClass, "bg-white")} value={agent.cwd} onChange={(event) => onChange({ ...agent, cwd: event.target.value })} placeholder="工作目录" />
@@ -1221,10 +1221,8 @@ function PeerAgentEditor({
         <input className={cx(inputClass, "bg-white")} value={String(agent.startupTimeoutSeconds)} onChange={(event) => onChange({ ...agent, startupTimeoutSeconds: parseNumber(event.target.value, agent.startupTimeoutSeconds) })} placeholder="启动超时秒数" />
         <input className={cx(inputClass, "bg-white")} value={String(agent.shutdownTimeoutSeconds)} onChange={(event) => onChange({ ...agent, shutdownTimeoutSeconds: parseNumber(event.target.value, agent.shutdownTimeoutSeconds) })} placeholder="关闭超时秒数" />
       </div>
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-        <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={agent.description} onChange={(event) => onChange({ ...agent, description: event.target.value })} placeholder="描述" />
-        <textarea className={cx(textareaClass, "min-h-24 bg-white font-mono text-[12px]")} value={formatLauncher(agent.launcher)} onChange={(event) => onChange({ ...agent, launcher: parseLauncher(event.target.value) })} placeholder="每行一个启动命令片段" />
-      </div>
+      <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={agent.description} onChange={(event) => onChange({ ...agent, description: event.target.value })} placeholder="描述" />
+      <textarea className={cx(textareaClass, "min-h-24 bg-white font-mono text-[12px]")} value={formatLauncher(agent.launcher)} onChange={(event) => onChange({ ...agent, launcher: parseLauncher(event.target.value) })} placeholder="每行一个启动命令片段" />
     </EditorCard>
   );
 }
