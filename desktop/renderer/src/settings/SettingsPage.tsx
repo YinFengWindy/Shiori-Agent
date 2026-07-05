@@ -9,7 +9,7 @@ import {
   inputClass,
   textareaClass,
 } from "../shared/styles";
-import { ResetIcon, SaveIcon } from "../shared/icons";
+import { DeleteIcon, PlusIcon, ResetIcon, SaveIcon } from "../shared/icons";
 import type {
   RoleRecord,
   SettingsChannelGroup,
@@ -245,6 +245,55 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return <section className="grid">{children}</section>;
+}
+
+function EditorCard({
+  title,
+  onRemove,
+  children,
+}: {
+  title: string;
+  onRemove: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-4 rounded-[22px] border border-[#E7EAF0] bg-[#FBFBFC] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-medium text-[#20242A]">{title}</div>
+        <button
+          className="grid h-8 w-8 place-items-center rounded-full border border-transparent text-[#C16E4E] transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+          type="button"
+          aria-label={`删除${title}`}
+          onClick={onRemove}
+        >
+          <DeleteIcon className="h-[14px] w-[14px] fill-current" />
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function AddListAction({
+  label,
+  onAdd,
+}: {
+  label: string;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-full border border-[#F0E1CC] bg-[#FFF9F0] px-5 py-3">
+      <span className="text-sm text-[#6B5A45]">{label}</span>
+      <button
+        className="grid h-9 w-9 place-items-center rounded-full border border-[#E6D7C4] bg-white text-[#6B5A45] transition hover:bg-[#FFFCF7] focus:outline-none focus:ring-2 focus:ring-primary/20"
+        type="button"
+        aria-label={label}
+        onClick={onAdd}
+      >
+        <PlusIcon className="h-[14px] w-[14px] fill-current" />
+      </button>
+    </div>
+  );
 }
 
 const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: string }>> = {
@@ -531,15 +580,13 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 当前频道还没有角色绑定。
               </div>
             )}
-            <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
+            <AddListAction label="添加角色绑定" onAdd={() => updateDraft((current) => ({
               ...current,
               channels: {
                 ...current.channels,
                 roleBindings: [...current.channels.roleBindings, { channel, chatId: "", roleId: "" }],
               },
-            }))}>
-              添加角色绑定
-            </button>
+            }))} />
           </div>
         </Field>
       );
@@ -650,15 +697,13 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                         }))}
                       />
                     ))}
-                    <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
+                    <AddListAction label="添加 QQ 群组" onAdd={() => updateDraft((current) => ({
                       ...current,
                       channels: {
                         ...current.channels,
                         qqGroups: [...current.channels.qqGroups, { groupId: "", allowFrom: [], requireAt: true }],
                       },
-                    }))}>
-                      添加 QQ 群组
-                    </button>
+                    }))} />
                   </div>
                 </Field>
                 {renderRoleBindingsForChannel("qq")}
@@ -696,15 +741,13 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                         }))}
                       />
                     ))}
-                    <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
+                    <AddListAction label="添加 QQBot 群组" onAdd={() => updateDraft((current) => ({
                       ...current,
                       channels: {
                         ...current.channels,
                         qqbotGroups: [...current.channels.qqbotGroups, { groupOpenid: "", allowFrom: [], requireAt: true, allowProactive: false }],
                       },
-                    }))}>
-                      添加 QQBot 群组
-                    </button>
+                    }))} />
                   </div>
                 </Field>
                 {renderRoleBindingsForChannel("qqbot")}
@@ -921,7 +964,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                         }))}
                       />
                     ))}
-                    <button className={cx("text-sm", ghostButtonClass)} type="button" onClick={() => updateDraft((current) => ({
+                    <AddListAction label="添加 Peer Agent" onAdd={() => updateDraft((current) => ({
                       ...current,
                       integrations: {
                         ...current.integrations,
@@ -939,9 +982,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                           },
                         ],
                       },
-                    }))}>
-                      添加 Peer Agent
-                    </button>
+                    }))} />
                   </div>
                 </Field>
               </SectionCard>
@@ -1085,15 +1126,15 @@ function GroupEditor({
   onRemove: () => void;
 }) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] p-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-medium text-[#20242A]">QQ 群组</div>
-        <button className="text-sm text-[#A14D32]" type="button" onClick={onRemove}>删除</button>
+    <EditorCard title="QQ 群组" onRemove={onRemove}>
+      <div className="grid gap-3">
+        <input className={cx(inputClass, "bg-white")} value={group.groupId} onChange={(event) => onChange({ ...group, groupId: event.target.value })} placeholder="群组 ID" />
+        <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
+        <div className="grid gap-3 md:grid-cols-2">
+          <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
+        </div>
       </div>
-      <input className={cx(inputClass, "bg-white")} value={group.groupId} onChange={(event) => onChange({ ...group, groupId: event.target.value })} placeholder="群组 ID" />
-      <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
-      <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
-    </div>
+    </EditorCard>
   );
 }
 
@@ -1107,18 +1148,16 @@ function QQBotGroupEditor({
   onRemove: () => void;
 }) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] p-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-medium text-[#20242A]">QQBot 群组</div>
-        <button className="text-sm text-[#A14D32]" type="button" onClick={onRemove}>删除</button>
+    <EditorCard title="QQBot 群组" onRemove={onRemove}>
+      <div className="grid gap-3">
+        <input className={cx(inputClass, "bg-white")} value={group.groupOpenid} onChange={(event) => onChange({ ...group, groupOpenid: event.target.value })} placeholder="群组 OpenID" />
+        <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
+        <div className="grid gap-3 md:grid-cols-2">
+          <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
+          <CompactToggleField label="allow_proactive" checked={group.allowProactive} onChange={(checked) => onChange({ ...group, allowProactive: checked })} />
+        </div>
       </div>
-      <input className={cx(inputClass, "bg-white")} value={group.groupOpenid} onChange={(event) => onChange({ ...group, groupOpenid: event.target.value })} placeholder="群组 OpenID" />
-      <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
-      <div className="grid gap-3 md:grid-cols-2">
-        <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
-        <CompactToggleField label="allow_proactive" checked={group.allowProactive} onChange={(checked) => onChange({ ...group, allowProactive: checked })} />
-      </div>
-    </div>
+    </EditorCard>
   );
 }
 
@@ -1138,23 +1177,24 @@ function ChannelRoleBindingEditor({
   const chatIdMeta = getBindingChatIdMeta(channel);
 
   return (
-    <div className="grid gap-3 rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] p-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-medium text-[#20242A]">渠道角色绑定</div>
-        <button className="text-sm text-[#A14D32]" type="button" onClick={onRemove}>删除</button>
+    <EditorCard title="渠道角色绑定" onRemove={onRemove}>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-1.5">
+          <div className="text-xs font-medium text-[#4A4F57]">{chatIdMeta.label}</div>
+          <input className={cx(inputClass, "bg-white")} value={binding.chatId} onChange={(event) => onChange({ ...binding, channel, chatId: event.target.value })} placeholder={chatIdMeta.placeholder} />
+          <div className="text-[12px] leading-5 text-[#7B7F87]">{chatIdMeta.hint}</div>
+        </div>
+        <div className="grid gap-1.5">
+          <div className="text-xs font-medium text-[#4A4F57]">角色</div>
+          <select className={cx(inputClass, "bg-white")} value={binding.roleId} onChange={(event) => onChange({ ...binding, channel, roleId: event.target.value })}>
+            <option value="">选择角色</option>
+            {roles.map((role) => (
+              <option key={role.id} value={role.id}>{role.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
-      <input className={cx(inputClass, "bg-white")} value={binding.chatId} onChange={(event) => onChange({ ...binding, channel, chatId: event.target.value })} placeholder={chatIdMeta.placeholder} />
-      <div className="grid gap-1">
-        <div className="text-xs font-medium text-[#4A4F57]">{chatIdMeta.label}</div>
-        <div className="text-[12px] leading-5 text-[#7B7F87]">{chatIdMeta.hint}</div>
-      </div>
-      <select className={cx(inputClass, "bg-white")} value={binding.roleId} onChange={(event) => onChange({ ...binding, channel, roleId: event.target.value })}>
-        <option value="">选择角色</option>
-        {roles.map((role) => (
-          <option key={role.id} value={role.id}>{role.name}</option>
-        ))}
-      </select>
-    </div>
+    </EditorCard>
   );
 }
 
@@ -1168,11 +1208,7 @@ function PeerAgentEditor({
   onRemove: () => void;
 }) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] p-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-medium text-[#20242A]">Peer Agent</div>
-        <button className="text-sm text-[#A14D32]" type="button" onClick={onRemove}>删除</button>
-      </div>
+    <EditorCard title="Peer Agent" onRemove={onRemove}>
       <div className="grid gap-3 md:grid-cols-2">
         <input className={cx(inputClass, "bg-white")} value={agent.name} onChange={(event) => onChange({ ...agent, name: event.target.value })} placeholder="名称" />
         <input className={cx(inputClass, "bg-white")} value={agent.baseUrl} onChange={(event) => onChange({ ...agent, baseUrl: event.target.value })} placeholder="基础地址" />
@@ -1183,6 +1219,6 @@ function PeerAgentEditor({
       </div>
       <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={agent.description} onChange={(event) => onChange({ ...agent, description: event.target.value })} placeholder="描述" />
       <textarea className={cx(textareaClass, "min-h-24 bg-white font-mono text-[12px]")} value={formatLauncher(agent.launcher)} onChange={(event) => onChange({ ...agent, launcher: parseLauncher(event.target.value) })} placeholder="每行一个启动命令片段" />
-    </div>
+    </EditorCard>
   );
 }
