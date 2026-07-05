@@ -40,6 +40,11 @@ type ProactiveTargetOption = {
   label: string;
 };
 
+type SettingsIntro = {
+  title: string;
+  description: string;
+};
+
 function joinLines(values: string[]): string {
   return values.join("\n");
 }
@@ -143,6 +148,102 @@ function getMemoryEngineOptions(currentValue: string): Array<{ value: string; la
   return options;
 }
 
+function getSettingsIntro(section: SettingsSectionId, subsectionId: string): SettingsIntro {
+  switch (section) {
+    case "models":
+      if (subsectionId === "fast") {
+        return {
+          title: "扩展模型",
+          description: "为轻量模型和视觉模型单独指定通道；不填写时继续沿用主模型回退路径。",
+        };
+      }
+      if (subsectionId === "vl") {
+        return {
+          title: "视觉模型",
+          description: "管理图像理解使用的模型与凭据；只在视觉能力需要单独入口时填写。",
+        };
+      }
+      return {
+        title: "主模型",
+        description: "配置桌面主对话使用的模型、鉴权和推理能力开关。",
+      };
+    case "channels":
+      return {
+        title: settingsSubsections.channels.find((item) => item.id === subsectionId)?.label ?? "频道",
+        description: "左侧说明字段用途和默认行为，右侧直接调整当前 transport 的实际配置。",
+      };
+    case "memory":
+      return {
+        title: subsectionId === "embedding" ? "Embedding" : "记忆",
+        description: subsectionId === "embedding"
+          ? "覆盖 embedding 模型、鉴权和输出维度；留空时沿用默认实现。"
+          : "控制记忆总开关和记忆引擎，不改则继续沿用当前默认 wiring。",
+      };
+    case "proactive":
+      if (subsectionId === "target") {
+        return {
+          title: "目标",
+          description: "先决定要发往哪个频道和角色，再补齐实际的 chat_id 或会话标识。",
+        };
+      }
+      if (subsectionId === "agent") {
+        return {
+          title: "Agent 参数",
+          description: "限制主动推送路径的模型、步骤和上下文规模，避免后台任务过重。",
+        };
+      }
+      if (subsectionId === "drift") {
+        return {
+          title: "Drift",
+          description: "Drift 是附加策略，不替代普通主动推送主流程。",
+        };
+      }
+      return {
+        title: "主动推送",
+        description: "先控制总开关和 profile，未启用时下方参数都不会生效。",
+      };
+    case "integrations":
+      if (subsectionId === "fitbit") {
+        return {
+          title: "Fitbit",
+          description: "这里只保留启用状态和作用说明，不额外堆叠复杂表单。",
+        };
+      }
+      if (subsectionId === "peer-agents") {
+        return {
+          title: "Peer Agents",
+          description: "维护外部 Agent 注册列表；为空时不会注册任何外部代理。",
+        };
+      }
+      return {
+        title: "NovelAI",
+        description: "把 NovelAI 的接入、默认生成项和权限限制放在同一组里顺序调整。",
+      };
+    case "advanced":
+      if (subsectionId === "wiring") {
+        return {
+          title: "Wiring",
+          description: "低频 wiring 配置保留在这里，结构上保持和其他设置一致。",
+        };
+      }
+      if (subsectionId === "plugins") {
+        return {
+          title: "插件 / TOML",
+          description: "尚未表单化的高级配置继续通过原始 TOML 片段维护。",
+        };
+      }
+      return {
+        title: "高级",
+        description: "保留全局 Prompt、运行数值项和开关，不改变原有保存模式。",
+      };
+    default:
+      return {
+        title: "设置",
+        description: "",
+      };
+  }
+}
+
 function Field({
   label,
   hint,
@@ -153,12 +254,12 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-2.5 border-b border-[#ECEEF2] px-5 py-4 last:border-b-0">
-      <div className="grid gap-1">
-        <div className="text-sm font-medium text-[#171717]">{label}</div>
-        {hint ? <div className="text-[12px] leading-5 text-[#7B7F87]">{hint}</div> : null}
+    <div className="grid gap-3 border-b border-[#ECEEF2] py-5 last:border-b-0 md:grid-cols-[minmax(0,1fr)_minmax(240px,360px)] md:items-start md:gap-8">
+      <div className="grid gap-1.5">
+        <div className="text-[15px] font-medium text-[#171717]">{label}</div>
+        {hint ? <div className="max-w-[560px] text-[13px] leading-6 text-[#7B7F87]">{hint}</div> : null}
       </div>
-      {children}
+      <div className="w-full md:justify-self-end">{children}</div>
     </div>
   );
 }
@@ -195,13 +296,7 @@ function SectionCard({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <section>
-      <div className={cx(cardClass, "overflow-hidden rounded-[18px] border border-[#E7EAF0] bg-white shadow-[0_10px_28px_rgba(15,23,42,0.04)]")}>
-        {children}
-      </div>
-    </section>
-  );
+  return <section className="grid">{children}</section>;
 }
 
 const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: string }>> = {
@@ -441,6 +536,9 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
       ? activeSubsections[currentId]
       : (visibleSubsections[0]?.id ?? null))
     : null;
+  const currentIntro = currentId && currentSubsectionId
+    ? getSettingsIntro(currentId, currentSubsectionId)
+    : { title: "", description: "" };
 
   function updateActiveSubsection(nextId: string): void {
     if (!currentId) return;
@@ -1090,14 +1188,28 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             </div>
           </div>
         </div>
-        <div className="relative scrollbar-soft overflow-y-auto px-10 py-8">
+        <div className="relative scrollbar-soft overflow-y-auto bg-white px-10 py-10">
           <div className="mx-auto w-full max-w-[940px]">
             {!currentSection ? (
               <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-[#7f8490]")}>
                 没有匹配的设置项
               </div>
             ) : null}
-            {currentSection ? renderCurrentSectionContent() : null}
+            {currentSection ? (
+              <div className="grid gap-6">
+                <div className="border-b border-[#ECEEF2] pb-4">
+                  <h2 className="text-[24px] font-semibold tracking-[-0.02em] text-[#171717]">{currentIntro.title}</h2>
+                  {currentIntro.description ? (
+                    <div className="mt-2 max-w-[720px] text-[13px] leading-6 text-[#7B7F87]">
+                      {currentIntro.description}
+                    </div>
+                  ) : null}
+                </div>
+                <div>
+                  {renderCurrentSectionContent()}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
