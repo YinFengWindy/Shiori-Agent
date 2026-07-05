@@ -56,6 +56,15 @@ function cloneSettings(data: SettingsFormData): SettingsFormData {
   return JSON.parse(JSON.stringify(data)) as SettingsFormData;
 }
 
+function hydrateSettingsSnapshot(snapshot: SettingsSnapshot, roleBindings: SettingsChannelRoleBinding[]): SettingsSnapshot {
+  const nextFormData = cloneSettings(snapshot.formData);
+  nextFormData.channels.roleBindings = roleBindings;
+  return {
+    ...snapshot,
+    formData: nextFormData,
+  };
+}
+
 function parseLauncher(value: string): string[] {
   return value
     .split("\n")
@@ -380,13 +389,12 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           }),
         ]);
         if (cancelled) return;
-        const nextFormData = cloneSettings(nextSnapshot.formData);
-        nextFormData.channels.roleBindings = nextBindings.bindings;
+        const hydratedSnapshot = hydrateSettingsSnapshot(nextSnapshot, nextBindings.bindings);
         if (rolesResponse.error) {
           throw new Error(rolesResponse.error.message);
         }
-        setSnapshot(nextSnapshot);
-        setDraft(nextFormData);
+        setSnapshot(hydratedSnapshot);
+        setDraft(cloneSettings(hydratedSnapshot.formData));
         setRoles(Array.isArray(rolesResponse.payload.roles) ? rolesResponse.payload.roles as RoleRecord[] : []);
         setLoadError("");
         setSavePhase("idle");
@@ -489,10 +497,9 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
         window.miraDesktop.readSettings(),
         window.miraDesktop.readChannelRoleBindings(),
       ]);
-      const nextFormData = cloneSettings(nextSnapshot.formData);
-      nextFormData.channels.roleBindings = nextBindings.bindings;
-      setSnapshot(nextSnapshot);
-      setDraft(nextFormData);
+      const hydratedSnapshot = hydrateSettingsSnapshot(nextSnapshot, nextBindings.bindings);
+      setSnapshot(hydratedSnapshot);
+      setDraft(cloneSettings(hydratedSnapshot.formData));
     } catch (error) {
       setSavePhase("error");
       setStatusMessage(error instanceof Error ? error.message : String(error));
@@ -501,9 +508,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
 
   function reset(): void {
     if (!snapshot) return;
-    const nextDraft = cloneSettings(snapshot.formData);
-    nextDraft.channels.roleBindings = draft?.channels.roleBindings ?? [];
-    setDraft(nextDraft);
+    setDraft(cloneSettings(snapshot.formData));
     setStatusMessage("");
     setSavePhase("idle");
   }
