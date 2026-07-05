@@ -133,6 +133,10 @@ const proactiveTargetOptions: ProactiveTargetOption[] = [
   { value: "cli", label: "CLI" },
 ];
 
+const proactiveProfileOptions: Array<{ value: string; label: string }> = [
+  { value: "daily", label: "daily" },
+];
+
 function getMemoryEngineOptions(currentValue: string): Array<{ value: string; label: string }> {
   const normalized = currentValue.trim();
   const options = [
@@ -831,13 +835,12 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             return (
               <SectionCard>
                 <ToggleField label="主动推送" checked={draft.proactive.enabled} onChange={(checked) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, enabled: checked } }))} />
-                <Field label="推送周期">
-                  <input className={cx(inputClass, "bg-white")} value={draft.proactive.profile} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, profile: event.target.value } }))} />
-                </Field>
-                <Field label="高级策略说明" hint="`proactive.profile` 是当前启用的策略名。像 `proactive.profiles`、`proactive.overrides` 这类高级策略树，继续放到高级 TOML 区编辑更稳妥。">
-                  <div className="rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] px-4 py-3 text-sm leading-6 text-[#5B616A]">
-                    常用运行项在这里改；复杂策略预设、覆盖白名单和实验参数，放在下方“高级”页的 TOML 文本区维护。
-                  </div>
+                <Field label="推送策略" hint="当前设置页先开放内置的 `daily` 策略。">
+                  <select className={cx(inputClass, "bg-white")} value={draft.proactive.profile} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, profile: event.target.value } }))}>
+                    {proactiveProfileOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
                 </Field>
               </SectionCard>
             );
@@ -874,21 +877,29 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "agent":
             return (
               <SectionCard>
-                <Field label="Proactive 模型" hint="专用于主动推送 / agent tick；留空时则使用主模型。">
-                  <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.agentModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentModel: event.target.value } }))} placeholder="模型名" />
-                    <SecretInput value={draft.models.agentApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, agentApiKey: value } }))} />
-                    <input className={cx(inputClass, "bg-white")} value={draft.models.agentBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentBaseUrl: event.target.value } }))} placeholder="基础地址" />
-                  </div>
+                <Field label="model" hint="专用于主动推送 / agent tick；留空时回退到主模型。">
+                  <input className={cx(inputClass, "bg-white")} value={draft.models.agentModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentModel: event.target.value } }))} placeholder="模型名" />
                 </Field>
-                <Field label="Agent 参数">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentMaxSteps: parseNumber(event.target.value, current.proactive.agentMaxSteps) } }))} placeholder="最大步数" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentContentLimit)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentContentLimit: parseNumber(event.target.value, current.proactive.agentContentLimit) } }))} placeholder="内容长度限制" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentWebFetchMaxChars)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentWebFetchMaxChars: parseNumber(event.target.value, current.proactive.agentWebFetchMaxChars) } }))} placeholder="网页抓取最大字符数" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentContextProb)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentContextProb: parseNumber(event.target.value, current.proactive.agentContextProb) } }))} placeholder="上下文概率" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentDeliveryCooldownHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentDeliveryCooldownHours: parseNumber(event.target.value, current.proactive.agentDeliveryCooldownHours) } }))} placeholder="发送冷却小时数" />
-                  </div>
+                <Field label="api_key" hint="Proactive 专用模型的 API Key。">
+                  <SecretInput value={draft.models.agentApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, agentApiKey: value } }))} />
+                </Field>
+                <Field label="base_url" hint="Proactive 专用模型的基础地址。">
+                  <input className={cx(inputClass, "bg-white")} value={draft.models.agentBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentBaseUrl: event.target.value } }))} placeholder="基础地址" />
+                </Field>
+                <Field label="max_steps" hint="限制单次主动推送任务可执行的最大步数。">
+                  <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentMaxSteps: parseNumber(event.target.value, current.proactive.agentMaxSteps) } }))} placeholder="最大步数" />
+                </Field>
+                <Field label="content_limit" hint="限制单次主动推送可选取的内容条目数量。">
+                  <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentContentLimit)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentContentLimit: parseNumber(event.target.value, current.proactive.agentContentLimit) } }))} placeholder="内容长度限制" />
+                </Field>
+                <Field label="web_fetch_max_chars" hint="限制网页抓取后允许注入上下文的最大字符数。">
+                  <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentWebFetchMaxChars)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentWebFetchMaxChars: parseNumber(event.target.value, current.proactive.agentWebFetchMaxChars) } }))} placeholder="网页抓取最大字符数" />
+                </Field>
+                <Field label="context_prob" hint="控制主动推送优先走上下文型内容的概率。">
+                  <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentContextProb)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentContextProb: parseNumber(event.target.value, current.proactive.agentContextProb) } }))} placeholder="上下文概率" />
+                </Field>
+                <Field label="delivery_cooldown_hours" hint="限制两次主动推送之间的最小冷却小时数。">
+                  <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentDeliveryCooldownHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentDeliveryCooldownHours: parseNumber(event.target.value, current.proactive.agentDeliveryCooldownHours) } }))} placeholder="发送冷却小时数" />
                 </Field>
               </SectionCard>
             );
@@ -896,11 +907,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             return (
               <SectionCard>
                 <ToggleField label="启用 Drift" checked={draft.proactive.driftEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftEnabled: checked } }))} />
-                <Field label="Drift 参数">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMaxSteps: parseNumber(event.target.value, current.proactive.driftMaxSteps) } }))} placeholder="最大步数" />
-                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMinIntervalHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMinIntervalHours: parseNumber(event.target.value, current.proactive.driftMinIntervalHours) } }))} placeholder="最小间隔小时数" />
-                  </div>
+                <Field label="max_steps" hint="限制 Drift 单次自主任务的最大步数。">
+                  <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMaxSteps: parseNumber(event.target.value, current.proactive.driftMaxSteps) } }))} placeholder="最大步数" />
+                </Field>
+                <Field label="min_interval_hours" hint="限制两次 Drift 任务之间的最小间隔小时数。">
+                  <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMinIntervalHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMinIntervalHours: parseNumber(event.target.value, current.proactive.driftMinIntervalHours) } }))} placeholder="最小间隔小时数" />
                 </Field>
               </SectionCard>
             );
