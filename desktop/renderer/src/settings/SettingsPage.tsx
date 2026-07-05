@@ -185,9 +185,6 @@ function getSettingsIntro(section: SettingsSectionId, subsectionId: string): str
       if (subsectionId === "wiring") {
         return "Wiring";
       }
-      if (subsectionId === "plugins") {
-        return "插件 / TOML";
-      }
       return "高级";
     default:
       return "设置";
@@ -324,7 +321,6 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
   advanced: [
     { id: "general", label: "基础" },
     { id: "wiring", label: "Wiring" },
-    { id: "plugins", label: "插件 / TOML" },
   ],
 };
 
@@ -1034,19 +1030,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <input className={cx(inputClass, "bg-white")} value={draft.advanced.wiringContext} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringContext: event.target.value } }))} placeholder="上下文实现名" />
                     <input className={cx(inputClass, "bg-white")} value={draft.advanced.wiringMemory} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringMemory: event.target.value } }))} placeholder="记忆实现名" />
                     <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.advanced.wiringToolsets)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringToolsets: splitLines(event.target.value) } }))} placeholder="每行一个工具集名称" />
-                  </div>
-                </Field>
-              </SectionCard>
-            );
-          case "plugins":
-            return (
-              <SectionCard>
-                <Field label="其他插件配置" hint="保留给尚未表单化的 plugins.* 段。按 TOML 片段填写。">
-                  <textarea className={cx(textareaClass, "min-h-[240px] bg-white font-mono text-[12px]")} value={draft.advanced.pluginsRawToml} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, pluginsRawToml: event.target.value } }))} />
-                </Field>
-                <Field label="TOML 提示" hint="这里最适合放表单之外、但仍然需要保留的高级配置。">
-                  <div className="rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] px-4 py-3 text-sm leading-6 text-[#5B616A]">
-                    例如：尚未表单化的 `plugins.*` 配置。这里填写的是原始 TOML 片段，会原样写回配置文件。
                   </div>
                 </Field>
               </SectionCard>
