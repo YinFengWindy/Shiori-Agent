@@ -1,8 +1,8 @@
 [![欢迎加入交流群](https://img.shields.io/badge/QQ%E4%BA%A4%E6%B5%81%E7%BE%A4-%E6%AC%A2%E8%BF%8E%E5%8A%A0%E5%85%A5-2ea44f?style=for-the-badge)](./COMMUNICATION.md)
 
-# Mira-Agent
+# Shiori
 
-Mira-Agent 是一个基于 Akashic Agent 基座演进出来的角色扮演 Agent 助手。当前仓库的主形态已经是 **Windows 桌面端 + Python Agent Runtime**：你可以创建和维护多个角色，让不同角色承接聊天、记忆、主动推送、图片生成和外部渠道绑定。
+Shiori 是一个基于 Akashic Agent 基座演进出来的角色扮演 Agent 助手。当前仓库的主形态已经是 **Windows 桌面端 + Python Agent Runtime**：你可以创建和维护多个角色，让不同角色承接聊天、记忆、主动推送、图片生成和外部渠道绑定。
 
 ---
 
@@ -30,7 +30,7 @@ Mira-Agent 是一个基于 Akashic Agent 基座演进出来的角色扮演 Agent
 
 ```bash
 git clone <this-repo>
-cd Mira-Agent
+cd Shiori
 uv venv
 uv pip install -r requirements.txt
 ```
