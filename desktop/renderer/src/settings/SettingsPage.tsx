@@ -148,49 +148,6 @@ function getMemoryEngineOptions(currentValue: string): Array<{ value: string; la
   return options;
 }
 
-function getSettingsIntro(section: SettingsSectionId, subsectionId: string): string {
-  switch (section) {
-    case "models":
-      if (subsectionId === "fast") {
-        return "轻量模型";
-      }
-      if (subsectionId === "vl") {
-        return "视觉模型";
-      }
-      return "主模型";
-    case "channels":
-      return settingsSubsections.channels.find((item) => item.id === subsectionId)?.label ?? "频道";
-    case "memory":
-      return subsectionId === "embedding" ? "Embedding" : "记忆";
-    case "proactive":
-      if (subsectionId === "target") {
-        return "目标";
-      }
-      if (subsectionId === "agent") {
-        return "Agent 参数";
-      }
-      if (subsectionId === "drift") {
-        return "Drift";
-      }
-      return "主动推送";
-    case "integrations":
-      if (subsectionId === "fitbit") {
-        return "Fitbit";
-      }
-      if (subsectionId === "peer-agents") {
-        return "Peer Agents";
-      }
-      return "NovelAI";
-    case "advanced":
-      if (subsectionId === "wiring") {
-        return "Wiring";
-      }
-      return "高级";
-    default:
-      return "设置";
-  }
-}
-
 function Field({
   label,
   hint,
@@ -526,10 +483,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
       ? activeSubsections[currentId]
       : (visibleSubsections[0]?.id ?? null))
     : null;
-  const currentTitle = currentId && currentSubsectionId
-    ? getSettingsIntro(currentId, currentSubsectionId)
-    : "";
-
   function updateActiveSubsection(nextId: string): void {
     if (!currentId) return;
     setActiveSubsections((current) => (
@@ -1111,13 +1064,8 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
               </div>
             ) : null}
             {currentSection ? (
-              <div className="grid gap-6">
-                <div className="border-b border-[#ECEEF2] pb-4">
-                  <h2 className="text-[24px] font-semibold tracking-[-0.02em] text-[#171717]">{currentTitle}</h2>
-                </div>
-                <div>
-                  {renderCurrentSectionContent()}
-                </div>
+              <div>
+                {renderCurrentSectionContent()}
               </div>
             ) : null}
           </div>
