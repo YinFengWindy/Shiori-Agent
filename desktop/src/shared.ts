@@ -77,7 +77,6 @@ export type SettingsFormData = {
     telegramAllowFrom: string[];
     qqBotUin: string;
     qqAllowFrom: string[];
-    qqWebsocketOpenTimeoutSeconds: number;
     qqGroups: SettingsChannelGroup[];
     qqbotAppId: string;
     qqbotClientSecret: string;
@@ -86,8 +85,6 @@ export type SettingsFormData = {
     feishuAppId: string;
     feishuAppSecret: string;
     feishuAllowFrom: string[];
-    feishuDomain: string;
-    cliSocket: string;
     cliSessionKey: string;
     roleBindings: SettingsChannelRoleBinding[];
   };
@@ -134,9 +131,6 @@ export type SettingsFormData = {
     spawnEnabled: boolean;
     memoryOptimizerEnabled: boolean;
     memoryOptimizerIntervalSeconds: number;
-    wiringContext: string;
-    wiringMemory: string;
-    wiringToolsets: string[];
     pluginsRawToml: string;
   };
 };

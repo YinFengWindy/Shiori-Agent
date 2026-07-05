@@ -343,7 +343,6 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
   ],
   advanced: [
     { id: "general", label: "基础" },
-    { id: "wiring", label: "Wiring" },
   ],
 };
 
@@ -674,14 +673,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "qq":
             return (
               <SectionCard>
-                <Field label="QQ Bot UIN">
+                <Field label="Bot QQ号" hint="填入Bot 的QQ号；留空则不启用 QQ 渠道。">
                   <input className={cx(inputClass, "bg-white")} value={draft.channels.qqBotUin} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqBotUin: event.target.value } }))} />
                 </Field>
                 <Field label="QQ Allow From" hint="每行一个 QQ 号。">
                   <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.qqAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqAllowFrom: splitLines(event.target.value) } }))} />
-                </Field>
-                <Field label="QQ WebSocket 超时秒数">
-                  <input className={cx(inputClass, "bg-white")} value={String(draft.channels.qqWebsocketOpenTimeoutSeconds)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqWebsocketOpenTimeoutSeconds: parseNumber(event.target.value, current.channels.qqWebsocketOpenTimeoutSeconds) } }))} />
                 </Field>
                 <Field label="QQ 群组规则" hint="第一版先用逐条卡片编辑。" layout="stack">
                   <div className="grid gap-3">
@@ -771,18 +767,12 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="Feishu Allow From" hint="每行一个 open_id / user_id / union_id；留空表示允许所有人。">
                   <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.feishuAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuAllowFrom: splitLines(event.target.value) } }))} />
                 </Field>
-                <Field label="Feishu Domain" hint="默认 open.feishu.cn；Lark 或私有化部署时再改。">
-                  <input className={cx(inputClass, "bg-white")} value={draft.channels.feishuDomain} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuDomain: event.target.value } }))} />
-                </Field>
                 {renderRoleBindingsForChannel("feishu")}
               </SectionCard>
             );
           case "cli":
             return (
               <SectionCard>
-                <Field label="CLI Socket">
-                  <input className={cx(inputClass, "bg-white")} value={draft.channels.cliSocket} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, cliSocket: event.target.value } }))} />
-                </Field>
                 <Field label="CLI Session Key">
                   <input className={cx(inputClass, "bg-white")} value={draft.channels.cliSessionKey} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, cliSessionKey: event.target.value } }))} />
                 </Field>
@@ -1025,18 +1015,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <ToggleField label="search_enabled" hint="控制 Agent 是否允许使用搜索能力。" checked={draft.advanced.searchEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, searchEnabled: checked } }))} />
                 <ToggleField label="spawn_enabled" hint="控制 Agent 是否允许创建子任务或派生执行流程。" checked={draft.advanced.spawnEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, spawnEnabled: checked } }))} />
                 <ToggleField label="memory_optimizer_enabled" hint="控制后台记忆优化任务是否启用。" checked={draft.advanced.memoryOptimizerEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerEnabled: checked } }))} />
-              </SectionCard>
-            );
-          case "wiring":
-            return (
-              <SectionCard>
-                <Field label="Wiring">
-                  <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={draft.advanced.wiringContext} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringContext: event.target.value } }))} placeholder="上下文实现名" />
-                    <input className={cx(inputClass, "bg-white")} value={draft.advanced.wiringMemory} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringMemory: event.target.value } }))} placeholder="记忆实现名" />
-                    <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.advanced.wiringToolsets)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, wiringToolsets: splitLines(event.target.value) } }))} placeholder="每行一个工具集名称" />
-                  </div>
-                </Field>
               </SectionCard>
             );
           default:

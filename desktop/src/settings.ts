@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+const DEFAULT_SOCKET = process.platform === "win32" ? "127.0.0.1:8765" : "/tmp/akashic.sock";
+
 type SettingsChannelGroup = {
   groupId: string;
   allowFrom: string[];
@@ -55,7 +57,6 @@ export type SettingsFormData = {
     telegramAllowFrom: string[];
     qqBotUin: string;
     qqAllowFrom: string[];
-    qqWebsocketOpenTimeoutSeconds: number;
     qqGroups: SettingsChannelGroup[];
     qqbotAppId: string;
     qqbotClientSecret: string;
@@ -64,8 +65,6 @@ export type SettingsFormData = {
     feishuAppId: string;
     feishuAppSecret: string;
     feishuAllowFrom: string[];
-    feishuDomain: string;
-    cliSocket: string;
     cliSessionKey: string;
     roleBindings: SettingsChannelRoleBinding[];
   };
@@ -112,9 +111,6 @@ export type SettingsFormData = {
     spawnEnabled: boolean;
     memoryOptimizerEnabled: boolean;
     memoryOptimizerIntervalSeconds: number;
-    wiringContext: string;
-    wiringMemory: string;
-    wiringToolsets: string[];
     pluginsRawToml: string;
   };
 };
@@ -336,7 +332,6 @@ function loadSettingsData(): SettingsSnapshot {
         telegramAllowFrom: splitList(telegram.allow_from as string[] | undefined),
         qqBotUin: String(qq.bot_uin ?? ""),
         qqAllowFrom: splitList(qq.allow_from as string[] | undefined),
-        qqWebsocketOpenTimeoutSeconds: Number(qq.websocket_open_timeout_seconds ?? 5),
         qqGroups: asArray(qq.groups, (item) => {
           const group = asRecord(item);
           return {
@@ -360,8 +355,6 @@ function loadSettingsData(): SettingsSnapshot {
         feishuAppId: String(feishu.app_id ?? ""),
         feishuAppSecret: String(feishu.app_secret ?? ""),
         feishuAllowFrom: splitList(feishu.allow_from as string[] | undefined),
-        feishuDomain: String(feishu.domain ?? "https://open.feishu.cn"),
-        cliSocket: String(cli.socket ?? ""),
         cliSessionKey: String(cli.session_key ?? ""),
         roleBindings: [],
       },
@@ -420,9 +413,6 @@ function loadSettingsData(): SettingsSnapshot {
         spawnEnabled: Boolean(agentTools.spawn_enabled ?? true),
         memoryOptimizerEnabled: Boolean(agentMaintenance.memory_optimizer_enabled ?? true),
         memoryOptimizerIntervalSeconds: Number(agentMaintenance.memory_optimizer_interval_seconds ?? 64800),
-        wiringContext: String(agentWiring.context ?? "default"),
-        wiringMemory: String(agentWiring.memory ?? "default"),
-        wiringToolsets: asArray(agentWiring.toolsets, (item) => String(item ?? "")),
         pluginsRawToml: renderPluginBlocks(
           Object.entries(plugins)
             .filter(([name]) => name !== "qqbot" && name !== "feishu")
@@ -548,9 +538,9 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `memory_optimizer_interval_seconds = ${formData.advanced.memoryOptimizerIntervalSeconds}`,
     "",
     "[agent.wiring]",
-    `context = ${quote(formData.advanced.wiringContext)}`,
-    `memory = ${quote(formData.advanced.wiringMemory)}`,
-    `toolsets = ${renderStringArray(formData.advanced.wiringToolsets)}`,
+    'context = "default"',
+    'memory = "default"',
+    "toolsets = []",
     "",
     "[channels.telegram]",
     `token = ${quote(formData.channels.telegramToken)}`,
@@ -560,11 +550,11 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "[channels.qq]",
     `bot_uin = ${quote(formData.channels.qqBotUin)}`,
     `allow_from = ${renderStringArray(formData.channels.qqAllowFrom)}`,
-    `websocket_open_timeout_seconds = ${formData.channels.qqWebsocketOpenTimeoutSeconds}`,
+    "websocket_open_timeout_seconds = 5",
     "",
     qqGroupBlocks,
     "[channels.cli]",
-    `socket = ${quote(formData.channels.cliSocket)}`,
+    `socket = ${quote(DEFAULT_SOCKET)}`,
     `session_key = ${quote(formData.channels.cliSessionKey)}`,
     "",
     "[plugins.qqbot]",
@@ -577,7 +567,7 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `app_id = ${quote(formData.channels.feishuAppId)}`,
     `app_secret = ${quote(formData.channels.feishuAppSecret)}`,
     `allow_from = ${renderStringArray(formData.channels.feishuAllowFrom)}`,
-    `domain = ${quote(formData.channels.feishuDomain.trim() || "https://open.feishu.cn")}`,
+    'domain = "https://open.feishu.cn"',
     "",
     "[memory]",
     `enabled = ${formData.memory.enabled ? "true" : "false"}`,
@@ -645,9 +635,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
 function validateSettings(formData: SettingsFormData): void {
   if (!formData.models.mainModel.trim()) {
     throw new Error("主模型不能为空");
-  }
-  if (formData.channels.qqWebsocketOpenTimeoutSeconds <= 0) {
-    throw new Error("QQ websocket 超时必须大于 0");
   }
   if (formData.advanced.maxTokens <= 0) {
     throw new Error("max_tokens 必须大于 0");
