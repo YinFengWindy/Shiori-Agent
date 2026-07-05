@@ -40,11 +40,6 @@ type ProactiveTargetOption = {
   label: string;
 };
 
-type SettingsIntro = {
-  title: string;
-  description: string;
-};
-
 function joinLines(values: string[]): string {
   return values.join("\n");
 }
@@ -148,99 +143,49 @@ function getMemoryEngineOptions(currentValue: string): Array<{ value: string; la
   return options;
 }
 
-function getSettingsIntro(section: SettingsSectionId, subsectionId: string): SettingsIntro {
+function getSettingsIntro(section: SettingsSectionId, subsectionId: string): string {
   switch (section) {
     case "models":
       if (subsectionId === "fast") {
-        return {
-          title: "扩展模型",
-          description: "为轻量模型和视觉模型单独指定通道；不填写时继续沿用主模型回退路径。",
-        };
+        return "扩展模型";
       }
       if (subsectionId === "vl") {
-        return {
-          title: "视觉模型",
-          description: "管理图像理解使用的模型与凭据；只在视觉能力需要单独入口时填写。",
-        };
+        return "视觉模型";
       }
-      return {
-        title: "主模型",
-        description: "配置桌面主对话使用的模型、鉴权和推理能力开关。",
-      };
+      return "主模型";
     case "channels":
-      return {
-        title: settingsSubsections.channels.find((item) => item.id === subsectionId)?.label ?? "频道",
-        description: "左侧说明字段用途和默认行为，右侧直接调整当前 transport 的实际配置。",
-      };
+      return settingsSubsections.channels.find((item) => item.id === subsectionId)?.label ?? "频道";
     case "memory":
-      return {
-        title: subsectionId === "embedding" ? "Embedding" : "记忆",
-        description: subsectionId === "embedding"
-          ? "覆盖 embedding 模型、鉴权和输出维度；留空时沿用默认实现。"
-          : "控制记忆总开关和记忆引擎，不改则继续沿用当前默认 wiring。",
-      };
+      return subsectionId === "embedding" ? "Embedding" : "记忆";
     case "proactive":
       if (subsectionId === "target") {
-        return {
-          title: "目标",
-          description: "先决定要发往哪个频道和角色，再补齐实际的 chat_id 或会话标识。",
-        };
+        return "目标";
       }
       if (subsectionId === "agent") {
-        return {
-          title: "Agent 参数",
-          description: "限制主动推送路径的模型、步骤和上下文规模，避免后台任务过重。",
-        };
+        return "Agent 参数";
       }
       if (subsectionId === "drift") {
-        return {
-          title: "Drift",
-          description: "Drift 是附加策略，不替代普通主动推送主流程。",
-        };
+        return "Drift";
       }
-      return {
-        title: "主动推送",
-        description: "先控制总开关和 profile，未启用时下方参数都不会生效。",
-      };
+      return "主动推送";
     case "integrations":
       if (subsectionId === "fitbit") {
-        return {
-          title: "Fitbit",
-          description: "这里只保留启用状态和作用说明，不额外堆叠复杂表单。",
-        };
+        return "Fitbit";
       }
       if (subsectionId === "peer-agents") {
-        return {
-          title: "Peer Agents",
-          description: "维护外部 Agent 注册列表；为空时不会注册任何外部代理。",
-        };
+        return "Peer Agents";
       }
-      return {
-        title: "NovelAI",
-        description: "把 NovelAI 的接入、默认生成项和权限限制放在同一组里顺序调整。",
-      };
+      return "NovelAI";
     case "advanced":
       if (subsectionId === "wiring") {
-        return {
-          title: "Wiring",
-          description: "低频 wiring 配置保留在这里，结构上保持和其他设置一致。",
-        };
+        return "Wiring";
       }
       if (subsectionId === "plugins") {
-        return {
-          title: "插件 / TOML",
-          description: "尚未表单化的高级配置继续通过原始 TOML 片段维护。",
-        };
+        return "插件 / TOML";
       }
-      return {
-        title: "高级",
-        description: "保留全局 Prompt、运行数值项和开关，不改变原有保存模式。",
-      };
+      return "高级";
     default:
-      return {
-        title: "设置",
-        description: "",
-      };
+      return "设置";
   }
 }
 
@@ -536,9 +481,9 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
       ? activeSubsections[currentId]
       : (visibleSubsections[0]?.id ?? null))
     : null;
-  const currentIntro = currentId && currentSubsectionId
+  const currentTitle = currentId && currentSubsectionId
     ? getSettingsIntro(currentId, currentSubsectionId)
-    : { title: "", description: "" };
+    : "";
 
   function updateActiveSubsection(nextId: string): void {
     if (!currentId) return;
@@ -640,24 +585,28 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "fast":
             return (
               <SectionCard>
-                <Field label="轻量模型">
-                  <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={formData.models.fastModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastModel: event.target.value } }))} placeholder="模型名" />
-                    <SecretInput value={formData.models.fastApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, fastApiKey: value } }))} />
-                    <input className={cx(inputClass, "bg-white")} value={formData.models.fastBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastBaseUrl: event.target.value } }))} placeholder="基础地址" />
-                  </div>
+                <Field label="轻量模型" hint="轻量路径使用的模型名；留空时继续沿用主模型回退路径。">
+                  <input className={cx(inputClass, "bg-white")} value={formData.models.fastModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastModel: event.target.value } }))} placeholder="模型名" />
+                </Field>
+                <Field label="轻量模型 API Key" hint="只在轻量模型通道需要独立鉴权时填写；留空时沿用主模型凭据。">
+                  <SecretInput value={formData.models.fastApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, fastApiKey: value } }))} />
+                </Field>
+                <Field label="轻量模型 Base URL" hint="覆盖轻量模型的请求地址；留空时使用 provider 默认地址。">
+                  <input className={cx(inputClass, "bg-white")} value={formData.models.fastBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastBaseUrl: event.target.value } }))} placeholder="基础地址" />
                 </Field>
               </SectionCard>
             );
           case "vl":
             return (
               <SectionCard>
-                <Field label="视觉模型">
-                  <div className="grid gap-3">
-                    <input className={cx(inputClass, "bg-white")} value={formData.models.vlModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlModel: event.target.value } }))} placeholder="模型名" />
-                    <SecretInput value={formData.models.vlApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, vlApiKey: value } }))} />
-                    <input className={cx(inputClass, "bg-white")} value={formData.models.vlBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlBaseUrl: event.target.value } }))} placeholder="基础地址" />
-                  </div>
+                <Field label="视觉模型" hint="视觉或图像理解路径使用的模型名；留空时继续沿用默认视觉能力。">
+                  <input className={cx(inputClass, "bg-white")} value={formData.models.vlModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlModel: event.target.value } }))} placeholder="模型名" />
+                </Field>
+                <Field label="视觉模型 API Key" hint="只在视觉模型通道需要单独凭据时填写；留空时沿用主模型凭据。">
+                  <SecretInput value={formData.models.vlApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, vlApiKey: value } }))} />
+                </Field>
+                <Field label="视觉模型 Base URL" hint="覆盖视觉模型的请求地址；留空时使用 provider 默认地址。">
+                  <input className={cx(inputClass, "bg-white")} value={formData.models.vlBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlBaseUrl: event.target.value } }))} placeholder="基础地址" />
                 </Field>
               </SectionCard>
             );
@@ -1198,12 +1147,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             {currentSection ? (
               <div className="grid gap-6">
                 <div className="border-b border-[#ECEEF2] pb-4">
-                  <h2 className="text-[24px] font-semibold tracking-[-0.02em] text-[#171717]">{currentIntro.title}</h2>
-                  {currentIntro.description ? (
-                    <div className="mt-2 max-w-[720px] text-[13px] leading-6 text-[#7B7F87]">
-                      {currentIntro.description}
-                    </div>
-                  ) : null}
+                  <h2 className="text-[24px] font-semibold tracking-[-0.02em] text-[#171717]">{currentTitle}</h2>
                 </div>
                 <div>
                   {renderCurrentSectionContent()}
