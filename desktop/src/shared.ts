@@ -128,8 +128,6 @@ export type SettingsFormData = {
     novelaiAllowTxt2img: boolean;
     novelaiAllowImg2img: boolean;
     novelaiAutoWritebackRoleAssets: boolean;
-    novelaiMaxSteps: number;
-    novelaiMaxPixels: number;
     peerAgents: SettingsPeerAgent[];
   };
   advanced: {

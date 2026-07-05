@@ -941,12 +941,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <ToggleField label="允许图生图" checked={draft.integrations.novelaiAllowImg2img} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowImg2img: checked } }))} />
                 <ToggleField label="生成后自动写回角色素材" checked={draft.integrations.novelaiAutoWritebackRoleAssets} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAutoWritebackRoleAssets: checked } }))} />
                 <ToggleField label="NSFW 模式（开启时使用 Full）" checked={draft.integrations.novelaiNsfwEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwEnabled: checked } }))} />
-                <Field label="最大步数" hint="限制单次生成允许使用的最大 steps。">
-                  <input className={cx(inputClass, "bg-white")} value={String(draft.integrations.novelaiMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiMaxSteps: parseNumber(event.target.value, current.integrations.novelaiMaxSteps) } }))} placeholder="最大步数" />
-                </Field>
-                <Field label="最大总像素" hint="限制单次生成图像总像素，避免请求过大。">
-                  <input className={cx(inputClass, "bg-white")} value={String(draft.integrations.novelaiMaxPixels)} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiMaxPixels: parseNumber(event.target.value, current.integrations.novelaiMaxPixels) } }))} placeholder="最大总像素" />
-                </Field>
               </SectionCard>
             );
           case "fitbit":

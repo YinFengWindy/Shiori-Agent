@@ -106,8 +106,6 @@ export type SettingsFormData = {
     novelaiAllowTxt2img: boolean;
     novelaiAllowImg2img: boolean;
     novelaiAutoWritebackRoleAssets: boolean;
-    novelaiMaxSteps: number;
-    novelaiMaxPixels: number;
     peerAgents: SettingsPeerAgent[];
   };
   advanced: {
@@ -410,8 +408,6 @@ function loadSettingsData(): SettingsSnapshot {
         novelaiAllowTxt2img: Boolean(novelai.allow_txt2img ?? true),
         novelaiAllowImg2img: Boolean(novelai.allow_img2img ?? true),
         novelaiAutoWritebackRoleAssets: Boolean(novelai.auto_writeback_role_assets),
-        novelaiMaxSteps: Number(novelai.max_steps ?? 28),
-        novelaiMaxPixels: Number(novelai.max_pixels ?? 1048576),
         peerAgents: asArray(integrations.peer_agents, (item) => {
           const peer = asRecord(item);
           return {
@@ -641,8 +637,8 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `allow_txt2img = ${formData.integrations.novelaiAllowTxt2img ? "true" : "false"}`,
     `allow_img2img = ${formData.integrations.novelaiAllowImg2img ? "true" : "false"}`,
     `auto_writeback_role_assets = ${formData.integrations.novelaiAutoWritebackRoleAssets ? "true" : "false"}`,
-    `max_pixels = ${formData.integrations.novelaiMaxPixels}`,
-    `max_steps = ${formData.integrations.novelaiMaxSteps}`,
+    "max_pixels = 1048576",
+    "max_steps = 28",
     `default_samples = 1`,
     "",
     peerAgentBlocks,
@@ -673,12 +669,6 @@ function validateSettings(formData: SettingsFormData): void {
   }
   if (formData.advanced.maxIterations < 0) {
     throw new Error("max_iterations 不能小于 0");
-  }
-  if (formData.integrations.novelaiMaxSteps <= 0) {
-    throw new Error("NovelAI 最大步数必须大于 0");
-  }
-  if (formData.integrations.novelaiMaxPixels <= 0) {
-    throw new Error("NovelAI 最大总像素必须大于 0");
   }
   if (!Number.isInteger(formData.integrations.novelaiUndesiredContentPreset) || formData.integrations.novelaiUndesiredContentPreset < 0) {
     throw new Error("NovelAI undesired content preset 必须是非负整数");
