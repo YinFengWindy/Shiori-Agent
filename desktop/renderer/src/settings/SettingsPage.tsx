@@ -1041,12 +1041,12 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "plugins":
             return (
               <SectionCard>
-                <Field label="其他插件配置" hint="保留给尚未表单化的 plugins.* 段，以及主动推送的高级策略项。按 TOML 片段填写。">
+                <Field label="其他插件配置" hint="保留给尚未表单化的 plugins.* 段。按 TOML 片段填写。">
                   <textarea className={cx(textareaClass, "min-h-[240px] bg-white font-mono text-[12px]")} value={draft.advanced.pluginsRawToml} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, pluginsRawToml: event.target.value } }))} />
                 </Field>
                 <Field label="TOML 提示" hint="这里最适合放表单之外、但仍然需要保留的高级配置。">
                   <div className="rounded-2xl border border-[#E7EAF0] bg-[#FBFBFC] px-4 py-3 text-sm leading-6 text-[#5B616A]">
-                    例如：`proactive.profiles`、`proactive.overrides`、尚未表单化的 `plugins.*` 配置。这里填写的是原始 TOML 片段，会原样写回配置文件。
+                    例如：尚未表单化的 `plugins.*` 配置。这里填写的是原始 TOML 片段，会原样写回配置文件。
                   </div>
                 </Field>
               </SectionCard>
