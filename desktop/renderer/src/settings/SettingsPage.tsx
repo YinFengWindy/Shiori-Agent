@@ -97,32 +97,32 @@ function getBindingChatIdMeta(channel: string): { label: string; placeholder: st
     case "telegram":
       return {
         label: "Telegram Chat ID",
-        placeholder: "例如 123456789",
-        hint: "通常填 Telegram user id 或群 chat_id。",
+        placeholder: "例如 123456789", 
+        hint: "",
       };
     case "qq":
       return {
         label: "QQ Chat ID",
         placeholder: "例如好友 QQ 号或群号",
-        hint: "和运行时 transport 使用的 chat_id 保持一致。",
+        hint: "",
       };
     case "qqbot":
       return {
         label: "QQBot Chat ID",
         placeholder: "例如 c2c:USER_OPENID",
-        hint: "私聊常用 c2c:USER_OPENID；如果后续支持群，再填对应 group 标识。",
+        hint: "",
       };
     case "feishu":
       return {
         label: "Feishu Chat ID",
         placeholder: "例如 open_id / chat_id",
-        hint: "填入运行时实际使用的 open_id 或 chat_id。",
+        hint: "",
       };
     case "cli":
       return {
         label: "CLI Session Key",
         placeholder: "例如 local 或 cli:local",
-        hint: "用于把特定 CLI 会话固定路由到某个角色。",
+        hint: "",
       };
     default:
       return {
@@ -679,7 +679,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="QQ Allow From" hint="每行一个 QQ 号。">
                   <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.qqAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqAllowFrom: splitLines(event.target.value) } }))} />
                 </Field>
-                <Field label="QQ 群组规则" hint="第一版先用逐条卡片编辑。" layout="stack">
+                <Field label="QQ 群组规则" layout="stack">
                   <div className="grid gap-3">
                     {draft.channels.qqGroups.map((group, index) => (
                       <GroupEditor
