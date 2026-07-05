@@ -293,12 +293,12 @@ function AddListAction({
     <div className="flex items-center justify-between gap-4 rounded-full bg-[#FFF9F0] px-5 py-3">
       <span className="text-sm text-[#6B5A45]">{label}</span>
       <button
-        className="grid h-9 w-9 place-items-center rounded-full bg-white text-[#6B5A45] transition hover:bg-[#FFFCF7] focus:outline-none focus:ring-2 focus:ring-primary/20"
+        className="grid h-11 w-11 place-items-center rounded-full bg-white text-[#6B5A45] transition hover:bg-[#FFFCF7] focus:outline-none focus:ring-2 focus:ring-primary/20"
         type="button"
         aria-label={label}
         onClick={onAdd}
       >
-        <PlusIcon className="h-[14px] w-[14px] fill-current" />
+        <PlusIcon className="h-[18px] w-[18px] fill-current" />
       </button>
     </div>
   );
