@@ -19,12 +19,10 @@ export function SettingsToggleCard({
   return (
     <button
       className={cx(
-        "relative inline-flex shrink-0 rounded-full border border-transparent transition-colors",
+        "relative inline-flex shrink-0 appearance-none rounded-full border-0 p-0 outline-none",
         compact ? "h-6 w-11" : "h-7 w-12",
-        checked ? "bg-[#75B8FF]" : "bg-[#D7DEE8]",
-        disabled
-          ? "cursor-not-allowed opacity-60"
-          : "cursor-pointer hover:brightness-[0.98] focus:outline-none focus:ring-2 focus:ring-primary/20",
+        checked ? "bg-[#79B9FF]" : "bg-[#D6DDE7]",
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
       )}
       type="button"
       role="switch"

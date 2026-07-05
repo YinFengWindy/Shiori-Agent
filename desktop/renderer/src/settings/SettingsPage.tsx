@@ -225,12 +225,14 @@ function ToggleField({
 }) {
   return (
     <Field label={label} hint={hint}>
-      <SettingsToggleCard
-        checked={checked}
-        disabled={disabled}
-        ariaLabel={label}
-        onChange={onChange}
-      />
+      <div className="flex w-full justify-end">
+        <SettingsToggleCard
+          checked={checked}
+          disabled={disabled}
+          ariaLabel={label}
+          onChange={onChange}
+        />
+      </div>
     </Field>
   );
 }
