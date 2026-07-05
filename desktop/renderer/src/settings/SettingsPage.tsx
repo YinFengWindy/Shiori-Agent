@@ -151,19 +151,27 @@ function getMemoryEngineOptions(currentValue: string): Array<{ value: string; la
 function Field({
   label,
   hint,
+  layout = "side",
   children,
 }: {
   label: string;
   hint?: string;
+  layout?: "side" | "stack";
   children: React.ReactNode;
 }) {
+  const stacked = layout === "stack";
   return (
-    <div className="grid gap-3 border-b border-[#ECEEF2] py-5 last:border-b-0 xl:grid-cols-[minmax(0,1fr)_minmax(240px,360px)] xl:items-start xl:gap-8">
+    <div className={cx(
+      "grid gap-3 border-b border-[#ECEEF2] py-5 last:border-b-0",
+      stacked
+        ? "grid-cols-[minmax(0,1fr)]"
+        : "xl:grid-cols-[minmax(0,1fr)_minmax(240px,360px)] xl:items-start xl:gap-8",
+    )}>
       <div className="grid gap-1.5">
         <div className="text-[15px] font-medium text-[#171717]">{label}</div>
         {hint ? <div className="max-w-[680px] text-[13px] leading-6 text-[#7B7F87]">{hint}</div> : null}
       </div>
-      <div className="w-full xl:justify-self-end">{children}</div>
+      <div className={cx("w-full", !stacked && "xl:justify-self-end")}>{children}</div>
     </div>
   );
 }
@@ -551,7 +559,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
         .filter((entry) => entry.binding.channel === channel);
 
       return (
-        <Field label="角色绑定" hint="把当前频道里的具体会话身份绑定到角色。">
+        <Field label="角色绑定" hint="把当前频道里的具体会话身份绑定到角色。" layout="stack">
           <div className="grid gap-3">
             {bindings.length ? bindings.map(({ binding, index }) => (
               <ChannelRoleBindingEditor
@@ -673,7 +681,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="QQ WebSocket 超时秒数">
                   <input className={cx(inputClass, "bg-white")} value={String(draft.channels.qqWebsocketOpenTimeoutSeconds)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqWebsocketOpenTimeoutSeconds: parseNumber(event.target.value, current.channels.qqWebsocketOpenTimeoutSeconds) } }))} />
                 </Field>
-                <Field label="QQ 群组规则" hint="第一版先用逐条卡片编辑。">
+                <Field label="QQ 群组规则" hint="第一版先用逐条卡片编辑。" layout="stack">
                   <div className="grid gap-3">
                     {draft.channels.qqGroups.map((group, index) => (
                       <GroupEditor
@@ -717,7 +725,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="QQBot Allow From" hint="每行一个 user_openid。">
                   <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.qqbotAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqbotAllowFrom: splitLines(event.target.value) } }))} />
                 </Field>
-                <Field label="QQBot 群组规则">
+                <Field label="QQBot 群组规则" layout="stack">
                   <div className="grid gap-3">
                     {draft.channels.qqbotGroups.map((group, index) => (
                       <QQBotGroupEditor
@@ -940,7 +948,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "peer-agents":
             return (
               <SectionCard>
-                <Field label="Peer Agents">
+                <Field label="Peer Agents" layout="stack">
                   <div className="grid gap-3">
                     {draft.integrations.peerAgents.map((agent, index) => (
                       <PeerAgentEditor
