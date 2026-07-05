@@ -213,27 +213,41 @@ function Field({
 function ToggleField({
   label,
   hint,
-  title,
   checked,
   disabled,
   onChange,
 }: {
   label: string;
   hint?: string;
-  title?: string;
   checked: boolean;
   disabled?: boolean;
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="border-b border-[#ECEEF2] py-5 last:border-b-0">
+    <Field label={label} hint={hint}>
       <SettingsToggleCard
-        title={title ?? label}
-        description={hint}
         checked={checked}
         disabled={disabled}
+        ariaLabel={label}
         onChange={onChange}
       />
+    </Field>
+  );
+}
+
+function CompactToggleField({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-[#E6E9EE] bg-white px-3.5 py-3">
+      <span className="text-sm font-medium text-[#20242A]">{label}</span>
+      <SettingsToggleCard compact checked={checked} ariaLabel={label} onChange={onChange} />
     </div>
   );
 }
@@ -597,20 +611,8 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="Reasoning Effort" hint="支持的模型可用，用于控制推理强度；留空表示不写入。">
                   <input className={cx(inputClass, "bg-white")} value={formData.models.reasoningEffort} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, reasoningEffort: event.target.value } }))} placeholder="例如 low / medium / high" />
                 </Field>
-                <Field label="主模型开关">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <SettingsToggleCard
-                      title="启用 Thinking"
-                      checked={formData.models.enableThinking}
-                      onChange={(checked) => updateDraft((current) => ({ ...current, models: { ...current.models, enableThinking: checked } }))}
-                    />
-                    <SettingsToggleCard
-                      title="启用多模态"
-                      checked={formData.models.multimodal}
-                      onChange={(checked) => updateDraft((current) => ({ ...current, models: { ...current.models, multimodal: checked } }))}
-                    />
-                  </div>
-                </Field>
+                <ToggleField label="启用 Thinking" checked={formData.models.enableThinking} onChange={(checked) => updateDraft((current) => ({ ...current, models: { ...current.models, enableThinking: checked } }))} />
+                <ToggleField label="启用多模态" checked={formData.models.multimodal} onChange={(checked) => updateDraft((current) => ({ ...current, models: { ...current.models, multimodal: checked } }))} />
               </SectionCard>
             );
           case "fast":
@@ -891,17 +893,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "drift":
             return (
               <SectionCard>
-                <Field label="Drift">
-                  <div className="grid gap-3">
-                    <SettingsToggleCard
-                      title="启用 Drift"
-                      checked={draft.proactive.driftEnabled}
-                      onChange={(checked) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftEnabled: checked } }))}
-                    />
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMaxSteps: parseNumber(event.target.value, current.proactive.driftMaxSteps) } }))} placeholder="最大步数" />
-                      <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMinIntervalHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMinIntervalHours: parseNumber(event.target.value, current.proactive.driftMinIntervalHours) } }))} placeholder="最小间隔小时数" />
-                    </div>
+                <ToggleField label="启用 Drift" checked={draft.proactive.driftEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftEnabled: checked } }))} />
+                <Field label="Drift 参数">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMaxSteps: parseNumber(event.target.value, current.proactive.driftMaxSteps) } }))} placeholder="最大步数" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.driftMinIntervalHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, driftMinIntervalHours: parseNumber(event.target.value, current.proactive.driftMinIntervalHours) } }))} placeholder="最小间隔小时数" />
                   </div>
                 </Field>
               </SectionCard>
@@ -914,63 +910,39 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "novelai":
             return (
               <SectionCard>
-                <Field label="NovelAI">
-                  <div className="grid gap-3">
-                    <SettingsToggleCard
-                      title="启用 NovelAI"
-                      checked={draft.integrations.novelaiEnabled}
-                      onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiEnabled: checked } }))}
-                    />
-                    <SecretInput value={draft.integrations.novelaiToken} onChange={(value) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiToken: value } }))} />
-                    <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiBaseUrl: event.target.value } }))} placeholder="Base URL" />
-                    <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiDefaultModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiDefaultModel: event.target.value } }))} placeholder="普通模型" />
-                    <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiNsfwModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwModel: event.target.value } }))} placeholder="NSFW 模型" />
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <SettingsToggleCard
-                        title="Add Quality Tags"
-                        checked={draft.integrations.novelaiAddQualityTags}
-                        onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAddQualityTags: checked } }))}
-                      />
-                      <select
-                        className="h-12 w-full rounded-md border border-[#D8DCE2] bg-white px-3.5 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0"
-                        value={String(draft.integrations.novelaiUndesiredContentPreset)}
-                        onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiUndesiredContentPreset: parseNumber(event.target.value, current.integrations.novelaiUndesiredContentPreset) } }))}
-                      >
-                        <option value="0">Undesired Content Preset: None</option>
-                        <option value="1">Undesired Content Preset: Light</option>
-                        <option value="2">Undesired Content Preset: Heavy</option>
-                      </select>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <SettingsToggleCard
-                        title="允许文生图"
-                        checked={draft.integrations.novelaiAllowTxt2img}
-                        onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowTxt2img: checked } }))}
-                      />
-                      <SettingsToggleCard
-                        title="允许图生图"
-                        checked={draft.integrations.novelaiAllowImg2img}
-                        onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowImg2img: checked } }))}
-                      />
-                      <div className="md:col-span-2">
-                        <SettingsToggleCard
-                          title="生成后自动写回角色素材"
-                          checked={draft.integrations.novelaiAutoWritebackRoleAssets}
-                          onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAutoWritebackRoleAssets: checked } }))}
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <SettingsToggleCard
-                          title="NSFW 模式（开启时使用 Full）"
-                          checked={draft.integrations.novelaiNsfwEnabled}
-                          onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwEnabled: checked } }))}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <input className={cx(inputClass, "bg-white")} value={String(draft.integrations.novelaiMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiMaxSteps: parseNumber(event.target.value, current.integrations.novelaiMaxSteps) } }))} placeholder="最大步数" />
-                      <input className={cx(inputClass, "bg-white")} value={String(draft.integrations.novelaiMaxPixels)} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiMaxPixels: parseNumber(event.target.value, current.integrations.novelaiMaxPixels) } }))} placeholder="最大总像素" />
-                    </div>
+                <ToggleField label="启用 NovelAI" checked={draft.integrations.novelaiEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiEnabled: checked } }))} />
+                <Field label="Token">
+                  <SecretInput value={draft.integrations.novelaiToken} onChange={(value) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiToken: value } }))} />
+                </Field>
+                <Field label="Base URL">
+                  <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiBaseUrl: event.target.value } }))} placeholder="Base URL" />
+                </Field>
+                <Field label="普通模型">
+                  <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiDefaultModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiDefaultModel: event.target.value } }))} placeholder="普通模型" />
+                </Field>
+                <Field label="NSFW 模型">
+                  <input className={cx(inputClass, "bg-white")} value={draft.integrations.novelaiNsfwModel} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwModel: event.target.value } }))} placeholder="NSFW 模型" />
+                </Field>
+                <ToggleField label="Add Quality Tags" checked={draft.integrations.novelaiAddQualityTags} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAddQualityTags: checked } }))} />
+                <Field label="Undesired Content Preset">
+                  <select
+                    className="h-12 w-full rounded-md border border-[#D8DCE2] bg-white px-3.5 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0"
+                    value={String(draft.integrations.novelaiUndesiredContentPreset)}
+                    onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiUndesiredContentPreset: parseNumber(event.target.value, current.integrations.novelaiUndesiredContentPreset) } }))}
+                  >
+                    <option value="0">Undesired Content Preset: None</option>
+                    <option value="1">Undesired Content Preset: Light</option>
+                    <option value="2">Undesired Content Preset: Heavy</option>
+                  </select>
+                </Field>
+                <ToggleField label="允许文生图" checked={draft.integrations.novelaiAllowTxt2img} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowTxt2img: checked } }))} />
+                <ToggleField label="允许图生图" checked={draft.integrations.novelaiAllowImg2img} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAllowImg2img: checked } }))} />
+                <ToggleField label="生成后自动写回角色素材" checked={draft.integrations.novelaiAutoWritebackRoleAssets} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAutoWritebackRoleAssets: checked } }))} />
+                <ToggleField label="NSFW 模式（开启时使用 Full）" checked={draft.integrations.novelaiNsfwEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwEnabled: checked } }))} />
+                <Field label="生成限制">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.integrations.novelaiMaxSteps)} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiMaxSteps: parseNumber(event.target.value, current.integrations.novelaiMaxSteps) } }))} placeholder="最大步数" />
+                    <input className={cx(inputClass, "bg-white")} value={String(draft.integrations.novelaiMaxPixels)} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiMaxPixels: parseNumber(event.target.value, current.integrations.novelaiMaxPixels) } }))} placeholder="最大总像素" />
                   </div>
                 </Field>
               </SectionCard>
@@ -978,7 +950,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "fitbit":
             return (
               <SectionCard>
-                <ToggleField label="Fitbit" title="启用 Fitbit" checked={draft.integrations.fitbitEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, fitbitEnabled: checked } }))} />
+                <ToggleField label="启用 Fitbit" checked={draft.integrations.fitbitEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, fitbitEnabled: checked } }))} />
               </SectionCard>
             );
           case "peer-agents":
@@ -1048,30 +1020,10 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.memoryOptimizerIntervalSeconds)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerIntervalSeconds: parseNumber(event.target.value, current.advanced.memoryOptimizerIntervalSeconds) } }))} placeholder="记忆优化间隔秒数" />
                   </div>
                 </Field>
-                <Field label="高级开关">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <SettingsToggleCard
-                      title="dev_mode"
-                      checked={draft.advanced.devMode}
-                      onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, devMode: checked } }))}
-                    />
-                    <SettingsToggleCard
-                      title="search_enabled"
-                      checked={draft.advanced.searchEnabled}
-                      onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, searchEnabled: checked } }))}
-                    />
-                    <SettingsToggleCard
-                      title="spawn_enabled"
-                      checked={draft.advanced.spawnEnabled}
-                      onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, spawnEnabled: checked } }))}
-                    />
-                    <SettingsToggleCard
-                      title="memory_optimizer_enabled"
-                      checked={draft.advanced.memoryOptimizerEnabled}
-                      onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerEnabled: checked } }))}
-                    />
-                  </div>
-                </Field>
+                <ToggleField label="dev_mode" checked={draft.advanced.devMode} onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, devMode: checked } }))} />
+                <ToggleField label="search_enabled" checked={draft.advanced.searchEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, searchEnabled: checked } }))} />
+                <ToggleField label="spawn_enabled" checked={draft.advanced.spawnEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, spawnEnabled: checked } }))} />
+                <ToggleField label="memory_optimizer_enabled" checked={draft.advanced.memoryOptimizerEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerEnabled: checked } }))} />
               </SectionCard>
             );
           case "wiring":
@@ -1209,7 +1161,7 @@ function GroupEditor({
       </div>
       <input className={cx(inputClass, "bg-white")} value={group.groupId} onChange={(event) => onChange({ ...group, groupId: event.target.value })} placeholder="群组 ID" />
       <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
-      <SettingsToggleCard compact title="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
+      <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
     </div>
   );
 }
@@ -1232,8 +1184,8 @@ function QQBotGroupEditor({
       <input className={cx(inputClass, "bg-white")} value={group.groupOpenid} onChange={(event) => onChange({ ...group, groupOpenid: event.target.value })} placeholder="群组 OpenID" />
       <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
       <div className="grid gap-3 md:grid-cols-2">
-        <SettingsToggleCard compact title="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
-        <SettingsToggleCard compact title="allow_proactive" checked={group.allowProactive} onChange={(checked) => onChange({ ...group, allowProactive: checked })} />
+        <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
+        <CompactToggleField label="allow_proactive" checked={group.allowProactive} onChange={(checked) => onChange({ ...group, allowProactive: checked })} />
       </div>
     </div>
   );
