@@ -947,7 +947,12 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "fitbit":
             return (
               <SectionCard>
-                <ToggleField label="启用 Fitbit" checked={draft.integrations.fitbitEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, fitbitEnabled: checked } }))} />
+                <ToggleField
+                  label="启用 Fitbit"
+                  hint="启用后允许 Agent 接入 Fitbit 健康数据能力，例如睡眠、步数、心率等信息。当前设置页只提供总开关。"
+                  checked={draft.integrations.fitbitEnabled}
+                  onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, fitbitEnabled: checked } }))}
+                />
               </SectionCard>
             );
           case "peer-agents":
