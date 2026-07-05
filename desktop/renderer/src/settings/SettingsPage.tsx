@@ -147,7 +147,7 @@ function getSettingsIntro(section: SettingsSectionId, subsectionId: string): str
   switch (section) {
     case "models":
       if (subsectionId === "fast") {
-        return "扩展模型";
+        return "轻量模型";
       }
       if (subsectionId === "vl") {
         return "视觉模型";
@@ -556,13 +556,13 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="Provider" hint="当前主模型提供商。">
                   <input className={cx(inputClass, "bg-white")} value={formData.models.provider} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, provider: event.target.value } }))} />
                 </Field>
-                <Field label="主模型" hint="桌面主对话使用的模型名。">
+                <Field label="主模型" hint="对话使用的模型。">
                   <input className={cx(inputClass, "bg-white")} value={formData.models.mainModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, mainModel: event.target.value } }))} />
                 </Field>
-                <Field label="主模型 API Key">
+                <Field label="API Key">
                   <SecretInput value={formData.models.mainApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, mainApiKey: value } }))} />
                 </Field>
-                <Field label="主模型 Base URL">
+                <Field label="Base URL">
                   <input className={cx(inputClass, "bg-white")} value={formData.models.mainBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, mainBaseUrl: event.target.value } }))} />
                 </Field>
                 <Field label="Reasoning Effort" hint="支持的模型可用，用于控制推理强度；留空表示不写入。">
@@ -585,13 +585,13 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "fast":
             return (
               <SectionCard>
-                <Field label="轻量模型" hint="轻量路径使用的模型名；留空时继续沿用主模型回退路径。">
+                <Field label="轻量模型" hint="轻量任务时使用的模型名；留空时则沿用主模型。">
                   <input className={cx(inputClass, "bg-white")} value={formData.models.fastModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastModel: event.target.value } }))} placeholder="模型名" />
                 </Field>
-                <Field label="轻量模型 API Key" hint="只在轻量模型通道需要独立鉴权时填写；留空时沿用主模型凭据。">
+                <Field label="API Key">
                   <SecretInput value={formData.models.fastApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, fastApiKey: value } }))} />
                 </Field>
-                <Field label="轻量模型 Base URL" hint="覆盖轻量模型的请求地址；留空时使用 provider 默认地址。">
+                <Field label="Base URL">
                   <input className={cx(inputClass, "bg-white")} value={formData.models.fastBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastBaseUrl: event.target.value } }))} placeholder="基础地址" />
                 </Field>
               </SectionCard>
@@ -599,13 +599,13 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "vl":
             return (
               <SectionCard>
-                <Field label="视觉模型" hint="视觉或图像理解路径使用的模型名；留空时继续沿用默认视觉能力。">
+                <Field label="视觉模型" hint="若主模型未启动多模态，则使用该模型；留空时则沿用主模型。">
                   <input className={cx(inputClass, "bg-white")} value={formData.models.vlModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlModel: event.target.value } }))} placeholder="模型名" />
                 </Field>
-                <Field label="视觉模型 API Key" hint="只在视觉模型通道需要单独凭据时填写；留空时沿用主模型凭据。">
+                <Field label="API Key" hint="">
                   <SecretInput value={formData.models.vlApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, vlApiKey: value } }))} />
                 </Field>
-                <Field label="视觉模型 Base URL" hint="覆盖视觉模型的请求地址；留空时使用 provider 默认地址。">
+                <Field label="Base URL" hint="">
                   <input className={cx(inputClass, "bg-white")} value={formData.models.vlBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlBaseUrl: event.target.value } }))} placeholder="基础地址" />
                 </Field>
               </SectionCard>
@@ -781,13 +781,13 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="Embedding 模型">
                   <input className={cx(inputClass, "bg-white")} value={draft.memory.embeddingModel} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, embeddingModel: event.target.value } }))} />
                 </Field>
-                <Field label="Embedding API Key">
+                <Field label="API Key">
                   <SecretInput value={draft.memory.embeddingApiKey} onChange={(value) => updateDraft((current) => ({ ...current, memory: { ...current.memory, embeddingApiKey: value } }))} />
                 </Field>
-                <Field label="Embedding 基础地址">
+                <Field label="Base URL">
                   <input className={cx(inputClass, "bg-white")} value={draft.memory.embeddingBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, embeddingBaseUrl: event.target.value } }))} />
                 </Field>
-                <Field label="输出维度" hint="留空表示不写该字段。">
+                <Field label="输出维度">
                   <input className={cx(inputClass, "bg-white")} value={draft.memory.outputDimensionality} onChange={(event) => updateDraft((current) => ({ ...current, memory: { ...current.memory, outputDimensionality: event.target.value } }))} />
                 </Field>
               </SectionCard>
@@ -800,13 +800,13 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "general":
             return (
               <SectionCard>
-                <Field label="启用主动推送">
+                <Field label="主动推送">
                   <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
                     <input type="checkbox" checked={draft.proactive.enabled} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, enabled: event.target.checked } }))} />
                     <span>proactive.enabled</span>
                   </label>
                 </Field>
-                <Field label="配置档">
+                <Field label="推送周期">
                   <input className={cx(inputClass, "bg-white")} value={draft.proactive.profile} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, profile: event.target.value } }))} />
                 </Field>
                 <Field label="高级策略说明" hint="`proactive.profile` 是当前启用的策略名。像 `proactive.profiles`、`proactive.overrides` 这类高级策略树，继续放到高级 TOML 区编辑更稳妥。">
@@ -819,7 +819,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "target":
             return (
               <SectionCard>
-                <Field label="主动推送目标">
+                <Field label="目标">
                   <select className={cx(inputClass, "bg-white")} value={draft.proactive.targetChannel} onChange={(event) => updateProactiveTargetChannel(event.target.value)}>
                     <option value="">请选择目标</option>
                     {proactiveTargetOptions.map((option) => (
@@ -849,7 +849,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "agent":
             return (
               <SectionCard>
-                <Field label="Proactive 模型" hint="专用于主动推送 / agent tick；留空表示继续使用默认回退路径。">
+                <Field label="Proactive 模型" hint="专用于主动推送 / agent tick；留空时则使用主模型。">
                   <div className="grid gap-3">
                     <input className={cx(inputClass, "bg-white")} value={draft.models.agentModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentModel: event.target.value } }))} placeholder="模型名" />
                     <SecretInput value={draft.models.agentApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, agentApiKey: value } }))} />
@@ -892,7 +892,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "novelai":
             return (
               <SectionCard>
-                <Field label="NovelAI / 生图">
+                <Field label="NovelAI">
                   <div className="grid gap-3">
                     <label className="flex items-center gap-3 rounded-xl border border-[#E6E9EE] bg-[#FBFBFC] px-4 py-3">
                       <input type="checkbox" checked={draft.integrations.novelaiEnabled} onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiEnabled: event.target.checked } }))} />
@@ -1010,10 +1010,10 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "general":
             return (
               <SectionCard>
-                <Field label="全局基础 Prompt" hint="这是 config.toml 里的 agent.system_prompt，不是角色 prompt。">
+                <Field label="System Prompt" hint="全局系统提示词">
                   <textarea className={cx(textareaClass, "min-h-28 bg-white")} value={draft.advanced.systemPrompt} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, systemPrompt: event.target.value } }))} />
                 </Field>
-                <Field label="全局数值项">
+                <Field label="Agent 参数">
                   <div className="grid gap-3 md:grid-cols-2">
                     <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.maxTokens)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, maxTokens: parseNumber(event.target.value, current.advanced.maxTokens) } }))} placeholder="最大令牌数" />
                     <input className={cx(inputClass, "bg-white")} value={String(draft.advanced.maxIterations)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, maxIterations: parseNumber(event.target.value, current.advanced.maxIterations) } }))} placeholder="最大迭代次数" />
