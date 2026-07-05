@@ -158,12 +158,12 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-3 border-b border-[#ECEEF2] py-5 last:border-b-0 md:grid-cols-[minmax(0,1fr)_minmax(240px,360px)] md:items-start md:gap-8">
+    <div className="grid gap-3 border-b border-[#ECEEF2] py-5 last:border-b-0 xl:grid-cols-[minmax(0,1fr)_minmax(240px,360px)] xl:items-start xl:gap-8">
       <div className="grid gap-1.5">
         <div className="text-[15px] font-medium text-[#171717]">{label}</div>
-        {hint ? <div className="max-w-[560px] text-[13px] leading-6 text-[#7B7F87]">{hint}</div> : null}
+        {hint ? <div className="max-w-[680px] text-[13px] leading-6 text-[#7B7F87]">{hint}</div> : null}
       </div>
-      <div className="w-full md:justify-self-end">{children}</div>
+      <div className="w-full xl:justify-self-end">{children}</div>
     </div>
   );
 }
@@ -1049,11 +1049,11 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
         </div>
       ) : null}
       <div className="settings-content grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-        <div className="border-b border-[#E8EBF0] bg-[#F7F8FB] px-10 py-5">
-          <div className="mx-auto flex w-full max-w-[940px] items-center gap-4">
+        <div className="border-b border-[#E8EBF0] bg-[#F7F8FB] px-4 py-4 sm:px-6 lg:px-8">
+          <div className="mx-auto flex w-full flex-col gap-4 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
               {visibleSubsections.length ? (
-                <div className="relative max-w-[260px]">
+                <div className="relative max-w-full sm:max-w-[260px]">
                   <select
                     className="h-10 w-full appearance-none rounded-md border border-[#D8DCE2] bg-white px-3.5 pr-10 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0"
                     value={currentSubsectionId ?? ""}
@@ -1093,8 +1093,8 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             </div>
           </div>
         </div>
-        <div className="relative scrollbar-soft overflow-y-auto bg-white px-10 py-10">
-          <div className="mx-auto w-full max-w-[940px]">
+        <div className="relative scrollbar-soft overflow-y-auto bg-white px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="mx-auto w-full max-w-none">
             {!currentSection ? (
               <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-[#7f8490]")}>
                 没有匹配的设置项
@@ -1123,10 +1123,10 @@ function GroupEditor({
 }) {
   return (
     <EditorCard title="QQ 群组" onRemove={onRemove}>
-      <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(320px,1.4fr)_220px] lg:items-start">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_minmax(320px,1.4fr)_220px] xl:items-start">
         <input className={cx(inputClass, "bg-white")} value={group.groupId} onChange={(event) => onChange({ ...group, groupId: event.target.value })} placeholder="群组 ID" />
-        <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
-        <div className="grid gap-3 self-start">
+        <textarea className={cx(textareaClass, "min-h-16 bg-white md:col-span-2 xl:col-auto")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
+        <div className="grid gap-3 self-start md:col-span-2 xl:col-auto">
           <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
         </div>
       </div>
@@ -1145,10 +1145,10 @@ function QQBotGroupEditor({
 }) {
   return (
     <EditorCard title="QQBot 群组" onRemove={onRemove}>
-      <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(320px,1.4fr)_320px] lg:items-start">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_minmax(320px,1.4fr)_320px] xl:items-start">
         <input className={cx(inputClass, "bg-white")} value={group.groupOpenid} onChange={(event) => onChange({ ...group, groupOpenid: event.target.value })} placeholder="群组 OpenID" />
-        <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
-        <div className="grid gap-3 md:grid-cols-2 self-start">
+        <textarea className={cx(textareaClass, "min-h-16 bg-white md:col-span-2 xl:col-auto")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
+        <div className="grid gap-3 md:col-span-2 md:grid-cols-2 self-start xl:col-auto">
           <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
           <CompactToggleField label="allow_proactive" checked={group.allowProactive} onChange={(checked) => onChange({ ...group, allowProactive: checked })} />
         </div>
@@ -1174,7 +1174,7 @@ function ChannelRoleBindingEditor({
 
   return (
     <EditorCard title="渠道角色绑定" onRemove={onRemove}>
-      <div className="grid gap-3 lg:grid-cols-[minmax(280px,1.2fr)_minmax(220px,0.8fr)]">
+      <div className="grid gap-3 md:grid-cols-2">
         <div className="grid gap-1.5">
           <div className="text-xs font-medium text-[#4A4F57]">{chatIdMeta.label}</div>
           <input className={cx(inputClass, "bg-white")} value={binding.chatId} onChange={(event) => onChange({ ...binding, channel, chatId: event.target.value })} placeholder={chatIdMeta.placeholder} />
@@ -1205,7 +1205,7 @@ function PeerAgentEditor({
 }) {
   return (
     <EditorCard title="Peer Agent" onRemove={onRemove}>
-      <div className="grid gap-3 xl:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         <input className={cx(inputClass, "bg-white")} value={agent.name} onChange={(event) => onChange({ ...agent, name: event.target.value })} placeholder="名称" />
         <input className={cx(inputClass, "bg-white")} value={agent.baseUrl} onChange={(event) => onChange({ ...agent, baseUrl: event.target.value })} placeholder="基础地址" />
         <input className={cx(inputClass, "bg-white")} value={agent.cwd} onChange={(event) => onChange({ ...agent, cwd: event.target.value })} placeholder="工作目录" />
@@ -1213,7 +1213,7 @@ function PeerAgentEditor({
         <input className={cx(inputClass, "bg-white")} value={String(agent.startupTimeoutSeconds)} onChange={(event) => onChange({ ...agent, startupTimeoutSeconds: parseNumber(event.target.value, agent.startupTimeoutSeconds) })} placeholder="启动超时秒数" />
         <input className={cx(inputClass, "bg-white")} value={String(agent.shutdownTimeoutSeconds)} onChange={(event) => onChange({ ...agent, shutdownTimeoutSeconds: parseNumber(event.target.value, agent.shutdownTimeoutSeconds) })} placeholder="关闭超时秒数" />
       </div>
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={agent.description} onChange={(event) => onChange({ ...agent, description: event.target.value })} placeholder="描述" />
         <textarea className={cx(textareaClass, "min-h-24 bg-white font-mono text-[12px]")} value={formatLauncher(agent.launcher)} onChange={(event) => onChange({ ...agent, launcher: parseLauncher(event.target.value) })} placeholder="每行一个启动命令片段" />
       </div>
