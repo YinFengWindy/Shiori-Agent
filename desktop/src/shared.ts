@@ -75,7 +75,6 @@ export type SettingsFormData = {
   channels: {
     telegramToken: string;
     telegramAllowFrom: string[];
-    telegramChannelName: string;
     qqBotUin: string;
     qqAllowFrom: string[];
     qqWebsocketOpenTimeoutSeconds: number;

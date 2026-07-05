@@ -53,7 +53,6 @@ export type SettingsFormData = {
   channels: {
     telegramToken: string;
     telegramAllowFrom: string[];
-    telegramChannelName: string;
     qqBotUin: string;
     qqAllowFrom: string[];
     qqWebsocketOpenTimeoutSeconds: number;
@@ -335,7 +334,6 @@ function loadSettingsData(): SettingsSnapshot {
       channels: {
         telegramToken: String(telegram.token ?? ""),
         telegramAllowFrom: splitList(telegram.allow_from as string[] | undefined),
-        telegramChannelName: String(telegram.channel_name ?? "telegram"),
         qqBotUin: String(qq.bot_uin ?? ""),
         qqAllowFrom: splitList(qq.allow_from as string[] | undefined),
         qqWebsocketOpenTimeoutSeconds: Number(qq.websocket_open_timeout_seconds ?? 5),
@@ -557,7 +555,7 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "[channels.telegram]",
     `token = ${quote(formData.channels.telegramToken)}`,
     `allow_from = ${renderStringArray(formData.channels.telegramAllowFrom)}`,
-    `channel_name = ${quote(formData.channels.telegramChannelName || "telegram")}`,
+    'channel_name = "telegram"',
     "",
     "[channels.qq]",
     `bot_uin = ${quote(formData.channels.qqBotUin)}`,
@@ -647,9 +645,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
 function validateSettings(formData: SettingsFormData): void {
   if (!formData.models.mainModel.trim()) {
     throw new Error("主模型不能为空");
-  }
-  if (!formData.channels.telegramChannelName.trim()) {
-    throw new Error("Telegram channel name 不能为空");
   }
   if (formData.channels.qqWebsocketOpenTimeoutSeconds <= 0) {
     throw new Error("QQ websocket 超时必须大于 0");

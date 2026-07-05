@@ -668,9 +668,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="Telegram Allow From" hint="每行一个用户名，不带 @。">
                   <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.telegramAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramAllowFrom: splitLines(event.target.value) } }))} />
                 </Field>
-                <Field label="Telegram Channel Name">
-                  <input className={cx(inputClass, "bg-white")} value={draft.channels.telegramChannelName} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramChannelName: event.target.value } }))} />
-                </Field>
                 {renderRoleBindingsForChannel("telegram")}
               </SectionCard>
             );
@@ -949,7 +946,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
               <SectionCard>
                 <ToggleField
                   label="启用 Fitbit"
-                  hint="启用后允许 Agent 接入 Fitbit 健康数据能力，例如睡眠、步数、心率等信息。当前设置页只提供总开关。"
+                  hint="启用后允许 Agent 接入 Fitbit 健康数据能力，例如睡眠、步数、心率等信息。"
                   checked={draft.integrations.fitbitEnabled}
                   onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, fitbitEnabled: checked } }))}
                 />
