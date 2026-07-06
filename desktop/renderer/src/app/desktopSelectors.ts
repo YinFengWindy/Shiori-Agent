@@ -5,6 +5,7 @@ import {
   resolveChatImageSelectionKey,
 } from "../chat/chatImageHistory";
 import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/chatHeaderState";
+import { isRoleFormDirty } from "../roles/roleFormState";
 import { toFileUrl } from "../shared/format";
 import type {
   AppMainView,
@@ -41,18 +42,7 @@ export function buildDesktopViewModel({
   const detailRoleId = mainView.kind === "role-detail" ? mainView.roleId : activeRoleId;
   const detailRole = roles.find((role) => role.id === detailRoleId) ?? null;
   const bridgeReady = health === "online";
-  const roleFormDirty = Boolean(
-    detailRole
-      && (
-        roleForm.name !== detailRole.name
-        || roleForm.description !== detailRole.description
-        || roleForm.systemPrompt !== detailRole.system_prompt
-        || roleForm.nsfwMemoryEnabled !== Boolean(detailRole.runtime_config?.nsfw_memory_enabled)
-        || Boolean(roleForm.avatarSource)
-        || roleForm.illustrationSources.length > 0
-        || roleForm.removedIllustrations.length > 0
-      )
-  );
+  const roleFormDirty = isRoleFormDirty(roleForm, detailRole);
 
   const previewAvatar = roleForm.avatarSource || detailRole?.avatar_abs || null;
   const previewIllustrations = roleForm.illustrationSources.length

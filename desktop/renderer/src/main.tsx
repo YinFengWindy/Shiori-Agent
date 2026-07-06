@@ -32,6 +32,7 @@ import { useRoleSearch } from "./app/roleSearch";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { useImageStudioState } from "./image/useImageStudioState";
+import { createRoleFormFromRole, isRoleFormDirty } from "./roles/roleFormState";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
 import { useLatestRef } from "./shared/useLatestRef";
@@ -252,15 +253,13 @@ function App(): React.ReactElement {
   function applyRoleSnapshot(role: RoleRecord, sessionOverride: SessionPayload | null = null): void {
     setActiveRoleId(role.id);
     activeRoleIdRef.current = role.id;
-    updateRoleForm({
-      name: role.name,
-      description: role.description,
-      systemPrompt: role.system_prompt,
-      nsfwMemoryEnabled: Boolean(role.runtime_config?.nsfw_memory_enabled),
-      avatarSource: "",
-      illustrationSources: [],
-      removedIllustrations: [],
-    });
+    const currentView = mainViewRef.current;
+    const sameRoleWorkspace =
+      (currentView.kind === "role-detail" || currentView.kind === "role-assets")
+      && currentView.roleId === role.id;
+    if (!sameRoleWorkspace || !isRoleFormDirty(roleFormRef.current, role)) {
+      updateRoleForm(createRoleFormFromRole(role));
+    }
     setSelectedAvatarAsset(role.avatar ?? "");
     setSelectedChatBackground(role.chat_background ?? "");
     const savedIllustration = window.localStorage.getItem("miraDesktop.activeIllustration") ?? "";
@@ -543,15 +542,7 @@ function App(): React.ReactElement {
 
   function resetRoleForm(): void {
     if (!detailRole) return;
-    updateRoleForm({
-      name: detailRole.name,
-      description: detailRole.description,
-      systemPrompt: detailRole.system_prompt,
-      nsfwMemoryEnabled: Boolean(detailRole.runtime_config?.nsfw_memory_enabled),
-      avatarSource: "",
-      illustrationSources: [],
-      removedIllustrations: [],
-    });
+    updateRoleForm(createRoleFormFromRole(detailRole));
     setNotice("角色表单已重置。");
   }
 
