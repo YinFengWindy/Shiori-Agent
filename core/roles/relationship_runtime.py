@@ -734,7 +734,7 @@ class LonelinessHeartbeatLoop:
         runtime: RoleRelationshipRuntimeService,
         *,
         role_store: RoleStore,
-        interval_seconds: int = 10 * 60,
+        interval_seconds: int = 3 * 60,
     ) -> None:
         self._runtime = runtime
         self._role_store = role_store

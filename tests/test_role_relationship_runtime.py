@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from core.roles import RoleRelationshipRuntimeService, RoleStore
+from core.roles import LonelinessHeartbeatLoop, RoleRelationshipRuntimeService, RoleStore
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 
@@ -150,6 +150,18 @@ def test_should_trigger_proactive_respects_threshold(tmp_path: Path):
 
     assert should_trigger is True
     assert meta["reason"] == "threshold"
+
+
+def test_loneliness_heartbeat_loop_defaults_to_three_minutes(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, _, _ = _runtime(tmp_path)
+
+    loop = LonelinessHeartbeatLoop(
+        runtime,
+        role_store=RoleStore(tmp_path),
+    )
+
+    assert loop._interval == 3 * 60
 
 
 @pytest.mark.asyncio
