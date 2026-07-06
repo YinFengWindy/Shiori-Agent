@@ -204,6 +204,7 @@ export function RoleAssetsPage({
                     selectedAssetAbsPath={selectedMoodAssetPair?.absPath ? toFileUrl(selectedMoodAssetPair.absPath) : ""}
                     selectedMood={selectedMood}
                     onSaveMoodBinding={saveMoodBinding}
+                    onClearSelectedAsset={() => setSelectedMoodAsset("")}
                   />
                 ) : selectedAsset ? (
                   selectionMode === "avatar" ? (

@@ -6,6 +6,7 @@ type RoleMoodBindingsPanelProps = {
   selectedAssetAbsPath: string;
   selectedMood: string;
   onSaveMoodBinding: (nextMood: string) => void;
+  onClearSelectedAsset: () => void;
 };
 
 /** Renders the role asset-side mood binding panel. */
@@ -14,6 +15,7 @@ export function RoleMoodBindingsPanel({
   selectedAssetAbsPath,
   selectedMood,
   onSaveMoodBinding,
+  onClearSelectedAsset,
 }: RoleMoodBindingsPanelProps) {
   const [draftMood, setDraftMood] = useState(selectedMood);
 
@@ -32,13 +34,23 @@ export function RoleMoodBindingsPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="grid min-h-[360px] flex-1 gap-4 rounded-[20px] bg-white p-5">
-        <div className="grid min-h-[260px] place-items-center overflow-hidden rounded-[18px] bg-[#F2F5F8]">
+        <div className="relative grid min-h-[260px] place-items-center overflow-hidden rounded-[18px] bg-[#F2F5F8]">
           {selectedAssetPath ? (
-            <img
-              className="max-h-full max-w-full object-contain"
-              src={selectedAssetAbsPath}
-              alt={`${selectedMood || "差分"} preview`}
-            />
+            <>
+              <button
+                className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                type="button"
+                onClick={onClearSelectedAsset}
+                aria-label="取消选中差分图"
+              >
+                ×
+              </button>
+              <img
+                className="max-h-full max-w-full object-contain"
+                src={selectedAssetAbsPath}
+                alt={`${selectedMood || "差分"} preview`}
+              />
+            </>
           ) : (
             <div className="px-6 text-center text-sm text-[#74808D]">请先在左侧选中一张差分立绘</div>
           )}

@@ -13,6 +13,7 @@ function renderRoleMoodBindingsPanel(): string {
       selectedAssetAbsPath="mira-asset://local?path=D%3A%5Cillustrations%5Cmira-smile.png"
       selectedMood="calm"
       onSaveMoodBinding={() => undefined}
+      onClearSelectedAsset={() => undefined}
     />,
   );
 }
@@ -22,6 +23,7 @@ describe("RoleMoodBindingsPanel", () => {
     const markup = renderRoleMoodBindingsPanel();
 
     assert.match(markup, /对应心情/);
+    assert.match(markup, /aria-label="取消选中差分图"/);
     assert.match(markup, /min-h-\[360px\]/);
     assert.doesNotMatch(markup, /min-h-\[420px\]/);
     assert.doesNotMatch(markup, /rounded-\[24px\]/);
