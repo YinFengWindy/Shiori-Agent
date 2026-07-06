@@ -519,7 +519,6 @@ export function useDesktopSessionState({
       const nextSession = res.payload.session as SessionPayload;
       // Keep the optimistic user turn visible when chat.send resolves with a stale session snapshot.
       commitActiveSession(nextSession);
-      clearSessionSending(sessionKey);
     } catch (error) {
       clearSessionSending(sessionKey);
       const { session: recoveredSession } = await fetchRoleSession(roleId);
