@@ -35,7 +35,6 @@ from core.common.strategy_trace import build_strategy_trace_envelope
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from core.roles import RoleAggregateService, RoleStore
 from core.roles.relationship_runtime import RoleRelationshipRuntimeService
-from proactive_v2.anyaction import AnyActionGate, QuotaStore
 from proactive_v2.energy import (
     compute_energy,
     d_energy,
@@ -161,14 +160,6 @@ class ProactiveLoop:
             presence=self._presence,
         )
 
-    def _build_anyaction_gate(self) -> AnyActionGate:
-        quota_path = Path(self._state.workspace_dir) / "proactive_quota.json"
-        return AnyActionGate(
-            cfg=self._cfg,
-            quota_store=QuotaStore(quota_path),
-            rng=self._rng,
-        )
-
     def _build_sense(self, fitbit_provider) -> Sensor:
         role_bindings = None
         workspace = getattr(self._sessions, "workspace", None)
@@ -204,7 +195,7 @@ class ProactiveLoop:
                 max_tokens=self._max_tokens,
                 memory=self._memory,
                 state_store=self._state,
-                any_action_gate=self._anyaction,
+                any_action_gate=None,
                 passive_busy_fn=self._passive_busy_fn,
                 turn_orchestrator=self._turn_orchestrator,
                 deduper=self._message_deduper,
@@ -237,7 +228,6 @@ class ProactiveLoop:
         self._read_workspace_proactive_context()
         # 3. 构建发送编排器、前置 gate、传感器、去重器和主动链路 pipeline。
         self._turn_orchestrator = self._build_turn_orchestrator()
-        self._anyaction = self._build_anyaction_gate()
         self._sense = self._build_sense(self._build_fitbit_provider())
         self._message_deduper = self._build_message_deduper()
         self._proactive_pipeline = self._build_agent_tick()
@@ -282,10 +272,6 @@ class ProactiveLoop:
             "tick_interval_s0": self._cfg.tick_interval_s0,
             "tick_interval_s1": self._cfg.tick_interval_s1,
             "tick_jitter": self._cfg.tick_jitter,
-            "anyaction_enabled": self._cfg.anyaction_enabled,
-            "anyaction_min_interval_seconds": self._cfg.anyaction_min_interval_seconds,
-            "anyaction_probability_min": self._cfg.anyaction_probability_min,
-            "anyaction_probability_max": self._cfg.anyaction_probability_max,
             "memory_history_gate_enabled": self._cfg.memory_history_gate_enabled,
             "sleep_modifier_sleeping": self._cfg.sleep_modifier_sleeping,
         }

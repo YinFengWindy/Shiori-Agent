@@ -6,7 +6,7 @@ ProactiveTurnPipeline — 主动回复链路顶层抽象。
 
 ┌─ tick trigger
 │  └─ ProactiveTurnPipeline.run()
-│     ├─ 1. Gate      准入检查（busy / cooldown / anyaction / fallback）
+│     ├─ 1. Gate      准入检查（target / busy / loneliness）
 │     ├─ 2. Fetch     拉取数据（alerts / content / context → messages）
 │     ├─ 3. Judge     LLM 评估（多轮工具调用：分类 → 草稿 → 收尾）
 │     ├─ 4. Resolve   决策去重（skip/reply + delivery_dedupe + message_dedupe）
@@ -289,7 +289,7 @@ class ProactiveTurnPipelineDeps:
 # ┌─ tick trigger
 # │  └─ ProactiveTurnPipeline.run
 # │     ├─ 1. Gate ── _gate_check
-# │     │  └─ no_target / busy / cooldown / anyaction / context_fallback
+# │     │  └─ no_target / busy / loneliness
 # │     ├─ 2. Fetch ── _fetch_pull
 # │     │  └─ DataGateway 并行拉取 → drift 分支 → 构建 system prompt + messages
 # │     ├─ 3. Judge ── _judge_evaluate
@@ -429,10 +429,6 @@ class ProactiveTurnPipeline:
             with diagnostic_context(phase="agent_loop"):
                 await self._judge_evaluate(ctx, feed.messages)
 
-        # 3.5 LLM 判定 reply 时记录 anyaction（drift 路径在 _finalize_after_drift 中处理）。
-        if ctx.terminal_action == "reply" and self._any_action_gate is not None:
-            self._any_action_gate.record_action(now_utc=ctx.now_utc)
-
         # 4. Resolve — 发还是不发？
         with diagnostic_context(phase="resolve"):
             decision = await self._resolve_decide(ctx)
@@ -473,52 +469,17 @@ class ProactiveTurnPipeline:
             logger.debug("[proactive_v2] gate: passive_busy → blocked")
             return GateResult(blocked=True, reason="busy", base_score=None)
 
-        # 1.3 发送冷却期内 → 跳过。
-        if self._state_store.count_deliveries_in_window(
-            self._session_key,
-            self._cfg.agent_tick_delivery_cooldown_hours,
-        ) > 0:
-            logger.debug("[proactive_v2] gate: delivery_cooldown → blocked")
-            return GateResult(blocked=True, reason="cooldown", base_score=None)
-
-        # 1.4 活跃度 gate（AnyAction）。
-        if self._any_action_gate is not None:
-            should_act, meta = self._any_action_gate.should_act(
-                now_utc=ctx.now_utc,
-                last_user_at=self._last_user_at_fn(),
-            )
-            if not should_act:
-                logger.debug("[proactive_v2] gate: anyaction → blocked meta=%s", meta)
-                return GateResult(blocked=True, reason="presence", base_score=None)
-
         if self._loneliness_gate_fn is not None:
             should_trigger, meta = self._loneliness_gate_fn(self._session_key, ctx.now_utc)
             if not should_trigger:
                 logger.debug("[proactive_v2] gate: loneliness → blocked meta=%s", meta)
                 return GateResult(blocked=True, reason="loneliness", base_score=None)
 
-        # 1.5 context-fallback 概率 + 配额计算。
-        context_as_fallback_open = self._rng.random() < self._cfg.agent_tick_context_prob
-        if context_as_fallback_open:
-            last_at = self._state_store.get_last_context_only_at(self._session_key)
-            count_24h = self._state_store.count_context_only_in_window(
-                self._session_key, window_hours=24
-            )
-            if (
-                (
-                    last_at is not None
-                    and (ctx.now_utc - last_at).total_seconds()
-                    < self._cfg.context_only_min_interval_hours * 3600
-                )
-                or count_24h >= self._cfg.context_only_daily_max
-            ):
-                context_as_fallback_open = False
-
         return GateResult(
             blocked=False,
             reason="passed",
             base_score=None,
-            context_as_fallback_open=context_as_fallback_open,
+            context_as_fallback_open=False,
         )
 
     # ── 2. Fetch ──────────────────────────────────────────────────────
@@ -982,8 +943,6 @@ class ProactiveTurnPipeline:
 
     def _finalize_after_drift(self, ctx: AgentTickContext) -> None:
         """drift 进入后跳过正常 post_loop，直接收尾。"""
-        if self._any_action_gate is not None:
-            self._any_action_gate.record_action(now_utc=ctx.now_utc)
         logger.info(
             "[proactive_v2] drift entered, skipping normal post_loop message_sent=%s finished=%s",
             ctx.drift_message_sent,

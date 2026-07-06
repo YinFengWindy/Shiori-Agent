@@ -285,7 +285,16 @@ def _make_pipeline_with_sink(llm, *, state=None, sender=None, deduper=None,
     )
     gateway = GatewayDeps(
         alert_fn=AsyncMock(return_value=[]),
-        feed_fn=AsyncMock(return_value=[]),
+        feed_fn=AsyncMock(return_value=[{
+            "id": "1",
+            "event_id": "1",
+            "ack_server": "feed-mcp",
+            "title": "candidate",
+            "source_name": "test-feed",
+            "url": "",
+            "published_at": "",
+        }]),
+        context_fn=AsyncMock(return_value=[]),
     )
     if tool_deps_extra:
         for k, v in tool_deps_extra.items():
@@ -485,13 +494,13 @@ async def test_send_success_acks_content_168h():
 @pytest.mark.asyncio
 async def test_send_success_acks_discarded_720h():
     llm = FakeLLM([
-        ("mark_not_interesting", {"item_ids": ["feed-mcp:bad"]}),
+        ("mark_not_interesting", {"item_ids": ["feed-mcp:1"]}),
         ("message_push", {"message": "hi", "evidence": []}),
         ("finish_turn", {"decision": "reply"}),
     ])
     tick, sink = _make_pipeline_with_sink(llm)
     await tick.run()
-    assert sink.acked("feed-mcp:bad", 720)
+    assert sink.acked("feed-mcp:1", 720)
 
 
 # ── send failure ──────────────────────────────────────────────────────────
@@ -533,14 +542,14 @@ async def test_send_failure_acks_discarded_720h():
     sender.send.return_value = False
 
     llm = FakeLLM([
-        ("mark_not_interesting", {"item_ids": ["feed-mcp:bad"]}),
+        ("mark_not_interesting", {"item_ids": ["feed-mcp:1"]}),
         ("message_push", {"message": "hi", "evidence": []}),
         ("finish_turn", {"decision": "reply"}),
     ])
     tick, sink = _make_pipeline_with_sink(llm, sender=sender)
     await tick.run()
 
-    assert sink.acked("feed-mcp:bad", 720)
+    assert sink.acked("feed-mcp:1", 720)
 
 
 # ── skip → only discarded ACK ─────────────────────────────────────────────
@@ -548,13 +557,13 @@ async def test_send_failure_acks_discarded_720h():
 @pytest.mark.asyncio
 async def test_skip_acks_discarded_720h():
     llm = FakeLLM([
-        ("mark_not_interesting", {"item_ids": ["feed-mcp:x"]}),
+        ("mark_not_interesting", {"item_ids": ["feed-mcp:1"]}),
         ("finish_turn", {"decision": "skip", "reason": "no_content"}),
     ])
     tick, sink = _make_pipeline_with_sink(llm)
     await tick.run()
 
-    assert sink.acked("feed-mcp:x", 720)
+    assert sink.acked("feed-mcp:1", 720)
 
 
 @pytest.mark.asyncio
@@ -575,89 +584,6 @@ async def test_no_terminal_action_no_ack_cited():
     tick.last_ctx = None
     await tick.run()
     assert sink.calls == []
-
-
-# ── context-only ──────────────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_context_only_marks_state_on_success():
-    from tests.proactive_v2.conftest import FakeRng
-    state = FakeStateStore()
-    state.set_context_only_count(0)
-    state.set_last_context_only_at(None)
-
-    llm = FakeLLM([
-        ("message_push", {"message": "steam update", "evidence": []}),
-        ("finish_turn", {"decision": "reply"}),
-    ])
-    sink = FakeAckSink()
-    deps = ToolDeps(
-        recent_chat_fn=AsyncMock(return_value=[]),
-        ack_fn=sink,
-    )
-    gateway = GatewayDeps(
-        alert_fn=AsyncMock(return_value=[]),
-        feed_fn=AsyncMock(return_value=[]),
-    )
-    sender = AsyncMock()
-    sender.send.return_value = True
-    deduper = AsyncMock()
-    deduper.is_duplicate = AsyncMock(return_value=(False, ""))
-
-    tick = make_proactive_pipeline(
-        llm_fn=llm,
-        state_store=state,
-        sender=sender,
-        deduper=deduper,
-        tool_deps=deps,
-        gateway_deps=gateway,
-        cfg=cfg_with(agent_tick_context_prob=1.0, context_only_daily_max=3),
-        rng=FakeRng(value=0.0),  # random() < 1.0 → gate 开
-    )
-    await tick.run()
-
-    assert state.context_only_send_marked is True
-
-
-@pytest.mark.asyncio
-async def test_context_only_not_marked_when_cited_ids_present():
-    """cited_ids 非空说明是 content/alert 路径，不算 context-only"""
-    from tests.proactive_v2.conftest import FakeRng
-    state = FakeStateStore()
-    state.set_context_only_count(0)
-    state.set_last_context_only_at(None)
-
-    llm = FakeLLM([
-        ("message_push", {"message": "msg", "evidence": ["feed-mcp:1"]}),
-        ("finish_turn", {"decision": "reply"}),
-    ])
-    sink = FakeAckSink()
-    deps = ToolDeps(
-        recent_chat_fn=AsyncMock(return_value=[]),
-        ack_fn=sink,
-    )
-    gateway = GatewayDeps(
-        alert_fn=AsyncMock(return_value=[]),
-        feed_fn=AsyncMock(return_value=[]),
-    )
-    sender = AsyncMock()
-    sender.send.return_value = True
-    deduper = AsyncMock()
-    deduper.is_duplicate = AsyncMock(return_value=(False, ""))
-
-    tick = make_proactive_pipeline(
-        llm_fn=llm,
-        state_store=state,
-        sender=sender,
-        deduper=deduper,
-        tool_deps=deps,
-        gateway_deps=gateway,
-        cfg=cfg_with(agent_tick_context_prob=1.0, context_only_daily_max=3),
-        rng=FakeRng(value=0.0),
-    )
-    await tick.run()
-
-    assert state.context_only_send_marked is False
 
 
 # ── cited vs discarded conflict ───────────────────────────────────────────
@@ -766,7 +692,16 @@ async def test_message_dedupe_receives_recent_proactive_list():
     )
     gateway = GatewayDeps(
         alert_fn=AsyncMock(return_value=[]),
-        feed_fn=AsyncMock(return_value=[]),
+        feed_fn=AsyncMock(return_value=[{
+            "id": "1",
+            "event_id": "1",
+            "ack_server": "feed-mcp",
+            "title": "candidate",
+            "source_name": "test-feed",
+            "url": "",
+            "published_at": "",
+        }]),
+        context_fn=AsyncMock(return_value=[]),
     )
     sender = AsyncMock()
     sender.send.return_value = True
@@ -910,7 +845,22 @@ async def test_run_loop_appends_openai_format_tool_messages():
         ("get_content_events", {}),      # step 1 → produces messages for step 2
         ("finish_turn", {"decision": "skip", "reason": "no_content"}),  # step 2 → terminates
     ])
-    tick = make_proactive_pipeline(llm_fn=llm)
+    tick = make_proactive_pipeline(
+        llm_fn=llm,
+        gateway_deps=GatewayDeps(
+            alert_fn=AsyncMock(return_value=[]),
+            feed_fn=AsyncMock(return_value=[{
+                "id": "1",
+                "event_id": "1",
+                "ack_server": "feed-mcp",
+                "title": "candidate",
+                "source_name": "test-feed",
+                "url": "",
+                "published_at": "",
+            }]),
+            context_fn=AsyncMock(return_value=[]),
+        ),
+    )
     await tick.run()
 
     # 第二次 LLM 调用收到的 messages 包含 step 1 的工具调用和结果

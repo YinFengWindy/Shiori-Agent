@@ -260,6 +260,9 @@ def make_proactive_pipeline(
     if rng is None:
         rng = FakeRng(value=0.0)  # 默认打开 context_fallback，避免空候选直接早退
 
+    if loneliness_gate_fn is None:
+        loneliness_gate_fn = lambda _session_key, _now_utc: (True, {"reason": "threshold"})
+
     session = _FakeSession(session_key)
     session_manager = SimpleNamespace(
         get_or_create=lambda _key: session,
