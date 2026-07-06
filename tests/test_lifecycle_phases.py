@@ -1573,6 +1573,46 @@ async def test_after_reasoning_persists_user_display_content_without_internal_me
 
 
 @pytest.mark.asyncio
+async def test_after_reasoning_enriches_session_metadata_with_relationship_runtime():
+    session = _DummySession("desktop:role:mira")
+    msg = InboundMessage(
+        channel="desktop",
+        sender="user",
+        chat_id="desktop:role:mira",
+        content="hi",
+        timestamp=_now,
+    )
+    state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=True)
+    state.session = session
+    relationship_runtime = Mock()
+    relationship_runtime.enrich_session_metadata = Mock(
+        return_value={"role_id": "mira", "relationship_snapshot": {"role_self_view": "我在想你。"}},
+    )
+    services = SimpleNamespace(
+        presence=Mock(),
+        session_manager=SimpleNamespace(append_messages=AsyncMock()),
+        relationship_runtime=relationship_runtime,
+    )
+    turn_result = TurnRunResult(
+        reply="reply",
+        tool_chain=[],
+        tools_used=[],
+        thinking=None,
+        streamed=False,
+        context_retry={},
+    )
+    phase = Phase(
+        default_after_reasoning_modules(EventBus(), cast(Any, services)),
+        frame_factory=AfterReasoningFrame,
+    )
+
+    await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
+
+    relationship_runtime.enrich_session_metadata.assert_called_once()
+    assert session.metadata["relationship_snapshot"]["role_self_view"] == "我在想你。"
+
+
+@pytest.mark.asyncio
 async def test_after_turn_collects_extra_and_telemetry_slots():
     committed_extra: list[dict[str, object]] = []
     after_turn_metadata: list[dict[str, object]] = []

@@ -186,8 +186,9 @@ class _PersistUserMessageModule:
             return frame
         if self._session_services.presence:
             self._session_services.presence.record_user_message(session.key)
-        if self._session_services.relationship_runtime is not None:
-            self._session_services.relationship_runtime.handle_user_message(session.key)
+        relationship_runtime = getattr(self._session_services, "relationship_runtime", None)
+        if relationship_runtime is not None:
+            relationship_runtime.handle_user_message(session.key)
         user_kwargs: dict[str, object] = {}
         user_kwargs["metadata"] = _build_synced_message_metadata(
             channel=msg.channel,
@@ -246,6 +247,9 @@ class _UpdateSessionMetadataModule:
     slot = "after_reasoning.update_meta"
     requires = ("after_reasoning.persist_asst", _CTX_SLOT)
 
+    def __init__(self, relationship_runtime: Any | None = None) -> None:
+        self._relationship_runtime = relationship_runtime
+
     async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
         ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
         raw_session = frame.input.state.session
@@ -258,8 +262,8 @@ class _UpdateSessionMetadataModule:
             tool_chain=list(ctx.tool_chain),
             mood=ctx.response_metadata.mood,
         )
-        if self._session_services.relationship_runtime is not None:
-            session.metadata = self._session_services.relationship_runtime.enrich_session_metadata(
+        if self._relationship_runtime is not None:
+            session.metadata = self._relationship_runtime.enrich_session_metadata(
                 cast(dict[str, Any], session.metadata),
             )
         return frame
@@ -329,13 +333,14 @@ def default_after_reasoning_modules(
 ) -> AfterReasoningModules:
     resolved_llm = llm or cast(Any, None)
     resolved_llm_config = llm_config or cast(Any, None)
+    relationship_runtime = getattr(session_services, "relationship_runtime", None)
     builtins: AfterReasoningModules = [
         _BuildAfterReasoningCtxModule(),
         _EmitAfterReasoningCtxModule(bus),
         _ResolveMoodModule(resolved_llm, resolved_llm_config),
         _PersistUserMessageModule(session_services),
         _PersistAssistantMessageModule(),
-        _UpdateSessionMetadataModule(),
+        _UpdateSessionMetadataModule(relationship_runtime),
         _AppendMessagesModule(session_services),
         _BuildOutboundMessageModule(),
         _ReturnAfterReasoningResultModule(),
