@@ -124,6 +124,9 @@ export function ChatSurface({
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
+    if (textarea.value !== draft) {
+      textarea.value = draft;
+    }
     textarea.style.height = "auto";
     textarea.style.height = `${textarea.scrollHeight}px`;
   }, [draft]);
@@ -262,8 +265,8 @@ export function ChatSurface({
     if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
 
     event.preventDefault();
-    if (!activeRoleId || !canSubmitChatMessage(event.currentTarget.value, pendingChatAttachments) || sending || !bridgeReady) return;
-    onSendMessage(event.currentTarget.value);
+    if (!activeRoleId || !canSubmit || sending || !bridgeReady) return;
+    onSendMessage();
   };
 
   const handleScrollToBottom = () => {
@@ -725,7 +728,7 @@ export function ChatSurface({
                   <PlusIcon className="h-[14px] w-[14px] fill-current" />
                 </button>
                 <div className="composer-spacer flex-1" />
-                <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="发送消息" onClick={() => onSendMessage(textareaRef.current?.value)} disabled={!activeRoleId || !canSubmit || sending || !bridgeReady}>
+                <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="发送消息" onClick={() => onSendMessage()} disabled={!activeRoleId || !canSubmit || sending || !bridgeReady}>
                   <SendIcon className="h-[15px] w-[15px] fill-current" />
                 </button>
               </div>
