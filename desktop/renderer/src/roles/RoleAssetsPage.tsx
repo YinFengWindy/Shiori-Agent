@@ -57,16 +57,25 @@ export function RoleAssetsPage({
   const activeMoodIllustrationPath = activeMood ? (roleForm.moodIllustrationBindings[activeMood] ?? "") : "";
   const activeMoodIllustration = assetPairs.find((item) => item.relPath === activeMoodIllustrationPath) ?? null;
 
-  async function applyAsset(relPath: string): Promise<void> {
+  function selectAsset(relPath: string): void {
+    const nextPath = getNextRoleAssetSelection(selectedAssetPath, relPath);
     if (selectionMode === "avatar") {
-      const nextPath = getNextRoleAssetSelection(selectedAssetPath, relPath);
       onSelectAvatarAsset(nextPath);
-      onSaveSelections({ avatarAsset: nextPath });
-    } else if (selectionMode === "chat-background") {
-      const nextPath = getNextRoleAssetSelection(selectedAssetPath, relPath);
-      onSelectChatBackground(nextPath);
-      onSaveSelections({ chatBackground: nextPath });
+      return;
     }
+    onSelectChatBackground(nextPath);
+  }
+
+  function saveCurrentSelection(): void {
+    if (selectionMode === "avatar") {
+      onSaveSelections({ avatarAsset: selectedAssetPath });
+      return;
+    }
+    if (selectionMode === "chat-background") {
+      onSaveSelections({ chatBackground: selectedAssetPath });
+      return;
+    }
+    bindSelectedAssetToMood();
   }
 
   function bindSelectedAssetToMood(): void {
@@ -125,7 +134,7 @@ export function RoleAssetsPage({
                       )}
                       type="button"
                       disabled={!bridgeReady || savingSelection}
-                      onClick={() => void applyAsset(relPath)}
+                      onClick={() => selectAsset(relPath)}
                     >
                       <img className="h-full w-full object-cover" src={toFileUrl(absPath)} alt="role asset" />
                     </button>
@@ -186,7 +195,7 @@ export function RoleAssetsPage({
                       type="button"
                       onClick={() => setSelectionMode("chat-background")}
                     >
-                      默认立绘
+                      立绘
                     </button>
                     <button
                       data-testid="selection-mode-mood-binding"
@@ -197,7 +206,7 @@ export function RoleAssetsPage({
                       type="button"
                       onClick={() => setSelectionMode("mood-binding")}
                     >
-                      心情映射
+                      差分
                     </button>
                   </div>
                 </div>
@@ -210,26 +219,46 @@ export function RoleAssetsPage({
                     activeMoodIllustrationAbsPath={activeMoodIllustration?.absPath ? toFileUrl(activeMoodIllustration.absPath) : ""}
                     selectedAssetPath={selectedAssetPath}
                     onSelectMood={setActiveMood}
-                    onBindSelectedAsset={bindSelectedAssetToMood}
+                    onBindSelectedAsset={saveCurrentSelection}
                     onClearMoodBinding={clearMoodBinding}
                   />
                 ) : selectedAsset ? (
-                  selectionMode === "avatar" ? (
-                    <div className="grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-white p-8">
-                      <img className="h-[140px] w-[140px] rounded-[32px] object-cover shadow-[0_10px_24px_rgba(15,23,42,0.08)]" src={toFileUrl(selectedAsset.absPath)} alt="avatar preview" />
+                  <div className="grid min-h-[360px] flex-1 gap-4 rounded-[20px] bg-white p-6">
+                    {selectionMode === "avatar" ? (
+                      <div className="grid flex-1 place-items-center">
+                        <img className="h-[140px] w-[140px] rounded-[32px] object-cover shadow-[0_10px_24px_rgba(15,23,42,0.08)]" src={toFileUrl(selectedAsset.absPath)} alt="avatar preview" />
+                      </div>
+                    ) : (
+                      <div className="flex min-h-[260px] flex-1 items-center justify-center overflow-hidden rounded-[20px] bg-white">
+                        <img
+                          className="max-h-full w-full object-contain"
+                          src={toFileUrl(selectedAsset.absPath)}
+                          alt="featured preview"
+                        />
+                      </div>
+                    )}
+                    <div className="rounded-[18px] border border-[#E4EAF0] bg-[#F8FBFD] px-4 py-3 text-sm text-[#596776]">
+                      <div className="truncate">当前选中素材：{selectedAsset.relPath}</div>
+                      <div className="mt-1 truncate">
+                        {selectionMode === "avatar"
+                          ? `已保存头像：${selectedAvatarAsset || "未设置"}`
+                          : `已保存立绘：${selectedChatBackground || "未设置"}`}
+                      </div>
                     </div>
-                  ) : (
-                    <div className="flex min-h-[360px] flex-1 items-center justify-center overflow-hidden rounded-[20px] bg-white p-6">
-                      <img
-                        className="max-h-full w-full object-contain"
-                        src={toFileUrl(selectedAsset.absPath)}
-                        alt="featured preview"
-                      />
+                    <div className="flex gap-2.5">
+                      <button
+                        className="ghost-btn rounded-md border border-[#D8DFE7] bg-white px-4 py-2 text-sm text-[#374151] transition hover:border-[#9AA3B2] hover:bg-[#F5F7FA]"
+                        type="button"
+                        onClick={saveCurrentSelection}
+                        disabled={!selectedAssetPath || savingSelection || !bridgeReady}
+                      >
+                        保存当前{selectionMode === "avatar" ? "头像" : "立绘"}
+                      </button>
                     </div>
-                  )
+                  </div>
                 ) : (
                   <div className="grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-[#F2F5F8] text-sm text-[#74808D]">
-                    {selectionMode === "avatar" ? "当前未设置头像" : "当前未设置立绘"}
+                    {selectionMode === "avatar" ? "请选择一张素材作为头像" : "请选择一张素材作为立绘"}
                   </div>
                 )}
               </div>
