@@ -43,3 +43,13 @@ def test_extract_structured_mood_tolerates_missing_content() -> None:
 
     assert clean_text == '{"mood":"警觉"}'
     assert mood == "警觉"
+
+
+def test_parse_response_extracts_structured_mood_from_embedded_json_payload() -> None:
+    result = response_parser.parse_response(
+        '前置说明 {"content":"她轻轻偏过头。","mood":"鄙视"} 后置说明',
+        tool_chain=[],
+    )
+
+    assert result.clean_text == "她轻轻偏过头。"
+    assert result.metadata.mood == "鄙视"
