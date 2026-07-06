@@ -1,0 +1,46 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="166" y1="120" x2="844" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6F5A61" />
+      <stop offset="1" stop-color="#4D4046" />
+    </linearGradient>
+    <linearGradient id="bookmark" x1="334" y1="210" x2="748" y2="812" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F3C8BC" />
+      <stop offset="1" stop-color="#DFA69C" />
+    </linearGradient>
+    <clipPath id="bookmarkClip">
+      <path d="M336 210C298.445 210 268 240.445 268 278V694L512 822L756 694V278C756 240.445 725.555 210 688 210H336Z" />
+    </clipPath>
+  </defs>
+
+  <rect x="72" y="72" width="880" height="880" rx="268" fill="url(#bg)" />
+
+  <path
+    d="M336 210C298.445 210 268 240.445 268 278V694L512 822L756 694V278C756 240.445 725.555 210 688 210H336Z"
+    fill="url(#bookmark)"
+  />
+
+  <g clip-path="url(#bookmarkClip)">
+    <path
+      d="M608 320C567 336 533 364 511 404C490 443 480 489 480 539C480 604 500 665 540 720C556 743 577 764 602 782C573 776 545 762 520 740C474 699 445 638 439 567C434 505 446 446 474 397C503 346 551 311 608 320Z"
+      fill="#FFF8F2"
+    />
+    <path
+      d="M374 260C399 245 429 239 459 241C434 256 413 276 402 300C393 321 392 344 397 368"
+      stroke="#FFF8F2"
+      stroke-width="20"
+      stroke-linecap="round"
+      opacity="0.96"
+    />
+    <path
+      d="M369 258C391 249 418 247 443 255C416 268 395 287 383 312C374 329 370 350 372 374C356 359 348 338 349 313C351 290 358 272 369 258Z"
+      fill="#6E5A61"
+      fill-opacity="0.82"
+    />
+    <path
+      d="M551 258C525 270 501 291 483 318C505 304 529 295 559 292C600 288 640 298 675 321C650 285 606 254 551 258Z"
+      fill="#FFFFFF"
+      fill-opacity="0.2"
+    />
+  </g>
+</svg>
