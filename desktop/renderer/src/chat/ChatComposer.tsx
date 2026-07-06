@@ -56,7 +56,7 @@ export function ChatComposer({
     setDraft("");
     setPendingAttachments([]);
     onClearReplyTarget();
-  }, [activeRoleId, onClearReplyTarget, sessionKey]);
+  }, [activeRoleId, sessionKey]);
 
   async function pickChatAttachments(): Promise<void> {
     const files = await window.miraDesktop.pickChatAttachments({ multiple: true });
