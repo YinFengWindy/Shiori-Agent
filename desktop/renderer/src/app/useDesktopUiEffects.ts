@@ -93,9 +93,9 @@ export function useDesktopUiEffects({
 
     const tryHighlight = () => {
       if (cancelled) return;
+      setHighlightedMessageKey(pendingMessageNavigation.messageKey);
       const target = findChatMessageElement(pendingMessageNavigation.messageKey);
       if (target) {
-        setHighlightedMessageKey(pendingMessageNavigation.messageKey);
         target.scrollIntoView({ behavior: "smooth", block: "center" });
         setPendingMessageNavigation(null);
         return;

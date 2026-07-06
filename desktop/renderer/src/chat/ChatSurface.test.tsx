@@ -176,6 +176,21 @@ describe("ChatSurface", () => {
     assert.match(markup, /ml-auto items-end/);
   });
 
+  it("renders only the recent chat window first and shows an affordance for older messages", () => {
+    const session = createSession();
+    session.messages = Array.from({ length: 220 }, (_value, index) => ({
+      id: `message-${index + 1}`,
+      role: index % 2 === 0 ? "assistant" : "user",
+      content: `message-${index + 1}`,
+    }));
+
+    const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
+
+    assert.match(markup, />更早消息 60 条</);
+    assert.doesNotMatch(markup, /data-message-key="message-1"/);
+    assert.match(markup, /data-message-key="message-220"/);
+  });
+
   it("marks sent attachments as draggable so they can be dragged out of the desktop app", () => {
     const session = createSession();
     session.messages = [

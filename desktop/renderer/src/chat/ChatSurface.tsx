@@ -1,8 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { buildChatImageHistoryKey } from "./chatImageHistory";
 import { isChatImageAsset } from "./chatImageHistory";
 import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
+import {
+  getExpandedVisibleChatMessageCountForKey,
+  getVisibleChatMessages,
+  initialVisibleChatMessageCount,
+  visibleChatMessageCountStep,
+} from "./chatMessageWindow";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
@@ -100,6 +106,7 @@ export function ChatSurface({
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
+  const [visibleMessageCount, setVisibleMessageCount] = useState(initialVisibleChatMessageCount);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const [sidebarMode, setSidebarMode] = useState<"status" | "images">(
     hasStatusIllustration ? "status" : "images",
@@ -199,6 +206,24 @@ export function ChatSurface({
   useEffect(() => {
     setComposerReplyTarget(null);
   }, [activeRoleId, activeSession?.key]);
+
+  useEffect(() => {
+    setVisibleMessageCount(initialVisibleChatMessageCount);
+  }, [activeSession?.key]);
+
+  const sessionMessages = activeSession?.messages ?? [];
+  const visibleMessageWindow = getVisibleChatMessages(sessionMessages, visibleMessageCount);
+
+  useLayoutEffect(() => {
+    const nextVisibleMessageCount = getExpandedVisibleChatMessageCountForKey(
+      sessionMessages,
+      visibleMessageCount,
+      highlightedMessageKey,
+    );
+    if (nextVisibleMessageCount !== visibleMessageCount) {
+      setVisibleMessageCount(nextVisibleMessageCount);
+    }
+  }, [highlightedMessageKey, sessionMessages, visibleMessageCount]);
 
   useEffect(() => {
     const currentMessageCount = activeSession?.messages.length ?? 0;
@@ -446,7 +471,19 @@ export function ChatSurface({
           )}
         >
           <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
-            {activeSession?.messages.map((message, index) => {
+            {visibleMessageWindow.hiddenMessageCount > 0 ? (
+              <div className="flex justify-center">
+                <button
+                  className="rounded-md border border-[#D8DEE8] bg-white/85 px-3 py-1.5 text-[12px] text-[#5B6472] transition hover:border-[#C6CEDA] hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  type="button"
+                  onClick={() => setVisibleMessageCount((current) => current + visibleChatMessageCountStep)}
+                >
+                  {`更早消息 ${visibleMessageWindow.hiddenMessageCount} 条`}
+                </button>
+              </div>
+            ) : null}
+            {visibleMessageWindow.messages.map((message, visibleIndex) => {
+              const index = visibleMessageWindow.startIndex + visibleIndex;
               const isUser = message.role === "user";
               const isError = message.role === "error";
               const authorLabel = isError ? "系统提示" : (isUser ? "你" : (activeRole?.name || "Agent"));
