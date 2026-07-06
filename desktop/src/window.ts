@@ -31,9 +31,9 @@ export function createDesktopWindow(): BrowserWindow {
       spellcheck: false,
     },
   });
-  win.webContents.on("console-message", (_event, _level, message) => {
+  win.webContents.on("console-message", (details: { message: string }) => {
     if (process.env.MIRA_DESKTOP_UI_SMOKE === "1") {
-      console.log(`[desktop-ui-console] ${message}`);
+      console.log(`[desktop-ui-console] ${details.message}`);
     }
   });
   win.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
