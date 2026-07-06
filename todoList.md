@@ -41,3 +41,9 @@ refactor：
 feat：
 
 [] 接入控制codex，claude等cli工具。
+
+2026.7.6
+
+feat：
+
+[] 头像立绘支持裁剪。
