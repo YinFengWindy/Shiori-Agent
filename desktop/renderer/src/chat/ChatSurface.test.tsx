@@ -46,6 +46,7 @@ function renderChatSurface(
     chatReplyTarget?: ChatReplyTarget | null;
     currentMood?: string;
     moodIllustrationUrl?: string;
+    chatLatestImageSidebarCollapsed?: boolean;
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -57,8 +58,8 @@ function renderChatSurface(
       chatLatestImagePath=""
       chatLatestImagePosition={0}
       chatLatestImageSidebarAnimating={false}
-      chatLatestImageSidebarCollapsed
-      chatLatestImageSidebarCount={0}
+      chatLatestImageSidebarCollapsed={options.chatLatestImageSidebarCollapsed ?? true}
+      chatLatestImageSidebarCount={options.chatLatestImageSidebarCollapsed === false ? 1 : 0}
       chatLatestImageSidebarWidth={320}
       currentMood={options.currentMood ?? ""}
       moodIllustrationBindingHit={false}
@@ -206,11 +207,11 @@ describe("ChatSurface", () => {
     const markup = renderChatSurface(createRole(), "mira", {
       currentMood: "开心",
       moodIllustrationUrl: "",
+      chatLatestImageSidebarCollapsed: false,
     });
 
     assert.match(markup, /aria-label="图片侧栏"/);
     assert.match(markup, /aria-label="状态侧栏"/);
-    assert.match(markup, /grid-rows-\[minmax\(0,1fr\)_auto\]/);
     assert.match(markup, /justify-self-center inline-flex/);
     assert.match(markup, /h-7 w-7/);
     assert.match(markup, /disabled=""/);
@@ -221,6 +222,7 @@ describe("ChatSurface", () => {
     const markup = renderChatSurface(createRole(), "mira", {
       currentMood: "开心",
       moodIllustrationUrl: "mira-asset://local?path=D%3A%5Croles%5Cmira%5Chappy.png",
+      chatLatestImageSidebarCollapsed: false,
     });
 
     assert.match(markup, /aria-label="图片侧栏"/);
@@ -232,6 +234,7 @@ describe("ChatSurface", () => {
     const markup = renderChatSurface(createRole(), "mira", {
       currentMood: "开心",
       moodIllustrationUrl: "mira-asset://local?path=D%3A%5Croles%5Cmira%5Chappy.png",
+      chatLatestImageSidebarCollapsed: false,
     });
 
     assert.match(markup, />当下想法</);

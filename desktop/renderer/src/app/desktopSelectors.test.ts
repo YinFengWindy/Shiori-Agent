@@ -18,6 +18,8 @@ function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
     chat_background_abs: overrides.chat_background_abs ?? "D:\\bg\\mira.png",
     illustrations: overrides.illustrations ?? [],
     illustrations_abs: overrides.illustrations_abs ?? ["D:\\bg\\mira.png"],
+    relationship_snapshot: overrides.relationship_snapshot ?? null,
+    loneliness_runtime: overrides.loneliness_runtime ?? null,
     created_at: overrides.created_at ?? "2026-07-04T12:00:00+08:00",
     updated_at: overrides.updated_at ?? "2026-07-04T12:00:00+08:00",
   };
