@@ -182,6 +182,8 @@ class _PersistAssistantMessageModule:
                 metadata=ctx.outbound_metadata,
             ),
         }
+        if ctx.response_metadata.mood:
+            assistant_kwargs["metadata"]["mood"] = ctx.response_metadata.mood
         if ctx.thinking is not None:
             assistant_kwargs["reasoning_content"] = ctx.thinking
         if ctx.media:
@@ -205,6 +207,7 @@ class _UpdateSessionMetadataModule:
             session,
             tools_used=list(ctx.tools_used),
             tool_chain=list(ctx.tool_chain),
+            mood=ctx.response_metadata.mood,
         )
         return frame
 

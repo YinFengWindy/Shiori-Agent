@@ -187,6 +187,7 @@ def update_session_runtime_metadata(
     *,
     tools_used: list[str],
     tool_chain: list[dict],
+    mood: str | None = None,
 ) -> None:
     md = session.metadata if isinstance(session.metadata, dict) else {}  # type: ignore[union-attr]
     call_count = sum(
@@ -197,6 +198,9 @@ def update_session_runtime_metadata(
 
     md["last_turn_tool_calls_count"] = call_count
     md["last_turn_ts"] = datetime.now().astimezone().isoformat()
+    if mood:
+        md["current_mood"] = mood
+        md["current_mood_updated_at"] = datetime.now().astimezone().isoformat()
     session.metadata = md  # type: ignore[union-attr]
 
 

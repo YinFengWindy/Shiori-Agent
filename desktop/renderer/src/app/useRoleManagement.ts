@@ -3,6 +3,7 @@ import { createEmptyNewRoleForm, createPendingRoleRecord, minRoleCardBusyMs } fr
 import type { RoleRecord, RoleFormState, NewRoleFormState, PendingRoleCardAction, SessionPayload } from "../shared/types";
 import type { AppMainView } from "../shared/types";
 import type { NavigationEntry } from "./appState";
+import { writeRoleMoodConfigToRuntimeConfig } from "../roles/roleMoodConfig";
 
 type UseRoleManagementArgs = {
   activeRoleId: string;
@@ -196,10 +197,13 @@ export function useRoleManagement({
         name: nextRoleForm.name,
         description: nextRoleForm.description,
         system_prompt: nextRoleForm.systemPrompt,
-        runtime_config: {
-          ...(detailRole?.runtime_config ?? {}),
-          nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
-        },
+        runtime_config: writeRoleMoodConfigToRuntimeConfig(
+          {
+            ...(detailRole?.runtime_config ?? {}),
+            nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
+          },
+          nextRoleForm,
+        ),
         avatar_source: nextRoleForm.avatarSource || undefined,
         illustration_sources: nextRoleForm.illustrationSources,
         removed_illustrations: nextRoleForm.removedIllustrations,
@@ -222,6 +226,7 @@ export function useRoleManagement({
   async function saveRoleAssets(nextSelection?: {
     avatarAsset?: string;
     chatBackground?: string;
+    moodIllustrationBindings?: Record<string, string>;
   }): Promise<void> {
     if (!detailRoleId) return;
     setSavingRoleAssets(true);
@@ -239,6 +244,7 @@ export function useRoleManagement({
     const chatBackground = hasChatBackgroundSelection
       ? (nextSelection?.chatBackground ?? "")
       : selectedChatBackground;
+    const nextMoodIllustrationBindings = nextSelection?.moodIllustrationBindings;
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
@@ -247,6 +253,18 @@ export function useRoleManagement({
         chat_background: chatBackground || undefined,
         clear_avatar: hasAvatarSelection && !avatarAsset,
         clear_chat_background: hasChatBackgroundSelection && !chatBackground,
+        runtime_config: nextMoodIllustrationBindings
+          ? writeRoleMoodConfigToRuntimeConfig(
+            {
+              ...(detailRole?.runtime_config ?? {}),
+              nsfw_memory_enabled: roleFormRef.current.nsfwMemoryEnabled,
+            },
+            {
+              ...roleFormRef.current,
+              moodIllustrationBindings: nextMoodIllustrationBindings,
+            },
+          )
+          : undefined,
       },
     });
     setSavingRoleAssets(false);

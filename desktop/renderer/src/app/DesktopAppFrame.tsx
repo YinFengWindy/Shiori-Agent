@@ -92,6 +92,10 @@ type DesktopAppFrameProps = {
   chatLatestImagePosition: number;
   chatLatestImageSidebar: RightSidebarViewState;
   chatLatestImageSidebarCount: number;
+  currentMood: string;
+  moodIllustrationBindingHit: boolean;
+  moodIllustrationUrl: string;
+  hasMoodIllustrationBinding: boolean;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   draft: string;
   headerTitle: string;
@@ -145,7 +149,7 @@ type DesktopAppFrameProps = {
   onRemoveRoleAsset: (path: string) => void;
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;
-  onSaveRoleAssets: (nextSelection?: { avatarAsset?: string; chatBackground?: string }) => void;
+  onSaveRoleAssets: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
   onSettingsMetaChange: (meta: { configPath: string; dirty: boolean }) => void;
   showSearchDialog: boolean;
   searchQuery: string;
@@ -215,6 +219,10 @@ export function DesktopAppFrame({
   chatLatestImagePosition,
   chatLatestImageSidebar,
   chatLatestImageSidebarCount,
+  currentMood,
+  moodIllustrationBindingHit,
+  moodIllustrationUrl,
+  hasMoodIllustrationBinding,
   conversationEndRef,
   draft,
   headerTitle,
@@ -415,6 +423,10 @@ export function DesktopAppFrame({
               chatLatestImageSidebarCollapsed={chatLatestImageSidebar.collapsed}
               chatLatestImageSidebarCount={chatLatestImageSidebarCount}
               chatLatestImageSidebarWidth={chatLatestImageSidebar.width}
+              currentMood={currentMood}
+              moodIllustrationBindingHit={moodIllustrationBindingHit}
+              moodIllustrationUrl={moodIllustrationUrl}
+              hasMoodIllustrationBinding={hasMoodIllustrationBinding}
               conversationEndRef={conversationEndRef}
               draft={draft}
               headerTitle={headerTitle}
@@ -503,6 +515,7 @@ export function DesktopAppFrame({
               activeRole={detailRole}
               bridgeReady={bridgeReady}
               savingSelection={savingRoleAssets}
+              roleForm={roleForm}
               selectedAvatarAsset={selectedAvatarAsset}
               selectedChatBackground={selectedChatBackground}
               onBackToDetail={onBackToRoleDetail}
@@ -510,6 +523,7 @@ export function DesktopAppFrame({
               onRemoveAsset={onRemoveRoleAsset}
               onSelectAvatarAsset={onSelectAvatarAsset}
               onSelectChatBackground={onSelectChatBackground}
+              onUpdateRoleForm={onUpdateRoleForm}
               onSaveSelections={onSaveRoleAssets}
             />
           ) : null}

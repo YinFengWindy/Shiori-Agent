@@ -399,6 +399,10 @@ function App(): React.ReactElement {
     roleFormDirty,
     previewAvatar,
     previewIllustrations,
+    currentMood,
+    moodIllustrationBindingHit,
+    moodIllustration,
+    moodIllustrationUrl,
     visibleIllustrationUrl,
     chatBackgroundUrl,
     activeSessionKey,
@@ -609,6 +613,10 @@ function App(): React.ReactElement {
       chatLatestImagePosition={selectedChatImagePosition}
       chatLatestImageSidebar={chatLatestImageSidebar}
       chatLatestImageSidebarCount={chatImageHistory.length}
+      currentMood={currentMood}
+      moodIllustrationBindingHit={moodIllustrationBindingHit}
+      moodIllustrationUrl={moodIllustrationUrl}
+      hasMoodIllustrationBinding={Boolean(currentMood && moodIllustration)}
       conversationEndRef={conversationEndRef}
       draft={draft}
       headerTitle={headerTitle}

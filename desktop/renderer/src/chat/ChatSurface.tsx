@@ -1,9 +1,9 @@
-import type React from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { buildChatImageHistoryKey } from "./chatImageHistory";
 import { isChatImageAsset } from "./chatImageHistory";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { canSubmitChatMessage, summarizeChatReplyContent } from "./chatComposerState";
+import { ChatStatusSidebar } from "./ChatStatusSidebar";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { CopyIcon, DeleteIcon, DocumentIcon, PlusIcon, QuoteIcon, SendIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
@@ -28,6 +28,10 @@ type ChatSurfaceProps = {
   chatLatestImageSidebarCollapsed: boolean;
   chatLatestImageSidebarCount: number;
   chatLatestImageSidebarWidth: number;
+  currentMood: string;
+  moodIllustrationBindingHit: boolean;
+  moodIllustrationUrl: string;
+  hasMoodIllustrationBinding: boolean;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   draft: string;
   headerTitle: string;
@@ -67,6 +71,10 @@ export function ChatSurface({
   chatLatestImageSidebarCollapsed,
   chatLatestImageSidebarCount,
   chatLatestImageSidebarWidth,
+  currentMood,
+  moodIllustrationBindingHit,
+  moodIllustrationUrl,
+  hasMoodIllustrationBinding,
   conversationEndRef,
   draft,
   headerTitle,
@@ -100,6 +108,9 @@ export function ChatSurface({
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
+  const [sidebarMode, setSidebarMode] = useState<"status" | "images">(
+    currentMood && moodIllustrationUrl ? "status" : "images",
+  );
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 
@@ -154,6 +165,17 @@ export function ChatSurface({
     const timer = window.setTimeout(() => setChatLatestImageSidebarMounted(false), 240);
     return () => window.clearTimeout(timer);
   }, [chatLatestImageSidebarCollapsed]);
+
+  useEffect(() => {
+    if (sidebarMode === "status" && (currentMood || moodIllustrationUrl)) {
+      return;
+    }
+    if (currentMood && moodIllustrationUrl) {
+      setSidebarMode("status");
+      return;
+    }
+    setSidebarMode("images");
+  }, [currentMood, moodIllustrationUrl, sidebarMode]);
 
   useEffect(() => {
     if (!messageContextMenu) return undefined;
@@ -729,54 +751,86 @@ export function ChatSurface({
               chatLatestImageSidebarCollapsed ? "pointer-events-none translate-x-8 pl-0 pr-0 opacity-0" : "translate-x-0 pl-2 pr-2 opacity-100",
             )}
           >
-            <div className="grid h-full min-h-0 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-              <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-[16px] bg-[#F1F5F9]">
-                <div className="pointer-events-none absolute inset-y-0 left-0 z-[2] flex items-center pl-3">
-                  <button
-                    className={sidebarNavButtonClass}
-                    type="button"
-                    aria-label="查看上一张聊天图片"
-                    onClick={onGoToPreviousChatImage}
-                    disabled={!canGoToPreviousChatImage}
-                  >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="m15 18-6-6 6-6" />
-                    </svg>
-                  </button>
-                </div>
-                {chatLatestImagePath ? (
-                  <button
-                    className="grid h-full w-full place-items-center border-0 bg-transparent p-0"
-                    type="button"
-                    aria-label="放大查看当前聊天图片"
-                    onClick={onOpenChatImageLightbox}
-                  >
-                    <img
-                      className="max-h-full max-w-full object-contain"
-                      src={toFileUrl(chatLatestImagePath)}
-                      alt="selected message image"
-                    />
-                  </button>
-                ) : (
-                  <div className="grid gap-2 px-6 text-center">
-                    <div className="mx-auto h-10 w-10 rounded-[14px] border border-[#D6DCE5] bg-white/70" />
-                    <div className="text-[12px] text-[#6B7280]">当前聊天里出现的图片会显示在这里</div>
-                  </div>
-                )}
-                <div className="pointer-events-none absolute inset-y-0 right-0 z-[2] flex items-center pr-3">
-                  <button
-                    className={sidebarNavButtonClass}
-                    type="button"
-                    aria-label="查看下一张聊天图片"
-                    onClick={onGoToNextChatImage}
-                    disabled={!canGoToNextChatImage}
-                  >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="m9 18 6-6-6-6" />
-                    </svg>
-                  </button>
-                </div>
+            <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3">
+              <div className="inline-flex w-fit rounded-full border border-[#D8DFE7] bg-[#F6F8FB] p-1">
+                <button
+                  className={cx(
+                    "rounded-full px-4 py-2 text-sm transition",
+                    sidebarMode === "status" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
+                  )}
+                  type="button"
+                  onClick={() => setSidebarMode("status")}
+                >
+                  状态
+                </button>
+                <button
+                  className={cx(
+                    "rounded-full px-4 py-2 text-sm transition",
+                    sidebarMode === "images" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
+                  )}
+                  type="button"
+                  onClick={() => setSidebarMode("images")}
+                >
+                  图片
+                </button>
               </div>
+              {sidebarMode === "status" ? (
+                <ChatStatusSidebar
+                  currentMood={currentMood}
+                  moodIllustrationUrl={moodIllustrationUrl}
+                  hasMoodMapping={moodIllustrationBindingHit && hasMoodIllustrationBinding}
+                />
+              ) : (
+                <div className="grid h-full min-h-0 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+                  <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-[16px] bg-[#F1F5F9]">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 z-[2] flex items-center pl-3">
+                      <button
+                        className={sidebarNavButtonClass}
+                        type="button"
+                        aria-label="查看上一张聊天图片"
+                        onClick={onGoToPreviousChatImage}
+                        disabled={!canGoToPreviousChatImage}
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="m15 18-6-6 6-6" />
+                        </svg>
+                      </button>
+                    </div>
+                    {chatLatestImagePath ? (
+                      <button
+                        className="grid h-full w-full place-items-center border-0 bg-transparent p-0"
+                        type="button"
+                        aria-label="放大查看当前聊天图片"
+                        onClick={onOpenChatImageLightbox}
+                      >
+                        <img
+                          className="max-h-full max-w-full object-contain"
+                          src={toFileUrl(chatLatestImagePath)}
+                          alt="selected message image"
+                        />
+                      </button>
+                    ) : (
+                      <div className="grid gap-2 px-6 text-center">
+                        <div className="mx-auto h-10 w-10 rounded-[14px] border border-[#D6DCE5] bg-white/70" />
+                        <div className="text-[12px] text-[#6B7280]">当前聊天里出现的图片会显示在这里</div>
+                      </div>
+                    )}
+                    <div className="pointer-events-none absolute inset-y-0 right-0 z-[2] flex items-center pr-3">
+                      <button
+                        className={sidebarNavButtonClass}
+                        type="button"
+                        aria-label="查看下一张聊天图片"
+                        onClick={onGoToNextChatImage}
+                        disabled={!canGoToNextChatImage}
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="m9 18 6-6-6-6" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : null}

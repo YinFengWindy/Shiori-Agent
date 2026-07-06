@@ -69,6 +69,9 @@ export type RoleFormState = {
   avatarSource: string;
   illustrationSources: string[];
   removedIllustrations: string[];
+  moodCatalog: string[];
+  defaultMood: string;
+  moodIllustrationBindings: Record<string, string>;
 };
 
 /** New role composer form state. */

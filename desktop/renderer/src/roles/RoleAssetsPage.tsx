@@ -2,13 +2,15 @@ import { useState } from "react";
 import { toFileUrl } from "../shared/format";
 import { UploadIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
-import type { RoleRecord } from "../shared/types";
+import type { RoleFormState, RoleRecord } from "../shared/types";
 import { getNextRoleAssetSelection, getSelectedRoleAssetPath } from "./roleAssetSelection";
+import { RoleMoodBindingsPanel } from "./RoleMoodBindingsPanel";
 
 type RoleAssetsPageProps = {
   activeRole: RoleRecord | null;
   bridgeReady: boolean;
   savingSelection: boolean;
+  roleForm: RoleFormState;
   selectedAvatarAsset: string;
   selectedChatBackground: string;
   onBackToDetail: () => void;
@@ -16,13 +18,15 @@ type RoleAssetsPageProps = {
   onRemoveAsset: (path: string) => void;
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;
-  onSaveSelections: (nextSelection?: { avatarAsset?: string; chatBackground?: string }) => void;
+  onUpdateRoleForm: React.Dispatch<React.SetStateAction<RoleFormState>>;
+  onSaveSelections: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
 };
 
 export function RoleAssetsPage({
   activeRole,
   bridgeReady,
   savingSelection,
+  roleForm,
   selectedAvatarAsset,
   selectedChatBackground,
   onBackToDetail,
@@ -30,6 +34,7 @@ export function RoleAssetsPage({
   onRemoveAsset,
   onSelectAvatarAsset,
   onSelectChatBackground,
+  onUpdateRoleForm,
   onSaveSelections,
 }: RoleAssetsPageProps) {
   const backIcon = (
@@ -41,24 +46,51 @@ export function RoleAssetsPage({
     relPath,
     absPath: activeRole?.illustrations_abs[index] ?? "",
   }));
-  const [selectionMode, setSelectionMode] = useState<"avatar" | "chat-background">("avatar");
+  const [selectionMode, setSelectionMode] = useState<"avatar" | "chat-background" | "mood-binding">("avatar");
+  const [activeMood, setActiveMood] = useState(roleForm.defaultMood || roleForm.moodCatalog[0] || "");
   const selectedAssetPath = getSelectedRoleAssetPath(
-    selectionMode,
+    selectionMode === "mood-binding" ? "chat-background" : selectionMode,
     selectedAvatarAsset,
     selectedChatBackground,
   );
   const selectedAsset = assetPairs.find((item) => item.relPath === selectedAssetPath) ?? null;
+  const activeMoodIllustrationPath = activeMood ? (roleForm.moodIllustrationBindings[activeMood] ?? "") : "";
+  const activeMoodIllustration = assetPairs.find((item) => item.relPath === activeMoodIllustrationPath) ?? null;
 
   async function applyAsset(relPath: string): Promise<void> {
     if (selectionMode === "avatar") {
       const nextPath = getNextRoleAssetSelection(selectedAssetPath, relPath);
       onSelectAvatarAsset(nextPath);
       onSaveSelections({ avatarAsset: nextPath });
-    } else {
+    } else if (selectionMode === "chat-background") {
       const nextPath = getNextRoleAssetSelection(selectedAssetPath, relPath);
       onSelectChatBackground(nextPath);
       onSaveSelections({ chatBackground: nextPath });
     }
+  }
+
+  function bindSelectedAssetToMood(): void {
+    if (!activeMood || !selectedAssetPath) return;
+    const nextBindings = {
+      ...roleForm.moodIllustrationBindings,
+      [activeMood]: selectedAssetPath,
+    };
+    onUpdateRoleForm((current) => ({
+      ...current,
+      moodIllustrationBindings: nextBindings,
+    }));
+    onSaveSelections({ moodIllustrationBindings: nextBindings });
+  }
+
+  function clearMoodBinding(): void {
+    if (!activeMood) return;
+    const nextBindings = { ...roleForm.moodIllustrationBindings };
+    delete nextBindings[activeMood];
+    onUpdateRoleForm((current) => ({
+      ...current,
+      moodIllustrationBindings: nextBindings,
+    }));
+    onSaveSelections({ moodIllustrationBindings: nextBindings });
   }
 
   return (
@@ -154,11 +186,34 @@ export function RoleAssetsPage({
                       type="button"
                       onClick={() => setSelectionMode("chat-background")}
                     >
-                      立绘
+                      默认立绘
+                    </button>
+                    <button
+                      data-testid="selection-mode-mood-binding"
+                      className={cx(
+                        "rounded-full px-4 py-2 text-sm transition",
+                        selectionMode === "mood-binding" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
+                      )}
+                      type="button"
+                      onClick={() => setSelectionMode("mood-binding")}
+                    >
+                      心情映射
                     </button>
                   </div>
                 </div>
-                {selectedAsset ? (
+                {selectionMode === "mood-binding" ? (
+                  <RoleMoodBindingsPanel
+                    moodCatalog={roleForm.moodCatalog}
+                    defaultMood={roleForm.defaultMood}
+                    activeMood={activeMood}
+                    activeMoodIllustrationPath={activeMoodIllustrationPath}
+                    activeMoodIllustrationAbsPath={activeMoodIllustration?.absPath ? toFileUrl(activeMoodIllustration.absPath) : ""}
+                    selectedAssetPath={selectedAssetPath}
+                    onSelectMood={setActiveMood}
+                    onBindSelectedAsset={bindSelectedAssetToMood}
+                    onClearMoodBinding={clearMoodBinding}
+                  />
+                ) : selectedAsset ? (
                   selectionMode === "avatar" ? (
                     <div className="grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-white p-8">
                       <img className="h-[140px] w-[140px] rounded-[32px] object-cover shadow-[0_10px_24px_rgba(15,23,42,0.08)]" src={toFileUrl(selectedAsset.absPath)} alt="avatar preview" />

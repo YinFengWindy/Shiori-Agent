@@ -174,6 +174,83 @@ export function RoleDetailPage({
                 />
                 <span>NSFW 记忆</span>
               </label>
+              <div className="grid gap-3 rounded-[18px] border border-[#E4EAF0] bg-[rgba(255,255,255,0.78)] px-4 py-3">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6B7280]">状态配置</div>
+                  <div className="mt-1 text-xs text-[#7A8593]">配置角色允许使用的心情目录与默认心情，差分绑定在素材页维护。</div>
+                </div>
+                <label className="grid gap-1.5 text-xs text-[#374151]">
+                  <span>默认心情</span>
+                  <input
+                    className={cx(inputClass, "border-[#D8DFE7] bg-white/82 text-[#111827] placeholder:text-[#9CA3AF]")}
+                    value={roleForm.defaultMood}
+                    onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, defaultMood: event.target.value.trimStart() }))}
+                    placeholder="例如：平静"
+                  />
+                </label>
+                <div className="grid gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {roleForm.moodCatalog.map((mood, index) => (
+                      <label
+                        key={`${mood}-${index}`}
+                        className="inline-flex items-center gap-2 rounded-full border border-[#D8DFE7] bg-white px-3 py-2 text-xs text-[#374151]"
+                      >
+                        <input
+                          className="w-16 min-w-0 border-0 bg-transparent p-0 text-xs text-[#111827] outline-none"
+                          value={mood}
+                          onChange={(event) => preserveScrollDuringFormUpdate((current) => {
+                            const nextMood = event.target.value.trimStart();
+                            const nextCatalog = [...current.moodCatalog];
+                            const previousMood = nextCatalog[index] ?? "";
+                            nextCatalog[index] = nextMood;
+                            const nextBindings = { ...current.moodIllustrationBindings };
+                            if (previousMood && previousMood !== nextMood && nextBindings[previousMood]) {
+                              nextBindings[nextMood] = nextBindings[previousMood];
+                              delete nextBindings[previousMood];
+                            }
+                            return {
+                              ...current,
+                              moodCatalog: nextCatalog,
+                              defaultMood: current.defaultMood === previousMood ? nextMood : current.defaultMood,
+                              moodIllustrationBindings: nextBindings,
+                            };
+                          })}
+                        />
+                        <button
+                          className="grid h-4 w-4 place-items-center rounded-full border-0 bg-transparent p-0 text-[#7C8797] transition hover:text-[#1F2937]"
+                          type="button"
+                          aria-label={`删除心情 ${mood || index + 1}`}
+                          onClick={() => preserveScrollDuringFormUpdate((current) => {
+                            const removedMood = current.moodCatalog[index] ?? "";
+                            const nextCatalog = current.moodCatalog.filter((_, catalogIndex) => catalogIndex !== index);
+                            const nextBindings = { ...current.moodIllustrationBindings };
+                            delete nextBindings[removedMood];
+                            const fallbackMood = nextCatalog[0] ?? "";
+                            return {
+                              ...current,
+                              moodCatalog: nextCatalog.length ? nextCatalog : [fallbackMood || "平静"],
+                              defaultMood: current.defaultMood === removedMood ? (fallbackMood || "平静") : current.defaultMood,
+                              moodIllustrationBindings: nextBindings,
+                            };
+                          })}
+                        >
+                          ×
+                        </button>
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    className="w-fit rounded-full border border-[#D8DFE7] bg-white px-3 py-2 text-xs text-[#374151] transition hover:border-[#9AA3B2] hover:bg-[#F5F7FA]"
+                    type="button"
+                    onClick={() => preserveScrollDuringFormUpdate((current) => ({
+                      ...current,
+                      moodCatalog: [...current.moodCatalog, `心情${current.moodCatalog.length + 1}`],
+                    }))}
+                  >
+                    添加心情
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

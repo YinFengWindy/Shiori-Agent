@@ -58,6 +58,10 @@ function renderChatSurface(
       chatLatestImageSidebarCollapsed
       chatLatestImageSidebarCount={0}
       chatLatestImageSidebarWidth={320}
+      currentMood=""
+      moodIllustrationBindingHit={false}
+      moodIllustrationUrl=""
+      hasMoodIllustrationBinding={false}
       conversationEndRef={React.createRef<HTMLDivElement>()}
       draft={options.draft ?? ""}
       headerTitle={activeRole?.name ?? "Mira"}

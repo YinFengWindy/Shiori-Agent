@@ -88,6 +88,9 @@ export function createEmptyRoleForm(): RoleFormState {
     avatarSource: "",
     illustrationSources: [],
     removedIllustrations: [],
+    moodCatalog: ["平静"],
+    defaultMood: "平静",
+    moodIllustrationBindings: {},
   };
 }
 

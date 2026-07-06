@@ -32,6 +32,9 @@ function createRoleForm(overrides: Partial<RoleFormState> = {}): RoleFormState {
     avatarSource: overrides.avatarSource ?? "",
     illustrationSources: overrides.illustrationSources ?? [],
     removedIllustrations: overrides.removedIllustrations ?? [],
+    moodCatalog: overrides.moodCatalog ?? ["平静", "开心"],
+    defaultMood: overrides.defaultMood ?? "平静",
+    moodIllustrationBindings: overrides.moodIllustrationBindings ?? {},
   };
 }
 
@@ -113,5 +116,32 @@ describe("desktopSelectors", () => {
     assert.equal(viewModel.selectedChatImagePosition, 2);
     assert.equal(viewModel.selectedChatImageEntry?.messageId, "message-2");
     assert.equal(viewModel.resolvedChatImagePath, "D:\\images\\latest.png");
+  });
+
+  it("derives the current mood illustration from session metadata and role bindings", () => {
+    const session = createSession();
+    session.metadata = {
+      role_id: "mira",
+      current_mood: "开心",
+    };
+    const viewModel = buildDesktopViewModel({
+      roles: [createRole()],
+      activeRoleId: "mira",
+      mainView: { kind: "chat" },
+      roleForm: createRoleForm({
+        moodIllustrationBindings: {
+          开心: "D:\\roles\\mira\\happy.png",
+        },
+      }),
+      activeIllustration: "",
+      activeSession: session,
+      selectedChatImageKey: "",
+      health: "online",
+      sendingSessions: {},
+    });
+
+    assert.equal(viewModel.currentMood, "开心");
+    assert.equal(viewModel.moodIllustration, "D:\\roles\\mira\\happy.png");
+    assert.match(viewModel.moodIllustrationUrl, /happy\.png/);
   });
 });
