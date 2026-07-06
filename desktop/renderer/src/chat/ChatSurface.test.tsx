@@ -155,6 +155,27 @@ describe("ChatSurface", () => {
     assert.match(markup, /data-message-key="message-1"/);
   });
 
+  it("keeps message rows on a fixed-width track so long content does not shift the whole row", () => {
+    const session = createSession();
+    session.messages = [
+      {
+        role: "assistant",
+        content: "这是一条很长很长的消息，用来确认消息行本身不会跟着气泡内容宽度一起伸缩。",
+      },
+      {
+        role: "user",
+        content: "我这边也来一条很长的消息，确认右侧气泡仍然只是在固定轨道里对齐。",
+      },
+    ];
+
+    const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
+
+    assert.match(markup, /class="group w-full"/);
+    assert.match(markup, /message-row flex w-full items-start gap-3/);
+    assert.match(markup, /message-body flex min-w-0 w-full max-w-\[82%\] flex-col text-sm leading-6 text-\[#1f1f1f\]/);
+    assert.match(markup, /ml-auto items-end/);
+  });
+
   it("marks sent attachments as draggable so they can be dragged out of the desktop app", () => {
     const session = createSession();
     session.messages = [

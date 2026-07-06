@@ -467,13 +467,13 @@ export function ChatSurface({
                   key={messageReactKey}
                   data-message-key={messageDomKey}
                   className={cx(
-                    "group max-w-[82%]",
+                    "group w-full",
                     isHighlighted && "message-hit-anchor",
-                    isUser ? "ml-auto translate-x-[2px] text-right" : "mr-auto -translate-x-[2px]",
+                    isUser && "text-right",
                   )}
                   onContextMenu={(event) => openMessageContextMenu(event, message, messageDomKey, authorLabel)}
                 >
-                  <div className={cx("message-row flex items-start gap-3", isUser && "flex-row-reverse")}>
+                  <div className={cx("message-row flex w-full items-start gap-3", isUser && "flex-row-reverse justify-start")}>
                     {!isUser ? (
                       activeRole?.avatar_abs ? (
                         <img
@@ -487,7 +487,7 @@ export function ChatSurface({
                         </span>
                       )
                     ) : null}
-                    <div className={cx("message-body flex min-w-0 flex-col text-sm leading-6 text-[#1f1f1f]", isUser && "items-end")}>
+                    <div className={cx("message-body flex min-w-0 w-full max-w-[82%] flex-col text-sm leading-6 text-[#1f1f1f]", isUser && "ml-auto items-end")}>
                       {!isUser ? (
                         <div className={cx("message-author mb-1 font-medium leading-none text-[#b9b9b9]", chatMinorTextClass)}>
                           {authorLabel}
