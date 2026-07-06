@@ -68,6 +68,7 @@ type UseDesktopSessionStateArgs = {
   mainViewRef: React.MutableRefObject<AppMainView>;
   rolesRef: React.MutableRefObject<RoleRecord[]>;
   draftRef: React.MutableRefObject<string>;
+  ignoredDraftReplayRef: React.MutableRefObject<string>;
   chatReplyTargetRef: React.MutableRefObject<ChatReplyTarget | null>;
   pendingChatAttachmentsRef: React.MutableRefObject<string[]>;
   sendingSessionsRef: React.MutableRefObject<Record<string, string>>;
@@ -143,6 +144,7 @@ export function useDesktopSessionState({
   mainViewRef,
   rolesRef,
   draftRef,
+  ignoredDraftReplayRef,
   chatReplyTargetRef,
   pendingChatAttachmentsRef,
   sendingSessionsRef,
@@ -198,6 +200,7 @@ export function useDesktopSessionState({
   }
 
   function applyRoleComposerState(snapshot: ReturnType<typeof createChatComposerStateSnapshot>): void {
+    ignoredDraftReplayRef.current = "";
     draftRef.current = snapshot.draft;
     chatReplyTargetRef.current = snapshot.replyTarget;
     pendingChatAttachmentsRef.current = snapshot.attachments;
@@ -461,6 +464,7 @@ export function useDesktopSessionState({
     const persistedReplyTarget = currentReplyTarget;
     markSessionSending(sessionKey, roleId);
     setError("");
+    ignoredDraftReplayRef.current = draftValue;
     setDraft("");
     draftRef.current = "";
     setChatReplyTarget(null);
@@ -501,6 +505,7 @@ export function useDesktopSessionState({
             current?.key === sessionKey ? previousSession : current,
           );
         }
+        ignoredDraftReplayRef.current = "";
         setDraft(draftValue);
         draftRef.current = draftValue;
         setChatReplyTarget(currentReplyTarget);
@@ -532,6 +537,7 @@ export function useDesktopSessionState({
           current?.key === sessionKey ? previousSession : current,
         );
       }
+      ignoredDraftReplayRef.current = "";
       setDraft(draftValue);
       draftRef.current = draftValue;
       setChatReplyTarget(currentReplyTarget);

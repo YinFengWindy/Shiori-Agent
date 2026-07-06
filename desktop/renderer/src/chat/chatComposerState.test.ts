@@ -6,6 +6,7 @@ import {
   buildOptimisticUserChatMessage,
   canSubmitChatMessage,
   normalizeChatAttachmentPaths,
+  shouldIgnoreStaleChatDraftReplay,
   summarizeChatReplyContent,
 } from "./chatComposerState";
 
@@ -57,6 +58,22 @@ describe("buildOptimisticUserChatMessage", () => {
           reply_to_sender: "Mira",
         },
       },
+    );
+  });
+});
+
+describe("shouldIgnoreStaleChatDraftReplay", () => {
+  it("ignores one stale replay when the cleared composer receives the just-sent draft again", () => {
+    assert.equal(
+      shouldIgnoreStaleChatDraftReplay("", "刚刚发出去的消息", "刚刚发出去的消息"),
+      true,
+    );
+  });
+
+  it("keeps normal typing updates even when they happen after a send", () => {
+    assert.equal(
+      shouldIgnoreStaleChatDraftReplay("", "刚", "刚刚发出去的消息"),
+      false,
     );
   });
 });

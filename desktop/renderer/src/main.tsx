@@ -30,6 +30,7 @@ import { useNavigationHistory } from "./app/useNavigationHistory";
 import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleSearch } from "./app/roleSearch";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
+import { shouldIgnoreStaleChatDraftReplay } from "./chat/chatComposerState";
 import type { RoleComposerStateCache } from "./chat/roleComposerStateCache";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { useImageStudioState } from "./image/useImageStudioState";
@@ -116,6 +117,7 @@ function App(): React.ReactElement {
   const mainViewRef = useLatestRef<AppMainView>(mainView);
   const rolesRef = useLatestRef(roles);
   const draftRef = useLatestRef(draft);
+  const ignoredDraftReplayRef = useRef("");
   const chatReplyTargetRef = useLatestRef(chatReplyTarget);
   const pendingChatAttachmentsRef = useLatestRef(pendingChatAttachments);
   const sendingSessionsRef = useLatestRef(sendingSessions);
@@ -178,6 +180,22 @@ function App(): React.ReactElement {
       : next;
     newRoleFormRef.current = resolved;
     setNewRoleForm(resolved);
+  }
+
+  function updateDraft(value: string): void {
+    const nextDraft = String(value ?? "");
+    if (shouldIgnoreStaleChatDraftReplay(
+      draftRef.current,
+      nextDraft,
+      ignoredDraftReplayRef.current,
+    )) {
+      ignoredDraftReplayRef.current = "";
+      return;
+    }
+    if (ignoredDraftReplayRef.current && nextDraft !== ignoredDraftReplayRef.current) {
+      ignoredDraftReplayRef.current = "";
+    }
+    setDraft(nextDraft);
   }
 
   function queueMessageNavigation(roleId: string, messageKey: string): void {
@@ -340,10 +358,11 @@ function App(): React.ReactElement {
     roleSessionCacheRef,
     roleComposerStateCacheRef,
     mainViewRef,
-    rolesRef,
-    draftRef,
-    chatReplyTargetRef,
-    pendingChatAttachmentsRef,
+      rolesRef,
+      draftRef,
+      ignoredDraftReplayRef,
+      chatReplyTargetRef,
+      pendingChatAttachmentsRef,
     sendingSessionsRef,
     unreadCountsRef,
     openRoleRequestIdRef,
@@ -654,7 +673,7 @@ function App(): React.ReactElement {
       onQuoteMessage={quoteChatMessage}
       onRemovePendingChatAttachment={removePendingChatAttachment}
       onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
-      onUpdateDraft={setDraft}
+      onUpdateDraft={updateDraft}
       imageHistorySidebar={imageHistorySidebar}
       detailRole={detailRole}
       pendingRoleCardAction={pendingRoleCardAction}
