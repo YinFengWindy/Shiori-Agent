@@ -508,6 +508,7 @@ function App(): React.ReactElement {
     activeRoleId,
     roles,
     activeSessionRef,
+    mainViewRef,
     applyRoleSnapshot,
     openRoleWorkspace,
     openRole,

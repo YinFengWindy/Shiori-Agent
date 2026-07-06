@@ -13,11 +13,13 @@ import logging
 import os
 import signal
 import sys
+from dataclasses import replace
 from contextlib import suppress
 from pathlib import Path
 
 from agent.config import Config
 from bootstrap.app import (
+    DESKTOP_RUNTIME_FEATURES,
     SERVICE_RUNTIME_FEATURES,
     RuntimeFeatures,
     build_app_runtime,
@@ -119,12 +121,7 @@ async def serve_bridge(
     runtime = build_app_runtime(
         Config.load(config_path),
         workspace=workspace or _default_workspace(),
-        features=RuntimeFeatures(
-            start_ipc=False,
-            enable_message_channels=True,
-            enable_dashboard=False,
-            enable_proactive=True,
-        ),
+        features=replace(DESKTOP_RUNTIME_FEATURES, start_ipc=False),
     )
     try:
         if hasattr(runtime, "start") and callable(runtime.start):

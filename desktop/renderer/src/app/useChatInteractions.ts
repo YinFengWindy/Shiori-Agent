@@ -6,6 +6,7 @@ type UseChatInteractionsArgs = {
   activeRoleId: string;
   roles: RoleRecord[];
   activeSessionRef: React.MutableRefObject<SessionPayload | null>;
+  mainViewRef: React.MutableRefObject<AppMainView>;
   applyRoleSnapshot: (role: RoleRecord, sessionOverride?: SessionPayload | null) => void;
   openRoleWorkspace: (
     nextView: Extract<AppMainView, { kind: "role-detail" | "role-assets" }>,
@@ -24,6 +25,7 @@ export function useChatInteractions({
   activeRoleId,
   roles,
   activeSessionRef,
+  mainViewRef,
   applyRoleSnapshot,
   openRoleWorkspace,
   openRole,
@@ -44,11 +46,15 @@ export function useChatInteractions({
 
   async function openRoleAssets(roleId: string): Promise<void> {
     const role = roles.find((item) => item.id === roleId) ?? null;
-    if (role) {
+    const currentView = mainViewRef.current;
+    const sameRoleWorkspace =
+      (currentView.kind === "role-detail" || currentView.kind === "role-assets")
+      && currentView.roleId === roleId;
+    if (role && !sameRoleWorkspace && activeRoleId !== roleId) {
       applyRoleSnapshot(role);
     }
     openRoleWorkspace({ kind: "role-assets", roleId });
-    if (activeSessionRef.current === null || activeRoleId !== roleId) {
+    if (!sameRoleWorkspace && (activeSessionRef.current === null || activeRoleId !== roleId)) {
       void openRole(roleId, role, { recordHistory: false });
     }
   }
