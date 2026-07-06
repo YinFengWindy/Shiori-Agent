@@ -226,7 +226,11 @@ export function RoleAssetsPage({
                   <div className="grid min-h-[360px] flex-1 gap-4 rounded-[20px] bg-white p-6">
                     {selectionMode === "avatar" ? (
                       <div className="grid flex-1 place-items-center">
-                        <img className="h-[140px] w-[140px] rounded-[32px] object-cover shadow-[0_10px_24px_rgba(15,23,42,0.08)]" src={toFileUrl(selectedAsset.absPath)} alt="avatar preview" />
+                        <img
+                          className="h-[140px] w-[140px] rounded-[32px] object-cover shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+                          src={toFileUrl(selectedAsset.absPath)}
+                          alt="avatar preview"
+                        />
                       </div>
                     ) : (
                       <div className="flex min-h-[260px] flex-1 items-center justify-center overflow-hidden rounded-[20px] bg-white">
