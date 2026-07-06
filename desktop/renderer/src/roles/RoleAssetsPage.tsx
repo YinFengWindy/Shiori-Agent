@@ -4,6 +4,7 @@ import { UploadIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
 import { getNextRoleAssetSelection, getSelectedRoleAssetPath } from "./roleAssetSelection";
+import { applyMoodToIllustration, getMoodForIllustration } from "./roleMoodBindingSelection";
 import { RoleMoodBindingsPanel } from "./RoleMoodBindingsPanel";
 
 type RoleAssetsPageProps = {
@@ -19,7 +20,7 @@ type RoleAssetsPageProps = {
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;
   onUpdateRoleForm: React.Dispatch<React.SetStateAction<RoleFormState>>;
-  onSaveSelections: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
+  onSaveSelections: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string>; moodCatalog?: string[] }) => void;
 };
 
 export function RoleAssetsPage({
@@ -47,15 +48,16 @@ export function RoleAssetsPage({
     absPath: activeRole?.illustrations_abs[index] ?? "",
   }));
   const [selectionMode, setSelectionMode] = useState<"avatar" | "chat-background" | "mood-binding">("avatar");
-  const [activeMood, setActiveMood] = useState(roleForm.defaultMood || roleForm.moodCatalog[0] || "");
+  const [selectedMoodAsset, setSelectedMoodAsset] = useState("");
   const selectedAssetPath = getSelectedRoleAssetPath(
     selectionMode === "mood-binding" ? "chat-background" : selectionMode,
     selectedAvatarAsset,
     selectedChatBackground,
   );
   const selectedAsset = assetPairs.find((item) => item.relPath === selectedAssetPath) ?? null;
-  const activeMoodIllustrationPath = activeMood ? (roleForm.moodIllustrationBindings[activeMood] ?? "") : "";
-  const activeMoodIllustration = assetPairs.find((item) => item.relPath === activeMoodIllustrationPath) ?? null;
+  const selectedMoodAssetPath = selectionMode === "mood-binding" ? selectedMoodAsset : "";
+  const selectedMoodAssetPair = assetPairs.find((item) => item.relPath === selectedMoodAssetPath) ?? null;
+  const selectedMood = getMoodForIllustration(selectedMoodAssetPath, roleForm.moodIllustrationBindings);
 
   async function applyAsset(relPath: string): Promise<void> {
     if (selectionMode === "avatar") {
@@ -66,26 +68,29 @@ export function RoleAssetsPage({
       const nextPath = getNextRoleAssetSelection(selectedAssetPath, relPath);
       onSelectChatBackground(nextPath);
       onSaveSelections({ chatBackground: nextPath });
+    } else {
+      setSelectedMoodAsset((current) => current === relPath ? "" : relPath);
     }
   }
 
-  function bindSelectedAssetToMood(): void {
-    if (!activeMood || !selectedAssetPath) return;
-    const nextBindings = {
-      ...roleForm.moodIllustrationBindings,
-      [activeMood]: selectedAssetPath,
-    };
+  function saveMoodBinding(nextMood: string): void {
+    if (!selectedMoodAssetPath) return;
+    const normalizedMood = nextMood.trim();
+    const nextBindings = applyMoodToIllustration(roleForm.moodIllustrationBindings, selectedMoodAssetPath, normalizedMood);
+    const nextCatalog = normalizedMood && !roleForm.moodCatalog.includes(normalizedMood)
+      ? [...roleForm.moodCatalog, normalizedMood]
+      : roleForm.moodCatalog;
     onUpdateRoleForm((current) => ({
       ...current,
+      moodCatalog: nextCatalog,
       moodIllustrationBindings: nextBindings,
     }));
-    onSaveSelections({ moodIllustrationBindings: nextBindings });
+    onSaveSelections({ moodIllustrationBindings: nextBindings, moodCatalog: nextCatalog });
   }
 
   function clearMoodBinding(): void {
-    if (!activeMood) return;
-    const nextBindings = { ...roleForm.moodIllustrationBindings };
-    delete nextBindings[activeMood];
+    if (!selectedMoodAssetPath) return;
+    const nextBindings = applyMoodToIllustration(roleForm.moodIllustrationBindings, selectedMoodAssetPath, "");
     onUpdateRoleForm((current) => ({
       ...current,
       moodIllustrationBindings: nextBindings,
@@ -111,7 +116,9 @@ export function RoleAssetsPage({
             </button>
             <div className="mt-5 grid grid-cols-4 content-start gap-2.5">
               {assetPairs.map(({ relPath, absPath }, index) => {
-                const isSelected = (selectedAsset?.relPath ?? "") === relPath;
+                const isSelected = selectionMode === "mood-binding"
+                  ? selectedMoodAssetPath === relPath
+                  : (selectedAsset?.relPath ?? "") === relPath;
                 return (
                   <div
                     key={relPath}
@@ -205,12 +212,10 @@ export function RoleAssetsPage({
                   <RoleMoodBindingsPanel
                     moodCatalog={roleForm.moodCatalog}
                     defaultMood={roleForm.defaultMood}
-                    activeMood={activeMood}
-                    activeMoodIllustrationPath={activeMoodIllustrationPath}
-                    activeMoodIllustrationAbsPath={activeMoodIllustration?.absPath ? toFileUrl(activeMoodIllustration.absPath) : ""}
-                    selectedAssetPath={selectedAssetPath}
-                    onSelectMood={setActiveMood}
-                    onBindSelectedAsset={bindSelectedAssetToMood}
+                    selectedAssetPath={selectedMoodAssetPath}
+                    selectedAssetAbsPath={selectedMoodAssetPair?.absPath ? toFileUrl(selectedMoodAssetPair.absPath) : ""}
+                    selectedMood={selectedMood}
+                    onSaveMoodBinding={saveMoodBinding}
                     onClearMoodBinding={clearMoodBinding}
                   />
                 ) : selectedAsset ? (

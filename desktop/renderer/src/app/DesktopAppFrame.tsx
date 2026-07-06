@@ -149,7 +149,7 @@ type DesktopAppFrameProps = {
   onRemoveRoleAsset: (path: string) => void;
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;
-  onSaveRoleAssets: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
+  onSaveRoleAssets: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string>; moodCatalog?: string[] }) => void;
   onSettingsMetaChange: (meta: { configPath: string; dirty: boolean }) => void;
   showSearchDialog: boolean;
   searchQuery: string;

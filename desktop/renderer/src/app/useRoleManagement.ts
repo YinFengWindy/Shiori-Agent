@@ -227,6 +227,7 @@ export function useRoleManagement({
     avatarAsset?: string;
     chatBackground?: string;
     moodIllustrationBindings?: Record<string, string>;
+    moodCatalog?: string[];
   }): Promise<void> {
     if (!detailRoleId) return;
     setSavingRoleAssets(true);
@@ -245,6 +246,7 @@ export function useRoleManagement({
       ? (nextSelection?.chatBackground ?? "")
       : selectedChatBackground;
     const nextMoodIllustrationBindings = nextSelection?.moodIllustrationBindings;
+    const nextMoodCatalog = nextSelection?.moodCatalog ?? roleFormRef.current.moodCatalog;
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
@@ -261,6 +263,7 @@ export function useRoleManagement({
             },
             {
               ...roleFormRef.current,
+              moodCatalog: nextMoodCatalog,
               moodIllustrationBindings: nextMoodIllustrationBindings,
             },
           )

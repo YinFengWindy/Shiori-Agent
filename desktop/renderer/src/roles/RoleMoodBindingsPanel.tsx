@@ -1,14 +1,13 @@
-import { cx, ghostButtonClass } from "../shared/styles";
+import { useEffect, useState } from "react";
+import { cx, ghostButtonClass, inputClass } from "../shared/styles";
 
 type RoleMoodBindingsPanelProps = {
   moodCatalog: string[];
   defaultMood: string;
-  activeMood: string;
-  activeMoodIllustrationPath: string;
-  activeMoodIllustrationAbsPath: string;
   selectedAssetPath: string;
-  onSelectMood: (mood: string) => void;
-  onBindSelectedAsset: () => void;
+  selectedAssetAbsPath: string;
+  selectedMood: string;
+  onSaveMoodBinding: (nextMood: string) => void;
   onClearMoodBinding: () => void;
 };
 
@@ -16,29 +15,44 @@ type RoleMoodBindingsPanelProps = {
 export function RoleMoodBindingsPanel({
   moodCatalog,
   defaultMood,
-  activeMood,
-  activeMoodIllustrationPath,
-  activeMoodIllustrationAbsPath,
   selectedAssetPath,
-  onSelectMood,
-  onBindSelectedAsset,
+  selectedAssetAbsPath,
+  selectedMood,
+  onSaveMoodBinding,
   onClearMoodBinding,
 }: RoleMoodBindingsPanelProps) {
+  const [draftMood, setDraftMood] = useState(selectedMood);
+
+  useEffect(() => {
+    setDraftMood(selectedMood);
+  }, [selectedMood]);
+
+  function handleMoodBlur(): void {
+    const normalizedDraft = draftMood.trim();
+    if (normalizedDraft === selectedMood.trim()) {
+      return;
+    }
+    onSaveMoodBinding(normalizedDraft);
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mb-4 text-xs text-[#7A8593]">为当前角色的每个心情绑定一张差分立绘。</div>
+      <div className="mb-4 text-xs text-[#7A8593]">先在左侧选中一张差分图，再为这张图填写对应心情；输入框失焦后会自动保存。</div>
       <div className="mb-4 flex flex-wrap gap-2">
         {moodCatalog.map((mood) => (
           <button
             key={mood}
             className={cx(
               "rounded-full px-4 py-2 text-sm transition",
-              activeMood === mood
+              selectedMood === mood
                 ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]"
                 : "border border-[#D8DFE7] bg-white text-[#5B6472] hover:text-[#272536]",
             )}
             type="button"
-            onClick={() => onSelectMood(mood)}
+            onClick={() => {
+              setDraftMood(mood);
+              onSaveMoodBinding(mood);
+            }}
           >
             {mood}
             {mood === defaultMood ? " · 默认" : ""}
@@ -46,41 +60,40 @@ export function RoleMoodBindingsPanel({
         ))}
       </div>
       <div className="grid min-h-[360px] flex-1 gap-4 rounded-[20px] bg-white p-5">
-        <div className="text-xs text-[#7A8593]">
-          当前心情：
-          <span className="ml-1 font-medium text-[#2A3440]">{activeMood || "未选择"}</span>
-        </div>
         <div className="grid min-h-[260px] place-items-center overflow-hidden rounded-[18px] bg-[#F2F5F8]">
-          {activeMoodIllustrationPath ? (
+          {selectedAssetPath ? (
             <img
               className="max-h-full max-w-full object-contain"
-              src={activeMoodIllustrationAbsPath}
-              alt={`${activeMood} preview`}
+              src={selectedAssetAbsPath}
+              alt={`${selectedMood || "差分"} preview`}
             />
           ) : (
-            <div className="px-6 text-center text-sm text-[#74808D]">当前心情还没有绑定差分立绘</div>
+            <div className="px-6 text-center text-sm text-[#74808D]">请先在左侧选中一张差分立绘</div>
           )}
         </div>
+        <label className="grid gap-1.5 text-xs text-[#374151]">
+          <span>对应心情</span>
+          <input
+            className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827] placeholder:text-[#9CA3AF]")}
+            value={draftMood}
+            onChange={(event) => setDraftMood(event.target.value.trimStart())}
+            onBlur={handleMoodBlur}
+            placeholder="例如：平静"
+            disabled={!selectedAssetPath}
+          />
+        </label>
         <div className="rounded-[18px] border border-[#E4EAF0] bg-[#F8FBFD] px-4 py-3 text-sm text-[#596776]">
-          <div className="truncate">已绑定素材：{activeMoodIllustrationPath || "未设置"}</div>
-          <div className="mt-1 truncate">当前选中素材：{selectedAssetPath || "未选择"}</div>
+          <div className="truncate">当前选中素材：{selectedAssetPath || "未选择"}</div>
+          <div className="mt-1 truncate">当前映射心情：{selectedMood || "未设置"}</div>
         </div>
         <div className="flex gap-2.5">
           <button
             className={cx("ghost-btn text-sm", ghostButtonClass)}
             type="button"
-            onClick={onBindSelectedAsset}
-            disabled={!selectedAssetPath || !activeMood}
-          >
-            绑定当前素材
-          </button>
-          <button
-            className={cx("ghost-btn text-sm", ghostButtonClass)}
-            type="button"
             onClick={onClearMoodBinding}
-            disabled={!activeMoodIllustrationPath}
+            disabled={!selectedAssetPath || !selectedMood}
           >
-            清除绑定
+            清除当前映射
           </button>
         </div>
       </div>
