@@ -45,6 +45,7 @@ type UseRoleManagementArgs = {
   commitActiveSession: (nextSession: null) => void;
   removeCachedRoleSession: (roleId: string) => void;
   rememberIllustration: (roleId: string, illustration: string) => Promise<void>;
+  roleAssetSaveRequestIdRef: React.MutableRefObject<number>;
 };
 
 async function waitForMinimumRoleCardBusy(startedAt: number): Promise<void> {
@@ -90,6 +91,7 @@ export function useRoleManagement({
   commitActiveSession,
   removeCachedRoleSession,
   rememberIllustration,
+  roleAssetSaveRequestIdRef,
 }: UseRoleManagementArgs) {
   async function refreshRolesAndResolveRole(updated: RoleRecord): Promise<{
     resolvedRole: RoleRecord;
@@ -230,6 +232,8 @@ export function useRoleManagement({
     moodCatalog?: string[];
   }): Promise<void> {
     if (!detailRoleId) return;
+    const requestId = roleAssetSaveRequestIdRef.current + 1;
+    roleAssetSaveRequestIdRef.current = requestId;
     setSavingRoleAssets(true);
     setError("");
     const pendingRoleForm = roleFormRef.current;
@@ -270,7 +274,12 @@ export function useRoleManagement({
           : undefined,
       },
     });
-    setSavingRoleAssets(false);
+    if (roleAssetSaveRequestIdRef.current === requestId) {
+      setSavingRoleAssets(false);
+    }
+    if (roleAssetSaveRequestIdRef.current !== requestId) {
+      return;
+    }
     if (res.error) {
       setError(res.error.message);
       return;

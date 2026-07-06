@@ -107,6 +107,7 @@ function App(): React.ReactElement {
   const [windowMaximized, setWindowMaximized] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
+  const roleAssetSaveRequestIdRef = useRef(0);
   const activeRoleIdRef = useLatestRef(activeRoleId);
   const activeSessionRef = useLatestRef(activeSession);
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
@@ -495,6 +496,7 @@ function App(): React.ReactElement {
     commitActiveSession,
     removeCachedRoleSession,
     rememberIllustration,
+    roleAssetSaveRequestIdRef,
   });
 
   const {

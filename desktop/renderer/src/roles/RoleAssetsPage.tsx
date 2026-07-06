@@ -129,7 +129,7 @@ export function RoleAssetsPage({
                         isSelected ? "border-[#272536] shadow-[0_8px_24px_rgba(39,37,54,0.16)]" : "border-[#D8DFE7] bg-white hover:border-[#9AA3B2]",
                       )}
                       type="button"
-                      disabled={!bridgeReady || savingSelection}
+                      disabled={!bridgeReady}
                       onClick={() => void applyAsset(relPath)}
                     >
                       <img className="h-full w-full object-cover" src={toFileUrl(absPath)} alt="role asset" />
