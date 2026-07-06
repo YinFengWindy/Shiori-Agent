@@ -44,6 +44,8 @@ function renderChatSurface(
     pendingChatAttachments?: string[];
     activeSession?: SessionPayload;
     chatReplyTarget?: ChatReplyTarget | null;
+    currentMood?: string;
+    moodIllustrationUrl?: string;
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -58,9 +60,9 @@ function renderChatSurface(
       chatLatestImageSidebarCollapsed
       chatLatestImageSidebarCount={0}
       chatLatestImageSidebarWidth={320}
-      currentMood=""
+      currentMood={options.currentMood ?? ""}
       moodIllustrationBindingHit={false}
-      moodIllustrationUrl=""
+      moodIllustrationUrl={options.moodIllustrationUrl ?? ""}
       hasMoodIllustrationBinding={false}
       conversationEndRef={React.createRef<HTMLDivElement>()}
       draft={options.draft ?? ""}
@@ -195,5 +197,17 @@ describe("ChatSurface", () => {
 
     assert.match(markup, /aria-label="发送消息"/);
     assert.doesNotMatch(markup, /aria-label="发送消息"[^>]*disabled=""/);
+  });
+
+  it("keeps the status tab disabled and falls back to images when no status illustration exists", () => {
+    const markup = renderChatSurface(createRole(), "mira", {
+      currentMood: "开心",
+      moodIllustrationUrl: "",
+    });
+
+    assert.match(markup, />图片</);
+    assert.match(markup, /状态<\/button>/);
+    assert.match(markup, /disabled=""/);
+    assert.doesNotMatch(markup, />使用回退立绘</);
   });
 });

@@ -108,8 +108,9 @@ export function ChatSurface({
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
+  const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const [sidebarMode, setSidebarMode] = useState<"status" | "images">(
-    currentMood && moodIllustrationUrl ? "status" : "images",
+    hasStatusIllustration ? "status" : "images",
   );
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
@@ -167,15 +168,15 @@ export function ChatSurface({
   }, [chatLatestImageSidebarCollapsed]);
 
   useEffect(() => {
-    if (sidebarMode === "status" && (currentMood || moodIllustrationUrl)) {
+    if (sidebarMode === "status" && hasStatusIllustration) {
       return;
     }
-    if (currentMood && moodIllustrationUrl) {
+    if (hasStatusIllustration) {
       setSidebarMode("status");
       return;
     }
     setSidebarMode("images");
-  }, [currentMood, moodIllustrationUrl, sidebarMode]);
+  }, [hasStatusIllustration, sidebarMode]);
 
   useEffect(() => {
     if (!messageContextMenu) return undefined;
@@ -757,8 +758,10 @@ export function ChatSurface({
                   className={cx(
                     "rounded-full px-4 py-2 text-sm transition",
                     sidebarMode === "status" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
+                    !hasStatusIllustration && "cursor-default opacity-45 hover:text-[#5B6472]",
                   )}
                   type="button"
+                  disabled={!hasStatusIllustration}
                   onClick={() => setSidebarMode("status")}
                 >
                   状态
@@ -778,7 +781,6 @@ export function ChatSurface({
                 <ChatStatusSidebar
                   currentMood={currentMood}
                   moodIllustrationUrl={moodIllustrationUrl}
-                  hasMoodMapping={moodIllustrationBindingHit && hasMoodIllustrationBinding}
                 />
               ) : (
                 <div className="grid h-full min-h-0 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
