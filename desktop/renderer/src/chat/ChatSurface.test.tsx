@@ -205,8 +205,8 @@ describe("ChatSurface", () => {
       moodIllustrationUrl: "",
     });
 
-    assert.match(markup, />图片</);
-    assert.match(markup, /状态<\/button>/);
+    assert.match(markup, /aria-label="图片侧栏"/);
+    assert.match(markup, /aria-label="状态侧栏"/);
     assert.match(markup, /disabled=""/);
     assert.doesNotMatch(markup, />使用回退立绘</);
   });
