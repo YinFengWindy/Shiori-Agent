@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { buildOptimisticUserChatMessage, normalizeChatAttachmentPaths } from "../chat/chatComposerState";
+import { ensureChatMessageRenderId, reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
 import { mergeIncomingSessionDuringSend } from "../chat/chatSessionMerge";
 import {
   readRoleSessionCache,
@@ -161,11 +162,12 @@ export function useDesktopSessionState({
   }
 
   function commitActiveSession(nextSession: SessionPayload | null): void {
-    const resolvedSession = mergeIncomingSessionDuringSend(
+    const mergedSession = mergeIncomingSessionDuringSend(
       activeSessionRef.current,
       nextSession,
       Boolean(nextSession?.key && sendingSessionsRef.current[nextSession.key]),
     );
+    const resolvedSession = reconcileSessionMessageRenderIds(activeSessionRef.current, mergedSession);
     activeSessionRef.current = resolvedSession;
     if (resolvedSession) {
       const roleId = getRoleIdFromSession(resolvedSession) || activeRoleIdRef.current;
@@ -257,11 +259,11 @@ export function useDesktopSessionState({
         ...current,
         messages: [
           ...current.messages,
-          {
+          ensureChatMessageRenderId({
             role: "error",
             content,
             timestamp: new Date().toISOString(),
-          },
+          }),
         ],
       };
     });

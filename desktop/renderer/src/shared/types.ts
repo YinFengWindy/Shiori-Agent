@@ -56,6 +56,8 @@ export type RoleRecord = {
 /** Single message in a role-bound session. */
 export type SessionMessage = {
   id?: string;
+  /** Stable renderer-only identity used to keep one visual message node mounted across local and bridge updates. */
+  render_id?: string;
   role: string;
   content: string;
   timestamp?: string;

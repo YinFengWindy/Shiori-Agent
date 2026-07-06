@@ -1,3 +1,4 @@
+import { ensureChatMessageRenderId } from "./chatMessageIdentity";
 import type { ChatReplyTarget, SessionMessage } from "../shared/types";
 
 /** Normalizes pending attachment paths so chat send logic can deduplicate repeated selections. */
@@ -49,8 +50,8 @@ export function buildOptimisticUserChatMessage(
     };
   }
   if (media.length === 0) {
-    return message;
+    return ensureChatMessageRenderId(message);
   }
   message.media = media;
-  return message;
+  return ensureChatMessageRenderId(message);
 }

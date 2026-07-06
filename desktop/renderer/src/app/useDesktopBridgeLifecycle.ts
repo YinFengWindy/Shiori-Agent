@@ -1,4 +1,5 @@
 import { startTransition, useEffect } from "react";
+import { ensureChatMessageRenderId } from "../chat/chatMessageIdentity";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import type { EventLog, RoleRecord, SessionPayload, AppMainView } from "../shared/types";
 
@@ -190,7 +191,7 @@ export function useDesktopBridgeLifecycle({
             if (last && last.role === "assistant" && !last.id) {
               last.content += delta;
             } else {
-              messages.push({ role: "assistant", content: delta });
+              messages.push(ensureChatMessageRenderId({ role: "assistant", content: delta }));
             }
             return { ...current, messages };
           });

@@ -30,34 +30,30 @@ describe("canSubmitChatMessage", () => {
 
 describe("buildOptimisticUserChatMessage", () => {
   it("includes media on optimistic user messages", () => {
-    assert.deepEqual(
-      buildOptimisticUserChatMessage("  hello  ", ["D:\\files\\note.md", "D:\\files\\pic.png"]),
-      {
-        role: "user",
-        content: "hello",
-        media: ["D:\\files\\note.md", "D:\\files\\pic.png"],
-      },
-    );
+    const message = buildOptimisticUserChatMessage("  hello  ", ["D:\\files\\note.md", "D:\\files\\pic.png"]);
+
+    assert.equal(message.role, "user");
+    assert.equal(message.content, "hello");
+    assert.deepEqual(message.media, ["D:\\files\\note.md", "D:\\files\\pic.png"]);
+    assert.match(message.render_id ?? "", /^local:user:\d+$/);
   });
 
   it("includes reply metadata on optimistic user messages", () => {
-    assert.deepEqual(
-      buildOptimisticUserChatMessage("  继续  ", [], {
-        messageId: "message-1",
-        sender: "Mira",
-        content: "她停顿了一下。",
-        preview: "她停顿了一下。",
-      }),
-      {
-        role: "user",
-        content: "继续",
-        metadata: {
-          reply_to_message_id: "message-1",
-          reply_to_content: "她停顿了一下。",
-          reply_to_sender: "Mira",
-        },
-      },
-    );
+    const message = buildOptimisticUserChatMessage("  继续  ", [], {
+      messageId: "message-1",
+      sender: "Mira",
+      content: "她停顿了一下。",
+      preview: "她停顿了一下。",
+    });
+
+    assert.equal(message.role, "user");
+    assert.equal(message.content, "继续");
+    assert.deepEqual(message.metadata, {
+      reply_to_message_id: "message-1",
+      reply_to_content: "她停顿了一下。",
+      reply_to_sender: "Mira",
+    });
+    assert.match(message.render_id ?? "", /^local:user:\d+$/);
   });
 });
 

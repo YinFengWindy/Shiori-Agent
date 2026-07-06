@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { buildChatImageHistoryKey } from "./chatImageHistory";
 import { isChatImageAsset } from "./chatImageHistory";
+import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
@@ -449,8 +450,9 @@ export function ChatSurface({
               const isUser = message.role === "user";
               const isError = message.role === "error";
               const authorLabel = isError ? "系统提示" : (isUser ? "你" : (activeRole?.name || "Agent"));
-              const messageKey = String(message.id ?? `${message.role}-${index}`);
-              const isHighlighted = highlightedMessageKey === messageKey;
+              const messageReactKey = getChatMessageReactKey(message, index);
+              const messageDomKey = getChatMessageDomKey(message, index);
+              const isHighlighted = highlightedMessageKey === messageDomKey;
               const sourceLabel = getMessageSourceLabel(message);
               const media = Array.isArray(message.media) ? message.media : [];
               const storedReplyPreview = getStoredReplyPreview(message);
@@ -461,105 +463,105 @@ export function ChatSurface({
                   : assistantMessageBubbleClass;
 
               return (
-              <article
-                key={messageKey}
-                data-message-key={messageKey}
-                className={cx(
-                  "group max-w-[82%]",
-                  isHighlighted && "message-hit-anchor",
-                  isUser ? "ml-auto translate-x-[2px] text-right" : "mr-auto -translate-x-[2px]",
-                )}
-                onContextMenu={(event) => openMessageContextMenu(event, message, messageKey, authorLabel)}
-              >
-                <div className={cx("message-row flex items-start gap-3", isUser && "flex-row-reverse")}>
-                  {!isUser ? (
-                    activeRole?.avatar_abs ? (
-                      <img
-                        className={agentAvatarClass}
-                        src={toFileUrl(activeRole.avatar_abs)}
-                        alt={`${activeRole.name} avatar`}
-                      />
-                    ) : (
-                      <span className={cx(agentAvatarClass, "text-xs font-bold text-accent-deep")}>
-                        {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "A"}
-                      </span>
-                    )
-                  ) : null}
-                  <div className={cx("message-body flex min-w-0 flex-col text-sm leading-6 text-[#1f1f1f]", isUser && "items-end")}>
+                <article
+                  key={messageReactKey}
+                  data-message-key={messageDomKey}
+                  className={cx(
+                    "group max-w-[82%]",
+                    isHighlighted && "message-hit-anchor",
+                    isUser ? "ml-auto translate-x-[2px] text-right" : "mr-auto -translate-x-[2px]",
+                  )}
+                  onContextMenu={(event) => openMessageContextMenu(event, message, messageDomKey, authorLabel)}
+                >
+                  <div className={cx("message-row flex items-start gap-3", isUser && "flex-row-reverse")}>
                     {!isUser ? (
-                      <div className={cx("message-author mb-1 font-medium leading-none text-[#b9b9b9]", chatMinorTextClass)}>
-                        {authorLabel}
-                      </div>
+                      activeRole?.avatar_abs ? (
+                        <img
+                          className={agentAvatarClass}
+                          src={toFileUrl(activeRole.avatar_abs)}
+                          alt={`${activeRole.name} avatar`}
+                        />
+                      ) : (
+                        <span className={cx(agentAvatarClass, "text-xs font-bold text-accent-deep")}>
+                          {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "A"}
+                        </span>
+                      )
                     ) : null}
-                    <div className={cx(bubbleClass, isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10")}>
-                      {storedReplyPreview ? (
-                        storedReplyPreview.messageId ? (
-                          <button
-                            className="mb-2 block max-w-[420px] border-0 bg-transparent p-0 text-left transition hover:opacity-85 focus:outline-none"
-                            type="button"
-                            aria-label="跳转到被引用消息"
-                            onClick={() => onJumpToMessage(storedReplyPreview.messageId)}
-                          >
-                            <div className="border-l-2 border-[#AEB7C5] pl-2.5">
+                    <div className={cx("message-body flex min-w-0 flex-col text-sm leading-6 text-[#1f1f1f]", isUser && "items-end")}>
+                      {!isUser ? (
+                        <div className={cx("message-author mb-1 font-medium leading-none text-[#b9b9b9]", chatMinorTextClass)}>
+                          {authorLabel}
+                        </div>
+                      ) : null}
+                      <div className={cx(bubbleClass, isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10")}>
+                        {storedReplyPreview ? (
+                          storedReplyPreview.messageId ? (
+                            <button
+                              className="mb-2 block max-w-[420px] border-0 bg-transparent p-0 text-left transition hover:opacity-85 focus:outline-none"
+                              type="button"
+                              aria-label="跳转到被引用消息"
+                              onClick={() => onJumpToMessage(storedReplyPreview.messageId)}
+                            >
+                              <div className="border-l-2 border-[#AEB7C5] pl-2.5">
+                                {storedReplyPreview.sender ? (
+                                  <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{storedReplyPreview.sender}</div>
+                                ) : null}
+                                <div className="line-clamp-2 text-[12px] leading-5 text-[#7B8190]">{storedReplyPreview.preview}</div>
+                              </div>
+                            </button>
+                          ) : (
+                            <div className="mb-2 max-w-[420px] border-l-2 border-[#AEB7C5] pl-2.5 text-left">
                               {storedReplyPreview.sender ? (
                                 <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{storedReplyPreview.sender}</div>
                               ) : null}
                               <div className="line-clamp-2 text-[12px] leading-5 text-[#7B8190]">{storedReplyPreview.preview}</div>
                             </div>
-                          </button>
-                        ) : (
-                          <div className="mb-2 max-w-[420px] border-l-2 border-[#AEB7C5] pl-2.5 text-left">
-                            {storedReplyPreview.sender ? (
-                              <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{storedReplyPreview.sender}</div>
-                            ) : null}
-                            <div className="line-clamp-2 text-[12px] leading-5 text-[#7B8190]">{storedReplyPreview.preview}</div>
+                          )
+                        ) : null}
+                        <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
+                        {media.length ? (
+                          <div className="mt-3 grid gap-2">
+                            {media.map((item, mediaIndex) => (
+                              isChatImageAsset(item) ? (
+                                <button
+                                  key={`${messageDomKey}:${mediaIndex}:${item}`}
+                                  className="block cursor-grab overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white active:cursor-grabbing focus:outline-none"
+                                  type="button"
+                                  draggable
+                                  onDragStart={(event) => handleAttachmentDragStart(event, item)}
+                                  onClick={() => onOpenChatImagePreview({ historyKey: buildChatImageHistoryKey(messageDomKey, mediaIndex) })}
+                                >
+                                  <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" />
+                                </button>
+                              ) : (
+                                <a
+                                  key={`${messageDomKey}:${mediaIndex}:${item}`}
+                                  href={toFileUrl(item)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex max-w-[280px] cursor-grab items-center gap-2.5 rounded-full border border-black/8 bg-[#F7F7F8] px-3 py-2 text-[12px] text-[#1F2937] transition hover:bg-white active:cursor-grabbing focus:outline-none"
+                                  draggable
+                                  onDragStart={(event) => handleAttachmentDragStart(event, item)}
+                                >
+                                  <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-transparent text-[#8B95A7]">
+                                    <DocumentIcon className="h-[13px] w-[13px] stroke-current" />
+                                  </span>
+                                  <span className="truncate font-medium">{getAttachmentName(item)}</span>
+                                </a>
+                              )
+                            ))}
                           </div>
-                        )
-                      ) : null}
-                      <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
-                      {media.length ? (
-                        <div className="mt-3 grid gap-2">
-                          {media.map((item, mediaIndex) => (
-                            isChatImageAsset(item) ? (
-                              <button
-                                key={`${messageKey}:${mediaIndex}:${item}`}
-                                className="block cursor-grab overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white active:cursor-grabbing focus:outline-none"
-                                type="button"
-                                draggable
-                                onDragStart={(event) => handleAttachmentDragStart(event, item)}
-                                onClick={() => onOpenChatImagePreview({ historyKey: buildChatImageHistoryKey(messageKey, mediaIndex) })}
-                              >
-                                <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" />
-                              </button>
-                            ) : (
-                              <a
-                                key={`${messageKey}:${mediaIndex}:${item}`}
-                                href={toFileUrl(item)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex max-w-[280px] cursor-grab items-center gap-2.5 rounded-full border border-black/8 bg-[#F7F7F8] px-3 py-2 text-[12px] text-[#1F2937] transition hover:bg-white active:cursor-grabbing focus:outline-none"
-                                draggable
-                                onDragStart={(event) => handleAttachmentDragStart(event, item)}
-                              >
-                                <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-transparent text-[#8B95A7]">
-                                  <DocumentIcon className="h-[13px] w-[13px] stroke-current" />
-                                </span>
-                                <span className="truncate font-medium">{getAttachmentName(item)}</span>
-                              </a>
-                            )
-                          ))}
+                        ) : null}
+                      </div>
+                      {message.timestamp || sourceLabel ? (
+                        <div className={cx("message-time mt-1 flex items-center gap-2 text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100", chatMinorTextClass)}>
+                          {message.timestamp ? <span>{formatTimestamp(message.timestamp)}</span> : null}
+                          {sourceLabel ? <span>{`from ${sourceLabel.toLowerCase()}`}</span> : null}
                         </div>
                       ) : null}
                     </div>
-                    {message.timestamp || sourceLabel ? (
-                      <div className={cx("message-time mt-1 flex items-center gap-2 text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100", chatMinorTextClass)}>
-                        {message.timestamp ? <span>{formatTimestamp(message.timestamp)}</span> : null}
-                        {sourceLabel ? <span>{`from ${sourceLabel.toLowerCase()}`}</span> : null}
-                      </div>
-                    ) : null}
                   </div>
-                </div>
-              </article>
+                </article>
               );
             })}
             <div ref={conversationEndRef} className="h-40" />

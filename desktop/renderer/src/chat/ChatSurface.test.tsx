@@ -139,6 +139,22 @@ describe("ChatSurface", () => {
     assert.match(markup, /aria-label="跳转到被引用消息"/);
   });
 
+  it("keeps DOM lookup keys pinned to persisted message ids even when render ids exist", () => {
+    const session = createSession();
+    session.messages = [
+      {
+        id: "message-1",
+        render_id: "local:user:1",
+        role: "user",
+        content: "继续",
+      },
+    ];
+
+    const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
+
+    assert.match(markup, /data-message-key="message-1"/);
+  });
+
   it("marks sent attachments as draggable so they can be dragged out of the desktop app", () => {
     const session = createSession();
     session.messages = [
