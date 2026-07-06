@@ -22,7 +22,9 @@ describe("RoleMoodBindingsPanel", () => {
   it("renders content inside the shared role asset container without adding another full card shell", () => {
     const markup = renderRoleMoodBindingsPanel();
 
-    assert.match(markup, /对应心情/);
+    assert.match(markup, /对应差分/);
+    assert.match(markup, /w-\[240px\]/);
+    assert.match(markup, /h-10/);
     assert.match(markup, /aria-label="取消选中差分图"/);
     assert.match(markup, /min-h-\[360px\]/);
     assert.doesNotMatch(markup, /min-h-\[420px\]/);

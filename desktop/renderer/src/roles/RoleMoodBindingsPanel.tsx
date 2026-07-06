@@ -55,10 +55,10 @@ export function RoleMoodBindingsPanel({
             <div className="px-6 text-center text-sm text-[#74808D]">请先在左侧选中一张差分立绘</div>
           )}
         </div>
-        <label className="grid gap-1.5 text-xs text-[#374151]">
-          <span>对应心情</span>
+        <label className="grid w-[240px] gap-1.5 text-xs text-[#374151]">
+          <span>对应差分</span>
           <input
-            className={`${inputClass} border-[#D8DFE7] bg-white text-[#111827] placeholder:text-[#9CA3AF]`}
+            className={`${inputClass} h-10 px-3 py-2 border-[#D8DFE7] bg-white text-[#111827] placeholder:text-[#9CA3AF]`}
             value={draftMood}
             onChange={(event) => setDraftMood(event.target.value.trimStart())}
             onBlur={handleMoodBlur}
