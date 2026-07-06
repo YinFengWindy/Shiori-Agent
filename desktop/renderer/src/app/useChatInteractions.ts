@@ -12,7 +12,7 @@ type UseChatInteractionsArgs = {
     nextView: Extract<AppMainView, { kind: "role-detail" | "role-assets" }>,
     options?: { recordHistory?: boolean },
   ) => void;
-  openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<void>;
+  openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<boolean>;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
   setError: React.Dispatch<React.SetStateAction<string>>;
   setPendingChatAttachments: React.Dispatch<React.SetStateAction<string[]>>;

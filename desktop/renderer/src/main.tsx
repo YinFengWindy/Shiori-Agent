@@ -30,6 +30,7 @@ import { useNavigationHistory } from "./app/useNavigationHistory";
 import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleSearch } from "./app/roleSearch";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
+import type { RoleComposerStateCache } from "./chat/roleComposerStateCache";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { useImageStudioState } from "./image/useImageStudioState";
 import { createRoleFormFromRole, isRoleFormDirty } from "./roles/roleFormState";
@@ -111,11 +112,14 @@ function App(): React.ReactElement {
   const activeRoleIdRef = useLatestRef(activeRoleId);
   const activeSessionRef = useLatestRef(activeSession);
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
+  const roleComposerStateCacheRef = useRef<RoleComposerStateCache>({});
   const mainViewRef = useLatestRef<AppMainView>(mainView);
   const rolesRef = useLatestRef(roles);
   const draftRef = useLatestRef(draft);
+  const chatReplyTargetRef = useLatestRef(chatReplyTarget);
   const pendingChatAttachmentsRef = useLatestRef(pendingChatAttachments);
   const sendingSessionsRef = useLatestRef(sendingSessions);
+  const unreadCountsRef = useLatestRef(unreadCounts);
   const roleFormRef = useLatestRef(roleForm);
   const newRoleFormRef = useLatestRef(newRoleForm);
   const lastNonSettingsViewRef = useRef<AppMainView>({ kind: "chat" });
@@ -334,11 +338,14 @@ function App(): React.ReactElement {
     activeRoleIdRef,
     activeSessionRef,
     roleSessionCacheRef,
+    roleComposerStateCacheRef,
     mainViewRef,
     rolesRef,
     draftRef,
+    chatReplyTargetRef,
     pendingChatAttachmentsRef,
     sendingSessionsRef,
+    unreadCountsRef,
     openRoleRequestIdRef,
   });
 

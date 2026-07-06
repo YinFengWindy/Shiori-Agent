@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { mergeIncomingSessionDuringSend } from "../chat/chatSessionMerge";
 import {
+  canSendSessionState,
   clearAllSendingSessionsState,
   clearSendingSessionState,
   markSendingSessionState,
@@ -77,6 +78,32 @@ describe("clearAllSendingSessionsState", () => {
         "role:shiori": "shiori",
       }),
       {},
+    );
+  });
+});
+
+describe("canSendSessionState", () => {
+  it("allows sending in a different role session while another role is still replying", () => {
+    assert.equal(
+      canSendSessionState(
+        {
+          "role:shiori": "shiori",
+        },
+        "role:mira",
+      ),
+      true,
+    );
+  });
+
+  it("blocks sending only for the in-flight session itself", () => {
+    assert.equal(
+      canSendSessionState(
+        {
+          "role:shiori": "shiori",
+        },
+        "role:shiori",
+      ),
+      false,
     );
   });
 });

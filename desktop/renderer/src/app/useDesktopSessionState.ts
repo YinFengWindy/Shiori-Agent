@@ -2,6 +2,13 @@ import { useEffect, useRef } from "react";
 import { buildOptimisticUserChatMessage, normalizeChatAttachmentPaths } from "../chat/chatComposerState";
 import { mergeIncomingSessionDuringSend } from "../chat/chatSessionMerge";
 import {
+  createChatComposerStateSnapshot,
+  readRoleComposerStateCache,
+  retainRoleComposerStateCache,
+  writeRoleComposerStateCache,
+  type RoleComposerStateCache,
+} from "../chat/roleComposerStateCache";
+import {
   readRoleSessionCache,
   removeRoleSessionCache,
   resolveImmediateRoleSession,
@@ -57,11 +64,14 @@ type UseDesktopSessionStateArgs = {
   activeRoleIdRef: React.MutableRefObject<string>;
   activeSessionRef: React.MutableRefObject<SessionPayload | null>;
   roleSessionCacheRef: React.MutableRefObject<RoleSessionCache>;
+  roleComposerStateCacheRef: React.MutableRefObject<RoleComposerStateCache>;
   mainViewRef: React.MutableRefObject<AppMainView>;
   rolesRef: React.MutableRefObject<RoleRecord[]>;
   draftRef: React.MutableRefObject<string>;
+  chatReplyTargetRef: React.MutableRefObject<ChatReplyTarget | null>;
   pendingChatAttachmentsRef: React.MutableRefObject<string[]>;
   sendingSessionsRef: React.MutableRefObject<Record<string, string>>;
+  unreadCountsRef: React.MutableRefObject<Record<string, number>>;
   openRoleRequestIdRef: React.MutableRefObject<number>;
 };
 
@@ -98,6 +108,11 @@ export function clearAllSendingSessionsState(current: SendingSessionsMap): Sendi
   return Object.keys(current).length ? {} : current;
 }
 
+/** Returns whether the current session can send without being blocked by another role's in-flight turn. */
+export function canSendSessionState(current: SendingSessionsMap, sessionKey: string): boolean {
+  return Boolean(sessionKey) && !current[sessionKey];
+}
+
 /** Owns desktop bridge/session lifecycle so the root app only composes state and actions. */
 export function useDesktopSessionState({
   roles,
@@ -124,11 +139,14 @@ export function useDesktopSessionState({
   activeRoleIdRef,
   activeSessionRef,
   roleSessionCacheRef,
+  roleComposerStateCacheRef,
   mainViewRef,
   rolesRef,
   draftRef,
+  chatReplyTargetRef,
   pendingChatAttachmentsRef,
   sendingSessionsRef,
+  unreadCountsRef,
   openRoleRequestIdRef,
 }: UseDesktopSessionStateArgs) {
   const chooseIllustrationRef = useRef(chooseIllustration);
@@ -162,6 +180,36 @@ export function useDesktopSessionState({
       roleSessionCacheRef.current,
       nextRoles.map((role) => role.id),
     );
+  }
+
+  function cacheRoleComposerState(
+    roleId: string,
+    snapshot = createChatComposerStateSnapshot({
+      draft: draftRef.current,
+      attachments: pendingChatAttachmentsRef.current,
+      replyTarget: chatReplyTargetRef.current,
+    }),
+  ): void {
+    roleComposerStateCacheRef.current = writeRoleComposerStateCache(
+      roleComposerStateCacheRef.current,
+      roleId,
+      snapshot,
+    );
+  }
+
+  function applyRoleComposerState(snapshot: ReturnType<typeof createChatComposerStateSnapshot>): void {
+    draftRef.current = snapshot.draft;
+    chatReplyTargetRef.current = snapshot.replyTarget;
+    pendingChatAttachmentsRef.current = snapshot.attachments;
+    setDraft(snapshot.draft);
+    setChatReplyTarget(snapshot.replyTarget);
+    setPendingChatAttachments(snapshot.attachments);
+  }
+
+  function restoreRoleComposerState(roleId: string): void {
+    const snapshot = readRoleComposerStateCache(roleComposerStateCacheRef.current, roleId)
+      ?? createChatComposerStateSnapshot();
+    applyRoleComposerState(snapshot);
   }
 
   function commitActiveSession(nextSession: SessionPayload | null): void {
@@ -221,6 +269,10 @@ export function useDesktopSessionState({
       return next;
     });
     retainCachedRoleSessions(nextRoles);
+    roleComposerStateCacheRef.current = retainRoleComposerStateCache(
+      roleComposerStateCacheRef.current,
+      nextRoles.map((role) => role.id),
+    );
     return mergedRoles;
   }
 
@@ -290,10 +342,21 @@ export function useDesktopSessionState({
     roleId: string,
     roleOverride: RoleRecord | null = null,
     options?: { recordHistory?: boolean },
-  ): Promise<void> {
+  ): Promise<boolean> {
     const requestId = openRoleRequestIdRef.current + 1;
     openRoleRequestIdRef.current = requestId;
+    const previousRoleId = activeRoleIdRef.current;
+    const previousSession = activeSessionRef.current;
+    const previousRole = previousRoleId
+      ? rolesRef.current.find((item) => item.id === previousRoleId) ?? null
+      : null;
+    const previousComposerState = createChatComposerStateSnapshot({
+      draft: draftRef.current,
+      attachments: pendingChatAttachmentsRef.current,
+      replyTarget: chatReplyTargetRef.current,
+    });
     const switchingRole = activeRoleIdRef.current !== roleId;
+    const previousUnreadCount = unreadCountsRef.current[roleId] ?? 0;
     const cachedSession = readCachedRoleSession(roleId);
     const immediateSession = resolveImmediateRoleSession({
       currentRoleId: activeRoleIdRef.current,
@@ -302,7 +365,10 @@ export function useDesktopSessionState({
       cachedSession,
     });
     if (switchingRole) {
-      setChatReplyTarget(null);
+      if (previousRoleId) {
+        cacheRoleComposerState(previousRoleId, previousComposerState);
+      }
+      restoreRoleComposerState(roleId);
     }
     const role = roleOverride ?? rolesRef.current.find((item) => item.id === roleId) ?? null;
     if (role) {
@@ -314,15 +380,42 @@ export function useDesktopSessionState({
     }
     const { error: sessionError, session } = await fetchRoleSession(roleId);
     if (openRoleRequestIdRef.current !== requestId) {
-      return;
+      return false;
     }
     if (!session) {
+      if (switchingRole) {
+        if (previousRole) {
+          applyRoleSnapshotRef.current(previousRole, previousSession);
+        } else {
+          setActiveRoleId(previousRoleId);
+          activeRoleIdRef.current = previousRoleId;
+          setActiveIllustration("");
+          setSelectedAvatarAsset("");
+          setSelectedChatBackground("");
+        }
+        commitActiveSession(previousSession);
+        if (previousRoleId) {
+          restoreRoleComposerState(previousRoleId);
+        } else {
+          applyRoleComposerState(previousComposerState);
+        }
+        if (previousUnreadCount > 0) {
+          setUnreadCounts((current) => (
+            current[roleId] === previousUnreadCount
+              ? current
+              : {
+                  ...current,
+                  [roleId]: previousUnreadCount,
+                }
+          ));
+        }
+      }
       setError(sessionError ?? "打开角色会话失败");
-      return;
+      return false;
     }
     const latestRoles = await loadRolesFromBridge();
     if (openRoleRequestIdRef.current !== requestId) {
-      return;
+      return false;
     }
     cacheRoleSession(roleId, session);
     setActiveRoleId(roleId);
@@ -344,12 +437,15 @@ export function useDesktopSessionState({
     } else if (mainViewRef.current.kind === "chat") {
       replaceNavigationEntryRef.current(buildNavigationEntryRef.current({ kind: "chat" }, roleId));
     }
+    return true;
   }
 
   async function refreshSession(): Promise<void> {
     if (!activeRoleIdRef.current) return;
-    await openRole(activeRoleIdRef.current, null, { recordHistory: false });
-    setNotice("会话已刷新。");
+    const refreshed = await openRole(activeRoleIdRef.current, null, { recordHistory: false });
+    if (refreshed) {
+      setNotice("会话已刷新。");
+    }
   }
 
   async function sendMessage(contentOverride?: string): Promise<void> {
@@ -361,15 +457,17 @@ export function useDesktopSessionState({
     const previousSession = activeSessionRef.current;
     const sessionKey = previousSession?.key ?? "";
     if ((!content && media.length === 0) || !roleId || !sessionKey) return;
-    if (Object.keys(sendingSessionsRef.current).length > 0) return;
+    if (!canSendSessionState(sendingSessionsRef.current, sessionKey)) return;
     const persistedReplyTarget = currentReplyTarget;
     markSessionSending(sessionKey, roleId);
     setError("");
     setDraft("");
     draftRef.current = "";
     setChatReplyTarget(null);
+    chatReplyTargetRef.current = null;
     setPendingChatAttachments([]);
     pendingChatAttachmentsRef.current = [];
+    cacheRoleComposerState(roleId, createChatComposerStateSnapshot());
     updateCommittedActiveSession((current) =>
       current?.key === sessionKey
         ? {
@@ -406,8 +504,14 @@ export function useDesktopSessionState({
         setDraft(draftValue);
         draftRef.current = draftValue;
         setChatReplyTarget(currentReplyTarget);
+        chatReplyTargetRef.current = currentReplyTarget;
         setPendingChatAttachments(media);
         pendingChatAttachmentsRef.current = media;
+        cacheRoleComposerState(roleId, createChatComposerStateSnapshot({
+          draft: draftValue,
+          attachments: media,
+          replyTarget: currentReplyTarget,
+        }));
         setError(res.error.message);
         appendSessionErrorMessage(sessionKey, res.error.message);
         return;
@@ -434,8 +538,14 @@ export function useDesktopSessionState({
       setDraft(draftValue);
       draftRef.current = draftValue;
       setChatReplyTarget(currentReplyTarget);
+      chatReplyTargetRef.current = currentReplyTarget;
       setPendingChatAttachments(media);
       pendingChatAttachmentsRef.current = media;
+      cacheRoleComposerState(roleId, createChatComposerStateSnapshot({
+        draft: draftValue,
+        attachments: media,
+        replyTarget: currentReplyTarget,
+      }));
       const message = error instanceof Error ? error.message : String(error);
       setError(message);
       appendSessionErrorMessage(sessionKey, message);

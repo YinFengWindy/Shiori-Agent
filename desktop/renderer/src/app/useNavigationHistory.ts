@@ -165,7 +165,7 @@ export function useNavigationHistory({
 
   async function navigateHistory(
     direction: "back" | "forward",
-    openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<void>,
+    openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<boolean>,
   ): Promise<void> {
     const delta = direction === "back" ? -1 : 1;
     const nextIndex = navigationHistoryIndexRef.current + delta;

@@ -25,7 +25,7 @@ type UseDesktopBridgeLifecycleArgs = {
   updateCommittedActiveSession: (updater: (current: SessionPayload | null) => SessionPayload | null) => void;
   appendSessionErrorMessage: (sessionKey: string, message: string) => void;
   loadRolesFromBridge: () => Promise<RoleRecord[] | null>;
-  openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<void>;
+  openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<boolean>;
   buildNavigationEntry: (view: { kind: "chat" }, roleId?: string) => NavigationEntry;
   pushNavigationEntry: (entry: NavigationEntry) => void;
 };
