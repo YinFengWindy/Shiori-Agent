@@ -56,29 +56,14 @@ def test_web_fetch_max_chars_less_than_50000():
     assert ProactiveConfig().agent_tick_web_fetch_max_chars < 50_000
 
 
-# ── context gate ─────────────────────────────────────────────────────────
+# ── removed proactive gates ────────────────────────────────────────────────
 
-def test_agent_tick_context_prob_default():
-    assert ProactiveConfig().agent_tick_context_prob == 0.03
-
-
-def test_agent_tick_context_prob_is_float():
-    assert isinstance(ProactiveConfig().agent_tick_context_prob, float)
+def test_agent_tick_context_prob_removed():
+    assert not hasattr(ProactiveConfig(), "agent_tick_context_prob")
 
 
-def test_agent_tick_context_prob_in_range():
-    prob = ProactiveConfig().agent_tick_context_prob
-    assert 0.0 <= prob <= 1.0
-
-
-# ── delivery cooldown ─────────────────────────────────────────────────────
-
-def test_agent_tick_delivery_cooldown_hours_default():
-    assert ProactiveConfig().agent_tick_delivery_cooldown_hours == 1
-
-
-def test_agent_tick_delivery_cooldown_hours_is_int():
-    assert isinstance(ProactiveConfig().agent_tick_delivery_cooldown_hours, int)
+def test_agent_tick_delivery_cooldown_hours_removed():
+    assert not hasattr(ProactiveConfig(), "agent_tick_delivery_cooldown_hours")
 
 
 def test_drift_enabled_default_false():
@@ -101,14 +86,6 @@ def test_drift_min_interval_hours_default():
 
 def test_delivery_dedupe_hours_exists():
     assert hasattr(ProactiveConfig(), "delivery_dedupe_hours")
-
-
-def test_context_only_daily_max_exists():
-    assert hasattr(ProactiveConfig(), "context_only_daily_max")
-
-
-def test_context_only_min_interval_hours_exists():
-    assert hasattr(ProactiveConfig(), "context_only_min_interval_hours")
 
 
 def test_message_dedupe_enabled_exists():
@@ -147,5 +124,9 @@ def test_v1_delivery_dedupe_hours_unchanged():
     assert ProactiveConfig().delivery_dedupe_hours == 24
 
 
-def test_v1_context_only_daily_max_unchanged():
-    assert ProactiveConfig().context_only_daily_max == 1
+def test_context_only_daily_max_removed():
+    assert not hasattr(ProactiveConfig(), "context_only_daily_max")
+
+
+def test_context_only_min_interval_hours_removed():
+    assert not hasattr(ProactiveConfig(), "context_only_min_interval_hours")

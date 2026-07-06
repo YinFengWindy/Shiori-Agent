@@ -883,12 +883,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="web_fetch_max_chars" hint="限制网页抓取后允许注入上下文的最大字符数。">
                   <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentWebFetchMaxChars)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentWebFetchMaxChars: parseNumber(event.target.value, current.proactive.agentWebFetchMaxChars) } }))} placeholder="网页抓取最大字符数" />
                 </Field>
-                <Field label="context_prob" hint="控制主动推送优先走上下文型内容的概率。">
-                  <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentContextProb)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentContextProb: parseNumber(event.target.value, current.proactive.agentContextProb) } }))} placeholder="上下文概率" />
-                </Field>
-                <Field label="delivery_cooldown_hours" hint="限制两次主动推送之间的最小冷却小时数。">
-                  <input className={cx(inputClass, "bg-white")} value={String(draft.proactive.agentDeliveryCooldownHours)} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, agentDeliveryCooldownHours: parseNumber(event.target.value, current.proactive.agentDeliveryCooldownHours) } }))} placeholder="发送冷却小时数" />
-                </Field>
               </SectionCard>
             );
           case "drift":

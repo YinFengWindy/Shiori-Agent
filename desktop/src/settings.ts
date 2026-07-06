@@ -85,8 +85,6 @@ export type SettingsFormData = {
     agentMaxSteps: number;
     agentContentLimit: number;
     agentWebFetchMaxChars: number;
-    agentContextProb: number;
-    agentDeliveryCooldownHours: number;
     driftEnabled: boolean;
     driftMaxSteps: number;
     driftMinIntervalHours: number;
@@ -375,8 +373,6 @@ function loadSettingsData(): SettingsSnapshot {
         agentMaxSteps: Number(proactiveAgent.max_steps ?? 35),
         agentContentLimit: Number(proactiveAgent.content_limit ?? 5),
         agentWebFetchMaxChars: Number(proactiveAgent.web_fetch_max_chars ?? 8000),
-        agentContextProb: Number(proactiveAgent.context_prob ?? 0.03),
-        agentDeliveryCooldownHours: Number(proactiveAgent.delivery_cooldown_hours ?? 1),
         driftEnabled: Boolean(proactiveDrift.enabled),
         driftMaxSteps: Number(proactiveDrift.max_steps ?? 20),
         driftMinIntervalHours: Number(proactiveDrift.min_interval_hours ?? 3),
@@ -592,8 +588,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `max_steps = ${formData.proactive.agentMaxSteps}`,
     `content_limit = ${formData.proactive.agentContentLimit}`,
     `web_fetch_max_chars = ${formData.proactive.agentWebFetchMaxChars}`,
-    `context_prob = ${formData.proactive.agentContextProb}`,
-    `delivery_cooldown_hours = ${formData.proactive.agentDeliveryCooldownHours}`,
     "",
     "[proactive.drift]",
     `enabled = ${formData.proactive.driftEnabled ? "true" : "false"}`,

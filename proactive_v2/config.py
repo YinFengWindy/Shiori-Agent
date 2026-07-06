@@ -30,25 +30,9 @@ class ProactiveConfig:
     score_llm_threshold: float = 0.40
     judge_send_threshold: float = 0.60
 
-    # AnyAction 配置
-    anyaction_enabled: bool = False
-    anyaction_daily_max_actions: int = 24
-    anyaction_min_interval_seconds: int = 300
-    anyaction_probability_min: float = 0.03
-    anyaction_probability_max: float = 0.45
-    anyaction_idle_scale_minutes: float = 240.0
-    anyaction_reset_hour_local: int = 12
-    anyaction_timezone: str = "Asia/Shanghai"
-
     # Safety 配置
     delivery_dedupe_hours: int = 24
     message_dedupe_recent_n: int = 5
-
-    # Context 配置
-    context_only_daily_max: int = 1
-    context_only_min_interval_hours: int = 12
-    context_only_judge_threshold: float = 0.72
-    context_only_judge_threshold_with_evidence: float = 0.68
 
     # === 策略内置参数（不对外暴露，由 presets.STRATEGY_PARAMS 提供） ===
 
@@ -96,8 +80,6 @@ class ProactiveConfig:
     agent_tick_model: str = ""
     agent_tick_content_limit: int = 5
     agent_tick_web_fetch_max_chars: int = 8_000
-    agent_tick_context_prob: float = 0.03
-    agent_tick_delivery_cooldown_hours: int = 1
     drift_enabled: bool = False
     drift_max_steps: int = 20
     drift_min_interval_hours: int = 3

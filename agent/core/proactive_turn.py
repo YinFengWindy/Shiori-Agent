@@ -214,17 +214,6 @@ async def _mark_delivery(*, state_store: Any, session_key: str, delivery_key: st
     state_store.mark_delivery(session_key, delivery_key)
 
 
-async def _mark_context_only_send(
-    *,
-    state_store: Any,
-    session_key: str,
-    context_as_fallback_open: bool,
-    has_cited: bool,
-) -> None:
-    if context_as_fallback_open and not has_cited:
-        state_store.mark_context_only_send(session_key)
-
-
 # ── 内存辅助函数 ──────────────────────────────────────────────────────────
 
 def _read_long_term_text(memory: MemoryProfileApi | None) -> str:
@@ -870,15 +859,6 @@ class ProactiveTurnPipeline:
                         delivery_key=delivery_key,
                     ),
                     name="mark_delivery",
-                ),
-                _CallbackSideEffect(
-                    callback=lambda: _mark_context_only_send(
-                        state_store=self._state_store,
-                        session_key=self._session_key,
-                        context_as_fallback_open=ctx.context_as_fallback_open,
-                        has_cited=bool(ctx.cited_item_ids),
-                    ),
-                    name="mark_context_only_send",
                 ),
                 _CallbackSideEffect(
                     callback=lambda: ack_on_success(

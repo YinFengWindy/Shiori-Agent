@@ -105,8 +105,6 @@ export type SettingsFormData = {
     agentMaxSteps: number;
     agentContentLimit: number;
     agentWebFetchMaxChars: number;
-    agentContextProb: number;
-    agentDeliveryCooldownHours: number;
     driftEnabled: boolean;
     driftMaxSteps: number;
     driftMinIntervalHours: number;

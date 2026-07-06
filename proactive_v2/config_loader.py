@@ -53,10 +53,6 @@ def _validate_ranges(config: dict[str, Any]) -> None:
     threshold_keys = [
         "score_llm_threshold",
         "judge_send_threshold",
-        "context_only_judge_threshold",
-        "context_only_judge_threshold_with_evidence",
-        "anyaction_probability_min",
-        "anyaction_probability_max",
     ]
     for key in threshold_keys:
         if key in config:
@@ -65,16 +61,6 @@ def _validate_ranges(config: dict[str, Any]) -> None:
                 raise ProactiveConfigError(
                     f"{key} 必须在 [0, 1] 范围内，当前值: {val}"
                 )
-
-    # probability_min <= probability_max
-    if "anyaction_probability_min" in config and "anyaction_probability_max" in config:
-        pmin = config["anyaction_probability_min"]
-        pmax = config["anyaction_probability_max"]
-        if pmin > pmax:
-            raise ProactiveConfigError(
-                f"anyaction_probability_min ({pmin}) 不能大于 "
-                f"anyaction_probability_max ({pmax})"
-            )
 
     # tick_interval_s0 >= s1 >= 1
     intervals = [
@@ -91,16 +77,6 @@ def _validate_ranges(config: dict[str, Any]) -> None:
         if interval_values[-1] < 1:
             raise ProactiveConfigError(
                 f"tick_interval_s1 必须 >= 1，当前值: {interval_values[-1]}"
-            )
-
-    # context_only_judge_threshold_with_evidence <= context_only_judge_threshold
-    if "context_only_judge_threshold" in config and "context_only_judge_threshold_with_evidence" in config:
-        with_ev = config["context_only_judge_threshold_with_evidence"]
-        without_ev = config["context_only_judge_threshold"]
-        if with_ev > without_ev:
-            raise ProactiveConfigError(
-                f"context_only_judge_threshold_with_evidence ({with_ev}) "
-                f"不能大于 context_only_judge_threshold ({without_ev})"
             )
 
 
@@ -151,8 +127,6 @@ def _validate_agent_tick_keys(agent_tick: dict[str, Any]) -> None:
         "max_steps",
         "content_limit",
         "web_fetch_max_chars",
-        "context_prob",
-        "delivery_cooldown_hours",
         "drift_enabled",
         "drift_max_steps",
         "drift_min_interval_hours",
@@ -200,8 +174,6 @@ def _validate_agent_keys(agent: dict[str, Any]) -> None:
         "max_steps",
         "content_limit",
         "web_fetch_max_chars",
-        "context_prob",
-        "delivery_cooldown_hours",
     }
     forbidden = set(agent.keys()) - allowed
     if forbidden:
@@ -388,32 +360,6 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
             _as_int(
                 _pick(agent, "web_fetch_max_chars", at, "web_fetch_max_chars"),
                 "agent.web_fetch_max_chars",
-            ),
-        )
-    if "context_prob" in agent or "context_prob" in at:
-        config.agent_tick_context_prob = max(
-            0.0,
-            min(
-                1.0,
-                _as_float(
-                    _pick(agent, "context_prob", at, "context_prob"),
-                    "agent.context_prob",
-                ),
-            ),
-        )
-    if "delivery_cooldown_hours" in agent or "delivery_cooldown_hours" in at:
-        config.agent_tick_delivery_cooldown_hours = max(
-            0,
-            int(
-                _as_int(
-                    _pick(
-                        agent,
-                        "delivery_cooldown_hours",
-                        at,
-                        "delivery_cooldown_hours",
-                    ),
-                    "agent.delivery_cooldown_hours",
-                )
             ),
         )
     if "enabled" in drift or "drift_enabled" in at:
