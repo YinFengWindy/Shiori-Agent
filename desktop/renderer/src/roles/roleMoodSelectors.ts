@@ -50,16 +50,7 @@ export function resolveMoodIllustration({
     ...(runtimeConfig.mood_illustration_bindings as Record<string, unknown> | undefined),
     ...roleForm.moodIllustrationBindings,
   });
-  const defaultMood = String(roleForm.defaultMood ?? runtimeConfig.default_mood ?? "").trim();
-
-  return (
-    bindings[currentMood]
-    || bindings[defaultMood]
-    || activeIllustration
-    || detailRole?.chat_background_abs
-    || previewIllustrations[0]
-    || ""
-  );
+  return bindings[currentMood] || "";
 }
 
 /** Returns whether the current mood maps to an explicit mood illustration binding. */

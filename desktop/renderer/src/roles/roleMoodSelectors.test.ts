@@ -78,7 +78,7 @@ describe("roleMoodSelectors", () => {
     );
   });
 
-  it("falls back to the default mood binding and then to existing illustration state", () => {
+  it("returns an empty string when the current mood has no bound illustration", () => {
     assert.equal(
       resolveMoodIllustration({
         activeSession: createSession({ current_mood: "警觉" }),
@@ -92,7 +92,7 @@ describe("roleMoodSelectors", () => {
         activeIllustration: "D:\\roles\\mira\\active.png",
         previewIllustrations: ["D:\\roles\\mira\\fallback.png"],
       }),
-      "D:\\roles\\mira\\calm.png",
+      "",
     );
   });
 });
