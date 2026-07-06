@@ -72,6 +72,13 @@ export type ChatReplyTarget = {
   preview: string;
 };
 
+/** Chat composer payload submitted from the desktop chat surface. */
+export type ChatSendRequest = {
+  content: string;
+  attachments: string[];
+  replyTarget: ChatReplyTarget | null;
+};
+
 /** Session payload returned by the desktop bridge. */
 export type SessionPayload = {
   key: string;

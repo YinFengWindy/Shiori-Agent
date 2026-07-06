@@ -14,6 +14,7 @@ import { reconcileRoles } from "../roles/roleListState";
 import type {
   AppMainView,
   ChatReplyTarget,
+  ChatSendRequest,
   NewRoleFormState,
   RoleFormState,
   RoleRecord,
@@ -30,17 +31,13 @@ type UseDesktopSessionStateArgs = {
   setRoles: React.Dispatch<React.SetStateAction<RoleRecord[]>>;
   setActiveRoleId: React.Dispatch<React.SetStateAction<string>>;
   setActiveSession: React.Dispatch<React.SetStateAction<SessionPayload | null>>;
-  setChatReplyTarget: React.Dispatch<React.SetStateAction<ChatReplyTarget | null>>;
-  setPendingChatAttachments: React.Dispatch<React.SetStateAction<string[]>>;
   setError: React.Dispatch<React.SetStateAction<string>>;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
-  setDraft: React.Dispatch<React.SetStateAction<string>>;
   setUnreadCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   setSelectedAvatarAsset: React.Dispatch<React.SetStateAction<string>>;
   setSelectedChatBackground: React.Dispatch<React.SetStateAction<string>>;
   setActiveIllustration: React.Dispatch<React.SetStateAction<string>>;
   setSendingSessions: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  chatReplyTarget: ChatReplyTarget | null;
   chooseIllustration: (
     role: RoleRecord | null,
     session: SessionPayload | null,
@@ -59,8 +56,6 @@ type UseDesktopSessionStateArgs = {
   roleSessionCacheRef: React.MutableRefObject<RoleSessionCache>;
   mainViewRef: React.MutableRefObject<AppMainView>;
   rolesRef: React.MutableRefObject<RoleRecord[]>;
-  draftRef: React.MutableRefObject<string>;
-  pendingChatAttachmentsRef: React.MutableRefObject<string[]>;
   sendingSessionsRef: React.MutableRefObject<Record<string, string>>;
   unreadCountsRef: React.MutableRefObject<Record<string, number>>;
   openRoleRequestIdRef: React.MutableRefObject<number>;
@@ -111,17 +106,13 @@ export function useDesktopSessionState({
   setRoles,
   setActiveRoleId,
   setActiveSession,
-  setChatReplyTarget,
-  setPendingChatAttachments,
   setError,
   setNotice,
-  setDraft,
   setUnreadCounts,
   setSelectedAvatarAsset,
   setSelectedChatBackground,
   setActiveIllustration,
   setSendingSessions,
-  chatReplyTarget,
   chooseIllustration,
   applyRoleSnapshot,
   buildNavigationEntry,
@@ -132,8 +123,6 @@ export function useDesktopSessionState({
   roleSessionCacheRef,
   mainViewRef,
   rolesRef,
-  draftRef,
-  pendingChatAttachmentsRef,
   sendingSessionsRef,
   unreadCountsRef,
   openRoleRequestIdRef,
@@ -315,11 +304,6 @@ export function useDesktopSessionState({
       cachedSession,
     });
     if (switchingRole) {
-      draftRef.current = "";
-      pendingChatAttachmentsRef.current = [];
-      setDraft("");
-      setChatReplyTarget(null);
-      setPendingChatAttachments([]);
     }
     const role = roleOverride ?? rolesRef.current.find((item) => item.id === roleId) ?? null;
     if (role) {
@@ -345,11 +329,6 @@ export function useDesktopSessionState({
           setSelectedChatBackground("");
         }
         commitActiveSession(previousSession);
-        draftRef.current = "";
-        pendingChatAttachmentsRef.current = [];
-        setDraft("");
-        setChatReplyTarget(null);
-        setPendingChatAttachments([]);
         if (previousUnreadCount > 0) {
           setUnreadCounts((current) => (
             current[roleId] === previousUnreadCount
@@ -399,24 +378,18 @@ export function useDesktopSessionState({
     }
   }
 
-  async function sendMessage(contentOverride?: string): Promise<void> {
-    const draftValue = contentOverride ?? draftRef.current;
-    const content = draftValue.trim();
-    const media = normalizeChatAttachmentPaths(pendingChatAttachmentsRef.current);
-    const currentReplyTarget = chatReplyTarget;
+  async function sendMessage(request: ChatSendRequest): Promise<boolean> {
+    const content = request.content.trim();
+    const media = normalizeChatAttachmentPaths(request.attachments);
+    const currentReplyTarget = request.replyTarget;
     const roleId = activeRoleIdRef.current;
     const previousSession = activeSessionRef.current;
     const sessionKey = previousSession?.key ?? "";
-    if ((!content && media.length === 0) || !roleId || !sessionKey) return;
-    if (!canSendSessionState(sendingSessionsRef.current, sessionKey)) return;
+    if ((!content && media.length === 0) || !roleId || !sessionKey) return false;
+    if (!canSendSessionState(sendingSessionsRef.current, sessionKey)) return false;
     const persistedReplyTarget = currentReplyTarget;
     markSessionSending(sessionKey, roleId);
     setError("");
-    setDraft("");
-    draftRef.current = "";
-    setChatReplyTarget(null);
-    setPendingChatAttachments([]);
-    pendingChatAttachmentsRef.current = [];
     updateCommittedActiveSession((current) =>
       current?.key === sessionKey
         ? {
@@ -450,18 +423,14 @@ export function useDesktopSessionState({
             current?.key === sessionKey ? previousSession : current,
           );
         }
-        setDraft(draftValue);
-        draftRef.current = draftValue;
-        setChatReplyTarget(currentReplyTarget);
-        setPendingChatAttachments(media);
-        pendingChatAttachmentsRef.current = media;
         setError(res.error.message);
         appendSessionErrorMessage(sessionKey, res.error.message);
-        return;
+        return false;
       }
       const nextSession = res.payload.session as SessionPayload;
       // Keep the optimistic user turn visible when chat.send resolves with a stale session snapshot.
       commitActiveSession(nextSession);
+      return true;
     } catch (error) {
       clearSessionSending(sessionKey);
       const { session: recoveredSession } = await fetchRoleSession(roleId);
@@ -475,14 +444,10 @@ export function useDesktopSessionState({
           current?.key === sessionKey ? previousSession : current,
         );
       }
-      setDraft(draftValue);
-      draftRef.current = draftValue;
-      setChatReplyTarget(currentReplyTarget);
-      setPendingChatAttachments(media);
-      pendingChatAttachmentsRef.current = media;
       const message = error instanceof Error ? error.message : String(error);
       setError(message);
       appendSessionErrorMessage(sessionKey, message);
+      return false;
     }
   }
 

@@ -1,6 +1,6 @@
 import type React from "react";
-import { normalizeChatAttachmentPaths } from "../chat/chatComposerState";
-import type { AppMainView, ChatReplyTarget, RoleRecord, SessionPayload } from "../shared/types";
+import { findChatMessageElement } from "../chat/chatMessageDom";
+import type { AppMainView, RoleRecord, SessionPayload } from "../shared/types";
 
 type UseChatInteractionsArgs = {
   activeRoleId: string;
@@ -15,8 +15,6 @@ type UseChatInteractionsArgs = {
   openRole: (roleId: string, roleOverride?: RoleRecord | null, options?: { recordHistory?: boolean }) => Promise<boolean>;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
   setError: React.Dispatch<React.SetStateAction<string>>;
-  setPendingChatAttachments: React.Dispatch<React.SetStateAction<string[]>>;
-  setChatReplyTarget: React.Dispatch<React.SetStateAction<ChatReplyTarget | null>>;
   setHighlightedMessageKey: React.Dispatch<React.SetStateAction<string>>;
 };
 
@@ -31,8 +29,6 @@ export function useChatInteractions({
   openRole,
   setNotice,
   setError,
-  setPendingChatAttachments,
-  setChatReplyTarget,
   setHighlightedMessageKey,
 }: UseChatInteractionsArgs) {
   async function openRoleDetail(roleId: string): Promise<void> {
@@ -59,24 +55,12 @@ export function useChatInteractions({
     }
   }
 
-  async function pickChatAttachments(): Promise<void> {
-    const files = await window.miraDesktop.pickChatAttachments({ multiple: true });
-    if (!files.length) {
-      return;
-    }
-    setPendingChatAttachments((current) => normalizeChatAttachmentPaths([...current, ...files]));
-  }
-
   function beginAttachmentDrag(path: string): void {
     const normalizedPath = path.trim();
     if (!normalizedPath) {
       return;
     }
     window.miraDesktop.startAttachmentDrag({ path: normalizedPath });
-  }
-
-  function removePendingChatAttachment(path: string): void {
-    setPendingChatAttachments((current) => current.filter((item) => item !== path));
   }
 
   async function copyChatMessage(content: string): Promise<void> {
@@ -104,21 +88,6 @@ export function useChatInteractions({
     }
   }
 
-  function quoteChatMessage(target: ChatReplyTarget): void {
-    setChatReplyTarget((current) => (
-      current
-      && current.messageId === target.messageId
-      && current.content === target.content
-      && current.sender === target.sender
-        ? current
-        : target
-    ));
-  }
-
-  function clearChatReplyTarget(): void {
-    setChatReplyTarget((current) => (current ? null : current));
-  }
-
   function jumpToChatMessage(messageKey: string): void {
     const normalizedMessageKey = messageKey.trim();
     if (!normalizedMessageKey) {
@@ -129,8 +98,7 @@ export function useChatInteractions({
     ));
     window.requestAnimationFrame(() => {
       setHighlightedMessageKey(normalizedMessageKey);
-      const target = Array.from(document.querySelectorAll<HTMLElement>("[data-message-key]"))
-        .find((item) => item.dataset.messageKey === normalizedMessageKey);
+      const target = findChatMessageElement(normalizedMessageKey);
       target?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
   }
@@ -138,12 +106,8 @@ export function useChatInteractions({
   return {
     openRoleDetail,
     openRoleAssets,
-    pickChatAttachments,
     beginAttachmentDrag,
-    removePendingChatAttachment,
     copyChatMessage,
-    quoteChatMessage,
-    clearChatReplyTarget,
     jumpToChatMessage,
   };
 }

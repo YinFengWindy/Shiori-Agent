@@ -1,13 +1,14 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { ChatComposer } from "./ChatComposer";
 import { buildChatImageHistoryKey } from "./chatImageHistory";
 import { isChatImageAsset } from "./chatImageHistory";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
-import { canSubmitChatMessage, summarizeChatReplyContent } from "./chatComposerState";
+import { summarizeChatReplyContent } from "./chatComposerState";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
 import { formatTimestamp, toFileUrl } from "../shared/format";
-import { CopyIcon, DeleteIcon, DocumentIcon, PlusIcon, QuoteIcon, SendIcon } from "../shared/icons";
+import { CopyIcon, DocumentIcon, QuoteIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
-import type { ChatReplyTarget, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
+import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
 
 type MessageContextMenuState = {
   x: number;
@@ -36,12 +37,9 @@ type ChatSurfaceProps = {
   relationshipTags: string[];
   lonelinessValue: number;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
-  draft: string;
   headerTitle: string;
   highlightedMessageKey: string;
   notice: string;
-  pendingChatAttachments: string[];
-  chatReplyTarget: ChatReplyTarget | null;
   sending: boolean;
   visibleIllustrationUrl: string;
   onBeginChatLatestImageSidebarResize: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -49,17 +47,12 @@ type ChatSurfaceProps = {
   onGoToPreviousChatImage: () => void;
   onOpenChatImageLightbox: () => void;
   onOpenChatImagePreview: (target: { historyKey: string }) => void;
-  onPickChatAttachments: () => void;
   onOpenRoleDetail: () => void;
   onJumpToMessage: (messageKey: string) => void;
-  onClearChatReplyTarget: () => void;
   onBeginAttachmentDrag: (path: string) => void;
   onCopyMessage: (content: string) => void;
-  onQuoteMessage: (target: ChatReplyTarget) => void;
-  onRemovePendingChatAttachment: (path: string) => void;
-  onSendMessage: (contentOverride?: string) => void;
+  onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
   onToggleChatLatestImageSidebar: () => void;
-  onUpdateDraft: (value: string) => void;
 };
 
 /** Renders the active role chat header, conversation messages, and composer. */
@@ -82,12 +75,9 @@ export function ChatSurface({
   relationshipTags,
   lonelinessValue,
   conversationEndRef,
-  draft,
   headerTitle,
   highlightedMessageKey,
   notice,
-  pendingChatAttachments,
-  chatReplyTarget,
   sending,
   visibleIllustrationUrl,
   onBeginChatLatestImageSidebarResize,
@@ -95,41 +85,26 @@ export function ChatSurface({
   onGoToPreviousChatImage,
   onOpenChatImageLightbox,
   onOpenChatImagePreview,
-  onPickChatAttachments,
   onOpenRoleDetail,
   onJumpToMessage,
-  onClearChatReplyTarget,
   onBeginAttachmentDrag,
   onCopyMessage,
-  onQuoteMessage,
-  onRemovePendingChatAttachment,
   onSendMessage,
   onToggleChatLatestImageSidebar,
-  onUpdateDraft,
 }: ChatSurfaceProps) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationListRef = useRef<HTMLDivElement | null>(null);
   const messageContextMenuRef = useRef<HTMLDivElement | null>(null);
   const previousMessageCountRef = useRef(0);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
+  const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const [sidebarMode, setSidebarMode] = useState<"status" | "images">(
     hasStatusIllustration ? "status" : "images",
   );
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
-
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    if (textarea.value !== draft) {
-      textarea.value = draft;
-    }
-    textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, [draft]);
 
   useEffect(() => {
     const updateScrollState = () => {
@@ -221,6 +196,10 @@ export function ChatSurface({
   }, [activeSession?.key]);
 
   useEffect(() => {
+    setComposerReplyTarget(null);
+  }, [activeRoleId, activeSession?.key]);
+
+  useEffect(() => {
     const currentMessageCount = activeSession?.messages.length ?? 0;
     const previousMessageCount = previousMessageCountRef.current;
     previousMessageCountRef.current = currentMessageCount;
@@ -257,17 +236,6 @@ export function ChatSurface({
   const canGoToNextChatImage = hasChatImageHistory && chatLatestImagePosition < chatLatestImageSidebarCount;
   const canOpenRoleDetail = Boolean(activeRole && activeRoleId);
   const detailRole = canOpenRoleDetail ? activeRole : null;
-  const canSubmit = canSubmitChatMessage(draft, pendingChatAttachments);
-
-  const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter") return;
-    if (event.ctrlKey || event.shiftKey) return;
-    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-
-    event.preventDefault();
-    if (!activeRoleId || !canSubmit || sending || !bridgeReady) return;
-    onSendMessage();
-  };
 
   const handleScrollToBottom = () => {
     const container = conversationListRef.current;
@@ -280,6 +248,10 @@ export function ChatSurface({
     onOpenRoleDetail();
   };
 
+  function getAttachmentName(path: string): string {
+    return path.split(/[\\/]/).pop() || path;
+  }
+
   function getMessageSourceLabel(message: SessionPayload["messages"][number]): string | null {
     const metadata = message.metadata ?? {};
     const transportChannel = String(metadata.transport_channel ?? metadata.context_channel ?? metadata.source_channel ?? "").trim();
@@ -290,19 +262,6 @@ export function ChatSurface({
       return "DESKTOP";
     }
     return null;
-  }
-
-  function getAttachmentName(path: string): string {
-    return path.split(/[\\/]/).pop() || path;
-  }
-
-  function getAttachmentExtensionLabel(path: string): string {
-    const attachmentName = getAttachmentName(path);
-    const dotIndex = attachmentName.lastIndexOf(".");
-    if (dotIndex < 0 || dotIndex === attachmentName.length - 1) {
-      return "FILE";
-    }
-    return attachmentName.slice(dotIndex + 1).toUpperCase();
   }
 
   function getMessageCopyText(message: SessionMessage): string {
@@ -365,7 +324,7 @@ export function ChatSurface({
     if (!messageContextMenu) return;
     const content = getMessageReplyContent(messageContextMenu.message);
     if (!content) return;
-    onQuoteMessage({
+    setComposerReplyTarget({
       messageId: messageContextMenu.messageKey,
       content,
       sender: messageContextMenu.sender,
@@ -606,135 +565,31 @@ export function ChatSurface({
             <div ref={conversationEndRef} className="h-40" />
           </div>
         </div>
-        <div className="composer-wrap absolute inset-x-0 bottom-10 z-[2] flex min-w-0 justify-center overflow-visible">
-          <div className={composerTrackClass}>
-            {showScrollToBottom ? (
-              <div className="pointer-events-none mb-2 flex justify-center">
-                <button
-                  className="pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-[#E4E4E4] bg-[rgba(255,255,255,0.96)] text-[#4b5563] shadow-[0_10px_24px_rgba(17,24,39,0.08)] transition hover:border-[#d5d5d5] hover:bg-white hover:text-[#1f2937] focus:outline-none"
-                  type="button"
-                  aria-label="滑到最下方"
-                  onClick={handleScrollToBottom}
-                >
-                  <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M12 5v14" />
-                    <path d="m6 13 6 6 6-6" />
-                  </svg>
-                </button>
-              </div>
-            ) : null}
-            <div className="composer grid w-full flex-none gap-1.5 rounded-[18px] border border-[#E4E4E4] bg-[#FFFEFF] px-3 pb-2 pt-2.5">
-              {chatReplyTarget ? (
-                <div className="flex min-w-0 items-start gap-2 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-2.5 py-2 text-left">
-                  {chatReplyTarget.messageId ? (
-                    <button
-                      className="min-w-0 flex-1 border-0 bg-transparent p-0 text-left transition hover:opacity-85 focus:outline-none"
-                      type="button"
-                      aria-label="跳转到引用来源消息"
-                      onClick={() => onJumpToMessage(chatReplyTarget.messageId)}
-                    >
-                      <div className="border-l-2 border-[#AEB7C5] pl-2.5">
-                        <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{chatReplyTarget.sender || "历史消息"}</div>
-                        <div className="line-clamp-2 text-[12px] leading-5 text-[#4B5563]">{chatReplyTarget.preview}</div>
-                      </div>
-                    </button>
-                  ) : (
-                    <div className="min-w-0 flex-1 border-l-2 border-[#AEB7C5] pl-2.5">
-                      <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{chatReplyTarget.sender || "历史消息"}</div>
-                      <div className="line-clamp-2 text-[12px] leading-5 text-[#4B5563]">{chatReplyTarget.preview}</div>
-                    </div>
-                  )}
-                  <button
-                    className="grid h-6 w-6 flex-none place-items-center rounded-md border-0 bg-transparent p-0 text-[#7C8797] transition hover:bg-black/5 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
-                    type="button"
-                    aria-label="取消引用"
-                    onClick={onClearChatReplyTarget}
-                    disabled={sending}
-                  >
-                    <DeleteIcon className="h-[10px] w-[10px] fill-current" />
-                  </button>
-                </div>
-              ) : null}
-              {pendingChatAttachments.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {pendingChatAttachments.map((path) => (
-                    isChatImageAsset(path) ? (
-                      <span
-                        key={path}
-                        className="relative h-14 w-14 overflow-hidden rounded-md border border-black/8 bg-[#F6F7FA]"
-                      >
-                        <img
-                          className="h-full w-full object-cover"
-                          src={toFileUrl(path)}
-                          alt=""
-                        />
-                        <button
-                          className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-white/92 p-0 text-[#7C8797] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
-                          type="button"
-                          aria-label="移除图片附件"
-                          onClick={() => onRemovePendingChatAttachment(path)}
-                          disabled={sending}
-                        >
-                          <DeleteIcon className="h-[10px] w-[10px] fill-current" />
-                        </button>
-                      </span>
-                    ) : (
-                      <span
-                        key={path}
-                        className="relative inline-flex max-w-[220px] items-center gap-2 rounded-[16px] border border-black/8 bg-[#F6F7FA] px-3 py-2 text-left text-[#4B5563]"
-                      >
-                        <span className="grid h-9 w-9 flex-none place-items-center rounded-[12px] bg-white text-[#6B7280] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)]">
-                          <DocumentIcon className="h-4 w-4 stroke-current" />
-                        </span>
-                        <span className="min-w-0 flex-1 pr-4">
-                          <span className="block truncate text-[12px] font-medium leading-[1.2] text-[#1F2937]">
-                            {getAttachmentName(path)}
-                          </span>
-                          <span className="mt-1 block text-[11px] leading-none text-[#8B95A7]">
-                            {getAttachmentExtensionLabel(path)}
-                          </span>
-                        </span>
-                        <button
-                          className="absolute right-2 top-2 grid h-4 w-4 place-items-center rounded-full border-0 bg-transparent p-0 text-[#7C8797] transition hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
-                          type="button"
-                          aria-label={`移除附件 ${getAttachmentName(path)}`}
-                          onClick={() => onRemovePendingChatAttachment(path)}
-                          disabled={sending}
-                        >
-                          <DeleteIcon className="h-[10px] w-[10px] fill-current" />
-                        </button>
-                      </span>
-                    )
-                  ))}
-                </div>
-              ) : null}
-              <textarea
-                ref={textareaRef}
-                className="min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-6 text-[#1f1f1f] outline-none"
-                rows={1}
-                value={draft}
-                onChange={(event) => onUpdateDraft(event.target.value)}
-                onKeyDown={handleComposerKeyDown}
-                placeholder="给当前角色发送消息..."
-              />
-              <div className="composer-actions flex items-center gap-2">
-                <button
-                  className="grid h-[30px] w-[30px] place-items-center rounded-full border-0 bg-transparent p-0 text-[#4B5563] transition focus:outline-none disabled:cursor-default disabled:opacity-40"
-                  type="button"
-                  aria-label="添加附件"
-                  onClick={onPickChatAttachments}
-                  disabled={!activeRoleId || sending || !bridgeReady}
-                >
-                  <PlusIcon className="h-[14px] w-[14px] fill-current" />
-                </button>
-                <div className="composer-spacer flex-1" />
-                <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="发送消息" onClick={() => onSendMessage()} disabled={!activeRoleId || !canSubmit || sending || !bridgeReady}>
-                  <SendIcon className="h-[15px] w-[15px] fill-current" />
-                </button>
-              </div>
-            </div>
+        {showScrollToBottom ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-[132px] z-[2] flex justify-center">
+            <button
+              className="pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-[#E4E4E4] bg-[rgba(255,255,255,0.96)] text-[#4b5563] shadow-[0_10px_24px_rgba(17,24,39,0.08)] transition hover:border-[#d5d5d5] hover:bg-white hover:text-[#1f2937] focus:outline-none"
+              type="button"
+              aria-label="滑到最下方"
+              onClick={handleScrollToBottom}
+            >
+              <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 5v14" />
+                <path d="m6 13 6 6 6-6" />
+              </svg>
+            </button>
           </div>
-        </div>
+        ) : null}
+        <ChatComposer
+          activeRoleId={activeRoleId}
+          sessionKey={activeSession?.key ?? ""}
+          bridgeReady={bridgeReady}
+          sending={sending}
+          replyTarget={composerReplyTarget}
+          onSendMessage={onSendMessage}
+          onClearReplyTarget={() => setComposerReplyTarget(null)}
+          onJumpToMessage={onJumpToMessage}
+        />
       </section>
       </div>
       <div

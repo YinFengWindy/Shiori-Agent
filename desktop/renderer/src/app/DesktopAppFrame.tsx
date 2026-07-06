@@ -17,7 +17,7 @@ import { SettingsSidebar, type SettingsSectionId } from "../settings/SettingsSid
 import { cx } from "../shared/styles";
 import type {
   AppMainView,
-  ChatReplyTarget,
+  ChatSendRequest,
   NewRoleFormState,
   PendingRoleCardAction,
   RoleFormState,
@@ -100,28 +100,20 @@ type DesktopAppFrameProps = {
   relationshipTags: string[];
   lonelinessValue: number;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
-  draft: string;
   headerTitle: string;
   highlightedMessageKey: string;
   notice: string;
-  pendingChatAttachments: string[];
-  chatReplyTarget: ChatReplyTarget | null;
   isVisibleChatSending: boolean;
   visibleIllustrationUrl: string;
   onGoToNextChatImage: () => void;
   onGoToPreviousChatImage: () => void;
   onOpenChatImageLightbox: () => void;
   onOpenChatImagePreview: (target: { historyKey: string }) => void;
-  onPickChatAttachments: () => void;
   onOpenRoleDetail: () => void;
   onJumpToMessage: (messageKey: string) => void;
-  onClearChatReplyTarget: () => void;
   onBeginAttachmentDrag: (path: string) => void;
   onCopyMessage: (content: string) => void;
-  onQuoteMessage: (target: ChatReplyTarget) => void;
-  onRemovePendingChatAttachment: (path: string) => void;
-  onSendMessage: (contentOverride?: string) => void;
-  onUpdateDraft: (value: string) => void;
+  onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
   imageHistorySidebar: RightSidebarViewState;
   detailRole: RoleRecord | null;
   pendingRoleCardAction: PendingRoleCardAction;
@@ -230,28 +222,20 @@ export function DesktopAppFrame({
   relationshipTags,
   lonelinessValue,
   conversationEndRef,
-  draft,
   headerTitle,
   highlightedMessageKey,
   notice,
-  pendingChatAttachments,
-  chatReplyTarget,
   isVisibleChatSending,
   visibleIllustrationUrl,
   onGoToNextChatImage,
   onGoToPreviousChatImage,
   onOpenChatImageLightbox,
   onOpenChatImagePreview,
-  onPickChatAttachments,
   onOpenRoleDetail,
   onJumpToMessage,
-  onClearChatReplyTarget,
   onBeginAttachmentDrag,
   onCopyMessage,
-  onQuoteMessage,
-  onRemovePendingChatAttachment,
   onSendMessage,
-  onUpdateDraft,
   imageHistorySidebar,
   detailRole,
   pendingRoleCardAction,
@@ -437,12 +421,9 @@ export function DesktopAppFrame({
               relationshipTags={relationshipTags}
               lonelinessValue={lonelinessValue}
               conversationEndRef={conversationEndRef}
-              draft={draft}
               headerTitle={headerTitle}
               highlightedMessageKey={highlightedMessageKey}
               notice={notice}
-              pendingChatAttachments={pendingChatAttachments}
-              chatReplyTarget={chatReplyTarget}
               sending={isVisibleChatSending}
               visibleIllustrationUrl={visibleIllustrationUrl}
               onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
@@ -450,17 +431,12 @@ export function DesktopAppFrame({
               onGoToPreviousChatImage={onGoToPreviousChatImage}
               onOpenChatImageLightbox={onOpenChatImageLightbox}
               onOpenChatImagePreview={onOpenChatImagePreview}
-              onPickChatAttachments={onPickChatAttachments}
               onOpenRoleDetail={onOpenRoleDetail}
               onJumpToMessage={onJumpToMessage}
-              onClearChatReplyTarget={onClearChatReplyTarget}
               onBeginAttachmentDrag={onBeginAttachmentDrag}
               onCopyMessage={onCopyMessage}
-              onQuoteMessage={onQuoteMessage}
-              onRemovePendingChatAttachment={onRemovePendingChatAttachment}
               onSendMessage={onSendMessage}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
-              onUpdateDraft={onUpdateDraft}
             />
           ) : null}
           {mainView.kind === "image-studio" ? (

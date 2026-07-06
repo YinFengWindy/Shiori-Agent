@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChatSurface } from "./ChatSurface";
-import type { ChatReplyTarget, RoleRecord, SessionPayload } from "../shared/types";
+import type { RoleRecord, SessionPayload } from "../shared/types";
 
 function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
   return {
@@ -40,10 +40,7 @@ function renderChatSurface(
   activeRole: RoleRecord | null,
   activeRoleId: string,
   options: {
-    draft?: string;
-    pendingChatAttachments?: string[];
     activeSession?: SessionPayload;
-    chatReplyTarget?: ChatReplyTarget | null;
     currentMood?: string;
     moodIllustrationUrl?: string;
     chatLatestImageSidebarCollapsed?: boolean;
@@ -69,12 +66,9 @@ function renderChatSurface(
       relationshipTags={["亲近", "等你主动"]}
       lonelinessValue={72}
       conversationEndRef={React.createRef<HTMLDivElement>()}
-      draft={options.draft ?? ""}
       headerTitle={activeRole?.name ?? "Mira"}
       highlightedMessageKey=""
       notice=""
-      pendingChatAttachments={options.pendingChatAttachments ?? []}
-      chatReplyTarget={options.chatReplyTarget ?? null}
       sending={false}
       visibleIllustrationUrl=""
       onBeginChatLatestImageSidebarResize={() => undefined}
@@ -82,17 +76,12 @@ function renderChatSurface(
       onGoToPreviousChatImage={() => undefined}
       onOpenChatImageLightbox={() => undefined}
       onOpenChatImagePreview={() => undefined}
-      onPickChatAttachments={() => undefined}
       onOpenRoleDetail={() => undefined}
       onJumpToMessage={() => undefined}
-      onClearChatReplyTarget={() => undefined}
       onBeginAttachmentDrag={() => undefined}
       onCopyMessage={() => undefined}
-      onQuoteMessage={() => undefined}
-      onRemovePendingChatAttachment={() => undefined}
-      onSendMessage={() => undefined}
+      onSendMessage={async () => true}
       onToggleChatLatestImageSidebar={() => undefined}
-      onUpdateDraft={() => undefined}
     />,
   );
 }
@@ -112,18 +101,6 @@ describe("ChatSurface", () => {
     assert.doesNotMatch(markup, /aria-label="查看角色 .* 详情"/);
   });
 
-  it("renders image attachments as thumbnails and keeps text attachments as pending cards", () => {
-    const markup = renderChatSurface(createRole(), "mira", {
-      pendingChatAttachments: ["D:\\files\\scene.png", "D:\\files\\notes.md"],
-    });
-
-    assert.match(markup, /aria-label="添加附件"/);
-    assert.match(markup, /mira-asset:\/\/local\?path=D%3A%5Cfiles%5Cscene\.png/);
-    assert.doesNotMatch(markup, />scene\.png</);
-    assert.match(markup, />notes\.md</);
-    assert.match(markup, />MD</);
-  });
-
   it("renders sent text attachments as compact file pills", () => {
     const session = createSession();
     session.messages = [
@@ -138,21 +115,6 @@ describe("ChatSurface", () => {
 
     assert.match(markup, />yinfeng-chat-history\.md</);
     assert.doesNotMatch(markup, />附件</);
-  });
-
-  it("renders the pending reply target above the composer", () => {
-    const markup = renderChatSurface(createRole(), "mira", {
-      chatReplyTarget: {
-        messageId: "message-1",
-        sender: "Mira",
-        content: "她停顿了一下，然后把声音放轻。",
-        preview: "她停顿了一下，然后把声音放轻。",
-      },
-    });
-
-    assert.match(markup, />Mira</);
-    assert.match(markup, />她停顿了一下，然后把声音放轻。</);
-    assert.match(markup, /aria-label="取消引用"/);
   });
 
   it("renders persisted reply previews inside message bubbles", () => {
@@ -192,15 +154,6 @@ describe("ChatSurface", () => {
     assert.match(markup, /draggable="true"/);
     assert.match(markup, /scene\.png/);
     assert.match(markup, /notes\.md/);
-  });
-
-  it("allows sending when attachments exist even if the draft is empty", () => {
-    const markup = renderChatSurface(createRole(), "mira", {
-      pendingChatAttachments: ["D:\\files\\notes.md"],
-    });
-
-    assert.match(markup, /aria-label="发送消息"/);
-    assert.doesNotMatch(markup, /aria-label="发送消息"[^>]*disabled=""/);
   });
 
   it("keeps the status tab disabled and falls back to images when no status illustration exists", () => {

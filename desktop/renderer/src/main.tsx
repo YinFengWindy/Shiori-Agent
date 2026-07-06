@@ -39,7 +39,6 @@ import { useLatestRef } from "./shared/useLatestRef";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
 import type {
   AppMainView,
-  ChatReplyTarget,
   EventLog,
   NewRoleFormState,
   PendingRoleCardAction,
@@ -54,9 +53,6 @@ function App(): React.ReactElement {
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [activeRoleId, setActiveRoleId] = useState("");
   const [activeSession, setActiveSession] = useState<SessionPayload | null>(null);
-  const [draft, setDraft] = useState("");
-  const [chatReplyTarget, setChatReplyTarget] = useState<ChatReplyTarget | null>(null);
-  const [pendingChatAttachments, setPendingChatAttachments] = useState<string[]>([]);
   const [events, setEvents] = useState<EventLog[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -113,8 +109,6 @@ function App(): React.ReactElement {
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
   const mainViewRef = useLatestRef<AppMainView>(mainView);
   const rolesRef = useLatestRef(roles);
-  const draftRef = useLatestRef(draft);
-  const pendingChatAttachmentsRef = useLatestRef(pendingChatAttachments);
   const sendingSessionsRef = useLatestRef(sendingSessions);
   const unreadCountsRef = useLatestRef(unreadCounts);
   const roleFormRef = useLatestRef(roleForm);
@@ -316,17 +310,13 @@ function App(): React.ReactElement {
     setRoles,
     setActiveRoleId,
     setActiveSession,
-    setChatReplyTarget,
-    setPendingChatAttachments,
     setError,
     setNotice,
-    setDraft,
     setUnreadCounts,
     setSelectedAvatarAsset,
     setSelectedChatBackground,
     setActiveIllustration,
     setSendingSessions,
-    chatReplyTarget,
     chooseIllustration,
     applyRoleSnapshot,
     buildNavigationEntry,
@@ -337,8 +327,6 @@ function App(): React.ReactElement {
     roleSessionCacheRef,
     mainViewRef,
     rolesRef,
-    draftRef,
-    pendingChatAttachmentsRef,
     sendingSessionsRef,
     unreadCountsRef,
     openRoleRequestIdRef,
@@ -507,12 +495,8 @@ function App(): React.ReactElement {
   const {
     openRoleDetail,
     openRoleAssets,
-    pickChatAttachments,
     beginAttachmentDrag,
-    removePendingChatAttachment,
     copyChatMessage,
-    quoteChatMessage,
-    clearChatReplyTarget,
     jumpToChatMessage,
   } = useChatInteractions({
     activeRoleId,
@@ -524,8 +508,6 @@ function App(): React.ReactElement {
     openRole,
     setNotice,
     setError,
-    setPendingChatAttachments,
-    setChatReplyTarget,
     setHighlightedMessageKey,
   });
 
@@ -628,28 +610,20 @@ function App(): React.ReactElement {
       relationshipTags={relationshipTags}
       lonelinessValue={lonelinessValue}
       conversationEndRef={conversationEndRef}
-      draft={draft}
       headerTitle={headerTitle}
       highlightedMessageKey={highlightedMessageKey}
       notice={notice}
-      pendingChatAttachments={pendingChatAttachments}
-      chatReplyTarget={chatReplyTarget}
       isVisibleChatSending={isVisibleChatSending}
       visibleIllustrationUrl={visibleIllustrationUrl}
       onGoToNextChatImage={selectNextChatImage}
       onGoToPreviousChatImage={selectPreviousChatImage}
       onOpenChatImageLightbox={openSelectedChatImageLightbox}
       onOpenChatImagePreview={openChatImagePreview}
-      onPickChatAttachments={() => void pickChatAttachments()}
       onOpenRoleDetail={() => void openRoleDetail(activeRoleId)}
       onJumpToMessage={jumpToChatMessage}
-      onClearChatReplyTarget={clearChatReplyTarget}
       onBeginAttachmentDrag={beginAttachmentDrag}
       onCopyMessage={(content) => void copyChatMessage(content)}
-      onQuoteMessage={quoteChatMessage}
-      onRemovePendingChatAttachment={removePendingChatAttachment}
-      onSendMessage={(contentOverride) => void sendMessage(contentOverride)}
-      onUpdateDraft={setDraft}
+      onSendMessage={sendMessage}
       imageHistorySidebar={imageHistorySidebar}
       detailRole={detailRole}
       pendingRoleCardAction={pendingRoleCardAction}

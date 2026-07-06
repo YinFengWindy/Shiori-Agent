@@ -136,7 +136,9 @@ export function useDesktopBridgeLifecycle({
   useEffect(() => {
     const off = window.miraDesktop.onEvent((event) => {
       startTransition(() => {
-        setEvents((items) => [...items, { method: event.method, payload: event.payload }].slice(-12));
+        if (event.method !== "chat.delta") {
+          setEvents((items) => [...items, { method: event.method, payload: event.payload }].slice(-12));
+        }
         if (event.method === "window.state") {
           setWindowMaximized(Boolean(event.payload.isMaximized));
           return;

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type React from "react";
+import { findChatMessageElement } from "../chat/chatMessageDom";
 import type { WorkspaceFeedback } from "./appState";
 
 type UseDesktopUiEffectsArgs = {
@@ -92,8 +93,7 @@ export function useDesktopUiEffects({
 
     const tryHighlight = () => {
       if (cancelled) return;
-      const target = Array.from(document.querySelectorAll<HTMLElement>("[data-message-key]"))
-        .find((item) => item.dataset.messageKey === pendingMessageNavigation.messageKey);
+      const target = findChatMessageElement(pendingMessageNavigation.messageKey);
       if (target) {
         setHighlightedMessageKey(pendingMessageNavigation.messageKey);
         target.scrollIntoView({ behavior: "smooth", block: "center" });
