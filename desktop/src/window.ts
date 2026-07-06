@@ -16,6 +16,7 @@ function emitWindowState(window: BrowserWindow): void {
 /** Creates the desktop shell window and wires renderer smoke hooks when requested. */
 export function createDesktopWindow(): BrowserWindow {
   const win = new BrowserWindow({
+    title: "Shiori",
     width: 1320,
     height: 860,
     minWidth: 520,

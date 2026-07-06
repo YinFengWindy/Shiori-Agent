@@ -1,5 +1,5 @@
 {
-  "name": "mira-desktop",
+  "name": "shiori-desktop",
   "private": true,
   "type": "module",
   "main": "dist/main.js",

@@ -35,7 +35,7 @@ function configureUserDataPath(): void {
   const userDataDir =
     requestedUserDataDir
       ? resolve(requestedUserDataDir)
-      : resolve(tmpdir(), "mira-desktop-smoke", String(process.pid));
+      : resolve(tmpdir(), "shiori-desktop-smoke", String(process.pid));
   mkdirSync(userDataDir, { recursive: true });
   app.setPath("userData", userDataDir);
 }
