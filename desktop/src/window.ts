@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron";
 import { attachWindowSmokeHandlers } from "./smoke.js";
-import { preloadScript, rendererDevServerUrl, rendererDist } from "./paths.js";
+import { desktopWindowIcon, preloadScript, rendererDevServerUrl, rendererDist } from "./paths.js";
 
 function emitWindowState(window: BrowserWindow): void {
   window.webContents.send("desktop:event", {
@@ -17,6 +17,7 @@ function emitWindowState(window: BrowserWindow): void {
 export function createDesktopWindow(): BrowserWindow {
   const win = new BrowserWindow({
     title: "Shiori",
+    icon: desktopWindowIcon,
     width: 1320,
     height: 860,
     minWidth: 520,
