@@ -160,6 +160,8 @@ class AgentCoreDeps:
     context: "ContextBuilder"
     tools: "ToolRegistry"
     reasoner: "Reasoner"
+    llm: "LLMServices | None" = None
+    llm_config: "LLMConfig | None" = None
     event_bus: "EventBus | None" = None
     outbound_port: "OutboundPort | None" = None
     history_window: int = 500
