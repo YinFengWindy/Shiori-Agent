@@ -20,15 +20,6 @@ export function canSubmitChatMessage(content: string, attachments: string[]): bo
   return content.trim().length > 0 || normalizeChatAttachmentPaths(attachments).length > 0;
 }
 
-/** Detects stale draft replays that can arrive right after the composer is cleared on send. */
-export function shouldIgnoreStaleChatDraftReplay(
-  currentDraft: string,
-  nextDraft: string,
-  ignoredDraft: string,
-): boolean {
-  return Boolean(ignoredDraft) && currentDraft.length === 0 && nextDraft === ignoredDraft;
-}
-
 /** Builds the one-line preview shown inside the desktop reply bar. */
 export function summarizeChatReplyContent(content: string): string {
   const compactContent = content.replace(/\s+/g, " ").trim();
