@@ -213,4 +213,15 @@ describe("ChatSurface", () => {
     assert.match(markup, /disabled=""/);
     assert.doesNotMatch(markup, />使用回退立绘</);
   });
+
+  it("keeps the image tab available when a status illustration exists", () => {
+    const markup = renderChatSurface(createRole(), "mira", {
+      currentMood: "开心",
+      moodIllustrationUrl: "mira-asset://local?path=D%3A%5Croles%5Cmira%5Chappy.png",
+    });
+
+    assert.match(markup, /aria-label="图片侧栏"/);
+    assert.match(markup, /aria-label="状态侧栏"/);
+    assert.doesNotMatch(markup, /aria-label="状态侧栏"[^>]*disabled=""/);
+  });
 });

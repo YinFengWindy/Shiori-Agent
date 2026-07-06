@@ -168,11 +168,7 @@ export function ChatSurface({
   }, [chatLatestImageSidebarCollapsed]);
 
   useEffect(() => {
-    if (sidebarMode === "status" && hasStatusIllustration) {
-      return;
-    }
-    if (hasStatusIllustration) {
-      setSidebarMode("status");
+    if (hasStatusIllustration || sidebarMode !== "status") {
       return;
     }
     setSidebarMode("images");
