@@ -118,6 +118,7 @@ class RelationshipSnapshot:
     source_summary: dict[str, Any]
     generated_at: str
     last_attempted_at: str
+    last_source_message_count: int
     last_error: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -132,6 +133,7 @@ class RelationshipSnapshot:
             "source_summary": dict(self.source_summary),
             "generated_at": self.generated_at,
             "last_attempted_at": self.last_attempted_at,
+            "last_source_message_count": self.last_source_message_count,
             "last_error": self.last_error,
         }
 
@@ -311,6 +313,7 @@ class RoleRelationshipRuntimeService:
             "self_text": store.read_self().strip(),
             "memory_text": store.read_long_term().strip(),
             "recent_messages": recent_messages,
+            "session_message_count": self._count_session_messages(session.messages),
             "interaction_summary": self._build_interaction_summary(role_id=role_id, recent_messages=recent_messages),
         }
 
@@ -326,6 +329,7 @@ class RoleRelationshipRuntimeService:
         source = self.generate_snapshot_input(role_id)
         role = source["role"]
         recent_messages = source["recent_messages"]
+        session_message_count = int(source["session_message_count"])
         now_dt = now or datetime.now().astimezone()
         prompt = _RELATIONSHIP_PROMPT.format(
             role_name=role.name or role.id,
@@ -364,11 +368,36 @@ class RoleRelationshipRuntimeService:
                 },
                 "generated_at": _now_iso(now_dt),
                 "last_attempted_at": _now_iso(now_dt),
+                "last_source_message_count": session_message_count,
                 "last_error": "",
             },
             preserve_error=False,
         )
         return self.write_snapshot(role_id, snapshot)
+
+    async def refresh_snapshot_after_consolidation(
+        self,
+        session: object,
+        *,
+        optimizer: "RelationshipSnapshotOptimizer",
+    ) -> dict[str, Any] | None:
+        """Refreshes the role snapshot after consolidation when the session is role-bound."""
+        role_id = self._role_id_from_session(session)
+        if not role_id or self._role_store.get_role(role_id) is None:
+            return None
+        snapshot = await optimizer.optimize(role_id=role_id)
+        metadata = getattr(session, "metadata", None)
+        if isinstance(metadata, dict):
+            if snapshot is None:
+                session.metadata = self.enrich_session_metadata(metadata)
+            else:
+                next_metadata = dict(metadata)
+                next_metadata["relationship_snapshot"] = snapshot
+                runtime = self.read_loneliness_runtime(role_id)
+                if runtime is not None:
+                    next_metadata["loneliness_runtime"] = runtime
+                session.metadata = next_metadata
+        return snapshot
 
     def recompute_loneliness(self, role_id: str, *, now: datetime | None = None) -> dict[str, Any] | None:
         snapshot = self.read_snapshot(role_id)
@@ -536,6 +565,9 @@ class RoleRelationshipRuntimeService:
             "source_summary": dict(payload.get("source_summary") or {}),
             "generated_at": str(payload.get("generated_at") or ""),
             "last_attempted_at": str(payload.get("last_attempted_at") or payload.get("generated_at") or ""),
+            "last_source_message_count": self._normalize_message_count(
+                payload.get("last_source_message_count")
+            ),
             "last_error": str(payload.get("last_error") or "") if preserve_error else "",
         }
         return normalized
@@ -559,6 +591,26 @@ class RoleRelationshipRuntimeService:
             return clean_key.split(":", 1)[1]
         session = self._session_manager.get_or_create(clean_key)
         return str(session.metadata.get("role_id") or "").strip()
+
+    def _role_id_from_session(self, session: object) -> str:
+        key = str(getattr(session, "key", "") or "").strip()
+        if key.startswith("role:"):
+            return key.split(":", 1)[1]
+        metadata = getattr(session, "metadata", None)
+        if isinstance(metadata, dict):
+            return str(metadata.get("role_id") or "").strip()
+        return ""
+
+    @staticmethod
+    def _count_session_messages(messages: object) -> int:
+        return len(messages) if isinstance(messages, list) else 0
+
+    @staticmethod
+    def _normalize_message_count(value: object) -> int:
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return 0
 
     def _collect_recent_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, str]]:
         pairs: list[dict[str, str]] = []

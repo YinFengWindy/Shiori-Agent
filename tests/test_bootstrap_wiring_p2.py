@@ -582,15 +582,16 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
         event_bus=EventBus(),
         memory_runtime=cast(
             Any,
-                SimpleNamespace(
-                    engine=object(),
-                    markdown=SimpleNamespace(
-                        store=markdown_store,
-                        maintenance=markdown_maintenance,
-                    ),
+            SimpleNamespace(
+                engine=object(),
+                markdown=SimpleNamespace(
+                    store=markdown_store,
+                    maintenance=markdown_maintenance,
                 ),
             ),
-        )
+        ),
+        relationship_runtime=cast(Any, SimpleNamespace()),
+    )
 
     assert observed["name"] == "default"
     assert observed["workspace"] == tmp_path

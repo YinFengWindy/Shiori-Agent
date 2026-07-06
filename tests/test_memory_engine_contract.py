@@ -680,6 +680,95 @@ async def test_markdown_consolidation_failure_trace_does_not_advance_cursor(tmp_
     assert session.last_consolidated == 0
 
 
+async def test_markdown_consolidation_runs_post_consolidation_hook(tmp_path: Path):
+    session = SimpleNamespace(
+        key="role:mira",
+        metadata={"role_id": "mira"},
+        messages=[{"role": "user", "content": f"u{i}"} for i in range(12)],
+        last_consolidated=0,
+    )
+    maintenance = MarkdownMemoryMaintenance(
+        store=MarkdownMemoryStore(tmp_path),
+        provider=cast(Any, SimpleNamespace()),
+        model="lm",
+        keep_count=6,
+    )
+    draft = _ConsolidationDraft(
+        window=_ConsolidationWindow(
+            old_messages=list(session.messages[:6]),
+            keep_count=6,
+            consolidate_up_to=6,
+        ),
+        source_ref='["role:mira:0"]',
+        history_entry_payloads=[],
+        pending_items="",
+        conversation="USER: hi",
+        recent_context_text="# Recent Context\n",
+        scope_channel="desktop",
+        scope_chat_id="role:mira",
+    )
+    maintenance._worker.prepare_consolidation = AsyncMock(return_value=draft)
+    after_consolidation = AsyncMock()
+    maintenance.bind_lifecycle(
+        MemoryLifecycleBindRequest(
+            get_session=lambda _key: session,
+            save_session=AsyncMock(),
+            after_consolidation=after_consolidation,
+        )
+    )
+
+    result = await maintenance.consolidate(ConsolidateRequest(session=session))
+
+    assert result.trace["mode"] == "markdown"
+    after_consolidation.assert_awaited_once_with(session)
+
+
+async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(tmp_path: Path):
+    session = SimpleNamespace(
+        key="role:mira",
+        metadata={"role_id": "mira"},
+        messages=[{"role": "user", "content": f"u{i}"} for i in range(12)],
+        last_consolidated=0,
+    )
+    maintenance = MarkdownMemoryMaintenance(
+        store=MarkdownMemoryStore(tmp_path),
+        provider=cast(Any, SimpleNamespace()),
+        model="lm",
+        keep_count=6,
+    )
+    draft = _ConsolidationDraft(
+        window=_ConsolidationWindow(
+            old_messages=list(session.messages[:6]),
+            keep_count=6,
+            consolidate_up_to=6,
+        ),
+        source_ref='["role:mira:0"]',
+        history_entry_payloads=[],
+        pending_items="",
+        conversation="USER: hi",
+        recent_context_text="# Recent Context\n",
+        scope_channel="desktop",
+        scope_chat_id="role:mira",
+    )
+    maintenance._worker.prepare_consolidation = AsyncMock(return_value=draft)
+
+    async def _fail(_session: object) -> None:
+        raise RuntimeError("relationship refresh failed")
+
+    maintenance.bind_lifecycle(
+        MemoryLifecycleBindRequest(
+            get_session=lambda _key: session,
+            save_session=AsyncMock(),
+            after_consolidation=_fail,
+        )
+    )
+
+    result = await maintenance.consolidate(ConsolidateRequest(session=session))
+
+    assert result.trace["mode"] == "markdown"
+    assert session.last_consolidated == 6
+
+
 async def test_default_memory_engine_serializes_lifecycle_maintenance():
     event_bus = EventBus()
     session = SimpleNamespace(

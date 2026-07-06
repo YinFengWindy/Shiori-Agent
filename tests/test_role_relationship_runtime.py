@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -61,6 +63,7 @@ def _snapshot_payload(*, role_id: str = "mira") -> dict:
         "source_summary": {},
         "generated_at": "2026-07-06T18:00:00+08:00",
         "last_attempted_at": "2026-07-06T18:00:00+08:00",
+        "last_source_message_count": 4,
         "last_error": "",
     }
 
@@ -167,7 +170,12 @@ def test_loneliness_heartbeat_loop_defaults_to_three_minutes(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_generate_snapshot_via_llm_accepts_prompt_json_example(tmp_path: Path):
     _seed_role(tmp_path)
-    runtime, _, _ = _runtime(tmp_path)
+    runtime, session_manager, _ = _runtime(tmp_path)
+    session = session_manager.get_or_create(session_manager.role_session_key("mira"))
+    session.messages = [
+        {"role": "user", "content": "你好"},
+        {"role": "assistant", "content": "我在。"},
+    ]
 
     class _Resp:
         content = (
@@ -189,3 +197,29 @@ async def test_generate_snapshot_via_llm_accepts_prompt_json_example(tmp_path: P
 
     assert snapshot["role_self_view"] == "我会留意你有没有来找我。"
     assert snapshot["relation_tags"] == ["亲近"]
+    assert snapshot["last_source_message_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_refresh_snapshot_after_consolidation_updates_session_metadata(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, session_manager, _ = _runtime(tmp_path)
+    session = session_manager.get_or_create(session_manager.role_session_key("mira"))
+    session.metadata["role_id"] = "mira"
+    session.messages = [{"role": "user", "content": "你好"}] * 6
+    expected_snapshot = {
+        **_snapshot_payload(),
+        "last_source_message_count": 6,
+    }
+    optimizer = SimpleNamespace(
+        optimize=AsyncMock(return_value=expected_snapshot),
+    )
+
+    snapshot = await runtime.refresh_snapshot_after_consolidation(
+        session,
+        optimizer=optimizer,
+    )
+
+    assert snapshot == expected_snapshot
+    optimizer.optimize.assert_awaited_once_with(role_id="mira")
+    assert session.metadata["relationship_snapshot"]["last_source_message_count"] == 6

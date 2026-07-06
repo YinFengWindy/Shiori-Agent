@@ -59,7 +59,11 @@ from bus.queue import MessageBus
 from core.memory.markdown import MemoryLifecycleBindRequest, MarkdownMemoryMaintenance
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
-from core.roles import RoleRelationshipRuntimeService, RoleStore
+from core.roles import (
+    RelationshipSnapshotOptimizer,
+    RoleRelationshipRuntimeService,
+    RoleStore,
+)
 from proactive_v2.presence import PresenceStore
 from session.manager import Session, SessionManager
 
@@ -389,9 +393,16 @@ def _build_loop_deps(
         presence=presence,
         relationship_runtime=relationship_runtime,
     )
+    relationship_optimizer = RelationshipSnapshotOptimizer(
+        relationship_runtime,
+        provider=provider,
+        model=config.agent_model or config.model,
+    )
     _bind_memory_lifecycle_if_supported(
         markdown=memory_runtime.markdown.maintenance,
         session_manager=session_manager,
+        relationship_runtime=relationship_runtime,
+        relationship_optimizer=relationship_optimizer,
     )
     retrieval_pipeline = DefaultMemoryRetrievalPipeline(
         memory=memory_services,
@@ -420,14 +431,23 @@ def _bind_memory_lifecycle_if_supported(
     *,
     markdown: MarkdownMemoryMaintenance,
     session_manager: SessionManager,
+    relationship_runtime: RoleRelationshipRuntimeService,
+    relationship_optimizer: RelationshipSnapshotOptimizer,
 ) -> None:
     async def _save_session(session: object) -> None:
         await session_manager.save_async(cast(Session, session))
+
+    async def _after_consolidation(session: object) -> None:
+        await relationship_runtime.refresh_snapshot_after_consolidation(
+            session,
+            optimizer=relationship_optimizer,
+        )
 
     markdown.bind_lifecycle(
         MemoryLifecycleBindRequest(
             get_session=session_manager.get_or_create,
             save_session=_save_session,
+            after_consolidation=_after_consolidation,
         )
     )
 

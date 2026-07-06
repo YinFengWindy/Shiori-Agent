@@ -51,6 +51,7 @@ class RefreshRecentTurnsRequest:
 class MemoryLifecycleBindRequest:
     get_session: Callable[[str], object]
     save_session: Callable[[object], Awaitable[None]]
+    after_consolidation: Callable[[object], Awaitable[None]] | None = None
 
 
 @runtime_checkable
@@ -1268,6 +1269,7 @@ class MarkdownMemoryMaintenance:
         self._consolidation_min_new_messages = max(5, keep_count // 2)
         self._get_session: Callable[[str], object] | None = None
         self._save_session: Callable[[object], Awaitable[None]] | None = None
+        self._after_consolidation: Callable[[object], Awaitable[None]] | None = None
         self._maintenance_queues: dict[str, deque[str]] = {}
         self._maintenance_tasks: dict[str, asyncio.Task[None]] = {}
         self._maintenance_locks: dict[str, asyncio.Lock] = {}
@@ -1284,6 +1286,7 @@ class MarkdownMemoryMaintenance:
     def bind_lifecycle(self, request: MemoryLifecycleBindRequest) -> None:
         self._get_session = request.get_session
         self._save_session = request.save_session
+        self._after_consolidation = request.after_consolidation
 
     def on_turn_committed(self, event: TurnCommitted) -> None:
         if bool((event.extra or {}).get("skip_post_memory")):
@@ -1392,10 +1395,20 @@ class MarkdownMemoryMaintenance:
                 }
             )
         await self._commit_markdown_draft(request.session, draft)
+        await self._run_after_consolidation(request.session)
         return ConsolidateResult(
             consolidated_count=len(draft.window.old_messages),
             trace={"mode": "markdown", "source_ref": draft.source_ref},
         )
+
+    async def _run_after_consolidation(self, session: object) -> None:
+        hook = self._after_consolidation
+        if hook is None:
+            return
+        try:
+            await hook(session)
+        except Exception as exc:
+            logger.warning("markdown memory post-consolidation hook failed: %s", exc)
 
     async def _commit_markdown_draft(
         self,

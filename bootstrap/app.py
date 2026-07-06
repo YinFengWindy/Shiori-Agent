@@ -18,9 +18,8 @@ from bootstrap.tools import CoreRuntime, build_core_runtime
 from bus.event_bus import EventBus
 from core.roles import (
     LonelinessHeartbeatLoop,
-    RelationshipSnapshotLoop,
-    RelationshipSnapshotOptimizer,
 )
+
 def configure_logging_stream(stream) -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -113,7 +112,6 @@ class AppRuntime:
         self.dashboard_task: asyncio.Task[None] | None = None
         self._background_tasks: list[asyncio.Task[None]] = []
         self._memory_optimizer = None
-        self._relationship_snapshot_optimizer = None
         self._shutdown = False
         self._started = False
 
@@ -183,27 +181,12 @@ class AppRuntime:
                 for index, task in enumerate(optimizer_tasks)
             )
             if self.relationship_runtime is not None:
-                relationship_optimizer = RelationshipSnapshotOptimizer(
-                    self.relationship_runtime,
-                    provider=self.provider,
-                    model=self.config.agent_model or self.config.model,
-                )
-                self._relationship_snapshot_optimizer = relationship_optimizer
-                relationship_loop = RelationshipSnapshotLoop(
-                    relationship_optimizer,
-                    role_store=self.core.relationship_runtime._role_store,
-                    runtime=self.relationship_runtime,
-                )
                 loneliness_loop = LonelinessHeartbeatLoop(
                     self.relationship_runtime,
                     role_store=self.core.relationship_runtime._role_store,
                 )
                 self._background_tasks.extend(
                     [
-                        asyncio.create_task(
-                            relationship_loop.run(),
-                            name="relationship_snapshot_loop",
-                        ),
                         asyncio.create_task(
                             loneliness_loop.run(),
                             name="loneliness_heartbeat_loop",
