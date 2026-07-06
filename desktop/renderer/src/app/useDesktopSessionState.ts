@@ -22,6 +22,8 @@ import type {
 import type { NavigationEntry } from "./appState";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
 
+type SendingSessionsMap = Record<string, string>;
+
 type UseDesktopSessionStateArgs = {
   roles: RoleRecord[];
   mainView: AppMainView;
@@ -62,6 +64,39 @@ type UseDesktopSessionStateArgs = {
   sendingSessionsRef: React.MutableRefObject<Record<string, string>>;
   openRoleRequestIdRef: React.MutableRefObject<number>;
 };
+
+/** Marks a chat session as sending while preserving the previous object when nothing changed. */
+export function markSendingSessionState(
+  current: SendingSessionsMap,
+  sessionKey: string,
+  roleId: string,
+): SendingSessionsMap {
+  if (!sessionKey || !roleId || current[sessionKey] === roleId) {
+    return current;
+  }
+  return {
+    ...current,
+    [sessionKey]: roleId,
+  };
+}
+
+/** Clears one in-flight chat session while preserving the previous object when it was already absent. */
+export function clearSendingSessionState(
+  current: SendingSessionsMap,
+  sessionKey: string,
+): SendingSessionsMap {
+  if (!sessionKey || !current[sessionKey]) {
+    return current;
+  }
+  const next = { ...current };
+  delete next[sessionKey];
+  return next;
+}
+
+/** Clears every in-flight chat session while preserving the previous object when already empty. */
+export function clearAllSendingSessionsState(current: SendingSessionsMap): SendingSessionsMap {
+  return Object.keys(current).length ? {} : current;
+}
 
 /** Owns desktop bridge/session lifecycle so the root app only composes state and actions. */
 export function useDesktopSessionState({
@@ -237,34 +272,18 @@ export function useDesktopSessionState({
   }
 
   function markSessionSending(sessionKey: string, roleId: string): void {
-    if (!sessionKey || !roleId) {
-      return;
-    }
-    setSendingSessions((current) => (
-      current[sessionKey] === roleId
-        ? current
-        : { ...current, [sessionKey]: roleId }
-    ));
+    sendingSessionsRef.current = markSendingSessionState(sendingSessionsRef.current, sessionKey, roleId);
+    setSendingSessions((current) => markSendingSessionState(current, sessionKey, roleId));
   }
 
   function clearSessionSending(sessionKey: string): void {
-    if (!sessionKey) {
-      return;
-    }
-    setSendingSessions((current) => {
-      if (!current[sessionKey]) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[sessionKey];
-      return next;
-    });
+    sendingSessionsRef.current = clearSendingSessionState(sendingSessionsRef.current, sessionKey);
+    setSendingSessions((current) => clearSendingSessionState(current, sessionKey));
   }
 
   function clearAllSendingSessions(): void {
-    setSendingSessions((current) => (
-      Object.keys(current).length ? {} : current
-    ));
+    sendingSessionsRef.current = clearAllSendingSessionsState(sendingSessionsRef.current);
+    setSendingSessions((current) => clearAllSendingSessionsState(current));
   }
 
   async function openRole(
