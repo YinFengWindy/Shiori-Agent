@@ -25,13 +25,8 @@ export function RoleMoodBindingsPanel({
   onClearMoodBinding,
 }: RoleMoodBindingsPanelProps) {
   return (
-    <div className="flex h-full min-h-[420px] flex-col rounded-[24px] border border-[#E4EAF0] bg-[#FAFBFD] p-5">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div>
-          <div className="text-sm font-medium text-[#2A3440]">心情映射</div>
-          <div className="mt-1 text-xs text-[#7A8593]">为当前角色的每个心情绑定一张差分立绘。</div>
-        </div>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="mb-4 text-xs text-[#7A8593]">为当前角色的每个心情绑定一张差分立绘。</div>
       <div className="mb-4 flex flex-wrap gap-2">
         {moodCatalog.map((mood) => (
           <button
@@ -50,7 +45,7 @@ export function RoleMoodBindingsPanel({
           </button>
         ))}
       </div>
-      <div className="grid flex-1 gap-4 rounded-[20px] bg-white p-5">
+      <div className="grid min-h-[360px] flex-1 gap-4 rounded-[20px] bg-white p-5">
         <div className="text-xs text-[#7A8593]">
           当前心情：
           <span className="ml-1 font-medium text-[#2A3440]">{activeMood || "未选择"}</span>
