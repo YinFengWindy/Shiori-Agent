@@ -3,11 +3,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildChatImageHistoryKey,
   collectChatImageHistory,
   findChatImageHistoryEntry,
   findChatImageHistoryIndex,
   isChatImageAsset,
-  resolveChatImageSelection,
+  resolveChatImageSelectionKey,
 } from "./chatImageHistory";
 import type { SessionPayload } from "../shared/types";
 
@@ -52,18 +53,21 @@ describe("collectChatImageHistory", () => {
 
     assert.deepEqual(collectChatImageHistory(session), [
       {
+        historyKey: "message-1:0",
         path: "outputs/cover.png",
         messageId: "message-1",
         mediaIndex: 0,
         timestamp: null,
       },
       {
+        historyKey: "message-2:0",
         path: "outputs/preview.webp",
         messageId: "message-2",
         mediaIndex: 0,
         timestamp: "2026-07-03T10:05:00.000Z",
       },
       {
+        historyKey: "message-2:1",
         path: "outputs/render.jpg",
         messageId: "message-2",
         mediaIndex: 1,
@@ -83,6 +87,7 @@ describe("collectChatImageHistory", () => {
 
     assert.deepEqual(collectChatImageHistory(session), [
       {
+        historyKey: "assistant-0:0",
         path: "outputs/cover.png",
         messageId: "assistant-0",
         mediaIndex: 0,
@@ -92,7 +97,13 @@ describe("collectChatImageHistory", () => {
   });
 });
 
-describe("resolveChatImageSelection", () => {
+describe("buildChatImageHistoryKey", () => {
+  it("keeps duplicate image paths distinct by message and media position", () => {
+    assert.equal(buildChatImageHistoryKey("message-1", 0), "message-1:0");
+  });
+});
+
+describe("resolveChatImageSelectionKey", () => {
   it("keeps the current selection when it is still in history", () => {
     const history = collectChatImageHistory(createSession([
       {
@@ -103,7 +114,7 @@ describe("resolveChatImageSelection", () => {
       },
     ]));
 
-    assert.equal(resolveChatImageSelection(history, "outputs/cover.png"), "outputs/cover.png");
+    assert.equal(resolveChatImageSelectionKey(history, "message-1:0"), "message-1:0");
   });
 
   it("falls back to the newest image when the current selection is missing", () => {
@@ -116,7 +127,26 @@ describe("resolveChatImageSelection", () => {
       },
     ]));
 
-    assert.equal(resolveChatImageSelection(history, "outputs/unknown.png"), "outputs/render.jpg");
+    assert.equal(resolveChatImageSelectionKey(history, "message-1:9"), "message-1:1");
+  });
+
+  it("keeps the newest duplicate image selected by its own history key", () => {
+    const history = collectChatImageHistory(createSession([
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "first",
+        media: ["outputs/render.jpg"],
+      },
+      {
+        id: "message-2",
+        role: "assistant",
+        content: "second",
+        media: ["outputs/render.jpg"],
+      },
+    ]));
+
+    assert.equal(resolveChatImageSelectionKey(history, "message-2:0"), "message-2:0");
   });
 });
 
@@ -131,7 +161,7 @@ describe("findChatImageHistoryIndex", () => {
       },
     ]));
 
-    assert.equal(findChatImageHistoryIndex(history, "outputs/render.jpg"), 1);
+    assert.equal(findChatImageHistoryIndex(history, "message-1:1"), 1);
   });
 
   it("falls back to the newest image index when the selection is empty", () => {
@@ -146,6 +176,25 @@ describe("findChatImageHistoryIndex", () => {
 
     assert.equal(findChatImageHistoryIndex(history, ""), 1);
   });
+
+  it("distinguishes duplicate paths by history key", () => {
+    const history = collectChatImageHistory(createSession([
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "first",
+        media: ["outputs/render.jpg"],
+      },
+      {
+        id: "message-2",
+        role: "assistant",
+        content: "second",
+        media: ["outputs/render.jpg"],
+      },
+    ]));
+
+    assert.equal(findChatImageHistoryIndex(history, "message-2:0"), 1);
+  });
 });
 
 describe("findChatImageHistoryEntry", () => {
@@ -159,7 +208,8 @@ describe("findChatImageHistoryEntry", () => {
       },
     ]));
 
-    assert.deepEqual(findChatImageHistoryEntry(history, "outputs/render.jpg"), {
+    assert.deepEqual(findChatImageHistoryEntry(history, "message-1:1"), {
+      historyKey: "message-1:1",
       path: "outputs/render.jpg",
       messageId: "message-1",
       mediaIndex: 1,
@@ -177,6 +227,6 @@ describe("findChatImageHistoryEntry", () => {
       },
     ]));
 
-    assert.equal(findChatImageHistoryEntry(history, "outputs/unknown.png"), null);
+    assert.equal(findChatImageHistoryEntry(history, "unknown:0"), null);
   });
 });

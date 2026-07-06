@@ -1,16 +1,12 @@
 import { useEffect, useRef } from "react";
+import type { ChatImageHistoryEntry } from "../chat/chatImageHistory";
 import type { RoleRecord } from "../shared/types";
-
-type ChatImageHistoryEntry = {
-  path: string;
-  messageId?: string | null;
-};
 
 type UseChatImageStateArgs = {
   activeRoleId: string;
   activeRole: RoleRecord | null;
   activeSessionKey: string;
-  setSelectedChatImagePath: React.Dispatch<React.SetStateAction<string>>;
+  setSelectedChatImageKey: React.Dispatch<React.SetStateAction<string>>;
   chatImageLightboxOpen: boolean;
   setChatImageLightboxOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setAddingChatImageToAssetLibrary: React.Dispatch<React.SetStateAction<boolean>>;
@@ -18,7 +14,7 @@ type UseChatImageStateArgs = {
   selectedChatImageIndex: number;
   selectedChatImageEntry: ChatImageHistoryEntry | null;
   chatImageHistory: ChatImageHistoryEntry[];
-  latestChatGeneratedImagePath: string;
+  latestChatGeneratedImageKey: string;
   openChatLatestImageSidebar: () => void;
   loadRolesFromBridge: () => Promise<unknown>;
   queueMessageNavigation: (roleId: string, messageKey: string) => void;
@@ -31,7 +27,7 @@ export function useChatImageState({
   activeRoleId,
   activeRole,
   activeSessionKey,
-  setSelectedChatImagePath,
+  setSelectedChatImageKey,
   chatImageLightboxOpen,
   setChatImageLightboxOpen,
   setAddingChatImageToAssetLibrary,
@@ -39,19 +35,19 @@ export function useChatImageState({
   selectedChatImageIndex,
   selectedChatImageEntry,
   chatImageHistory,
-  latestChatGeneratedImagePath,
+  latestChatGeneratedImageKey,
   openChatLatestImageSidebar,
   loadRolesFromBridge,
   queueMessageNavigation,
   setError,
   setNotice,
 }: UseChatImageStateArgs) {
-  const latestChatImageRef = useRef<{ sessionKey: string; latestPath: string }>({ sessionKey: "", latestPath: "" });
+  const latestChatImageRef = useRef<{ sessionKey: string; latestKey: string }>({ sessionKey: "", latestKey: "" });
 
-  function openChatImagePreview(path: string): void {
-    const cleanPath = path.trim();
-    if (!cleanPath) return;
-    setSelectedChatImagePath(cleanPath);
+  function openChatImagePreview(target: { historyKey: string }): void {
+    const nextHistoryKey = target.historyKey.trim();
+    if (!nextHistoryKey) return;
+    setSelectedChatImageKey(nextHistoryKey);
     openChatLatestImageSidebar();
   }
 
@@ -99,37 +95,37 @@ export function useChatImageState({
 
   function selectPreviousChatImage(): void {
     if (selectedChatImageIndex <= 0) return;
-    const previousPath = chatImageHistory[selectedChatImageIndex - 1]?.path ?? "";
-    if (!previousPath) return;
-    setSelectedChatImagePath(previousPath);
+    const previousHistoryKey = chatImageHistory[selectedChatImageIndex - 1]?.historyKey ?? "";
+    if (!previousHistoryKey) return;
+    setSelectedChatImageKey(previousHistoryKey);
   }
 
   function selectNextChatImage(): void {
     if (selectedChatImageIndex < 0 || selectedChatImageIndex >= chatImageHistory.length - 1) return;
-    const nextPath = chatImageHistory[selectedChatImageIndex + 1]?.path ?? "";
-    if (!nextPath) return;
-    setSelectedChatImagePath(nextPath);
+    const nextHistoryKey = chatImageHistory[selectedChatImageIndex + 1]?.historyKey ?? "";
+    if (!nextHistoryKey) return;
+    setSelectedChatImageKey(nextHistoryKey);
   }
 
   useEffect(() => {
     const sessionKey = activeSessionKey;
     if (!sessionKey) {
-      latestChatImageRef.current = { sessionKey: "", latestPath: "" };
+      latestChatImageRef.current = { sessionKey: "", latestKey: "" };
       return;
     }
 
     const previous = latestChatImageRef.current;
     if (previous.sessionKey !== sessionKey) {
-      latestChatImageRef.current = { sessionKey, latestPath: latestChatGeneratedImagePath };
+      latestChatImageRef.current = { sessionKey, latestKey: latestChatGeneratedImageKey };
       return;
     }
 
-    if (latestChatGeneratedImagePath && latestChatGeneratedImagePath !== previous.latestPath) {
-      setSelectedChatImagePath(latestChatGeneratedImagePath);
+    if (latestChatGeneratedImageKey && latestChatGeneratedImageKey !== previous.latestKey) {
+      setSelectedChatImageKey(latestChatGeneratedImageKey);
       openChatLatestImageSidebar();
     }
-    latestChatImageRef.current = { sessionKey, latestPath: latestChatGeneratedImagePath };
-  }, [activeSessionKey, latestChatGeneratedImagePath, openChatLatestImageSidebar]);
+    latestChatImageRef.current = { sessionKey, latestKey: latestChatGeneratedImageKey };
+  }, [activeSessionKey, latestChatGeneratedImageKey, openChatLatestImageSidebar, setSelectedChatImageKey]);
 
   useEffect(() => {
     if (resolvedChatImagePath) return;

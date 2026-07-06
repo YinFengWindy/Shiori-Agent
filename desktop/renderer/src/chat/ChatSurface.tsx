@@ -1,5 +1,6 @@
 import type React from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { buildChatImageHistoryKey } from "./chatImageHistory";
 import { isChatImageAsset } from "./chatImageHistory";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { canSubmitChatMessage, summarizeChatReplyContent } from "./chatComposerState";
@@ -40,7 +41,7 @@ type ChatSurfaceProps = {
   onGoToNextChatImage: () => void;
   onGoToPreviousChatImage: () => void;
   onOpenChatImageLightbox: () => void;
-  onOpenChatImagePreview: (path: string) => void;
+  onOpenChatImagePreview: (target: { historyKey: string }) => void;
   onPickChatAttachments: () => void;
   onOpenRoleDetail: () => void;
   onJumpToMessage: (messageKey: string) => void;
@@ -531,21 +532,21 @@ export function ChatSurface({
                       <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
                       {media.length ? (
                         <div className="mt-3 grid gap-2">
-                          {media.map((item) => (
+                          {media.map((item, mediaIndex) => (
                             isChatImageAsset(item) ? (
                               <button
-                                key={item}
+                                key={`${messageKey}:${mediaIndex}:${item}`}
                                 className="block cursor-grab overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white active:cursor-grabbing focus:outline-none"
                                 type="button"
                                 draggable
                                 onDragStart={(event) => handleAttachmentDragStart(event, item)}
-                                onClick={() => onOpenChatImagePreview(item)}
+                                onClick={() => onOpenChatImagePreview({ historyKey: buildChatImageHistoryKey(messageKey, mediaIndex) })}
                               >
                                 <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" />
                               </button>
                             ) : (
                               <a
-                                key={item}
+                                key={`${messageKey}:${mediaIndex}:${item}`}
                                 href={toFileUrl(item)}
                                 target="_blank"
                                 rel="noreferrer"

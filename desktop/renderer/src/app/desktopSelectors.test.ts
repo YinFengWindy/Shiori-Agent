@@ -55,7 +55,7 @@ describe("desktopSelectors", () => {
       roleForm: createRoleForm({ description: "changed" }),
       activeIllustration: "",
       activeSession: createSession(),
-      selectedChatImagePath: "",
+      selectedChatImageKey: "",
       health: "online",
       sendingSessions: {},
     });
@@ -71,12 +71,47 @@ describe("desktopSelectors", () => {
       roleForm: createRoleForm(),
       activeIllustration: "",
       activeSession: createSession(),
-      selectedChatImagePath: "",
+      selectedChatImageKey: "",
       health: "online",
       sendingSessions: { "role:mira": "mira" },
     });
 
     assert.equal(viewModel.headerTitle, "正在输入中...");
     assert.equal(viewModel.bridgeReady, true);
+  });
+
+  it("keeps duplicate latest images distinct when selection uses the history entry key", () => {
+    const session = createSession();
+    session.messages = [
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "first",
+        media: ["D:\\images\\latest.png"],
+      },
+      {
+        id: "message-2",
+        role: "assistant",
+        content: "second",
+        media: ["D:\\images\\latest.png"],
+      },
+    ];
+
+    const viewModel = buildDesktopViewModel({
+      roles: [createRole()],
+      activeRoleId: "mira",
+      mainView: { kind: "chat" },
+      roleForm: createRoleForm(),
+      activeIllustration: "",
+      activeSession: session,
+      selectedChatImageKey: "message-2:0",
+      health: "online",
+      sendingSessions: {},
+    });
+
+    assert.equal(viewModel.selectedChatImageIndex, 1);
+    assert.equal(viewModel.selectedChatImagePosition, 2);
+    assert.equal(viewModel.selectedChatImageEntry?.messageId, "message-2");
+    assert.equal(viewModel.resolvedChatImagePath, "D:\\images\\latest.png");
   });
 });

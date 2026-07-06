@@ -100,7 +100,7 @@ function App(): React.ReactElement {
     animationDurationMs: sidebarAnimationDurationMs,
     defaultCollapsed: true,
   });
-  const [selectedChatImagePath, setSelectedChatImagePath] = useState("");
+  const [selectedChatImageKey, setSelectedChatImageKey] = useState("");
   const [chatImageLightboxOpen, setChatImageLightboxOpen] = useState(false);
   const [addingChatImageToAssetLibrary, setAddingChatImageToAssetLibrary] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
@@ -409,7 +409,7 @@ function App(): React.ReactElement {
     resolvedChatImagePath,
     selectedChatImageIndex,
     selectedChatImageEntry,
-    latestChatGeneratedImagePath,
+    latestChatGeneratedImageKey,
     selectedChatImagePosition,
   } = buildDesktopViewModel({
     roles,
@@ -418,7 +418,7 @@ function App(): React.ReactElement {
     roleForm,
     activeIllustration,
     activeSession,
-    selectedChatImagePath,
+    selectedChatImageKey,
     health,
     sendingSessions,
   });
@@ -435,7 +435,7 @@ function App(): React.ReactElement {
     activeRoleId,
     activeRole,
     activeSessionKey,
-    setSelectedChatImagePath,
+    setSelectedChatImageKey,
     chatImageLightboxOpen,
     setChatImageLightboxOpen,
     setAddingChatImageToAssetLibrary,
@@ -443,7 +443,7 @@ function App(): React.ReactElement {
     selectedChatImageIndex,
     selectedChatImageEntry,
     chatImageHistory,
-    latestChatGeneratedImagePath,
+    latestChatGeneratedImageKey,
     openChatLatestImageSidebar: chatLatestImageSidebar.open,
     loadRolesFromBridge,
     queueMessageNavigation,

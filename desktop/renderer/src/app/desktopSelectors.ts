@@ -2,7 +2,7 @@ import {
   collectChatImageHistory,
   findChatImageHistoryEntry,
   findChatImageHistoryIndex,
-  resolveChatImageSelection,
+  resolveChatImageSelectionKey,
 } from "../chat/chatImageHistory";
 import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/chatHeaderState";
 import { toFileUrl } from "../shared/format";
@@ -20,7 +20,7 @@ type BuildDesktopViewModelArgs = {
   roleForm: RoleFormState;
   activeIllustration: string;
   activeSession: SessionPayload | null;
-  selectedChatImagePath: string;
+  selectedChatImageKey: string;
   health: string;
   sendingSessions: Record<string, string>;
 };
@@ -33,7 +33,7 @@ export function buildDesktopViewModel({
   roleForm,
   activeIllustration,
   activeSession,
-  selectedChatImagePath,
+  selectedChatImageKey,
   health,
   sendingSessions,
 }: BuildDesktopViewModelArgs) {
@@ -73,10 +73,11 @@ export function buildDesktopViewModel({
     sendingSessions,
   });
   const chatImageHistory = collectChatImageHistory(activeSession);
-  const resolvedChatImagePath = resolveChatImageSelection(chatImageHistory, selectedChatImagePath);
-  const selectedChatImageIndex = findChatImageHistoryIndex(chatImageHistory, resolvedChatImagePath);
-  const selectedChatImageEntry = findChatImageHistoryEntry(chatImageHistory, resolvedChatImagePath);
-  const latestChatGeneratedImagePath = chatImageHistory[chatImageHistory.length - 1]?.path ?? "";
+  const resolvedSelectedChatImageKey = resolveChatImageSelectionKey(chatImageHistory, selectedChatImageKey);
+  const selectedChatImageIndex = findChatImageHistoryIndex(chatImageHistory, resolvedSelectedChatImageKey);
+  const selectedChatImageEntry = findChatImageHistoryEntry(chatImageHistory, resolvedSelectedChatImageKey);
+  const resolvedChatImagePath = selectedChatImageEntry?.path ?? "";
+  const latestChatGeneratedImageKey = chatImageHistory[chatImageHistory.length - 1]?.historyKey ?? "";
   const selectedChatImagePosition = selectedChatImageIndex >= 0 ? selectedChatImageIndex + 1 : 0;
 
   return {
@@ -98,7 +99,7 @@ export function buildDesktopViewModel({
     resolvedChatImagePath,
     selectedChatImageIndex,
     selectedChatImageEntry,
-    latestChatGeneratedImagePath,
+    latestChatGeneratedImageKey,
     selectedChatImagePosition,
   };
 }

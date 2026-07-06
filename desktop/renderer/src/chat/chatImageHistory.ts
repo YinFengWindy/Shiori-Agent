@@ -1,6 +1,7 @@
 import type { SessionPayload } from "../shared/types";
 
 export type ChatImageHistoryEntry = {
+  historyKey: string;
   path: string;
   messageId: string;
   mediaIndex: number;
@@ -15,6 +16,11 @@ export function isChatImageAsset(path: string): boolean {
   const dotIndex = cleanPath.lastIndexOf(".");
   const extension = dotIndex >= 0 ? cleanPath.slice(dotIndex).toLowerCase() : "";
   return supportedImageExtensions.has(extension);
+}
+
+/** Builds a stable history identity for one media item inside a chat message. */
+export function buildChatImageHistoryKey(messageId: string, mediaIndex: number): string {
+  return `${messageId}:${mediaIndex}`;
 }
 
 /** Collects every image that appeared in the current chat session, preserving message order. */
@@ -32,9 +38,11 @@ export function collectChatImageHistory(session: SessionPayload | null): ChatIma
       if (!path || !isChatImageAsset(path)) {
         continue;
       }
+      const messageId = String(message.id ?? `${message.role}-${messageIndex}`);
       history.push({
+        historyKey: buildChatImageHistoryKey(messageId, mediaIndex),
         path,
-        messageId: String(message.id ?? `${message.role}-${messageIndex}`),
+        messageId,
         mediaIndex,
         timestamp: message.timestamp ?? null,
       });
@@ -44,32 +52,32 @@ export function collectChatImageHistory(session: SessionPayload | null): ChatIma
 }
 
 /** Keeps the current selection when possible and otherwise falls back to the newest chat image. */
-export function resolveChatImageSelection(
+export function resolveChatImageSelectionKey(
   history: ChatImageHistoryEntry[],
-  selectedPath: string,
+  selectedHistoryKey: string,
 ): string {
   if (history.length === 0) {
     return "";
   }
-  if (selectedPath && history.some((entry) => entry.path === selectedPath)) {
-    return selectedPath;
+  if (selectedHistoryKey && history.some((entry) => entry.historyKey === selectedHistoryKey)) {
+    return selectedHistoryKey;
   }
-  return history[history.length - 1]?.path ?? "";
+  return history[history.length - 1]?.historyKey ?? "";
 }
 
 /** Finds the selected image index and falls back to the newest history item when the path is missing. */
 export function findChatImageHistoryIndex(
   history: ChatImageHistoryEntry[],
-  selectedPath: string,
+  selectedHistoryKey: string,
 ): number {
   if (history.length === 0) {
     return -1;
   }
-  if (!selectedPath) {
+  if (!selectedHistoryKey) {
     return history.length - 1;
   }
   for (let index = history.length - 1; index >= 0; index -= 1) {
-    if (history[index]?.path === selectedPath) {
+    if (history[index]?.historyKey === selectedHistoryKey) {
       return index;
     }
   }
@@ -79,10 +87,10 @@ export function findChatImageHistoryIndex(
 /** Returns the history entry for the selected chat image path so callers can navigate back to its source message. */
 export function findChatImageHistoryEntry(
   history: ChatImageHistoryEntry[],
-  selectedPath: string,
+  selectedHistoryKey: string,
 ): ChatImageHistoryEntry | null {
-  if (!selectedPath) {
+  if (!selectedHistoryKey) {
     return null;
   }
-  return history.find((entry) => entry.path === selectedPath) ?? null;
+  return history.find((entry) => entry.historyKey === selectedHistoryKey) ?? null;
 }
