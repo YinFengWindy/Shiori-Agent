@@ -44,6 +44,7 @@ function renderChatSurface(
     currentMood?: string;
     moodIllustrationUrl?: string;
     chatLatestImageSidebarCollapsed?: boolean;
+    hiddenMessageCount?: number;
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -51,6 +52,7 @@ function renderChatSurface(
       activeRole={activeRole}
       activeRoleId={activeRoleId}
       activeSession={options.activeSession ?? createSession()}
+      hiddenMessageCount={options.hiddenMessageCount ?? 0}
       bridgeReady
       chatLatestImagePath=""
       chatLatestImagePosition={0}
@@ -81,6 +83,7 @@ function renderChatSurface(
       onBeginAttachmentDrag={() => undefined}
       onCopyMessage={() => undefined}
       onSendMessage={async () => true}
+      onLoadOlderMessages={() => undefined}
       onToggleChatLatestImageSidebar={() => undefined}
     />,
   );
@@ -176,7 +179,25 @@ describe("ChatSurface", () => {
     assert.match(markup, /ml-auto items-end/);
   });
 
-  it("renders only the recent chat window first and shows an affordance for older messages", () => {
+  it("shows an affordance for older messages that still live in the cold session cache", () => {
+    const session = createSession();
+    session.messages = Array.from({ length: 160 }, (_value, index) => ({
+      id: `message-${index + 61}`,
+      role: index % 2 === 0 ? "assistant" : "user",
+      content: `message-${index + 61}`,
+    }));
+
+    const markup = renderChatSurface(createRole(), "mira", {
+      activeSession: session,
+      hiddenMessageCount: 60,
+    });
+
+    assert.match(markup, />更早消息 60 条</);
+    assert.doesNotMatch(markup, /data-message-key="message-1"/);
+    assert.match(markup, /data-message-key="message-220"/);
+  });
+
+  it("does not render the older-message affordance once the hot session already contains the full history", () => {
     const session = createSession();
     session.messages = Array.from({ length: 220 }, (_value, index) => ({
       id: `message-${index + 1}`,
@@ -184,10 +205,10 @@ describe("ChatSurface", () => {
       content: `message-${index + 1}`,
     }));
 
-    const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
+    const markup = renderChatSurface(createRole(), "mira", { activeSession: session, hiddenMessageCount: 0 });
 
-    assert.match(markup, />更早消息 60 条</);
-    assert.doesNotMatch(markup, /data-message-key="message-1"/);
+    assert.doesNotMatch(markup, />更早消息/);
+    assert.match(markup, /data-message-key="message-1"/);
     assert.match(markup, /data-message-key="message-220"/);
   });
 

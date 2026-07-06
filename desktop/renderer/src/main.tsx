@@ -30,7 +30,8 @@ import { useNavigationHistory } from "./app/useNavigationHistory";
 import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleSearch } from "./app/roleSearch";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
-import type { RoleSessionCache } from "./chat/roleSessionCache";
+import { countHiddenHotChatMessages } from "./chat/chatMessageWindow";
+import { readRoleSessionCache, type RoleSessionCache } from "./chat/roleSessionCache";
 import { useImageStudioState } from "./image/useImageStudioState";
 import { createRoleFormFromRole, isRoleFormDirty } from "./roles/roleFormState";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
@@ -304,6 +305,8 @@ function App(): React.ReactElement {
     sendMessage,
     commitActiveSession,
     updateCommittedActiveSession,
+    loadOlderActiveSessionMessages,
+    ensureActiveSessionMessageVisible,
   } = useDesktopSessionState({
     roles,
     mainView,
@@ -509,6 +512,7 @@ function App(): React.ReactElement {
     setNotice,
     setError,
     setHighlightedMessageKey,
+    ensureActiveSessionMessageVisible,
   });
 
   useDesktopUiEffects({
@@ -524,6 +528,7 @@ function App(): React.ReactElement {
     workspaceFeedback,
     setWorkspaceFeedback,
     highlightedMessageKey,
+    ensureActiveSessionMessageVisible,
     previewIllustrations,
     activeIllustration,
     persistedChatBackground: detailRole?.chat_background_abs ?? "",
@@ -543,6 +548,9 @@ function App(): React.ReactElement {
     updateNewRoleForm(createEmptyNewRoleForm());
     setWorkspaceFeedback({ tone: "success", message: "新建角色表单已重置。" });
   }
+
+  const activeFullSession = activeRoleId ? readRoleSessionCache(roleSessionCacheRef.current, activeRoleId) : null;
+  const hiddenChatMessageCount = countHiddenHotChatMessages(activeFullSession, activeSession);
 
   return (
     <DesktopAppFrame
@@ -598,6 +606,7 @@ function App(): React.ReactElement {
       workspaceFeedback={workspaceFeedback}
       activeRole={activeRole}
       activeSession={activeSession}
+      hiddenChatMessageCount={hiddenChatMessageCount}
       chatLatestImagePath={resolvedChatImagePath}
       chatLatestImagePosition={selectedChatImagePosition}
       chatLatestImageSidebar={chatLatestImageSidebar}
@@ -624,6 +633,7 @@ function App(): React.ReactElement {
       onBeginAttachmentDrag={beginAttachmentDrag}
       onCopyMessage={(content) => void copyChatMessage(content)}
       onSendMessage={sendMessage}
+      onLoadOlderMessages={loadOlderActiveSessionMessages}
       imageHistorySidebar={imageHistorySidebar}
       detailRole={detailRole}
       pendingRoleCardAction={pendingRoleCardAction}

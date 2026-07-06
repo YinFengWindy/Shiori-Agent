@@ -67,4 +67,45 @@ describe("roleSearch", () => {
 
     assert.equal(messageKey, "assistant-0");
   });
+
+  it("falls back to the indexed full session when the current hot session no longer contains the hit index", () => {
+    const indexedSession: SessionPayload = {
+      ...createSession("mira", "older"),
+      messages: [
+        {
+          id: undefined,
+          role: "assistant",
+          content: "older",
+        },
+        {
+          id: "mira-message-2",
+          role: "assistant",
+          content: "newer",
+        },
+      ],
+    };
+    const activeSession: SessionPayload = {
+      ...indexedSession,
+      messages: [indexedSession.messages[1]],
+    };
+    const searchIndex: SearchableSessionRecord[] = [
+      {
+        roleId: "mira",
+        roleName: "Mira",
+        roleAvatarAbs: null,
+        session: indexedSession,
+      },
+    ];
+
+    const messageKey = resolveSearchResultMessageKey({
+      roleId: "mira",
+      messageId: null,
+      messageIndex: 0,
+      activeRoleId: "mira",
+      activeSession,
+      searchIndex,
+    });
+
+    assert.equal(messageKey, "assistant-0");
+  });
 });

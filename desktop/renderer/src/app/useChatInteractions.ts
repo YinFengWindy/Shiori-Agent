@@ -16,6 +16,7 @@ type UseChatInteractionsArgs = {
   setNotice: React.Dispatch<React.SetStateAction<string>>;
   setError: React.Dispatch<React.SetStateAction<string>>;
   setHighlightedMessageKey: React.Dispatch<React.SetStateAction<string>>;
+  ensureActiveSessionMessageVisible: (messageKey: string) => boolean;
 };
 
 /** Owns chat-scoped desktop actions that do not need to live in the root component. */
@@ -30,6 +31,7 @@ export function useChatInteractions({
   setNotice,
   setError,
   setHighlightedMessageKey,
+  ensureActiveSessionMessageVisible,
 }: UseChatInteractionsArgs) {
   async function openRoleDetail(roleId: string): Promise<void> {
     const role = roles.find((item) => item.id === roleId) ?? null;
@@ -96,6 +98,7 @@ export function useChatInteractions({
     setHighlightedMessageKey((current) => (
       current === normalizedMessageKey ? "" : current
     ));
+    ensureActiveSessionMessageVisible(normalizedMessageKey);
     window.requestAnimationFrame(() => {
       setHighlightedMessageKey(normalizedMessageKey);
       const target = findChatMessageElement(normalizedMessageKey);

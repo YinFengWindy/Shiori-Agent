@@ -3,50 +3,63 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  getExpandedVisibleChatMessageCountForKey,
-  getVisibleChatMessages,
-  getVisibleChatMessageStartIndex,
+  countHiddenHotChatMessages,
+  createHotChatSession,
+  ensureHotChatSessionContainsMessage,
+  expandHotChatSession,
 } from "./chatMessageWindow";
-import type { SessionMessage } from "../shared/types";
+import type { SessionMessage, SessionPayload } from "../shared/types";
 
-function createMessages(count: number): SessionMessage[] {
-  return Array.from({ length: count }, (_value, index) => ({
-    id: `message-${index + 1}`,
-    role: index % 2 === 0 ? "assistant" : "user",
-    content: `message-${index + 1}`,
-  }));
+function createSession(count: number): SessionPayload {
+  return {
+    key: "role:mira",
+    created_at: "2026-07-07T12:00:00+08:00",
+    updated_at: "2026-07-07T12:00:00+08:00",
+    last_consolidated: 0,
+    metadata: { role_id: "mira" },
+    messages: Array.from({ length: count }, (_value, index): SessionMessage => ({
+      id: `message-${index + 1}`,
+      role: index % 2 === 0 ? "assistant" : "user",
+      content: `message-${index + 1}`,
+    })),
+  };
 }
 
-describe("getVisibleChatMessageStartIndex", () => {
-  it("pins the default render window to the newest chat messages", () => {
-    assert.equal(getVisibleChatMessageStartIndex(240, 160), 80);
+describe("createHotChatSession", () => {
+  it("pins the active desktop session to the newest hot message tail", () => {
+    const hotSession = createHotChatSession(createSession(240));
+
+    assert.equal(hotSession.messages.length, 160);
+    assert.equal(hotSession.messages[0]?.id, "message-81");
+    assert.equal(hotSession.messages[159]?.id, "message-240");
   });
 });
 
-describe("getVisibleChatMessages", () => {
-  it("returns only the visible tail and reports how many messages stay hidden", () => {
-    const result = getVisibleChatMessages(createMessages(5), 2);
+describe("countHiddenHotChatMessages", () => {
+  it("reports how many messages stay in the cold cache outside the hot session", () => {
+    const fullSession = createSession(220);
+    const hotSession = createHotChatSession(fullSession);
 
-    assert.equal(result.startIndex, 3);
-    assert.equal(result.hiddenMessageCount, 3);
-    assert.deepEqual(result.messages.map((message) => message.id), ["message-4", "message-5"]);
+    assert.equal(countHiddenHotChatMessages(fullSession, hotSession), 60);
   });
 });
 
-describe("getExpandedVisibleChatMessageCountForKey", () => {
-  it("expands the render window when a highlighted message lives above the current slice", () => {
-    const messages = createMessages(300);
+describe("expandHotChatSession", () => {
+  it("hydrates one older cold chunk back into the hot session", () => {
+    const fullSession = createSession(300);
+    const hotSession = createHotChatSession(fullSession);
+    const expandedSession = expandHotChatSession(fullSession, hotSession);
 
-    const nextVisibleCount = getExpandedVisibleChatMessageCountForKey(messages, 160, "message-40");
-
-    assert.equal(nextVisibleCount, 285);
+    assert.equal(expandedSession.messages.length, 280);
+    assert.equal(expandedSession.messages[0]?.id, "message-21");
   });
 
-  it("keeps the current render window when the highlighted message is already visible", () => {
-    const messages = createMessages(300);
+  it("expands the hot session far enough to include one cold highlighted message", () => {
+    const fullSession = createSession(300);
+    const hotSession = createHotChatSession(fullSession);
+    const expandedSession = ensureHotChatSessionContainsMessage(fullSession, hotSession, "message-40");
 
-    const nextVisibleCount = getExpandedVisibleChatMessageCountForKey(messages, 160, "message-280");
-
-    assert.equal(nextVisibleCount, 160);
+    assert.equal(expandedSession.messages.some((message) => message.id === "message-40"), true);
+    assert.equal(expandedSession.messages.some((message) => message.id === "message-300"), true);
   });
 });

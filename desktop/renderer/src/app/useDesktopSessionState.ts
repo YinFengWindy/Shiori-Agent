@@ -1,6 +1,11 @@
 import { useEffect, useRef } from "react";
 import { buildOptimisticUserChatMessage, normalizeChatAttachmentPaths } from "../chat/chatComposerState";
 import { ensureChatMessageRenderId, reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
+import {
+  createHotChatSession,
+  ensureHotChatSessionContainsMessage,
+  expandHotChatSession,
+} from "../chat/chatMessageWindow";
 import { mergeIncomingSessionDuringSend } from "../chat/chatSessionMerge";
 import {
   readRoleSessionCache,
@@ -161,37 +166,83 @@ export function useDesktopSessionState({
     );
   }
 
+  function resolveSessionRoleId(session: SessionPayload | null): string {
+    return session ? (getRoleIdFromSession(session) || activeRoleIdRef.current) : activeRoleIdRef.current;
+  }
+
+  function showActiveSession(nextSession: SessionPayload | null): void {
+    activeSessionRef.current = nextSession;
+    setActiveSession(nextSession);
+  }
+
   function commitActiveSession(nextSession: SessionPayload | null): void {
+    const nextRoleId = resolveSessionRoleId(nextSession);
+    const currentFullSession = nextRoleId ? readCachedRoleSession(nextRoleId) : null;
     const mergedSession = mergeIncomingSessionDuringSend(
-      activeSessionRef.current,
+      currentFullSession ?? activeSessionRef.current,
       nextSession,
       Boolean(nextSession?.key && sendingSessionsRef.current[nextSession.key]),
     );
-    const resolvedSession = reconcileSessionMessageRenderIds(activeSessionRef.current, mergedSession);
-    activeSessionRef.current = resolvedSession;
-    if (resolvedSession) {
-      const roleId = getRoleIdFromSession(resolvedSession) || activeRoleIdRef.current;
-      if (roleId) {
-        cacheRoleSession(roleId, resolvedSession);
-      }
+    const resolvedFullSession = reconcileSessionMessageRenderIds(activeSessionRef.current, mergedSession);
+    if (resolvedFullSession && nextRoleId) {
+      cacheRoleSession(nextRoleId, resolvedFullSession);
     }
+    const resolvedSession = resolvedFullSession ? createHotChatSession(resolvedFullSession) : null;
+    activeSessionRef.current = resolvedSession;
     setActiveSession(resolvedSession);
   }
 
   function updateCommittedActiveSession(
     updater: (current: SessionPayload | null) => SessionPayload | null,
   ): void {
-    setActiveSession((current) => {
-      const nextSession = updater(current);
-      activeSessionRef.current = nextSession;
-      if (nextSession) {
-        const roleId = getRoleIdFromSession(nextSession) || activeRoleIdRef.current;
-        if (roleId) {
-          cacheRoleSession(roleId, nextSession);
-        }
+    setActiveSession((currentHotSession) => {
+      const roleId = resolveSessionRoleId(currentHotSession);
+      const currentFullSession = roleId ? (readCachedRoleSession(roleId) ?? currentHotSession) : currentHotSession;
+      const nextFullSession = updater(currentFullSession);
+      if (nextFullSession && roleId) {
+        cacheRoleSession(roleId, nextFullSession);
       }
-      return nextSession;
+      const nextHotSession = nextFullSession ? createHotChatSession(nextFullSession) : null;
+      activeSessionRef.current = nextHotSession;
+      return nextHotSession;
     });
+  }
+
+  function loadOlderActiveSessionMessages(): void {
+    const currentHotSession = activeSessionRef.current;
+    if (!currentHotSession) {
+      return;
+    }
+    const roleId = resolveSessionRoleId(currentHotSession);
+    const currentFullSession = roleId ? readCachedRoleSession(roleId) : null;
+    if (!currentFullSession || currentFullSession.messages.length <= currentHotSession.messages.length) {
+      return;
+    }
+    const nextHotSession = expandHotChatSession(currentFullSession, currentHotSession);
+    if (nextHotSession === currentHotSession) {
+      return;
+    }
+    activeSessionRef.current = nextHotSession;
+    setActiveSession(nextHotSession);
+  }
+
+  function ensureActiveSessionMessageVisible(messageKey: string): boolean {
+    const currentHotSession = activeSessionRef.current;
+    if (!currentHotSession) {
+      return false;
+    }
+    const roleId = resolveSessionRoleId(currentHotSession);
+    const currentFullSession = roleId ? readCachedRoleSession(roleId) : null;
+    if (!currentFullSession) {
+      return false;
+    }
+    const nextHotSession = ensureHotChatSessionContainsMessage(currentFullSession, currentHotSession, messageKey);
+    if (nextHotSession === currentHotSession) {
+      return false;
+    }
+    activeSessionRef.current = nextHotSession;
+    setActiveSession(nextHotSession);
+    return true;
   }
 
   async function loadRolesFromBridge(): Promise<RoleRecord[] | null> {
@@ -313,7 +364,7 @@ export function useDesktopSessionState({
       setError("");
     }
     if (immediateSession !== activeSessionRef.current) {
-      commitActiveSession(immediateSession);
+      showActiveSession(immediateSession);
     }
     const { error: sessionError, session } = await fetchRoleSession(roleId);
     if (openRoleRequestIdRef.current !== requestId) {
@@ -330,7 +381,7 @@ export function useDesktopSessionState({
           setSelectedAvatarAsset("");
           setSelectedChatBackground("");
         }
-        commitActiveSession(previousSession);
+        showActiveSession(previousSession);
         if (previousUnreadCount > 0) {
           setUnreadCounts((current) => (
             current[roleId] === previousUnreadCount
@@ -466,5 +517,7 @@ export function useDesktopSessionState({
     sendMessage,
     commitActiveSession,
     updateCommittedActiveSession,
+    loadOlderActiveSessionMessages,
+    ensureActiveSessionMessageVisible,
   };
 }

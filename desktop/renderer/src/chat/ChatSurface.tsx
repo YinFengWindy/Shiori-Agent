@@ -1,14 +1,8 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { buildChatImageHistoryKey } from "./chatImageHistory";
 import { isChatImageAsset } from "./chatImageHistory";
 import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
-import {
-  getExpandedVisibleChatMessageCountForKey,
-  getVisibleChatMessages,
-  initialVisibleChatMessageCount,
-  visibleChatMessageCountStep,
-} from "./chatMessageWindow";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
@@ -29,6 +23,7 @@ type ChatSurfaceProps = {
   activeRole: RoleRecord | null;
   activeRoleId: string;
   activeSession: SessionPayload | null;
+  hiddenMessageCount: number;
   bridgeReady: boolean;
   chatLatestImagePath: string;
   chatLatestImagePosition: number;
@@ -59,6 +54,7 @@ type ChatSurfaceProps = {
   onBeginAttachmentDrag: (path: string) => void;
   onCopyMessage: (content: string) => void;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
+  onLoadOlderMessages: () => void;
   onToggleChatLatestImageSidebar: () => void;
 };
 
@@ -67,6 +63,7 @@ export function ChatSurface({
   activeRole,
   activeRoleId,
   activeSession,
+  hiddenMessageCount,
   bridgeReady,
   chatLatestImagePath,
   chatLatestImagePosition,
@@ -97,6 +94,7 @@ export function ChatSurface({
   onBeginAttachmentDrag,
   onCopyMessage,
   onSendMessage,
+  onLoadOlderMessages,
   onToggleChatLatestImageSidebar,
 }: ChatSurfaceProps) {
   const conversationListRef = useRef<HTMLDivElement | null>(null);
@@ -106,7 +104,6 @@ export function ChatSurface({
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
-  const [visibleMessageCount, setVisibleMessageCount] = useState(initialVisibleChatMessageCount);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const [sidebarMode, setSidebarMode] = useState<"status" | "images">(
     hasStatusIllustration ? "status" : "images",
@@ -206,24 +203,6 @@ export function ChatSurface({
   useEffect(() => {
     setComposerReplyTarget(null);
   }, [activeRoleId, activeSession?.key]);
-
-  useEffect(() => {
-    setVisibleMessageCount(initialVisibleChatMessageCount);
-  }, [activeSession?.key]);
-
-  const sessionMessages = activeSession?.messages ?? [];
-  const visibleMessageWindow = getVisibleChatMessages(sessionMessages, visibleMessageCount);
-
-  useLayoutEffect(() => {
-    const nextVisibleMessageCount = getExpandedVisibleChatMessageCountForKey(
-      sessionMessages,
-      visibleMessageCount,
-      highlightedMessageKey,
-    );
-    if (nextVisibleMessageCount !== visibleMessageCount) {
-      setVisibleMessageCount(nextVisibleMessageCount);
-    }
-  }, [highlightedMessageKey, sessionMessages, visibleMessageCount]);
 
   useEffect(() => {
     const currentMessageCount = activeSession?.messages.length ?? 0;
@@ -471,19 +450,18 @@ export function ChatSurface({
           )}
         >
           <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
-            {visibleMessageWindow.hiddenMessageCount > 0 ? (
+            {hiddenMessageCount > 0 ? (
               <div className="flex justify-center">
                 <button
                   className="rounded-md border border-[#D8DEE8] bg-white/85 px-3 py-1.5 text-[12px] text-[#5B6472] transition hover:border-[#C6CEDA] hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
                   type="button"
-                  onClick={() => setVisibleMessageCount((current) => current + visibleChatMessageCountStep)}
+                  onClick={onLoadOlderMessages}
                 >
-                  {`更早消息 ${visibleMessageWindow.hiddenMessageCount} 条`}
+                  {`更早消息 ${hiddenMessageCount} 条`}
                 </button>
               </div>
             ) : null}
-            {visibleMessageWindow.messages.map((message, visibleIndex) => {
-              const index = visibleMessageWindow.startIndex + visibleIndex;
+            {activeSession?.messages.map((message, index) => {
               const isUser = message.role === "user";
               const isError = message.role === "error";
               const authorLabel = isError ? "系统提示" : (isUser ? "你" : (activeRole?.name || "Agent"));

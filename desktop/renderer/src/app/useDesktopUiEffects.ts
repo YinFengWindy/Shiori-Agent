@@ -16,6 +16,7 @@ type UseDesktopUiEffectsArgs = {
   workspaceFeedback: WorkspaceFeedback | null;
   setWorkspaceFeedback: React.Dispatch<React.SetStateAction<WorkspaceFeedback | null>>;
   highlightedMessageKey: string;
+  ensureActiveSessionMessageVisible: (messageKey: string) => boolean;
   previewIllustrations: string[];
   activeIllustration: string;
   persistedChatBackground: string;
@@ -39,6 +40,7 @@ export function useDesktopUiEffects({
   workspaceFeedback,
   setWorkspaceFeedback,
   highlightedMessageKey,
+  ensureActiveSessionMessageVisible,
   previewIllustrations,
   activeIllustration,
   persistedChatBackground,
@@ -94,6 +96,7 @@ export function useDesktopUiEffects({
     const tryHighlight = () => {
       if (cancelled) return;
       setHighlightedMessageKey(pendingMessageNavigation.messageKey);
+      ensureActiveSessionMessageVisible(pendingMessageNavigation.messageKey);
       const target = findChatMessageElement(pendingMessageNavigation.messageKey);
       if (target) {
         target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -119,6 +122,7 @@ export function useDesktopUiEffects({
     pendingMessageNavigation,
     setHighlightedMessageKey,
     setPendingMessageNavigation,
+    ensureActiveSessionMessageVisible,
   ]);
 
   useEffect(() => {
