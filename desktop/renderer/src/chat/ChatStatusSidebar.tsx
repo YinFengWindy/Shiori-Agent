@@ -1,16 +1,23 @@
 type ChatStatusSidebarProps = {
   currentMood: string;
   moodIllustrationUrl: string;
+  roleSelfView: string;
+  relationshipTags: string[];
+  lonelinessValue: number;
 };
 
 /** Renders the chat status sidebar with the current mood and mapped illustration. */
 export function ChatStatusSidebar({
   currentMood,
   moodIllustrationUrl,
+  roleSelfView,
+  relationshipTags,
+  lonelinessValue,
 }: ChatStatusSidebarProps) {
+  const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
   return (
     <div className="grid h-full min-h-0 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-      <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3 rounded-[16px] bg-[#F4F7FB] p-3">
+      <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto_auto] gap-3 rounded-[16px] bg-[#F4F7FB] p-3">
         <div className="grid min-h-0 place-items-center overflow-hidden rounded-[16px] bg-white p-4">
           <img
             className="max-h-full max-w-full object-contain"
@@ -22,6 +29,38 @@ export function ChatStatusSidebar({
           <div className="text-[11px] uppercase tracking-[0.16em] text-[#7A8593]">当前状态</div>
           <div className="mt-1 text-sm font-semibold text-[#1F2937]">
             {currentMood || "未生成"}
+          </div>
+        </div>
+        <div className="rounded-[14px] bg-white/90 px-3 py-3 text-left">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[#7A8593]">当下想法</div>
+          <div className="mt-2 text-[13px] leading-6 text-[#334155]">
+            {roleSelfView || "我还在慢慢整理自己现在对你的想法。"}
+          </div>
+        </div>
+        {relationshipTags.length ? (
+          <div className="flex flex-wrap gap-2">
+            {relationshipTags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-[#D9E1EB] bg-white/88 px-2.5 py-1 text-[11px] leading-none text-[#556070]"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[11px] text-[#8A94A3]">关系标签还在生成中</div>
+        )}
+        <div className="rounded-[14px] bg-white/90 px-3 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-[#7A8593]">寂寞值</div>
+            <div className="text-sm font-semibold text-[#1F2937]">{Math.round(normalizedLoneliness)}</div>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E6EBF2]">
+            <div
+              className="h-full rounded-full bg-[linear-gradient(90deg,#A6B8D6_0%,#65758E_100%)] transition-[width] duration-300"
+              style={{ width: `${normalizedLoneliness}%` }}
+            />
           </div>
         </div>
       </div>

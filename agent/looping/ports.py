@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from core.memory.engine import MemoryEngine
     from core.memory.runtime import MemoryRuntime
     from proactive_v2.presence import PresenceStore
+    from core.roles.relationship_runtime import RoleRelationshipRuntimeService
     from session.manager import SessionManager
 
 
@@ -66,6 +67,7 @@ class MemoryServices:
 class SessionServices:
     session_manager: SessionManager
     presence: PresenceStore | None = None
+    relationship_runtime: "RoleRelationshipRuntimeService | None" = None
 
 
 @dataclass

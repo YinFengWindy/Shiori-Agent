@@ -172,6 +172,33 @@ async def test_anyaction_gate_called_with_last_user_at():
     assert call_kwargs["last_user_at"] == last_user_at
 
 
+@pytest.mark.asyncio
+async def test_loneliness_gate_blocks_when_threshold_not_reached():
+    state = FakeStateStore()
+    gate_calls: list[tuple[str, datetime]] = []
+    tick = make_proactive_pipeline(
+        state_store=state,
+        loneliness_gate_fn=lambda session_key, now_utc: (
+            gate_calls.append((session_key, now_utc)) or False,
+            {"reason": "below_threshold"},
+        ),
+    )
+    result = await tick.run()
+    assert result is None
+    assert len(gate_calls) == 1
+    assert gate_calls[0][0] == "test_session"
+    assert state.tick_log_finishes[0]["gate_exit"] == "loneliness"
+
+
+@pytest.mark.asyncio
+async def test_loneliness_gate_passes_when_threshold_reached():
+    tick = make_proactive_pipeline(
+        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+    )
+    result = await tick.run()
+    assert result is not None
+
+
 # ── Context gate — 概率 ───────────────────────────────────────────────────
 
 @pytest.mark.asyncio

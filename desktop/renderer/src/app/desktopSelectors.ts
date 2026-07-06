@@ -10,6 +10,8 @@ import { isRoleFormDirty } from "../roles/roleFormState";
 import { toFileUrl } from "../shared/format";
 import type {
   AppMainView,
+  LonelinessRuntime,
+  RelationshipSnapshot,
   RoleFormState,
   RoleRecord,
   SessionPayload,
@@ -88,6 +90,23 @@ export function buildDesktopViewModel({
   const resolvedChatImagePath = selectedChatImageEntry?.path ?? "";
   const latestChatGeneratedImageKey = chatImageHistory[chatImageHistory.length - 1]?.historyKey ?? "";
   const selectedChatImagePosition = selectedChatImageIndex >= 0 ? selectedChatImageIndex + 1 : 0;
+  const relationshipSnapshot = (
+    (activeSession?.metadata.relationship_snapshot as RelationshipSnapshot | null | undefined)
+    ?? activeRole?.relationship_snapshot
+    ?? null
+  );
+  const lonelinessRuntime = (
+    (activeSession?.metadata.loneliness_runtime as LonelinessRuntime | null | undefined)
+    ?? activeRole?.loneliness_runtime
+    ?? null
+  );
+  const roleSelfView = String(relationshipSnapshot?.role_self_view ?? "").trim();
+  const relationshipTags = Array.isArray(relationshipSnapshot?.relation_tags)
+    ? relationshipSnapshot.relation_tags.filter((tag) => String(tag || "").trim()).slice(0, 4)
+    : [];
+  const lonelinessValue = typeof lonelinessRuntime?.loneliness_value === "number"
+    ? lonelinessRuntime.loneliness_value
+    : 0;
 
   return {
     activeRole,
@@ -114,5 +133,10 @@ export function buildDesktopViewModel({
     selectedChatImageEntry,
     latestChatGeneratedImageKey,
     selectedChatImagePosition,
+    relationshipSnapshot,
+    lonelinessRuntime,
+    roleSelfView,
+    relationshipTags,
+    lonelinessValue,
   };
 }

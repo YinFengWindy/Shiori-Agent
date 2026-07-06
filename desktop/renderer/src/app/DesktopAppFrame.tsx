@@ -96,6 +96,9 @@ type DesktopAppFrameProps = {
   moodIllustrationBindingHit: boolean;
   moodIllustrationUrl: string;
   hasMoodIllustrationBinding: boolean;
+  roleSelfView: string;
+  relationshipTags: string[];
+  lonelinessValue: number;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   draft: string;
   headerTitle: string;
@@ -223,6 +226,9 @@ export function DesktopAppFrame({
   moodIllustrationBindingHit,
   moodIllustrationUrl,
   hasMoodIllustrationBinding,
+  roleSelfView,
+  relationshipTags,
+  lonelinessValue,
   conversationEndRef,
   draft,
   headerTitle,
@@ -427,6 +433,9 @@ export function DesktopAppFrame({
               moodIllustrationBindingHit={moodIllustrationBindingHit}
               moodIllustrationUrl={moodIllustrationUrl}
               hasMoodIllustrationBinding={hasMoodIllustrationBinding}
+              roleSelfView={roleSelfView}
+              relationshipTags={relationshipTags}
+              lonelinessValue={lonelinessValue}
               conversationEndRef={conversationEndRef}
               draft={draft}
               headerTitle={headerTitle}

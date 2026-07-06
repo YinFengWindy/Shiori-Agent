@@ -12,7 +12,7 @@ from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
 from core.integrations.novelai import NovelAIClient, NovelAIService, NovelAIStore
 from core.integrations.novelai.models import GenerateImageRequest, NovelAISettings
 from core.net.http import get_default_http_requester
-from core.roles import RoleAggregateService, RoleStore
+from core.roles import RoleAggregateService, RoleRelationshipRuntimeService, RoleStore
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from infra.channels.reply_context import build_inbound_text_with_reply_context
@@ -33,6 +33,7 @@ class DesktopBridgeService:
         novelai_service: NovelAIService | None = None,
         novelai_store: NovelAIStore | None = None,
         push_tool: MessagePushTool | None = None,
+        relationship_runtime: RoleRelationshipRuntimeService | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -48,6 +49,7 @@ class DesktopBridgeService:
             session_manager=session_manager,
             self_seed_generator=self._self_seed_generator,
         )
+        self.relationship_runtime = relationship_runtime
         self.novelai_store = novelai_store or NovelAIStore(workspace)
         self.novelai_service = novelai_service or self._build_novelai_service()
         if push_tool is not None:
@@ -113,6 +115,8 @@ class DesktopBridgeService:
             tools_used=["message_push"],
         )
         await self.session_manager.save_async(session)
+        if self.relationship_runtime is not None:
+            self.relationship_runtime.handle_proactive_sent(session.key)
         return session
 
     def _is_existing_desktop_push(
@@ -566,7 +570,7 @@ class DesktopBridgeService:
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
             "last_consolidated": session.last_consolidated,
-            "metadata": dict(session.metadata),
+            "metadata": self._enrich_session_metadata(dict(session.metadata)),
             "messages": [_serialize_message(msg) for msg in session.messages],
         }
 
@@ -637,7 +641,21 @@ class DesktopBridgeService:
             for rel in illustrations
             if isinstance(rel, str) and rel
         ]
+        relationship_runtime = self.relationship_runtime
+        if relationship_runtime is not None:
+            snapshot = relationship_runtime.read_snapshot(role.id)
+            runtime = relationship_runtime.read_loneliness_runtime(role.id)
+            if snapshot is not None:
+                payload["relationship_snapshot"] = snapshot
+            if runtime is not None:
+                payload["loneliness_runtime"] = runtime
         return payload
+
+    def _enrich_session_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
+        relationship_runtime = self.relationship_runtime
+        if relationship_runtime is None:
+            return metadata
+        return relationship_runtime.enrich_session_metadata(metadata)
 
     def _build_novelai_service(self) -> NovelAIService | None:
         if self.config is None:

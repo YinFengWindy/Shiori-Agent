@@ -64,6 +64,9 @@ function renderChatSurface(
       moodIllustrationBindingHit={false}
       moodIllustrationUrl={options.moodIllustrationUrl ?? ""}
       hasMoodIllustrationBinding={false}
+      roleSelfView="我最近会不自觉地想起你。"
+      relationshipTags={["亲近", "等你主动"]}
+      lonelinessValue={72}
       conversationEndRef={React.createRef<HTMLDivElement>()}
       draft={options.draft ?? ""}
       headerTitle={activeRole?.name ?? "Mira"}
@@ -223,5 +226,19 @@ describe("ChatSurface", () => {
     assert.match(markup, /aria-label="图片侧栏"/);
     assert.match(markup, /aria-label="状态侧栏"/);
     assert.doesNotMatch(markup, /aria-label="状态侧栏"[^>]*disabled=""/);
+  });
+
+  it("renders relationship summary, tags, and loneliness value inside the status sidebar", () => {
+    const markup = renderChatSurface(createRole(), "mira", {
+      currentMood: "开心",
+      moodIllustrationUrl: "mira-asset://local?path=D%3A%5Croles%5Cmira%5Chappy.png",
+    });
+
+    assert.match(markup, />当下想法</);
+    assert.match(markup, />我最近会不自觉地想起你。</);
+    assert.match(markup, />亲近</);
+    assert.match(markup, />等你主动</);
+    assert.match(markup, />寂寞值</);
+    assert.match(markup, />72</);
   });
 });

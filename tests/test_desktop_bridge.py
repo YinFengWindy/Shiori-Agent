@@ -18,6 +18,7 @@ from core.integrations.novelai.models import (
 )
 from core.integrations.novelai.store import NovelAIStore
 from core.roles import RoleStore
+from core.roles.relationship_runtime import RoleRelationshipRuntimeService
 from desktop_bridge import DesktopBridgeServer, DesktopBridgeService
 from session.manager import SessionManager
 
@@ -1027,6 +1028,90 @@ async def test_desktop_bridge_syncs_role_metadata_into_session_on_open_and_updat
     session = session_manager.get_or_create("role:mira")
     assert session.metadata["role_name"] == "Mira Prime"
     assert session.metadata["role_prompt"] == "you are still mira"
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_includes_relationship_snapshot_and_loneliness_runtime(tmp_path: Path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    relationship_runtime = RoleRelationshipRuntimeService(
+        tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        presence=SimpleNamespace(
+            get_last_user_at=lambda _key: None,
+            get_last_proactive_at=lambda _key: None,
+        ),
+    )
+    relationship_runtime.write_snapshot(
+        role.id,
+        {
+            "role_id": role.id,
+            "role_self_view": "我最近会忍不住去想你。",
+            "relation_tags": ["亲近", "等你主动"],
+            "internal_profile": {
+                "relation_state": {},
+                "behavior_profile": {},
+            },
+            "source_summary": {},
+            "generated_at": "2026-07-06T18:00:00+08:00",
+            "last_attempted_at": "2026-07-06T18:00:00+08:00",
+            "last_error": "",
+        },
+    )
+    relationship_runtime.write_loneliness_runtime(
+        role.id,
+        {
+            "role_id": role.id,
+            "loneliness_value": 58,
+            "last_calculated_at": "2026-07-06T18:00:00+08:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": False,
+            "awaiting_reply_since": "",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+        relationship_runtime=relationship_runtime,
+    )
+
+    roles_response = await service.handle(
+        {
+            "id": "1",
+            "method": "roles.list",
+            "payload": {},
+        },
+        emit_event=lambda payload: None,
+    )
+    session_response = await service.handle(
+        {
+            "id": "2",
+            "method": "session.openByRole",
+            "payload": {"role_id": role.id},
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert roles_response.error is None
+    role_payload = roles_response.payload["roles"][0]
+    assert role_payload["relationship_snapshot"]["role_self_view"] == "我最近会忍不住去想你。"
+    assert role_payload["loneliness_runtime"]["loneliness_value"] == 58
+    assert session_response.error is None
+    assert session_response.payload["session"]["metadata"]["relationship_snapshot"]["role_self_view"] == "我最近会忍不住去想你。"
+    assert session_response.payload["session"]["metadata"]["loneliness_runtime"]["loneliness_value"] == 58
 
 
 @pytest.mark.asyncio

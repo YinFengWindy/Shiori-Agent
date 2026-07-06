@@ -59,6 +59,7 @@ from bus.queue import MessageBus
 from core.memory.markdown import MemoryLifecycleBindRequest, MarkdownMemoryMaintenance
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
+from core.roles import RoleRelationshipRuntimeService, RoleStore
 from proactive_v2.presence import PresenceStore
 from session.manager import Session, SessionManager
 
@@ -79,6 +80,7 @@ class CoreRuntime:
     mcp_registry: McpServerRegistry
     memory_runtime: MemoryRuntime
     presence: PresenceStore
+    relationship_runtime: RoleRelationshipRuntimeService
     peer_process_manager: PeerProcessManager | None
     peer_poller: PeerAgentPoller | None
     agent_provider: LLMProvider | None = None
@@ -366,6 +368,7 @@ def _build_loop_deps(
     processing_state: ProcessingState,
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
+    relationship_runtime: RoleRelationshipRuntimeService,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
     context = resolve_context_factory(wiring.context)(
@@ -382,7 +385,9 @@ def _build_loop_deps(
     llm_services = LLMServices(provider=provider, light_provider=light)
     memory_services = MemoryServices(engine=memory_engine)
     session_services = SessionServices(
-        session_manager=session_manager, presence=presence
+        session_manager=session_manager,
+        presence=presence,
+        relationship_runtime=relationship_runtime,
     )
     _bind_memory_lifecycle_if_supported(
         markdown=memory_runtime.markdown.maintenance,
@@ -441,6 +446,7 @@ def build_core_runtime(
     loop_provider = agent_provider or provider
     loop_model = config.agent_model or config.model
     session_manager = SessionManager(workspace)
+    role_store = RoleStore(workspace)
     loop_ref: dict[str, AgentLoop] = {}
     tools, push_tool, scheduler, mcp_registry, memory_runtime, peer_pm, peer_poller = (
         build_registered_tools(
@@ -457,6 +463,12 @@ def build_core_runtime(
         )
     )
     presence = PresenceStore(session_manager._store)
+    relationship_runtime = RoleRelationshipRuntimeService(
+        workspace,
+        role_store=role_store,
+        session_manager=session_manager,
+        presence=presence,
+    )
     processing_state = ProcessingState()
     loop_deps = _build_loop_deps(
         config=config,
@@ -470,6 +482,7 @@ def build_core_runtime(
         processing_state=processing_state,
         event_bus=event_bus,
         memory_runtime=memory_runtime,
+        relationship_runtime=relationship_runtime,
     )
     loop = AgentLoop(
         loop_deps,
@@ -522,6 +535,7 @@ def build_core_runtime(
         mcp_registry=mcp_registry,
         memory_runtime=memory_runtime,
         presence=presence,
+        relationship_runtime=relationship_runtime,
         peer_process_manager=peer_pm,
         peer_poller=peer_poller,
         plugin_manager=plugin_manager,

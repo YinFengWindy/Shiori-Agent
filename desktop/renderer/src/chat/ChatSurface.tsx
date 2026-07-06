@@ -32,6 +32,9 @@ type ChatSurfaceProps = {
   moodIllustrationBindingHit: boolean;
   moodIllustrationUrl: string;
   hasMoodIllustrationBinding: boolean;
+  roleSelfView: string;
+  relationshipTags: string[];
+  lonelinessValue: number;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   draft: string;
   headerTitle: string;
@@ -75,6 +78,9 @@ export function ChatSurface({
   moodIllustrationBindingHit,
   moodIllustrationUrl,
   hasMoodIllustrationBinding,
+  roleSelfView,
+  relationshipTags,
+  lonelinessValue,
   conversationEndRef,
   draft,
   headerTitle,
@@ -753,6 +759,9 @@ export function ChatSurface({
                 <ChatStatusSidebar
                   currentMood={currentMood}
                   moodIllustrationUrl={moodIllustrationUrl}
+                  roleSelfView={roleSelfView}
+                  relationshipTags={relationshipTags}
+                  lonelinessValue={lonelinessValue}
                 />
               ) : (
                 <div className="grid h-full min-h-0 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">

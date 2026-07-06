@@ -186,6 +186,8 @@ class _PersistUserMessageModule:
             return frame
         if self._session_services.presence:
             self._session_services.presence.record_user_message(session.key)
+        if self._session_services.relationship_runtime is not None:
+            self._session_services.relationship_runtime.handle_user_message(session.key)
         user_kwargs: dict[str, object] = {}
         user_kwargs["metadata"] = _build_synced_message_metadata(
             channel=msg.channel,
@@ -256,6 +258,10 @@ class _UpdateSessionMetadataModule:
             tool_chain=list(ctx.tool_chain),
             mood=ctx.response_metadata.mood,
         )
+        if self._session_services.relationship_runtime is not None:
+            session.metadata = self._session_services.relationship_runtime.enrich_session_metadata(
+                cast(dict[str, Any], session.metadata),
+            )
         return frame
 
 

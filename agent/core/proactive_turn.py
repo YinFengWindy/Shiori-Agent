@@ -279,6 +279,7 @@ class ProactiveTurnPipelineDeps:
     drift_pipeline: DriftTurnPipeline | None
     target_transport_fn: Callable[[], tuple[str, str]] | None = None
     tool_hooks: list[ToolHook] | None = None
+    loneliness_gate_fn: Callable[[str, datetime], tuple[bool, dict[str, Any]]] | None = None
 
 
 # ── 主 Pipeline ─────────────────────────────────────────────────────────
@@ -318,6 +319,7 @@ class ProactiveTurnPipeline:
         self._recent_proactive_fn = deps.recent_proactive_fn
         self._drift_pipeline = deps.drift_pipeline
         self._target_transport_fn = deps.target_transport_fn
+        self._loneliness_gate_fn = deps.loneliness_gate_fn
         self._tool_executor = ToolExecutor(deps.tool_hooks or [])
 
         # 1. drift_pipeline 的 step_recorder 指向本 pipeline 的记录方法。
@@ -488,6 +490,12 @@ class ProactiveTurnPipeline:
             if not should_act:
                 logger.debug("[proactive_v2] gate: anyaction → blocked meta=%s", meta)
                 return GateResult(blocked=True, reason="presence", base_score=None)
+
+        if self._loneliness_gate_fn is not None:
+            should_trigger, meta = self._loneliness_gate_fn(self._session_key, ctx.now_utc)
+            if not should_trigger:
+                logger.debug("[proactive_v2] gate: loneliness → blocked meta=%s", meta)
+                return GateResult(blocked=True, reason="loneliness", base_score=None)
 
         # 1.5 context-fallback 概率 + 配额计算。
         context_as_fallback_open = self._rng.random() < self._cfg.agent_tick_context_prob

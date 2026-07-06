@@ -404,6 +404,9 @@ function App(): React.ReactElement {
     moodIllustrationBindingHit,
     moodIllustration,
     moodIllustrationUrl,
+    roleSelfView,
+    relationshipTags,
+    lonelinessValue,
     visibleIllustrationUrl,
     chatBackgroundUrl,
     activeSessionKey,
@@ -619,6 +622,9 @@ function App(): React.ReactElement {
       moodIllustrationBindingHit={moodIllustrationBindingHit}
       moodIllustrationUrl={moodIllustrationUrl}
       hasMoodIllustrationBinding={Boolean(currentMood && moodIllustration)}
+      roleSelfView={roleSelfView}
+      relationshipTags={relationshipTags}
+      lonelinessValue={lonelinessValue}
       conversationEndRef={conversationEndRef}
       draft={draft}
       headerTitle={headerTitle}

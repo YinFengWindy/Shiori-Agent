@@ -173,4 +173,96 @@ describe("desktopSelectors", () => {
     assert.equal(viewModel.moodIllustration, "D:\\roles\\mira\\happy.png");
     assert.match(viewModel.moodIllustrationUrl, /happy\.png/);
   });
+
+  it("derives relationship summary, tags, and loneliness value from session metadata first", () => {
+    const session = createSession();
+    session.metadata = {
+      role_id: "mira",
+      relationship_snapshot: {
+        role_id: "mira",
+        role_self_view: "我最近会不自觉地去想你会不会来找我。",
+        relation_tags: ["亲近", "怕被冷落"],
+        internal_profile: {
+          relation_state: {},
+          behavior_profile: {},
+        },
+        source_summary: {},
+        generated_at: "2026-07-06T18:00:00+08:00",
+        last_attempted_at: "2026-07-06T18:00:00+08:00",
+        last_error: "",
+      },
+      loneliness_runtime: {
+        role_id: "mira",
+        loneliness_value: 64,
+        last_calculated_at: "2026-07-06T18:00:00+08:00",
+        last_user_at: "",
+        last_proactive_at: "",
+        awaiting_reply_after_proactive: false,
+        awaiting_reply_since: "",
+        last_triggered_at: "",
+        cooldown_until: "",
+      },
+    };
+
+    const viewModel = buildDesktopViewModel({
+      roles: [createRole()],
+      activeRoleId: "mira",
+      mainView: { kind: "chat" },
+      roleForm: createRoleForm(),
+      activeIllustration: "",
+      activeSession: session,
+      selectedChatImageKey: "",
+      health: "online",
+      sendingSessions: {},
+    });
+
+    assert.equal(viewModel.roleSelfView, "我最近会不自觉地去想你会不会来找我。");
+    assert.deepEqual(viewModel.relationshipTags, ["亲近", "怕被冷落"]);
+    assert.equal(viewModel.lonelinessValue, 64);
+  });
+
+  it("falls back to the role payload relationship runtime when the session metadata is empty", () => {
+    const role = createRole({
+      relationship_snapshot: {
+        role_id: "mira",
+        role_self_view: "我还是会留意你有没有想起我。",
+        relation_tags: ["嘴硬", "等你主动"],
+        internal_profile: {
+          relation_state: {},
+          behavior_profile: {},
+        },
+        source_summary: {},
+        generated_at: "2026-07-06T18:00:00+08:00",
+        last_attempted_at: "2026-07-06T18:00:00+08:00",
+        last_error: "",
+      },
+      loneliness_runtime: {
+        role_id: "mira",
+        loneliness_value: 52,
+        last_calculated_at: "2026-07-06T18:00:00+08:00",
+        last_user_at: "",
+        last_proactive_at: "",
+        awaiting_reply_after_proactive: false,
+        awaiting_reply_since: "",
+        last_triggered_at: "",
+        cooldown_until: "",
+      },
+    });
+
+    const viewModel = buildDesktopViewModel({
+      roles: [role],
+      activeRoleId: "mira",
+      mainView: { kind: "chat" },
+      roleForm: createRoleForm(),
+      activeIllustration: "",
+      activeSession: createSession(),
+      selectedChatImageKey: "",
+      health: "online",
+      sendingSessions: {},
+    });
+
+    assert.equal(viewModel.roleSelfView, "我还是会留意你有没有想起我。");
+    assert.deepEqual(viewModel.relationshipTags, ["嘴硬", "等你主动"]);
+    assert.equal(viewModel.lonelinessValue, 52);
+  });
 });

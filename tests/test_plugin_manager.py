@@ -1093,6 +1093,7 @@ async def test_core_runtime_start_wires_plugin_tool_hooks_to_loop_and_spawn():
         mcp_registry=FakeMcpRegistry(),  # type: ignore[arg-type]
         memory_runtime=SimpleNamespace(),  # type: ignore[arg-type]
         presence=SimpleNamespace(),  # type: ignore[arg-type]
+        relationship_runtime=SimpleNamespace(),  # type: ignore[arg-type]
         peer_process_manager=None,
         peer_poller=None,
         plugin_manager=plugin_manager,  # type: ignore[arg-type]

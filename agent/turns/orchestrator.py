@@ -78,6 +78,8 @@ class TurnOrchestrator:
                     self._session.presence.record_proactive_sent_by_role(role_id)
                 else:
                     self._session.presence.record_proactive_sent(session_key)
+            if self._session.relationship_runtime is not None:
+                self._session.relationship_runtime.handle_proactive_sent(session_key)
             await self._run_effects(result.success_side_effects)
         else:
             await self._run_effects(result.failure_side_effects)

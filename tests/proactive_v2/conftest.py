@@ -218,6 +218,7 @@ def make_proactive_pipeline(
     workspace_context_fn: Any = None,
     drift_pipeline: Any = None,
     target_transport_fn: Any = None,
+    loneliness_gate_fn: Any = None,
 ):
     from agent.core.proactive_turn import (
         ProactiveTurnPipeline,
@@ -298,5 +299,6 @@ def make_proactive_pipeline(
             drift_pipeline=drift_pipeline,
             target_transport_fn=target_transport_fn,
             tool_hooks=None,
+            loneliness_gate_fn=loneliness_gate_fn,
         )
     )

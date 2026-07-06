@@ -57,6 +57,7 @@ class AgentTickDeps:
     turn_orchestrator: TurnOrchestrator | None = None
     pool: McpClientPool | None = None
     tool_hooks: list[ToolHook] = field(default_factory=list)
+    loneliness_gate_fn: Callable[[str, Any], tuple[bool, dict[str, Any]]] | None = None
 
 
 class AgentTickFactory:
@@ -97,6 +98,7 @@ class AgentTickFactory:
                 drift_pipeline=drift_pipeline,
                 target_transport_fn=self._deps.sense.target_transport,
                 tool_hooks=self._deps.tool_hooks,
+                loneliness_gate_fn=self._deps.loneliness_gate_fn,
             )
         )
 

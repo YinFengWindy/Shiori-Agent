@@ -33,8 +33,9 @@ from agent.turns.outbound import PushToolOutboundPort
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from core.common.strategy_trace import build_strategy_trace_envelope
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
-from proactive_v2.anyaction import AnyActionGate, QuotaStore
 from core.roles import RoleAggregateService, RoleStore
+from core.roles.relationship_runtime import RoleRelationshipRuntimeService
+from proactive_v2.anyaction import AnyActionGate, QuotaStore
 from proactive_v2.energy import (
     compute_energy,
     d_energy,
@@ -106,6 +107,7 @@ class ProactiveLoop:
         self._fitbit_poll_interval = max(1, int(fitbit_poll_interval))
         self._workspace_context_mtime_ns: int | None = None
         self._workspace_context_text: str = ""
+        self._relationship_runtime = self._build_relationship_runtime()
         self._init_runtime_state(config)
         self._init_runtime_components()
 
@@ -142,9 +144,21 @@ class ProactiveLoop:
                 session=SessionServices(
                     session_manager=self._sessions,
                     presence=self._presence,
+                    relationship_runtime=self._relationship_runtime,
                 ),
                 outbound=PushToolOutboundPort(self._push),
             )
+        )
+
+    def _build_relationship_runtime(self) -> RoleRelationshipRuntimeService | None:
+        workspace = getattr(self._sessions, "workspace", None)
+        if workspace is None or self._presence is None:
+            return None
+        return RoleRelationshipRuntimeService(
+            Path(workspace),
+            role_store=RoleStore(Path(workspace)),
+            session_manager=self._sessions,
+            presence=self._presence,
         )
 
     def _build_anyaction_gate(self) -> AnyActionGate:
@@ -199,6 +213,11 @@ class ProactiveLoop:
                 shared_tools=self._shared_tools,
                 pool=self._mcp_pool,
                 tool_hooks=self._tool_hooks,
+                loneliness_gate_fn=(
+                    self._relationship_runtime.should_trigger_proactive
+                    if self._relationship_runtime is not None
+                    else None
+                ),
             )
         ).build()
 

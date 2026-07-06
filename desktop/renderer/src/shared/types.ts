@@ -9,6 +9,32 @@ import type {
 } from "../../../src/shared";
 
 /** Role data returned by the desktop bridge. */
+export type RelationshipSnapshot = {
+  role_id: string;
+  role_self_view: string;
+  relation_tags: string[];
+  internal_profile: {
+    relation_state: Record<string, number>;
+    behavior_profile: Record<string, number>;
+  };
+  source_summary: Record<string, unknown>;
+  generated_at: string;
+  last_attempted_at: string;
+  last_error: string;
+};
+
+export type LonelinessRuntime = {
+  role_id: string;
+  loneliness_value: number;
+  last_calculated_at: string;
+  last_user_at: string;
+  last_proactive_at: string;
+  awaiting_reply_after_proactive: boolean;
+  awaiting_reply_since: string;
+  last_triggered_at: string;
+  cooldown_until: string;
+};
+
 export type RoleRecord = {
   id: string;
   name: string;
@@ -21,6 +47,8 @@ export type RoleRecord = {
   chat_background_abs: string | null;
   illustrations: string[];
   illustrations_abs: string[];
+  relationship_snapshot?: RelationshipSnapshot | null;
+  loneliness_runtime?: LonelinessRuntime | null;
   created_at: string;
   updated_at: string;
 };
@@ -50,7 +78,10 @@ export type SessionPayload = {
   created_at: string;
   updated_at: string;
   last_consolidated: number;
-  metadata: Record<string, unknown>;
+  metadata: Record<string, unknown> & {
+    relationship_snapshot?: RelationshipSnapshot | null;
+    loneliness_runtime?: LonelinessRuntime | null;
+  };
   messages: SessionMessage[];
 };
 
