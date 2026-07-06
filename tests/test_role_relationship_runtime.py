@@ -150,3 +150,30 @@ def test_should_trigger_proactive_respects_threshold(tmp_path: Path):
 
     assert should_trigger is True
     assert meta["reason"] == "threshold"
+
+
+@pytest.mark.asyncio
+async def test_generate_snapshot_via_llm_accepts_prompt_json_example(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, _, _ = _runtime(tmp_path)
+
+    class _Resp:
+        content = (
+            '{"role_self_view":"我会留意你有没有来找我。",'
+            '"relation_tags":["亲近"],'
+            '"relation_state":{"closeness":0.6,"dependence":0.5,"security":0.4,"initiative_desire":0.7,"neglect_sensitivity":0.8},'
+            '"behavior_profile":{"loneliness_growth_base":1.5,"loneliness_growth_when_unanswered":2.2,"trigger_threshold":60,"post_trigger_cooldown_minutes":120,"night_suppression":0.4}}'
+        )
+
+    class _Provider:
+        async def chat(self, **kwargs):
+            return _Resp()
+
+    snapshot = await runtime.generate_snapshot_via_llm(
+        "mira",
+        provider=_Provider(),
+        model="test-model",
+    )
+
+    assert snapshot["role_self_view"] == "我会留意你有没有来找我。"
+    assert snapshot["relation_tags"] == ["亲近"]

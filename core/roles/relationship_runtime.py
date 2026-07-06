@@ -69,24 +69,24 @@ _RELATIONSHIP_PROMPT = """\
 - 不要复述静态设定，不要分析系统机制，不要出现“角色”“用户”“设定”等旁白口吻。
 
 输出 JSON 结构：
-{
+{{
   "role_self_view": "第一人称想法",
   "relation_tags": ["标签1", "标签2"],
-  "relation_state": {
+  "relation_state": {{
     "closeness": 0.0,
     "dependence": 0.0,
     "security": 0.0,
     "initiative_desire": 0.0,
     "neglect_sensitivity": 0.0
-  },
-  "behavior_profile": {
+  }},
+  "behavior_profile": {{
     "loneliness_growth_base": 0.0,
     "loneliness_growth_when_unanswered": 0.0,
     "trigger_threshold": 0.0,
     "post_trigger_cooldown_minutes": 0,
     "night_suppression": 0.0
-  }
-}
+  }}
+}}
 
 角色名称：
 {role_name}
