@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cx, ghostButtonClass, inputClass } from "../shared/styles";
+import { cx, inputClass } from "../shared/styles";
 
 type RoleMoodBindingsPanelProps = {
   moodCatalog: string[];
@@ -8,7 +8,6 @@ type RoleMoodBindingsPanelProps = {
   selectedAssetAbsPath: string;
   selectedMood: string;
   onSaveMoodBinding: (nextMood: string) => void;
-  onClearMoodBinding: () => void;
 };
 
 /** Renders the role asset-side mood binding panel. */
@@ -19,7 +18,6 @@ export function RoleMoodBindingsPanel({
   selectedAssetAbsPath,
   selectedMood,
   onSaveMoodBinding,
-  onClearMoodBinding,
 }: RoleMoodBindingsPanelProps) {
   const [draftMood, setDraftMood] = useState(selectedMood);
 
@@ -82,20 +80,6 @@ export function RoleMoodBindingsPanel({
             disabled={!selectedAssetPath}
           />
         </label>
-        <div className="rounded-[18px] border border-[#E4EAF0] bg-[#F8FBFD] px-4 py-3 text-sm text-[#596776]">
-          <div className="truncate">当前选中素材：{selectedAssetPath || "未选择"}</div>
-          <div className="mt-1 truncate">当前映射心情：{selectedMood || "未设置"}</div>
-        </div>
-        <div className="flex gap-2.5">
-          <button
-            className={cx("ghost-btn text-sm", ghostButtonClass)}
-            type="button"
-            onClick={onClearMoodBinding}
-            disabled={!selectedAssetPath || !selectedMood}
-          >
-            清除当前映射
-          </button>
-        </div>
       </div>
     </div>
   );

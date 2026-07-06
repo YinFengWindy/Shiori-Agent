@@ -88,16 +88,6 @@ export function RoleAssetsPage({
     onSaveSelections({ moodIllustrationBindings: nextBindings, moodCatalog: nextCatalog });
   }
 
-  function clearMoodBinding(): void {
-    if (!selectedMoodAssetPath) return;
-    const nextBindings = applyMoodToIllustration(roleForm.moodIllustrationBindings, selectedMoodAssetPath, "");
-    onUpdateRoleForm((current) => ({
-      ...current,
-      moodIllustrationBindings: nextBindings,
-    }));
-    onSaveSelections({ moodIllustrationBindings: nextBindings });
-  }
-
   return (
     <section
       className="role-assets-page scrollbar-soft scrollbar-soft-accent h-full overflow-y-auto bg-white"
@@ -216,7 +206,6 @@ export function RoleAssetsPage({
                     selectedAssetAbsPath={selectedMoodAssetPair?.absPath ? toFileUrl(selectedMoodAssetPair.absPath) : ""}
                     selectedMood={selectedMood}
                     onSaveMoodBinding={saveMoodBinding}
-                    onClearMoodBinding={clearMoodBinding}
                   />
                 ) : selectedAsset ? (
                   selectionMode === "avatar" ? (

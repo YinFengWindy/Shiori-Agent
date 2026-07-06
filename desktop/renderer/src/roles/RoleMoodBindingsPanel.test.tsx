@@ -15,7 +15,6 @@ function renderRoleMoodBindingsPanel(): string {
       selectedAssetAbsPath="mira-asset://local?path=D%3A%5Cillustrations%5Cmira-smile.png"
       selectedMood="calm"
       onSaveMoodBinding={() => undefined}
-      onClearMoodBinding={() => undefined}
     />,
   );
 }
@@ -26,10 +25,11 @@ describe("RoleMoodBindingsPanel", () => {
 
     assert.match(markup, /先在左侧选中一张差分图，再为这张图填写对应心情；输入框失焦后会自动保存。/);
     assert.match(markup, /对应心情/);
-    assert.match(markup, /当前映射心情：calm/);
     assert.match(markup, /min-h-\[360px\]/);
     assert.doesNotMatch(markup, /min-h-\[420px\]/);
     assert.doesNotMatch(markup, /rounded-\[24px\]/);
     assert.doesNotMatch(markup, /border-\[#E4EAF0\]/);
+    assert.doesNotMatch(markup, /当前选中素材：/);
+    assert.doesNotMatch(markup, /清除当前映射/);
   });
 });
