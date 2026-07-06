@@ -64,6 +64,10 @@ export function mergeIncomingSessionDuringSend(
   }
   return {
     ...incomingSession,
+    metadata: {
+      ...(currentSession.metadata ?? {}),
+      ...(incomingSession.metadata ?? {}),
+    },
     messages: currentSession.messages,
   };
 }

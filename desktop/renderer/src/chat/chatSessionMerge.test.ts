@@ -130,4 +130,38 @@ describe("mergeIncomingSessionDuringSend", () => {
 
     assert.equal(merged, incomingSession);
   });
+
+  it("preserves fresh incoming metadata while keeping the optimistic local message tail", () => {
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        role: "user",
+        content: "刚发出去的消息",
+      },
+    ]);
+    currentSession.metadata = {
+      role_id: "mira",
+      current_mood: "平静",
+    };
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+    ]);
+    incomingSession.metadata = {
+      role_id: "mira",
+      current_mood: "开心",
+    };
+
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
+
+    assert.equal(merged?.messages, currentSession.messages);
+    assert.equal(merged?.metadata.current_mood, "开心");
+  });
 });
