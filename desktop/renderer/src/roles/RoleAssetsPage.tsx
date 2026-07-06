@@ -200,8 +200,6 @@ export function RoleAssetsPage({
                 </div>
                 {selectionMode === "mood-binding" ? (
                   <RoleMoodBindingsPanel
-                    moodCatalog={roleForm.moodCatalog}
-                    defaultMood={roleForm.defaultMood}
                     selectedAssetPath={selectedMoodAssetPath}
                     selectedAssetAbsPath={selectedMoodAssetPair?.absPath ? toFileUrl(selectedMoodAssetPair.absPath) : ""}
                     selectedMood={selectedMood}
