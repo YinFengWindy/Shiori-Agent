@@ -163,7 +163,7 @@ export function RoleAssetsPage({
               <div className="flex h-full min-h-[420px] flex-col rounded-[24px] border border-[#E4EAF0] bg-[#FAFBFD] p-5">
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <div className="text-sm font-medium text-[#2A3440]">
-                    {selectionMode === "avatar" ? "头像效果" : "立绘效果"}
+                    {selectionMode === "avatar" ? "头像效果" : selectionMode === "chat-background" ? "立绘效果" : "差分效果"}
                   </div>
                   <div className="inline-flex rounded-full border border-[#D8DFE7] bg-[#F6F8FB] p-1">
                     <button
@@ -186,7 +186,7 @@ export function RoleAssetsPage({
                       type="button"
                       onClick={() => setSelectionMode("chat-background")}
                     >
-                      默认立绘
+                      立绘
                     </button>
                     <button
                       data-testid="selection-mode-mood-binding"
@@ -197,7 +197,7 @@ export function RoleAssetsPage({
                       type="button"
                       onClick={() => setSelectionMode("mood-binding")}
                     >
-                      心情映射
+                      差分
                     </button>
                   </div>
                 </div>
