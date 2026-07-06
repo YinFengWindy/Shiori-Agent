@@ -65,6 +65,26 @@ describe("roleMoodSelectors", () => {
     assert.equal(
       resolveMoodIllustration({
         activeSession: createSession({ current_mood: "开心" }),
+        detailRole: createRole({
+          illustrations: ["assets/roles/mira/happy.png"],
+          illustrations_abs: ["D:\\roles\\mira\\happy.png"],
+        }),
+        roleForm: createRoleForm({
+          moodIllustrationBindings: {
+            开心: "assets/roles/mira/happy.png",
+          },
+        }),
+        activeIllustration: "",
+        previewIllustrations: ["D:\\roles\\mira\\fallback.png"],
+      }),
+      "D:\\roles\\mira\\happy.png",
+    );
+  });
+
+  it("keeps an absolute bound illustration path when it is already renderer-ready", () => {
+    assert.equal(
+      resolveMoodIllustration({
+        activeSession: createSession({ current_mood: "开心" }),
         detailRole: createRole(),
         roleForm: createRoleForm({
           moodIllustrationBindings: {

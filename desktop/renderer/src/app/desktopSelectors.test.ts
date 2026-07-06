@@ -144,4 +144,33 @@ describe("desktopSelectors", () => {
     assert.equal(viewModel.moodIllustration, "D:\\roles\\mira\\happy.png");
     assert.match(viewModel.moodIllustrationUrl, /happy\.png/);
   });
+
+  it("resolves mood illustration bindings saved as relative role asset paths", () => {
+    const session = createSession();
+    session.metadata = {
+      role_id: "mira",
+      current_mood: "开心",
+    };
+    const viewModel = buildDesktopViewModel({
+      roles: [createRole({
+        illustrations: ["assets/roles/mira/happy.png"],
+        illustrations_abs: ["D:\\roles\\mira\\happy.png"],
+      })],
+      activeRoleId: "mira",
+      mainView: { kind: "chat" },
+      roleForm: createRoleForm({
+        moodIllustrationBindings: {
+          开心: "assets/roles/mira/happy.png",
+        },
+      }),
+      activeIllustration: "",
+      activeSession: session,
+      selectedChatImageKey: "",
+      health: "online",
+      sendingSessions: {},
+    });
+
+    assert.equal(viewModel.moodIllustration, "D:\\roles\\mira\\happy.png");
+    assert.match(viewModel.moodIllustrationUrl, /happy\.png/);
+  });
 });

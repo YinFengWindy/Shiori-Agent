@@ -50,7 +50,11 @@ export function resolveMoodIllustration({
     ...(runtimeConfig.mood_illustration_bindings as Record<string, unknown> | undefined),
     ...roleForm.moodIllustrationBindings,
   });
-  return bindings[currentMood] || "";
+  const selectedBinding = bindings[currentMood] || "";
+  if (!selectedBinding) {
+    return "";
+  }
+  return resolveIllustrationAssetPath(selectedBinding, detailRole) || selectedBinding;
 }
 
 /** Returns whether the current mood maps to an explicit mood illustration binding. */
@@ -86,4 +90,18 @@ function normalizeMoodBindings(bindings: Record<string, unknown> | undefined): R
     next[mood] = illustration;
   });
   return next;
+}
+
+function resolveIllustrationAssetPath(
+  illustrationPath: string,
+  detailRole: Pick<RoleRecord, "illustrations" | "illustrations_abs"> | null,
+): string {
+  if (!detailRole) {
+    return "";
+  }
+  const illustrationIndex = detailRole.illustrations.findIndex((path) => path === illustrationPath);
+  if (illustrationIndex < 0) {
+    return "";
+  }
+  return detailRole.illustrations_abs[illustrationIndex] ?? "";
 }
