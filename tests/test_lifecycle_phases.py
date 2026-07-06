@@ -239,6 +239,62 @@ def _inbound() -> InboundMessage:
     )
 
 
+@pytest.mark.asyncio
+async def test_after_reasoning_resolves_mood_when_reply_lacks_structured_mood(monkeypatch: pytest.MonkeyPatch):
+    async def _fake_resolve_role_mood(*args, **kwargs):  # type: ignore[no-untyped-def]
+        return "鄙视"
+
+    monkeypatch.setattr(
+        "agent.lifecycle.phases.after_reasoning.resolve_role_mood",
+        _fake_resolve_role_mood,
+    )
+
+    services = SimpleNamespace(
+        session_manager=AsyncMock(),
+        presence=None,
+    )
+    llm_services = SimpleNamespace(provider=object(), light_provider=object())
+    llm_config = SimpleNamespace(model="test-model", max_tokens=256)
+    session = _DummySession("role:role-0ae7dd84853e")
+    session.metadata = {
+        "role_id": "role-0ae7dd84853e",
+        "role_runtime_config": {
+            "default_mood": "平静",
+            "mood_illustration_bindings": {
+                "平静": "assets/role-0ae7dd84853e/illustration-37bc9697.png",
+                "鄙视": "assets/role-0ae7dd84853e/illustration-eefa9553.png",
+            },
+        },
+    }
+    state = TurnState(
+        msg=_inbound(),
+        session_key="role:role-0ae7dd84853e",
+        dispatch_outbound=True,
+        session=session,
+    )
+    turn_result = TurnRunResult(
+        reply="（她轻轻抬了抬眼，语气很淡。）……你想得倒挺美。",
+        tools_used=[],
+        tool_chain=[],
+    )
+
+    phase = Phase(
+        default_after_reasoning_modules(
+            EventBus(),
+            cast(Any, services),
+            cast(Any, llm_services),
+            cast(Any, llm_config),
+        ),
+        frame_factory=AfterReasoningFrame,
+    )
+
+    result = await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
+
+    assert result.ctx.response_metadata.mood == "鄙视"
+    assert session.messages[-1]["metadata"]["mood"] == "鄙视"
+    assert session.metadata["current_mood"] == "鄙视"
+
+
 class _DummySession:
     def __init__(self, key: str) -> None:
         self.key = key

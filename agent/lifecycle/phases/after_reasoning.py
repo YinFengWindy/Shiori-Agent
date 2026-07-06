@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
+from agent.core.mood_resolver import resolve_role_mood
 from agent.core.passive_support import update_session_runtime_metadata
 from agent.core.response_parser import parse_response
 from agent.lifecycle.phase import (
@@ -22,6 +23,7 @@ from bus.event_bus import EventBus
 from bus.events import OutboundMessage
 
 if TYPE_CHECKING:
+    from agent.looping.ports import LLMConfig, LLMServices
     from agent.looping.ports import SessionServices
     from session.manager import Session
 
@@ -116,6 +118,51 @@ class _EmitAfterReasoningCtxModule:
     async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
         ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
         frame.slots[_CTX_SLOT] = await self._bus.emit(ctx)
+        return frame
+
+
+class _ResolveMoodModule:
+    slot = "after_reasoning.resolve_mood"
+    requires = ("after_reasoning.emit", _CTX_SLOT)
+
+    def __init__(self, llm: "LLMServices | None", llm_config: "LLMConfig | None") -> None:
+        self._llm = llm
+        self._llm_config = llm_config
+
+    async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
+        ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
+        if ctx.response_metadata.mood:
+            return frame
+        if self._llm is None or self._llm_config is None:
+            return frame
+        raw_session = frame.input.state.session
+        if raw_session is None:
+            return frame
+        session = cast("Session", raw_session)
+        runtime_config = session.metadata.get("role_runtime_config")
+        if not isinstance(runtime_config, dict):
+            return frame
+        raw_bindings = runtime_config.get("mood_illustration_bindings")
+        if not isinstance(raw_bindings, dict):
+            return frame
+        available_moods = [
+            str(mood).strip()
+            for mood, path in raw_bindings.items()
+            if str(mood).strip() and str(path or "").strip()
+        ]
+        if not available_moods:
+            return frame
+        default_mood = str(runtime_config.get("default_mood") or "").strip() or available_moods[0]
+        resolved_mood = await resolve_role_mood(
+            self._llm.provider,
+            model=self._llm_config.model,
+            max_tokens=self._llm_config.max_tokens,
+            reply_text=ctx.reply,
+            available_moods=available_moods,
+            default_mood=default_mood,
+        )
+        if resolved_mood:
+            ctx.response_metadata.mood = resolved_mood
         return frame
 
 
@@ -270,11 +317,16 @@ class _ReturnAfterReasoningResultModule:
 def default_after_reasoning_modules(
     bus: EventBus,
     session_services: SessionServices,
+    llm: "LLMServices | None" = None,
+    llm_config: "LLMConfig | None" = None,
     plugin_modules: AfterReasoningModules | None = None,
 ) -> AfterReasoningModules:
+    resolved_llm = llm or cast(Any, None)
+    resolved_llm_config = llm_config or cast(Any, None)
     builtins: AfterReasoningModules = [
         _BuildAfterReasoningCtxModule(),
         _EmitAfterReasoningCtxModule(bus),
+        _ResolveMoodModule(resolved_llm, resolved_llm_config),
         _PersistUserMessageModule(session_services),
         _PersistAssistantMessageModule(),
         _UpdateSessionMetadataModule(),

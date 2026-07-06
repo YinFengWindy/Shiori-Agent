@@ -247,6 +247,8 @@ class PassiveTurnPipeline:
         self._context = deps.context
         self._tools = deps.tools
         self._reasoner = deps.reasoner
+        self._llm = getattr(deps, "llm", None)
+        self._llm_config = getattr(deps, "llm_config", None)
         add_before_step = getattr(self._reasoner, "add_before_step_plugin_modules", None)
         if add_before_step is not None:
             add_before_step(list(deps.before_step_plugin_modules or []))
@@ -334,6 +336,8 @@ class PassiveTurnPipeline:
             default_after_reasoning_modules(
                 self._bus,
                 self._session,
+                self._llm,
+                self._llm_config,
                 plugin_modules=cast("list[Any]", self._after_reasoning_plugin_modules),
             ),
             frame_factory=AfterReasoningFrame,
