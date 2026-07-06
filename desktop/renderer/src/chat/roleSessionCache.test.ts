@@ -58,27 +58,6 @@ describe("roleSessionCache", () => {
     assert.equal(immediateSession, null);
   });
 
-  it("shows only the cached hot tail immediately when switching to another cached role", () => {
-    const cachedSession: SessionPayload = {
-      ...createSession("luna", "2026-07-04T10:05:00+08:00"),
-      messages: Array.from({ length: 220 }, (_value, index) => ({
-        id: `luna-message-${index + 1}`,
-        role: index % 2 === 0 ? "assistant" : "user",
-        content: `message-${index + 1}`,
-      })),
-    };
-
-    const immediateSession = resolveImmediateRoleSession({
-      currentRoleId: "mira",
-      nextRoleId: "luna",
-      currentSession: createSession("mira", "2026-07-04T10:00:00+08:00"),
-      cachedSession,
-    });
-
-    assert.equal(immediateSession?.messages.length, 160);
-    assert.equal(immediateSession?.messages[0]?.id, "luna-message-61");
-  });
-
   it("removes a deleted role and prunes sessions for roles that no longer exist", () => {
     const cache: RoleSessionCache = {
       mira: createSession("mira", "2026-07-04T10:00:00+08:00"),

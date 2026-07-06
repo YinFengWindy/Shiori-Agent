@@ -88,7 +88,6 @@ type DesktopAppFrameProps = {
   workspaceFeedback: WorkspaceFeedback | null;
   activeRole: RoleRecord | null;
   activeSession: SessionPayload | null;
-  hiddenChatMessageCount: number;
   chatLatestImagePath: string;
   chatLatestImagePosition: number;
   chatLatestImageSidebar: RightSidebarViewState;
@@ -115,7 +114,6 @@ type DesktopAppFrameProps = {
   onBeginAttachmentDrag: (path: string) => void;
   onCopyMessage: (content: string) => void;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
-  onLoadOlderMessages: () => void;
   imageHistorySidebar: RightSidebarViewState;
   detailRole: RoleRecord | null;
   pendingRoleCardAction: PendingRoleCardAction;
@@ -212,7 +210,6 @@ export function DesktopAppFrame({
   workspaceFeedback,
   activeRole,
   activeSession,
-  hiddenChatMessageCount,
   chatLatestImagePath,
   chatLatestImagePosition,
   chatLatestImageSidebar,
@@ -239,7 +236,6 @@ export function DesktopAppFrame({
   onBeginAttachmentDrag,
   onCopyMessage,
   onSendMessage,
-  onLoadOlderMessages,
   imageHistorySidebar,
   detailRole,
   pendingRoleCardAction,
@@ -410,7 +406,6 @@ export function DesktopAppFrame({
               activeRole={activeRole}
               activeRoleId={activeRoleId}
               activeSession={activeSession}
-              hiddenMessageCount={hiddenChatMessageCount}
               bridgeReady={bridgeReady}
               chatLatestImagePath={chatLatestImagePath}
               chatLatestImagePosition={chatLatestImagePosition}
@@ -441,7 +436,6 @@ export function DesktopAppFrame({
               onBeginAttachmentDrag={onBeginAttachmentDrag}
               onCopyMessage={onCopyMessage}
               onSendMessage={onSendMessage}
-              onLoadOlderMessages={onLoadOlderMessages}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
             />
           ) : null}

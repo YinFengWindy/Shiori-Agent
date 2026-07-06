@@ -1,4 +1,3 @@
-import { createHotChatSession } from "./chatMessageWindow";
 import type { SessionPayload } from "../shared/types";
 
 export type RoleSessionCache = Record<string, SessionPayload>;
@@ -34,7 +33,7 @@ export function resolveImmediateRoleSession({
     normalizeRoleId(currentRoleId) !== normalizeRoleId(nextRoleId)
     || !currentSession
   ) {
-    return cachedSession ? createHotChatSession(cachedSession) : null;
+    return cachedSession;
   }
   return currentSession;
 }

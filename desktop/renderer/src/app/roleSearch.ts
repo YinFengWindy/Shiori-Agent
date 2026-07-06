@@ -51,10 +51,10 @@ export function resolveSearchResultMessageKey({
 }: ResolveSearchResultMessageKeyArgs): string {
   if (messageId) return String(messageId);
   if (messageIndex == null) return "";
-  const indexedSession = searchIndex.find((item) => item.roleId === roleId)?.session ?? null;
-  const indexedMessage = indexedSession?.messages[messageIndex] ?? null;
-  const activeMessage = activeRoleId === roleId ? activeSession?.messages[messageIndex] ?? null : null;
-  const message = indexedMessage ?? activeMessage;
+  const session = activeRoleId === roleId
+    ? (activeSession ?? searchIndex.find((item) => item.roleId === roleId)?.session ?? null)
+    : (searchIndex.find((item) => item.roleId === roleId)?.session ?? null);
+  const message = session?.messages[messageIndex];
   if (!message) return "";
   return String(message.id ?? `${message.role}-${messageIndex}`);
 }
