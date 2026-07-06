@@ -26,16 +26,18 @@ export function createDefaultRoleMoodConfig(): RoleMoodConfig {
 /** Reads role mood config from role runtime config, normalizing invalid shapes. */
 export function readRoleMoodConfig(role: Pick<RoleRecord, "runtime_config"> | null): RoleMoodConfig {
   const runtimeConfig = (role?.runtime_config ?? {}) as RoleMoodRuntimeConfig;
-  const rawCatalog = Array.isArray(runtimeConfig.mood_catalog) ? runtimeConfig.mood_catalog : [];
-  const moodCatalog = dedupeMoods(rawCatalog);
-  const rawDefaultMood = String(runtimeConfig.default_mood ?? "").trim();
-  const resolvedDefaultMood = rawDefaultMood || moodCatalog[0] || defaultMood;
-  const finalCatalog = dedupeMoods([resolvedDefaultMood, ...moodCatalog]);
   const rawBindings = runtimeConfig.mood_illustration_bindings;
-  const moodIllustrationBindings = normalizeMoodBindings(rawBindings, finalCatalog);
+  const rawDefaultMood = String(runtimeConfig.default_mood ?? "").trim();
+  const moodIllustrationBindings = normalizeMoodBindings(rawBindings);
+  const moodCatalog = Object.keys(moodIllustrationBindings);
+  const resolvedDefaultMood = (
+    rawDefaultMood && moodIllustrationBindings[rawDefaultMood]
+      ? rawDefaultMood
+      : moodCatalog[0] || defaultMood
+  );
 
   return {
-    moodCatalog: finalCatalog,
+    moodCatalog,
     defaultMood: resolvedDefaultMood,
     moodIllustrationBindings,
   };
@@ -46,10 +48,14 @@ export function writeRoleMoodConfigToRuntimeConfig(
   runtimeConfig: Record<string, unknown>,
   roleForm: Pick<RoleFormState, "moodCatalog" | "defaultMood" | "moodIllustrationBindings">,
 ): Record<string, unknown> {
-  const normalizedCatalog = dedupeMoods([roleForm.defaultMood, ...roleForm.moodCatalog]);
-  const resolvedDefaultMood = String(roleForm.defaultMood || "").trim() || normalizedCatalog[0] || defaultMood;
-  const nextCatalog = dedupeMoods([resolvedDefaultMood, ...normalizedCatalog]);
-  const nextBindings = normalizeMoodBindings(roleForm.moodIllustrationBindings, nextCatalog);
+  const nextBindings = normalizeMoodBindings(roleForm.moodIllustrationBindings);
+  const nextCatalog = Object.keys(nextBindings);
+  const requestedDefaultMood = String(roleForm.defaultMood || "").trim();
+  const resolvedDefaultMood = (
+    requestedDefaultMood && nextBindings[requestedDefaultMood]
+      ? requestedDefaultMood
+      : nextCatalog[0] || defaultMood
+  );
 
   return {
     ...runtimeConfig,
@@ -64,17 +70,22 @@ export function roleMoodConfigEqual(
   left: Pick<RoleFormState, "moodCatalog" | "defaultMood" | "moodIllustrationBindings">,
   right: RoleMoodConfig,
 ): boolean {
-  if (String(left.defaultMood).trim() !== right.defaultMood) {
+  const leftBindings = normalizeMoodBindings(left.moodIllustrationBindings);
+  const leftCatalog = Object.keys(leftBindings);
+  const leftDefaultMood = (
+    String(left.defaultMood).trim() && leftBindings[String(left.defaultMood).trim()]
+      ? String(left.defaultMood).trim()
+      : leftCatalog[0] || defaultMood
+  );
+  if (leftDefaultMood !== right.defaultMood) {
     return false;
   }
-  const leftCatalog = dedupeMoods(left.moodCatalog);
   if (leftCatalog.length !== right.moodCatalog.length) {
     return false;
   }
   if (leftCatalog.some((mood, index) => mood !== right.moodCatalog[index])) {
     return false;
   }
-  const leftBindings = normalizeMoodBindings(left.moodIllustrationBindings, leftCatalog);
   const rightKeys = Object.keys(right.moodIllustrationBindings).sort();
   const leftKeys = Object.keys(leftBindings).sort();
   if (leftKeys.length !== rightKeys.length) {
@@ -97,16 +108,15 @@ function dedupeMoods(values: unknown[]): string[] {
   return next;
 }
 
-function normalizeMoodBindings(rawBindings: unknown, moodCatalog: string[]): Record<string, string> {
+function normalizeMoodBindings(rawBindings: unknown): Record<string, string> {
   if (!rawBindings || typeof rawBindings !== "object" || Array.isArray(rawBindings)) {
     return {};
   }
-  const allowedMoods = new Set(moodCatalog);
   const next: Record<string, string> = {};
   Object.entries(rawBindings).forEach(([key, value]) => {
     const mood = String(key ?? "").trim();
     const path = String(value ?? "").trim();
-    if (!mood || !path || !allowedMoods.has(mood)) {
+    if (!mood || !path) {
       return;
     }
     next[mood] = path;

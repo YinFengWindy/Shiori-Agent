@@ -20,7 +20,7 @@ type RoleAssetsPageProps = {
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;
   onUpdateRoleForm: React.Dispatch<React.SetStateAction<RoleFormState>>;
-  onSaveSelections: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string>; moodCatalog?: string[] }) => void;
+  onSaveSelections: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
 };
 
 export function RoleAssetsPage({
@@ -85,15 +85,11 @@ export function RoleAssetsPage({
     if (!selectedMoodAssetPath) return;
     const normalizedMood = nextMood.trim();
     const nextBindings = applyMoodToIllustration(roleForm.moodIllustrationBindings, selectedMoodAssetPath, normalizedMood);
-    const nextCatalog = normalizedMood && !roleForm.moodCatalog.includes(normalizedMood)
-      ? [...roleForm.moodCatalog, normalizedMood]
-      : roleForm.moodCatalog;
     onUpdateRoleForm((current) => ({
       ...current,
-      moodCatalog: nextCatalog,
       moodIllustrationBindings: nextBindings,
     }));
-    onSaveSelections({ moodIllustrationBindings: nextBindings, moodCatalog: nextCatalog });
+    onSaveSelections({ moodIllustrationBindings: nextBindings });
   }
 
   return (
