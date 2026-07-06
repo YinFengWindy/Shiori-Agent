@@ -35,10 +35,10 @@ describe("getNextRoleAssetSelection", () => {
     );
   });
 
-  it("clears the slot when clicking the currently selected image", () => {
+  it("keeps the current selection when clicking the currently selected image", () => {
     assert.equal(
       getNextRoleAssetSelection("avatars/mira.png", "avatars/mira.png"),
-      "",
+      "avatars/mira.png",
     );
   });
 });

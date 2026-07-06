@@ -59,15 +59,23 @@ export function RoleAssetsPage({
   const selectedMoodAssetPair = assetPairs.find((item) => item.relPath === selectedMoodAssetPath) ?? null;
   const selectedMood = getMoodForIllustration(selectedMoodAssetPath, roleForm.moodIllustrationBindings);
 
+  function saveSingleSelection(mode: "avatar" | "chat-background", nextPath: string): void {
+    if (mode === "avatar") {
+      onSelectAvatarAsset(nextPath);
+      onSaveSelections({ avatarAsset: nextPath });
+      return;
+    }
+    onSelectChatBackground(nextPath);
+    onSaveSelections({ chatBackground: nextPath });
+  }
+
   async function applyAsset(relPath: string): Promise<void> {
     if (selectionMode === "avatar") {
       const nextPath = getNextRoleAssetSelection(selectedAssetPath, relPath);
-      onSelectAvatarAsset(nextPath);
-      onSaveSelections({ avatarAsset: nextPath });
+      saveSingleSelection("avatar", nextPath);
     } else if (selectionMode === "chat-background") {
       const nextPath = getNextRoleAssetSelection(selectedAssetPath, relPath);
-      onSelectChatBackground(nextPath);
-      onSaveSelections({ chatBackground: nextPath });
+      saveSingleSelection("chat-background", nextPath);
     } else {
       setSelectedMoodAsset((current) => current === relPath ? "" : relPath);
     }
@@ -208,11 +216,27 @@ export function RoleAssetsPage({
                   />
                 ) : selectedAsset ? (
                   selectionMode === "avatar" ? (
-                    <div className="grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-white p-8">
+                    <div className="relative grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-white p-8">
+                      <button
+                        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        type="button"
+                        onClick={() => saveSingleSelection("avatar", "")}
+                        aria-label="取消选中头像"
+                      >
+                        ×
+                      </button>
                       <img className="h-[140px] w-[140px] rounded-[32px] object-cover shadow-[0_10px_24px_rgba(15,23,42,0.08)]" src={toFileUrl(selectedAsset.absPath)} alt="avatar preview" />
                     </div>
                   ) : (
-                    <div className="flex min-h-[360px] flex-1 items-center justify-center overflow-hidden rounded-[20px] bg-white p-6">
+                    <div className="relative flex min-h-[360px] flex-1 items-center justify-center overflow-hidden rounded-[20px] bg-white p-6">
+                      <button
+                        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        type="button"
+                        onClick={() => saveSingleSelection("chat-background", "")}
+                        aria-label="取消选中立绘"
+                      >
+                        ×
+                      </button>
                       <img
                         className="max-h-full w-full object-contain"
                         src={toFileUrl(selectedAsset.absPath)}

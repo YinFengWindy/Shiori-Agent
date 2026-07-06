@@ -10,10 +10,10 @@ export function getSelectedRoleAssetPath(
   return selectedChatBackground;
 }
 
-/** Toggle a single-select asset choice. Clicking the selected asset clears the slot. */
+/** Resolve the next selected asset path for single-select modes. */
 export function getNextRoleAssetSelection(
   currentSelectedPath: string,
   clickedPath: string,
 ): string {
-  return currentSelectedPath === clickedPath ? "" : clickedPath;
+  return currentSelectedPath === clickedPath ? currentSelectedPath : clickedPath;
 }
