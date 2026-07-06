@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
@@ -17,6 +18,8 @@ from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 from session.manager import Session, SessionManager
+
+logger = logging.getLogger("desktop.bridge")
 
 
 class DesktopBridgeService:
@@ -42,6 +45,7 @@ class DesktopBridgeService:
         self.event_bus = event_bus
         self.config = config
         self._event_listeners: set[Callable[[dict[str, Any]], Awaitable[None] | None]] = set()
+        self._chat_tasks: set[asyncio.Task[None]] = set()
         self._self_seed_generator = self._build_self_seed_generator()
         self.role_service = role_service or RoleAggregateService.from_runtime(
             workspace=workspace,
@@ -323,7 +327,7 @@ class DesktopBridgeService:
                         reply_text=reply_to_content,
                         reply_sender=reply_to_sender,
                     )
-                session, events = await self._run_chat_turn(
+                self._start_chat_turn(
                     request_id=request_id,
                     session_key=session.key,
                     content=inbound_content,
@@ -336,7 +340,7 @@ class DesktopBridgeService:
                     method,
                     {
                         "session": self._serialize_session(session),
-                        "events": [event.to_dict() for event in events],
+                        "events": [],
                     },
                 )
             if method == "chat.cancel":
@@ -512,6 +516,33 @@ class DesktopBridgeService:
         finally:
             self.event_bus.off(StreamDeltaReady, _on_delta)
             self.event_bus.off(TurnCommitted, _on_done)
+
+    def _start_chat_turn(
+        self,
+        *,
+        request_id: str,
+        session_key: str,
+        content: str,
+        media: list[str],
+        metadata: dict[str, object] | None,
+        emit_event,
+    ) -> None:
+        async def _runner() -> None:
+            try:
+                await self._run_chat_turn(
+                    request_id=request_id,
+                    session_key=session_key,
+                    content=content,
+                    media=media,
+                    metadata=metadata,
+                    emit_event=emit_event,
+                )
+            except Exception:
+                logger.exception("desktop chat turn failed: %s", session_key)
+
+        task = asyncio.create_task(_runner(), name=f"desktop-chat:{session_key}")
+        self._chat_tasks.add(task)
+        task.add_done_callback(self._chat_tasks.discard)
 
     def _ok(self, request_id: str, method: str, payload: dict[str, Any]) -> BridgeResponse:
         return BridgeResponse(

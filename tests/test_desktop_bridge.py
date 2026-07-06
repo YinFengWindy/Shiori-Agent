@@ -23,6 +23,14 @@ from desktop_bridge import DesktopBridgeServer, DesktopBridgeService
 from session.manager import SessionManager
 
 
+async def _wait_until(predicate, *, attempts: int = 40) -> None:
+    for _ in range(attempts):
+        if predicate():
+            return
+        await asyncio.sleep(0)
+    assert predicate()
+
+
 @pytest.mark.asyncio
 async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
     role_store = RoleStore(tmp_path)
@@ -118,12 +126,15 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
 
     assert response.error is None
     assert response.payload["session"]["key"] == f"role:{role_id}"
-    assert [item["role"] for item in response.payload["session"]["messages"]] == ["user", "assistant"]
-    assert response.payload["session"]["messages"][0]["media"] == ["D:\\files\\scene.png"]
+    assert response.payload["session"]["messages"] == []
+    await _wait_until(lambda: [item["method"] for item in emitted] == ["session.updated", "chat.delta", "chat.done", "session.updated"])
     methods = [item["method"] for item in emitted]
     assert methods == ["session.updated", "chat.delta", "chat.done", "session.updated"]
     delta_event = next(item for item in emitted if item["method"] == "chat.delta")
     done_event = next(item for item in emitted if item["method"] == "chat.done")
+    session_updated_event = emitted[-1]
+    assert [item["role"] for item in session_updated_event["payload"]["session"]["messages"]] == ["user", "assistant"]
+    assert session_updated_event["payload"]["session"]["messages"][0]["media"] == ["D:\\files\\scene.png"]
     assert delta_event["payload"]["content_delta"] == "hel"
     assert done_event["payload"]["reply"] == "hello"
 
@@ -190,6 +201,7 @@ async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path:
     )
 
     assert response.error is None
+    await _wait_until(lambda: "content" in seen)
     assert seen["content"] == (
         "【你正在回复一条历史消息】\n"
         "被回复消息（来自 Mira）：\n"
@@ -203,7 +215,8 @@ async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path:
         "reply_to_content": "她沉默了很久。",
         "persisted_user_content": "再展开一点",
     }
-    user_message = response.payload["session"]["messages"][0]
+    session = session_manager.get_or_create("role:mira")
+    user_message = session.messages[0]
     assert user_message["content"] == "再展开一点"
     assert user_message["metadata"]["reply_to_message_id"] == "message-1"
     assert user_message["metadata"]["reply_to_content"] == "她沉默了很久。"
@@ -395,6 +408,7 @@ async def test_desktop_bridge_chat_listeners_are_removed_after_send(tmp_path: Pa
         emit_event=lambda payload: None,
     )
 
+    await _wait_until(lambda: event_bus._handlers.get(StreamDeltaReady, []) == [] and event_bus._handlers.get(TurnCommitted, []) == [])
     assert event_bus._handlers.get(StreamDeltaReady, []) == []
     assert event_bus._handlers.get(TurnCommitted, []) == []
 
@@ -456,7 +470,8 @@ async def test_desktop_bridge_chat_send_accepts_media_only(tmp_path: Path):
     )
 
     assert response.error is None
-    assert response.payload["session"]["messages"][0]["media"] == ["D:\\files\\notes.md"]
+    await _wait_until(lambda: bool(session_manager.get_or_create("role:mira").messages))
+    assert session_manager.get_or_create("role:mira").messages[0]["media"] == ["D:\\files\\notes.md"]
 
 
 @pytest.mark.asyncio
