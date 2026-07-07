@@ -80,6 +80,27 @@ async def test_spawn_tool_returns_error_when_context_missing():
 
 
 @pytest.mark.asyncio
+async def test_spawn_tool_prefers_explicit_channel_and_chat_id() -> None:
+    registry = ToolRegistry()
+    registry.set_context(channel="stale", chat_id="stale")
+    manager = _make_manager()
+    tool = SpawnTool(manager, registry)
+
+    result = await tool.execute(
+        task="do work",
+        label="job",
+        run_in_background=True,
+        channel="telegram",
+        chat_id="123",
+    )
+
+    assert result == "started"
+    kwargs = manager.spawn.await_args.kwargs
+    assert kwargs["origin_channel"] == "telegram"
+    assert kwargs["origin_chat_id"] == "123"
+
+
+@pytest.mark.asyncio
 async def test_spawn_tool_keeps_spawning_even_when_policy_prefers_inline():
     """DelegationPolicy allows all tasks under concurrent limit; small tasks still spawn."""
     registry = ToolRegistry()

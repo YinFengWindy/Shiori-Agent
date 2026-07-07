@@ -85,6 +85,7 @@ async def process_spawn_completion_event(
             session=session,
         ),
     )
+    tool_execution_context = tools.get_context()
     prompt_render = await prompt_render_fn(
         PromptRenderInput(
             session_key=key,
@@ -106,6 +107,10 @@ async def process_spawn_completion_event(
         initial_messages,
         request_time=item.timestamp,
         preloaded_tools=None,
+        tool_event_session_key=key,
+        tool_event_channel=item.channel,
+        tool_event_chat_id=item.chat_id,
+        tool_execution_context=tool_execution_context,
     )
     if final_content is None:
         if status == "completed":

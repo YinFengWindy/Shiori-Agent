@@ -80,6 +80,34 @@ class _ExistingDescriptionTool(Tool):
         return description
 
 
+class _ContextEchoTool(Tool):
+    name = "context_echo"
+    description = "回显工具执行上下文"
+    parameters = {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    }
+
+    async def execute(
+        self,
+        session_key: str = "",
+        role_id: str = "",
+        channel: str = "",
+        chat_id: str = "",
+        **_: Any,
+    ) -> str:
+        return json.dumps(
+            {
+                "session_key": session_key,
+                "role_id": role_id,
+                "channel": channel,
+                "chat_id": chat_id,
+            },
+            ensure_ascii=False,
+        )
+
+
 def _make_registry() -> ToolRegistry:
     """构建测试用 registry。
 
@@ -200,6 +228,64 @@ async def test_registry_keeps_real_description_parameter() -> None:
     )
 
     assert result == "业务描述"
+
+
+@pytest.mark.asyncio
+async def test_registry_execute_prefers_explicit_context_snapshot() -> None:
+    reg = ToolRegistry()
+    reg.register(_ContextEchoTool())
+    reg.set_context(
+        session_key="stale-session",
+        role_id="stale-role",
+        channel="stale-channel",
+        chat_id="stale-chat",
+    )
+
+    first, second = await asyncio.gather(
+        reg.execute(
+            "context_echo",
+            {},
+            context={
+                "session_key": "session-a",
+                "role_id": "role-a",
+                "channel": "telegram",
+                "chat_id": "100",
+            },
+        ),
+        reg.execute(
+            "context_echo",
+            {},
+            context={
+                "session_key": "session-b",
+                "role_id": "role-b",
+                "channel": "discord",
+                "chat_id": "200",
+            },
+        ),
+    )
+
+    assert json.loads(first) == {
+        "session_key": "session-a",
+        "role_id": "role-a",
+        "channel": "telegram",
+        "chat_id": "100",
+    }
+    assert json.loads(second) == {
+        "session_key": "session-b",
+        "role_id": "role-b",
+        "channel": "discord",
+        "chat_id": "200",
+    }
+
+
+def test_registry_get_context_returns_copy() -> None:
+    reg = ToolRegistry()
+    reg.set_context(channel="telegram", chat_id="123")
+
+    ctx = reg.get_context()
+    ctx["channel"] = "mutated"
+
+    assert reg.get_context() == {"channel": "telegram", "chat_id": "123"}
 
 
 # ── _default_normalize 单元测试 ───────────────────────────────────────────────

@@ -130,6 +130,10 @@ class AgentLoopRunner(Protocol):
         initial_messages: list[dict],
         request_time: datetime | None = None,
         preloaded_tools: set[str] | None = None,
+        tool_event_session_key: str = "",
+        tool_event_channel: str = "",
+        tool_event_chat_id: str = "",
+        tool_execution_context: dict[str, str] | None = None,
     ) -> tuple[str, list[str], list[dict], set[str] | None, str | None]:
         ...
 

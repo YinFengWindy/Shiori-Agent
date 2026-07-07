@@ -68,7 +68,31 @@ async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
             )
         )
     )
-    tools = SimpleNamespace(set_context=MagicMock())
+    item = SpawnCompletionItem(
+        channel="telegram",
+        chat_id="123",
+        event=SpawnCompletionEvent(
+            job_id="",
+            label="任务",
+            task="总结结果",
+            status="completed",
+            result="ok",
+            exit_reason="completed",
+            retry_count=0,
+        ),
+    )
+    tool_context = {
+        "channel": "telegram",
+        "chat_id": "123",
+        "session_key": "scheduler:job-1",
+        "role_id": "mira",
+        "current_timestamp": item.timestamp.isoformat(),
+        "current_user_source_ref": "telegram:123:9",
+    }
+    tools = SimpleNamespace(
+        set_context=MagicMock(),
+        get_context=MagicMock(return_value=dict(tool_context)),
+    )
     run_agent_loop_fn = AsyncMock(
         return_value=("done", ["spawn"], [{"name": "spawn"}], None, None)
     )
@@ -94,20 +118,6 @@ async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
             prompt_render_fn=prompt_render_fn,
         )
     )
-    item = SpawnCompletionItem(
-        channel="telegram",
-        chat_id="123",
-        event=SpawnCompletionEvent(
-            job_id="",
-            label="任务",
-            task="总结结果",
-            status="completed",
-            result="ok",
-            exit_reason="completed",
-            retry_count=0,
-        ),
-    )
-
     out = await runner.process(item, "scheduler:job-1", dispatch_outbound=False)
 
     assert out.content == "spawn done"
@@ -125,6 +135,11 @@ async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
     assert render_input.session_key == "scheduler:job-1"
     assert "后台任务回传" in render_input.content
     run_agent_loop_fn.assert_awaited_once()
+    loop_kwargs = run_agent_loop_fn.await_args.kwargs
+    assert loop_kwargs["tool_event_session_key"] == "scheduler:job-1"
+    assert loop_kwargs["tool_event_channel"] == "telegram"
+    assert loop_kwargs["tool_event_chat_id"] == "123"
+    assert loop_kwargs["tool_execution_context"] == tool_context
     pipeline_mock.post_reasoning.assert_awaited_once()
     pr_kwargs = pipeline_mock.post_reasoning.await_args.kwargs
     assert pr_kwargs["dispatch_outbound"] is False

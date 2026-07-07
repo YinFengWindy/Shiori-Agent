@@ -3,9 +3,11 @@ import json
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 from agent.core.passive_turn import DefaultReasoner
 from agent.core.runtime_support import LLMServices, ToolDiscoveryState
+from agent.lifecycle.types import PromptRenderResult
 from agent.looping.ports import LLMConfig
 from agent.provider import LLMResponse, ToolCall
 from agent.tools.base import Tool
@@ -46,6 +48,33 @@ class _InflateTool(Tool):
 
     async def execute(self, **kwargs: Any) -> str:
         return f"payload-{kwargs.get('value', '')}-" + ("x" * 2400)
+
+
+class _ContextProbeTool(Tool):
+    name = "context_probe"
+    description = "context_probe"
+    parameters = {"type": "object", "properties": {}, "required": []}
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    async def execute(
+        self,
+        session_key: str = "",
+        role_id: str = "",
+        channel: str = "",
+        chat_id: str = "",
+        **kwargs: Any,
+    ) -> str:
+        payload = {
+            "session_key": session_key,
+            "role_id": role_id,
+            "channel": channel,
+            "chat_id": chat_id,
+            **kwargs,
+        }
+        self.calls.append(payload)
+        return json.dumps(payload, ensure_ascii=False)
 
 
 class _Provider:
@@ -111,6 +140,71 @@ def test_default_reasoner_runs_tool_loop_and_returns_reasoner_result():
     assert react_stats["cache_hit_tokens"] == 100
     first_messages = provider.calls[0]["messages"]
     assert not any("未加载工具目录" in str(m.get("content", "")) for m in first_messages)
+
+
+def test_default_reasoner_run_turn_uses_tool_context_snapshot():
+    provider = _Provider(
+        [
+            LLMResponse(content="", tool_calls=[ToolCall("c1", "context_probe", {})]),
+            LLMResponse(content="final", tool_calls=[]),
+        ]
+    )
+    tools = ToolRegistry()
+    probe = _ContextProbeTool()
+    tools.register(probe, always_on=True)
+    reasoner = DefaultReasoner(
+        llm=cast(Any, LLMServices(provider=cast(Any, provider), light_provider=cast(Any, provider))),
+        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=512),
+        tools=tools,
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+        context=cast(Any, SimpleNamespace(render=lambda *_args, **_kwargs: None)),
+        session_manager=cast(Any, SimpleNamespace(save_async=AsyncMock())),
+    )
+    tools.set_context(
+        session_key="telegram:123",
+        role_id="mira",
+        channel="telegram",
+        chat_id="123",
+    )
+    reasoner.render_prompt = AsyncMock(
+        side_effect=lambda _input: (
+            tools.set_context(
+                session_key="discord:999",
+                role_id="other",
+                channel="discord",
+                chat_id="999",
+            )
+            or PromptRenderResult(messages=[{"role": "user", "content": "hi"}])
+        )
+    )
+    session = SimpleNamespace(
+        key="telegram:123",
+        metadata={"role_id": "mira"},
+        last_consolidated=0,
+        get_history=lambda max_messages=500, start_index=None: [],
+        messages=[],
+    )
+    msg = SimpleNamespace(
+        channel="telegram",
+        chat_id="123",
+        content="hi",
+        media=[],
+        timestamp=datetime(2026, 4, 5, 12, 0, 0),
+    )
+
+    result = asyncio.run(reasoner.run_turn(msg=msg, session=cast(Any, session)))
+
+    assert result.reply == "final"
+    assert probe.calls == [
+        {
+            "session_key": "telegram:123",
+            "role_id": "mira",
+            "channel": "telegram",
+            "chat_id": "123",
+        }
+    ]
 
 
 def test_default_reasoner_blocks_disabled_tool_even_if_model_calls_it():

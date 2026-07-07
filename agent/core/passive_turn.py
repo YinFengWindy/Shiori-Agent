@@ -740,6 +740,7 @@ class Reasoner(ABC):
         tool_event_session_key: str = "",
         tool_event_channel: str = "",
         tool_event_chat_id: str = "",
+        tool_execution_context: dict[str, Any] | None = None,
         disabled_tools: set[str] | None = None,
     ) -> ReasonerResult:
         """执行多轮 tool loop，并返回本轮结果。"""
@@ -955,6 +956,7 @@ class DefaultReasoner(Reasoner):
             self._stream_sink_factory(msg) if self._stream_sink_factory is not None else None
         )
         disabled_tools = _disabled_tools_from_msg(msg)
+        tool_execution_context = self._tools.get_context()
 
         # 2. 再按 trim plan + history window 顺序逐轮尝试。
         attempts = self._build_attempt_plans(total_history)
@@ -1011,6 +1013,7 @@ class DefaultReasoner(Reasoner):
                     tool_event_session_key=session.key,
                     tool_event_channel=msg.channel,
                     tool_event_chat_id=msg.chat_id,
+                    tool_execution_context=tool_execution_context,
                     disabled_tools=disabled_tools,
                 )
                 tools_used = list(result.metadata.get("tools_used") or [])
@@ -1107,6 +1110,7 @@ class DefaultReasoner(Reasoner):
         tool_event_session_key: str = "",
         tool_event_channel: str = "",
         tool_event_chat_id: str = "",
+        tool_execution_context: dict[str, Any] | None = None,
         disabled_tools: set[str] | None = None,
     ) -> ReasonerResult:
         # 1. 初始化消息上下文、本轮工具轨迹。
@@ -1114,6 +1118,11 @@ class DefaultReasoner(Reasoner):
         tools_used: list[str] = []
         tools_unlocked: list[str] = []
         tool_chain: list[dict[str, Any]] = []
+        execution_context = dict(
+            tool_execution_context
+            if tool_execution_context is not None
+            else self._tools.get_context()
+        )
         # 2. 初始化本轮可见工具集合。
         visible_names: set[str] | None = None
         visible_order: list[str] | None = None
@@ -1440,7 +1449,11 @@ class DefaultReasoner(Reasoner):
                         ),
                         # 真实工具执行入口仍是 ToolRegistry.execute；
                         # hook 只负责拦截与记录，不替代 registry。
-                        self._tools.execute,
+                        lambda name, args: self._tools.execute(
+                            name,
+                            args,
+                            context=execution_context,
+                        ),
                     )
                     if exec_result.status == "success":
                         tools_used.append(tool_call.name)

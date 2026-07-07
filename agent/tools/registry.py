@@ -127,7 +127,7 @@ class ToolRegistry:
         self._context.update(kwargs)
 
     def get_context(self) -> dict[str, str]:
-        return self._context
+        return dict(self._context)
 
     def register(
         self,
@@ -235,14 +235,20 @@ class ToolRegistry:
             "mcp": {k: sorted(v) for k, v in sorted(mcp.items())},
         }
 
-    async def execute(self, name: str, arguments: dict[str, Any]) -> str | ToolResult:
+    async def execute(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> str | ToolResult:
         tool = self._tools.get(name)
         if tool is None:
             return f"工具 '{name}' 不存在"
         try:
             # 将会话上下文（channel、chat_id）作为低优先级默认值合并进 kwargs，
             # 工具可按需读取，不感知此机制的工具会直接忽略多余的 key。
-            merged: dict[str, Any] = {**self._context, **arguments}
+            merged: dict[str, Any] = {**(context or self._context), **arguments}
             if not _tool_defines_parameter(tool, _PROGRESS_DESCRIPTION_FIELD):
                 merged.pop(_PROGRESS_DESCRIPTION_FIELD, None)
             return await tool.execute(**merged)
