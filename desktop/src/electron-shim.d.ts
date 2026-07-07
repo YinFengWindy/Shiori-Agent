@@ -67,6 +67,7 @@ declare module "electron" {
     on(event: string, handler: (...args: unknown[]) => void): void;
     setPath(name: string, path: string): void;
     getPath(name: string): string;
+    requestSingleInstanceLock(): boolean;
     quit(): void;
     exit(code?: number): void;
   };

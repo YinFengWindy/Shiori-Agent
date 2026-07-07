@@ -16,9 +16,14 @@ import { attachDesktopWindowLifecycle, createDesktopWindow, showDesktopWindow } 
 const bridge = new DesktopBridgeClient();
 const assetScheme = "mira-asset";
 const trayLifecycleEnabled = process.platform === "win32";
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 let desktopWindow: BrowserWindow | null = null;
 let desktopTray: ReturnType<typeof createDesktopTray> | null = null;
 let isQuitting = false;
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -81,6 +86,15 @@ app.on("child-process-gone", (_event, details) => {
       name: details.name,
     },
   });
+});
+
+app.on("second-instance", () => {
+  logDesktopDiagnostic({
+    scope: "main",
+    event: "app.second-instance",
+    payload: {},
+  });
+  showOrCreateDesktopWindow();
 });
 
 function ensureDesktopConfig(): void {
