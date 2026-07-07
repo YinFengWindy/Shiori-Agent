@@ -21,6 +21,7 @@ from core.roles import RoleStore
 from core.roles.relationship_runtime import RoleRelationshipRuntimeService
 from desktop_bridge import DesktopBridgeServer, DesktopBridgeService
 from desktop_bridge.models import BridgeResponse
+from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
 
 
@@ -495,6 +496,96 @@ async def test_desktop_bridge_chat_send_accepts_media_only(tmp_path: Path):
     assert session_manager.get_or_create("role:mira").messages[0]["media"] == [
         "D:\\files\\notes.md"
     ]
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_chat_send_updates_presence_and_loneliness_runtime(
+    tmp_path: Path,
+):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    presence = PresenceStore(session_manager._store)
+    relationship_runtime = RoleRelationshipRuntimeService(
+        tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        presence=presence,
+    )
+    relationship_runtime.write_snapshot(
+        role.id,
+        {
+            "role_id": role.id,
+            "role_self_view": "我最近会忍不住去想你。",
+            "relation_tags": ["亲近", "等你主动"],
+            "internal_profile": {
+                "relation_state": {
+                    "closeness": 0.9,
+                    "dependence": 0.7,
+                    "security": 0.8,
+                    "initiative_desire": 0.6,
+                    "neglect_sensitivity": 0.4,
+                },
+                "behavior_profile": {
+                    "loneliness_growth_base": 1.2,
+                    "loneliness_growth_when_unanswered": 1.8,
+                    "trigger_threshold": 60,
+                    "post_trigger_cooldown_minutes": 120,
+                    "night_suppression": 0.4,
+                },
+            },
+            "source_summary": {},
+            "generated_at": "2026-07-06T18:00:00+08:00",
+            "last_attempted_at": "2026-07-06T18:00:00+08:00",
+            "last_source_message_count": 12,
+            "last_error": "",
+        },
+    )
+    relationship_runtime.write_loneliness_runtime(
+        role.id,
+        {
+            "role_id": role.id,
+            "loneliness_value": 80,
+            "last_calculated_at": "2026-07-06T18:00:00+08:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": True,
+            "awaiting_reply_since": "2026-07-06T17:00:00+08:00",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+        relationship_runtime=relationship_runtime,
+        presence=presence,
+    )
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "chat.send",
+            "payload": {"role_id": role.id, "content": "hi"},
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert response.error is None
+    runtime_payload = response.payload["session"]["metadata"]["loneliness_runtime"]
+    assert runtime_payload["loneliness_value"] < 80
+    assert runtime_payload["awaiting_reply_after_proactive"] is False
+    assert runtime_payload["awaiting_reply_since"] == ""
+    assert runtime_payload["last_user_at"]
+    assert presence.get_last_user_at("role:mira") is not None
 
 
 @pytest.mark.asyncio

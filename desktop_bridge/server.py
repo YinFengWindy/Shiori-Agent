@@ -29,6 +29,7 @@ class DesktopBridgeServer:
             novelai_store=NovelAIStore(runtime.session_manager.workspace),
             push_tool=getattr(runtime, "push_tool", None),
             relationship_runtime=getattr(runtime, "relationship_runtime", None),
+            presence=getattr(runtime, "presence", None),
         )
 
     async def serve_streams(self, *, read_line, write_payload) -> None:

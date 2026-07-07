@@ -37,6 +37,7 @@ class DesktopBridgeService:
         novelai_store: NovelAIStore | None = None,
         push_tool: MessagePushTool | None = None,
         relationship_runtime: RoleRelationshipRuntimeService | None = None,
+        presence: Any | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -54,6 +55,7 @@ class DesktopBridgeService:
             self_seed_generator=self._self_seed_generator,
         )
         self.relationship_runtime = relationship_runtime
+        self.presence = presence
         self.novelai_store = novelai_store or NovelAIStore(workspace)
         self.novelai_service = novelai_service or self._build_novelai_service()
         if push_tool is not None:
@@ -118,9 +120,14 @@ class DesktopBridgeService:
             proactive=True,
             tools_used=["message_push"],
         )
-        await self.session_manager.save_async(session)
+        if self.presence is not None:
+            self.presence.record_proactive_sent(session.key)
         if self.relationship_runtime is not None:
             self.relationship_runtime.handle_proactive_sent(session.key)
+            session.metadata = self.relationship_runtime.enrich_session_metadata(
+                dict(session.metadata),
+            )
+        await self.session_manager.save_async(session)
         return session
 
     def _is_existing_desktop_push(
@@ -163,6 +170,13 @@ class DesktopBridgeService:
             media=media or None,
             metadata=self._build_desktop_user_message_metadata(metadata),
         )
+        if self.presence is not None:
+            self.presence.record_user_message(session.key)
+        if self.relationship_runtime is not None:
+            self.relationship_runtime.handle_user_message(session.key)
+            session.metadata = self.relationship_runtime.enrich_session_metadata(
+                dict(session.metadata),
+            )
         await self.session_manager.append_messages(session, session.messages[-1:])
         return session
 
