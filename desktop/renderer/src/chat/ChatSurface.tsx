@@ -129,7 +129,7 @@ export function ChatSurface({
   };
 
   useEffect(() => {
-    const updateScrollState = () => {
+    const updateScrollState = (options?: { allowUnstick?: boolean }) => {
       const container = conversationListRef.current;
       if (!container) return;
 
@@ -141,7 +141,7 @@ export function ChatSurface({
 
       if (nextState.isAtBottom) {
         stickToBottomRef.current = true;
-      } else if (!autoScrollingRef.current) {
+      } else if (options?.allowUnstick && !autoScrollingRef.current) {
         stickToBottomRef.current = false;
       }
 
@@ -157,15 +157,18 @@ export function ChatSurface({
     const container = conversationListRef.current;
     if (!container) return;
 
-    container.addEventListener("scroll", updateScrollState, { passive: true });
-    window.addEventListener("resize", updateScrollState);
+    const handleScroll = () => updateScrollState({ allowUnstick: true });
+    const handleResize = () => updateScrollState();
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleResize);
 
     const resizeObserver = new ResizeObserver(() => updateScrollState());
     resizeObserver.observe(container);
 
     return () => {
-      container.removeEventListener("scroll", updateScrollState);
-      window.removeEventListener("resize", updateScrollState);
+      container.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleResize);
       resizeObserver.disconnect();
     };
   }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, sending]);
