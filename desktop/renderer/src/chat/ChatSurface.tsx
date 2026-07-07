@@ -103,6 +103,8 @@ export function ChatSurface({
   const messageContextMenuRef = useRef<HTMLDivElement | null>(null);
   const previousMessageCountRef = useRef(0);
   const previousLastMessageContentRef = useRef("");
+  const autoScrollingRef = useRef(false);
+  const stickToBottomRef = useRef(true);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
@@ -115,6 +117,15 @@ export function ChatSurface({
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 
+  const scrollConversationToBottom = (behavior: ScrollBehavior): void => {
+    autoScrollingRef.current = true;
+    stickToBottomRef.current = true;
+    conversationEndRef.current?.scrollIntoView({ behavior, block: "end" });
+    window.setTimeout(() => {
+      autoScrollingRef.current = false;
+    }, behavior === "smooth" ? 320 : 0);
+  };
+
   useEffect(() => {
     const updateScrollState = () => {
       const container = conversationListRef.current;
@@ -125,6 +136,12 @@ export function ChatSurface({
         isAtBottom: distanceFromBottom <= 24,
         isScrollable: container.scrollHeight - container.clientHeight > 24,
       };
+
+      if (nextState.isAtBottom) {
+        stickToBottomRef.current = true;
+      } else if (!autoScrollingRef.current) {
+        stickToBottomRef.current = false;
+      }
 
       setScrollState((current) => (
         current.isAtBottom === nextState.isAtBottom && current.isScrollable === nextState.isScrollable
@@ -202,7 +219,8 @@ export function ChatSurface({
     previousLastMessageContentRef.current = activeSession?.messages.at(-1)?.content ?? "";
     const container = conversationListRef.current;
     if (!container) return;
-    container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+    stickToBottomRef.current = true;
+    scrollConversationToBottom("auto");
   }, [activeSession?.key]);
 
   useEffect(() => {
@@ -241,12 +259,12 @@ export function ChatSurface({
       previousLastMessageContent,
       highlightedMessageKey,
       sending,
-      wasAtBottom: scrollState.isAtBottom,
+      wasAtBottom: stickToBottomRef.current,
     })) {
       return;
     }
-    conversationEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [activeSession?.messages.length, conversationEndRef, highlightedMessageKey, scrollState.isAtBottom, sending]);
+    scrollConversationToBottom("auto");
+  }, [activeSession?.messages.length, conversationEndRef, highlightedMessageKey, sending]);
 
   const headerAvatarClass =
     "chat-header-avatar grid h-[34px] w-[34px] flex-none place-items-center rounded-full border border-black/10 object-cover";
@@ -274,6 +292,11 @@ export function ChatSurface({
     const container = conversationListRef.current;
     if (!container) return;
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    autoScrollingRef.current = true;
+    stickToBottomRef.current = true;
+    window.setTimeout(() => {
+      autoScrollingRef.current = false;
+    }, 320);
   };
 
   const handleOpenRoleDetail = () => {
