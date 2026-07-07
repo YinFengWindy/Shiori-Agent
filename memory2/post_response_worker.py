@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent.provider import LLMProvider
@@ -15,6 +16,14 @@ if TYPE_CHECKING:
     from bus.publisher import EventPublisher
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _PostResponseRunContext:
+    session_key: str = ""
+    channel: str = ""
+    chat_id: str = ""
+    role_id: str = ""
 
 
 class PostResponseMemoryWorker:
@@ -45,10 +54,6 @@ class PostResponseMemoryWorker:
         self._provider = light_provider
         self._model = light_model
         self._event_publisher = event_publisher
-        self._current_run_session_key = ""
-        self._current_run_channel = ""
-        self._current_run_chat_id = ""
-        self._current_run_role_id = ""
 
     async def handle(self, event: TurnIngested) -> None:
         await self.run(
@@ -74,10 +79,12 @@ class PostResponseMemoryWorker:
         role_id: str = "",
     ) -> None:
         # 1. 初始化本轮异步提炼的上下文和 token 预算。
-        self._current_run_session_key = session_key
-        self._current_run_channel = channel
-        self._current_run_chat_id = chat_id
-        self._current_run_role_id = role_id
+        run_context = _PostResponseRunContext(
+            session_key=session_key,
+            channel=channel,
+            chat_id=chat_id,
+            role_id=role_id,
+        )
         token_budget = self.TOKEN_BUDGET_PER_RUN
         logger.debug(
             "post_response_memorize start session=%s source_ref=%s user_len=%d resp_len=%d tool_steps=%d",
@@ -107,6 +114,7 @@ class PostResponseMemoryWorker:
                 source_ref,
                 protected_ids,
                 token_budget,
+                run_context=run_context,
             )
 
             logger.debug(
@@ -180,6 +188,8 @@ class PostResponseMemoryWorker:
         source_ref: str,
         protected_ids: set[str] | None = None,
         token_budget: int = TOKEN_BUDGET_PER_RUN,
+        *,
+        run_context: _PostResponseRunContext,
     ) -> int:
         """检测用户明确指出 agent 旧行为有误的情况，无需替代规则即直接 supersede 旧条目。"""
         # 1. 先从当前用户消息里提取"要废弃什么旧行为"的主题。
@@ -189,7 +199,7 @@ class PostResponseMemoryWorker:
         )
         logger.debug(
             "post_response invalidation_topics session=%s count=%d remain_budget=%d topics=%s",
-            self._current_run_session_key or "-",
+            run_context.session_key or "-",
             len(topics),
             token_budget,
             [self._preview_text(topic, 40) for topic in topics[:3]],
@@ -226,16 +236,16 @@ class PostResponseMemoryWorker:
                     supersede_ids,
                     topic,
                 )
-                if self._event_publisher is not None and self._current_run_session_key:
+                if self._event_publisher is not None and run_context.session_key:
                     await self._event_publisher.fanout(
                         MemoryWritten(
-                            session_key=self._current_run_session_key,
-                            channel=self._current_run_channel,
-                            chat_id=self._current_run_chat_id,
+                            session_key=run_context.session_key,
+                            channel=run_context.channel,
+                            chat_id=run_context.chat_id,
                             source_ref=source_ref,
                             action="supersede",
                             superseded_ids=supersede_ids,
-                            role_id=self._current_run_role_id,
+                            role_id=run_context.role_id,
                         )
                     )
         return token_budget

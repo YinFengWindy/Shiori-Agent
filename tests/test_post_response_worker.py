@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
-from core.memory.events import TurnIngested
+from core.memory.events import MemoryWritten, TurnIngested
 from memory2.memorizer import Memorizer
 from memory2.post_response_worker import PostResponseMemoryWorker
 from memory2.rule_schema import build_procedure_rule_schema
@@ -208,6 +208,85 @@ def test_extract_invalidation_topics_skips_when_token_budget_exhausted():
     assert topics == []
     assert remain == 0
     assert provider.calls == 0
+
+
+def test_post_worker_keeps_run_context_isolated_across_concurrent_runs():
+    class _Publisher:
+        def __init__(self) -> None:
+            self.events: list[MemoryWritten] = []
+
+        async def fanout(self, event: MemoryWritten) -> None:
+            self.events.append(event)
+
+    class _StaticRetriever:
+        async def retrieve(self, query: str, memory_types=None):
+            return [{"id": f"{query}-1", "summary": f"{query} summary", "score": 0.95}]
+
+    publisher = _Publisher()
+    memorizer = _DummyMemorizer()
+    worker = PostResponseMemoryWorker(
+        memorizer=cast(Any, memorizer),
+        retriever=cast(Any, _StaticRetriever()),
+        light_provider=cast(Any, _DummyProvider()),
+        light_model="test",
+        event_publisher=cast(Any, publisher),
+    )
+
+    first_ready = asyncio.Event()
+    second_ready = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _extract(user_msg: str, token_budget: int):
+        if user_msg == "first":
+            first_ready.set()
+            await second_ready.wait()
+            await release.wait()
+            return ["topic-a"], token_budget
+        second_ready.set()
+        await first_ready.wait()
+        release.set()
+        return ["topic-b"], token_budget
+
+    async def _check(topic: str, candidates: list[dict], token_budget: int):
+        return [str(candidates[0]["id"])], token_budget
+
+    worker._extract_invalidation_topics = AsyncMock(side_effect=_extract)
+    worker._check_invalidate = AsyncMock(side_effect=_check)
+
+    async def _run() -> None:
+        await asyncio.gather(
+            worker.run(
+                user_msg="first",
+                agent_response="ok",
+                tool_chain=[],
+                source_ref="src-1",
+                session_key="telegram:1",
+                channel="telegram",
+                chat_id="1",
+                role_id="mira",
+            ),
+            worker.run(
+                user_msg="second",
+                agent_response="ok",
+                tool_chain=[],
+                source_ref="src-2",
+                session_key="telegram:2",
+                channel="telegram",
+                chat_id="2",
+                role_id="atlas",
+            ),
+        )
+
+    asyncio.run(_run())
+
+    assert memorizer.supersede_batch.call_count == 2
+    assert [
+        (event.session_key, event.chat_id, event.role_id, event.source_ref)
+        for event in publisher.events
+    ] == [
+        ("telegram:2", "2", "atlas", "src-2"),
+        ("telegram:1", "1", "mira", "src-1"),
+    ]
 
 
 def test_merge_item_should_keep_procedure_metadata_consistent():

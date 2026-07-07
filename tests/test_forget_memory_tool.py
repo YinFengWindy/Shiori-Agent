@@ -11,8 +11,10 @@ from memory2.store import MemoryStore2
 class _MemoryWriter:
     def __init__(self, store: MemoryStore2) -> None:
         self._store = store
+        self.last_request: MemoryMutation | None = None
 
     async def mutate(self, request: MemoryMutation) -> MemoryMutationResult:
+        self.last_request = request
         items = self._store.get_items_by_ids(list(request.ids))
         found_ids = [str(item["id"]) for item in items]
         if found_ids:
@@ -65,6 +67,37 @@ async def test_forget_memory_marks_existing_items_superseded(tmp_path: Path):
         assert payload["missing_ids"] == []
         item = store.get_items_by_ids([item_id])[0]
         assert item["status"] == "superseded"
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_forget_memory_passes_runtime_scope_to_engine(tmp_path: Path):
+    store = MemoryStore2(tmp_path / "memory2.db")
+    try:
+        result = store.upsert_item(
+            memory_type="event",
+            summary="用户同步过角色设定",
+            embedding=[0.1, 0.2],
+            source_ref="tg:1:3",
+        )
+        item_id = result.split(":", 1)[1]
+        writer = _MemoryWriter(store)
+        tool = _forget_tool(writer)
+
+        _ = await tool.execute(
+            ids=[item_id],
+            role_id="mira",
+            channel="telegram",
+            chat_id="100",
+            session_key="telegram:100",
+        )
+
+        assert writer.last_request is not None
+        assert writer.last_request.scope.role_id == "mira"
+        assert writer.last_request.scope.channel == "telegram"
+        assert writer.last_request.scope.chat_id == "100"
+        assert writer.last_request.scope.session_key == "telegram:100"
     finally:
         store.close()
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 import asyncio
+from datetime import datetime
 import pytest
 from pathlib import Path
 from types import SimpleNamespace
@@ -35,6 +36,7 @@ from core.memory.markdown import (
     resolve_markdown_store,
 )
 from core.memory.plugin import MemoryPluginRuntime
+from memory2.store import MemoryStore2
 
 
 def _make_default_engine(
@@ -1006,6 +1008,72 @@ async def test_default_memory_engine_filters_unauthorized_shared_query(tmp_path:
     assert result.trace["denied_reason"] == "memory_domain_unauthorized"
 
 
+async def test_default_memory_engine_forget_filters_to_matching_role_and_scope(
+    tmp_path: Path,
+):
+    store = MemoryStore2(tmp_path / "memory2.db")
+    engine = _make_default_engine(retriever=cast(Any, SimpleNamespace()))
+    engine._v2_store = store
+    try:
+        same_scope = store.upsert_item(
+            memory_type="event",
+            summary="[2026-04-25 09:00] Mira room-1",
+            embedding=[1.0, 0.0],
+            source_ref="tg:1",
+            extra={
+                "role_id": "mira",
+                "scope_channel": "telegram",
+                "scope_chat_id": "room-1",
+            },
+            happened_at="2026-04-25T09:00:00",
+        ).split(":", 1)[1]
+        other_scope = store.upsert_item(
+            memory_type="event",
+            summary="[2026-04-25 10:00] Mira room-2",
+            embedding=[1.0, 0.0],
+            source_ref="tg:2",
+            extra={
+                "role_id": "mira",
+                "scope_channel": "telegram",
+                "scope_chat_id": "room-2",
+            },
+            happened_at="2026-04-25T10:00:00",
+        ).split(":", 1)[1]
+        other_role = store.upsert_item(
+            memory_type="event",
+            summary="[2026-04-25 11:00] Atlas room-1",
+            embedding=[1.0, 0.0],
+            source_ref="tg:3",
+            extra={
+                "role_id": "atlas",
+                "scope_channel": "telegram",
+                "scope_chat_id": "room-1",
+            },
+            happened_at="2026-04-25T11:00:00",
+        ).split(":", 1)[1]
+
+        result = await engine.mutate(
+            MemoryMutation(
+                kind="forget",
+                ids=(same_scope, other_scope, other_role),
+                scope=MemoryScope(
+                    role_id="mira",
+                    session_key="telegram:room-1",
+                    channel="telegram",
+                    chat_id="room-1",
+                ),
+            )
+        )
+
+        assert result.affected_ids == [same_scope]
+        assert set(result.missing_ids) == {other_scope, other_role}
+        assert store.get_items_by_ids([same_scope])[0]["status"] == "superseded"
+        assert store.get_items_by_ids([other_scope])[0]["status"] == "active"
+        assert store.get_items_by_ids([other_role])[0]["status"] == "active"
+    finally:
+        store.close()
+
+
 async def test_default_memory_engine_remember_merged_keeps_target_id_alive():
     memorizer = SimpleNamespace(
         save_item_with_supersede=AsyncMock(return_value="merged:memu-1")
@@ -1027,6 +1095,106 @@ async def test_default_memory_engine_remember_merged_keeps_target_id_alive():
     assert result.item_id == "memu-1"
     assert result.status == "merged"
     assert result.affected_ids == []
+
+
+async def test_default_memory_engine_timeline_query_honors_role_scope_and_domain_filters(
+    tmp_path: Path,
+):
+    store = MemoryStore2(tmp_path / "memory2.db")
+    engine = _make_default_engine(retriever=cast(Any, SimpleNamespace()))
+    engine._v2_store = store
+    try:
+        store.upsert_item(
+            memory_type="event",
+            summary="[2026-04-25 09:00] Mira room-1",
+            embedding=[1.0, 0.0],
+            source_ref="tg:1",
+            extra={
+                "role_id": "mira",
+                "memory_domain": "relationship",
+                "scope_channel": "telegram",
+                "scope_chat_id": "room-1",
+            },
+            happened_at="2026-04-25T09:00:00",
+        )
+        store.upsert_item(
+            memory_type="event",
+            summary="[2026-04-25 10:00] Mira room-2",
+            embedding=[1.0, 0.0],
+            source_ref="tg:2",
+            extra={
+                "role_id": "mira",
+                "memory_domain": "relationship",
+                "scope_channel": "telegram",
+                "scope_chat_id": "room-2",
+            },
+            happened_at="2026-04-25T10:00:00",
+        )
+        store.upsert_item(
+            memory_type="event",
+            summary="[2026-04-25 11:00] Atlas room-1",
+            embedding=[1.0, 0.0],
+            source_ref="tg:3",
+            extra={
+                "role_id": "atlas",
+                "memory_domain": "relationship",
+                "scope_channel": "telegram",
+                "scope_chat_id": "room-1",
+            },
+            happened_at="2026-04-25T11:00:00",
+        )
+
+        result = await engine.query(
+            MemoryQuery(
+                text="今天我做了什么",
+                intent="timeline",
+                scope=MemoryScope(
+                    role_id="mira",
+                    session_key="telegram:room-1",
+                    channel="telegram",
+                    chat_id="room-1",
+                ),
+                filters=MemoryQueryFilters(
+                    domains=("relationship",),
+                    time_start=datetime.fromisoformat("2026-04-25T00:00:00+08:00"),
+                    time_end=datetime.fromisoformat("2026-04-26T00:00:00+08:00"),
+                ),
+                limit=10,
+            )
+        )
+
+        assert [record.summary for record in result.records] == [
+            "[2026-04-25 09:00] Mira room-1"
+        ]
+    finally:
+        store.close()
+
+
+async def test_default_memory_engine_timeline_query_rejects_unauthorized_shared_domain(
+    tmp_path: Path,
+):
+    store = MemoryStore2(tmp_path / "memory2.db")
+    engine = _make_default_engine(retriever=cast(Any, SimpleNamespace()))
+    engine._v2_store = store
+    try:
+        result = await engine.query(
+            MemoryQuery(
+                text="共享时间线",
+                intent="timeline",
+                scope=MemoryScope(role_id="mira"),
+                filters=MemoryQueryFilters(
+                    domains=("shared",),
+                    time_start=datetime.fromisoformat("2026-04-25T00:00:00+08:00"),
+                    time_end=datetime.fromisoformat("2026-04-26T00:00:00+08:00"),
+                ),
+            )
+        )
+
+        assert result.records == []
+        assert result.raw == {"items": []}
+        assert result.trace["denied_reason"] == "memory_domain_unauthorized"
+    finally:
+        store.close()
 
 
 async def test_default_memory_engine_consumes_markdown_consolidation_event():

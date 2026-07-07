@@ -161,7 +161,11 @@ class _TimelineStore:
         return []
 
     def list_events_by_time_range(
-        self, time_start: datetime, time_end: datetime, limit: int = 200
+        self,
+        time_start: datetime,
+        time_end: datetime,
+        limit: int = 200,
+        **_kwargs: object,
     ) -> list[_MemoryHit]:
         self.time_start = time_start
         self.time_end = time_end
@@ -608,6 +612,7 @@ async def test_recall_memory_answer_intent_passes_time_range_to_searches() -> No
             query="DeepSeek 缓存命中率",
             intent="answer",
             time_filter="2026-04-25",
+            role_id="mira",
         )
     )
 
@@ -630,7 +635,7 @@ async def test_recall_memory_falls_back_to_keyword_when_query_embed_fails() -> N
     provider = _FakeProvider("用户处理过支付相关问题")
     tool = _recall_tool(store, _FailingEmbedder(), provider)
 
-    payload = json.loads(await tool.execute(query="phase 支付"))
+    payload = json.loads(await tool.execute(query="phase 支付", role_id="mira"))
 
     assert payload["count"] == 1
     assert payload["items"][0]["id"] == "mem:1"
@@ -652,7 +657,10 @@ async def test_recall_memory_falls_back_to_keyword_when_query_embed_hangs(
     tool = _recall_tool(store, _HangingEmbedder(), provider)
 
     payload = json.loads(
-        await asyncio.wait_for(tool.execute(query="phase 支付"), timeout=0.5)
+        await asyncio.wait_for(
+            tool.execute(query="phase 支付", role_id="mira"),
+            timeout=0.5,
+        )
     )
 
     assert payload["count"] == 1

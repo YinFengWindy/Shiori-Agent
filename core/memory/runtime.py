@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
 import inspect
 import logging
 from dataclasses import dataclass, field
@@ -32,25 +33,39 @@ class MemoryRuntime:
     markdown: "MarkdownMemoryRuntime"
     engine: "MemoryEngine"
     closeables: list[object] = field(default_factory=list[object])
-    _session_metadata: dict[str, Any] | None = None
+    _session_metadata_var: ContextVar[dict[str, Any] | None] = field(
+        default_factory=lambda: ContextVar(
+            "memory_runtime_session_metadata",
+            default=None,
+        ),
+        init=False,
+        repr=False,
+    )
+
+    def _session_metadata(self) -> dict[str, Any] | None:
+        return self._session_metadata_var.get()
 
     def read_long_term(self) -> str:
-        return self.markdown.read_long_term(session_metadata=self._session_metadata)
+        return self.markdown.read_long_term(session_metadata=self._session_metadata())
 
     def read_self(self) -> str:
-        return self.markdown.read_self(session_metadata=self._session_metadata)
+        return self.markdown.read_self(session_metadata=self._session_metadata())
 
     def read_recent_context(self) -> str:
-        return self.markdown.read_recent_context(session_metadata=self._session_metadata)
+        return self.markdown.read_recent_context(
+            session_metadata=self._session_metadata()
+        )
 
     def read_recent_history(self, *, max_chars: int = 0) -> str:
         return self.markdown.read_recent_history(
             max_chars=max_chars,
-            session_metadata=self._session_metadata,
+            session_metadata=self._session_metadata(),
         )
 
     def get_memory_context(self) -> str:
-        return self.markdown.get_memory_context(session_metadata=self._session_metadata)
+        return self.markdown.get_memory_context(
+            session_metadata=self._session_metadata()
+        )
 
     def has_long_term_memory(self) -> bool:
         return bool(self.read_long_term().strip())
@@ -59,7 +74,7 @@ class MemoryRuntime:
         self,
         session_metadata: dict[str, Any] | None,
     ) -> None:
-        self._session_metadata = (
+        self._session_metadata_var.set(
             dict(session_metadata) if isinstance(session_metadata, dict) else None
         )
 

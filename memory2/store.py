@@ -1641,16 +1641,43 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         time_start: datetime,
         time_end: datetime,
         limit: int = 200,
+        *,
+        memory_domains: list[str] | None = None,
+        role_id: str | None = None,
+        scope_channel: str | None = None,
+        scope_chat_id: str | None = None,
+        require_scope_match: bool = False,
     ) -> list[dict[str, object]]:
         time_clauses, time_params = _time_prefilter_clauses(
             "happened_at", time_start, time_end
         )
+        where_parts = ["memory_type='event'", "status='active'"]
+        params: list[object] = []
+        if memory_domains:
+            placeholders = ",".join("?" for _ in memory_domains)
+            where_parts.append(
+                "COALESCE(TRIM(json_extract(extra_json, '$.memory_domain')), '') "
+                f"IN ({placeholders})"
+            )
+            params.extend([domain.strip() for domain in memory_domains])
+        if role_id:
+            where_parts.append(_role_json_filter())
+            params.append(role_id.strip())
+        if require_scope_match:
+            where_parts.append(
+                "COALESCE(TRIM(json_extract(extra_json, '$.scope_channel')), '') = ?"
+            )
+            where_parts.append(
+                "COALESCE(TRIM(json_extract(extra_json, '$.scope_chat_id')), '') = ?"
+            )
+            params.extend([(scope_channel or "").strip(), (scope_chat_id or "").strip()])
+        where_parts.extend(time_clauses)
+        params.extend(time_params)
         rows = cast(list[tuple[object, ...]], self._db.execute(
             "SELECT id, memory_type, summary, source_ref, happened_at "
             "FROM memory_items "
-            "WHERE memory_type='event' AND status='active' "
-            f"AND {' AND '.join(time_clauses)}",
-            tuple(time_params),
+            f"WHERE {' AND '.join(where_parts)}",
+            tuple(params),
         ).fetchall())
 
         hits: list[tuple[datetime, dict[str, object]]] = []

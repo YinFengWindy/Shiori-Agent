@@ -26,6 +26,7 @@ from core.memory.engine import (
     MemoryQuery,
     MemoryQueryResult,
     MemoryRecord,
+    MemoryScope,
     MemoryToolProfile,
     MemoryToolSpec,
 )
@@ -209,6 +210,29 @@ def _dict_items(value: object) -> list[dict[str, object]]:
         for item in value
         if isinstance(item, dict)
     ]
+
+
+def _item_matches_forget_scope(
+    item: dict[str, object],
+    scope: MemoryScope,
+) -> bool:
+    extra = item.get("extra_json")
+    extra_json = cast(dict[str, object], extra) if isinstance(extra, dict) else {}
+    if str(extra_json.get("role_id") or "").strip() != str(scope.role_id or "").strip():
+        return False
+
+    scope_channel = str(scope.channel or "").strip()
+    scope_chat_id = str(scope.chat_id or "").strip()
+    item_scope_channel = str(extra_json.get("scope_channel") or "").strip()
+    item_scope_chat_id = str(extra_json.get("scope_chat_id") or "").strip()
+    if not scope_channel or not scope_chat_id:
+        return True
+    if not item_scope_channel and not item_scope_chat_id:
+        return True
+    return (
+        item_scope_channel == scope_channel
+        and item_scope_chat_id == scope_chat_id
+    )
 
 
 def _build_long_term_prompt(*, conversation: str, existing_profile: str) -> str:
@@ -914,9 +938,14 @@ class DefaultMemoryEngine:
     # 显式遗忘入口：只把条目标成 superseded，不物理删除。
     async def _forget(self, request: MemoryMutation) -> MemoryMutationResult:
         # 1. 先按 id 去重并读取现存条目。
+        scope = resolve_memory_scope(request.scope)
         store = self._require_v2_store()
         clean_ids = _dedupe_ids(list(request.ids))
-        items = store.get_items_by_ids(clean_ids)
+        items = [
+            item
+            for item in store.get_items_by_ids(clean_ids)
+            if _item_matches_forget_scope(item, scope)
+        ]
         found_ids = [str(item.get("id") or "") for item in items if item.get("id")]
 
         # 2. 只失效能确认存在的条目，缺失 id 返回给调用方展示。
@@ -1244,10 +1273,36 @@ class DefaultMemoryEngine:
                     "effect": request.effect,
                 }
             )
-        hits = self.list_events_by_time_range(
+        scope = request.scope
+        requested_domains = self._resolve_memory_domains(request)
+        memory_domains = self._guard_shared_memory_domains(
+            requested_domains,
+            role_id=scope.role_id,
+        )
+        if self._is_domain_request_denied(requested_domains, memory_domains):
+            return MemoryQueryResult(
+                records=[],
+                trace={
+                    "source": self.DESCRIPTOR.name,
+                    "intent": "timeline",
+                    "effect": request.effect,
+                    "hit_count": 0,
+                    "denied_domains": list(requested_domains or []),
+                    "denied_reason": "memory_domain_unauthorized",
+                },
+                raw={"items": []},
+            )
+        hits = self._require_v2_store().list_events_by_time_range(
             request.filters.time_start,
             request.filters.time_end,
             limit=request.limit,
+            memory_domains=memory_domains,
+            role_id=scope.role_id or None,
+            scope_channel=scope.channel or None,
+            scope_chat_id=scope.chat_id or None,
+            require_scope_match=bool(
+                str(scope.channel or "").strip() and str(scope.chat_id or "").strip()
+            ),
         )
         return MemoryQueryResult(
             records=[self._build_record(item) for item in hits if isinstance(item, dict)],

@@ -4,7 +4,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from agent.tools.base import Tool
-from core.memory.engine import MemoryMutation, MemoryToolSpec
+from core.memory.engine import MemoryMutation, MemoryScope, MemoryToolSpec
 
 if TYPE_CHECKING:
     from core.memory.engine import MemoryWriteApi
@@ -29,13 +29,33 @@ class ForgetMemoryTool(Tool):
         self.description = self._spec.description
         self.parameters = self._spec.parameters
 
-    async def execute(self, ids: list[str], **_: Any) -> str:
+    async def execute(
+        self,
+        ids: list[str],
+        role_id: str | None = None,
+        channel: str | None = None,
+        chat_id: str | None = None,
+        session_key: str | None = None,
+        **_: Any,
+    ) -> str:
         clean_ids = _clean_ids(ids)
         if not clean_ids:
             return _render_forget_result(clean_ids, [], [], [])
 
+        resolved_session_key = str(session_key or "").strip()
+        if not resolved_session_key and channel and chat_id:
+            resolved_session_key = f"{channel}:{chat_id}"
         result = await self._memory.mutate(
-            MemoryMutation(kind="forget", ids=tuple(clean_ids))
+            MemoryMutation(
+                kind="forget",
+                ids=tuple(clean_ids),
+                scope=MemoryScope(
+                    role_id=str(role_id or "").strip(),
+                    session_key=resolved_session_key,
+                    channel=channel or "",
+                    chat_id=chat_id or "",
+                ),
+            )
         )
         return _render_forget_result(
             clean_ids,
