@@ -135,6 +135,7 @@ class PostResponseMemoryWorker:
     @staticmethod
     def _preview_text(text: str, limit: int = 80) -> str:
         import re
+
         compact = re.sub(r"\s+", " ", str(text or "").strip())
         if len(compact) <= limit:
             return compact
@@ -212,6 +213,13 @@ class PostResponseMemoryWorker:
             candidates = await self._retriever.retrieve(
                 topic,
                 memory_types=["procedure", "preference"],
+                role_id=run_context.role_id or None,
+                scope_channel=run_context.channel or None,
+                scope_chat_id=run_context.chat_id or None,
+                require_scope_match=bool(
+                    str(run_context.channel or "").strip()
+                    and str(run_context.chat_id or "").strip()
+                ),
             )
             high_sim = [
                 c

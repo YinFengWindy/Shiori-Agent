@@ -215,7 +215,9 @@ async def test_default_memory_engine_retrieve_falls_back_to_session_scope():
         )
 
 
-async def test_default_memory_engine_role_query_excludes_legacy_unscoped_memory(tmp_path: Path):
+async def test_default_memory_engine_role_query_excludes_legacy_unscoped_memory(
+    tmp_path: Path,
+):
     provider = SimpleNamespace()
     runtime = build_memory_runtime(
         config=Config(
@@ -264,7 +266,9 @@ async def test_default_memory_engine_role_query_excludes_legacy_unscoped_memory(
     assert "legacy 公共记忆：用户常驻上海" not in summaries
 
 
-async def test_default_memory_engine_isolates_relationship_memory_between_roles(tmp_path: Path):
+async def test_default_memory_engine_isolates_relationship_memory_between_roles(
+    tmp_path: Path,
+):
     provider = SimpleNamespace()
     runtime = build_memory_runtime(
         config=Config(
@@ -338,7 +342,10 @@ async def test_default_engine_keeps_history_injected_ids():
                 }
             ]
         ),
-        build_injection_block=lambda items: ("## 【相关历史】\n- 用户昨天提过 FitBit", ["e1"]),
+        build_injection_block=lambda items: (
+            "## 【相关历史】\n- 用户昨天提过 FitBit",
+            ["e1"],
+        ),
     )
     engine = _make_default_engine(retriever=cast(Any, retriever))
 
@@ -346,7 +353,12 @@ async def test_default_engine_keeps_history_injected_ids():
         MemoryQuery(
             text="Fitbit 型号",
             intent="context",
-            scope=MemoryScope(role_id="mira", session_key="telegram:1", channel="telegram", chat_id="1"),
+            scope=MemoryScope(
+                role_id="mira",
+                session_key="telegram:1",
+                channel="telegram",
+                chat_id="1",
+            ),
             filters=MemoryQueryFilters(
                 kinds=("event",),
                 hints={"require_scope_match": True},
@@ -505,7 +517,9 @@ async def test_default_memory_engine_refreshes_recent_context_from_lifecycle_rol
     await event_bus.aclose()
 
 
-async def test_default_memory_engine_refreshes_role_recent_context_in_role_memory(tmp_path: Path):
+async def test_default_memory_engine_refreshes_role_recent_context_in_role_memory(
+    tmp_path: Path,
+):
     event_bus = EventBus()
     session = SimpleNamespace(
         key="role:mira",
@@ -546,7 +560,9 @@ async def test_default_memory_engine_refreshes_role_recent_context_in_role_memor
     await event_bus.drain()
     await _drain_maintenance(maintenance)
 
-    role_recent_context_path = tmp_path / "roles" / "mira" / "memory" / "RECENT_CONTEXT.md"
+    role_recent_context_path = (
+        tmp_path / "roles" / "mira" / "memory" / "RECENT_CONTEXT.md"
+    )
     global_recent_context_path = tmp_path / "memory" / "RECENT_CONTEXT.md"
 
     assert role_recent_context_path.exists()
@@ -603,7 +619,9 @@ async def test_default_memory_engine_consolidates_ready_session_from_lifecycle()
     await event_bus.aclose()
 
 
-async def test_markdown_consolidation_advances_window_when_consumer_fails(tmp_path: Path):
+async def test_markdown_consolidation_advances_window_when_consumer_fails(
+    tmp_path: Path,
+):
     event_bus = EventBus()
 
     async def _fail_consolidation(_event):
@@ -643,13 +661,15 @@ async def test_markdown_consolidation_advances_window_when_consumer_fails(tmp_pa
         await maintenance.consolidate(ConsolidateRequest(session=session))
 
     assert session.last_consolidated == 6
-    assert "用户测试记忆" in (tmp_path / "roles" / "mira" / "memory" / "HISTORY.md").read_text(
-        encoding="utf-8"
-    )
+    assert "用户测试记忆" in (
+        tmp_path / "roles" / "mira" / "memory" / "HISTORY.md"
+    ).read_text(encoding="utf-8")
     await event_bus.aclose()
 
 
-async def test_markdown_consolidation_failure_trace_does_not_advance_cursor(tmp_path: Path):
+async def test_markdown_consolidation_failure_trace_does_not_advance_cursor(
+    tmp_path: Path,
+):
     session = SimpleNamespace(
         key="role:mira",
         metadata={"role_id": "mira"},
@@ -725,7 +745,9 @@ async def test_markdown_consolidation_runs_post_consolidation_hook(tmp_path: Pat
     after_consolidation.assert_awaited_once_with(session)
 
 
-async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(tmp_path: Path):
+async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(
+    tmp_path: Path,
+):
     session = SimpleNamespace(
         key="role:mira",
         metadata={"role_id": "mira"},
@@ -857,14 +879,22 @@ async def test_default_memory_engine_remember_uses_memorizer():
             kind="remember",
             summary="以后用中文回复",
             memory_kind="preference",
-            scope=MemoryScope(role_id="mira", session_key="role:mira", channel="desktop", chat_id="role:mira"),
+            scope=MemoryScope(
+                role_id="mira",
+                session_key="role:mira",
+                channel="desktop",
+                chat_id="role:mira",
+            ),
         )
     )
 
     assert result.item_id == "memu-1"
     assert result.status == "new"
     memorizer.save_item_with_supersede.assert_awaited_once()
-    assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["memory_domain"] == "relationship"
+    assert (
+        memorizer.save_item_with_supersede.await_args.kwargs["extra"]["memory_domain"]
+        == "relationship"
+    )
 
 
 async def test_default_memory_engine_remember_keeps_explicit_memory_domain():
@@ -886,7 +916,10 @@ async def test_default_memory_engine_remember_keeps_explicit_memory_domain():
         )
     )
 
-    assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["memory_domain"] == "role_self"
+    assert (
+        memorizer.save_item_with_supersede.await_args.kwargs["extra"]["memory_domain"]
+        == "role_self"
+    )
 
 
 async def test_default_memory_engine_remember_role_scope_persists_role_id():
@@ -907,7 +940,10 @@ async def test_default_memory_engine_remember_role_scope_persists_role_id():
         )
     )
 
-    assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["role_id"] == "mira"
+    assert (
+        memorizer.save_item_with_supersede.await_args.kwargs["extra"]["role_id"]
+        == "mira"
+    )
 
 
 async def test_default_memory_engine_query_passes_memory_domains():
@@ -982,7 +1018,10 @@ async def test_default_memory_engine_allows_authorized_shared_write(tmp_path: Pa
         )
     )
 
-    assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["memory_domain"] == "shared"
+    assert (
+        memorizer.save_item_with_supersede.await_args.kwargs["extra"]["memory_domain"]
+        == "shared"
+    )
 
 
 async def test_default_memory_engine_filters_unauthorized_shared_query(tmp_path: Path):
@@ -1088,7 +1127,12 @@ async def test_default_memory_engine_remember_merged_keeps_target_id_alive():
             kind="remember",
             summary="以后用中文回复",
             memory_kind="preference",
-            scope=MemoryScope(role_id="mira", session_key="role:mira", channel="desktop", chat_id="role:mira"),
+            scope=MemoryScope(
+                role_id="mira",
+                session_key="role:mira",
+                channel="desktop",
+                chat_id="role:mira",
+            ),
         )
     )
 
@@ -1197,6 +1241,30 @@ async def test_default_memory_engine_timeline_query_rejects_unauthorized_shared_
         store.close()
 
 
+async def test_default_memory_engine_timeline_query_requires_role_scope(
+    tmp_path: Path,
+):
+    store = MemoryStore2(tmp_path / "memory2.db")
+    engine = _make_default_engine(retriever=cast(Any, SimpleNamespace()))
+    engine._v2_store = store
+    try:
+        with pytest.raises(ValueError, match="role_id required"):
+            await engine.query(
+                MemoryQuery(
+                    text="今天我做了什么",
+                    intent="timeline",
+                    scope=MemoryScope(),
+                    filters=MemoryQueryFilters(
+                        time_start=datetime.fromisoformat("2026-04-25T00:00:00+08:00"),
+                        time_end=datetime.fromisoformat("2026-04-26T00:00:00+08:00"),
+                    ),
+                    limit=10,
+                )
+            )
+    finally:
+        store.close()
+
+
 async def test_default_memory_engine_consumes_markdown_consolidation_event():
     memorizer = SimpleNamespace(
         save_from_consolidation=AsyncMock(),
@@ -1258,7 +1326,10 @@ async def test_default_memory_engine_consolidation_role_scope_persists_role_id()
     )
 
     assert memorizer.save_from_consolidation.await_args.kwargs["role_id"] == "mira"
-    assert memorizer.save_item_with_supersede.await_args.kwargs["extra"]["role_id"] == "mira"
+    assert (
+        memorizer.save_item_with_supersede.await_args.kwargs["extra"]["role_id"]
+        == "mira"
+    )
 
 
 async def test_default_memory_engine_reports_implicit_extraction_failure():
@@ -1536,4 +1607,6 @@ def test_build_memory_runtime_exposes_default_memory_engine(
 
     assert runtime.engine is not None
     assert runtime.engine.describe().name == "default"
-    assert MemoryCapability.SEMANTICS_RICH_MEMORY in runtime.engine.describe().capabilities
+    assert (
+        MemoryCapability.SEMANTICS_RICH_MEMORY in runtime.engine.describe().capabilities
+    )

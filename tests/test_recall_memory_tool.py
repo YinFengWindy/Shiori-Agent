@@ -14,7 +14,12 @@ import agent.tools.recall_memory as recall_memory_module
 import memory2.retriever as retriever_module
 from agent.provider import LLMProvider, LLMResponse
 from agent.tools.recall_memory import RecallMemoryTool
-from core.memory.engine import EvidenceRef, MemoryQueryResult, MemoryRecord, MemoryToolSpec
+from core.memory.engine import (
+    EvidenceRef,
+    MemoryQueryResult,
+    MemoryRecord,
+    MemoryToolSpec,
+)
 from plugins.default_memory.engine import DefaultMemoryEngine
 from memory2.embedder import Embedder
 from memory2.retriever import Retriever
@@ -196,9 +201,7 @@ class _TimedSemanticStore:
         self.vector_batch_vec_count = 0
         self.keyword_kwargs: list[dict[str, object]] = []
 
-    def vector_search(
-        self, *_args: object, **kwargs: object
-    ) -> list[_MemoryHit]:
+    def vector_search(self, *_args: object, **kwargs: object) -> list[_MemoryHit]:
         self.vector_kwargs.append(kwargs)
         raise AssertionError("带 time_filter 的 semantic 模式应复用 batch 候选")
 
@@ -442,7 +445,9 @@ async def test_retriever_returns_keyword_hits_when_vector_empty() -> None:
 
 
 @pytest.mark.asyncio
-async def test_retriever_keeps_strong_vector_order_when_keyword_hits_are_low_rank() -> None:
+async def test_retriever_keeps_strong_vector_order_when_keyword_hits_are_low_rank() -> (
+    None
+):
     vector_hits: list[_MemoryHit] = [
         {
             "id": "vec1",
@@ -589,6 +594,7 @@ async def test_recall_memory_timeline_intent_lists_events_without_embedding() ->
             intent="timeline",
             time_filter="2026-04-25",
             limit=80,
+            role_id="mira",
         )
     )
 

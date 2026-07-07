@@ -23,14 +23,15 @@ class _DummyRetriever:
         self._results = results
         self.calls = []
 
-    async def retrieve(self, query: str, memory_types=None):
-        self.calls.append((query, tuple(memory_types or [])))
+    async def retrieve(self, query: str, memory_types=None, **kwargs):
+        self.calls.append((query, tuple(memory_types or []), dict(kwargs)))
         return list(self._results)
 
 
 class _DummyMemorizer:
     def __init__(self, store=None):
         from unittest.mock import AsyncMock, MagicMock
+
         self.save_item = AsyncMock(return_value="new:testid")
         self.supersede_batch = MagicMock()
         self.merge_item = AsyncMock()
@@ -50,6 +51,7 @@ def test_post_worker_run_only_handles_invalidations_no_implicit_save():
     隐式提取已移至 consolidation 窗口期（与 event 提取并行，用主模型处理）。
     """
     from unittest.mock import AsyncMock, MagicMock
+
     memorizer = _DummyMemorizer()
     retriever = _DummyRetriever([])
     worker = PostResponseMemoryWorker(
@@ -219,7 +221,7 @@ def test_post_worker_keeps_run_context_isolated_across_concurrent_runs():
             self.events.append(event)
 
     class _StaticRetriever:
-        async def retrieve(self, query: str, memory_types=None):
+        async def retrieve(self, query: str, memory_types=None, **kwargs):
             return [{"id": f"{query}-1", "summary": f"{query} summary", "score": 0.95}]
 
     publisher = _Publisher()
@@ -286,6 +288,48 @@ def test_post_worker_keeps_run_context_isolated_across_concurrent_runs():
     ] == [
         ("telegram:2", "2", "atlas", "src-2"),
         ("telegram:1", "1", "mira", "src-1"),
+    ]
+
+
+def test_post_worker_invalidation_retrieval_uses_run_scope():
+    retriever = _DummyRetriever(
+        [{"id": "mem:1", "summary": "topic summary", "score": 0.95}]
+    )
+    worker = PostResponseMemoryWorker(
+        memorizer=cast(Any, _DummyMemorizer()),
+        retriever=cast(Any, retriever),
+        light_provider=cast(Any, _DummyProvider()),
+        light_model="test",
+    )
+    worker._extract_invalidation_topics = AsyncMock(
+        return_value=(["topic"], worker.TOKEN_BUDGET_PER_RUN)
+    )
+    worker._check_invalidate = AsyncMock(return_value=([], worker.TOKEN_BUDGET_PER_RUN))
+
+    asyncio.run(
+        worker.run(
+            user_msg="以后别再这么做",
+            agent_response="好的",
+            tool_chain=[],
+            source_ref="src-1",
+            session_key="telegram:1",
+            channel="telegram",
+            chat_id="1",
+            role_id="mira",
+        )
+    )
+
+    assert retriever.calls == [
+        (
+            "topic",
+            ("procedure", "preference"),
+            {
+                "role_id": "mira",
+                "scope_channel": "telegram",
+                "scope_chat_id": "1",
+                "require_scope_match": True,
+            },
+        )
     ]
 
 

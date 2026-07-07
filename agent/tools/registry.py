@@ -1,4 +1,5 @@
 import logging
+from contextvars import ContextVar
 from collections.abc import Iterable, Set as AbstractSet
 from copy import deepcopy
 from dataclasses import dataclass
@@ -119,15 +120,20 @@ class ToolRegistry:
         self._tools: dict[str, Tool] = {}
         self._metadata: dict[str, ToolMeta] = {}
         self._documents: dict[str, ToolDocument] = {}
-        self._context: dict[str, str] = {}
+        self._context_var: ContextVar[dict[str, str]] = ContextVar(
+            "tool_registry_context",
+            default={},
+        )
         self._backend: SearchBackend = backend or KeywordSearchBackend()
 
     def set_context(self, **kwargs: str) -> None:
         """设置当前会话上下文（channel、chat_id 等），供工具按需读取。"""
-        self._context.update(kwargs)
+        next_context = dict(self._context_var.get())
+        next_context.update(kwargs)
+        self._context_var.set(next_context)
 
     def get_context(self) -> dict[str, str]:
-        return dict(self._context)
+        return dict(self._context_var.get())
 
     def register(
         self,
@@ -208,9 +214,7 @@ class ToolRegistry:
         """返回所有已注册工具的索引文档列表。"""
         return list(self._documents.values())
 
-    def get_deferred_names(
-        self, visible: set[str] | None = None
-    ) -> dict[str, object]:
+    def get_deferred_names(self, visible: set[str] | None = None) -> dict[str, object]:
         """返回所有 deferred 工具名，按来源分组。
 
         visible: 当前 turn 已可见工具名（always_on + preloaded），从结果中排除。
@@ -248,7 +252,10 @@ class ToolRegistry:
         try:
             # 将会话上下文（channel、chat_id）作为低优先级默认值合并进 kwargs，
             # 工具可按需读取，不感知此机制的工具会直接忽略多余的 key。
-            merged: dict[str, Any] = {**(context or self._context), **arguments}
+            merged: dict[str, Any] = {
+                **(context or self.get_context()),
+                **arguments,
+            }
             if not _tool_defines_parameter(tool, _PROGRESS_DESCRIPTION_FIELD):
                 merged.pop(_PROGRESS_DESCRIPTION_FIELD, None)
             return await tool.execute(**merged)

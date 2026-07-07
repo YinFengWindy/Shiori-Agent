@@ -288,6 +288,30 @@ def test_registry_get_context_returns_copy() -> None:
     assert reg.get_context() == {"channel": "telegram", "chat_id": "123"}
 
 
+@pytest.mark.asyncio
+async def test_registry_context_is_task_local() -> None:
+    reg = ToolRegistry()
+    first_ready = asyncio.Event()
+    second_ready = asyncio.Event()
+
+    async def _first() -> dict[str, str]:
+        reg.set_context(channel="telegram", chat_id="123")
+        first_ready.set()
+        await second_ready.wait()
+        return reg.get_context()
+
+    async def _second() -> dict[str, str]:
+        await first_ready.wait()
+        reg.set_context(channel="discord", chat_id="999")
+        second_ready.set()
+        return reg.get_context()
+
+    first, second = await asyncio.gather(_first(), _second())
+
+    assert first == {"channel": "telegram", "chat_id": "123"}
+    assert second == {"channel": "discord", "chat_id": "999"}
+
+
 # ── _default_normalize 单元测试 ───────────────────────────────────────────────
 
 
@@ -347,7 +371,9 @@ class TestRegistrySearch:
         assert "feed_manage" in self._names(reg.search("RSS订阅"))
 
     def test_健康数据(self, reg):
-        assert "mcp_fitbit__fitbit_health_snapshot" in self._names(reg.search("健康数据"))
+        assert "mcp_fitbit__fitbit_health_snapshot" in self._names(
+            reg.search("健康数据")
+        )
 
     def test_推送消息(self, reg):
         assert "message_push" in self._names(reg.search("推送消息给用户"))
@@ -498,7 +524,9 @@ class TestMcpToolSearch:
         reg = self._make_feed_registry()
         for query in ["RSS订阅", "添加订阅", "订阅管理"]:
             names = [r["name"] for r in reg.search(query)]
-            assert "mcp_feed__feed_manage" in names, f"query={query!r} 未找到 feed_manage"
+            assert (
+                "mcp_feed__feed_manage" in names
+            ), f"query={query!r} 未找到 feed_manage"
 
     def test_feed_query_chinese_discovery(self):
         """中文新闻/最新资讯查询发现路径。"""
@@ -528,9 +556,7 @@ class TestToolSearchTool:
 
     def test_no_match_returns_tip(self):
         reg = ToolRegistry()
-        reg.register(
-            ToolSearchTool(reg), always_on=True, risk="read-only"
-        )
+        reg.register(ToolSearchTool(reg), always_on=True, risk="read-only")
         tool = ToolSearchTool(reg)
         result = asyncio.run(tool.execute(query="xxxxxxxxxxxxxxx"))
         data = json.loads(result)
