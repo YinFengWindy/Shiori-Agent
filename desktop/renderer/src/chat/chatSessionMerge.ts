@@ -4,18 +4,6 @@ function normalizeMessageId(message: SessionMessage): string {
   return String(message.id ?? "").trim();
 }
 
-function hasUnpersistedTailMessages(
-  currentSession: SessionPayload,
-  incomingSession: SessionPayload,
-): boolean {
-  if (incomingSession.messages.length >= currentSession.messages.length) {
-    return false;
-  }
-  return currentSession.messages
-    .slice(incomingSession.messages.length)
-    .some((message) => !normalizeMessageId(message));
-}
-
 function normalizeReplyMetadata(message: SessionMessage) {
   return {
     messageId: String(message.metadata?.reply_to_message_id ?? "").trim(),
@@ -55,14 +43,65 @@ function areEquivalentMessages(left: SessionMessage, right: SessionMessage): boo
     && leftReply.sender === rightReply.sender;
 }
 
-function isIncomingPrefixOfCurrent(currentSession: SessionPayload, incomingSession: SessionPayload): boolean {
-  if (incomingSession.messages.length >= currentSession.messages.length) {
+function areEquivalentMessagesIgnoringMissingIds(left: SessionMessage, right: SessionMessage): boolean {
+  const leftId = normalizeMessageId(left);
+  const rightId = normalizeMessageId(right);
+  if (leftId && rightId && leftId !== rightId) {
     return false;
   }
-  return incomingSession.messages.every((message, index) => areEquivalentMessages(message, currentSession.messages[index]));
+  if (left.role !== right.role || left.content !== right.content || !sameMedia(left, right)) {
+    return false;
+  }
+  const leftReply = normalizeReplyMetadata(left);
+  const rightReply = normalizeReplyMetadata(right);
+  return leftReply.messageId === rightReply.messageId
+    && leftReply.content === rightReply.content
+    && leftReply.sender === rightReply.sender;
 }
 
-/** Keeps locally rendered optimistic chat messages visible while an older session snapshot is still arriving. */
+function isOptimisticUserMessage(message: SessionMessage): boolean {
+  return message.role === "user" && !normalizeMessageId(message);
+}
+
+function findOptimisticUserIndex(messages: SessionMessage[]): number {
+  return messages.findIndex(isOptimisticUserMessage);
+}
+
+function hasMatchingPersistedPrefixBeforeOptimisticUser(
+  currentSession: SessionPayload,
+  incomingSession: SessionPayload,
+  optimisticUserIndex: number,
+): boolean {
+  if (optimisticUserIndex <= 0) {
+    return true;
+  }
+  if (incomingSession.messages.length < optimisticUserIndex) {
+    return false;
+  }
+  return currentSession.messages
+    .slice(0, optimisticUserIndex)
+    .every((message, index) => areEquivalentMessages(message, incomingSession.messages[index]));
+}
+
+function findMissingOptimisticUserMessage(
+  currentSession: SessionPayload,
+  incomingSession: SessionPayload,
+  optimisticUserIndex: number,
+): SessionMessage | null {
+  if (optimisticUserIndex < 0) {
+    return null;
+  }
+  const optimisticUserMessage = currentSession.messages[optimisticUserIndex];
+  if (!optimisticUserMessage || !isOptimisticUserMessage(optimisticUserMessage)) {
+    return null;
+  }
+  const alreadyPersisted = incomingSession.messages.some((message) => (
+    areEquivalentMessagesIgnoringMissingIds(optimisticUserMessage, message)
+  ));
+  return alreadyPersisted ? null : optimisticUserMessage;
+}
+
+/** Keeps the local optimistic user turn visible while older session snapshots are still arriving. */
 export function mergeIncomingSessionDuringSend(
   currentSession: SessionPayload | null,
   incomingSession: SessionPayload | null,
@@ -71,19 +110,36 @@ export function mergeIncomingSessionDuringSend(
   if (!currentSession || !incomingSession || currentSession.key !== incomingSession.key) {
     return incomingSession;
   }
-  const shouldProtectLocalTail = sending || hasUnpersistedTailMessages(currentSession, incomingSession);
-  if (!shouldProtectLocalTail) {
+
+  const optimisticUserIndex = findOptimisticUserIndex(currentSession.messages);
+  const missingOptimisticUserMessage = findMissingOptimisticUserMessage(
+    currentSession,
+    incomingSession,
+    optimisticUserIndex,
+  );
+
+  if (!sending && !missingOptimisticUserMessage) {
     return incomingSession;
   }
-  if (!isIncomingPrefixOfCurrent(currentSession, incomingSession)) {
+
+  if (!missingOptimisticUserMessage) {
     return incomingSession;
   }
+
+  if (!hasMatchingPersistedPrefixBeforeOptimisticUser(currentSession, incomingSession, optimisticUserIndex)) {
+    return incomingSession;
+  }
+
   return {
     ...incomingSession,
     metadata: {
       ...(currentSession.metadata ?? {}),
       ...(incomingSession.metadata ?? {}),
     },
-    messages: currentSession.messages,
+    messages: [
+      ...incomingSession.messages.slice(0, optimisticUserIndex),
+      missingOptimisticUserMessage,
+      ...incomingSession.messages.slice(optimisticUserIndex),
+    ],
   };
 }

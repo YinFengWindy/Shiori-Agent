@@ -17,7 +17,7 @@ function createSession(messages: SessionMessage[]): SessionPayload {
 }
 
 describe("mergeIncomingSessionDuringSend", () => {
-  it("keeps the local optimistic tail when a shorter stale session snapshot arrives during sending", () => {
+  it("keeps the optimistic user turn when a stale shorter snapshot arrives during sending", () => {
     const currentSession = createSession([
       {
         id: "role:mira:1",
@@ -27,10 +27,6 @@ describe("mergeIncomingSessionDuringSend", () => {
       {
         role: "user",
         content: "刚发出去的消息",
-      },
-      {
-        role: "assistant",
-        content: "回",
       },
     ]);
     const incomingSession = createSession([
@@ -43,10 +39,10 @@ describe("mergeIncomingSessionDuringSend", () => {
 
     const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
 
-    assert.equal(merged?.messages, currentSession.messages);
+    assert.deepEqual(merged?.messages, currentSession.messages);
   });
 
-  it("accepts the incoming session once sending has already finished", () => {
+  it("keeps the optimistic user turn even after sending flips false when a stale snapshot arrives late", () => {
     const currentSession = createSession([
       {
         id: "role:mira:1",
@@ -54,7 +50,6 @@ describe("mergeIncomingSessionDuringSend", () => {
         content: "上一条消息",
       },
       {
-        id: "role:mira:2",
         role: "user",
         content: "刚发出去的消息",
       },
@@ -69,10 +64,10 @@ describe("mergeIncomingSessionDuringSend", () => {
 
     const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, false);
 
-    assert.equal(merged, incomingSession);
+    assert.deepEqual(merged?.messages, currentSession.messages);
   });
 
-  it("accepts divergent incoming snapshots instead of hiding real session changes", () => {
+  it("inserts the optimistic user turn back into a same-length stale snapshot", () => {
     const currentSession = createSession([
       {
         id: "role:mira:1",
@@ -88,16 +83,24 @@ describe("mergeIncomingSessionDuringSend", () => {
       {
         id: "role:mira:1",
         role: "assistant",
-        content: "上一条消息（已变更）",
+        content: "上一条消息",
+      },
+      {
+        role: "assistant",
+        content: "角色处理中",
       },
     ]);
 
     const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
 
-    assert.equal(merged, incomingSession);
+    assert.deepEqual(merged?.messages, [
+      incomingSession.messages[0],
+      currentSession.messages[1],
+      incomingSession.messages[1],
+    ]);
   });
 
-  it("accepts authoritative sessions that already include the newly sent message", () => {
+  it("accepts the incoming session once it already contains the persisted user turn", () => {
     const currentSession = createSession([
       {
         id: "role:mira:1",
@@ -132,7 +135,7 @@ describe("mergeIncomingSessionDuringSend", () => {
     assert.equal(merged, incomingSession);
   });
 
-  it("keeps the optimistic tail even after sending flips false when a stale snapshot still arrives late", () => {
+  it("accepts divergent incoming snapshots instead of forcing the optimistic turn into unrelated history", () => {
     const currentSession = createSession([
       {
         id: "role:mira:1",
@@ -148,16 +151,16 @@ describe("mergeIncomingSessionDuringSend", () => {
       {
         id: "role:mira:1",
         role: "assistant",
-        content: "上一条消息",
+        content: "上一条消息（已变更）",
       },
     ]);
 
-    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, false);
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
 
-    assert.equal(merged?.messages, currentSession.messages);
+    assert.equal(merged, incomingSession);
   });
 
-  it("preserves fresh incoming metadata while keeping the optimistic local message tail", () => {
+  it("preserves fresh incoming metadata while keeping the optimistic local user turn", () => {
     const currentSession = createSession([
       {
         id: "role:mira:1",
@@ -187,7 +190,7 @@ describe("mergeIncomingSessionDuringSend", () => {
 
     const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
 
-    assert.equal(merged?.messages, currentSession.messages);
+    assert.deepEqual(merged?.messages, currentSession.messages);
     assert.equal(merged?.metadata.current_mood, "开心");
   });
 });

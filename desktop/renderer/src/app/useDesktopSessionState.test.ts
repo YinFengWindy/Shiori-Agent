@@ -50,7 +50,7 @@ describe("markSendingSessionState", () => {
       Boolean(sendingSessions[currentSession.key]),
     );
 
-    assert.equal(merged?.messages, currentSession.messages);
+    assert.deepEqual(merged?.messages, currentSession.messages);
   });
 });
 
