@@ -181,17 +181,15 @@ export function useDesktopSessionState({
   function updateCommittedActiveSession(
     updater: (current: SessionPayload | null) => SessionPayload | null,
   ): void {
-    setActiveSession((current) => {
-      const nextSession = updater(current);
-      activeSessionRef.current = nextSession;
-      if (nextSession) {
-        const roleId = getRoleIdFromSession(nextSession) || activeRoleIdRef.current;
-        if (roleId) {
-          cacheRoleSession(roleId, nextSession);
-        }
+    const nextSession = updater(activeSessionRef.current);
+    activeSessionRef.current = nextSession;
+    if (nextSession) {
+      const roleId = getRoleIdFromSession(nextSession) || activeRoleIdRef.current;
+      if (roleId) {
+        cacheRoleSession(roleId, nextSession);
       }
-      return nextSession;
-    });
+    }
+    setActiveSession(nextSession);
   }
 
   async function loadRolesFromBridge(): Promise<RoleRecord[] | null> {
