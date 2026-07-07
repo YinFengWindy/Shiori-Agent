@@ -100,12 +100,19 @@ export function buildDesktopViewModel({
     ?? activeRole?.loneliness_runtime
     ?? null
   );
-  const roleSelfView = String(relationshipSnapshot?.role_self_view ?? "").trim();
+  const roleSelfView = typeof relationshipSnapshot?.role_self_view === "string"
+    ? relationshipSnapshot.role_self_view.trim()
+    : "";
   const relationshipTags = Array.isArray(relationshipSnapshot?.relation_tags)
-    ? relationshipSnapshot.relation_tags.filter((tag) => String(tag || "").trim()).slice(0, 4)
+    ? relationshipSnapshot.relation_tags
+      .filter((tag): tag is string => typeof tag === "string")
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .slice(0, 4)
     : [];
-  const lonelinessValue = typeof lonelinessRuntime?.loneliness_value === "number"
-    ? lonelinessRuntime.loneliness_value
+  const normalizedLonelinessValue = Number(lonelinessRuntime?.loneliness_value);
+  const lonelinessValue = Number.isFinite(normalizedLonelinessValue)
+    ? normalizedLonelinessValue
     : 0;
 
   return {

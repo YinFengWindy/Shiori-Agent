@@ -95,6 +95,27 @@ describe("collectChatImageHistory", () => {
       },
     ]);
   });
+
+  it("ignores malformed non-string media entries instead of crashing the renderer", () => {
+    const session = createSession([
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "first",
+        media: ["outputs/cover.png", 42 as unknown as string, null as unknown as string],
+      },
+    ]);
+
+    assert.deepEqual(collectChatImageHistory(session), [
+      {
+        historyKey: "message-1:0",
+        path: "outputs/cover.png",
+        messageId: "message-1",
+        mediaIndex: 0,
+        timestamp: null,
+      },
+    ]);
+  });
 });
 
 describe("buildChatImageHistoryKey", () => {

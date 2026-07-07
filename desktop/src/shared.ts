@@ -165,12 +165,24 @@ export type StartAttachmentDragRequest = {
   path: string;
 };
 
+export type RendererDiagnosticPayload = {
+  kind: "error" | "unhandledrejection" | "error-boundary";
+  message: string;
+  stack?: string;
+  componentStack?: string;
+  filename?: string;
+  lineno?: number;
+  colno?: number;
+  details?: Record<string, unknown>;
+};
+
 export type DesktopApi = {
   invoke(request: Omit<BridgeRequest, "id">): Promise<BridgeResponse>;
   onEvent(listener: (event: BridgeEvent) => void): () => void;
   pickImages(options?: { multiple?: boolean }): Promise<string[]>;
   pickChatAttachments(options?: { multiple?: boolean }): Promise<string[]>;
   startAttachmentDrag(request: StartAttachmentDragRequest): void;
+  reportRendererDiagnostic(payload: RendererDiagnosticPayload): void;
   bridgeStatus(): Promise<{ running: boolean; lastError: string | null }>;
   restartBridge(): Promise<{ ok: boolean; running: boolean; lastError: string | null }>;
   readSettings(): Promise<SettingsSnapshot>;

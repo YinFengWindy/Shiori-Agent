@@ -267,4 +267,36 @@ describe("desktopSelectors", () => {
     assert.deepEqual(viewModel.relationshipTags, ["嘴硬", "等你主动"]);
     assert.equal(viewModel.lonelinessValue, 52);
   });
+
+  it("drops malformed relationship fields so renderer summaries stay safe", () => {
+    const session = createSession();
+    session.metadata = {
+      role_id: "mira",
+      relationship_snapshot: {
+        role_id: "mira",
+        role_self_view: { text: "bad" },
+        relation_tags: ["亲近", { text: "bad" }, "等你主动"],
+      },
+      loneliness_runtime: {
+        role_id: "mira",
+        loneliness_value: "61",
+      },
+    } as unknown as SessionPayload["metadata"];
+
+    const viewModel = buildDesktopViewModel({
+      roles: [createRole()],
+      activeRoleId: "mira",
+      mainView: { kind: "chat" },
+      roleForm: createRoleForm(),
+      activeIllustration: "",
+      activeSession: session,
+      selectedChatImageKey: "",
+      health: "online",
+      sendingSessions: {},
+    });
+
+    assert.equal(viewModel.roleSelfView, "");
+    assert.deepEqual(viewModel.relationshipTags, ["亲近", "等你主动"]);
+    assert.equal(viewModel.lonelinessValue, 61);
+  });
 });

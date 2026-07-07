@@ -1,4 +1,5 @@
 import { BrowserWindow } from "electron";
+import { logDesktopDiagnostic } from "./diagnostics.js";
 import { attachWindowSmokeHandlers } from "./smoke.js";
 import { desktopWindowIcon, preloadScript, rendererDevServerUrl, rendererDist } from "./paths.js";
 
@@ -38,9 +39,41 @@ export function createDesktopWindow(): BrowserWindow {
     }
   });
   win.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
+    logDesktopDiagnostic({
+      scope: "main",
+      event: "window.did-fail-load",
+      payload: {
+        errorCode,
+        errorDescription,
+      },
+    });
     if (process.env.MIRA_DESKTOP_UI_SMOKE === "1") {
       console.error(`[desktop-ui-load-fail] ${errorCode} ${errorDescription}`);
     }
+  });
+  win.on("unresponsive", () => {
+    logDesktopDiagnostic({
+      scope: "main",
+      event: "window.unresponsive",
+      payload: {},
+    });
+  });
+  win.on("responsive", () => {
+    logDesktopDiagnostic({
+      scope: "main",
+      event: "window.responsive",
+      payload: {},
+    });
+  });
+  win.webContents.on("render-process-gone", (_event, details) => {
+    logDesktopDiagnostic({
+      scope: "main",
+      event: "window.render-process-gone",
+      payload: {
+        reason: details.reason,
+        exitCode: details.exitCode,
+      },
+    });
   });
   win.on("maximize", () => emitWindowState(win));
   win.on("unmaximize", () => emitWindowState(win));

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { BridgeEvent, DesktopApi, WindowControlAction, WindowState } from "./shared.js";
+import type { BridgeEvent, DesktopApi, RendererDiagnosticPayload, WindowControlAction, WindowState } from "./shared.js";
 
 const api: DesktopApi = {
   invoke(request) {
@@ -18,6 +18,9 @@ const api: DesktopApi = {
   },
   startAttachmentDrag(request) {
     ipcRenderer.send("desktop:start-attachment-drag", request);
+  },
+  reportRendererDiagnostic(payload: RendererDiagnosticPayload) {
+    ipcRenderer.send("desktop:renderer-diagnostic", payload);
   },
   bridgeStatus() {
     return ipcRenderer.invoke("desktop:bridge-status") as Promise<{ running: boolean; lastError: string | null }>;

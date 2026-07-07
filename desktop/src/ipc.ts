@@ -2,10 +2,11 @@ import { BrowserWindow, dialog, ipcMain } from "electron";
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import type { IpcMainInvokeEvent } from "electron";
+import { logDesktopDiagnostic } from "./diagnostics.js";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
 import { runBridgeSmoke } from "./smoke.js";
 import { loadChannelRoleBindings, loadSettingsData, saveSettings } from "./settings.js";
-import type { SettingsChannelRoleBinding, SettingsFormData } from "./shared.js";
+import type { RendererDiagnosticPayload, SettingsChannelRoleBinding, SettingsFormData } from "./shared.js";
 import type { WindowControlAction } from "./shared.js";
 
 type RegisterDesktopIpcOptions = {
@@ -28,6 +29,25 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     event.sender.startDrag({
       file: filePath,
       icon: dragPreviewIconPath,
+    });
+  });
+  ipcMain.on("desktop:renderer-diagnostic", (_event: IpcMainInvokeEvent, payload?: RendererDiagnosticPayload) => {
+    const diagnostic = payload ?? {
+      kind: "error",
+      message: "renderer emitted an empty diagnostic payload",
+    };
+    logDesktopDiagnostic({
+      scope: "renderer",
+      event: `renderer.${diagnostic.kind}`,
+      payload: {
+        message: diagnostic.message,
+        stack: diagnostic.stack,
+        componentStack: diagnostic.componentStack,
+        filename: diagnostic.filename,
+        lineno: diagnostic.lineno,
+        colno: diagnostic.colno,
+        details: diagnostic.details ?? {},
+      },
     });
   });
   ipcMain.handle("desktop:bridge-status", async () => {

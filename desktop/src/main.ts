@@ -6,6 +6,7 @@ import { app, BrowserWindow, protocol } from "electron";
 import { getLocalAssetMimeType } from "./assetMime.js";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 import { startBridge, wireBridgeEvents } from "./bridgeLifecycle.js";
+import { logDesktopDiagnostic } from "./diagnostics.js";
 import { registerDesktopIpc } from "./ipc.js";
 import { desktopRoot } from "./paths.js";
 import { createDesktopWindow } from "./window.js";
@@ -41,6 +42,40 @@ function configureUserDataPath(): void {
 }
 
 configureUserDataPath();
+
+process.on("uncaughtException", (error) => {
+  logDesktopDiagnostic({
+    scope: "main",
+    event: "process.uncaughtException",
+    payload: {
+      error,
+    },
+  });
+});
+
+process.on("unhandledRejection", (reason) => {
+  logDesktopDiagnostic({
+    scope: "main",
+    event: "process.unhandledRejection",
+    payload: {
+      reason,
+    },
+  });
+});
+
+app.on("child-process-gone", (_event, details) => {
+  logDesktopDiagnostic({
+    scope: "main",
+    event: "app.child-process-gone",
+    payload: {
+      type: details.type,
+      reason: details.reason,
+      exitCode: details.exitCode,
+      serviceName: details.serviceName,
+      name: details.name,
+    },
+  });
+});
 
 function ensureDesktopConfig(): void {
   const configPath = resolve(desktopRoot, "..", "config.toml");

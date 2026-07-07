@@ -1,4 +1,5 @@
 import type { SessionMessage, SessionPayload } from "../shared/types";
+import { normalizeSessionMediaPaths } from "./chatMedia";
 
 function normalizeMessageId(message: SessionMessage): string {
   return String(message.id ?? "").trim();
@@ -13,7 +14,7 @@ function normalizeReplyMetadata(message: SessionMessage) {
 }
 
 function normalizeMedia(message: SessionMessage): string[] {
-  return (message.media ?? []).map((item) => item.trim());
+  return normalizeSessionMediaPaths(message.media);
 }
 
 function sameMedia(left: SessionMessage, right: SessionMessage): boolean {

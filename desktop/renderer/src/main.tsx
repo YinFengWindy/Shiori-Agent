@@ -31,6 +31,7 @@ import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleSearch } from "./app/roleSearch";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
+import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { useImageStudioState } from "./image/useImageStudioState";
 import { createRoleFormFromRole, isRoleFormDirty } from "./roles/roleFormState";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
@@ -47,6 +48,46 @@ import type {
   SessionPayload,
 } from "./shared/types";
 import "./styles.css";
+
+function reportRendererGlobalError(payload: {
+  kind: "error" | "unhandledrejection";
+  message: string;
+  stack?: string;
+  filename?: string;
+  lineno?: number;
+  colno?: number;
+  details?: Record<string, unknown>;
+}): void {
+  window.miraDesktop.reportRendererDiagnostic(payload);
+}
+
+function registerRendererGlobalDiagnostics(): void {
+  window.addEventListener("error", (event) => {
+    reportRendererGlobalError({
+      kind: "error",
+      message: event.message || "renderer error",
+      stack: event.error instanceof Error ? event.error.stack : undefined,
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+    });
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event.reason;
+    reportRendererGlobalError({
+      kind: "unhandledrejection",
+      message: reason instanceof Error
+        ? reason.message
+        : String(reason ?? "renderer unhandled rejection"),
+      stack: reason instanceof Error ? reason.stack : undefined,
+      details: reason instanceof Error
+        ? {}
+        : {
+            reason,
+          },
+    });
+  });
+}
 
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
@@ -706,4 +747,10 @@ function App(): React.ReactElement {
   );
 }
 
-createRoot(document.getElementById("root") as HTMLElement).render(<App />);
+registerRendererGlobalDiagnostics();
+
+createRoot(document.getElementById("root") as HTMLElement).render(
+  <DesktopErrorBoundary>
+    <App />
+  </DesktopErrorBoundary>,
+);

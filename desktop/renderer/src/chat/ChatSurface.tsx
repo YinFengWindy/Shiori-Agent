@@ -11,6 +11,7 @@ import {
 } from "./chatMessageWindow";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { summarizeChatReplyContent } from "./chatComposerState";
+import { normalizeSessionMediaPaths } from "./chatMedia";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { CopyIcon, DocumentIcon, QuoteIcon } from "../shared/icons";
@@ -330,7 +331,7 @@ export function ChatSurface({
   function getMessageReplyContent(message: SessionMessage): string {
     const content = message.content.trim();
     if (content) return content;
-    const media = Array.isArray(message.media) ? message.media.filter((item) => item.trim()) : [];
+    const media = normalizeSessionMediaPaths(message.media);
     if (!media.length) return "";
     return media.some((item) => isChatImageAsset(item)) ? "[图片]" : "[附件]";
   }
@@ -524,7 +525,7 @@ export function ChatSurface({
               const messageDomKey = getChatMessageDomKey(message, index);
               const isHighlighted = highlightedMessageKey === messageDomKey;
               const sourceLabel = getMessageSourceLabel(message);
-              const media = Array.isArray(message.media) ? message.media : [];
+              const media = normalizeSessionMediaPaths(message.media);
               const storedReplyPreview = getStoredReplyPreview(message);
               const bubbleClass = isError
                 ? "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(176,58,58,0.22)] bg-[rgba(255,244,244,0.96)] px-3.5 py-2.5 text-left text-[#8f2d2d] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"

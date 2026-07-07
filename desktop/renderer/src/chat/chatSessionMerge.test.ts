@@ -193,4 +193,42 @@ describe("mergeIncomingSessionDuringSend", () => {
     assert.deepEqual(merged?.messages, currentSession.messages);
     assert.equal(merged?.metadata.current_mood, "开心");
   });
+
+  it("treats malformed media payloads as empty instead of throwing during merge", () => {
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+        media: ["D:\\images\\mira.png", 9 as unknown as string],
+      },
+      {
+        role: "user",
+        content: "刚发出去的消息",
+      },
+    ]);
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+        media: ["D:\\images\\mira.png"],
+      },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
+
+    assert.deepEqual(merged?.messages, [
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+        media: ["D:\\images\\mira.png"],
+      },
+      {
+        role: "user",
+        content: "刚发出去的消息",
+      },
+    ]);
+  });
 });

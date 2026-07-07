@@ -51,6 +51,7 @@ declare module "electron" {
     whenReady(): Promise<void>;
     on(event: string, handler: (...args: unknown[]) => void): void;
     setPath(name: string, path: string): void;
+    getPath(name: string): string;
     quit(): void;
     exit(code?: number): void;
   };

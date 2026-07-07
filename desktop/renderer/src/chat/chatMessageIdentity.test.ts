@@ -30,6 +30,16 @@ describe("ensureChatMessageRenderId", () => {
 
     assert.match(message.render_id ?? "", /^local:user:\d+$/);
   });
+
+  it("keeps malformed media payloads from crashing render-id assignment", () => {
+    const message = ensureChatMessageRenderId({
+      role: "assistant",
+      content: "hello",
+      media: ["D:\\images\\mira.png", 7 as unknown as string],
+    });
+
+    assert.match(message.render_id ?? "", /^local:assistant:\d+$/);
+  });
 });
 
 describe("reconcileSessionMessageRenderIds", () => {
