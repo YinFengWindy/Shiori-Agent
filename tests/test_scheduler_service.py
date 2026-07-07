@@ -130,6 +130,42 @@ async def test_soft_records_latency(tmp_path, mock_push, mock_loop, fixed_now):
     assert len(tracker._samples) == 1
 
 
+async def test_stop_cancels_inflight_job_tasks(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def _slow_process_direct(**kwargs):
+        started.set()
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    mock_loop.process_direct = AsyncMock(side_effect=_slow_process_direct)
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(
+        trigger="at",
+        tier="soft",
+        fire_at=fixed_now - timedelta(seconds=30),
+        prompt="查询北京天气",
+    )
+    svc._jobs[job.id] = job
+
+    await svc._tick()
+    await started.wait()
+    svc.stop()
+    await asyncio.wait_for(cancelled.wait(), timeout=0.1)
+    await drain_tasks()
+
+    assert cancelled.is_set()
+    assert job.id in svc._jobs
+    assert job.id not in svc._in_flight
+    assert job.id not in svc._active_tasks
+
+
 # ── Timing: pre-trigger ──────────────────────────────────────────
 
 

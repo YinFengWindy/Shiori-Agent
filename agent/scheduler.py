@@ -355,6 +355,7 @@ class SchedulerService:
         self._now = _now_fn or (lambda: datetime.now(timezone.utc))
         self._jobs: dict[str, ScheduledJob] = {}
         self._in_flight: set[str] = set()
+        self._active_tasks: dict[str, asyncio.Task[None]] = {}
         self._running = False
 
     # ── Public API ───────────────────────────────────────────────
@@ -369,6 +370,9 @@ class SchedulerService:
 
     def stop(self) -> None:
         self._running = False
+        for job_id, task in list(self._active_tasks.items()):
+            task.cancel()
+            self._active_tasks.pop(job_id, None)
 
     def add_job(self, job: ScheduledJob) -> None:
         # Ensure fire_at is UTC-aware
@@ -448,16 +452,30 @@ class SchedulerService:
                     f"[scheduler] 触发任务 {label!r}  tier={job.tier}  channel={job.channel}:{job.chat_id}"
                 )
                 self._in_flight.add(job.id)
-                asyncio.create_task(self._execute_and_reschedule(job))
+                task = asyncio.create_task(
+                    self._execute_and_reschedule(job),
+                    name=f"scheduler:{job.id}",
+                )
+                self._active_tasks[job.id] = task
+                task.add_done_callback(
+                    lambda done, job_id=job.id: self._on_job_task_done(job_id, done)
+                )
 
     async def _execute_and_reschedule(self, job: ScheduledJob) -> None:
+        cancelled = False
         try:
             await self._execute(job)
             job.run_count += 1
+        except asyncio.CancelledError:
+            cancelled = True
+            logger.info("Job %s cancelled during shutdown", job.id[:8])
+            raise
         except Exception as e:
             logger.error(f"Job {job.id[:8]} execution failed: {e}", exc_info=True)
         finally:
             self._in_flight.discard(job.id)
+            if cancelled:
+                return
             now = self._now()
             if job.trigger == "every":
                 # SOFT recurring jobs may execute before nominal fire_at.
@@ -470,6 +488,10 @@ class SchedulerService:
             else:
                 self._jobs.pop(job.id, None)
             self.store.save(self._jobs)
+
+    def _on_job_task_done(self, job_id: str, task: asyncio.Task[None]) -> None:
+        if self._active_tasks.get(job_id) is task:
+            self._active_tasks.pop(job_id, None)
 
     async def _execute(self, job: ScheduledJob) -> None:
         label = job.name or job.id[:8]
@@ -514,7 +536,11 @@ class SchedulerService:
                 logger.warning(f"[scheduler] soft AI 返回空内容 {label!r}，跳过推送")
 
     def _get_agent_loop(self) -> Any:
-        loop = self._agent_loop_provider() if self._agent_loop_provider else self.agent_loop
+        loop = (
+            self._agent_loop_provider()
+            if self._agent_loop_provider
+            else self.agent_loop
+        )
         if loop is None:
             raise RuntimeError("scheduler soft job requires agent_loop")
         return loop

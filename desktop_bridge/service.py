@@ -45,7 +45,9 @@ class DesktopBridgeService:
         self.agent_loop = agent_loop
         self.event_bus = event_bus
         self.config = config
-        self._event_listeners: set[Callable[[dict[str, Any]], Awaitable[None] | None]] = set()
+        self._event_listeners: set[
+            Callable[[dict[str, Any]], Awaitable[None] | None]
+        ] = set()
         self._chat_tasks: set[asyncio.Task[None]] = set()
         self._self_seed_generator = self._build_self_seed_generator()
         self.role_service = role_service or RoleAggregateService.from_runtime(
@@ -87,14 +89,45 @@ class DesktopBridgeService:
                 message=message,
                 media=media,
             )
-            await self._broadcast_session_updated(request_id="proactive", session=session)
+            await self._broadcast_session_updated(
+                request_id="proactive", session=session
+            )
 
         push_tool.register_channel(
             "desktop",
-            text=lambda chat_id, message: _emit_session_for_chat(chat_id, message=message),
-            file=lambda chat_id, file_path, _name=None: _emit_session_for_chat(chat_id, media=[file_path]),
-            image=lambda chat_id, image_path: _emit_session_for_chat(chat_id, media=[image_path]),
+            text=lambda chat_id, message: _emit_session_for_chat(
+                chat_id, message=message
+            ),
+            file=lambda chat_id, file_path, _name=None: _emit_session_for_chat(
+                chat_id, media=[file_path]
+            ),
+            image=lambda chat_id, image_path: _emit_session_for_chat(
+                chat_id, media=[image_path]
+            ),
         )
+
+    async def _apply_post_persist_runtime_effects(
+        self,
+        session: Session,
+        *,
+        record_presence,
+        handle_relationship,
+    ) -> Session:
+        """Apply derived runtime side effects only after the message is persisted."""
+        if record_presence is not None:
+            record_presence(session.key)
+        metadata_changed = False
+        if handle_relationship is not None and self.relationship_runtime is not None:
+            handle_relationship(session.key)
+            enriched_metadata = self.relationship_runtime.enrich_session_metadata(
+                dict(session.metadata),
+            )
+            if enriched_metadata != session.metadata:
+                session.metadata = enriched_metadata
+                metadata_changed = True
+        if metadata_changed:
+            await self.session_manager.save_async(session)
+        return session
 
     async def _apply_desktop_push(
         self,
@@ -113,6 +146,8 @@ class DesktopBridgeService:
             media=normalized_media,
         ):
             return session
+        original_length = len(session.messages)
+        original_updated_at = session.updated_at
         session.add_message(
             "assistant",
             normalized_message,
@@ -120,15 +155,25 @@ class DesktopBridgeService:
             proactive=True,
             tools_used=["message_push"],
         )
-        if self.presence is not None:
-            self.presence.record_proactive_sent(session.key)
-        if self.relationship_runtime is not None:
-            self.relationship_runtime.handle_proactive_sent(session.key)
-            session.metadata = self.relationship_runtime.enrich_session_metadata(
-                dict(session.metadata),
-            )
-        await self.session_manager.save_async(session)
-        return session
+        try:
+            await self.session_manager.save_async(session)
+        except Exception:
+            del session.messages[original_length:]
+            session.updated_at = original_updated_at
+            raise
+        return await self._apply_post_persist_runtime_effects(
+            session,
+            record_presence=(
+                self.presence.record_proactive_sent
+                if self.presence is not None
+                else None
+            ),
+            handle_relationship=(
+                self.relationship_runtime.handle_proactive_sent
+                if self.relationship_runtime is not None
+                else None
+            ),
+        )
 
     def _is_existing_desktop_push(
         self,
@@ -144,8 +189,12 @@ class DesktopBridgeService:
             return False
         if str(last_message.get("content") or "") != message:
             return False
-        last_media = [str(item).strip() for item in list(last_message.get("media") or []) if str(item).strip()]
-        return all(item in last_media for item in media)
+        last_media = [
+            str(item).strip()
+            for item in list(last_message.get("media") or [])
+            if str(item).strip()
+        ]
+        return last_media == media
 
     def _build_desktop_user_message_metadata(
         self,
@@ -164,21 +213,31 @@ class DesktopBridgeService:
         media: list[str],
         metadata: dict[str, object] | None,
     ) -> Session:
+        original_length = len(session.messages)
+        original_updated_at = session.updated_at
         session.add_message(
             "user",
             content,
             media=media or None,
             metadata=self._build_desktop_user_message_metadata(metadata),
         )
-        if self.presence is not None:
-            self.presence.record_user_message(session.key)
-        if self.relationship_runtime is not None:
-            self.relationship_runtime.handle_user_message(session.key)
-            session.metadata = self.relationship_runtime.enrich_session_metadata(
-                dict(session.metadata),
-            )
-        await self.session_manager.append_messages(session, session.messages[-1:])
-        return session
+        try:
+            await self.session_manager.append_messages(session, session.messages[-1:])
+        except Exception:
+            del session.messages[original_length:]
+            session.updated_at = original_updated_at
+            raise
+        return await self._apply_post_persist_runtime_effects(
+            session,
+            record_presence=(
+                self.presence.record_user_message if self.presence is not None else None
+            ),
+            handle_relationship=(
+                self.relationship_runtime.handle_user_message
+                if self.relationship_runtime is not None
+                else None
+            ),
+        )
 
     async def handle(
         self,
@@ -188,7 +247,9 @@ class DesktopBridgeService:
     ) -> BridgeResponse:
         request_id = str(request.get("id") or "").strip() or "bridge-request"
         method = str(request.get("method") or "").strip()
-        payload = request.get("payload") if isinstance(request.get("payload"), dict) else {}
+        payload = (
+            request.get("payload") if isinstance(request.get("payload"), dict) else {}
+        )
 
         try:
             if method == "health":
@@ -197,7 +258,12 @@ class DesktopBridgeService:
                 return self._ok(
                     request_id,
                     method,
-                    {"roles": [self._serialize_role(role) for role in self.role_service.repository.list_roles()]},
+                    {
+                        "roles": [
+                            self._serialize_role(role)
+                            for role in self.role_service.repository.list_roles()
+                        ]
+                    },
                 )
             if method == "roles.create":
                 avatar_source = str(payload.get("avatar_source") or "").strip() or None
@@ -221,7 +287,9 @@ class DesktopBridgeService:
                     avatar_source=avatar_source,
                     illustration_sources=illustration_sources,
                 )
-                return self._ok(request_id, method, {"role": self._serialize_role(aggregate.role)})
+                return self._ok(
+                    request_id, method, {"role": self._serialize_role(aggregate.role)}
+                )
             if method == "roles.update":
                 avatar_source = str(payload.get("avatar_source") or "").strip() or None
                 avatar_asset = str(payload.get("avatar_asset") or "").strip() or None
@@ -233,11 +301,17 @@ class DesktopBridgeService:
                 )
                 raw_removed_illustrations = payload.get("removed_illustrations")
                 removed_illustrations = (
-                    [str(item) for item in raw_removed_illustrations if str(item).strip()]
+                    [
+                        str(item)
+                        for item in raw_removed_illustrations
+                        if str(item).strip()
+                    ]
                     if isinstance(raw_removed_illustrations, list)
                     else None
                 )
-                chat_background = str(payload.get("chat_background") or "").strip() or None
+                chat_background = (
+                    str(payload.get("chat_background") or "").strip() or None
+                )
                 aggregate = await self.role_service.update_role_async(
                     str(payload.get("role_id") or ""),
                     name=payload.get("name"),
@@ -258,7 +332,9 @@ class DesktopBridgeService:
                     removed_illustrations=removed_illustrations,
                     clear_illustrations=bool(payload.get("clear_illustrations")),
                 )
-                return self._ok(request_id, method, {"role": self._serialize_role(aggregate.role)})
+                return self._ok(
+                    request_id, method, {"role": self._serialize_role(aggregate.role)}
+                )
             if method == "roles.delete":
                 role_id = str(payload.get("role_id") or "").strip()
                 deleted, session_deleted = self.role_service.delete_role(role_id)
@@ -284,7 +360,9 @@ class DesktopBridgeService:
             if method == "roles.bindings.replace":
                 raw_bindings = payload.get("bindings")
                 if not isinstance(raw_bindings, list):
-                    return self._error(request_id, method, "invalid_request", "bindings 必须是数组")
+                    return self._error(
+                        request_id, method, "invalid_request", "bindings 必须是数组"
+                    )
                 bindings = self.role_service.bindings.replace_bindings(
                     [
                         {
@@ -325,7 +403,9 @@ class DesktopBridgeService:
                 active_illustration = payload.get("active_illustration")
                 session = self.role_service.sessions.update_display_state(
                     aggregate.role,
-                    active_illustration=str(active_illustration) if active_illustration else None,
+                    active_illustration=(
+                        str(active_illustration) if active_illustration else None
+                    ),
                 )
                 await self._emit_session_updated(
                     request_id=request_id,
@@ -346,11 +426,18 @@ class DesktopBridgeService:
                     if isinstance(raw_media, list)
                     else []
                 )
-                reply_to_message_id = str(payload.get("reply_to_message_id") or "").strip()
+                reply_to_message_id = str(
+                    payload.get("reply_to_message_id") or ""
+                ).strip()
                 reply_to_content = str(payload.get("reply_to_content") or "").strip()
                 reply_to_sender = str(payload.get("reply_to_sender") or "").strip()
                 if not content and not media:
-                    return self._error(request_id, method, "invalid_request", "content 和 media 不能同时为空")
+                    return self._error(
+                        request_id,
+                        method,
+                        "invalid_request",
+                        "content 和 media 不能同时为空",
+                    )
                 aggregate = await self.role_service.open_role_async(role_id)
                 session = aggregate.session
                 inbound_content = content
@@ -410,7 +497,9 @@ class DesktopBridgeService:
                 )
             if method == "novelai.generate":
                 if self.novelai_service is None:
-                    return self._error(request_id, method, "invalid_request", "NovelAI 未配置")
+                    return self._error(
+                        request_id, method, "invalid_request", "NovelAI 未配置"
+                    )
                 role_id = str(payload.get("role_id") or "").strip()
                 session_key = str(payload.get("session_key") or "").strip()
                 if not session_key and role_id:
@@ -479,7 +568,9 @@ class DesktopBridgeService:
         except Exception as exc:
             return self._error(request_id, method, "internal_error", str(exc))
 
-        return self._error(request_id, method, "unknown_method", f"unknown method: {method}")
+        return self._error(
+            request_id, method, "unknown_method", f"unknown method: {method}"
+        )
 
     async def _run_chat_turn(
         self,
@@ -596,7 +687,9 @@ class DesktopBridgeService:
         self._chat_tasks.add(task)
         task.add_done_callback(self._chat_tasks.discard)
 
-    def _ok(self, request_id: str, method: str, payload: dict[str, Any]) -> BridgeResponse:
+    def _ok(
+        self, request_id: str, method: str, payload: dict[str, Any]
+    ) -> BridgeResponse:
         return BridgeResponse(
             id=request_id,
             type="response",

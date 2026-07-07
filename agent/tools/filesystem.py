@@ -16,6 +16,7 @@ from agent.tools.base import Tool, ToolResult
 logger = logging.getLogger(__name__)
 _FILE_MUTATION_LOCKS: dict[str, asyncio.Lock] = {}
 
+
 def _resolve_path(path: str, allowed_dir: Path | None = None) -> Path:
     """解析路径（展开 ~ 并取绝对路径），可选限制在允许目录内。
 
@@ -28,8 +29,12 @@ def _resolve_path(path: str, allowed_dir: Path | None = None) -> Path:
         resolved = (allowed_dir / p).resolve()
     else:
         resolved = p.resolve()
-    if allowed_dir and not str(resolved).startswith(str(allowed_dir.resolve())):
-        raise PermissionError(f"路径 {path} 超出允许目录 {allowed_dir}")
+    if allowed_dir is not None:
+        allowed_root = allowed_dir.resolve()
+        try:
+            resolved.relative_to(allowed_root)
+        except ValueError as exc:
+            raise PermissionError(f"路径 {path} 超出允许目录 {allowed_dir}") from exc
     return resolved
 
 
@@ -258,13 +263,25 @@ def _truncate_numbered_lines(
         used_bytes += line_bytes
         output_lines += 1
 
-    return "".join(parts), truncated_by is not None, truncated_by, False, output_lines, used_bytes
+    return (
+        "".join(parts),
+        truncated_by is not None,
+        truncated_by,
+        False,
+        output_lines,
+        used_bytes,
+    )
 
 
 class ReadFileTool(Tool):
     """读取文件内容，支持按行分页，超大文件自动截断。"""
 
-    def __init__(self, allowed_dir: Path | None = None, multimodal: bool = True, vl_available: bool = False):
+    def __init__(
+        self,
+        allowed_dir: Path | None = None,
+        multimodal: bool = True,
+        vl_available: bool = False,
+    ):
         self._allowed_dir = allowed_dir
         self._multimodal = multimodal
         self._vl_available = vl_available
@@ -360,10 +377,7 @@ class ReadFileTool(Tool):
                 first_line_too_long,
                 output_lines,
                 output_bytes,
-            ) = _truncate_numbered_lines(
-                sliced,
-                numbered_lines
-            )
+            ) = _truncate_numbered_lines(sliced, numbered_lines)
 
             suffix_note = ""
             end_line = offset + len(sliced)
@@ -380,9 +394,7 @@ class ReadFileTool(Tool):
                     f"建议用 limit=N 分段读取，例如 offset={offset} limit=100。]"
                 )
             elif offset > 0 or limit is not None:
-                suffix_note = (
-                    f"\n\n[第 {offset + 1}–{end_line} 行 / 共 {total_lines} 行 / {total_bytes} 字节]"
-                )
+                suffix_note = f"\n\n[第 {offset + 1}–{end_line} 行 / 共 {total_lines} 行 / {total_bytes} 字节]"
             elif total_lines > len(sliced):
                 suffix_note = f"\n\n[共 {total_lines} 行 / {total_bytes} 字节]"
 
@@ -446,6 +458,7 @@ class WriteFileTool(Tool):
             return f"错误：{e}"
         except Exception as e:
             return f"写入文件失败：{e}"
+
 
 class EditFileTool(Tool):
     """精确替换文件中的指定文本片段。"""
@@ -540,6 +553,7 @@ class EditFileTool(Tool):
             return f"错误：{e}"
         except Exception as e:
             return f"编辑文件失败：{e}"
+
 
 class ListDirTool(Tool):
     """列举目录内容。"""

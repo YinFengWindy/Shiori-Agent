@@ -589,6 +589,70 @@ async def test_desktop_bridge_chat_send_updates_presence_and_loneliness_runtime(
 
 
 @pytest.mark.asyncio
+async def test_desktop_bridge_chat_send_rolls_back_runtime_side_effects_when_persist_fails(
+    tmp_path: Path,
+):
+    class _Presence:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def record_user_message(self, session_key: str) -> None:
+            self.calls.append(session_key)
+
+    class _Relationship:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def handle_user_message(self, session_key: str) -> None:
+            self.calls.append(session_key)
+
+        def enrich_session_metadata(
+            self,
+            metadata: dict[str, object],
+        ) -> dict[str, object]:
+            metadata["relationship"] = "updated"
+            return metadata
+
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    session_manager.append_messages = AsyncMock(side_effect=RuntimeError("db down"))  # type: ignore[method-assign]
+    presence = _Presence()
+    relationship = _Relationship()
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+        relationship_runtime=relationship,  # type: ignore[arg-type]
+        presence=presence,
+    )
+
+    response = await service.handle(
+        {
+            "id": "1",
+            "method": "chat.send",
+            "payload": {"role_id": role.id, "content": "hi"},
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert response.error is not None
+    assert response.error.code == "internal_error"
+    assert presence.calls == []
+    assert relationship.calls == []
+    session = session_manager.get_or_create("role:mira")
+    assert session.messages == []
+    assert session.metadata.get("relationship") is None
+
+
+@pytest.mark.asyncio
 async def test_desktop_bridge_chat_send_rejects_empty_content_and_media(tmp_path: Path):
     role_store = RoleStore(tmp_path)
     role = role_store.create_role(
@@ -659,6 +723,68 @@ async def test_desktop_bridge_emits_session_updated_for_background_desktop_push(
 
 
 @pytest.mark.asyncio
+async def test_desktop_bridge_push_rolls_back_runtime_side_effects_when_persist_fails(
+    tmp_path: Path,
+):
+    class _Presence:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def record_proactive_sent(self, session_key: str) -> None:
+            self.calls.append(session_key)
+
+    class _Relationship:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def handle_proactive_sent(self, session_key: str) -> None:
+            self.calls.append(session_key)
+
+        def enrich_session_metadata(
+            self,
+            metadata: dict[str, object],
+        ) -> dict[str, object]:
+            metadata["relationship"] = "updated"
+            return metadata
+
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    session_manager.save_async = AsyncMock(side_effect=RuntimeError("db down"))  # type: ignore[method-assign]
+    push_tool = MessagePushTool()
+    presence = _Presence()
+    relationship = _Relationship()
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+        push_tool=push_tool,
+        relationship_runtime=relationship,  # type: ignore[arg-type]
+        presence=presence,
+    )
+
+    result = await push_tool.execute(
+        channel="desktop",
+        chat_id=role.id,
+        message="主动消息",
+    )
+
+    assert "发送失败" in result
+    assert presence.calls == []
+    assert relationship.calls == []
+    session = session_manager.get_or_create("role:mira")
+    assert session.messages == []
+    assert session.metadata.get("relationship") is None
+
+
+@pytest.mark.asyncio
 async def test_desktop_bridge_desktop_push_does_not_duplicate_existing_proactive_message(
     tmp_path: Path,
 ):
@@ -696,6 +822,48 @@ async def test_desktop_bridge_desktop_push_does_not_duplicate_existing_proactive
 
     session_after = session_manager.get_or_create("role:mira")
     assert len(session_after.messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_desktop_bridge_push_does_not_treat_subset_media_as_duplicate(
+    tmp_path: Path,
+):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="you are mira",
+    )
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.open_role_session(
+        role.id,
+        role_name=role.name,
+    )
+    session.add_message(
+        "assistant",
+        "主动消息",
+        media=["a.png", "b.png"],
+        proactive=True,
+        tools_used=["message_push"],
+    )
+    await session_manager.save_async(session)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+
+    updated_session = await service._apply_desktop_push(
+        role.id,
+        message="主动消息",
+        media=["a.png"],
+    )
+
+    assert len(updated_session.messages) == 2
+    assert updated_session.messages[-1]["media"] == ["a.png"]
 
 
 @pytest.mark.asyncio
