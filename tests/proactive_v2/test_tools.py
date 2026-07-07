@@ -309,7 +309,12 @@ async def test_recall_memory_passes_query_to_facade_interest_request():
     fake_memory.query = AsyncMock(return_value=SimpleNamespace(records=[]))
     now = datetime(2026, 4, 4, 14, 0, 0, tzinfo=timezone.utc)
     await _recall_memory(
-        ctx=AgentTickContext(now_utc=now),
+        ctx=AgentTickContext(
+            now_utc=now,
+            session_key="role:mira",
+            target_channel="telegram",
+            target_chat_id="100",
+        ),
         args={"query": "q"},
         memory=fake_memory,
     )
@@ -319,6 +324,10 @@ async def test_recall_memory_passes_query_to_facade_interest_request():
     assert request.effect == "read_only"
     assert request.limit == 2
     assert request.timestamp == now
+    assert request.scope.role_id == "mira"
+    assert request.scope.session_key == "role:mira"
+    assert request.scope.channel == "telegram"
+    assert request.scope.chat_id == "100"
 
 
 @pytest.mark.asyncio

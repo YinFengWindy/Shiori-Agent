@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+from agent.core.passive_support import predict_current_user_source_ref
 from agent.core.passive_turn import get_session_metadata
 from agent.core.runtime_support import AgentLoopRunner, PromptRenderRunner, TurnRunResult
 from agent.lifecycle.types import PromptRenderInput
@@ -72,10 +73,17 @@ async def process_spawn_completion_event(
     )
 
     # 2. 再调用主模型生成用户可见回复。
+    session_metadata = get_session_metadata(session)
     tools.set_context(
         channel=item.channel,
         chat_id=item.chat_id,
+        session_key=key,
+        role_id=str(session_metadata.get("role_id") or "").strip(),
         current_timestamp=item.timestamp.isoformat(),
+        current_user_source_ref=predict_current_user_source_ref(
+            session_manager=session_svc.session_manager,
+            session=session,
+        ),
     )
     prompt_render = await prompt_render_fn(
         PromptRenderInput(
@@ -90,7 +98,7 @@ async def process_spawn_completion_event(
             retrieved_memory_block="",
             disabled_sections=set(),
             turn_injection_prompt="",
-            session_metadata=get_session_metadata(session),
+            session_metadata=session_metadata,
         )
     )
     initial_messages = prompt_render.messages

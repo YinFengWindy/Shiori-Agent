@@ -50,6 +50,9 @@ async def test_core_runner_routes_passive_message_to_agent_core():
 async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
     session = MagicMock()
     session.get_history.return_value = [{"role": "user", "content": "old"}]
+    session.metadata = {"role_id": "mira"}
+    session.key = "scheduler:job-1"
+    session.messages = [{"id": "telegram:123:9"}]
     session_svc = SimpleNamespace(
         session_manager=SimpleNamespace(get_or_create=MagicMock(return_value=session))
     )
@@ -112,7 +115,10 @@ async def test_core_runner_handles_spawn_completion_via_direct_helper_deps():
     tools.set_context.assert_called_once_with(
         channel="telegram",
         chat_id="123",
+        session_key="scheduler:job-1",
+        role_id="mira",
         current_timestamp=item.timestamp.isoformat(),
+        current_user_source_ref="telegram:123:9",
     )
     prompt_render_fn.assert_awaited_once()
     render_input = prompt_render_fn.await_args.args[0]

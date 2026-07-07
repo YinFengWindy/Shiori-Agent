@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-from core.memory.engine import MemoryQuery
+from core.memory.engine import MemoryQuery, MemoryScope
 from agent.prompting import is_context_frame
 from proactive_v2.context import AgentTickContext
 from proactive_v2.outbound_text import normalize_outbound_text
@@ -205,14 +205,36 @@ TERMINAL_TOOL_SCHEMAS: list[dict] = [
 
 async def _recall_memory(ctx: AgentTickContext, args: dict, *, memory) -> str:
     query = args["query"]
-    hits = await _retrieve_interest_hits(memory=memory, query=query, timestamp=ctx.now_utc)
+    hits = await _retrieve_interest_hits(
+        memory=memory,
+        query=query,
+        timestamp=ctx.now_utc,
+        scope=_memory_scope_from_tick_context(ctx),
+    )
     if not hits:
         return json.dumps({"result": "", "hits": 0}, ensure_ascii=False)
     texts = [h.get("text", "") for h in hits if h.get("text")]
     return json.dumps({"result": "\n---\n".join(texts), "hits": len(hits)}, ensure_ascii=False)
 
 
-async def _retrieve_interest_hits(*, memory, query: str, timestamp) -> list[dict]:
+def _memory_scope_from_tick_context(ctx: AgentTickContext) -> MemoryScope:
+    session_key = str(ctx.session_key or "").strip()
+    role_id = session_key.split(":", 1)[1] if session_key.startswith("role:") else ""
+    return MemoryScope(
+        role_id=role_id,
+        session_key=session_key,
+        channel=str(ctx.target_channel or "").strip(),
+        chat_id=str(ctx.target_chat_id or "").strip(),
+    )
+
+
+async def _retrieve_interest_hits(
+    *,
+    memory,
+    query: str,
+    timestamp,
+    scope: MemoryScope,
+) -> list[dict]:
     if memory is None:
         return []
 
@@ -222,6 +244,7 @@ async def _retrieve_interest_hits(*, memory, query: str, timestamp) -> list[dict
             text=query,
             intent="interest",
             effect="read_only",
+            scope=scope,
             limit=2,
             timestamp=timestamp,
         )

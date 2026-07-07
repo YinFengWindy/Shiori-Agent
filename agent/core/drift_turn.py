@@ -165,7 +165,7 @@ class DriftTurnPipeline:
         # 2.4 构建初始 messages。
         messages: list[dict] = [
             {"role": "system", "content": self._build_system_prompt()},
-            self._build_runtime_context_message(skills, connected_servers),
+            self._build_runtime_context_message(ctx, skills, connected_servers),
         ]
 
         return tools, messages, mounted_tool_names
@@ -305,6 +305,7 @@ class DriftTurnPipeline:
 
     def _build_runtime_context_message(
         self,
+        ctx: AgentTickContext | None,
         skills: list[SkillMeta],
         connected_servers: set[str] | None = None,
     ) -> dict[str, str]:
@@ -314,6 +315,14 @@ class DriftTurnPipeline:
         recent_context_text = ""
         if self._tool_deps.memory is not None:
             memory = cast("MemoryProfileApi", self._tool_deps.memory)
+            bind_session_metadata = getattr(memory, "bind_session_metadata", None)
+            role_id = ""
+            if ctx is not None:
+                session_key = str(ctx.session_key or "").strip()
+                if session_key.startswith("role:"):
+                    role_id = session_key.split(":", 1)[1]
+            if callable(bind_session_metadata):
+                bind_session_metadata({"role_id": role_id} if role_id else None)
             try:
                 raw = str(memory.read_long_term() or "").strip()
                 if raw:

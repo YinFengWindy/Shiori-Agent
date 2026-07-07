@@ -210,7 +210,12 @@ def test_drift_system_prompt_discourages_stuck_skill_and_lists_new_tools(tmp_pat
         ),
     )
     prompt = pipeline._build_system_prompt()
-    runtime = str(pipeline._build_runtime_context_message(store.scan_skills())["content"])
+    runtime = str(
+        pipeline._build_runtime_context_message(
+            None,
+            store.scan_skills(),
+        )["content"]
+    )
     assert "不要因为某个 skill 最近刚运行过" in prompt
     assert "如果这个 skill 当前明显处于“等待用户回复/等待外部条件”的状态，就不要选它" in prompt
     assert "对用户的表达要像此刻自然想到的一句聊天" in prompt
@@ -221,6 +226,48 @@ def test_drift_system_prompt_discourages_stuck_skill_and_lists_new_tools(tmp_pat
     assert "shell" in prompt
     assert is_context_frame(runtime)
     assert "drift_skills" in runtime
+
+
+def test_drift_runtime_context_binds_role_memory_from_ctx(tmp_path: Path):
+    _write_skill(tmp_path)
+    store = DriftStateStore(tmp_path)
+
+    class _Memory:
+        def __init__(self) -> None:
+            self.bound: dict[str, str] | None = None
+
+        def bind_session_metadata(self, metadata):
+            self.bound = metadata
+
+        def read_long_term(self) -> str:
+            role_id = str((self.bound or {}).get("role_id") or "")
+            return f"memory:{role_id}"
+
+        def read_recent_context(self) -> str:
+            role_id = str((self.bound or {}).get("role_id") or "")
+            return f"recent:{role_id}"
+
+    memory = _Memory()
+    pipeline = _make_drift_pipeline(
+        store=store,
+        tool_deps=DriftToolDeps(
+            drift_dir=tmp_path,
+            store=store,
+            memory=memory,
+            shared_tools=_build_shared_tools(),
+        ),
+    )
+
+    content = str(
+        pipeline._build_runtime_context_message(
+            AgentTickContext(session_key="role:mira"),
+            store.scan_skills(),
+        )["content"]
+    )
+
+    assert memory.bound == {"role_id": "mira"}
+    assert "memory:mira" in content
+    assert "recent:mira" in content
 
 
 @pytest.mark.asyncio
@@ -951,6 +998,7 @@ def test_system_prompt_includes_mcp_directory(tmp_path: Path):
     )
     content = str(
         pipeline._build_runtime_context_message(
+            None,
             store.scan_skills(), shared.get_mcp_server_names()
         )["content"]
     )
@@ -970,7 +1018,13 @@ def test_system_prompt_no_mcp_block_without_servers(tmp_path: Path):
         store=store,
         tool_deps=DriftToolDeps(drift_dir=tmp_path, store=store, shared_tools=_build_shared_tools()),
     )
-    content = str(pipeline._build_runtime_context_message(store.scan_skills(), set())["content"])
+    content = str(
+        pipeline._build_runtime_context_message(
+            None,
+            store.scan_skills(),
+            set(),
+        )["content"]
+    )
     assert "可挂载的外部能力" not in content
     assert "mount_server" not in content
 
@@ -985,6 +1039,7 @@ def test_system_prompt_skill_requires_mcp_annotation(tmp_path: Path):
     )
     content = str(
         pipeline._build_runtime_context_message(
+            None,
             store.scan_skills(), shared.get_mcp_server_names()
         )["content"]
     )
