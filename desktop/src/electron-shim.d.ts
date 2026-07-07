@@ -1,6 +1,15 @@
 declare module "electron" {
   export type IpcMainInvokeEvent = unknown;
   export type NativeImage = unknown;
+  export type MenuInstance = unknown;
+  export type BrowserWindowCloseEvent = {
+    preventDefault(): void;
+  };
+
+  export type MenuItemConstructorOptions = {
+    label?: string;
+    click?: () => void;
+  };
 
   export type Privileges = {
     standard?: boolean;
@@ -28,10 +37,16 @@ declare module "electron" {
   export interface BrowserWindowInstance {
     loadFile(path: string): Promise<void>;
     loadURL(url: string): Promise<void>;
+    show(): void;
+    hide(): void;
+    focus(): void;
+    restore(): void;
     minimize(): void;
     maximize(): void;
     unmaximize(): void;
     isMaximized(): boolean;
+    isMinimized(): boolean;
+    isVisible(): boolean;
     close(): void;
     on(event: string, handler: (...args: unknown[]) => void): void;
     webContents: {
@@ -66,6 +81,19 @@ declare module "electron" {
       properties?: string[];
       filters?: Array<{ name: string; extensions: string[] }>;
     }): Promise<{ canceled: boolean; filePaths: string[] }>;
+  };
+
+  export const Menu: {
+    buildFromTemplate(template: MenuItemConstructorOptions[]): MenuInstance;
+  };
+
+  export const Tray: {
+    new (image: NativeImage | string): {
+      setToolTip(toolTip: string): void;
+      setContextMenu(menu: MenuInstance): void;
+      destroy(): void;
+      on(event: string, handler: (...args: unknown[]) => void): void;
+    };
   };
 
   export const ipcMain: {

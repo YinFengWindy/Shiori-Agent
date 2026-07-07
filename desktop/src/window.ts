@@ -1,7 +1,10 @@
 import { BrowserWindow } from "electron";
 import { logDesktopDiagnostic } from "./diagnostics.js";
-import { attachWindowSmokeHandlers } from "./smoke.js";
 import { desktopWindowIcon, preloadScript, rendererDevServerUrl, rendererDist } from "./paths.js";
+
+type AttachDesktopWindowLifecycleOptions = {
+  shouldHideOnClose: () => boolean;
+};
 
 function emitWindowState(window: BrowserWindow): void {
   window.webContents.send("desktop:event", {
@@ -14,7 +17,7 @@ function emitWindowState(window: BrowserWindow): void {
   });
 }
 
-/** Creates the desktop shell window and wires renderer smoke hooks when requested. */
+/** Creates the desktop shell window. */
 export function createDesktopWindow(): BrowserWindow {
   const win = new BrowserWindow({
     title: "Shiori",
@@ -83,6 +86,30 @@ export function createDesktopWindow(): BrowserWindow {
     void win.loadFile(rendererDist);
   }
   win.webContents.on("did-finish-load", () => emitWindowState(win));
-  attachWindowSmokeHandlers(win);
   return win;
+}
+
+/** Restores a hidden desktop window and brings it back to the foreground. */
+export function showDesktopWindow(window: BrowserWindow): void {
+  if (window.isMinimized()) {
+    window.restore();
+  }
+  if (!window.isVisible()) {
+    window.show();
+  }
+  window.focus();
+}
+
+/** Keeps the desktop renderer alive when the user closes into the tray. */
+export function attachDesktopWindowLifecycle(
+  window: BrowserWindow,
+  { shouldHideOnClose }: AttachDesktopWindowLifecycleOptions,
+): void {
+  window.on("close", (event: { preventDefault(): void }) => {
+    if (!shouldHideOnClose()) {
+      return;
+    }
+    event.preventDefault();
+    window.hide();
+  });
 }

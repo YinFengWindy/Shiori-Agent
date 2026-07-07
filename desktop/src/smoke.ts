@@ -1,8 +1,92 @@
 import { app, type BrowserWindow } from "electron";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
 
+type AttachWindowSmokeHandlersOptions = {
+  hideToTrayEnabled?: boolean;
+  restoreWindow?: (window: BrowserWindow) => void;
+  requestExplicitQuit?: () => void;
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runTrayLifecycleSmoke(
+  win: BrowserWindow,
+  options: AttachWindowSmokeHandlersOptions,
+): Promise<{
+  ok: boolean;
+  hiddenAfterClose: boolean;
+  visibleAfterRestore: boolean;
+  bridgeRunningAfterClose: boolean;
+  bridgeRunningAfterRestore: boolean;
+  reason?: string;
+}> {
+  if (!options.hideToTrayEnabled || !options.restoreWindow || !options.requestExplicitQuit) {
+    return {
+      ok: false,
+      hiddenAfterClose: false,
+      visibleAfterRestore: false,
+      bridgeRunningAfterClose: false,
+      bridgeRunningAfterRestore: false,
+      reason: "tray-smoke-hooks-missing",
+    };
+  }
+  win.close();
+  await sleep(250);
+  const hiddenAfterClose = !win.isVisible();
+  if (!hiddenAfterClose) {
+    return {
+      ok: false,
+      hiddenAfterClose,
+      visibleAfterRestore: false,
+      bridgeRunningAfterClose: false,
+      bridgeRunningAfterRestore: false,
+      reason: "window-not-hidden-after-close",
+    };
+  }
+  const statusAfterClose = await win.webContents.executeJavaScript("window.miraDesktop.bridgeStatus()");
+  const bridgeRunningAfterClose = Boolean(statusAfterClose && typeof statusAfterClose === "object" && "running" in statusAfterClose && statusAfterClose.running);
+  if (!bridgeRunningAfterClose) {
+    return {
+      ok: false,
+      hiddenAfterClose,
+      visibleAfterRestore: false,
+      bridgeRunningAfterClose,
+      bridgeRunningAfterRestore: false,
+      reason: "bridge-not-running-after-close",
+    };
+  }
+  options.restoreWindow(win);
+  await sleep(250);
+  const visibleAfterRestore = win.isVisible();
+  if (!visibleAfterRestore) {
+    return {
+      ok: false,
+      hiddenAfterClose,
+      visibleAfterRestore,
+      bridgeRunningAfterClose,
+      bridgeRunningAfterRestore: false,
+      reason: "window-not-visible-after-restore",
+    };
+  }
+  const statusAfterRestore = await win.webContents.executeJavaScript("window.miraDesktop.bridgeStatus()");
+  const bridgeRunningAfterRestore = Boolean(statusAfterRestore && typeof statusAfterRestore === "object" && "running" in statusAfterRestore && statusAfterRestore.running);
+  return {
+    ok: bridgeRunningAfterRestore,
+    hiddenAfterClose,
+    visibleAfterRestore,
+    bridgeRunningAfterClose,
+    bridgeRunningAfterRestore,
+    reason: bridgeRunningAfterRestore ? undefined : "bridge-not-running-after-restore",
+  };
+}
+
 /** Attaches Electron-window smoke handlers used by desktop smoke scripts. */
-export function attachWindowSmokeHandlers(win: BrowserWindow): void {
+export function attachWindowSmokeHandlers(
+  win: BrowserWindow,
+  options: AttachWindowSmokeHandlersOptions = {},
+): void {
   if (process.env.MIRA_DESKTOP_UI_SMOKE === "1") {
     win.webContents.on("did-finish-load", async () => {
       try {
@@ -1115,8 +1199,17 @@ export function attachWindowSmokeHandlers(win: BrowserWindow): void {
       try {
         console.log("[desktop-smoke] renderer loaded");
         const result = await win.webContents.executeJavaScript("window.miraDesktop.smoke()");
-        console.log(`[desktop-smoke] ${JSON.stringify(result)}`);
-        app.exit(0);
+        const trayLifecycle = await runTrayLifecycleSmoke(win, options);
+        const payload = {
+          ...result,
+          trayLifecycle,
+        };
+        console.log(`[desktop-smoke] ${JSON.stringify(payload)}`);
+        if (!trayLifecycle.ok) {
+          app.exit(1);
+          return;
+        }
+        options.requestExplicitQuit?.();
       } catch (error) {
         console.error("[desktop-smoke] failed", error);
         app.exit(1);

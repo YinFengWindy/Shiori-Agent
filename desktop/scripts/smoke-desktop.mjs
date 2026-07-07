@@ -20,6 +20,7 @@ const proc = spawn(
 );
 
 let settled = false;
+let awaitingExplicitQuit = false;
 let stderr = "";
 let stdout = "";
 
@@ -65,8 +66,13 @@ proc.stdout.on("data", (chunk) => {
         && parsed?.openedSession?.payload?.session?.key === `role:${parsed.createdRole.payload.role.id}`
         && parsed?.deletedRole?.payload?.deleted === true
         && parsed?.deletedRole?.payload?.session_deleted === true
+        && parsed?.trayLifecycle?.ok === true
+        && parsed?.trayLifecycle?.hiddenAfterClose === true
+        && parsed?.trayLifecycle?.visibleAfterRestore === true
+        && parsed?.trayLifecycle?.bridgeRunningAfterClose === true
+        && parsed?.trayLifecycle?.bridgeRunningAfterRestore === true
       ) {
-        finish(0, "desktop renderer bridge smoke ok");
+        awaitingExplicitQuit = true;
         return;
       }
       finish(1, `desktop smoke payload invalid: ${payload}\nSTDERR:\n${stderr}`);
@@ -77,6 +83,10 @@ proc.stdout.on("data", (chunk) => {
 });
 
 proc.on("exit", (code) => {
+  if (awaitingExplicitQuit && code === 0) {
+    finish(0, "desktop renderer bridge smoke ok");
+    return;
+  }
   finish(1, `desktop exited before smoke completed (${code ?? "unknown"})\nSTDERR:\n${stderr}\nSTDOUT:\n${stdout}`);
 });
 

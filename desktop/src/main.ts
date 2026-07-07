@@ -2,17 +2,23 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
-import { app, BrowserWindow, protocol } from "electron";
+import { app, protocol, type BrowserWindow } from "electron";
 import { getLocalAssetMimeType } from "./assetMime.js";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 import { startBridge, wireBridgeEvents } from "./bridgeLifecycle.js";
 import { logDesktopDiagnostic } from "./diagnostics.js";
 import { registerDesktopIpc } from "./ipc.js";
 import { desktopRoot } from "./paths.js";
-import { createDesktopWindow } from "./window.js";
+import { attachWindowSmokeHandlers } from "./smoke.js";
+import { createDesktopTray } from "./tray.js";
+import { attachDesktopWindowLifecycle, createDesktopWindow, showDesktopWindow } from "./window.js";
 
 const bridge = new DesktopBridgeClient();
 const assetScheme = "mira-asset";
+const trayLifecycleEnabled = process.platform === "win32";
+let desktopWindow: BrowserWindow | null = null;
+let desktopTray: ReturnType<typeof createDesktopTray> | null = null;
+let isQuitting = false;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -113,27 +119,87 @@ function registerAssetProtocol(): void {
   });
 }
 
-app.whenReady().then(() => {
+function requestAppQuit(): void {
+  isQuitting = true;
+  app.quit();
+}
+
+function shouldHideDesktopWindowOnClose(): boolean {
+  return trayLifecycleEnabled && !isQuitting;
+}
+
+function wireDesktopWindow(window: BrowserWindow): BrowserWindow {
+  attachDesktopWindowLifecycle(window, {
+    shouldHideOnClose: shouldHideDesktopWindowOnClose,
+  });
+  attachWindowSmokeHandlers(window, {
+    hideToTrayEnabled: trayLifecycleEnabled,
+    restoreWindow: showDesktopWindow,
+    requestExplicitQuit: requestAppQuit,
+  });
+  window.on("closed", () => {
+    if (desktopWindow === window) {
+      desktopWindow = null;
+    }
+  });
+  return window;
+}
+
+function getOrCreateDesktopWindow(): BrowserWindow {
+  if (desktopWindow) {
+    return desktopWindow;
+  }
+  desktopWindow = wireDesktopWindow(createDesktopWindow());
+  return desktopWindow;
+}
+
+function showOrCreateDesktopWindow(): BrowserWindow {
+  const window = getOrCreateDesktopWindow();
+  showDesktopWindow(window);
+  return window;
+}
+
+void app.whenReady().then(() => {
   ensureDesktopConfig();
   registerAssetProtocol();
   void startBridge(bridge);
   wireBridgeEvents(bridge);
   registerDesktopIpc({ bridge, desktopRoot });
-  createDesktopWindow();
+  getOrCreateDesktopWindow();
+  if (trayLifecycleEnabled) {
+    desktopTray = createDesktopTray({
+      onShowWindow: () => {
+        showOrCreateDesktopWindow();
+      },
+      onQuitRequested: requestAppQuit,
+    });
+  }
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createDesktopWindow();
-    }
+    showOrCreateDesktopWindow();
   });
+}).catch((error) => {
+  logDesktopDiagnostic({
+    scope: "main",
+    event: "app.whenReady.failed",
+    payload: {
+      error,
+    },
+  });
+  app.exit(1);
 });
 
 app.on("window-all-closed", () => {
+  if (!isQuitting && trayLifecycleEnabled) {
+    return;
+  }
   if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
 app.on("before-quit", () => {
+  isQuitting = true;
+  desktopTray?.destroy();
   bridge.stop();
 });
 
