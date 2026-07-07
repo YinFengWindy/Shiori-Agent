@@ -627,6 +627,66 @@ class SessionStore:
             row.update(extra)
         return row
 
+    def replace_session_messages(
+        self,
+        session_key: str,
+        *,
+        rows: list[dict[str, Any]],
+        updated_at: str,
+        last_consolidated: int,
+        next_seq: int,
+    ) -> None:
+        """Atomically replace one session's persisted message snapshot."""
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._conn.execute(
+                    "DELETE FROM messages WHERE session_key = ?",
+                    (session_key,),
+                )
+                for row in rows:
+                    tool_chain = row.get("tool_chain")
+                    extra = row.get("extra")
+                    self._conn.execute(
+                        """
+                        INSERT INTO messages (id, session_key, seq, role, content, tool_chain, extra, ts)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            str(row["id"]),
+                            session_key,
+                            int(row["seq"]),
+                            str(row["role"]),
+                            str(row["content"]),
+                            (
+                                json.dumps(tool_chain, ensure_ascii=False)
+                                if tool_chain is not None
+                                else None
+                            ),
+                            json.dumps(extra or {}, ensure_ascii=False),
+                            str(row["timestamp"]),
+                        ),
+                    )
+                self._conn.execute(
+                    """
+                    UPDATE sessions
+                    SET updated_at = ?,
+                        last_consolidated = ?,
+                        next_seq = ?
+                    WHERE key = ?
+                    """,
+                    (
+                        updated_at,
+                        int(last_consolidated),
+                        max(0, int(next_seq)),
+                        session_key,
+                    ),
+                )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+
     def fetch_session_messages(self, session_key: str) -> list[dict[str, Any]]:
         with self._lock:
             rows = self._conn.execute(

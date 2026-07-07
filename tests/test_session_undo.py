@@ -6,7 +6,6 @@ from pathlib import Path
 from plugins.plugin_undo.plugin import _find_last_passive_turn, _undo_last_turn
 from session.manager import SessionManager
 
-
 _FRAME = '<system-reminder data-system-context-frame="true">内部</system-reminder>'
 
 
@@ -17,11 +16,15 @@ def _run(coro):
 def _add_turn(session, index: int, *, standalone_frame: bool = True) -> None:
     if standalone_frame:
         session.add_message("user", _FRAME)
-    session.add_message("user", f"u{index}", llm_context_frame=None if standalone_frame else _FRAME)
+    session.add_message(
+        "user", f"u{index}", llm_context_frame=None if standalone_frame else _FRAME
+    )
     session.add_message("assistant", f"a{index}")
 
 
-def _saved_manager(tmp_path: Path, *, turns: int, standalone_frame: bool = True) -> SessionManager:
+def _saved_manager(
+    tmp_path: Path, *, turns: int, standalone_frame: bool = True
+) -> SessionManager:
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("cli:1")
     for index in range(turns):
@@ -66,7 +69,14 @@ def test_undo_uses_rollback_source_ids_for_consolidated_window_start(tmp_path: P
         _undo_last_turn(
             manager,
             "cli:1",
-            rollback_source_ids=["cli:1:0", "cli:1:1", "cli:1:2", "cli:1:3", "cli:1:4", "cli:1:5"],
+            rollback_source_ids=[
+                "cli:1:0",
+                "cli:1:1",
+                "cli:1:2",
+                "cli:1:3",
+                "cli:1:4",
+                "cli:1:5",
+            ],
             expected_message_ids=message_ids,
         )
     )
@@ -115,3 +125,15 @@ def test_undo_does_not_reuse_deleted_tail_message_ids(tmp_path: Path):
     manager.save(session)
 
     assert [m["id"] for m in session.messages] == ["cli:1:3", "cli:1:4"]
+
+
+def test_session_clear_persists_deleted_messages(tmp_path: Path):
+    manager = _saved_manager(tmp_path, turns=1)
+    session = manager.get_or_create("cli:1")
+
+    session.clear()
+    manager.save(session)
+    manager.invalidate("cli:1")
+
+    reloaded = manager.get_or_create("cli:1")
+    assert reloaded.messages == []

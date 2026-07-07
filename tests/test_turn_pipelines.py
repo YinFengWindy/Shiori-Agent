@@ -118,6 +118,8 @@ def test_stream_event_sink_respects_suppression_flag():
 @pytest.mark.asyncio
 async def test_process_direct_suppresses_stream_and_memory_when_requested():
     loop = object.__new__(AgentLoop)
+    loop._active_tasks = {}
+    loop._active_turn_states = {}
     loop._process = AsyncMock(
         return_value=OutboundMessage(
             channel="telegram",
@@ -148,6 +150,46 @@ async def test_process_direct_suppresses_stream_and_memory_when_requested():
         "disabled_tools": ["message_push"],
     }
     assert loop._process.await_args.kwargs["dispatch_outbound"] is False
+
+
+@pytest.mark.asyncio
+async def test_process_direct_registers_interruptible_active_task():
+    loop = object.__new__(AgentLoop)
+    loop._active_tasks = {}
+    loop._active_turn_states = {}
+    loop._interrupt_states = {}
+    loop._processing_state = None
+    loop._event_bus = EventBus()
+
+    async def _slow_process(*args, **kwargs):
+        await asyncio.sleep(1)
+        return OutboundMessage(channel="desktop", chat_id="role:mira", content="ok")
+
+    loop._process = _slow_process
+
+    task = asyncio.create_task(
+        AgentLoop.process_direct(
+            loop,
+            content="hi",
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
+        )
+    )
+    await asyncio.sleep(0)
+
+    result = AgentLoop.request_interrupt(
+        loop,
+        "role:mira",
+        sender="desktop",
+        command="/cancel",
+    )
+
+    assert result.status == "interrupted"
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert "role:mira" not in loop._active_tasks
+    assert "role:mira" not in loop._active_turn_states
 
 
 def _make_loop(
@@ -288,6 +330,7 @@ async def test_resumed_interrupt_state_completes_normally(tmp_path: Path):
         original_user_message="原始消息 A",
         partial_reply="半截回答",
     )
+
     async def _slow_process(*args, **kwargs):
         await asyncio.sleep(0.05)
         return MagicMock(content="ok")

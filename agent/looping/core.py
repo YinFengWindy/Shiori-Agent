@@ -101,7 +101,9 @@ def _suppresses_stream_events(msg: object) -> bool:
 def _item_content(item: InboundItem) -> str:
     if isinstance(item, InboundMessage):
         return item.content
-    return f"[后台任务完成] {item.event.label or item.event.status or item.event.job_id}"
+    return (
+        f"[后台任务完成] {item.event.label or item.event.status or item.event.job_id}"
+    )
 
 
 class AgentLoop:
@@ -232,8 +234,12 @@ class AgentLoop:
                     session_key=session_key,
                     channel=channel,
                     chat_id=chat_id,
-                    content_delta=content_delta if isinstance(content_delta, str) else "",
-                    thinking_delta=thinking_delta if isinstance(thinking_delta, str) else "",
+                    content_delta=(
+                        content_delta if isinstance(content_delta, str) else ""
+                    ),
+                    thinking_delta=(
+                        thinking_delta if isinstance(thinking_delta, str) else ""
+                    ),
                 )
             )
 
@@ -644,12 +650,24 @@ class AgentLoop:
             media=list(media or []),
             metadata=merged_metadata,
         )
-        response = await self._process(
-            msg,
-            session_key=session_key,
-            dispatch_outbound=False,
+        key = session_key
+        self._active_turn_states[key] = self._build_initial_turn_state(msg, key)
+        task = asyncio.create_task(
+            self._process(
+                msg,
+                session_key=key,
+                dispatch_outbound=False,
+            ),
+            name=f"agent_loop_direct:{key}",
         )
-        return response.content if response else ""
+        self._active_tasks[key] = task
+        try:
+            response = await task
+            return response.content if response else ""
+        finally:
+            if self._active_tasks.get(key) is task:
+                self._active_tasks.pop(key, None)
+                self._active_turn_states.pop(key, None)
 
     async def _run_agent_loop(
         self,

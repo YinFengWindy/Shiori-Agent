@@ -132,11 +132,22 @@ class RoleStore:
             domain="roles",
         )
 
-    def _remove_asset_relpath(self, rel_path: str | None) -> None:
+    def _resolve_asset_path(self, rel_path: str | None) -> Path | None:
         normalized = _normalize_rel_path(rel_path)
         if not normalized:
+            return None
+        target = (self.roles_dir / normalized).resolve()
+        assets_root = self.assets_dir.resolve()
+        try:
+            target.relative_to(assets_root)
+        except ValueError:
+            raise ValueError(f"角色素材路径越界: {normalized}") from None
+        return target
+
+    def _remove_asset_relpath(self, rel_path: str | None) -> None:
+        target = self._resolve_asset_path(rel_path)
+        if target is None:
             return
-        target = self.roles_dir / normalized
         try:
             if target.is_file():
                 target.unlink()
@@ -179,7 +190,9 @@ class RoleStore:
 
         with self._lock:
             roles = self.list_roles()
-            resolved_id = str(role_id).strip() if role_id else f"role-{uuid.uuid4().hex[:12]}"
+            resolved_id = (
+                str(role_id).strip() if role_id else f"role-{uuid.uuid4().hex[:12]}"
+            )
             if any(role.id == resolved_id for role in roles):
                 raise ValueError(f"role 已存在: {resolved_id}")
             now = _now_iso()
@@ -259,17 +272,23 @@ class RoleStore:
                     role.avatar = None
                 if avatar_source is not None:
                     self._remove_asset_relpath(role.avatar)
-                    role.avatar = self.import_asset(role.id, avatar_source, prefix="avatar")
+                    role.avatar = self.import_asset(
+                        role.id, avatar_source, prefix="avatar"
+                    )
                 if avatar_asset is not None:
                     clean_avatar_asset = _normalize_rel_path(avatar_asset)
-                    if clean_avatar_asset and not self._is_role_asset_path(role.id, clean_avatar_asset):
+                    if clean_avatar_asset and not self._is_role_asset_path(
+                        role.id, clean_avatar_asset
+                    ):
                         raise ValueError(f"角色素材不存在: {clean_avatar_asset}")
                     role.avatar = clean_avatar_asset
                 if clear_chat_background:
                     role.chat_background = None
                 if chat_background is not None:
                     clean_chat_background = _normalize_rel_path(chat_background)
-                    if clean_chat_background and not self._is_role_asset_path(role.id, clean_chat_background):
+                    if clean_chat_background and not self._is_role_asset_path(
+                        role.id, clean_chat_background
+                    ):
                         raise ValueError(f"角色素材不存在: {clean_chat_background}")
                     role.chat_background = clean_chat_background
                 if clear_illustrations:

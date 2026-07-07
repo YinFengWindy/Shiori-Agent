@@ -247,7 +247,25 @@ def test_role_store_removes_selected_illustration_only(tmp_path: Path):
     assert second_path.exists()
 
 
-def test_role_store_can_select_avatar_and_chat_background_from_asset_library(tmp_path: Path):
+def test_role_store_rejects_out_of_root_asset_deletion(tmp_path: Path):
+    outside = tmp_path.parent / "role-store-outside.txt"
+    outside.write_text("outside", encoding="utf-8")
+    store = RoleStore(tmp_path)
+
+    try:
+        store._remove_asset_relpath("../../role-store-outside.txt")
+    except ValueError as exc:
+        assert "路径越界" in str(exc)
+    else:
+        raise AssertionError("越界素材删除必须失败")
+
+    assert outside.exists()
+    outside.unlink()
+
+
+def test_role_store_can_select_avatar_and_chat_background_from_asset_library(
+    tmp_path: Path,
+):
     ill1 = tmp_path / "ill-1.png"
     ill1.write_bytes(b"ill-1")
     ill2 = tmp_path / "ill-2.png"
@@ -272,7 +290,9 @@ def test_role_store_can_select_avatar_and_chat_background_from_asset_library(tmp
     assert updated.chat_background == role.illustrations[1]
 
 
-def test_role_store_clears_selected_assets_when_underlying_asset_removed(tmp_path: Path):
+def test_role_store_clears_selected_assets_when_underlying_asset_removed(
+    tmp_path: Path,
+):
     ill1 = tmp_path / "ill-1.png"
     ill1.write_bytes(b"ill-1")
     ill2 = tmp_path / "ill-2.png"
@@ -301,7 +321,9 @@ def test_role_store_clears_selected_assets_when_underlying_asset_removed(tmp_pat
     assert updated.chat_background is None
 
 
-def test_role_aggregate_service_initializes_role_session_and_memory_space(tmp_path: Path):
+def test_role_aggregate_service_initializes_role_session_and_memory_space(
+    tmp_path: Path,
+):
     class _SelfSeed:
         def generate(self, role) -> str:
             return (
@@ -341,7 +363,9 @@ def test_role_aggregate_service_initializes_role_session_and_memory_space(tmp_pa
     assert aggregate.role.runtime_config == {}
 
 
-def test_role_aggregate_service_updates_background_without_losing_history(tmp_path: Path):
+def test_role_aggregate_service_updates_background_without_losing_history(
+    tmp_path: Path,
+):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
@@ -382,15 +406,21 @@ def test_role_self_seed_generator_does_not_override_existing_self(tmp_path: Path
     )
 
     self_path = aggregate.memory_root / "SELF.md"
-    self_path.write_text("# 角色自我认知\n\n## 人格与形象\n- 旧内容\n", encoding="utf-8")
+    self_path.write_text(
+        "# 角色自我认知\n\n## 人格与形象\n- 旧内容\n", encoding="utf-8"
+    )
 
     reopened = service.open_role("mira")
 
     assert "旧内容" in (reopened.memory_root / "SELF.md").read_text(encoding="utf-8")
-    assert "新生成内容" not in (reopened.memory_root / "SELF.md").read_text(encoding="utf-8")
+    assert "新生成内容" not in (reopened.memory_root / "SELF.md").read_text(
+        encoding="utf-8"
+    )
 
 
-def test_role_aggregate_service_user_edit_first_impression_becomes_baseline(tmp_path: Path):
+def test_role_aggregate_service_user_edit_first_impression_becomes_baseline(
+    tmp_path: Path,
+):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
@@ -416,7 +446,9 @@ def test_role_aggregate_service_user_edit_first_impression_becomes_baseline(tmp_
     assert "关系基线修订" in history_text
 
 
-def test_role_aggregate_service_system_derived_cannot_override_user_relationship_baseline(tmp_path: Path):
+def test_role_aggregate_service_system_derived_cannot_override_user_relationship_baseline(
+    tmp_path: Path,
+):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
@@ -583,12 +615,16 @@ def test_role_legacy_migrator_keeps_unconfirmed_session_in_unresolved(tmp_path: 
     )
     summary = migrator.migrate()
 
-    unresolved = json.loads((tmp_path / "roles" / "migration_unresolved.json").read_text(encoding="utf-8"))
+    unresolved = json.loads(
+        (tmp_path / "roles" / "migration_unresolved.json").read_text(encoding="utf-8")
+    )
     assert summary.migrated_session_keys == []
     assert "telegram:404" in unresolved["unresolved_session_keys"]
 
 
-def test_role_legacy_migrator_is_idempotent_for_sessions_and_memory_items(tmp_path: Path):
+def test_role_legacy_migrator_is_idempotent_for_sessions_and_memory_items(
+    tmp_path: Path,
+):
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
@@ -633,7 +669,9 @@ def test_role_legacy_migrator_is_idempotent_for_sessions_and_memory_items(tmp_pa
     assert [item["content"] for item in migrated.messages] == ["hello"]
 
 
-def test_role_legacy_migrator_avoids_duplicate_messages_when_state_file_missing(tmp_path: Path):
+def test_role_legacy_migrator_avoids_duplicate_messages_when_state_file_missing(
+    tmp_path: Path,
+):
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,

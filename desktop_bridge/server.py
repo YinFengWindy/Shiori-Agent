@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sys
 from typing import Any
 
 from bootstrap.tools import CoreRuntime
 from core.integrations.novelai.store import NovelAIStore
 from core.roles import RoleStore
+from desktop_bridge.models import BridgeError, BridgeResponse
 from desktop_bridge.service import DesktopBridgeService
+
+logger = logging.getLogger("desktop.bridge")
 
 
 class DesktopBridgeServer:
@@ -44,8 +48,55 @@ class DesktopBridgeServer:
                 raw = raw.strip()
                 if not raw:
                     continue
-                request = json.loads(raw)
-                response = await self.service.handle(request, emit_event=_emit_event)
+                try:
+                    request = json.loads(raw)
+                except json.JSONDecodeError as exc:
+                    response = BridgeResponse(
+                        id="bridge-request",
+                        type="response",
+                        method="invalid_request",
+                        error=BridgeError(
+                            code="invalid_request",
+                            message=f"invalid JSON: {exc.msg}",
+                        ),
+                    )
+                else:
+                    if not isinstance(request, dict):
+                        response = BridgeResponse(
+                            id="bridge-request",
+                            type="response",
+                            method="invalid_request",
+                            error=BridgeError(
+                                code="invalid_request",
+                                message="request 必须是对象",
+                            ),
+                        )
+                    else:
+                        try:
+                            response = await self.service.handle(
+                                request,
+                                emit_event=_emit_event,
+                            )
+                        except Exception as exc:
+                            request_id = (
+                                str(request.get("id") or "").strip() or "bridge-request"
+                            )
+                            method = (
+                                str(request.get("method") or "").strip()
+                                or "bridge.internal"
+                            )
+                            logger.exception(
+                                "desktop bridge request failed: %s", method
+                            )
+                            response = BridgeResponse(
+                                id=request_id,
+                                type="response",
+                                method=method,
+                                error=BridgeError(
+                                    code="internal_error",
+                                    message=str(exc),
+                                ),
+                            )
                 async with write_lock:
                     await write_payload(response.to_dict())
         finally:

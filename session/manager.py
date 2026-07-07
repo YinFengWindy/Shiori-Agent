@@ -82,17 +82,19 @@ def _build_proactive_history_messages(
     if not meta:
         return messages
     frame = build_context_frame_message(
-        build_context_frame_content([
-            PromptSectionRender(
-                name="recent_proactive_message_meta",
-                content=(
-                    "上一条 assistant 消息是系统主动推送。"
-                    "以下 metadata 仅用于理解用户后续指代，不是用户陈述。\n"
-                    + _truncate_text(meta, _PROACTIVE_META_HISTORY_CHAR_BUDGET)
-                ),
-                is_static=False,
-            )
-        ])
+        build_context_frame_content(
+            [
+                PromptSectionRender(
+                    name="recent_proactive_message_meta",
+                    content=(
+                        "上一条 assistant 消息是系统主动推送。"
+                        "以下 metadata 仅用于理解用户后续指代，不是用户陈述。\n"
+                        + _truncate_text(meta, _PROACTIVE_META_HISTORY_CHAR_BUDGET)
+                    ),
+                    is_static=False,
+                )
+            ]
+        )
     )
     messages.append(frame)
     return messages
@@ -451,7 +453,117 @@ class SessionManager:
         }
         return {k: v for k, v in msg.items() if k not in skip}
 
-    def _persist_messages(self, session: Session, messages: list[dict[str, Any]]) -> int:
+    def _message_seq(self, session_key: str, msg: dict[str, Any]) -> int | None:
+        raw_seq = msg.get("seq")
+        if raw_seq is not None:
+            try:
+                return int(raw_seq)
+            except (TypeError, ValueError):
+                return None
+        raw_id = str(msg.get("id") or "").strip()
+        prefix = f"{session_key}:"
+        if not raw_id.startswith(prefix):
+            return None
+        try:
+            return int(raw_id[len(prefix) :])
+        except ValueError:
+            return None
+
+    def _message_snapshot(
+        self,
+        session_key: str,
+        msg: dict[str, Any],
+    ) -> dict[str, Any]:
+        content = msg.get("content", "")
+        if not isinstance(content, str):
+            content = json.dumps(content, ensure_ascii=False)
+        timestamp = str(msg.get("timestamp") or "")
+        return {
+            "id": str(msg.get("id") or ""),
+            "session_key": session_key,
+            "seq": self._message_seq(session_key, msg),
+            "role": str(msg.get("role") or "assistant"),
+            "content": content,
+            "timestamp": timestamp,
+            "tool_chain": msg.get("tool_chain"),
+            "extra": self._extract_extra(msg),
+        }
+
+    def _requires_full_message_sync(self, session: Session) -> bool:
+        persisted = self._store.fetch_session_messages(session.key)
+        persisted_ids = [str(msg.get("id") or "") for msg in persisted]
+        current_persisted = [
+            msg for msg in session.messages if str(msg.get("id") or "").strip()
+        ]
+        current_persisted_ids = [str(msg.get("id") or "") for msg in current_persisted]
+        if len(current_persisted_ids) != len(persisted_ids):
+            return True
+        if current_persisted_ids != persisted_ids:
+            return True
+        seen_unpersisted = False
+        for msg in session.messages:
+            if str(msg.get("id") or "").strip():
+                if seen_unpersisted:
+                    return True
+                continue
+            seen_unpersisted = True
+        persisted_by_id = {
+            str(msg.get("id") or ""): self._message_snapshot(session.key, msg)
+            for msg in persisted
+        }
+        for msg in current_persisted:
+            message_id = str(msg.get("id") or "")
+            if self._message_snapshot(session.key, msg) != persisted_by_id.get(
+                message_id
+            ):
+                return True
+        return False
+
+    def _replace_persisted_messages(self, session: Session) -> None:
+        next_seq = self._store.next_seq(session.key)
+        rows: list[dict[str, Any]] = []
+        for msg in session.messages:
+            timestamp = str(
+                msg.get("timestamp") or datetime.now().astimezone().isoformat()
+            )
+            msg["timestamp"] = timestamp
+            seq = self._message_seq(session.key, msg)
+            if seq is None:
+                seq = next_seq
+            message_id = str(msg.get("id") or "").strip() or f"{session.key}:{seq}"
+            next_seq = max(next_seq, seq + 1)
+            row = {
+                "id": message_id,
+                "session_key": session.key,
+                "seq": seq,
+                "role": str(msg.get("role") or "assistant"),
+                "content": msg.get("content", ""),
+                "timestamp": timestamp,
+                "tool_chain": msg.get("tool_chain"),
+                "extra": self._extract_extra(msg),
+            }
+            if not isinstance(row["content"], str):
+                row["content"] = json.dumps(row["content"], ensure_ascii=False)
+            msg.update(
+                {
+                    "id": message_id,
+                    "session_key": session.key,
+                    "seq": seq,
+                    "timestamp": timestamp,
+                }
+            )
+            rows.append(row)
+        self._store.replace_session_messages(
+            session.key,
+            rows=rows,
+            updated_at=session.updated_at.isoformat(),
+            last_consolidated=session.last_consolidated,
+            next_seq=next_seq,
+        )
+
+    def _persist_messages(
+        self, session: Session, messages: list[dict[str, Any]]
+    ) -> int:
         next_seq = self._store.next_seq(session.key)
         inserted = 0
 
@@ -486,7 +598,10 @@ class SessionManager:
     def save(self, session: Session) -> None:
         session.updated_at = datetime.now()
         self._ensure_session_meta(session)
-        self._persist_messages(session, session.messages)
+        if self._requires_full_message_sync(session):
+            self._replace_persisted_messages(session)
+        else:
+            self._persist_messages(session, session.messages)
         self._store.upsert_session(
             session.key,
             created_at=session.created_at.isoformat(),
