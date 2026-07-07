@@ -1,5 +1,5 @@
 import type React from "react";
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useEffectEvent, useRef, useState } from "react";
 import { type SettingsSectionId, settingsSections } from "./SettingsSidebar";
 import { SettingsToggleCard } from "./SettingsToggleCard";
 import {
@@ -19,6 +19,13 @@ import type {
   SettingsQQBotGroup,
   SettingsSnapshot,
 } from "../shared/types";
+import {
+  cloneSettings,
+  loadSettingsPageData,
+  saveSettingsPageData,
+  settingsEqual,
+  shouldRetryFailedSettingsLoad,
+} from "./settingsPersistence";
 
 type SavePhase =
   | "idle"
@@ -52,19 +59,6 @@ function splitLines(value: string): string[] {
     .filter(Boolean);
 }
 
-function cloneSettings(data: SettingsFormData): SettingsFormData {
-  return JSON.parse(JSON.stringify(data)) as SettingsFormData;
-}
-
-function hydrateSettingsSnapshot(snapshot: SettingsSnapshot, roleBindings: SettingsChannelRoleBinding[]): SettingsSnapshot {
-  const nextFormData = cloneSettings(snapshot.formData);
-  nextFormData.channels.roleBindings = roleBindings;
-  return {
-    ...snapshot,
-    formData: nextFormData,
-  };
-}
-
 function parseLauncher(value: string): string[] {
   return value
     .split("\n")
@@ -74,11 +68,6 @@ function parseLauncher(value: string): string[] {
 
 function formatLauncher(values: string[]): string {
   return values.join("\n");
-}
-
-function settingsEqual(left: SettingsFormData | null, right: SettingsFormData | null): boolean {
-  if (!left || !right) return false;
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function parseNumber(value: string, fallback: number): number {
@@ -366,45 +355,52 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   const [statusMessage, setStatusMessage] = useState("");
   const [activeSubsections, setActiveSubsections] = useState<Record<SettingsSectionId, string>>(createInitialSubsectionState);
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
+  const loadRequestIdRef = useRef(0);
   const floatingActionClass =
     "grid h-10 w-10 place-items-center rounded-full border bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-default disabled:border-black/6 disabled:bg-white/60 disabled:text-[#b8b8b8] disabled:shadow-none";
   const desktopTargetRoleId = draft?.proactive.targetRoleId.trim() ?? "";
   const desktopTargetChatId = desktopTargetRoleId ? `role:${desktopTargetRoleId}` : "";
   const proactiveTargetMeta = getBindingChatIdMeta(draft?.proactive.targetChannel ?? "");
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        if (typeof window.miraDesktop.readSettings !== "function") {
-          throw new Error("当前桌面进程版本过旧，请完全关闭并重新打开桌面端。");
-        }
-        const [nextSnapshot, nextBindings, rolesResponse] = await Promise.all([
-          window.miraDesktop.readSettings(),
-          window.miraDesktop.readChannelRoleBindings(),
-          window.miraDesktop.invoke({
-            method: "roles.list",
-            payload: {},
-          }),
-        ]);
-        if (cancelled) return;
-        const hydratedSnapshot = hydrateSettingsSnapshot(nextSnapshot, nextBindings.bindings);
-        if (rolesResponse.error) {
-          throw new Error(rolesResponse.error.message);
-        }
-        setSnapshot(hydratedSnapshot);
-        setDraft(cloneSettings(hydratedSnapshot.formData));
-        setRoles(Array.isArray(rolesResponse.payload.roles) ? rolesResponse.payload.roles as RoleRecord[] : []);
-        setLoadError("");
-        setSavePhase("idle");
-        setStatusMessage("");
-      } catch (error) {
-        if (cancelled) return;
-        setLoadError(error instanceof Error ? error.message : String(error));
+  const loadPageData = useEffectEvent(async () => {
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
+    try {
+      if (typeof window.miraDesktop.readSettings !== "function") {
+        throw new Error("当前桌面进程版本过旧，请完全关闭并重新打开桌面端。");
       }
-    })();
+      const loaded = await loadSettingsPageData(window.miraDesktop);
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
+      setSnapshot(loaded.snapshot);
+      setDraft(cloneSettings(loaded.snapshot.formData));
+      setRoles(loaded.roles);
+      setLoadError("");
+      setSavePhase("idle");
+      setStatusMessage("");
+    } catch (error) {
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
+      setLoadError(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  useEffect(() => {
+    void loadPageData();
+  }, []);
+
+  useEffect(() => {
+    if (!shouldRetryFailedSettingsLoad({ bridgeReady, loadError })) {
+      return;
+    }
+    void loadPageData();
+  }, [bridgeReady, loadError]);
+
+  useEffect(() => {
     return () => {
-      cancelled = true;
+      loadRequestIdRef.current += 1;
     };
   }, []);
 
@@ -481,24 +477,30 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     setSavePhase("saving");
     setStatusMessage("正在写入 config.toml...");
     try {
-      const [result] = await Promise.all([
-        window.miraDesktop.saveSettings(draft),
-        window.miraDesktop.saveChannelRoleBindings(draft.channels.roleBindings),
-      ]);
-      if (result.restart.ok) {
-        setSavePhase("saved");
-        setStatusMessage(result.health.ok ? "配置已保存，Bridge 已重启。" : `配置已保存，但健康检查失败：${result.health.message}`);
-      } else {
+      const result = await saveSettingsPageData(window.miraDesktop, draft, snapshot);
+      setSnapshot(result.snapshot);
+      setDraft(result.nextDraft);
+      if (!result.saveResult.restart.ok) {
         setSavePhase("restart-failed");
-        setStatusMessage(`配置已保存，但 Bridge 重启失败：${result.restart.lastError || "unknown error"}`);
+        setStatusMessage(
+          result.bindingsError
+            ? `配置已保存，但 Bridge 重启失败：${result.saveResult.restart.lastError || "unknown error"}；${result.bindingsError}`
+            : `配置已保存，但 Bridge 重启失败：${result.saveResult.restart.lastError || "unknown error"}`,
+        );
+        return;
       }
-      const [nextSnapshot, nextBindings] = await Promise.all([
-        window.miraDesktop.readSettings(),
-        window.miraDesktop.readChannelRoleBindings(),
-      ]);
-      const hydratedSnapshot = hydrateSettingsSnapshot(nextSnapshot, nextBindings.bindings);
-      setSnapshot(hydratedSnapshot);
-      setDraft(cloneSettings(hydratedSnapshot.formData));
+      if (result.bindingsError) {
+        setSavePhase("error");
+        setStatusMessage(`配置已保存，但频道角色绑定保存失败：${result.bindingsError}`);
+        return;
+      }
+      if (result.saveResult.health.ok) {
+        setSavePhase("saved");
+        setStatusMessage("配置已保存，Bridge 已重启。");
+        return;
+      }
+      setSavePhase("saved");
+      setStatusMessage(`配置已保存，但健康检查失败：${result.saveResult.health.message}`);
     } catch (error) {
       setSavePhase("error");
       setStatusMessage(error instanceof Error ? error.message : String(error));

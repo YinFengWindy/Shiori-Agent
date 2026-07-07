@@ -6,7 +6,7 @@ import type {
   SettingsPeerAgent,
   SettingsQQBotGroup,
   SettingsSnapshot,
-} from "../../../src/shared";
+} from "../../../src/shared.js";
 
 /** Role data returned by the desktop bridge. */
 export type RelationshipSnapshot = {

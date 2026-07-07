@@ -75,6 +75,16 @@ export class DesktopBridgeClient extends EventEmitter {
     this.pending.clear();
   }
 
+  private createBridgeExitResponse(id: string, method: string, message: string): BridgeResponse {
+    return {
+      id,
+      type: "response",
+      method,
+      payload: {},
+      error: { code: "bridge_exit", message },
+    };
+  }
+
   private async waitUntilReady(): Promise<void> {
     const response = await this.invoke({
       method: "health",
@@ -172,6 +182,14 @@ export class DesktopBridgeClient extends EventEmitter {
     } else if (!skipReady && this.startPromise) {
       await this.startPromise;
     }
+    const child = this.child;
+    if (!child) {
+      return this.createBridgeExitResponse(
+        "bridge-exit",
+        request.method,
+        this.lastError || "bridge stopped",
+      );
+    }
     const id = randomUUID();
     const payload: BridgeRequest = {
       id,
@@ -181,8 +199,51 @@ export class DesktopBridgeClient extends EventEmitter {
     const text = JSON.stringify(payload) + "\n";
 
     return await new Promise<BridgeResponse>((resolvePending) => {
-      this.pending.set(id, resolvePending);
-      this.child?.stdin.write(text);
+      let settled = false;
+      const resolveOnce = (value: BridgeResponse): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        this.pending.delete(id);
+        resolvePending(value);
+      };
+
+      this.pending.set(id, resolveOnce);
+
+      if (
+        this.child !== child
+        || child.killed
+        || child.exitCode !== null
+        || child.stdin.destroyed
+        || child.stdin.writable === false
+        || child.stdin.writableEnded
+      ) {
+        resolveOnce(
+          this.createBridgeExitResponse(
+            id,
+            request.method,
+            this.lastError || "bridge stopped",
+          ),
+        );
+        return;
+      }
+
+      child.stdin.write(text, (error?: Error | null) => {
+        if (!error) {
+          return;
+        }
+        resolveOnce({
+          id,
+          type: "response",
+          method: request.method,
+          payload: {},
+          error: {
+            code: "bridge_write_failed",
+            message: error.message,
+          },
+        });
+      });
     });
   }
 
