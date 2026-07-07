@@ -182,6 +182,158 @@ def test_consolidation_service_abstracts_nsfw_memory_conversation():
     assert "NSFW图" not in event_prompt
 
 
+def test_consolidation_recent_context_uses_main_model_for_nsfw_sessions():
+    memory = SimpleNamespace(
+        read_long_term=MagicMock(return_value="MEM"),
+        read_history=MagicMock(return_value=""),
+        read_recent_context=MagicMock(return_value=""),
+        write_recent_context=MagicMock(),
+        append_history_once=MagicMock(return_value=True),
+        append_pending_once=MagicMock(return_value=True),
+        append_journal=MagicMock(),
+        save_from_consolidation=AsyncMock(),
+        save_item=AsyncMock(return_value="new:profile-1"),
+        save_item_with_supersede=AsyncMock(return_value="new:profile-1"),
+    )
+
+    async def _main_chat_side_effect(**kwargs):
+        text = _message_text(kwargs)
+        if "近期语境压缩代理" in text:
+            return _Resp(
+                '{"active_topics":["关系明显升温"],"user_preferences":[],"follow_ups":[],"avoidances":[],"ongoing_threads":[]}'
+            )
+        return _Resp(
+            '{"history_entries":[{"summary":"[2026-07-01 23:16] 用户与角色的亲密关系继续升温","emotional_weight":7}],"pending_items":[]}'
+        )
+
+    main_provider = SimpleNamespace(chat=AsyncMock(side_effect=_main_chat_side_effect))
+    fast_provider = SimpleNamespace(chat=AsyncMock())
+    service = ConsolidationWorker(
+        profile_maint=cast(Any, memory),
+        provider=cast(Any, main_provider),
+        model="main-model",
+        keep_count=2,
+        recent_context_provider=cast(Any, fast_provider),
+        recent_context_model="fast-model",
+    )
+    session = SimpleNamespace(
+        key="role:mira",
+        metadata={
+            "role_id": "mira",
+            "role_runtime_config": {"nsfw_memory_enabled": True},
+        },
+        messages=[
+            {
+                "role": "user",
+                "content": "（用手抚摸你的脸，亲你，并将凶器塞入你的子宫）我爱你",
+                "timestamp": "2026-07-01T23:16:51",
+            },
+            {
+                "role": "assistant",
+                "content": "……我也……爱你……抱紧我……别放开……",
+                "timestamp": "2026-07-01T23:16:52",
+            },
+            {
+                "role": "user",
+                "content": "那你再抱紧一点。",
+                "timestamp": "2026-07-01T23:16:53",
+            },
+            {
+                "role": "assistant",
+                "content": "……知道啦，别催我。",
+                "timestamp": "2026-07-01T23:16:54",
+            },
+        ],
+        last_consolidated=0,
+        _channel="desktop",
+        _chat_id="role:mira",
+    )
+
+    draft = _prepare(service, session, archive_all=True)
+
+    assert draft is not None
+    fast_provider.chat.assert_not_awaited()
+    recent_context_call = next(
+        call
+        for call in main_provider.chat.await_args_list
+        if call.kwargs["messages"][0]["content"] == "你是近期语境压缩代理，只返回合法 JSON。"
+    )
+    assert recent_context_call.kwargs["model"] == "main-model"
+
+
+def test_consolidation_recent_context_keeps_fast_model_for_non_nsfw_sessions():
+    memory = SimpleNamespace(
+        read_long_term=MagicMock(return_value="MEM"),
+        read_history=MagicMock(return_value=""),
+        read_recent_context=MagicMock(return_value=""),
+        write_recent_context=MagicMock(),
+        append_history_once=MagicMock(return_value=True),
+        append_pending_once=MagicMock(return_value=True),
+        append_journal=MagicMock(),
+        save_from_consolidation=AsyncMock(),
+        save_item=AsyncMock(return_value="new:profile-1"),
+        save_item_with_supersede=AsyncMock(return_value="new:profile-1"),
+    )
+
+    async def _main_chat_side_effect(**kwargs):
+        return _Resp(
+            '{"history_entries":[{"summary":"[2026-03-15 10:00] 用户聊了 Zigbee 方案","emotional_weight":6}],"pending_items":[]}'
+        )
+
+    async def _fast_chat_side_effect(**kwargs):
+        return _Resp(
+            '{"active_topics":["用户最近关注 Zigbee 方案"],"user_preferences":[],"follow_ups":[],"avoidances":[],"ongoing_threads":[]}'
+        )
+
+    main_provider = SimpleNamespace(chat=AsyncMock(side_effect=_main_chat_side_effect))
+    fast_provider = SimpleNamespace(chat=AsyncMock(side_effect=_fast_chat_side_effect))
+    service = ConsolidationWorker(
+        profile_maint=cast(Any, memory),
+        provider=cast(Any, main_provider),
+        model="main-model",
+        keep_count=2,
+        recent_context_provider=cast(Any, fast_provider),
+        recent_context_model="fast-model",
+    )
+    session = SimpleNamespace(
+        key="cli:1",
+        metadata={},
+        messages=[
+            {
+                "role": "user",
+                "content": "我买了 Zigbee 网关",
+                "timestamp": "2026-03-15T10:00:00",
+            },
+            {
+                "role": "assistant",
+                "content": "记住了",
+                "timestamp": "2026-03-15T10:01:00",
+            },
+            {
+                "role": "user",
+                "content": "之后我还想继续聊本地控制。",
+                "timestamp": "2026-03-15T10:02:00",
+            },
+            {
+                "role": "assistant",
+                "content": "可以，之后继续展开。",
+                "timestamp": "2026-03-15T10:03:00",
+            },
+        ],
+        last_consolidated=0,
+        _channel="cli",
+        _chat_id="1",
+    )
+
+    draft = _prepare(service, session, archive_all=True)
+
+    assert draft is not None
+    recent_context_call = fast_provider.chat.await_args_list[0]
+    assert recent_context_call.kwargs["messages"][0]["content"] == "你是近期语境压缩代理，只返回合法 JSON。"
+    assert recent_context_call.kwargs["model"] == "fast-model"
+    assert main_provider.chat.await_count == 1
+
+
 def test_consolidation_service_uses_profile_maint_for_reads():
     memory_port = SimpleNamespace(
         save_from_consolidation=AsyncMock(),

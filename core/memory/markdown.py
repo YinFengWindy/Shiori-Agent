@@ -566,6 +566,15 @@ class _MarkdownConsolidationWorker:
         self._keep_count = keep_count
         self._consolidation_min_new_messages = max(5, keep_count // 2)
 
+    def _resolve_recent_context_llm(
+        self,
+        *,
+        nsfw_memory_enabled: bool,
+    ) -> tuple["LLMProvider", str]:
+        if nsfw_memory_enabled:
+            return self._provider, self._model
+        return self._recent_context_provider, self._recent_context_model
+
     @staticmethod
     def _build_recent_context_prompt(
         *,
@@ -776,10 +785,15 @@ ongoing_threads 严格限制：
         if hasattr(profile_maint, "read_recent_context"):
             old_recent_context = str(
                 await asyncio.to_thread(profile_maint.read_recent_context) or ""
-            )
+        )
         conversation = _format_conversation_for_recent_context(
             compact_source,
             nsfw_memory_enabled=nsfw_memory_enabled,
+        )
+        recent_context_provider, recent_context_model = (
+            self._resolve_recent_context_llm(
+                nsfw_memory_enabled=nsfw_memory_enabled,
+            )
         )
         compression: dict[str, list[str]] | None = None
         if conversation:
@@ -790,8 +804,8 @@ ongoing_threads 严格限制：
             )
             call_result = await self._call_llm_step(
                 step="recent_context",
-                provider=self._recent_context_provider,
-                model=self._recent_context_model,
+                provider=recent_context_provider,
+                model=recent_context_model,
                 messages=[
                     {
                         "role": "system",
