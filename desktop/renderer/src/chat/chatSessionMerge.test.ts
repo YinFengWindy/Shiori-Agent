@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mergeIncomingSessionDuringSend } from "./chatSessionMerge";
-import type { SessionMessage, SessionPayload } from "../shared/types";
+import { mergeIncomingSessionDuringSend } from "./chatSessionMerge.js";
+import type { SessionMessage, SessionPayload } from "../shared/types.js";
 
 function createSession(messages: SessionMessage[]): SessionPayload {
   return {
@@ -192,6 +192,93 @@ describe("mergeIncomingSessionDuringSend", () => {
 
     assert.deepEqual(merged?.messages, currentSession.messages);
     assert.equal(merged?.metadata.current_mood, "开心");
+  });
+
+  it("keeps the current local tail when chat.send resolves with an older shorter snapshot after streaming already started", () => {
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        id: "role:mira:2",
+        role: "user",
+        content: "刚发出去的消息",
+      },
+      {
+        role: "assistant",
+        content: "她",
+      },
+    ]);
+    currentSession.metadata = {
+      role_id: "mira",
+      current_mood: "平静",
+    };
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        id: "role:mira:2",
+        role: "user",
+        content: "刚发出去的消息",
+      },
+    ]);
+    incomingSession.metadata = {
+      role_id: "mira",
+      current_mood: "开心",
+    };
+
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
+
+    assert.deepEqual(merged?.messages, [
+      incomingSession.messages[0],
+      incomingSession.messages[1],
+      currentSession.messages[2],
+    ]);
+    assert.equal(merged?.metadata.current_mood, "开心");
+  });
+
+  it("keeps the current local tail even after sending flips false when a shorter equivalent snapshot arrives late", () => {
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        id: "role:mira:2",
+        role: "user",
+        content: "刚发出去的消息",
+      },
+      {
+        role: "assistant",
+        content: "她停",
+      },
+    ]);
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        id: "role:mira:2",
+        role: "user",
+        content: "刚发出去的消息",
+      },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, false);
+
+    assert.deepEqual(merged?.messages, [
+      incomingSession.messages[0],
+      incomingSession.messages[1],
+      currentSession.messages[2],
+    ]);
   });
 
   it("treats malformed media payloads as empty instead of throwing during merge", () => {

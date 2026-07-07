@@ -1,5 +1,5 @@
-import type { SessionMessage, SessionPayload } from "../shared/types";
-import { normalizeSessionMediaPaths } from "./chatMedia";
+import type { SessionMessage, SessionPayload } from "../shared/types.js";
+import { normalizeSessionMediaPaths } from "./chatMedia.js";
 
 function normalizeMessageId(message: SessionMessage): string {
   return String(message.id ?? "").trim();
@@ -102,6 +102,35 @@ function findMissingOptimisticUserMessage(
   return alreadyPersisted ? null : optimisticUserMessage;
 }
 
+function hasEquivalentIncomingPrefix(
+  currentSession: SessionPayload,
+  incomingSession: SessionPayload,
+): boolean {
+  if (incomingSession.messages.length >= currentSession.messages.length) {
+    return false;
+  }
+  return incomingSession.messages.every((incomingMessage, index) => (
+    areEquivalentMessagesIgnoringMissingIds(currentSession.messages[index], incomingMessage)
+  ));
+}
+
+function preserveCurrentMessageTail(
+  currentSession: SessionPayload,
+  incomingSession: SessionPayload,
+): SessionPayload {
+  return {
+    ...incomingSession,
+    metadata: {
+      ...(currentSession.metadata ?? {}),
+      ...(incomingSession.metadata ?? {}),
+    },
+    messages: [
+      ...incomingSession.messages,
+      ...currentSession.messages.slice(incomingSession.messages.length),
+    ],
+  };
+}
+
 /** Keeps the local optimistic user turn visible while older session snapshots are still arriving. */
 export function mergeIncomingSessionDuringSend(
   currentSession: SessionPayload | null,
@@ -110,6 +139,10 @@ export function mergeIncomingSessionDuringSend(
 ): SessionPayload | null {
   if (!currentSession || !incomingSession || currentSession.key !== incomingSession.key) {
     return incomingSession;
+  }
+
+  if (hasEquivalentIncomingPrefix(currentSession, incomingSession)) {
+    return preserveCurrentMessageTail(currentSession, incomingSession);
   }
 
   const optimisticUserIndex = findOptimisticUserIndex(currentSession.messages);
