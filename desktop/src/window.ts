@@ -6,6 +6,27 @@ type AttachDesktopWindowLifecycleOptions = {
   shouldHideOnClose: () => boolean;
 };
 
+type ReloadDesktopRendererOptions = {
+  revealAfterReload: boolean;
+};
+
+function loadDesktopRenderer(window: BrowserWindow): Promise<void> {
+  if (rendererDevServerUrl) {
+    return window.loadURL(rendererDevServerUrl);
+  }
+  return window.loadFile(rendererDist);
+}
+
+async function reloadDesktopRenderer(
+  window: BrowserWindow,
+  { revealAfterReload }: ReloadDesktopRendererOptions,
+): Promise<void> {
+  await loadDesktopRenderer(window);
+  if (revealAfterReload) {
+    showDesktopWindow(window);
+  }
+}
+
 function emitWindowState(window: BrowserWindow): void {
   window.webContents.send("desktop:event", {
     id: `window-state-${Date.now()}`,
@@ -19,6 +40,14 @@ function emitWindowState(window: BrowserWindow): void {
 
 /** Creates the desktop shell window. */
 export function createDesktopWindow(): BrowserWindow {
+  const rendererRecoveryTimestamps: number[] = [];
+
+  function canRecoverRenderer(now: number): boolean {
+    const recentTimestamps = rendererRecoveryTimestamps.filter((timestamp) => now - timestamp < 90_000);
+    rendererRecoveryTimestamps.splice(0, rendererRecoveryTimestamps.length, ...recentTimestamps);
+    return recentTimestamps.length < 3;
+  }
+
   const win = new BrowserWindow({
     title: "Shiori",
     icon: desktopWindowIcon,
@@ -77,14 +106,59 @@ export function createDesktopWindow(): BrowserWindow {
         exitCode: details.exitCode,
       },
     });
+    if (details.reason === "clean-exit") {
+      return;
+    }
+    const now = Date.now();
+    if (!canRecoverRenderer(now)) {
+      logDesktopDiagnostic({
+        scope: "main",
+        event: "window.render-process-recovery-skipped",
+        payload: {
+          reason: details.reason,
+          exitCode: details.exitCode,
+          note: "renderer crashed too many times in a short window",
+        },
+      });
+      return;
+    }
+    rendererRecoveryTimestamps.push(now);
+    const revealAfterReload = win.isVisible();
+    logDesktopDiagnostic({
+      scope: "main",
+      event: "window.render-process-recovery-started",
+      payload: {
+        reason: details.reason,
+        exitCode: details.exitCode,
+        revealAfterReload,
+      },
+    });
+    setTimeout(() => {
+      void reloadDesktopRenderer(win, { revealAfterReload }).then(() => {
+        logDesktopDiagnostic({
+          scope: "main",
+          event: "window.render-process-recovery-finished",
+          payload: {
+            reason: details.reason,
+            exitCode: details.exitCode,
+          },
+        });
+      }).catch((error) => {
+        logDesktopDiagnostic({
+          scope: "main",
+          event: "window.render-process-recovery-failed",
+          payload: {
+            reason: details.reason,
+            exitCode: details.exitCode,
+            error,
+          },
+        });
+      });
+    }, 350);
   });
   win.on("maximize", () => emitWindowState(win));
   win.on("unmaximize", () => emitWindowState(win));
-  if (rendererDevServerUrl) {
-    void win.loadURL(rendererDevServerUrl);
-  } else {
-    void win.loadFile(rendererDist);
-  }
+  void loadDesktopRenderer(win);
   win.webContents.on("did-finish-load", () => emitWindowState(win));
   return win;
 }

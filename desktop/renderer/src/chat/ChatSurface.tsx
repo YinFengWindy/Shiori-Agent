@@ -100,6 +100,9 @@ export function ChatSurface({
   onSendMessage,
   onToggleChatLatestImageSidebar,
 }: ChatSurfaceProps) {
+  const [visualsActive, setVisualsActive] = useState(() => (
+    typeof document === "undefined" ? true : !document.hidden
+  ));
   const conversationListRef = useRef<HTMLDivElement | null>(null);
   const messageContextMenuRef = useRef<HTMLDivElement | null>(null);
   const previousMessageCountRef = useRef(0);
@@ -128,6 +131,30 @@ export function ChatSurface({
       autoScrollingRef.current = false;
     }, behavior === "smooth" ? 320 : 0);
   };
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined;
+    }
+
+    const updateVisualsActive = () => {
+      setVisualsActive((current) => {
+        const next = !document.hidden;
+        return current === next ? current : next;
+      });
+    };
+
+    updateVisualsActive();
+    document.addEventListener("visibilitychange", updateVisualsActive);
+    window.addEventListener("focus", updateVisualsActive);
+    window.addEventListener("blur", updateVisualsActive);
+
+    return () => {
+      document.removeEventListener("visibilitychange", updateVisualsActive);
+      window.removeEventListener("focus", updateVisualsActive);
+      window.removeEventListener("blur", updateVisualsActive);
+    };
+  }, []);
 
   useEffect(() => {
     const updateScrollState = (options?: { allowUnstick?: boolean }) => {
@@ -284,7 +311,7 @@ export function ChatSurface({
     "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(228,228,228,0.66)] bg-[rgba(255,255,255,0.48)] px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-[10px] transition-colors duration-150 group-hover:bg-[rgba(255,255,255,0.72)]";
   const userMessageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
-  const hasIllustration = Boolean(visibleIllustrationUrl);
+  const hasIllustration = Boolean(visibleIllustrationUrl) && visualsActive;
   const showScrollToBottom = scrollState.isScrollable && !scrollState.isAtBottom;
   const hasChatImageHistory = chatLatestImageSidebarCount > 0;
   const canGoToPreviousChatImage = chatLatestImagePosition > 1;
@@ -693,6 +720,7 @@ export function ChatSurface({
                   roleSelfView={roleSelfView}
                   relationshipTags={relationshipTags}
                   lonelinessValue={lonelinessValue}
+                  visualsActive={visualsActive}
                 />
               ) : (
                 <div className="grid h-full min-h-0 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
@@ -710,7 +738,7 @@ export function ChatSurface({
                         </svg>
                       </button>
                     </div>
-                    {chatLatestImagePath ? (
+                    {chatLatestImagePath && visualsActive ? (
                       <button
                         className="grid h-full w-full place-items-center border-0 bg-transparent p-0"
                         type="button"
@@ -721,6 +749,7 @@ export function ChatSurface({
                           className="max-h-full max-w-full object-contain"
                           src={toFileUrl(chatLatestImagePath)}
                           alt="selected message image"
+                          decoding="async"
                         />
                       </button>
                     ) : (

@@ -6,6 +6,7 @@ type ChatStatusSidebarProps = {
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
+  visualsActive?: boolean;
 };
 
 /** Renders the chat status sidebar with the current mood and mapped illustration. */
@@ -15,17 +16,26 @@ export function ChatStatusSidebar({
   roleSelfView,
   relationshipTags,
   lonelinessValue,
+  visualsActive = true,
 }: ChatStatusSidebarProps) {
   const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
+  const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   return (
     <div className="grid h-full min-h-0 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto_auto] gap-3 rounded-[16px] bg-[#F4F7FB] p-3">
         <div className="grid min-h-0 place-items-center overflow-hidden rounded-[16px] bg-white p-4">
-          <img
-            className="max-h-full max-w-full object-contain"
-            src={moodIllustrationUrl}
-            alt={currentMood ? `${currentMood} status illustration` : "status illustration"}
-          />
+          {shouldRenderIllustration ? (
+            <img
+              className="max-h-full max-w-full object-contain"
+              src={moodIllustrationUrl}
+              alt={currentMood ? `${currentMood} status illustration` : "status illustration"}
+              decoding="async"
+            />
+          ) : (
+            <div className="grid h-full w-full place-items-center rounded-[14px] bg-[#F4F7FB] text-[12px] text-[#98A2B3]">
+              {visualsActive ? "当前状态图还没生成" : "窗口隐藏时已暂停图片渲染"}
+            </div>
+          )}
         </div>
         <div className="text-center">
           <div className="text-[11px] uppercase tracking-[0.16em] text-[#7A8593]">当前状态</div>
