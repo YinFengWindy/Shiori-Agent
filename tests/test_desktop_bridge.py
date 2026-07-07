@@ -43,6 +43,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
         session_key: str,
         channel: str,
         chat_id: str,
+        omit_user_turn: bool,
         stream_events: bool,
         media: list[str],
         **kwargs,
@@ -50,10 +51,10 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
         assert session_key == f"role:{role_id}"
         assert channel == "desktop"
         assert chat_id == f"role:{role_id}"
+        assert omit_user_turn is True
         assert stream_events is True
         assert media == ["D:\\files\\scene.png"]
         session = session_manager.get_or_create(session_key)
-        session.add_message("user", content, media=media or None)
         session.add_message("assistant", "hello")
         await session_manager.save_async(session)
         await event_bus.observe(
@@ -126,7 +127,9 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
 
     assert response.error is None
     assert response.payload["session"]["key"] == f"role:{role_id}"
-    assert response.payload["session"]["messages"] == []
+    assert [item["role"] for item in response.payload["session"]["messages"]] == ["user"]
+    assert response.payload["session"]["messages"][0]["content"] == "hi"
+    assert response.payload["session"]["messages"][0]["media"] == ["D:\\files\\scene.png"]
     await _wait_until(lambda: [item["method"] for item in emitted] == ["session.updated", "chat.delta", "chat.done", "session.updated"])
     methods = [item["method"] for item in emitted]
     assert methods == ["session.updated", "chat.delta", "chat.done", "session.updated"]
@@ -158,21 +161,13 @@ async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path:
         session_key: str,
         media: list[str],
         metadata: dict[str, object],
+        omit_user_turn: bool,
         **kwargs,
     ) -> str:
         seen["content"] = content
         seen["metadata"] = dict(metadata)
+        seen["omit_user_turn"] = omit_user_turn
         session = session_manager.get_or_create(session_key)
-        session.add_message(
-            "user",
-            str(metadata.get("persisted_user_content") or content),
-            media=media or None,
-            metadata={
-                key: value
-                for key, value in metadata.items()
-                if key != "persisted_user_content"
-            },
-        )
         session.add_message("assistant", "继续")
         await session_manager.save_async(session)
         return "继续"
@@ -215,6 +210,7 @@ async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path:
         "reply_to_content": "她沉默了很久。",
         "persisted_user_content": "再展开一点",
     }
+    assert seen["omit_user_turn"] is True
     session = session_manager.get_or_create("role:mira")
     user_message = session.messages[0]
     assert user_message["content"] == "再展开一点"

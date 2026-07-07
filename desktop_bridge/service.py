@@ -140,6 +140,32 @@ class DesktopBridgeService:
         last_media = [str(item).strip() for item in list(last_message.get("media") or []) if str(item).strip()]
         return all(item in last_media for item in media)
 
+    def _build_desktop_user_message_metadata(
+        self,
+        metadata: dict[str, object] | None,
+    ) -> dict[str, object]:
+        next_metadata = dict(metadata or {})
+        next_metadata.pop("persisted_user_content", None)
+        next_metadata.setdefault("source", "desktop")
+        return next_metadata
+
+    async def _persist_desktop_user_message(
+        self,
+        *,
+        session: Session,
+        content: str,
+        media: list[str],
+        metadata: dict[str, object] | None,
+    ) -> Session:
+        session.add_message(
+            "user",
+            content,
+            media=media or None,
+            metadata=self._build_desktop_user_message_metadata(metadata),
+        )
+        await self.session_manager.append_messages(session, session.messages[-1:])
+        return session
+
     async def handle(
         self,
         request: dict[str, Any],
@@ -314,6 +340,7 @@ class DesktopBridgeService:
                 aggregate = await self.role_service.open_role_async(role_id)
                 session = aggregate.session
                 inbound_content = content
+                persisted_user_content = content
                 metadata: dict[str, object] = {}
                 if reply_to_message_id:
                     metadata["reply_to_message_id"] = reply_to_message_id
@@ -327,12 +354,19 @@ class DesktopBridgeService:
                         reply_text=reply_to_content,
                         reply_sender=reply_to_sender,
                     )
+                await self._persist_desktop_user_message(
+                    session=session,
+                    content=persisted_user_content,
+                    media=media,
+                    metadata=metadata,
+                )
                 self._start_chat_turn(
                     request_id=request_id,
                     session_key=session.key,
                     content=inbound_content,
                     media=media,
                     metadata=metadata,
+                    omit_user_turn=True,
                     emit_event=emit_event,
                 )
                 return self._ok(
@@ -441,6 +475,7 @@ class DesktopBridgeService:
         content: str,
         media: list[str],
         metadata: dict[str, object] | None,
+        omit_user_turn: bool,
         emit_event,
     ) -> tuple[Session, list[BridgeEvent]]:
         collected: list[BridgeEvent] = []
@@ -488,6 +523,7 @@ class DesktopBridgeService:
                 session_key=session_key,
                 channel="desktop",
                 chat_id=session_key,
+                omit_user_turn=omit_user_turn,
                 media=media,
                 metadata=metadata,
                 stream_events=True,
@@ -525,6 +561,7 @@ class DesktopBridgeService:
         content: str,
         media: list[str],
         metadata: dict[str, object] | None,
+        omit_user_turn: bool,
         emit_event,
     ) -> None:
         async def _runner() -> None:
@@ -535,6 +572,7 @@ class DesktopBridgeService:
                     content=content,
                     media=media,
                     metadata=metadata,
+                    omit_user_turn=omit_user_turn,
                     emit_event=emit_event,
                 )
             except Exception:
