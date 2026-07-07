@@ -4,6 +4,18 @@ function normalizeMessageId(message: SessionMessage): string {
   return String(message.id ?? "").trim();
 }
 
+function hasUnpersistedTailMessages(
+  currentSession: SessionPayload,
+  incomingSession: SessionPayload,
+): boolean {
+  if (incomingSession.messages.length >= currentSession.messages.length) {
+    return false;
+  }
+  return currentSession.messages
+    .slice(incomingSession.messages.length)
+    .some((message) => !normalizeMessageId(message));
+}
+
 function normalizeReplyMetadata(message: SessionMessage) {
   return {
     messageId: String(message.metadata?.reply_to_message_id ?? "").trim(),
@@ -56,7 +68,11 @@ export function mergeIncomingSessionDuringSend(
   incomingSession: SessionPayload | null,
   sending: boolean,
 ): SessionPayload | null {
-  if (!currentSession || !incomingSession || !sending || currentSession.key !== incomingSession.key) {
+  if (!currentSession || !incomingSession || currentSession.key !== incomingSession.key) {
+    return incomingSession;
+  }
+  const shouldProtectLocalTail = sending || hasUnpersistedTailMessages(currentSession, incomingSession);
+  if (!shouldProtectLocalTail) {
     return incomingSession;
   }
   if (!isIncomingPrefixOfCurrent(currentSession, incomingSession)) {

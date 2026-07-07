@@ -54,6 +54,7 @@ describe("mergeIncomingSessionDuringSend", () => {
         content: "上一条消息",
       },
       {
+        id: "role:mira:2",
         role: "user",
         content: "刚发出去的消息",
       },
@@ -129,6 +130,31 @@ describe("mergeIncomingSessionDuringSend", () => {
     const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
 
     assert.equal(merged, incomingSession);
+  });
+
+  it("keeps the optimistic tail even after sending flips false when a stale snapshot still arrives late", () => {
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      {
+        role: "user",
+        content: "刚发出去的消息",
+      },
+    ]);
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, false);
+
+    assert.equal(merged?.messages, currentSession.messages);
   });
 
   it("preserves fresh incoming metadata while keeping the optimistic local message tail", () => {
