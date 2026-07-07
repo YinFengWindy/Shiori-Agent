@@ -44,6 +44,7 @@ function renderChatSurface(
     currentMood?: string;
     moodIllustrationUrl?: string;
     chatLatestImageSidebarCollapsed?: boolean;
+    windowVisible?: boolean;
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -71,6 +72,7 @@ function renderChatSurface(
       notice=""
       sending={false}
       visibleIllustrationUrl=""
+      windowVisible={options.windowVisible ?? true}
       onBeginChatLatestImageSidebarResize={() => undefined}
       onGoToNextChatImage={() => undefined}
       onGoToPreviousChatImage={() => undefined}
@@ -248,5 +250,17 @@ describe("ChatSurface", () => {
     assert.match(markup, />等你主动</);
     assert.match(markup, />寂寞值</);
     assert.match(markup, />72</);
+  });
+
+  it("unmounts the status illustration when the desktop window is hidden", () => {
+    const markup = renderChatSurface(createRole(), "mira", {
+      currentMood: "开心",
+      moodIllustrationUrl: "mira-asset://local?path=D%3A%5Croles%5Cmira%5Chappy.png",
+      chatLatestImageSidebarCollapsed: false,
+      windowVisible: false,
+    });
+
+    assert.match(markup, />窗口隐藏时已暂停图片渲染</);
+    assert.doesNotMatch(markup, /happy\.png/);
   });
 });

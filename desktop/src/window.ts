@@ -34,6 +34,7 @@ function emitWindowState(window: BrowserWindow): void {
     method: "window.state",
     payload: {
       isMaximized: window.isMaximized(),
+      isVisible: window.isVisible(),
     },
   });
 }
@@ -158,6 +159,10 @@ export function createDesktopWindow(): BrowserWindow {
   });
   win.on("maximize", () => emitWindowState(win));
   win.on("unmaximize", () => emitWindowState(win));
+  win.on("show", () => emitWindowState(win));
+  win.on("hide", () => emitWindowState(win));
+  win.on("minimize", () => emitWindowState(win));
+  win.on("restore", () => emitWindowState(win));
   void loadDesktopRenderer(win);
   win.webContents.on("did-finish-load", () => emitWindowState(win));
   return win;

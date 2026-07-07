@@ -50,6 +50,7 @@ type ChatSurfaceProps = {
   notice: string;
   sending: boolean;
   visibleIllustrationUrl: string;
+  windowVisible: boolean;
   onBeginChatLatestImageSidebarResize: (event: React.PointerEvent<HTMLDivElement>) => void;
   onGoToNextChatImage: () => void;
   onGoToPreviousChatImage: () => void;
@@ -88,6 +89,7 @@ export function ChatSurface({
   notice,
   sending,
   visibleIllustrationUrl,
+  windowVisible,
   onBeginChatLatestImageSidebarResize,
   onGoToNextChatImage,
   onGoToPreviousChatImage,
@@ -311,7 +313,8 @@ export function ChatSurface({
     "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(228,228,228,0.66)] bg-[rgba(255,255,255,0.48)] px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-[10px] transition-colors duration-150 group-hover:bg-[rgba(255,255,255,0.72)]";
   const userMessageBubbleClass =
     "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
-  const hasIllustration = Boolean(visibleIllustrationUrl) && visualsActive;
+  const renderHeavyVisuals = visualsActive && windowVisible;
+  const hasIllustration = Boolean(visibleIllustrationUrl) && renderHeavyVisuals;
   const showScrollToBottom = scrollState.isScrollable && !scrollState.isAtBottom;
   const hasChatImageHistory = chatLatestImageSidebarCount > 0;
   const canGoToPreviousChatImage = chatLatestImagePosition > 1;
@@ -720,7 +723,7 @@ export function ChatSurface({
                   roleSelfView={roleSelfView}
                   relationshipTags={relationshipTags}
                   lonelinessValue={lonelinessValue}
-                  visualsActive={visualsActive}
+                  visualsActive={renderHeavyVisuals}
                 />
               ) : (
                 <div className="grid h-full min-h-0 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
@@ -738,7 +741,7 @@ export function ChatSurface({
                         </svg>
                       </button>
                     </div>
-                    {chatLatestImagePath && visualsActive ? (
+                    {chatLatestImagePath && renderHeavyVisuals ? (
                       <button
                         className="grid h-full w-full place-items-center border-0 bg-transparent p-0"
                         type="button"

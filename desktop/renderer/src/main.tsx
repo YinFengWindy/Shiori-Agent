@@ -142,6 +142,7 @@ function App(): React.ReactElement {
   const [chatImageLightboxOpen, setChatImageLightboxOpen] = useState(false);
   const [addingChatImageToAssetLibrary, setAddingChatImageToAssetLibrary] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
+  const [windowVisible, setWindowVisible] = useState(true);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const openRoleRequestIdRef = useRef(0);
   const roleAssetSaveRequestIdRef = useRef(0);
@@ -383,6 +384,7 @@ function App(): React.ReactElement {
     setNotice,
     setEvents,
     setWindowMaximized,
+    setWindowVisible,
     setUnreadCounts,
     activeRoleIdRef,
     activeSessionRef,
@@ -656,6 +658,7 @@ function App(): React.ReactElement {
       notice={notice}
       isVisibleChatSending={isVisibleChatSending}
       visibleIllustrationUrl={visibleIllustrationUrl}
+      windowVisible={windowVisible}
       onGoToNextChatImage={selectNextChatImage}
       onGoToPreviousChatImage={selectPreviousChatImage}
       onOpenChatImageLightbox={openSelectedChatImageLightbox}

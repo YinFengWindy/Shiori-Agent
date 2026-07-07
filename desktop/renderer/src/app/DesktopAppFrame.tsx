@@ -105,6 +105,7 @@ type DesktopAppFrameProps = {
   notice: string;
   isVisibleChatSending: boolean;
   visibleIllustrationUrl: string;
+  windowVisible: boolean;
   onGoToNextChatImage: () => void;
   onGoToPreviousChatImage: () => void;
   onOpenChatImageLightbox: () => void;
@@ -227,6 +228,7 @@ export function DesktopAppFrame({
   notice,
   isVisibleChatSending,
   visibleIllustrationUrl,
+  windowVisible,
   onGoToNextChatImage,
   onGoToPreviousChatImage,
   onOpenChatImageLightbox,
@@ -426,6 +428,7 @@ export function DesktopAppFrame({
               notice={notice}
               sending={isVisibleChatSending}
               visibleIllustrationUrl={visibleIllustrationUrl}
+              windowVisible={windowVisible}
               onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
               onGoToNextChatImage={onGoToNextChatImage}
               onGoToPreviousChatImage={onGoToPreviousChatImage}

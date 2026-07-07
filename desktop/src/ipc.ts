@@ -173,6 +173,7 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     const [window] = BrowserWindow.getAllWindows();
     return {
       isMaximized: window?.isMaximized() ?? false,
+      isVisible: window?.isVisible() ?? false,
     };
   });
   ipcMain.handle("desktop:pick-images", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {

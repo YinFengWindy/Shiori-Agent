@@ -13,6 +13,7 @@ type UseDesktopBridgeLifecycleArgs = {
   setNotice: React.Dispatch<React.SetStateAction<string>>;
   setEvents: React.Dispatch<React.SetStateAction<EventLog[]>>;
   setWindowMaximized: React.Dispatch<React.SetStateAction<boolean>>;
+  setWindowVisible: React.Dispatch<React.SetStateAction<boolean>>;
   setUnreadCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   activeRoleIdRef: React.MutableRefObject<string>;
   activeSessionRef: React.MutableRefObject<SessionPayload | null>;
@@ -42,6 +43,7 @@ export function useDesktopBridgeLifecycle({
   setNotice,
   setEvents,
   setWindowMaximized,
+  setWindowVisible,
   setUnreadCounts,
   activeRoleIdRef,
   activeSessionRef,
@@ -142,6 +144,7 @@ export function useDesktopBridgeLifecycle({
         }
         if (event.method === "window.state") {
           setWindowMaximized(Boolean(event.payload.isMaximized));
+          setWindowVisible(Boolean(event.payload.isVisible));
           return;
         }
 
@@ -232,6 +235,7 @@ export function useDesktopBridgeLifecycle({
     setNotice,
     setUnreadCounts,
     setWindowMaximized,
+    setWindowVisible,
     updateCommittedActiveSession,
   ]);
 
@@ -242,6 +246,7 @@ export function useDesktopBridgeLifecycle({
       const currentWindowState = await window.miraDesktop.windowState();
       if (cancelled) return;
       setWindowMaximized(currentWindowState.isMaximized);
+      setWindowVisible(currentWindowState.isVisible);
 
       const bridgeStatus = await window.miraDesktop.bridgeStatus();
       if (cancelled) return;
@@ -291,6 +296,7 @@ export function useDesktopBridgeLifecycle({
     setError,
     setHealth,
     setWindowMaximized,
+    setWindowVisible,
   ]);
 
   return {

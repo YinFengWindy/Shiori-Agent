@@ -159,6 +159,7 @@ export type SaveSettingsResult = {
 export type WindowControlAction = "minimize" | "toggleMaximize" | "close";
 export type WindowState = {
   isMaximized: boolean;
+  isVisible: boolean;
 };
 
 export type StartAttachmentDragRequest = {
