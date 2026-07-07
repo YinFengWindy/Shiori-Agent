@@ -1,12 +1,16 @@
 export function shouldAutoScrollOnNewMessage({
   currentMessageCount,
   previousMessageCount,
+  lastMessageContent,
+  previousLastMessageContent,
   highlightedMessageKey,
   sending,
   wasAtBottom,
 }: {
   currentMessageCount: number;
   previousMessageCount: number;
+  lastMessageContent: string;
+  previousLastMessageContent: string;
   highlightedMessageKey: string;
   sending: boolean;
   wasAtBottom: boolean;
@@ -14,7 +18,11 @@ export function shouldAutoScrollOnNewMessage({
   if (highlightedMessageKey) {
     return false;
   }
-  if (currentMessageCount <= previousMessageCount) {
+  const appendedMessage = currentMessageCount > previousMessageCount;
+  const expandedLastMessage =
+    currentMessageCount === previousMessageCount
+    && lastMessageContent !== previousLastMessageContent;
+  if (!appendedMessage && !expandedLastMessage) {
     return false;
   }
   return sending || wasAtBottom;

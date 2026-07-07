@@ -102,6 +102,7 @@ export function ChatSurface({
   const conversationListRef = useRef<HTMLDivElement | null>(null);
   const messageContextMenuRef = useRef<HTMLDivElement | null>(null);
   const previousMessageCountRef = useRef(0);
+  const previousLastMessageContentRef = useRef("");
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
@@ -198,6 +199,7 @@ export function ChatSurface({
 
   useEffect(() => {
     previousMessageCountRef.current = activeSession?.messages.length ?? 0;
+    previousLastMessageContentRef.current = activeSession?.messages.at(-1)?.content ?? "";
     const container = conversationListRef.current;
     if (!container) return;
     container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
@@ -228,10 +230,15 @@ export function ChatSurface({
   useEffect(() => {
     const currentMessageCount = activeSession?.messages.length ?? 0;
     const previousMessageCount = previousMessageCountRef.current;
+    const currentLastMessageContent = activeSession?.messages.at(-1)?.content ?? "";
+    const previousLastMessageContent = previousLastMessageContentRef.current;
     previousMessageCountRef.current = currentMessageCount;
+    previousLastMessageContentRef.current = currentLastMessageContent;
     if (!shouldAutoScrollOnNewMessage({
       currentMessageCount,
       previousMessageCount,
+      lastMessageContent: currentLastMessageContent,
+      previousLastMessageContent,
       highlightedMessageKey,
       sending,
       wasAtBottom: scrollState.isAtBottom,

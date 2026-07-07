@@ -1,3 +1,5 @@
+import React from "react";
+
 type ChatStatusSidebarProps = {
   currentMood: string;
   moodIllustrationUrl: string;
