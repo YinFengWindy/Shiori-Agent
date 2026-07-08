@@ -23,6 +23,8 @@ _RECENT_MESSAGE_CHAR_LIMIT = 6000
 _UNANSWERED_REPLY_WINDOW_HOURS = 24
 _NIGHT_SUPPRESSION_START_HOUR = 0
 _NIGHT_SUPPRESSION_END_HOUR = 6
+_LONELINESS_TICK_MINUTES = 10
+_PROACTIVE_CLOSENESS_THRESHOLD = 0.7
 _RELATION_STATE_KEYS = (
     "closeness",
     "dependence",
@@ -170,6 +172,23 @@ def _parse_iso(value: object) -> datetime | None:
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
+
+
+def _advance_by_loneliness_ticks(
+    last_calculated: datetime,
+    *,
+    tick_count: int,
+) -> datetime:
+    return last_calculated + timedelta(minutes=max(0, tick_count) * _LONELINESS_TICK_MINUTES)
+
+
+def _loneliness_tick_count(
+    last_calculated: datetime,
+    *,
+    now: datetime,
+) -> int:
+    elapsed_seconds = max(0.0, (now - last_calculated).total_seconds())
+    return int(elapsed_seconds // (_LONELINESS_TICK_MINUTES * 60))
 
 
 def _normalize_tags(raw: object) -> list[str]:
@@ -412,30 +431,27 @@ class RoleRelationshipRuntimeService:
             return None
         now_dt = (now or datetime.now().astimezone()).astimezone()
         current = self.read_loneliness_runtime(role_id) or self._build_initial_runtime(role_id, now=now_dt)
+        if not self._is_loneliness_growth_enabled(snapshot):
+            self._clear_awaiting_reply_state(current)
+            current["last_calculated_at"] = _now_iso(now_dt)
+            return self._write_runtime_with_presence(role_id, current)
         value = float(current["loneliness_value"])
         last_calculated = _parse_iso(current.get("last_calculated_at")) or now_dt
-        elapsed_minutes = max(0.0, (now_dt - last_calculated).total_seconds() / 60.0)
         profile = self._behavior_profile(snapshot)
-        elapsed_hours = elapsed_minutes / 60.0
-        delta = elapsed_hours * float(profile["loneliness_growth_base"])
+        tick_count = _loneliness_tick_count(last_calculated, now=now_dt)
+        delta = tick_count * float(profile["loneliness_growth_base"])
         if bool(current.get("awaiting_reply_after_proactive")):
             awaiting_since = _parse_iso(current.get("awaiting_reply_since"))
             if awaiting_since is not None and now_dt - awaiting_since <= timedelta(hours=_UNANSWERED_REPLY_WINDOW_HOURS):
-                delta += (
-                    elapsed_hours
-                    * float(profile["loneliness_growth_when_unanswered"])
-                )
+                delta += tick_count * float(profile["loneliness_growth_when_unanswered"])
             else:
-                current["awaiting_reply_after_proactive"] = False
-                current["awaiting_reply_since"] = ""
+                self._clear_awaiting_reply_state(current)
         current["loneliness_value"] = round(_clamp(value + delta, 0.0, 100.0), 2)
-        current["last_calculated_at"] = _now_iso(now_dt)
-        presence_key = self._session_manager.role_session_key(role_id)
-        last_user_at = self._presence.get_last_user_at(presence_key) if self._presence else None
-        last_proactive_at = self._presence.get_last_proactive_at(presence_key) if self._presence else None
-        current["last_user_at"] = _now_iso(last_user_at) if last_user_at else str(current.get("last_user_at") or "")
-        current["last_proactive_at"] = _now_iso(last_proactive_at) if last_proactive_at else str(current.get("last_proactive_at") or "")
-        return self.write_loneliness_runtime(role_id, current)
+        if tick_count > 0:
+            current["last_calculated_at"] = _now_iso(
+                _advance_by_loneliness_ticks(last_calculated, tick_count=tick_count)
+            )
+        return self._write_runtime_with_presence(role_id, current)
 
     def handle_user_message(self, session_key: str, *, now: datetime | None = None) -> dict[str, Any] | None:
         role_id = self._role_id_from_session_key(session_key)
@@ -493,6 +509,8 @@ class RoleRelationshipRuntimeService:
         runtime = self.recompute_loneliness(role_id, now=now)
         if runtime is None:
             return False, {"reason": "no_runtime"}
+        if not self._is_loneliness_growth_enabled(snapshot):
+            return False, {"reason": "not_close_enough"}
         now_dt = (now or datetime.now().astimezone()).astimezone()
         effective_value = float(runtime["loneliness_value"])
         local_hour = now_dt.hour
@@ -534,6 +552,22 @@ class RoleRelationshipRuntimeService:
     def _relation_state(self, snapshot: dict[str, Any]) -> dict[str, float]:
         internal = snapshot.get("internal_profile") if isinstance(snapshot, dict) else {}
         return _normalize_relation_state((internal or {}).get("relation_state"))
+
+    def _is_loneliness_growth_enabled(self, snapshot: dict[str, Any]) -> bool:
+        return float(self._relation_state(snapshot)["closeness"]) >= _PROACTIVE_CLOSENESS_THRESHOLD
+
+    @staticmethod
+    def _clear_awaiting_reply_state(runtime: dict[str, Any]) -> None:
+        runtime["awaiting_reply_after_proactive"] = False
+        runtime["awaiting_reply_since"] = ""
+
+    def _write_runtime_with_presence(self, role_id: str, runtime: dict[str, Any]) -> dict[str, Any]:
+        presence_key = self._session_manager.role_session_key(role_id)
+        last_user_at = self._presence.get_last_user_at(presence_key) if self._presence else None
+        last_proactive_at = self._presence.get_last_proactive_at(presence_key) if self._presence else None
+        runtime["last_user_at"] = _now_iso(last_user_at) if last_user_at else str(runtime.get("last_user_at") or "")
+        runtime["last_proactive_at"] = _now_iso(last_proactive_at) if last_proactive_at else str(runtime.get("last_proactive_at") or "")
+        return self.write_loneliness_runtime(role_id, runtime)
 
     def _build_initial_runtime(self, role_id: str, *, now: datetime) -> dict[str, Any]:
         session_key = self._session_manager.role_session_key(role_id)
@@ -797,7 +831,7 @@ class LonelinessHeartbeatLoop:
         runtime: RoleRelationshipRuntimeService,
         *,
         role_store: RoleStore,
-        interval_seconds: int = 3 * 60,
+        interval_seconds: int = _LONELINESS_TICK_MINUTES * 60,
     ) -> None:
         self._runtime = runtime
         self._role_store = role_store

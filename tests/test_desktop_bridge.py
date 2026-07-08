@@ -1473,7 +1473,9 @@ async def test_desktop_bridge_recomputes_loneliness_runtime_for_roles_and_sessio
             "role_self_view": "我最近会忍不住去想你。",
             "relation_tags": ["亲近", "等你主动"],
             "internal_profile": {
-                "relation_state": {},
+                "relation_state": {
+                    "closeness": 0.8,
+                },
                 "behavior_profile": {},
             },
             "source_summary": {},
@@ -1482,7 +1484,7 @@ async def test_desktop_bridge_recomputes_loneliness_runtime_for_roles_and_sessio
             "last_error": "",
         },
     )
-    stale_runtime_at = datetime.now(timezone.utc) - timedelta(hours=12)
+    stale_runtime_at = datetime.now(timezone.utc) - timedelta(minutes=21)
     relationship_runtime.write_loneliness_runtime(
         role.id,
         {
