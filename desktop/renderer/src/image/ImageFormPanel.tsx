@@ -129,7 +129,7 @@ export function ImageFormPanel({
   }
 
   return (
-    <section className="grid min-h-0 min-w-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-[#FBFCFE] p-5">
+    <section className="grid min-h-0 min-w-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-white p-5">
       <div className="relative" ref={rolePanelRef}>
         <button
           type="button"

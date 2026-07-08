@@ -14,7 +14,7 @@ export function ImageHistoryPanel({
   onSelect,
 }: ImageHistoryPanelProps) {
   return (
-    <section className="flex h-full min-h-0 flex-col gap-3 rounded-[20px] bg-[#FBFCFE] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+    <section className="flex h-full min-h-0 flex-col gap-3 rounded-[20px] bg-white p-3">
       <div className="flex items-center justify-between px-1 pt-1">
         <div className="text-sm font-medium text-[#20242A]">History</div>
       </div>
