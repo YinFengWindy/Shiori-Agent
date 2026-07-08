@@ -115,9 +115,30 @@ async def test_empty_candidates_enter_relationship_fallback_when_loneliness_gate
     )
     result = await tick.run()
     assert result == 0.0
-    assert len(llm.calls) == 1
+    assert len(llm.calls) == 2
     assert "已通过 loneliness gate" in str(llm.calls[0][2]["content"])
-    assert tick.last_ctx.skip_reason == "no_content"
+    assert "不要再用 no_content 跳过" in str(llm.calls[1][-1]["content"])
+    assert tick.last_ctx.skip_reason == ""
+
+
+@pytest.mark.asyncio
+async def test_relationship_fallback_takes_priority_over_drift_when_loneliness_gate_passes():
+    llm = FakeLLM([("finish_turn", {"decision": "skip", "reason": "no_content"})])
+    drift_pipeline = MagicMock()
+    tick = make_proactive_pipeline(
+        cfg=cfg_with(drift_enabled=True, drift_min_interval_hours=3),
+        llm_fn=llm,
+        drift_pipeline=drift_pipeline,
+        rng=FakeRng(value=1.0),
+        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+    )
+
+    await tick.run()
+
+    drift_pipeline.run.assert_not_called()
+    assert len(llm.calls) == 2
+    assert "优先尝试纯关系向 fallback" in str(llm.calls[0][2]["content"])
+    assert "不要再用 no_content 跳过" in str(llm.calls[1][-1]["content"])
 
 
 @pytest.mark.asyncio
@@ -131,7 +152,7 @@ async def test_drift_interval_blocks_recent_drift():
         rng=FakeRng(value=1.0),
         llm_fn=AsyncMock(return_value=None),
         drift_pipeline=drift_pipeline,
-        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+        loneliness_gate_fn=False,
     )
     await tick.run()
     assert tick.last_ctx.drift_entered is False
@@ -183,7 +204,7 @@ async def test_drift_interval_allows_after_window():
                     max_steps=5,
                 )
             ),
-            loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+            loneliness_gate_fn=False,
         )
         await tick.run()
         assert tick.last_ctx.drift_entered is True

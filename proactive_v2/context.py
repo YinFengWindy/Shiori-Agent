@@ -12,6 +12,7 @@ class AgentTickContext:
     now_utc: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     session_key: str = ""
     context_as_fallback_open: bool = False
+    relationship_fallback_open: bool = False
     target_channel: str = ""
     target_chat_id: str = ""
 

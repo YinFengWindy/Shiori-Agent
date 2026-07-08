@@ -497,7 +497,6 @@ class RoleRelationshipRuntimeService:
     def should_trigger_proactive(
         self,
         session_key: str,
-        *,
         now: datetime | None = None,
     ) -> tuple[bool, dict[str, Any]]:
         role_id = self._role_id_from_session_key(session_key)

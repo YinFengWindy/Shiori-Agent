@@ -275,6 +275,34 @@ def test_should_trigger_proactive_respects_threshold(tmp_path: Path):
     assert meta["reason"] == "threshold"
 
 
+def test_should_trigger_proactive_accepts_positional_now_argument(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, session_manager, _ = _runtime(tmp_path)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 70,
+            "last_calculated_at": "2026-07-06T12:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": False,
+            "awaiting_reply_since": "",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    should_trigger, meta = runtime.should_trigger_proactive(
+        session_manager.role_session_key("mira"),
+        _utc(2026, 7, 6, 12, 0),
+    )
+
+    assert should_trigger is True
+    assert meta["reason"] == "threshold"
+
+
 def test_should_trigger_proactive_requires_closeness_threshold(tmp_path: Path):
     _seed_role(tmp_path)
     runtime, session_manager, _ = _runtime(tmp_path)

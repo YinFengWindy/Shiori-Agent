@@ -528,7 +528,10 @@ class ProactiveTurnPipeline:
 
         # 2.3 快速 skip：无 alert、无 content、且 fallback 未开启时尝试 drift。
         if not gw_result.alerts and not gw_result.content_meta and not ctx.context_as_fallback_open:
-            if self._drift_pipeline is not None and self._cfg.drift_enabled:
+            if self._allow_relationship_only_fallback(ctx):
+                ctx.relationship_fallback_open = True
+                logger.info("[proactive_v2] fetch: no data but loneliness gate passed → relationship fallback")
+            elif self._drift_pipeline is not None and self._cfg.drift_enabled:
                 last_drift_at = self._state_store.get_last_drift_at(self._session_key)
                 min_interval_hours = max(0, int(getattr(self._cfg, "drift_min_interval_hours", 0) or 0))
                 if (
@@ -566,7 +569,7 @@ class ProactiveTurnPipeline:
                     self.last_ctx = ctx
                     return FeedResult(drift_entered=True, base_score=0.0)
                 logger.info("[proactive_v2] fetch: drift not entered")
-            if not self._allow_relationship_only_fallback(ctx):
+            else:
                 logger.info("[proactive_v2] fetch: no data and fallback off → skip")
                 logger.info(
                     diagnostic_line(
@@ -585,7 +588,6 @@ class ProactiveTurnPipeline:
                 ctx.skip_reason = "no_content"
                 self.last_ctx = ctx
                 return FeedResult(drift_entered=False, base_score=None)
-            logger.info("[proactive_v2] fetch: no data but loneliness gate passed → relationship fallback")
 
         # 2.4 llm_fn 为空 → 无法进入 Judge，直接退出。
         if self._llm_fn is None:
@@ -604,9 +606,10 @@ class ProactiveTurnPipeline:
             kickoff_content = (
                 "开始本轮 proactive 处理。"
                 "本轮已通过 loneliness gate，但当前没有 alert/content/context 候选。"
-                "允许走纯关系向 fallback：先用 get_recent_chat 判断最近是否有自然延伸的话题；"
-                "如果有，就直接 message_push 一条轻量的关系向主动消息并 finish_turn(decision=reply)。"
-                "如果没有，再 finish_turn(decision=skip, reason=no_content)。"
+                "这一轮优先尝试纯关系向 fallback，不要改走 drift。"
+                "先用 get_recent_chat 判断最近是否有自然延伸的话题；"
+                "只要能自然接上，就应该直接 message_push 一条轻量的关系向主动消息并 finish_turn(decision=reply)。"
+                "只有在 recent_chat 明确看不出任何自然切口，或明显不适合打扰时，才 finish_turn(decision=skip, reason=no_content)。"
             )
         kickoff_msg = {
             "role": "user",
@@ -665,6 +668,30 @@ class ProactiveTurnPipeline:
                     ok = await self._run_tool_step(messages, ctx, loop_tag="complete")
                     if not ok:
                         break
+
+        # 3.2b 关系向 fallback：寂寞值已过线时，不允许轻易用 no_content 直接逃掉。
+        if (
+            ctx.relationship_fallback_open
+            and ctx.terminal_action == "skip"
+            and ctx.skip_reason == "no_content"
+            and ctx.steps_taken < self._cfg.agent_tick_max_steps
+        ):
+            ctx.terminal_action = None
+            ctx.skip_reason = ""
+            relationship_reflection = (
+                "【系统提示】本轮已通过 loneliness gate，说明现在默认应该主动联系用户。"
+                "relationship fallback 不要求必须存在未完成话题；只要语气自然，就可以主动发一条轻量的关心、撒娇、试探或想你了的消息。"
+                "只有当 recent_chat 明确显示用户正在忙、明显不适合打扰，才允许 finish_turn(decision=skip, reason=user_busy)。"
+                "请现在优先 message_push + finish_turn(decision=reply)；不要再用 no_content 跳过。"
+            )
+            logger.info("[proactive_v2] judge relationship fallback: forcing one more reply-focused pass")
+            messages.append({"role": "user", "content": relationship_reflection})
+            for _ in range(3):
+                if ctx.terminal_action is not None or ctx.steps_taken >= self._cfg.agent_tick_max_steps:
+                    break
+                ok = await self._run_tool_step(messages, ctx, loop_tag="relationship_reflect", tool_choice="auto")
+                if not ok:
+                    break
 
         # 3.3 反思阶段：如果 interesting 已标好但还没 finish_turn，逼它收尾。
         if ctx.terminal_action is None and ctx.interesting_item_ids and ctx.steps_taken < self._cfg.agent_tick_max_steps:
