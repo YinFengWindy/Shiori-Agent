@@ -23,7 +23,7 @@ export function ChatStatusSidebar({
   return (
     <div className="grid h-full min-h-0 rounded-[20px] bg-[#F4F7FB] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
       <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto_auto] gap-3 rounded-[16px] bg-[#F4F7FB] p-3">
-        <div className="grid min-h-0 place-items-center overflow-hidden rounded-[16px] bg-white p-4">
+        <div className="grid min-h-0 place-items-center overflow-hidden rounded-[16px] bg-[#F4F7FB] p-4">
           {shouldRenderIllustration ? (
             <img
               className="max-h-full max-w-full object-contain"
