@@ -112,6 +112,20 @@ def test_user_message_clears_unanswered_state_and_reduces_loneliness(tmp_path: P
     assert datetime.fromisoformat(updated["last_user_at"]).astimezone(timezone.utc) == now
 
 
+def test_snapshot_growth_profile_is_raised_to_default_floor(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, _, _ = _runtime(tmp_path)
+    payload = _snapshot_payload()
+    payload["internal_profile"]["behavior_profile"]["loneliness_growth_base"] = 1.2
+    payload["internal_profile"]["behavior_profile"]["loneliness_growth_when_unanswered"] = 1.8
+
+    saved = runtime.write_snapshot("mira", payload)
+
+    profile = saved["internal_profile"]["behavior_profile"]
+    assert profile["loneliness_growth_base"] == 1.6
+    assert profile["loneliness_growth_when_unanswered"] == 2.4
+
+
 def test_current_loneliness_runtime_catches_up_elapsed_time_since_last_calculation(tmp_path: Path):
     _seed_role(tmp_path)
     runtime, _, _ = _runtime(tmp_path)
@@ -137,7 +151,7 @@ def test_current_loneliness_runtime_catches_up_elapsed_time_since_last_calculati
     )
 
     assert updated is not None
-    assert updated["loneliness_value"] == 74.8
+    assert updated["loneliness_value"] == 58
     assert datetime.fromisoformat(updated["last_calculated_at"]).astimezone(timezone.utc) == _utc(2026, 7, 7, 0, 0)
 
 

@@ -45,14 +45,12 @@ _DEFAULT_RELATION_STATE = {
     "neglect_sensitivity": 0.5,
 }
 _DEFAULT_BEHAVIOR_PROFILE = {
-    "loneliness_growth_base": 1.2,
-    "loneliness_growth_when_unanswered": 1.8,
+    "loneliness_growth_base": 1.6,
+    "loneliness_growth_when_unanswered": 2.4,
     "trigger_threshold": 68.0,
     "post_trigger_cooldown_minutes": 240,
     "night_suppression": 0.4,
 }
-# Keep per-role profile differences, but make the experiential growth curve a bit steeper.
-_LONELINESS_GROWTH_RATE_MULTIPLIER = 1.35
 _RELATIONSHIP_SYSTEM = (
     "你正在根据当前关系证据，生成角色此刻对用户关系的主观状态。"
     "你只能输出 JSON 对象，不要输出 JSON 之外的文字。"
@@ -203,12 +201,12 @@ def _normalize_behavior_profile(raw: object) -> dict[str, float | int]:
     return {
         "loneliness_growth_base": _clamp(
             float(payload.get("loneliness_growth_base", _DEFAULT_BEHAVIOR_PROFILE["loneliness_growth_base"]) or _DEFAULT_BEHAVIOR_PROFILE["loneliness_growth_base"]),
-            0.1,
+            _DEFAULT_BEHAVIOR_PROFILE["loneliness_growth_base"],
             8.0,
         ),
         "loneliness_growth_when_unanswered": _clamp(
             float(payload.get("loneliness_growth_when_unanswered", _DEFAULT_BEHAVIOR_PROFILE["loneliness_growth_when_unanswered"]) or _DEFAULT_BEHAVIOR_PROFILE["loneliness_growth_when_unanswered"]),
-            0.1,
+            _DEFAULT_BEHAVIOR_PROFILE["loneliness_growth_when_unanswered"],
             12.0,
         ),
         "trigger_threshold": _clamp(
@@ -419,14 +417,13 @@ class RoleRelationshipRuntimeService:
         elapsed_minutes = max(0.0, (now_dt - last_calculated).total_seconds() / 60.0)
         profile = self._behavior_profile(snapshot)
         elapsed_hours = elapsed_minutes / 60.0
-        delta = elapsed_hours * float(profile["loneliness_growth_base"]) * _LONELINESS_GROWTH_RATE_MULTIPLIER
+        delta = elapsed_hours * float(profile["loneliness_growth_base"])
         if bool(current.get("awaiting_reply_after_proactive")):
             awaiting_since = _parse_iso(current.get("awaiting_reply_since"))
             if awaiting_since is not None and now_dt - awaiting_since <= timedelta(hours=_UNANSWERED_REPLY_WINDOW_HOURS):
                 delta += (
                     elapsed_hours
                     * float(profile["loneliness_growth_when_unanswered"])
-                    * _LONELINESS_GROWTH_RATE_MULTIPLIER
                 )
             else:
                 current["awaiting_reply_after_proactive"] = False
