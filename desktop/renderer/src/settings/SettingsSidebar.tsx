@@ -51,7 +51,7 @@ export function SettingsSidebar({
   const query = search.trim().toLowerCase();
   const visibleSections = settingsSections.filter((section) => sectionMatches(section, query));
   const sidebarActionClass =
-    "flex min-h-[38px] items-center justify-between rounded-xl border border-transparent px-3 text-left text-sm text-[#32363C] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
+    "flex min-h-[38px] items-center justify-between rounded-md border border-transparent px-3 text-left text-sm text-[#32363C] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
   const sidebarBackClass =
     "mb-3 flex h-8 items-center gap-2 rounded-md border border-transparent bg-transparent px-2 text-left text-sm text-[#6E737A] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
 
@@ -72,7 +72,7 @@ export function SettingsSidebar({
       <input
         className={cx(
           inputClass,
-          "mb-3 h-10 rounded-xl bg-[#F5F6F8] px-4 py-0 text-sm",
+          "mb-3 h-10 rounded-md px-4 py-0 text-sm",
         )}
         placeholder="搜索设置..."
         value={search}

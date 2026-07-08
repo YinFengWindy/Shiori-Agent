@@ -79,14 +79,14 @@ export function ImageFormPanel({
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectClass = cx(
     inputClass,
-    "h-11 appearance-none bg-white py-0 pr-10 text-sm leading-5 focus:border-[#D8DCE2] focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:ring-0",
+    "h-11 appearance-none py-0 pr-10 text-sm leading-5 focus:border-[#D8DCE2] focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:ring-0",
   );
   const promptTextareaClass = cx(
     inputClass,
-    "min-h-[96px] resize-none overflow-hidden rounded-none border-[#D6DCE3] bg-[#F3F5F7] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus:bg-[#F3F5F7] focus:ring-0 focus-visible:border-[#D6DCE3] focus-visible:ring-0",
+    "min-h-[96px] resize-none overflow-hidden rounded-md border-[#D6DCE3] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus:ring-0 focus-visible:border-[#D6DCE3] focus-visible:ring-0",
   );
-  const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-xl bg-[#F5F6F8] p-1";
-  const segmentedButtonBaseClassName = "min-w-0 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition";
+  const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-md bg-[#F3F5F7] p-1";
+  const segmentedButtonBaseClassName = "min-w-0 rounded-md px-3 py-1.5 text-[13px] font-semibold transition";
   const customSizeReady = form.sizePreset !== "custom"
     || (hasPositiveIntegerText(form.customWidth) && hasPositiveIntegerText(form.customHeight));
   const generateDisabled =
@@ -133,7 +133,7 @@ export function ImageFormPanel({
       <div className="relative" ref={rolePanelRef}>
         <button
           type="button"
-          className="flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-[#D8DCE2] bg-white px-3 pr-4 text-left transition hover:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2]"
+          className="flex h-11 w-full min-w-0 items-center gap-3 rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-3 pr-4 text-left transition hover:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2]"
           aria-expanded={rolePanelOpen}
           onClick={() => setRolePanelOpen((current) => !current)}
         >
@@ -154,14 +154,14 @@ export function ImageFormPanel({
           </svg>
         </button>
         {rolePanelOpen ? (
-          <div className="absolute inset-x-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-[#D8DCE2] bg-white p-2">
+          <div className="absolute inset-x-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-md border border-[#D8DCE2] bg-white p-2">
             <div className="grid gap-1">
               {roleItems.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   className={cx(
-                    "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-[#F5F6F8] focus:outline-none focus:ring-0",
+                    "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition hover:bg-[#F5F6F8] focus:outline-none focus:ring-0",
                     form.roleId === item.id && "bg-[#F5F6F8]",
                   )}
                   onClick={() => {
@@ -226,7 +226,7 @@ export function ImageFormPanel({
                 </svg>
               </button>
               {settingsOpen ? (
-                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-[320px] max-w-[calc(100vw-2rem)] rounded-2xl border border-[#D6DCE3] bg-[#F3F5F7] p-4">
+                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-[320px] max-w-[calc(100vw-2rem)] rounded-md border border-[#D6DCE3] bg-[#F3F5F7] p-4">
                   <div className="mb-4 flex items-center gap-2 border-b border-[#D6DCE3] pb-3">
                     <div className="rounded-md bg-white px-2 py-1 text-xs font-medium text-[#20242A]">Settings</div>
                   </div>
@@ -319,7 +319,7 @@ export function ImageFormPanel({
                   <div className="flex flex-none items-center gap-2">
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
                       aria-label="重新选择 Base Img"
                       onClick={onPickBaseImage}
                     >
@@ -327,7 +327,7 @@ export function ImageFormPanel({
                     </button>
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
                       aria-label="移除 Base Img"
                       onClick={() => onChange({ baseImagePath: "" })}
                     >

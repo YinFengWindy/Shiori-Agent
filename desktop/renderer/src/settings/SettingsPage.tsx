@@ -288,10 +288,10 @@ function AddListAction({
   onAdd: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-full bg-[#FFF9F0] px-5 py-3">
-      <span className="text-sm text-[#6B5A45]">{label}</span>
+    <div className="flex items-center justify-between gap-4 rounded-md bg-[#F3F5F7] px-5 py-3">
+      <span className="text-sm text-[#5B616A]">{label}</span>
       <button
-        className="grid h-11 w-11 place-items-center rounded-full bg-white text-[#6B5A45] transition hover:bg-[#FFFCF7] focus:outline-none focus:ring-2 focus:ring-primary/20"
+        className="grid h-11 w-11 place-items-center rounded-md border border-[#D6DCE3] bg-white text-[#5B616A] transition hover:bg-[#EEF2F6] focus:outline-none focus:ring-2 focus:ring-primary/20"
         type="button"
         aria-label={label}
         onClick={onAdd}
@@ -914,7 +914,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <ToggleField label="Add Quality Tags" checked={draft.integrations.novelaiAddQualityTags} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAddQualityTags: checked } }))} />
                 <Field label="内容过滤预设" hint="控制默认 undesired content 强度。">
                   <select
-                    className="h-12 w-full rounded-md border border-[#D8DCE2] bg-white px-3.5 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0"
+                    className="h-12 w-full rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-3.5 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0"
                     value={String(draft.integrations.novelaiUndesiredContentPreset)}
                     onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiUndesiredContentPreset: parseNumber(event.target.value, current.integrations.novelaiUndesiredContentPreset) } }))}
                   >
@@ -1044,7 +1044,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
               {visibleSubsections.length ? (
                 <div className="relative max-w-full sm:max-w-[260px]">
                   <select
-                    className="h-10 w-full appearance-none rounded-md border border-[#D8DCE2] bg-white px-3.5 pr-10 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0"
+                    className="h-10 w-full appearance-none rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-3.5 pr-10 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-0"
                     value={currentSubsectionId ?? ""}
                     onChange={(event) => updateActiveSubsection(event.target.value)}
                   >
