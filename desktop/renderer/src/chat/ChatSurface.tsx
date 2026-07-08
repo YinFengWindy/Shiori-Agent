@@ -726,7 +726,7 @@ export function ChatSurface({
                   visualsActive={renderHeavyVisuals}
                 />
               ) : (
-                <div className="grid h-full min-h-0 rounded-[20px] bg-[#F4F7FB] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+                <div className="grid h-full min-h-0 rounded-[20px] bg-[#F1F5F9] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
                   <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-[16px] bg-[#F1F5F9]">
                     <div className="pointer-events-none absolute inset-y-0 left-0 z-[2] flex items-center pl-3">
                       <button
