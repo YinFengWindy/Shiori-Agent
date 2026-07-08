@@ -106,8 +106,8 @@ async def test_loneliness_gate_passes_when_threshold_reached():
 
 
 @pytest.mark.asyncio
-async def test_empty_candidates_skip_without_llm():
-    llm = FakeLLM([("get_recent_chat", {})])
+async def test_empty_candidates_enter_relationship_fallback_when_loneliness_gate_passes():
+    llm = FakeLLM([("finish_turn", {"decision": "skip", "reason": "no_content"})])
     tick = make_proactive_pipeline(
         llm_fn=llm,
         rng=FakeRng(value=1.0),
@@ -115,7 +115,8 @@ async def test_empty_candidates_skip_without_llm():
     )
     result = await tick.run()
     assert result == 0.0
-    assert llm.calls == []
+    assert len(llm.calls) == 1
+    assert "已通过 loneliness gate" in str(llm.calls[0][2]["content"])
     assert tick.last_ctx.skip_reason == "no_content"
 
 

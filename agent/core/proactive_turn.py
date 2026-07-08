@@ -566,24 +566,26 @@ class ProactiveTurnPipeline:
                     self.last_ctx = ctx
                     return FeedResult(drift_entered=True, base_score=0.0)
                 logger.info("[proactive_v2] fetch: drift not entered")
-            logger.info("[proactive_v2] fetch: no data and fallback off → skip")
-            logger.info(
-                diagnostic_line(
-                    "ProactiveTurnPipeline._fetch_pull",
-                    event="skip",
-                    flow="proactive",
-                    phase="gateway",
-                    session=self._session_key,
-                    tick=ctx.tick_id,
-                    action="skip",
-                    reason="no_content",
-                    counts="alerts:0,content:0,context:0",
+            if not self._allow_relationship_only_fallback(ctx):
+                logger.info("[proactive_v2] fetch: no data and fallback off → skip")
+                logger.info(
+                    diagnostic_line(
+                        "ProactiveTurnPipeline._fetch_pull",
+                        event="skip",
+                        flow="proactive",
+                        phase="gateway",
+                        session=self._session_key,
+                        tick=ctx.tick_id,
+                        action="skip",
+                        reason="no_content",
+                        counts="alerts:0,content:0,context:0",
+                    )
                 )
-            )
-            ctx.terminal_action = "skip"
-            ctx.skip_reason = "no_content"
-            self.last_ctx = ctx
-            return FeedResult(drift_entered=False, base_score=None)
+                ctx.terminal_action = "skip"
+                ctx.skip_reason = "no_content"
+                self.last_ctx = ctx
+                return FeedResult(drift_entered=False, base_score=None)
+            logger.info("[proactive_v2] fetch: no data but loneliness gate passed → relationship fallback")
 
         # 2.4 llm_fn 为空 → 无法进入 Judge，直接退出。
         if self._llm_fn is None:
@@ -593,13 +595,22 @@ class ProactiveTurnPipeline:
         # 2.5 构造本轮 proactive 输入 messages。
         system_msg = {"role": "system", "content": self._build_system_prompt()}
         runtime_context_msg = self._build_runtime_context_message(ctx, gw_result)
+        kickoff_content = (
+            "开始本轮 proactive 处理。"
+            "请基于上面的候选内容和规则，必须通过工具逐步完成分类，"
+            "最后通过 message_push + finish_turn(decision=reply)，或 finish_turn(decision=skip, reason=...) 收尾。"
+        )
+        if self._is_relationship_only_fallback(gw_result):
+            kickoff_content = (
+                "开始本轮 proactive 处理。"
+                "本轮已通过 loneliness gate，但当前没有 alert/content/context 候选。"
+                "允许走纯关系向 fallback：先用 get_recent_chat 判断最近是否有自然延伸的话题；"
+                "如果有，就直接 message_push 一条轻量的关系向主动消息并 finish_turn(decision=reply)。"
+                "如果没有，再 finish_turn(decision=skip, reason=no_content)。"
+            )
         kickoff_msg = {
             "role": "user",
-            "content": (
-                "开始本轮 proactive 处理。"
-                "请基于上面的候选内容和规则，必须通过工具逐步完成分类，"
-                "最后通过 message_push + finish_turn(decision=reply)，或 finish_turn(decision=skip, reason=...) 收尾。"
-            ),
+            "content": kickoff_content,
         }
         messages: list[dict] = [system_msg, runtime_context_msg, kickoff_msg]
 
@@ -1245,6 +1256,16 @@ class ProactiveTurnPipeline:
                 )
 
         return build_context_frame_message(build_context_frame_content(sections))
+
+    def _is_relationship_only_fallback(self, gw_result: GatewayResult) -> bool:
+        return not gw_result.alerts and not gw_result.content_meta and not gw_result.context
+
+    def _allow_relationship_only_fallback(self, ctx: AgentTickContext) -> bool:
+        return (
+            self._llm_fn is not None
+            and self._loneliness_gate_fn is not None
+            and not ctx.context_as_fallback_open
+        )
 
     def _read_workspace_context_for_prompt(self) -> str:
         if self._workspace_context_fn is None:
