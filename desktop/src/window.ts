@@ -57,7 +57,7 @@ export function createDesktopWindow(): BrowserWindow {
     minWidth: 520,
     minHeight: 680,
     frame: false,
-    backgroundColor: "#f4efe6",
+    backgroundColor: "#EFF4F9",
     webPreferences: {
       preload: preloadScript,
       contextIsolation: true,
