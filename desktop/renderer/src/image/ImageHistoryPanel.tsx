@@ -28,12 +28,12 @@ export function ImageHistoryPanel({
               key={item.id}
               className={cx(
                 "rounded-[16px] border p-2 text-left transition focus:outline-none",
-                selected ? "border-black bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)]" : "border-transparent bg-white/60 hover:bg-white/85",
+                selected ? "border-black bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)]" : "border-transparent bg-white hover:bg-white",
               )}
               type="button"
               onClick={() => onSelect(item)}
             >
-              <div className="aspect-square w-full overflow-hidden rounded-[14px] bg-[#F1F5F9]">
+              <div className="aspect-square w-full overflow-hidden rounded-[14px] bg-white">
                 {previewPath ? (
                   <img className="h-full w-full object-contain" src={toFileUrl(previewPath)} alt="history preview" />
                 ) : null}

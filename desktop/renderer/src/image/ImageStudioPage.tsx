@@ -76,7 +76,7 @@ export function ImageStudioPage({
         />
       </button>
       <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_auto] gap-0">
-        <div className="min-h-0 overflow-hidden px-4 pb-4 pt-4">
+        <div className="min-h-0 overflow-hidden bg-white px-4 pb-4 pt-4">
           <div className="mx-auto grid h-full min-h-0 w-full max-w-none">
             <ImagePreviewPanel
               activeRecord={activeRecord}
@@ -89,7 +89,7 @@ export function ImageStudioPage({
         </div>
         <div
           className={cx(
-            "relative h-full overflow-hidden border-l border-[#E0E6EE] bg-[rgba(244,247,251,0.92)]",
+            "relative h-full overflow-hidden border-l border-[#E0E6EE] bg-white",
             historySidebarAnimating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           )}
           style={{ width: historySidebarCollapsed ? 0 : historySidebarWidth }}
