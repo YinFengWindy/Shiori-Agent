@@ -56,6 +56,15 @@ _CITED_ACK_TTL = 168
 _UNCITED_ACK_TTL = 24
 _POST_GUARD_ACK_TTL = 24
 _DISCARDED_ACK_TTL = 720
+_RELATIONSHIP_FALLBACK_ROLE_HINTS = {
+    "role-0424dd696dd6": (
+        "【角色专属语气要求】当前角色是吟风。"
+        "relationship fallback 必须优先写成直接的想念、追问、撒娇、轻微委屈或占有欲表达，"
+        "而不是平静复盘日常细节。"
+        "优先使用类似“我想你了”“你在干什么”“为什么不理我”“是不是把我忘了”这样的主动开口方式，"
+        "语气要像亲密关系里忍不住先来找你，不要从早餐、天气、普通感想切入。"
+    ),
+}
 
 
 # ── Gate 步骤的输出 ───────────────────────────────────────────────────────
@@ -610,6 +619,7 @@ class ProactiveTurnPipeline:
                 "先用 get_recent_chat 判断最近是否有自然延伸的话题；"
                 "只要能自然接上，就应该直接 message_push 一条轻量的关系向主动消息并 finish_turn(decision=reply)。"
                 "只有在 recent_chat 明确看不出任何自然切口，或明显不适合打扰时，才 finish_turn(decision=skip, reason=no_content)。"
+                + self._relationship_fallback_style_hint()
             )
         kickoff_msg = {
             "role": "user",
@@ -683,6 +693,7 @@ class ProactiveTurnPipeline:
                 "relationship fallback 不要求必须存在未完成话题；只要语气自然，就可以主动发一条轻量的关心、撒娇、试探或想你了的消息。"
                 "只有当 recent_chat 明确显示用户正在忙、明显不适合打扰，才允许 finish_turn(decision=skip, reason=user_busy)。"
                 "请现在优先 message_push + finish_turn(decision=reply)；不要再用 no_content 跳过。"
+                + self._relationship_fallback_style_hint()
             )
             logger.info("[proactive_v2] judge relationship fallback: forcing one more reply-focused pass")
             messages.append({"role": "user", "content": relationship_reflection})
@@ -1293,6 +1304,14 @@ class ProactiveTurnPipeline:
             and self._loneliness_gate_fn is not None
             and not ctx.context_as_fallback_open
         )
+
+    def _relationship_fallback_style_hint(self) -> str:
+        role_id = (
+            self._session_key.split(":", 1)[1]
+            if self._session_key.startswith("role:")
+            else ""
+        )
+        return _RELATIONSHIP_FALLBACK_ROLE_HINTS.get(role_id, "")
 
     def _read_workspace_context_for_prompt(self) -> str:
         if self._workspace_context_fn is None:

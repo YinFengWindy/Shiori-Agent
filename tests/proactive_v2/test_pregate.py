@@ -142,6 +142,25 @@ async def test_relationship_fallback_takes_priority_over_drift_when_loneliness_g
 
 
 @pytest.mark.asyncio
+async def test_yinfeng_relationship_fallback_includes_direct_longing_style_hint():
+    llm = FakeLLM([("finish_turn", {"decision": "skip", "reason": "no_content"})])
+    tick = make_proactive_pipeline(
+        session_key="role:role-0424dd696dd6",
+        llm_fn=llm,
+        rng=FakeRng(value=1.0),
+        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+    )
+
+    await tick.run()
+
+    kickoff = str(llm.calls[0][2]["content"])
+    reflection = str(llm.calls[1][-1]["content"])
+    assert "当前角色是吟风" in kickoff
+    assert "我想你了" in kickoff
+    assert "为什么不理我" in reflection
+
+
+@pytest.mark.asyncio
 async def test_drift_interval_blocks_recent_drift():
     state = FakeStateStore()
     state.set_last_drift_at(datetime.now(timezone.utc) - timedelta(hours=1))
