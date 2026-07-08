@@ -820,7 +820,7 @@ class DesktopBridgeService:
         relationship_runtime = self.relationship_runtime
         if relationship_runtime is not None:
             snapshot = relationship_runtime.read_snapshot(role.id)
-            runtime = relationship_runtime.read_loneliness_runtime(role.id)
+            runtime = relationship_runtime.current_loneliness_runtime(role.id)
             if snapshot is not None:
                 payload["relationship_snapshot"] = snapshot
             if runtime is not None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -1445,7 +1446,7 @@ async def test_desktop_bridge_syncs_role_metadata_into_session_on_open_and_updat
 
 
 @pytest.mark.asyncio
-async def test_desktop_bridge_includes_relationship_snapshot_and_loneliness_runtime(
+async def test_desktop_bridge_recomputes_loneliness_runtime_for_roles_and_sessions_on_read(
     tmp_path: Path,
 ):
     role_store = RoleStore(tmp_path)
@@ -1481,12 +1482,13 @@ async def test_desktop_bridge_includes_relationship_snapshot_and_loneliness_runt
             "last_error": "",
         },
     )
+    stale_runtime_at = datetime.now(timezone.utc) - timedelta(hours=12)
     relationship_runtime.write_loneliness_runtime(
         role.id,
         {
             "role_id": role.id,
             "loneliness_value": 58,
-            "last_calculated_at": "2026-07-06T18:00:00+08:00",
+            "last_calculated_at": stale_runtime_at.isoformat(),
             "last_user_at": "",
             "last_proactive_at": "",
             "awaiting_reply_after_proactive": False,
@@ -1527,7 +1529,7 @@ async def test_desktop_bridge_includes_relationship_snapshot_and_loneliness_runt
         role_payload["relationship_snapshot"]["role_self_view"]
         == "我最近会忍不住去想你。"
     )
-    assert role_payload["loneliness_runtime"]["loneliness_value"] == 58
+    assert role_payload["loneliness_runtime"]["loneliness_value"] > 58
     assert session_response.error is None
     assert (
         session_response.payload["session"]["metadata"]["relationship_snapshot"][
@@ -1539,7 +1541,7 @@ async def test_desktop_bridge_includes_relationship_snapshot_and_loneliness_runt
         session_response.payload["session"]["metadata"]["loneliness_runtime"][
             "loneliness_value"
         ]
-        == 58
+        > 58
     )
 
 

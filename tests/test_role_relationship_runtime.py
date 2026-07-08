@@ -112,6 +112,35 @@ def test_user_message_clears_unanswered_state_and_reduces_loneliness(tmp_path: P
     assert datetime.fromisoformat(updated["last_user_at"]).astimezone(timezone.utc) == now
 
 
+def test_current_loneliness_runtime_catches_up_elapsed_time_since_last_calculation(tmp_path: Path):
+    _seed_role(tmp_path)
+    runtime, _, _ = _runtime(tmp_path)
+    runtime.write_snapshot("mira", _snapshot_payload())
+    runtime.write_loneliness_runtime(
+        "mira",
+        {
+            "role_id": "mira",
+            "loneliness_value": 10,
+            "last_calculated_at": "2026-07-06T00:00:00+00:00",
+            "last_user_at": "",
+            "last_proactive_at": "",
+            "awaiting_reply_after_proactive": False,
+            "awaiting_reply_since": "",
+            "last_triggered_at": "",
+            "cooldown_until": "",
+        },
+    )
+
+    updated = runtime.current_loneliness_runtime(
+        "mira",
+        now=_utc(2026, 7, 7, 0, 0),
+    )
+
+    assert updated is not None
+    assert updated["loneliness_value"] == 74.8
+    assert datetime.fromisoformat(updated["last_calculated_at"]).astimezone(timezone.utc) == _utc(2026, 7, 7, 0, 0)
+
+
 def test_proactive_sent_marks_unanswered_and_sets_cooldown(tmp_path: Path):
     _seed_role(tmp_path)
     runtime, session_manager, _ = _runtime(tmp_path)

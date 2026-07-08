@@ -51,6 +51,8 @@ _DEFAULT_BEHAVIOR_PROFILE = {
     "post_trigger_cooldown_minutes": 240,
     "night_suppression": 0.4,
 }
+# Keep per-role profile differences, but make the experiential growth curve a bit steeper.
+_LONELINESS_GROWTH_RATE_MULTIPLIER = 1.35
 _RELATIONSHIP_SYSTEM = (
     "你正在根据当前关系证据，生成角色此刻对用户关系的主观状态。"
     "你只能输出 JSON 对象，不要输出 JSON 之外的文字。"
@@ -285,6 +287,13 @@ class RoleRelationshipRuntimeService:
         atomic_save_json(path, normalized, domain="role.loneliness")
         return normalized
 
+    def current_loneliness_runtime(self, role_id: str, *, now: datetime | None = None) -> dict[str, Any] | None:
+        """Returns the latest loneliness runtime, catching up elapsed time when possible."""
+        runtime = self.recompute_loneliness(role_id, now=now)
+        if runtime is not None:
+            return runtime
+        return self.read_loneliness_runtime(role_id)
+
     def mark_snapshot_error(
         self,
         role_id: str,
@@ -393,7 +402,7 @@ class RoleRelationshipRuntimeService:
             else:
                 next_metadata = dict(metadata)
                 next_metadata["relationship_snapshot"] = snapshot
-                runtime = self.read_loneliness_runtime(role_id)
+                runtime = self.current_loneliness_runtime(role_id)
                 if runtime is not None:
                     next_metadata["loneliness_runtime"] = runtime
                 session.metadata = next_metadata
@@ -409,11 +418,16 @@ class RoleRelationshipRuntimeService:
         last_calculated = _parse_iso(current.get("last_calculated_at")) or now_dt
         elapsed_minutes = max(0.0, (now_dt - last_calculated).total_seconds() / 60.0)
         profile = self._behavior_profile(snapshot)
-        delta = (elapsed_minutes / 60.0) * float(profile["loneliness_growth_base"])
+        elapsed_hours = elapsed_minutes / 60.0
+        delta = elapsed_hours * float(profile["loneliness_growth_base"]) * _LONELINESS_GROWTH_RATE_MULTIPLIER
         if bool(current.get("awaiting_reply_after_proactive")):
             awaiting_since = _parse_iso(current.get("awaiting_reply_since"))
             if awaiting_since is not None and now_dt - awaiting_since <= timedelta(hours=_UNANSWERED_REPLY_WINDOW_HOURS):
-                delta += (elapsed_minutes / 60.0) * float(profile["loneliness_growth_when_unanswered"])
+                delta += (
+                    elapsed_hours
+                    * float(profile["loneliness_growth_when_unanswered"])
+                    * _LONELINESS_GROWTH_RATE_MULTIPLIER
+                )
             else:
                 current["awaiting_reply_after_proactive"] = False
                 current["awaiting_reply_since"] = ""
@@ -509,7 +523,7 @@ class RoleRelationshipRuntimeService:
         if not role_id:
             return next_metadata
         snapshot = self.read_snapshot(role_id)
-        runtime = self.read_loneliness_runtime(role_id)
+        runtime = self.current_loneliness_runtime(role_id)
         if snapshot is not None:
             next_metadata["relationship_snapshot"] = snapshot
         if runtime is not None:
