@@ -78,6 +78,18 @@ export function PlusIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProp
   );
 }
 
+/** Renders the shared desktop smiley glyph used by chat emoji actions. */
+export function SmileyIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
+      <circle cx="12" cy="12" r="8.5" strokeWidth="1.7" />
+      <path d="M9.25 9.5h.01" strokeLinecap="round" strokeWidth="2.4" />
+      <path d="M14.75 9.5h.01" strokeLinecap="round" strokeWidth="2.4" />
+      <path d="M8.75 13.75c.8 1.2 2.1 1.75 3.25 1.75s2.45-.55 3.25-1.75" strokeLinecap="round" strokeWidth="1.7" />
+    </svg>
+  );
+}
+
 /** Renders the shared desktop document glyph. */
 export function DocumentIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
   return (

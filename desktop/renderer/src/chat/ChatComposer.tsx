@@ -1,5 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChatEmojiPicker } from "./ChatEmojiPicker";
 import { canSubmitChatMessage, normalizeChatAttachmentPaths } from "./chatComposerState";
+import { insertEmojiIntoChatDraft } from "./chatEmojiState";
 import { isChatImageAsset } from "./chatImageHistory";
 import { DeleteIcon, DocumentIcon, PlusIcon, SendIcon } from "../shared/icons";
 import { toFileUrl } from "../shared/format";
@@ -41,22 +43,39 @@ export function ChatComposer({
   onJumpToMessage,
 }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
   const [draft, setDraft] = useState("");
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<string[]>([]);
   const canSubmit = canSubmitChatMessage(draft, pendingAttachments);
+  const composerInputDisabled = !activeRoleId || sending || !bridgeReady;
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = "auto";
     textarea.style.height = `${textarea.scrollHeight}px`;
+    if (!pendingSelectionRef.current) {
+      return;
+    }
+    textarea.focus();
+    textarea.setSelectionRange(pendingSelectionRef.current.start, pendingSelectionRef.current.end);
+    pendingSelectionRef.current = null;
   }, [draft]);
 
   useEffect(() => {
     setDraft("");
+    setEmojiPickerOpen(false);
+    pendingSelectionRef.current = null;
     setPendingAttachments([]);
     onClearReplyTarget();
   }, [activeRoleId, sessionKey]);
+
+  useEffect(() => {
+    if (sending) {
+      setEmojiPickerOpen(false);
+    }
+  }, [sending]);
 
   async function pickChatAttachments(): Promise<void> {
     const files = await window.miraDesktop.pickChatAttachments({ multiple: true });
@@ -74,6 +93,7 @@ export function ChatComposer({
     if (!activeRoleId || !bridgeReady || sending || !canSubmit) {
       return;
     }
+    setEmojiPickerOpen(false);
     const request: ChatSendRequest = {
       content: draft,
       attachments: pendingAttachments,
@@ -87,6 +107,21 @@ export function ChatComposer({
       setDraft(request.content);
       setPendingAttachments(request.attachments);
     }
+  }
+
+  function handleSelectEmoji(emoji: string): void {
+    const nextDraft = insertEmojiIntoChatDraft(
+      draft,
+      emoji,
+      textareaRef.current?.selectionStart,
+      textareaRef.current?.selectionEnd,
+    );
+    pendingSelectionRef.current = {
+      start: nextDraft.selectionStart,
+      end: nextDraft.selectionEnd,
+    };
+    setDraft(nextDraft.value);
+    setEmojiPickerOpen(false);
   }
 
   function handleComposerKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -200,11 +235,18 @@ export function ChatComposer({
               type="button"
               aria-label="添加附件"
               onClick={() => void pickChatAttachments()}
-              disabled={!activeRoleId || sending || !bridgeReady}
+              disabled={composerInputDisabled}
             >
               <PlusIcon className="h-[14px] w-[14px] fill-current" />
             </button>
             <div className="composer-spacer flex-1" />
+            <ChatEmojiPicker
+              disabled={composerInputDisabled}
+              open={emojiPickerOpen}
+              onClose={() => setEmojiPickerOpen(false)}
+              onSelectEmoji={handleSelectEmoji}
+              onToggle={() => setEmojiPickerOpen((current) => !current)}
+            />
             <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="发送消息" onClick={() => void submitMessage()} disabled={!activeRoleId || !canSubmit || sending || !bridgeReady}>
               <SendIcon className="h-[15px] w-[15px] fill-current" />
             </button>

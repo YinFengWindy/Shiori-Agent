@@ -23,6 +23,10 @@ describe("canSubmitChatMessage", () => {
     assert.equal(canSubmitChatMessage("", ["D:\\files\\note.md"]), true);
   });
 
+  it("allows emoji-only sends", () => {
+    assert.equal(canSubmitChatMessage("😀", []), true);
+  });
+
   it("rejects empty text and empty attachments", () => {
     assert.equal(canSubmitChatMessage("   ", []), false);
   });
