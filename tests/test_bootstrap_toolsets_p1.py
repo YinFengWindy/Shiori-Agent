@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from agent.tools.registry import ToolRegistry
+from bootstrap.toolsets.peer import build_peer_agent_resources
 from bootstrap.toolsets.protocol import (
     ToolsetRegistrationResult,
     build_registration_result,
@@ -136,3 +137,13 @@ def test_build_registration_result_uses_public_registry_names():
 
     assert result.tool_names == ["always", "b"]
     assert result.always_on_names == ["always"]
+
+
+def test_build_peer_agent_resources_is_disabled_for_removed_runtime() -> None:
+    resources = build_peer_agent_resources(
+        config=cast(Any, SimpleNamespace(peer_agents=["legacy"])),
+        bus=cast(Any, SimpleNamespace()),
+        http_resources=cast(Any, SimpleNamespace()),
+    )
+
+    assert resources == (None, None)

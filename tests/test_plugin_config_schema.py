@@ -80,7 +80,10 @@ async def test_plugin_config_model_failure_skips_plugin(tmp_path: Path):
     assert manager.loaded_count == 0
 
 
-def test_config_load_resolves_plugin_env_and_legacy_qqbot(tmp_path: Path, monkeypatch):
+def test_config_load_resolves_plugin_env_and_ignores_removed_qqbot_block(
+    tmp_path: Path,
+    monkeypatch,
+):
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
@@ -111,5 +114,4 @@ allow_from = ["user-openid"]
     config = Config.load(config_path)
 
     assert config.plugins["typed"]["api_key"] == "plugin-secret"
-    assert config.plugins["qqbot"]["client_secret"] == "qq-secret"
-    assert config.plugins["qqbot"]["allow_from"] == ["user-openid"]
+    assert "qqbot" not in config.plugins

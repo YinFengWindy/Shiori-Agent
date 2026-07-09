@@ -1,63 +1,29 @@
 from __future__ import annotations
 
-import asyncio
-import sys
-import threading
-import types
-
-import pytest
-
-from bootstrap.setup_wizard import _async_fetch_qqbot_openid
+from bootstrap.setup_wizard import (
+    WizardAnswers,
+    _render_channels,
+    _render_integrations,
+)
 
 
-@pytest.mark.asyncio
-async def test_qqbot_openid_fetch_times_out_without_ws_frames(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class _Resp:
-        def __init__(self, payload: dict[str, str]) -> None:
-            self._payload = payload
+def test_render_channels_omits_removed_qqbot_section() -> None:
+    rendered = _render_channels(
+        WizardAnswers(
+            tg_token="telegram-token",
+            tg_allow_from=["alice"],
+            proactive_enabled=True,
+            proactive_channel="telegram",
+            proactive_chat_id="123",
+        )
+    )
 
-        def json(self) -> dict[str, str]:
-            return self._payload
+    assert "[channels.telegram]" in rendered
+    assert "[plugins.qqbot]" not in rendered
 
-    class _Client:
-        def __init__(self, timeout: int) -> None:
-            self.timeout = timeout
 
-        async def __aenter__(self):
-            return self
+def test_render_integrations_omits_removed_fitbit_and_peer_sections() -> None:
+    rendered = _render_integrations()
 
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def post(self, *args, **kwargs) -> _Resp:
-            return _Resp({"access_token": "token"})
-
-        async def get(self, *args, **kwargs) -> _Resp:
-            return _Resp({"url": "wss://example.invalid"})
-
-    class _NeverFrames:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        def __aiter__(self):
-            return self
-
-        async def __anext__(self):
-            await asyncio.sleep(3600)
-            raise StopAsyncIteration
-
-    fake_httpx = types.ModuleType("httpx")
-    fake_httpx.AsyncClient = _Client
-    fake_websockets = types.ModuleType("websockets")
-    fake_websockets.connect = lambda *_args, **_kwargs: _NeverFrames()
-    monkeypatch.setitem(sys.modules, "httpx", fake_httpx)
-    monkeypatch.setitem(sys.modules, "websockets", fake_websockets)
-
-    result = await _async_fetch_qqbot_openid("app", "secret", 1, threading.Event())
-
-    assert result is None
+    assert "fitbit" not in rendered
+    assert "peer_agents" not in rendered

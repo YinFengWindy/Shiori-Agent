@@ -5,15 +5,12 @@ python main.py setup
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import sys
 import select
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
 
 import click
 from plugins.default_memory.config import render_default_memory_config
@@ -46,9 +43,6 @@ class WizardAnswers:
     proactive_enabled: bool = False
     proactive_chat_id: str = ""
     proactive_channel: str = ""
-    qqbot_app_id: str = ""
-    qqbot_client_secret: str = ""
-    qqbot_user_openid: str = ""
     embed_model: str = ""
     embed_api_key: str = ""
     embed_base_url: str = ""
@@ -239,7 +233,6 @@ def _collect_answers() -> WizardAnswers:
     _phase_main_llm(a)
     _phase_fast_model(a)
     _phase_telegram(a)
-    _phase_qqbot(a)
     _phase_memory(a)
     return a
 
@@ -290,10 +283,10 @@ def _phase_fast_model(a: WizardAnswers) -> None:
 
 
 def _phase_telegram(a: WizardAnswers) -> None:
-    _section_header("3/5", "Telegram 频道 + Proactive")
+    _section_header("3/4", "Telegram 频道 + Proactive")
 
     if not click.confirm("配置 Telegram 频道？", default=True):
-        _hint("跳过后仅支持 CLI 模式（uv run python main.py cli），proactive 已关闭")
+        _hint("跳过后不配置外部渠道，proactive 已关闭")
         a.proactive_enabled = False
         return
 
@@ -344,53 +337,8 @@ def _phase_telegram(a: WizardAnswers) -> None:
         _hint("启动后向 bot 发 /chatid 可以随时补填")
 
 
-def _phase_qqbot(a: WizardAnswers) -> None:
-    _section_header("4/5", "官方 QQBot 频道（可跳过）")
-    _hint("使用腾讯开放平台 WebSocket 长连接，无需 NapCat，与 Telegram 并存")
-
-    if not click.confirm("配置官方 QQBot？", default=False):
-        return
-
-    click.echo()
-    click.echo(click.style("  还没有 QQ 开放平台应用？按以下步骤创建：", dim=True))
-    _hint("1. 打开 https://q.qq.com，登录腾讯开放平台")
-    _hint("2. 创建机器人应用，记录 AppID 和 AppSecret")
-    _hint("3. 在「开发设置」中开启「私聊」C2C 消息权限")
-    click.echo()
-
-    a.qqbot_app_id = click.prompt("AppID")
-    a.qqbot_client_secret = _secret_prompt("AppSecret (client_secret)")
-
-    err = _validate_qqbot_credentials(a.qqbot_app_id, a.qqbot_client_secret)
-    if err:
-        _warn(f"凭据验证失败：{err}")
-        _hint("继续配置，启动后检查凭据是否正确")
-
-    click.echo()
-    click.echo(click.style("  需要获取你的 user_openid：", bold=True))
-    _hint("在 QQ 中搜索你的 bot，向它发任意一条消息（比如「你好」）")
-    _hint("发完回来按回车，向导会自动读取")
-    click.echo()
-    click.pause(info="发完消息后按回车继续...")
-
-    openid = _fetch_qqbot_openid_with_spinner(
-        a.qqbot_app_id, a.qqbot_client_secret, timeout_s=90
-    )
-    if openid:
-        _ok(f"user_openid 已获取：{openid}")
-        a.qqbot_user_openid = openid
-        # 仅在没有 Telegram proactive 时才用 qqbot 作为 proactive 目标
-        if not a.proactive_enabled and click.confirm("开启 proactive 主动推送（via QQBot）？", default=True):
-            a.proactive_enabled = True
-            a.proactive_channel = "qqbot"
-            a.proactive_chat_id = f"c2c:{openid}"
-    else:
-        _warn("未收到消息，allow_from 留空")
-        _hint("启动后可在 config.toml 的 [plugins.qqbot] 中手动填入 allow_from")
-
-
 def _phase_memory(a: WizardAnswers) -> None:
-    _section_header("5/5", "语义记忆（Embedding）")
+    _section_header("4/4", "语义记忆（Embedding）")
     _hint("agent 用 embedding 模型将记忆转为向量，实现语义检索")
     click.echo()
 
@@ -480,119 +428,6 @@ def _fetch_chat_id(token: str, username: str, timeout_s: int, stop: threading.Ev
     except Exception as e:
         _err(f"获取 chat_id 失败：{e}")
     return None
-
-
-def _validate_qqbot_credentials(app_id: str, client_secret: str) -> str | None:
-    try:
-        import httpx
-        resp = httpx.post(
-            "https://bots.qq.com/app/getAppAccessToken",
-            json={"appId": app_id, "clientSecret": client_secret},
-            timeout=10,
-        )
-        data = resp.json()
-        if data.get("access_token"):
-            _ok("AppID / AppSecret 验证成功")
-            return None
-        return f"token 获取失败（{data}）"
-    except Exception as e:
-        return f"网络错误：{e}"
-
-
-def _fetch_qqbot_openid_with_spinner(app_id: str, client_secret: str, timeout_s: int = 90) -> str | None:
-    result: list[str | None] = [None]
-    done = threading.Event()
-
-    def _run() -> None:
-        try:
-            result[0] = asyncio.run(
-                _async_fetch_qqbot_openid(app_id, client_secret, timeout_s, done)
-            )
-        except Exception as e:
-            _err(f"获取 user_openid 失败：{e}")
-        done.set()
-
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
-
-    frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    i = 0
-    while not done.wait(timeout=0.1):
-        frame = click.style(frames[i % len(frames)], fg="cyan")
-        click.echo(f"\r  {frame} 等待消息中...", nl=False)
-        i += 1
-    click.echo("\r" + " " * 30 + "\r", nl=False)
-
-    thread.join()
-    return result[0]
-
-
-async def _async_fetch_qqbot_openid(
-    app_id: str,
-    client_secret: str,
-    timeout_s: int,
-    stop: threading.Event,
-) -> str | None:
-    import httpx
-    import websockets
-
-    # 1. 获取 access token
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            "https://bots.qq.com/app/getAppAccessToken",
-            json={"appId": app_id, "clientSecret": client_secret},
-        )
-        token_data = resp.json()
-        token = str(token_data.get("access_token") or "")
-        if not token:
-            return None
-
-    # 2. 获取 gateway URL
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            "https://api.sgroup.qq.com/gateway",
-            headers={"Authorization": f"QQBot {token}"},
-        )
-        gateway_url = str(resp.json().get("url") or "")
-        if not gateway_url:
-            return None
-
-    # 3. 连接 WS，监听第一条 C2C 私聊消息
-    try:
-        async with asyncio.timeout(timeout_s):
-            async with websockets.connect(gateway_url) as ws:
-                async for raw in ws:
-                    if stop.is_set():
-                        return None
-                    payload = json.loads(raw)
-                    op = payload.get("op")
-                    if op == 10:
-                        # Hello：发送鉴权 Identify
-                        await ws.send(json.dumps({
-                            "op": 2,
-                            "d": {
-                                "token": f"QQBot {token}",
-                                "intents": 1 << 25,
-                                "shard": [0, 1],
-                            },
-                        }))
-                    elif op == 0 and payload.get("t") == "C2C_MESSAGE_CREATE":
-                        raw_d = payload.get("d")
-                        d = cast(dict[str, object], raw_d) if isinstance(raw_d, dict) else {}
-                        raw_author = d.get("author")
-                        author = (
-                            cast(dict[str, object], raw_author)
-                            if isinstance(raw_author, dict)
-                            else {}
-                        )
-                        openid = str(author.get("user_openid") or d.get("user_openid") or "")
-                        if openid:
-                            return openid
-    except TimeoutError:
-        return None
-    return None
-
-
 # ---------------------------------------------------------------------------
 # Config 验证
 # ---------------------------------------------------------------------------
@@ -724,25 +559,6 @@ def _render_channels(a: WizardAnswers) -> str:
         "",
     ]
 
-    if a.qqbot_app_id:
-        allow = ", ".join(f'"{u}"' for u in ([a.qqbot_user_openid] if a.qqbot_user_openid else []))
-        lines += [
-            "[plugins.qqbot]",
-            f'app_id = "{a.qqbot_app_id}"',
-            f'client_secret = "{a.qqbot_client_secret}"',
-            f"allow_from = [{allow}]",
-            "",
-        ]
-    else:
-        lines += [
-            "# 官方 QQBot（如需启用，填写后取消注释）",
-            "# [plugins.qqbot]",
-            '# app_id = ""',
-            '# client_secret = ""',
-            '# allow_from = []  # 用户的 user_openid，发一条消息后可从日志获取',
-            "",
-        ]
-
     return "\n".join(lines)
 
 
@@ -796,20 +612,7 @@ def _render_proactive(a: WizardAnswers) -> str:
 
 
 def _render_integrations() -> str:
-    return """\
-[integrations.fitbit]
-enabled = false
-
-# 可选：接入外部 Peer Agent（如 DeepResearch）
-# [[integrations.peer_agents]]
-# name = "DeepResearch Agent"
-# base_url = "http://127.0.0.1:9404"
-# launcher = ["uv", "run", "--project", "/path/to/deepresearch", "python", "-m", "app.a2a_server"]
-# cwd = "/path/to/deepresearch"
-# description = "对复杂问题执行多轮深度调研，生成结构化长报告。"
-# startup_timeout_s = 30
-# shutdown_timeout_s = 60
-"""
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -824,26 +627,10 @@ def _print_completion(a: WizardAnswers) -> None:
     if a.proactive_enabled and not a.proactive_chat_id:
         click.echo()
         _warn("proactive 已开启，但 chat_id 未获取到")
-        if a.proactive_channel == "qqbot" or (not a.tg_token and a.qqbot_app_id):
-            _hint("启动后向 bot 发任意消息，日志中会出现 user_openid")
-            _hint("将其填入 config.toml：")
-            _hint("[plugins.qqbot]")
-            _hint('allow_from = ["<user_openid>"]')
-            _hint("[proactive.target]")
-            _hint('channel = "qqbot"')
-            _hint('chat_id = "c2c:<user_openid>"')
-        else:
-            _hint("启动后向 bot 发 /chatid，把返回的 id 填入 config.toml：")
-            _hint("[proactive.target]")
-            _hint('chat_id = "<你的 id>"')
+        _hint("启动后向 bot 发 /chatid，把返回的 id 填入 config.toml：")
+        _hint("[proactive.target]")
+        _hint('chat_id = "<你的 id>"')
         _hint("修改后重启生效")
     elif a.proactive_enabled and a.proactive_chat_id:
         click.echo()
         _ok("proactive 已配置，启动后会主动向你推送消息")
-
-    if a.qqbot_app_id and not a.qqbot_user_openid:
-        click.echo()
-        _warn("QQBot allow_from 为空，启动后所有私聊请求会被拒绝")
-        _hint("向 bot 发一条消息，日志里找到 user_openid，填入 config.toml：")
-        _hint("[plugins.qqbot]")
-        _hint('allow_from = ["<user_openid>"]')

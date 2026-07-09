@@ -97,6 +97,7 @@ def test_stream_events_only_support_telegram_private_chat():
     assert _supports_stream_events("telegram", "123")
     assert not _supports_stream_events("telegram", "-1001")
     assert not _supports_stream_events("telegram", "@alice")
+    assert not _supports_stream_events("feishu", "oc_123")
     assert not _supports_stream_events("qq", "123")
     assert not _supports_stream_events("cli", "direct")
 

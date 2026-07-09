@@ -31,6 +31,7 @@ from bus.event_bus import EventBus
 from infra.channels.contract import Channel
 
 logger = logging.getLogger(__name__)
+_REMOVED_PLUGIN_NAMES = {"qqbot", "feishu"}
 
 _EVENT_TYPE_MAP: dict[PluginEventType, type] = {
     PluginEventType.BEFORE_TURN: BeforeTurnCtx,
@@ -143,6 +144,9 @@ class PluginManager:
             for child in sorted(d.iterdir()):
                 # 1. 跳过非目录和没有 plugin.py 的目录
                 if not child.is_dir():
+                    continue
+                if child.name in _REMOVED_PLUGIN_NAMES:
+                    logger.info("插件已从正式运行时移除，跳过发现: %s", child.name)
                     continue
                 main = child / "plugin.py"
                 if not main.exists():
