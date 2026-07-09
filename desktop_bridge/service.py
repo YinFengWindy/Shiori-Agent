@@ -17,6 +17,7 @@ from core.net.http import get_default_http_requester
 from core.roles import RoleAggregateService, RoleRelationshipRuntimeService, RoleStore
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.app_service import DesktopAppService
+from desktop_bridge.chat_service import DesktopChatService
 from desktop_bridge.image_service import DesktopImageService
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from infra.channels.reply_context import build_inbound_text_with_reply_context
@@ -51,7 +52,6 @@ class DesktopBridgeService:
         self._event_listeners: set[
             Callable[[dict[str, Any]], Awaitable[None] | None]
         ] = set()
-        self._chat_tasks: set[asyncio.Task[None]] = set()
         self._self_seed_generator = self._build_self_seed_generator()
         self.role_service = role_service or RoleAggregateService.from_runtime(
             workspace=workspace,
@@ -71,6 +71,15 @@ class DesktopBridgeService:
             conversation_service=self.conversation_service,
             relationship_runtime=relationship_runtime,
             presence=presence,
+        )
+        self.chat_service = DesktopChatService(
+            agent_loop=agent_loop,
+            event_bus=event_bus,
+            session_manager=session_manager,
+            role_id_from_session_key=self._role_id_from_desktop_session_key,
+            sync_desktop_session_thread=self._sync_desktop_session_thread,
+            emit_payload=self._emit_event,
+            emit_session_updated=self._emit_session_updated,
         )
         self.novelai_store = novelai_store or NovelAIStore(workspace)
         self.novelai_service = novelai_service or self._build_novelai_service()
@@ -453,83 +462,15 @@ class DesktopBridgeService:
         omit_user_turn: bool,
         emit_event,
     ) -> tuple[Session, list[BridgeEvent]]:
-        collected: list[BridgeEvent] = []
-
-        async def _on_delta(event: StreamDeltaReady) -> None:
-            if event.session_key != session_key:
-                return
-            payload = {
-                "session_key": event.session_key,
-                "content_delta": event.content_delta,
-                "thinking_delta": event.thinking_delta,
-            }
-            bridge_event = BridgeEvent(
-                id=request_id,
-                type="event",
-                method="chat.delta",
-                payload=payload,
-            )
-            collected.append(bridge_event)
-            await self._emit_event(emit_event, bridge_event.to_dict())
-
-        async def _on_done(event: TurnCommitted) -> None:
-            if event.session_key != session_key:
-                return
-            payload = {
-                "session_key": event.session_key,
-                "reply": event.assistant_response,
-                "thinking": event.thinking,
-                "tools_used": list(event.tools_used),
-            }
-            bridge_event = BridgeEvent(
-                id=request_id,
-                type="event",
-                method="chat.done",
-                payload=payload,
-            )
-            collected.append(bridge_event)
-            await self._emit_event(emit_event, bridge_event.to_dict())
-
-        self.event_bus.on(StreamDeltaReady, _on_delta)
-        self.event_bus.on(TurnCommitted, _on_done)
-        try:
-            await self.agent_loop.process_direct(
-                content,
-                session_key=session_key,
-                channel="desktop",
-                chat_id=session_key,
-                omit_user_turn=omit_user_turn,
-                media=media,
-                metadata=metadata,
-                stream_events=True,
-            )
-            await asyncio.sleep(0)
-            session = self.session_manager.get_or_create(session_key)
-            role_id = self._role_id_from_desktop_session_key(session_key)
-            if role_id:
-                self._sync_desktop_session_thread(session, role_id=role_id)
-            await self._emit_session_updated(
-                request_id=request_id,
-                session=session,
-                emit_event=emit_event,
-            )
-            return session, collected
-        except Exception as exc:
-            bridge_event = BridgeEvent(
-                id=request_id,
-                type="event",
-                method="chat.error",
-                payload={
-                    "session_key": session_key,
-                    "message": str(exc),
-                },
-            )
-            collected.append(bridge_event)
-            await self._emit_event(emit_event, bridge_event.to_dict())
-            raise
-        finally:
-            self.event_bus.off(StreamDeltaReady, _on_delta)
-            self.event_bus.off(TurnCommitted, _on_done)
+        return await self.chat_service.run_chat_turn(
+            request_id=request_id,
+            session_key=session_key,
+            content=content,
+            media=media,
+            metadata=metadata,
+            omit_user_turn=omit_user_turn,
+            emit_event=emit_event,
+        )
 
     def _start_chat_turn(
         self,
@@ -542,23 +483,15 @@ class DesktopBridgeService:
         omit_user_turn: bool,
         emit_event,
     ) -> None:
-        async def _runner() -> None:
-            try:
-                await self._run_chat_turn(
-                    request_id=request_id,
-                    session_key=session_key,
-                    content=content,
-                    media=media,
-                    metadata=metadata,
-                    omit_user_turn=omit_user_turn,
-                    emit_event=emit_event,
-                )
-            except Exception:
-                logger.exception("desktop chat turn failed: %s", session_key)
-
-        task = asyncio.create_task(_runner(), name=f"desktop-chat:{session_key}")
-        self._chat_tasks.add(task)
-        task.add_done_callback(self._chat_tasks.discard)
+        self.chat_service.start_chat_turn(
+            request_id=request_id,
+            session_key=session_key,
+            content=content,
+            media=media,
+            metadata=metadata,
+            omit_user_turn=omit_user_turn,
+            emit_event=emit_event,
+        )
 
     def _ok(
         self, request_id: str, method: str, payload: dict[str, Any]
