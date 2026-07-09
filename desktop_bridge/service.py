@@ -10,6 +10,7 @@ from agent.looping.core import AgentLoop
 from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
+from conversation.service import ConversationService
 from core.integrations.novelai import NovelAIClient, NovelAIService, NovelAIStore
 from core.integrations.novelai.models import GenerateImageRequest, NovelAISettings
 from core.net.http import get_default_http_requester
@@ -55,6 +56,10 @@ class DesktopBridgeService:
             role_store=role_store,
             session_manager=session_manager,
             self_seed_generator=self._self_seed_generator,
+        )
+        self.conversation_service = ConversationService(
+            session_manager,
+            binding_resolver=self.role_service.bindings.resolve_role_id,
         )
         self.relationship_runtime = relationship_runtime
         self.presence = presence
@@ -137,6 +142,7 @@ class DesktopBridgeService:
         media: list[str] | None = None,
     ) -> Session:
         session_key = self._normalize_desktop_session_key(chat_id)
+        role_id = self._role_id_from_desktop_session_key(session_key)
         session = self.session_manager.get_or_create(session_key)
         normalized_message = str(message or "")
         normalized_media = [item for item in (media or []) if str(item).strip()]
@@ -161,6 +167,7 @@ class DesktopBridgeService:
             del session.messages[original_length:]
             session.updated_at = original_updated_at
             raise
+        self._sync_desktop_session_thread(session, role_id=role_id)
         return await self._apply_post_persist_runtime_effects(
             session,
             record_presence=(
@@ -209,6 +216,7 @@ class DesktopBridgeService:
         self,
         *,
         session: Session,
+        role_id: str,
         content: str,
         media: list[str],
         metadata: dict[str, object] | None,
@@ -227,6 +235,7 @@ class DesktopBridgeService:
             del session.messages[original_length:]
             session.updated_at = original_updated_at
             raise
+        self._sync_desktop_session_thread(session, role_id=role_id)
         return await self._apply_post_persist_runtime_effects(
             session,
             record_presence=(
@@ -385,6 +394,7 @@ class DesktopBridgeService:
                 role_id = str(payload.get("role_id") or "").strip()
                 aggregate = await self.role_service.open_role_async(role_id)
                 session = aggregate.session
+                self._sync_desktop_session_thread(session, role_id=aggregate.role.id)
                 await self._emit_session_updated(
                     request_id=request_id,
                     session=session,
@@ -457,6 +467,7 @@ class DesktopBridgeService:
                     )
                 await self._persist_desktop_user_message(
                     session=session,
+                    role_id=aggregate.role.id,
                     content=persisted_user_content,
                     media=media,
                     metadata=metadata,
@@ -635,6 +646,9 @@ class DesktopBridgeService:
             )
             await asyncio.sleep(0)
             session = self.session_manager.get_or_create(session_key)
+            role_id = self._role_id_from_desktop_session_key(session_key)
+            if role_id:
+                self._sync_desktop_session_thread(session, role_id=role_id)
             await self._emit_session_updated(
                 request_id=request_id,
                 session=session,
@@ -712,6 +726,8 @@ class DesktopBridgeService:
         )
 
     def _serialize_session(self, session: Session) -> dict[str, Any]:
+        thread = self.conversation_service.get_thread_by_session_key(session.key)
+
         def _serialize_message(msg: dict[str, Any]) -> dict[str, Any]:
             metadata = msg.get("metadata")
             merged_metadata = dict(metadata) if isinstance(metadata, dict) else {}
@@ -747,6 +763,11 @@ class DesktopBridgeService:
             "updated_at": session.updated_at.isoformat(),
             "last_consolidated": session.last_consolidated,
             "metadata": self._enrich_session_metadata(dict(session.metadata)),
+            "thread": (
+                self.conversation_service.serialize_thread(thread)
+                if thread is not None
+                else None
+            ),
             "messages": [_serialize_message(msg) for msg in session.messages],
         }
 
@@ -796,6 +817,24 @@ class DesktopBridgeService:
         if normalized:
             return self.role_service.sessions.derive_session_key(normalized)
         raise ValueError("desktop proactive chat_id 不能为空")
+
+    def _role_id_from_desktop_session_key(self, session_key: str) -> str:
+        clean_key = str(session_key or "").strip()
+        if not clean_key.startswith("role:"):
+            return ""
+        return clean_key.removeprefix("role:").strip()
+
+    def _sync_desktop_session_thread(self, session: Session, *, role_id: str) -> None:
+        thread = self.conversation_service.sync_session_messages_to_thread(
+            session.key,
+            role_id=role_id,
+            channel="desktop",
+            chat_id="self",
+            created_at=session.created_at.isoformat(),
+            updated_at=session.updated_at.isoformat(),
+            metadata=dict(session.metadata),
+        )
+        session.metadata.setdefault("thread_id", thread.id)
 
     def _serialize_role(self, role) -> dict[str, Any]:
         payload = role.to_dict()

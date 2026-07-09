@@ -114,6 +114,8 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
         emit_event=emitted.append,
     )
     assert opened.payload["session"]["key"] == f"role:{role_id}"
+    assert opened.payload["session"]["thread"]["id"] == f"thread:{role_id}:desktop"
+    assert opened.payload["session"]["thread"]["kind"] == "desktop"
     assert opened.payload["session"]["created_at"]
     assert opened.payload["session"]["updated_at"]
     assert opened.payload["session"]["last_consolidated"] == 0
@@ -134,6 +136,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
 
     assert response.error is None
     assert response.payload["session"]["key"] == f"role:{role_id}"
+    assert response.payload["session"]["thread"]["id"] == f"thread:{role_id}:desktop"
     assert [item["role"] for item in response.payload["session"]["messages"]] == [
         "user"
     ]
@@ -158,6 +161,10 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
     ]
     assert delta_event["payload"]["content_delta"] == "hel"
     assert done_event["payload"]["reply"] == "hello"
+    assert session_manager.conversation_store.list_message_thread_ids(f"role:{role_id}") == [
+        f"thread:{role_id}:desktop",
+        f"thread:{role_id}:desktop",
+    ]
 
 
 @pytest.mark.asyncio
@@ -717,10 +724,14 @@ async def test_desktop_bridge_emits_session_updated_for_background_desktop_push(
     assert "已发送" in result
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
+    assert emitted[0]["payload"]["session"]["thread"]["id"] == "thread:mira:desktop"
     messages = emitted[0]["payload"]["session"]["messages"]
     assert messages[-1]["content"] == "主动消息"
     assert messages[-1]["metadata"]["proactive"] is True
     assert messages[-1]["metadata"]["tools_used"] == ["message_push"]
+    assert session_manager.conversation_store.list_message_thread_ids("role:mira") == [
+        "thread:mira:desktop"
+    ]
 
 
 @pytest.mark.asyncio
