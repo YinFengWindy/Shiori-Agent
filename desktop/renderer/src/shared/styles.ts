@@ -24,6 +24,18 @@ export const primaryButtonClass =
 export const ghostButtonClass =
   "cursor-pointer rounded-md border border-stroke bg-[#F3F5F7] px-[18px] py-3 text-text disabled:cursor-default disabled:opacity-50";
 
+/** Shared keyboard-only focus ring for key desktop actions. */
+export const focusVisibleRingClass =
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/20";
+
+/** Shared keyboard-only focus ring for key actions shown on dark or image surfaces. */
+export const focusVisibleWhiteRingClass =
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20";
+
+/** Shared keyboard-only focus ring for destructive confirmations. */
+export const focusVisibleDangerRingClass =
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(143,43,24,0.16)]";
+
 /** Reusable panel header layout. */
 export const panelHeadClass = "panel-head mb-3 flex items-center justify-between";
 

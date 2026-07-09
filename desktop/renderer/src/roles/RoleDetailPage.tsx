@@ -1,7 +1,7 @@
 import { toFileUrl } from "../shared/format";
 import { useLayoutEffect, useRef } from "react";
 import { ResetIcon, SaveIcon } from "../shared/icons";
-import { cx, inputClass } from "../shared/styles";
+import { cx, focusVisibleRingClass, focusVisibleWhiteRingClass, inputClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
 import { captureRoleDetailScrollTop, restoreRoleDetailScrollTop } from "./roleDetailScrollState";
 
@@ -122,7 +122,10 @@ export function RoleDetailPage({
               type="button"
               data-testid="open-role-assets-button"
               data-has-preview-avatar={previewAvatar ? "true" : "false"}
-              className="group relative h-[116px] w-[116px] overflow-hidden rounded-[28px] border border-white/22 bg-[rgba(255,255,255,0.08)] text-left shadow-[0_14px_32px_rgba(15,23,42,0.14)] transition hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-white/30"
+              className={cx(
+                "group relative h-[116px] w-[116px] overflow-hidden rounded-[28px] border border-white/22 bg-[rgba(255,255,255,0.08)] text-left shadow-[0_14px_32px_rgba(15,23,42,0.14)] transition hover:scale-[1.01]",
+                focusVisibleWhiteRingClass,
+              )}
               onClick={onOpenAssetsPage}
             >
               {previewAvatar ? (
@@ -167,7 +170,7 @@ export function RoleDetailPage({
               </label>
               <label className="flex items-center gap-3 text-xs text-[#374151]">
                 <input
-                  className="h-4 w-4 rounded border-[#D8DFE7] text-[#111827] focus:ring-2 focus:ring-primary/20"
+                  className={cx("h-4 w-4 rounded border-[#D8DFE7] text-[#111827]", focusVisibleRingClass)}
                   type="checkbox"
                   checked={roleForm.nsfwMemoryEnabled}
                   onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, nsfwMemoryEnabled: event.target.checked }))}

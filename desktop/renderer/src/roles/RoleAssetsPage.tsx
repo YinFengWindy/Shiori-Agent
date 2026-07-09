@@ -214,7 +214,7 @@ export function RoleAssetsPage({
                   selectionMode === "avatar" ? (
                     <div className="relative grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-white p-8">
                       <button
-                        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none"
                         type="button"
                         onClick={() => saveSingleSelection("avatar", "")}
                         aria-label="取消选中头像"
@@ -226,7 +226,7 @@ export function RoleAssetsPage({
                   ) : (
                     <div className="relative flex min-h-[360px] flex-1 items-center justify-center overflow-hidden rounded-[20px] bg-white p-6">
                       <button
-                        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none"
                         type="button"
                         onClick={() => saveSingleSelection("chat-background", "")}
                         aria-label="取消选中立绘"

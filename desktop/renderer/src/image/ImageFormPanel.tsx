@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toFileUrl } from "../shared/format";
 import { DeleteIcon, ResetIcon, UploadIcon } from "../shared/icons";
-import { cx, inputClass } from "../shared/styles";
+import { cx, focusVisibleRingClass, focusVisibleWhiteRingClass, inputClass } from "../shared/styles";
 import type { ImageSizePreset, ImageStudioFormState } from "./types";
 
 type RolePickerItem = {
@@ -235,7 +235,8 @@ export function ImageFormPanel({
                     <button
                       type="button"
                       className={cx(
-                        "relative inline-flex h-7 w-12 rounded-full transition focus:outline-none focus:ring-2 focus:ring-primary/20",
+                        "relative inline-flex h-7 w-12 rounded-full transition",
+                        focusVisibleRingClass,
                         nsfwEnabled ? "bg-[#20242A]" : "bg-[#BFC6D0]",
                       )}
                       aria-pressed={nsfwEnabled}
@@ -254,7 +255,8 @@ export function ImageFormPanel({
                     <button
                       type="button"
                       className={cx(
-                        "relative inline-flex h-7 w-12 rounded-full transition focus:outline-none focus:ring-2 focus:ring-primary/20",
+                        "relative inline-flex h-7 w-12 rounded-full transition",
+                        focusVisibleRingClass,
                         addQualityTags ? "bg-[#20242A]" : "bg-[#BFC6D0]",
                       )}
                       aria-pressed={addQualityTags}
@@ -317,20 +319,20 @@ export function ImageFormPanel({
                     <div className="mt-1 text-[11px] text-white/72">Transform your image.</div>
                   </div>
                   <div className="flex flex-none items-center gap-2">
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
-                      aria-label="重新选择 Base Img"
-                      onClick={onPickBaseImage}
-                    >
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none"
+                        aria-label="重新选择 Base Img"
+                        onClick={onPickBaseImage}
+                      >
                       <ResetIcon className="h-4 w-4 fill-current" />
                     </button>
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
-                      aria-label="移除 Base Img"
-                      onClick={() => onChange({ baseImagePath: "" })}
-                    >
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none"
+                        aria-label="移除 Base Img"
+                        onClick={() => onChange({ baseImagePath: "" })}
+                      >
                       <DeleteIcon className="h-4 w-4 fill-current" />
                     </button>
                   </div>
@@ -432,7 +434,10 @@ export function ImageFormPanel({
       ) : null}
 
       <button
-        className="rounded-md bg-[#1F1F1F] px-4 py-3 text-sm text-white transition hover:bg-[#2A2A2A] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-default disabled:opacity-40"
+        className={cx(
+          "rounded-md bg-[#1F1F1F] px-4 py-3 text-sm text-white transition hover:bg-[#2A2A2A] disabled:cursor-default disabled:opacity-40",
+          focusVisibleWhiteRingClass,
+        )}
         type="button"
         disabled={generateDisabled}
         onClick={onSubmit}

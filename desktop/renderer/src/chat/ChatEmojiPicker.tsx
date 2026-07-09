@@ -55,7 +55,7 @@ export function ChatEmojiPicker({
   return (
     <div ref={rootRef} className="relative">
       <button
-        className="grid h-[30px] w-[30px] place-items-center rounded-md border-0 bg-transparent p-0 text-[#4B5563] transition hover:bg-black/5 hover:text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-default disabled:opacity-40"
+        className="grid h-[30px] w-[30px] place-items-center rounded-md border-0 bg-transparent p-0 text-[#4B5563] transition hover:bg-black/5 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40"
         type="button"
         aria-label={open ? "收起常用表情面板" : "打开常用表情面板"}
         aria-expanded={open}
@@ -76,7 +76,7 @@ export function ChatEmojiPicker({
             {commonChatEmojis.map((emoji) => (
               <button
                 key={emoji}
-                className="grid h-8 w-8 place-items-center rounded-md border border-transparent bg-transparent p-0 text-[19px] leading-none transition hover:border-[#D8DEE8] hover:bg-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="grid h-8 w-8 place-items-center rounded-md border border-transparent bg-transparent p-0 text-[19px] leading-none transition hover:border-[#D8DEE8] hover:bg-[#F8FAFC] focus:outline-none"
                 type="button"
                 aria-label={`插入表情 ${emoji}`}
                 onClick={() => onSelectEmoji(emoji)}

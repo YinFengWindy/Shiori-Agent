@@ -15,7 +15,7 @@ import { normalizeSessionMediaPaths } from "./chatMedia";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { CopyIcon, DocumentIcon, QuoteIcon } from "../shared/icons";
-import { cx } from "../shared/styles";
+import { cx, focusVisibleRingClass } from "../shared/styles";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
 
 type MessageContextMenuState = {
@@ -494,7 +494,7 @@ export function ChatSurface({
       <header className="chat-header relative z-[1] flex min-w-0 items-center gap-3 border-b border-[#E4E4E4] bg-[rgba(255,255,255,0.55)] pl-[23px] pr-6 backdrop-blur-[3px]" data-testid="session-hero">
         {detailRole ? (
           <button
-            className="rounded-full transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="rounded-full transition hover:opacity-90 focus:outline-none"
             type="button"
             aria-label={`查看角色 ${detailRole.name} 详情`}
             data-testid="chat-header-avatar-button"
@@ -538,7 +538,10 @@ export function ChatSurface({
             {visibleMessageWindow.hiddenMessageCount > 0 ? (
               <div className="flex justify-center">
                 <button
-                  className="rounded-md border border-[#D8DEE8] bg-white/85 px-3 py-1.5 text-[12px] text-[#5B6472] transition hover:border-[#C6CEDA] hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className={cx(
+                    "rounded-md border border-[#D8DEE8] bg-white/85 px-3 py-1.5 text-[12px] text-[#5B6472] transition hover:border-[#C6CEDA] hover:bg-white",
+                    focusVisibleRingClass,
+                  )}
                   type="button"
                   onClick={() => setVisibleMessageCount((current) => current + visibleChatMessageCountStep)}
                 >

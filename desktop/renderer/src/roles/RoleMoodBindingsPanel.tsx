@@ -38,7 +38,7 @@ export function RoleMoodBindingsPanel({
           {selectedAssetPath ? (
             <>
               <button
-                className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none"
                 type="button"
                 onClick={onClearSelectedAsset}
                 aria-label="取消选中差分图"

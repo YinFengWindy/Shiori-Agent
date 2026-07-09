@@ -267,7 +267,7 @@ function EditorCard({
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-medium text-[#20242A]">{title}</div>
         <button
-          className="grid h-8 w-8 place-items-center rounded-full border border-transparent text-[#C16E4E] transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="grid h-8 w-8 place-items-center rounded-full border border-transparent text-[#C16E4E] transition hover:bg-white focus:outline-none"
           type="button"
           aria-label={`删除${title}`}
           onClick={onRemove}
@@ -291,7 +291,7 @@ function AddListAction({
     <div className="flex items-center justify-between gap-4 rounded-md bg-[#F3F5F7] px-5 py-3">
       <span className="text-sm text-[#5B616A]">{label}</span>
       <button
-        className="grid h-11 w-11 place-items-center rounded-md border border-[#D6DCE3] bg-white text-[#5B616A] transition hover:bg-[#EEF2F6] focus:outline-none focus:ring-2 focus:ring-primary/20"
+        className="grid h-11 w-11 place-items-center rounded-md border border-[#D6DCE3] bg-white text-[#5B616A] transition hover:bg-[#EEF2F6] focus:outline-none"
         type="button"
         aria-label={label}
         onClick={onAdd}
