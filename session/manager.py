@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from conversation.store import ConversationStore
 from agent.prompting import (
     PromptSectionRender,
     build_context_frame_content,
@@ -304,6 +305,11 @@ class SessionManager:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = workspace / "sessions.db"
         self._store = SessionStore(self.db_path)
+        self.conversation_store = ConversationStore(
+            self.db_path,
+            connection=self._store._conn,
+            lock=self._store._lock,
+        )
         self._cache: dict[str, Session] = {}
         self._write_locks: dict[str, asyncio.Lock] = {}
 

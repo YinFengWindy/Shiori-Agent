@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from conversation.store import ensure_conversation_schema
+
 
 class SessionStore:
     """SQLite-backed store for session metadata and messages."""
@@ -52,6 +54,7 @@ class SessionStore:
                     UNIQUE (session_key, seq)
                 )
                 """)
+            ensure_conversation_schema(self._conn)
             self._ensure_next_seq_values()
             self._ensure_fts()
             self._conn.commit()
