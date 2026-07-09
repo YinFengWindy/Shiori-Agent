@@ -23,7 +23,7 @@ import logging
 import re
 from collections.abc import Coroutine
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from agent.config_models import QQGroupConfig
 from agent.looping.interrupt import InterruptController
@@ -35,7 +35,7 @@ from bus.events_lifecycle import (
     TurnStarted,
 )
 from bus.queue import MessageBus
-from core.roles import InboundRoleRouter
+from core.channels import ChannelHub
 from infra.channels.base import AttachmentStore, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
 from infra.channels.group_filter import (
@@ -45,6 +45,9 @@ from infra.channels.group_filter import (
 )
 from core.net.http import HttpRequester, RequestBudget, get_default_http_requester
 from session.manager import SessionManager
+
+if TYPE_CHECKING:
+    from core.channels import ChannelHub
 
 # NcatBot 运行时产物（plugins、logs）放到用户目录，不污染项目目录
 _NCATBOT_DIR = Path.home() / ".akashic" / "ncatbot"
@@ -308,6 +311,7 @@ class QQChannel:
         http_requester: HttpRequester | None = None,
         event_bus: EventBus | None = None,
         interrupt_controller: InterruptController | None = None,
+        channel_hub: "ChannelHub | None" = None,
     ) -> None:
         from ncatbot.core import BotClient
         from ncatbot.utils import ncatbot_config
@@ -322,11 +326,12 @@ class QQChannel:
         ws = getattr(session_manager, "workspace", None)
         self._workspace = Path(ws) if ws else None
         self._attachments = AttachmentStore(Path(ws) / "uploads" if ws else None)
-        self._role_router = (
-            InboundRoleRouter.from_workspace(Path(ws), session_manager=session_manager)
-            if ws
-            else None
-        )
+        self._channel_hub = channel_hub
+        if self._channel_hub is None and ws:
+            self._channel_hub = ChannelHub.from_workspace(
+                Path(ws),
+                session_manager=session_manager,
+            )
         self._trace_actor_name_cache: str | None = None
         self._identity_index = SessionIdentityIndex(
             session_manager,
@@ -593,8 +598,8 @@ class QQChannel:
         )
 
     async def _publish_inbound(self, message: InboundMessage) -> None:
-        if self._role_router is not None:
-            message = self._role_router.route(message)
+        if self._channel_hub is not None:
+            message = self._channel_hub.route_inbound(message)
         await self._bus.publish_inbound(message)
 
     async def _handle_stop_group(self, group_id: str, user_id: str) -> None:
@@ -789,19 +794,11 @@ class QQChannel:
         *,
         delivery_status: str,
     ) -> None:
-        marker = getattr(self._session_manager, "mark_latest_assistant_delivery", None)
-        if not callable(marker):
+        if self._channel_hub is None:
             return
-        metadata = msg.metadata if isinstance(msg.metadata, dict) else {}
-        session_key = str(
-            metadata.get("session_key_override")
-            or metadata.get("session_key")
-            or _session_key_for_chat(msg.chat_id)
-        ).strip()
-        thread_id = str(metadata.get("thread_id") or "").strip()
-        marker(
-            session_key,
-            thread_id=thread_id,
+        self._channel_hub.mark_delivery(
+            msg,
+            default_channel=_CHANNEL,
             delivery_status=delivery_status,
         )
 

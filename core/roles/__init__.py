@@ -1,4 +1,3 @@
-from .inbound import InboundRoleRouter, route_inbound_by_role
 from .migration import RoleLegacyMigrator, RoleMigrationSummary
 from .services import (
     RoleAggregate,
@@ -20,6 +19,7 @@ from .relationship_runtime import (
 from .store import RoleRecord, RoleStore
 
 __all__ = [
+    "InboundRoleRouter",
     "LonelinessHeartbeatLoop",
     "RoleAggregate",
     "RoleAggregateService",
@@ -37,6 +37,17 @@ __all__ = [
     "RoleSessionService",
     "RoleStore",
     "RoleLegacyMigrator",
-    "InboundRoleRouter",
     "route_inbound_by_role",
 ]
+
+
+def __getattr__(name: str):
+    if name == "InboundRoleRouter":
+        from .inbound import InboundRoleRouter
+
+        return InboundRoleRouter
+    if name == "route_inbound_by_role":
+        from .inbound import route_inbound_by_role
+
+        return route_inbound_by_role
+    raise AttributeError(name)

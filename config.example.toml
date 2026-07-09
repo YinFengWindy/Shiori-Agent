@@ -114,8 +114,6 @@ chat_id = ""
 max_steps = 35
 content_limit = 5
 web_fetch_max_chars = 8000
-context_prob = 0.03
-delivery_cooldown_hours = 1
 
 [proactive.drift]
 # Drift：无可推送内容时 agent 自主做任务。建议先跑通 proactive 再开启。

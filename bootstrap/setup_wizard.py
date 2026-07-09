@@ -600,8 +600,6 @@ def _render_proactive(a: WizardAnswers) -> str:
         "max_steps = 35",
         "content_limit = 5",
         "web_fetch_max_chars = 8000",
-        "context_prob = 0.03",
-        "delivery_cooldown_hours = 1",
         "",
         "[proactive.drift]",
         "enabled = false",

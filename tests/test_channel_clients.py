@@ -622,7 +622,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     mod = _import_telegram_channel(monkeypatch)
     bus = _Bus()
     event_bus = EventBus()
-    session_manager = _SessionManager()
+    session_manager = _SessionManager(tmp_path)
     interrupt_controller = MagicMock()
     interrupt_controller.request_interrupt.return_value = SimpleNamespace(
         status="interrupted",
@@ -1361,10 +1361,11 @@ async def test_qq_private_trace_skips_empty_trace(monkeypatch: pytest.MonkeyPatc
 @pytest.mark.asyncio
 async def test_qq_channel_records_failed_delivery_status(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ):
     mod = _import_qq_channel(monkeypatch)
     bus = _Bus()
-    session_manager = _SessionManager()
+    session_manager = _SessionManager(tmp_path)
     channel = mod.QQChannel(
         "42",
         bus,

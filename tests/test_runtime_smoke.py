@@ -419,10 +419,11 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
     try:
         controller = object()
         plugin_channel = _QQBotChannel(event_bus=event_bus)
+        session_manager = types.SimpleNamespace(workspace=tmp_path)
         ipc, host = await start_channels(
             config,
             bus=cast(Any, object()),
-            session_manager=cast(Any, object()),
+            session_manager=cast(Any, session_manager),
             push_tool=cast(Any, _PushTool()),
             http_resources=resources,
             event_bus=event_bus,
@@ -443,6 +444,8 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
     ]
     assert tg.kwargs["event_bus"] is event_bus
     assert tg.kwargs["interrupt_controller"] is controller
+    assert tg.kwargs["channel_hub"] is qq.kwargs["channel_hub"]
+    assert tg.kwargs["channel_hub"] is not None
     assert qq.kwargs["interrupt_controller"] is controller
     assert qqbot.kwargs["event_bus"] is event_bus
 

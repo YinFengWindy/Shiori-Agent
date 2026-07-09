@@ -8,6 +8,7 @@ from agent.tools.message_push import MessagePushTool
 from bootstrap.channel_host import ChannelHost
 from bus.event_bus import EventBus
 from bus.queue import MessageBus
+from core.channels import ChannelHub
 from core.net.http import SharedHttpResources
 from infra.channels.base import AttachmentStore
 from infra.channels.contract import Channel, ChannelContext
@@ -60,6 +61,11 @@ async def start_channels(
     host = ChannelHost(_ctx_factory)
     if not enable_message_channels:
         return ipc, host
+    channel_hub = (
+        ChannelHub.from_workspace(session_manager.workspace, session_manager=session_manager)
+        if getattr(session_manager, "workspace", None) is not None
+        else None
+    )
 
     if config.channels.telegram and config.channels.telegram.token:
         from infra.channels.telegram_channel import TelegramChannel
@@ -74,6 +80,7 @@ async def start_channels(
             event_bus=event_bus,
             interrupt_controller=interrupt_controller,
             channel_name=tg.channel_name,
+            channel_hub=channel_hub,
         ))
 
     if config.channels.qq and config.channels.qq.bot_uin:
@@ -90,6 +97,7 @@ async def start_channels(
             http_requester=http_resources.external_default,
             event_bus=event_bus,
             interrupt_controller=interrupt_controller,
+            channel_hub=channel_hub,
         ))
 
     for channel in plugin_channels or []:

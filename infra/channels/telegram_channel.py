@@ -11,7 +11,7 @@ import json
 from collections.abc import Coroutine
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from telegram import BotCommand, Update
 from telegram.constants import ChatAction
@@ -33,7 +33,7 @@ from bus.events_lifecycle import (
     TurnStarted,
 )
 from bus.queue import MessageBus
-from core.roles import InboundRoleRouter
+from core.channels import ChannelHub
 from agent.looping.interrupt import InterruptController
 from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
@@ -48,6 +48,9 @@ from infra.channels.telegram_utils import (
     send_thinking_block,
 )
 from session.manager import SessionManager
+
+if TYPE_CHECKING:
+    from core.channels import ChannelHub
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +85,7 @@ class TelegramChannel:
         event_bus: EventBus | None = None,
         interrupt_controller: InterruptController | None = None,
         channel_name: str = _CHANNEL,
+        channel_hub: "ChannelHub | None" = None,
     ) -> None:
         self._bus = bus
         self._session_manager = session_manager
@@ -92,11 +96,12 @@ class TelegramChannel:
         self._message_deduper = MessageDeduper(_SEEN_MSG_MAXSIZE)
         ws = getattr(session_manager, "workspace", None)
         self._attachments = AttachmentStore(Path(ws) / "uploads" if ws else None)
-        self._role_router = (
-            InboundRoleRouter.from_workspace(Path(ws), session_manager=session_manager)
-            if ws
-            else None
-        )
+        self._channel_hub = channel_hub
+        if self._channel_hub is None and ws:
+            self._channel_hub = ChannelHub.from_workspace(
+                Path(ws),
+                session_manager=session_manager,
+            )
         self._identity_index = SessionIdentityIndex(
             session_manager,
             channel=channel_name,
@@ -337,9 +342,9 @@ class TelegramChannel:
         )
 
     def _route_inbound(self, message: InboundMessage) -> InboundMessage:
-        if self._role_router is None:
+        if self._channel_hub is None:
             return message
-        return self._role_router.route(message)
+        return self._channel_hub.route_inbound(message)
 
     async def _publish_inbound(self, message: InboundMessage) -> None:
         await self._bus.publish_inbound(self._route_inbound(message))
@@ -801,29 +806,17 @@ class TelegramChannel:
         with open(image, "rb") as f:
             return await self._app.bot.send_photo(chat_id=chat_id, photo=f)
 
-    def _delivery_tracking(self, msg: OutboundMessage) -> tuple[str, str]:
-        metadata = msg.metadata if isinstance(msg.metadata, dict) else {}
-        session_key = str(
-            metadata.get("session_key_override")
-            or metadata.get("session_key")
-            or f"{self._channel}:{msg.chat_id}"
-        ).strip()
-        thread_id = str(metadata.get("thread_id") or "").strip()
-        return session_key, thread_id
-
     def _record_delivery_status(
         self,
         msg: OutboundMessage,
         *,
         delivery_status: str,
     ) -> None:
-        marker = getattr(self._session_manager, "mark_latest_assistant_delivery", None)
-        if not callable(marker):
+        if self._channel_hub is None:
             return
-        session_key, thread_id = self._delivery_tracking(msg)
-        marker(
-            session_key,
-            thread_id=thread_id,
+        self._channel_hub.mark_delivery(
+            msg,
+            default_channel=self._channel,
             delivery_status=delivery_status,
         )
 
