@@ -41,6 +41,7 @@ class InboundRoleRouter:
             role_id = self._service.bindings.resolve_role_id(message.channel, message.chat_id)
         except KeyError:
             return message
+        role = self._service.repository.get_required(role_id)
         thread = self._conversation.ensure_thread_for_session(
             LegacySessionDescriptor(
                 session_key=f"{message.channel}:{message.chat_id}",
@@ -50,10 +51,21 @@ class InboundRoleRouter:
                 metadata=metadata,
             )
         )
-        session_key = self._service.sessions.derive_session_key(role_id)
+        session = self._service.sessions._session_manager.sync_thread_session_metadata(
+            thread.id,
+            role_id=role.id,
+            role_name=role.name,
+            role_prompt=role.system_prompt,
+            thread_id=thread.id,
+            role_runtime_config=role.runtime_config,
+            context_channel=message.channel,
+            context_chat_id=message.chat_id,
+            transport_channel=message.channel,
+            transport_chat_id=message.chat_id,
+        )
         metadata["role_id"] = role_id
         metadata["thread_id"] = thread.id
-        metadata["session_key_override"] = session_key
+        metadata["session_key_override"] = session.key
         metadata.setdefault("context_channel", message.channel)
         metadata.setdefault("context_chat_id", message.chat_id)
         metadata.setdefault("transport_channel", message.channel)

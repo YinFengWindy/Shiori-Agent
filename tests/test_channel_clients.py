@@ -42,6 +42,7 @@ class _SessionManager:
     def __init__(self, workspace: Path | None = None) -> None:
         self.sessions = {}
         self.saved = []
+        self.delivery_updates = []
         self.workspace = workspace
 
     def get_or_create(self, key: str):
@@ -55,6 +56,54 @@ class _SessionManager:
 
     def role_session_key(self, role_id: str) -> str:
         return f"role:{role_id}"
+
+    def sync_thread_session_metadata(
+        self,
+        session_key: str,
+        *,
+        role_id: str,
+        role_name: str,
+        role_prompt: str,
+        thread_id: str,
+        role_runtime_config=None,
+        context_channel: str = "",
+        context_chat_id: str = "",
+        transport_channel: str = "",
+        transport_chat_id: str = "",
+    ):
+        session = self.get_or_create(session_key)
+        session.metadata.update(
+            {
+                "role_id": role_id,
+                "role_name": role_name,
+                "role_prompt": role_prompt,
+                "thread_id": thread_id,
+                "context_channel": context_channel,
+                "context_chat_id": context_chat_id,
+                "transport_channel": transport_channel,
+                "transport_chat_id": transport_chat_id,
+            }
+        )
+        if role_runtime_config is not None:
+            session.metadata["role_runtime_config"] = dict(role_runtime_config)
+        return session
+
+    def mark_latest_assistant_delivery(
+        self,
+        session_key: str,
+        *,
+        thread_id: str = "",
+        delivery_status: str,
+        external_message_id: str = "",
+    ):
+        payload = {
+            "session_key": session_key,
+            "thread_id": thread_id,
+            "delivery_status": delivery_status,
+            "external_message_id": external_message_id,
+        }
+        self.delivery_updates.append(payload)
+        return payload
 
 
 def _import_cli_tui(monkeypatch: pytest.MonkeyPatch):
@@ -730,7 +779,17 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     await channel.send_file("123", str(sample), name="doc.txt", caption="cap")
     await channel.send_image("123", "https://example.com/img.jpg")
     await channel.send_image("123", str(sample))
-    await channel._on_response(OutboundMessage(channel="telegram", chat_id="123", content="pong"))
+    await channel._on_response(
+        OutboundMessage(
+            channel="telegram",
+            chat_id="123",
+            content="pong",
+            metadata={
+                "session_key_override": "thread:mira:telegram:123",
+                "thread_id": "thread:mira:telegram:123",
+            },
+        )
+    )
     assert mod.send_markdown.await_count == 3
     assert mod.send_stream_markdown.await_count == 1
     sender = channel.create_stream_sender("123")
@@ -934,6 +993,12 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
         await asyncio.gather(*created)
     channel._on_polling_error(mod.TelegramError("warn"))
     await channel.stop()
+    assert {
+        "session_key": "thread:mira:telegram:123",
+        "thread_id": "thread:mira:telegram:123",
+        "delivery_status": "sent",
+        "external_message_id": "",
+    } in session_manager.delivery_updates
 
     merged, meta = mod._build_inbound_text_with_reply("hi", None)
     assert (merged, meta) == ("hi", {})
@@ -1025,10 +1090,10 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert len(bus.inbound) == 2
     assert bus.inbound[0].metadata["chat_type"] == "private"
     assert bus.inbound[1].metadata["chat_type"] == "group"
-    assert bus.inbound[0].session_key == "role:mira"
+    assert bus.inbound[0].session_key == "thread:mira:qq:1"
     assert bus.inbound[0].metadata["role_id"] == "mira"
     assert bus.inbound[0].metadata["thread_id"] == "thread:mira:qq:1"
-    assert bus.inbound[1].session_key == "role:mira"
+    assert bus.inbound[1].session_key == "thread:mira:qq:gqq:100"
     assert bus.inbound[1].metadata["thread_id"] == "thread:mira:qq:gqq:100"
     assert channel._interrupt_controller.request_interrupt.call_count == 2
 
@@ -1039,7 +1104,17 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     await channel.send("gqq:100", "group pong")
     await channel.send_file("1", str(sample), name="x.bin")
     await channel.send_image("1", str(sample))
-    await channel._on_response(OutboundMessage(channel="qq", chat_id="gqq:100", content="reply"))
+    await channel._on_response(
+        OutboundMessage(
+            channel="qq",
+            chat_id="gqq:100",
+            content="reply",
+            metadata={
+                "session_key_override": "thread:mira:qq:gqq:100",
+                "thread_id": "thread:mira:qq:gqq:100",
+            },
+        )
+    )
     assert channel._api.calls
     assert mod._is_local(str(sample)) is True
     assert mod._is_local("https://example.com/x.jpg") is False
@@ -1059,6 +1134,12 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         await mod.QQChannel._run_on_bot_loop(channel, pending)
     pending.close()
     await channel.stop()
+    assert {
+        "session_key": "thread:mira:qq:gqq:100",
+        "thread_id": "thread:mira:qq:gqq:100",
+        "delivery_status": "sent",
+        "external_message_id": "",
+    } in session_manager.delivery_updates
 
 
 @pytest.mark.asyncio
@@ -1111,7 +1192,7 @@ async def test_telegram_channel_routes_bound_inbound_to_role_session(
     await channel._on_message(update, context)
 
     assert len(bus.inbound) == 1
-    assert bus.inbound[0].session_key == "role:mira"
+    assert bus.inbound[0].session_key == "thread:mira:telegram:123"
     assert bus.inbound[0].metadata["role_id"] == "mira"
     assert bus.inbound[0].metadata["thread_id"] == "thread:mira:telegram:123"
     assert bus.inbound[0].metadata["transport_channel"] == "telegram"
@@ -1275,6 +1356,54 @@ async def test_qq_private_trace_skips_empty_trace(monkeypatch: pytest.MonkeyPatc
 
     assert [item[0] for item in calls] == ["text"]
     assert calls[0] == ("text", 1, "嗯，收到。")
+
+
+@pytest.mark.asyncio
+async def test_qq_channel_records_failed_delivery_status(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mod = _import_qq_channel(monkeypatch)
+    bus = _Bus()
+    session_manager = _SessionManager()
+    channel = mod.QQChannel(
+        "42",
+        bus,
+        session_manager,
+        allow_from=["1"],
+        event_bus=EventBus(),
+        http_requester=SimpleNamespace(get=AsyncMock()),
+    )
+    await channel.start()
+
+    async def _drain(coro):
+        return await coro
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError("send failed")
+
+    channel._run_on_bot_loop = AsyncMock(side_effect=_drain)
+    channel._api.send_private_text = _boom
+
+    with pytest.raises(RuntimeError, match="send failed"):
+        await channel._on_response(
+            OutboundMessage(
+                channel="qq",
+                chat_id="1",
+                content="reply",
+                metadata={
+                    "session_key_override": "thread:mira:qq:1",
+                    "thread_id": "thread:mira:qq:1",
+                },
+            )
+        )
+
+    assert session_manager.delivery_updates[-1] == {
+        "session_key": "thread:mira:qq:1",
+        "thread_id": "thread:mira:qq:1",
+        "delivery_status": "failed",
+        "external_message_id": "",
+    }
+    await channel.stop()
 
 
 @pytest.mark.asyncio

@@ -398,6 +398,41 @@ class SessionManager:
         self.save(session)
         return session
 
+    def sync_thread_session_metadata(
+        self,
+        session_key: str,
+        *,
+        role_id: str,
+        role_name: str,
+        role_prompt: str,
+        thread_id: str,
+        role_runtime_config: dict[str, Any] | None = None,
+        context_channel: str = "",
+        context_chat_id: str = "",
+        transport_channel: str = "",
+        transport_chat_id: str = "",
+    ) -> Session:
+        clean_session_key = str(session_key).strip()
+        if not clean_session_key:
+            raise ValueError("session_key 不能为空")
+        session = self.get_or_create(clean_session_key)
+        session.metadata["role_id"] = role_id
+        session.metadata["role_name"] = role_name
+        session.metadata["role_prompt"] = role_prompt
+        session.metadata["thread_id"] = thread_id
+        if role_runtime_config is not None:
+            session.metadata["role_runtime_config"] = dict(role_runtime_config)
+        if context_channel:
+            session.metadata["context_channel"] = context_channel
+        if context_chat_id:
+            session.metadata["context_chat_id"] = context_chat_id
+        if transport_channel:
+            session.metadata["transport_channel"] = transport_channel
+        if transport_chat_id:
+            session.metadata["transport_chat_id"] = transport_chat_id
+        self.save(session)
+        return session
+
     def normalize_role_session_display_state(
         self,
         role_id: str,
@@ -670,6 +705,36 @@ class SessionManager:
                 metadata=session.metadata,
             )
             self._cache[session.key] = session
+
+    def mark_latest_assistant_delivery(
+        self,
+        session_key: str,
+        *,
+        thread_id: str = "",
+        delivery_status: str,
+        external_message_id: str = "",
+    ) -> dict[str, Any] | None:
+        updated = self._store.update_latest_assistant_delivery(
+            session_key,
+            thread_id=thread_id,
+            delivery_status=delivery_status,
+            external_message_id=external_message_id,
+        )
+        if updated is None:
+            return None
+        session = self._cache.get(session_key)
+        if session is None:
+            return updated
+        updated_id = str(updated.get("id") or "").strip()
+        for message in reversed(session.messages):
+            if str(message.get("id") or "").strip() != updated_id:
+                continue
+            if "delivery_status" in updated:
+                message["delivery_status"] = updated["delivery_status"]
+            if updated.get("external_message_id"):
+                message["external_message_id"] = updated["external_message_id"]
+            break
+        return updated
 
     def invalidate(self, key: str) -> None:
         self._cache.pop(key, None)

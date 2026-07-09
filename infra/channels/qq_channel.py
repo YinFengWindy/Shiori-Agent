@@ -622,6 +622,7 @@ class QQChannel:
                 await self._send_private_trace(msg.chat_id, session_key, msg)
             except Exception as e:
                 logger.warning(f"[qq] 私聊 tracing 合并转发失败  chat_id={msg.chat_id}  错误: {e}")
+        send_failed = False
         if msg.content.strip():
             try:
                 if msg.chat_id.startswith(_GROUP_PREFIX):
@@ -636,12 +637,20 @@ class QQChannel:
                         api.send_private_text(int(msg.chat_id), msg.content)
                     )
             except Exception as e:
+                send_failed = True
+                self._record_delivery_status(msg, delivery_status="failed")
                 logger.error(f"[qq] 发送失败  chat_id={msg.chat_id}  错误: {e}")
+                raise
         for image in (msg.media or []):
             try:
                 await self.send_image(msg.chat_id, image)
             except Exception as e:
+                send_failed = True
+                self._record_delivery_status(msg, delivery_status="failed")
                 logger.error(f"[qq] meme 图片发送失败  chat_id={msg.chat_id}  path={image}  err={e}")
+                raise
+        if not send_failed:
+            self._record_delivery_status(msg, delivery_status="sent")
         self._trace_states.pop(session_key, None)
 
     async def _send_private_trace(
@@ -773,6 +782,28 @@ class QQChannel:
             raise RuntimeError("QQ bot loop 未就绪")
         future = asyncio.run_coroutine_threadsafe(coro, self._bot_loop)
         return await asyncio.wrap_future(future)
+
+    def _record_delivery_status(
+        self,
+        msg: OutboundMessage,
+        *,
+        delivery_status: str,
+    ) -> None:
+        marker = getattr(self._session_manager, "mark_latest_assistant_delivery", None)
+        if not callable(marker):
+            return
+        metadata = msg.metadata if isinstance(msg.metadata, dict) else {}
+        session_key = str(
+            metadata.get("session_key_override")
+            or metadata.get("session_key")
+            or _session_key_for_chat(msg.chat_id)
+        ).strip()
+        thread_id = str(metadata.get("thread_id") or "").strip()
+        marker(
+            session_key,
+            thread_id=thread_id,
+            delivery_status=delivery_status,
+        )
 
 
 def _is_local(path: str) -> bool:

@@ -819,6 +819,11 @@ class SessionStore:
         tool_chain: Any | None = None,
         extra: dict[str, Any] | None = None,
         ts: str | None = None,
+        thread_id: str | None = None,
+        sender_role: str | None = None,
+        media: list[str] | None = None,
+        external_message_id: str | None = None,
+        delivery_status: str | None = None,
     ) -> dict[str, Any] | None:
         set_parts: list[str] = []
         params: list[Any] = []
@@ -837,6 +842,23 @@ class SessionStore:
         if ts is not None:
             set_parts.append("ts = ?")
             params.append(ts)
+        if thread_id is not None:
+            set_parts.append("thread_id = ?")
+            params.append(str(thread_id).strip() or None)
+        if sender_role is not None:
+            set_parts.append("sender_role = ?")
+            params.append(str(sender_role).strip() or None)
+        if media is not None:
+            set_parts.append("media = ?")
+            params.append(
+                json.dumps(list(media), ensure_ascii=False) if media else None
+            )
+        if external_message_id is not None:
+            set_parts.append("external_message_id = ?")
+            params.append(str(external_message_id).strip() or None)
+        if delivery_status is not None:
+            set_parts.append("delivery_status = ?")
+            params.append(str(delivery_status).strip() or None)
         if not set_parts:
             return self.get_message(message_id)
 
@@ -861,6 +883,55 @@ class SessionStore:
         if cur.rowcount <= 0:
             return None
         return self.get_message(message_id)
+
+    def update_latest_assistant_delivery(
+        self,
+        session_key: str,
+        *,
+        thread_id: str = "",
+        delivery_status: str,
+        external_message_id: str = "",
+    ) -> dict[str, Any] | None:
+        clean_session_key = str(session_key or "").strip()
+        clean_thread_id = str(thread_id or "").strip()
+        clean_status = str(delivery_status or "").strip()
+        clean_external_id = str(external_message_id or "").strip()
+        if not clean_session_key or not clean_status:
+            return None
+        with self._lock:
+            if clean_thread_id:
+                row = self._conn.execute(
+                    """
+                    SELECT id
+                    FROM messages
+                    WHERE session_key = ?
+                      AND role = 'assistant'
+                      AND thread_id = ?
+                    ORDER BY seq DESC
+                    LIMIT 1
+                    """,
+                    (clean_session_key, clean_thread_id),
+                ).fetchone()
+            else:
+                row = self._conn.execute(
+                    """
+                    SELECT id
+                    FROM messages
+                    WHERE session_key = ?
+                      AND role = 'assistant'
+                    ORDER BY seq DESC
+                    LIMIT 1
+                    """,
+                    (clean_session_key,),
+                ).fetchone()
+            if row is None:
+                return None
+            message_id = str(row["id"])
+        return self.update_message(
+            message_id,
+            delivery_status=clean_status,
+            external_message_id=clean_external_id or None,
+        )
 
     def delete_message(self, message_id: str) -> bool:
         with self._lock:

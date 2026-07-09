@@ -112,3 +112,39 @@ def test_session_store_message_roundtrip_preserves_conversation_fields(
     assert messages[0]["media"] == ["D:\\files\\scene.png"]
     assert messages[0]["external_message_id"] == "telegram-msg-1"
     assert messages[0]["delivery_status"] == "received"
+
+
+def test_session_store_updates_latest_assistant_delivery_by_thread(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    legacy = SessionStore(db_path)
+    legacy.create_session(key="role:mira", metadata={"role_id": "mira"})
+    legacy.insert_message(
+        "role:mira",
+        role="assistant",
+        content="first",
+        ts="2026-07-10T12:00:00+08:00",
+        seq=0,
+        thread_id="thread:mira:telegram:123",
+    )
+    legacy.insert_message(
+        "role:mira",
+        role="assistant",
+        content="second",
+        ts="2026-07-10T12:01:00+08:00",
+        seq=1,
+        thread_id="thread:mira:telegram:456",
+    )
+
+    updated = legacy.update_latest_assistant_delivery(
+        "role:mira",
+        thread_id="thread:mira:telegram:123",
+        delivery_status="sent",
+        external_message_id="tg-1",
+    )
+
+    assert updated is not None
+    assert updated["content"] == "first"
+    assert updated["delivery_status"] == "sent"
+    assert updated["external_message_id"] == "tg-1"

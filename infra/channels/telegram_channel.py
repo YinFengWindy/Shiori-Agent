@@ -801,6 +801,32 @@ class TelegramChannel:
         with open(image, "rb") as f:
             return await self._app.bot.send_photo(chat_id=chat_id, photo=f)
 
+    def _delivery_tracking(self, msg: OutboundMessage) -> tuple[str, str]:
+        metadata = msg.metadata if isinstance(msg.metadata, dict) else {}
+        session_key = str(
+            metadata.get("session_key_override")
+            or metadata.get("session_key")
+            or f"{self._channel}:{msg.chat_id}"
+        ).strip()
+        thread_id = str(metadata.get("thread_id") or "").strip()
+        return session_key, thread_id
+
+    def _record_delivery_status(
+        self,
+        msg: OutboundMessage,
+        *,
+        delivery_status: str,
+    ) -> None:
+        marker = getattr(self._session_manager, "mark_latest_assistant_delivery", None)
+        if not callable(marker):
+            return
+        session_key, thread_id = self._delivery_tracking(msg)
+        marker(
+            session_key,
+            thread_id=thread_id,
+            delivery_status=delivery_status,
+        )
+
     async def _on_response(self, msg: OutboundMessage) -> None:
         preview = msg.content[:60] + "..." if len(msg.content) > 60 else msg.content
         logger.info(f"[telegram] 发送回复  chat_id={msg.chat_id}  内容: {preview!r}")
@@ -821,11 +847,20 @@ class TelegramChannel:
                 )
             await self._send_final_tool_snapshot(session_key, msg.chat_id)
         streamed_reply = bool((msg.metadata or {}).get("streamed_reply"))
-        if msg.content.strip():
-            if streamed_reply:
-                stream = self._active_streams.pop(str(msg.chat_id), None)
-                if stream is not None:
-                    await stream.finalize(msg.content)
+        send_failed = False
+        try:
+            if msg.content.strip():
+                if streamed_reply:
+                    stream = self._active_streams.pop(str(msg.chat_id), None)
+                    if stream is not None:
+                        await stream.finalize(msg.content)
+                    else:
+                        await send_markdown(
+                            self._app.bot,
+                            msg.chat_id,
+                            msg.content,
+                            self._telegram_outbound_limiter,
+                        )
                 else:
                     await send_markdown(
                         self._app.bot,
@@ -833,22 +868,19 @@ class TelegramChannel:
                         msg.content,
                         self._telegram_outbound_limiter,
                     )
-            else:
-                await send_markdown(
-                    self._app.bot,
-                    msg.chat_id,
-                    msg.content,
-                    self._telegram_outbound_limiter,
-                )
-        if final_thinking and not had_live:
-            await self._send_final_thinking(cid, msg.chat_id, final_thinking)
-        self._reply_buffers.pop(session_key, None)
-        self._thinking_buffers.pop(session_key, None)
-        for image in (msg.media or []):
-            try:
+            if final_thinking and not had_live:
+                await self._send_final_thinking(cid, msg.chat_id, final_thinking)
+            self._reply_buffers.pop(session_key, None)
+            self._thinking_buffers.pop(session_key, None)
+            for image in (msg.media or []):
                 await self.send_image(str(msg.chat_id), image)
-            except Exception as e:
-                logger.warning(f"[telegram] meme 图片发送失败  chat_id={msg.chat_id}  path={image}  err={e}")
+        except Exception:
+            send_failed = True
+            self._record_delivery_status(msg, delivery_status="failed")
+            raise
+        finally:
+            if not send_failed:
+                self._record_delivery_status(msg, delivery_status="sent")
 
     async def _safe_send_typing(
         self, context: ContextTypes.DEFAULT_TYPE, chat_id: int
