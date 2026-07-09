@@ -28,21 +28,8 @@ async def start_channels(
     bot_commands: list[tuple[str, str]] | None = None,
     interrupt_controller: InterruptController | None = None,
     plugin_channels: list[Channel] | None = None,
-    start_ipc: bool = True,
     enable_message_channels: bool = True,
 ) -> tuple[object | None, ChannelHost]:
-    from infra.channels.ipc_server import IPCServerChannel
-
-    ipc: object | None = None
-    if start_ipc:
-        ipc = IPCServerChannel(
-            bus,
-            config.channels.socket,
-            default_session_key=config.channels.cli_session_key,
-        )
-        await ipc.start()
-        logger.info("Agent 已启动  |  CLI 连接地址: %s", config.channels.socket)
-
     attachment_store = AttachmentStore()
 
     def _ctx_factory(channel: Channel) -> ChannelContext:
@@ -60,7 +47,7 @@ async def start_channels(
 
     host = ChannelHost(_ctx_factory)
     if not enable_message_channels:
-        return ipc, host
+        return None, host
     channel_hub = (
         ChannelHub.from_workspace(session_manager.workspace, session_manager=session_manager)
         if getattr(session_manager, "workspace", None) is not None
@@ -103,4 +90,4 @@ async def start_channels(
     for channel in plugin_channels or []:
         host.add(channel)
 
-    return ipc, host
+    return None, host

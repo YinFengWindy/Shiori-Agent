@@ -12,7 +12,6 @@ import asyncio
 import logging
 import signal
 import sys
-from dataclasses import replace
 from contextlib import suppress
 from pathlib import Path
 
@@ -125,7 +124,7 @@ async def serve_bridge(
     runtime = build_app_runtime(
         Config.load(config_path),
         workspace=workspace or _default_workspace(),
-        features=replace(DESKTOP_RUNTIME_FEATURES, start_ipc=False),
+        features=DESKTOP_RUNTIME_FEATURES,
     )
     try:
         if hasattr(runtime, "start") and callable(runtime.start):

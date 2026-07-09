@@ -292,21 +292,8 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
     starts: list[str] = []
     registrations: list[tuple[str, list[str]]] = []
 
-    fake_ipc_server = types.ModuleType("infra.channels.ipc_server")
     fake_telegram_channel = types.ModuleType("infra.channels.telegram_channel")
     fake_qq_channel = types.ModuleType("infra.channels.qq_channel")
-
-    class _IPCServerChannel:
-        def __init__(self, bus, socket, default_session_key: str = ""):
-            self.bus = bus
-            self.socket = socket
-            self.default_session_key = default_session_key
-
-        async def start(self) -> None:
-            starts.append("ipc")
-
-        async def stop(self) -> None:
-            starts.append("ipc.stop")
 
     class _TelegramChannel:
         def __init__(self, **kwargs):
@@ -388,10 +375,8 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
         async def send_stream(self, *args, **kwargs):
             return None
 
-    fake_ipc_server.IPCServerChannel = _IPCServerChannel  # type: ignore[attr-defined]
     fake_telegram_channel.TelegramChannel = _TelegramChannel  # type: ignore[attr-defined]
     fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "infra.channels.ipc_server", fake_ipc_server)
     monkeypatch.setitem(sys.modules, "infra.channels.telegram_channel", fake_telegram_channel)
     monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
 
@@ -434,9 +419,9 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
     finally:
         await resources.aclose()
 
-    assert ipc is not None
+    assert ipc is None
     tg, qq, qqbot = host.channels
-    assert starts == ["ipc", "telegram", "qq", "qqbot"]
+    assert starts == ["telegram", "qq", "qqbot"]
     assert registrations == [
         ("telegram", ["file", "image", "stream_text", "text"]),
         ("qq", ["file", "image", "text"]),
@@ -454,21 +439,8 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
 async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_path):
     starts: list[str] = []
 
-    fake_ipc_server = types.ModuleType("infra.channels.ipc_server")
     fake_telegram_channel = types.ModuleType("infra.channels.telegram_channel")
     fake_qq_channel = types.ModuleType("infra.channels.qq_channel")
-
-    class _IPCServerChannel:
-        def __init__(self, bus, socket, default_session_key: str = ""):
-            self.bus = bus
-            self.socket = socket
-            self.default_session_key = default_session_key
-
-        async def start(self) -> None:
-            starts.append("ipc")
-
-        async def stop(self) -> None:
-            starts.append("ipc.stop")
 
     class _TelegramChannel:
         async def start(self) -> None:
@@ -478,10 +450,8 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
         async def start(self) -> None:
             starts.append("qq")
 
-    fake_ipc_server.IPCServerChannel = _IPCServerChannel  # type: ignore[attr-defined]
     fake_telegram_channel.TelegramChannel = _TelegramChannel  # type: ignore[attr-defined]
     fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "infra.channels.ipc_server", fake_ipc_server)
     monkeypatch.setitem(sys.modules, "infra.channels.telegram_channel", fake_telegram_channel)
     monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
 
@@ -513,9 +483,9 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
     finally:
         await resources.aclose()
 
-    assert ipc is not None
+    assert ipc is None
     assert host.channels == []
-    assert starts == ["ipc"]
+    assert starts == []
 
 
 @pytest.mark.asyncio
@@ -525,13 +495,8 @@ async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
 ):
     starts: list[str] = []
 
-    fake_ipc_server = types.ModuleType("infra.channels.ipc_server")
     fake_telegram_channel = types.ModuleType("infra.channels.telegram_channel")
     fake_qq_channel = types.ModuleType("infra.channels.qq_channel")
-
-    class _IPCServerChannel:
-        def __init__(self, *args, **kwargs):
-            raise AssertionError("desktop mode should not construct IPCServerChannel")
 
     class _TelegramChannel:
         def __init__(self, **kwargs):
@@ -541,10 +506,8 @@ async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
         def __init__(self, **kwargs):
             starts.append("qq.init")
 
-    fake_ipc_server.IPCServerChannel = _IPCServerChannel  # type: ignore[attr-defined]
     fake_telegram_channel.TelegramChannel = _TelegramChannel  # type: ignore[attr-defined]
     fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "infra.channels.ipc_server", fake_ipc_server)
     monkeypatch.setitem(sys.modules, "infra.channels.telegram_channel", fake_telegram_channel)
     monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
 
@@ -572,7 +535,6 @@ async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
             push_tool=cast(Any, object()),
             http_resources=resources,
             event_bus=EventBus(),
-            start_ipc=False,
             enable_message_channels=False,
         )
     finally:

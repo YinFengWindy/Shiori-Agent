@@ -46,7 +46,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class RuntimeFeatures:
-    start_ipc: bool = True
     enable_message_channels: bool = True
     enable_proactive: bool = True
 
@@ -153,7 +152,6 @@ class AppRuntime:
                 ),
                 interrupt_controller=self.agent_loop,
                 plugin_channels=plugin_manager.channels if plugin_manager else None,
-                start_ipc=self.features.start_ipc,
                 enable_message_channels=self.features.enable_message_channels,
             )
             await self.channel_host.start_all()

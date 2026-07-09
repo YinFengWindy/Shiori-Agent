@@ -818,7 +818,6 @@ async def test_app_runtime_desktop_mode_disables_message_channels(
     )
 
     async def _fake_start_channels(*args, **kwargs):
-        observed["start_ipc"] = kwargs["start_ipc"]
         observed["enable_message_channels"] = kwargs["enable_message_channels"]
         return (
             None,
@@ -842,7 +841,6 @@ async def test_app_runtime_desktop_mode_disables_message_channels(
     )
     await app.start()
 
-    assert observed["start_ipc"] is True
     assert observed["enable_message_channels"] is False
 
 
