@@ -2,13 +2,12 @@ from __future__ import annotations
 from typing import Any, cast
 
 import json
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from agent.config import Config, DEFAULT_SOCKET
+from agent.config import Config
 from agent.config_models import Config as ConfigModel, WiringConfig
 from agent.lifecycle.facade import TurnLifecycle
 from agent.lifecycle.types import AfterStepCtx
@@ -247,7 +246,7 @@ def test_config_load_reads_embedding_and_ignores_private_memory_sections(tmp_pat
     assert cfg.memory.embedding.output_dimensionality == 1536
 
 
-def test_config_load_reads_memory_window_and_socket(tmp_path: Path):
+def test_config_load_reads_memory_window_and_ignores_legacy_socket(tmp_path: Path):
     cfg_path = tmp_path / "config.toml"
     _write_toml(
         cfg_path,
@@ -274,6 +273,7 @@ def test_config_load_reads_memory_window_and_socket(tmp_path: Path):
     cfg = Config.load(cfg_path)
 
     assert cfg.memory_window == 20
+    assert not hasattr(cfg.channels, "socket")
 
 
 def test_config_load_reads_agent_dev_mode(tmp_path: Path):
@@ -374,7 +374,7 @@ def test_config_load_skips_unfilled_channels_and_ignores_removed_qqbot_block(
     assert cfg.channels.telegram is None
     assert cfg.channels.qq is None
     assert "qqbot" not in cfg.plugins
-    assert cfg.channels.socket == DEFAULT_SOCKET
+    assert not hasattr(cfg.channels, "socket")
 
 
 def test_config_load_ignores_removed_fitbit_integration_block(tmp_path: Path):
@@ -405,7 +405,7 @@ def test_config_load_ignores_removed_fitbit_integration_block(tmp_path: Path):
     assert cfg.fitbit.enabled is False
 
 
-def test_config_load_reads_toml_layout_and_ignores_removed_integrations(
+def test_config_load_reads_toml_layout_and_ignores_removed_integrations_and_socket(
     tmp_path: Path,
 ):
     cfg_path = tmp_path / "config.toml"
@@ -441,11 +441,7 @@ enabled = true
     assert cfg.model == "m"
     assert cfg.max_tokens == 256
     assert cfg.memory_window == 12
-    if sys.platform == "win32":
-        assert cfg.channels.socket != "/tmp/toml-akashic.sock"
-        assert cfg.channels.socket.startswith("127.0.0.1:")
-    else:
-        assert cfg.channels.socket == "/tmp/toml-akashic.sock"
+    assert not hasattr(cfg.channels, "socket")
     assert cfg.fitbit.enabled is False
 
 

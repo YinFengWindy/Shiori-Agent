@@ -37,11 +37,11 @@ _PRESETS: dict[str, str] = {
     "openai": "https://api.openai.com/v1",
 }
 
-# CLI channel 默认 Unix socket 路径
 DEFAULT_SOCKET = "127.0.0.1:8765" if os.name == "nt" else "/tmp/akashic.sock"
 
 
 def _normalize_cli_socket_endpoint(value: str | None) -> str:
+    """保留给孤立的 CLI 调试模块使用；正式 runtime 不再读取该配置。"""
     text = str(value or "").strip()
     if not text:
         return DEFAULT_SOCKET
@@ -207,23 +207,10 @@ def _load_channels_config(data: dict) -> ChannelsConfig:
                 ),
             )
 
-    cli_data = _as_dict(channels_data.get("cli"))
-    socket_value = channels_data.get("socket") or cli_data.get(
-        "socket", DEFAULT_SOCKET
-    )
-    cli_session_key = str(cli_data.get("session_key") or "").strip()
-    cli_channel = str(cli_data.get("channel") or "").strip()
-    cli_chat_id = str(cli_data.get("chat_id") or "").strip()
-    if not cli_session_key and cli_channel and cli_chat_id:
-        cli_session_key = f"{cli_channel}:{cli_chat_id}"
-    channels = ChannelsConfig(
+    return ChannelsConfig(
         telegram=telegram,
         qq=qq,
-        socket=_normalize_cli_socket_endpoint(socket_value),
-        cli_session_key=cli_session_key,
     )
-    channels.socket = _normalize_cli_socket_endpoint(channels.socket)
-    return channels
 
 
 def _load_proactive_config(data: dict) -> ProactiveConfig:

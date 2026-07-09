@@ -42,8 +42,6 @@ class QQBotGroupConfig:
 class ChannelsConfig:
     telegram: TelegramChannelConfig | None = None
     qq: QQChannelConfig | None = None
-    socket: str = "/tmp/akashic.sock"
-    cli_session_key: str = ""
 
 
 @dataclass

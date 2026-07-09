@@ -930,16 +930,7 @@ async def test_bootstrap_trigger_and_entrypoints_cover_paths(
     monkeypatch.setattr("asyncio.run", _fake_asyncio_run)
     monkeypatch.setattr(
         "agent.config.Config.load",
-        classmethod(
-            lambda cls, path="config.toml": SimpleNamespace(
-                channels=SimpleNamespace(socket="/tmp/sock")
-            )
-        ),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "infra.channels.cli_tui",
-        SimpleNamespace(run_tui=MagicMock()),
+        classmethod(lambda cls, path="config.toml": SimpleNamespace()),
     )
     monkeypatch.setattr(
         "bootstrap.app.build_app_runtime",

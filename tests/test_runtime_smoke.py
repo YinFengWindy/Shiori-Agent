@@ -15,7 +15,6 @@ from bootstrap.channels import start_channels
 from agent.config import (
     ChannelsConfig,
     Config,
-    DEFAULT_SOCKET,
     QQChannelConfig,
     QQGroupConfig,
     TelegramChannelConfig,
@@ -200,30 +199,6 @@ async def test_run_cleanup_steps_continues_after_failure():
 
     assert calls == ["fail", "cleanup"]
 
-
-def test_connect_cli_uses_socket_from_config(monkeypatch, tmp_path):
-    config_path = tmp_path / "config.toml"
-    socket_path = tmp_path / "cli.sock"
-    _write_config(config_path, socket_path)
-    observed: dict[str, str] = {}
-
-    fake_cli_tui = types.ModuleType("infra.channels.cli_tui")
-
-    def _run_tui(socket: str) -> None:
-        observed["socket"] = socket
-
-    fake_cli_tui.run_tui = _run_tui  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "infra.channels.cli_tui", fake_cli_tui)
-
-    main.connect_cli(str(config_path))
-
-    if sys.platform == "win32":
-        assert observed["socket"] != str(socket_path)
-        assert observed["socket"].startswith("127.0.0.1:")
-    else:
-        assert observed["socket"] == str(socket_path)
-
-
 def test_init_workspace_creates_expected_assets(tmp_path):
     config_path = tmp_path / "config.toml"
     workspace = tmp_path / "workspace"
@@ -396,7 +371,6 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
                 allow_from=["2"],
                 groups=[QQGroupConfig(group_id="3")],
             ),
-            socket=str(tmp_path / "sock"),
         ),
     )
     resources = SharedHttpResources()
@@ -467,7 +441,6 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
         channels=ChannelsConfig(
             telegram=None,
             qq=None,
-            socket=str(tmp_path / "sock"),
         ),
     )
     resources = SharedHttpResources()
@@ -523,7 +496,6 @@ async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
                 allow_from=["2"],
                 groups=[QQGroupConfig(group_id="3")],
             ),
-            socket=str(tmp_path / "sock"),
         ),
     )
     resources = SharedHttpResources()

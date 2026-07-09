@@ -77,21 +77,6 @@ def _exit_removed_entrypoint(name: str) -> None:
     sys.exit(2)
 
 
-def connect_cli(config_path: str = "config.toml") -> None:
-    socket_path = Config.load(config_path).channels.socket
-    try:
-        from infra.channels.cli_tui import run_tui
-    except RuntimeError as exc:
-        logger.warning("%s", exc)
-        logger.info("回退到纯文本 CLI。")
-        from infra.channels.cli import CLIClient
-
-        asyncio.run(CLIClient(socket_path).run())
-        return
-
-    run_tui(socket_path)
-
-
 async def inspect_modules(
     config_path: str = "config.toml",
     workspace: Path | None = None,
