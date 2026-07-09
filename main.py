@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import signal
 import sys
 from dataclasses import replace
@@ -25,10 +24,7 @@ from bootstrap.app import (
     build_app_runtime,
     configure_logging_stream,
 )
-from bootstrap.dashboard_api import run_dashboard_api
 from bootstrap.init_workspace import InitSummary, init_workspace
-from bootstrap.memory import build_memory_admin_runtime
-from bootstrap.providers import build_providers
 from bootstrap.tools import build_core_runtime
 from core.net.http import SharedHttpResources
 from desktop_bridge import DesktopBridgeServer
@@ -68,10 +64,6 @@ def _log_init_summary(summary: InitSummary) -> None:
         logger.info("下一步：")
         for step in summary.next_steps:
             logger.info("  %s", step)
-
-
-def _legacy_dashboard_enabled() -> bool:
-    return os.environ.get("AKASHIC_ENABLE_LEGACY_DASHBOARD") == "1"
 
 
 def connect_cli(config_path: str = "config.toml") -> None:
@@ -205,14 +197,10 @@ if __name__ == "__main__":
     config_path = "config.toml"
     workspace: Path | None = None
     force = "--force" in args
-    dashboard_host = "0.0.0.0"
-    dashboard_port = 2236
 
     try:
         config_value = _get_flag_value(args, "--config")
         workspace_value = _get_flag_value(args, "--workspace")
-        host_value = _get_flag_value(args, "--host")
-        port_value = _get_flag_value(args, "--port")
     except ValueError as exc:
         logger.error("%s", exc)
         sys.exit(1)
@@ -221,10 +209,6 @@ if __name__ == "__main__":
         config_path = config_value
     if workspace_value is not None:
         workspace = Path(workspace_value)
-    if host_value is not None:
-        dashboard_host = host_value
-    if port_value is not None:
-        dashboard_port = int(port_value)
 
     if args and args[0] == "setup":
         from bootstrap.setup_wizard import run_setup_wizard
@@ -254,36 +238,6 @@ if __name__ == "__main__":
 
     if args and args[0] == "bridge":
         asyncio.run(serve_bridge(config_path, workspace))
-        sys.exit(0)
-
-    if args and args[0] == "dashboard":
-        logger.warning("[deprecated] `python main.py dashboard` 已进入兼容维护模式；桌面端请优先使用 `npm run desktop:start`。")
-        if "--allow-legacy-dashboard" not in args:
-            logger.error("如确需继续使用旧 Dashboard，请显式添加 `--allow-legacy-dashboard`。")
-            sys.exit(2)
-        if not _legacy_dashboard_enabled():
-            logger.error("旧 Dashboard 现仅保留给内部兼容调试路径，请改用桌面端；如需内部调试，请设置 `AKASHIC_ENABLE_LEGACY_DASHBOARD=1`。")
-            sys.exit(3)
-        config = Config.load(config_path)
-        dashboard_workspace = workspace or _default_workspace()
-        http_resources = SharedHttpResources()
-        provider, light_provider, _ = build_providers(config)
-        memory_runtime = build_memory_admin_runtime(
-            config=config,
-            workspace=dashboard_workspace,
-            provider=provider,
-            light_provider=light_provider,
-            http_resources=http_resources,
-        )
-        try:
-            run_dashboard_api(
-                workspace=dashboard_workspace,
-                host=dashboard_host,
-                port=dashboard_port,
-                memory_admin=memory_runtime.engine,
-            )
-        finally:
-            asyncio.run(memory_runtime.aclose())
         sys.exit(0)
 
     if not Path(config_path).exists():

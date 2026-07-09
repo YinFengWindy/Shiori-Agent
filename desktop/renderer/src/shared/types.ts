@@ -3,8 +3,6 @@ import type {
   SettingsChannelGroup,
   SettingsChannelRoleBinding,
   SettingsFormData,
-  SettingsPeerAgent,
-  SettingsQQBotGroup,
   SettingsSnapshot,
 } from "../../../src/shared.js";
 
@@ -154,7 +152,5 @@ export type {
   SettingsChannelGroup,
   SettingsChannelRoleBinding,
   SettingsFormData,
-  SettingsPeerAgent,
-  SettingsQQBotGroup,
   SettingsSnapshot,
 };

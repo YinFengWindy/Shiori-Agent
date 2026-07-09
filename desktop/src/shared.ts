@@ -29,28 +29,10 @@ export type SettingsChannelGroup = {
   requireAt: boolean;
 };
 
-export type SettingsQQBotGroup = {
-  groupOpenid: string;
-  allowFrom: string[];
-  requireAt: boolean;
-  allowProactive: boolean;
-};
-
 export type SettingsChannelRoleBinding = {
   channel: string;
   chatId: string;
   roleId: string;
-};
-
-export type SettingsPeerAgent = {
-  name: string;
-  baseUrl: string;
-  launcher: string[];
-  cwd: string;
-  description: string;
-  healthPath: string;
-  startupTimeoutSeconds: number;
-  shutdownTimeoutSeconds: number;
 };
 
 export type SettingsFormData = {
@@ -78,14 +60,6 @@ export type SettingsFormData = {
     qqBotUin: string;
     qqAllowFrom: string[];
     qqGroups: SettingsChannelGroup[];
-    qqbotAppId: string;
-    qqbotClientSecret: string;
-    qqbotAllowFrom: string[];
-    qqbotGroups: SettingsQQBotGroup[];
-    feishuAppId: string;
-    feishuAppSecret: string;
-    feishuAllowFrom: string[];
-    cliSessionKey: string;
     roleBindings: SettingsChannelRoleBinding[];
   };
   memory: {
@@ -110,14 +84,12 @@ export type SettingsFormData = {
     driftMinIntervalHours: number;
   };
   integrations: {
-    fitbitEnabled: boolean;
     novelaiEnabled: boolean;
     novelaiToken: string;
     novelaiNsfwEnabled: boolean;
     novelaiAddQualityTags: boolean;
     novelaiUndesiredContentPreset: number;
     novelaiAutoWritebackRoleAssets: boolean;
-    peerAgents: SettingsPeerAgent[];
   };
   advanced: {
     systemPrompt: string;
@@ -157,6 +129,7 @@ export type SaveSettingsResult = {
 
 /** Window chrome actions exposed through the preload bridge. */
 export type WindowControlAction = "minimize" | "toggleMaximize" | "close";
+
 export type WindowState = {
   isMaximized: boolean;
   isVisible: boolean;
@@ -185,11 +158,17 @@ export type DesktopApi = {
   startAttachmentDrag(request: StartAttachmentDragRequest): void;
   reportRendererDiagnostic(payload: RendererDiagnosticPayload): void;
   bridgeStatus(): Promise<{ running: boolean; lastError: string | null }>;
-  restartBridge(): Promise<{ ok: boolean; running: boolean; lastError: string | null }>;
+  restartBridge(): Promise<{
+    ok: boolean;
+    running: boolean;
+    lastError: string | null;
+  }>;
   readSettings(): Promise<SettingsSnapshot>;
   saveSettings(formData: SettingsFormData): Promise<SaveSettingsResult>;
   readChannelRoleBindings(): Promise<SettingsBindingsSnapshot>;
-  saveChannelRoleBindings(bindings: SettingsChannelRoleBinding[]): Promise<SettingsBindingsSnapshot>;
+  saveChannelRoleBindings(
+    bindings: SettingsChannelRoleBinding[],
+  ): Promise<SettingsBindingsSnapshot>;
   /** Controls the custom frameless Electron window chrome. */
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */

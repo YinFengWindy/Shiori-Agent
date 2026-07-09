@@ -80,30 +80,6 @@ websocket_open_timeout_seconds = 5.0
 # allow_from = ["your_qq_number"]
 # require_at = true
 
-[plugins.qqbot]
-# 官方 QQBot，和 NapCat QQ 通道并存。留空跳过。
-app_id = ""
-client_secret = ""
-# 私聊白名单使用官方 user_openid。
-allow_from = []
-
-# 当前实现仅启用私聊；群配置先保留为后续扩展占位。
-# [[plugins.qqbot.groups]]
-# group_openid = "GROUP_OPENID"
-# allow_from = ["MEMBER_OPENID"]
-# require_at = true
-# allow_proactive = false
-
-[plugins.feishu]
-# 飞书自建应用（长连接模式，无需公网回调）。留空跳过。
-# app_id / app_secret 来自开放平台「凭证与基础信息」。
-app_id = ""
-app_secret = ""
-# 私聊白名单填 open_id（ou_...）/ user_id / union_id，留空允许所有人。
-allow_from = []
-# 私有化部署改 domain，如 https://open.larksuite.com（Lark 国际版）。
-# domain = "https://open.feishu.cn"
-
 # =============================================================================
 # 语义记忆
 # default memory 的检索阈值在 plugins/default_memory/config.local.toml。
@@ -132,7 +108,6 @@ profile = "daily"
 [proactive.target]
 channel = "telegram"
 # 你的 Telegram user id（向 bot 发一条消息后从日志里可以拿到）。
-# 官方 QQBot 私聊可填：channel = "qqbot"，chat_id = "c2c:USER_OPENID"
 chat_id = ""
 
 [proactive.agent]
@@ -148,13 +123,6 @@ enabled = false
 max_steps = 20
 min_interval_hours = 3
 
-# =============================================================================
-# 其他集成（可选）
-# =============================================================================
-
-[integrations.fitbit]
-enabled = false
-
 [integrations.novelai]
 enabled = false
 token = "${NOVELAI_TOKEN}"
@@ -168,13 +136,3 @@ auto_writeback_role_assets = false
 max_pixels = 1048576
 max_steps = 28
 default_samples = 1
-
-# 可选：接入外部 Peer Agent（如 DeepResearch）
-# [[integrations.peer_agents]]
-# name = "DeepResearch Agent"
-# base_url = "http://127.0.0.1:9404"
-# launcher = ["uv", "run", "--project", "/path/to/deepresearch", "python", "-m", "app.a2a_server"]
-# cwd = "/path/to/deepresearch"
-# description = "对复杂问题执行多轮深度调研，生成结构化长报告。"
-# startup_timeout_s = 30
-# shutdown_timeout_s = 60

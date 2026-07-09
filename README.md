@@ -1,5 +1,3 @@
-[![欢迎加入交流群](https://img.shields.io/badge/QQ%E4%BA%A4%E6%B5%81%E7%BE%A4-%E6%AC%A2%E8%BF%8E%E5%8A%A0%E5%85%A5-2ea44f?style=for-the-badge)](./COMMUNICATION.md)
-
 # Shiori
 
 Shiori 是一个基于 Akashic Agent 基座演进出来的角色扮演 Agent 助手。当前仓库的主形态已经是 **Windows 桌面端 + Python Agent Runtime**：你可以创建和维护多个角色，让不同角色承接聊天、记忆、主动推送、图片生成和外部渠道绑定。
@@ -10,8 +8,8 @@ Shiori 是一个基于 Akashic Agent 基座演进出来的角色扮演 Agent 助
 
 - **桌面端优先**：Electron 桌面端是当前推荐入口，内置角色管理、聊天、设置、渠道绑定和基础 smoke 验证链路。
 - **角色驱动**：角色有独立名称、简介、系统提示词、头像、立绘和角色记忆空间。
-- **多渠道接入**：当前配置面已经覆盖 Telegram、QQ、QQBot、Feishu、CLI。
-- **主动能力保留**：支持 proactive 推送、Drift 空闲任务和外部 MCP / peer agent 接入。
+- **多渠道接入**：当前保留的外部渠道为 Telegram、QQ。
+- **主动能力保留**：支持 proactive 推送与 Drift 空闲任务。
 - **Akashic 基座仍在**：Phase、插件、记忆系统、工具编排和旧渠道兼容路径仍然保留。
 
 如果你第一次接触这个仓库，建议直接把它理解成：**一个以角色为核心、桌面端优先的本地 Agent 应用**。
@@ -120,7 +118,7 @@ allow_from = ["your_username"]
 补充说明：
 
 - 至少配置一个可用渠道后，被动消息链路才有实际入口。
-- `plugins.qqbot`、`plugins.feishu`、`integrations.peer_agents`、`integrations.novelai` 都已经进入当前配置模型。
+- `integrations.novelai` 已经进入当前配置模型。
 - 如果你主要体验桌面端，本地聊天与角色编辑本身不依赖 Telegram，但模型配置仍然是必需的。
 
 ### 3. 启动桌面端
@@ -166,10 +164,10 @@ uv run python main.py bridge
 当前桌面设置页已经覆盖：
 
 - 模型配置：`main` / `fast` / `vl`
-- 渠道配置：Telegram、QQ、QQBot、Feishu、CLI
+- 渠道配置：Telegram、QQ
 - Memory 与 Embedding 配置
 - Proactive 与 Drift 配置
-- NovelAI、Fitbit、Peer Agents 集成配置
+- NovelAI 集成配置
 - 原始插件 / wiring / TOML 片段编辑能力
 
 ### Agent Runtime
@@ -179,7 +177,6 @@ uv run python main.py bridge
 - proactive 主动推送
 - drift 空闲任务执行
 - 插件扩展与工具拦截
-- 外部 peer agent 接入
 
 ---
 
@@ -187,7 +184,6 @@ uv run python main.py bridge
 
 ```bash
 uv run python main.py               # 启动主 runtime
-uv run python main.py cli           # 连接运行中的 agent（TUI/CLI）
 uv run python main.py setup         # 交互式初始化
 uv run python main.py init          # 生成默认配置与工作区
 uv run python main.py bridge        # 启动桌面端 bridge
@@ -197,7 +193,6 @@ uv run python main.py --help        # 查看全部命令
 兼容入口说明：
 
 - `uv run python main.py desktop` 仍可用，但已经进入兼容维护模式
-- `uv run python main.py dashboard` 也仍保留，但默认不再作为推荐产品入口
 
 ---
 

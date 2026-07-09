@@ -1,139 +1,14 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const DEFAULT_SOCKET = process.platform === "win32" ? "127.0.0.1:8765" : "/tmp/akashic.sock";
-
-type SettingsChannelGroup = {
-  groupId: string;
-  allowFrom: string[];
-  requireAt: boolean;
-};
-
-type SettingsQQBotGroup = {
-  groupOpenid: string;
-  allowFrom: string[];
-  requireAt: boolean;
-  allowProactive: boolean;
-};
-
-type SettingsChannelRoleBinding = {
-  channel: string;
-  chatId: string;
-  roleId: string;
-};
-
-type SettingsPeerAgent = {
-  name: string;
-  baseUrl: string;
-  launcher: string[];
-  cwd: string;
-  description: string;
-  healthPath: string;
-  startupTimeoutSeconds: number;
-  shutdownTimeoutSeconds: number;
-};
-
-export type SettingsFormData = {
-  models: {
-    provider: string;
-    mainModel: string;
-    mainApiKey: string;
-    mainBaseUrl: string;
-    enableThinking: boolean;
-    reasoningEffort: string;
-    multimodal: boolean;
-    fastModel: string;
-    fastApiKey: string;
-    fastBaseUrl: string;
-    agentModel: string;
-    agentApiKey: string;
-    agentBaseUrl: string;
-    vlModel: string;
-    vlApiKey: string;
-    vlBaseUrl: string;
-  };
-  channels: {
-    telegramToken: string;
-    telegramAllowFrom: string[];
-    qqBotUin: string;
-    qqAllowFrom: string[];
-    qqGroups: SettingsChannelGroup[];
-    qqbotAppId: string;
-    qqbotClientSecret: string;
-    qqbotAllowFrom: string[];
-    qqbotGroups: SettingsQQBotGroup[];
-    feishuAppId: string;
-    feishuAppSecret: string;
-    feishuAllowFrom: string[];
-    cliSessionKey: string;
-    roleBindings: SettingsChannelRoleBinding[];
-  };
-  memory: {
-    enabled: boolean;
-    engine: string;
-    embeddingModel: string;
-    embeddingApiKey: string;
-    embeddingBaseUrl: string;
-    outputDimensionality: string;
-  };
-  proactive: {
-    enabled: boolean;
-    profile: string;
-    targetChannel: string;
-    targetChatId: string;
-    targetRoleId: string;
-    agentMaxSteps: number;
-    agentContentLimit: number;
-    agentWebFetchMaxChars: number;
-    driftEnabled: boolean;
-    driftMaxSteps: number;
-    driftMinIntervalHours: number;
-  };
-  integrations: {
-    fitbitEnabled: boolean;
-    novelaiEnabled: boolean;
-    novelaiToken: string;
-    novelaiNsfwEnabled: boolean;
-    novelaiAddQualityTags: boolean;
-    novelaiUndesiredContentPreset: number;
-    novelaiAutoWritebackRoleAssets: boolean;
-    peerAgents: SettingsPeerAgent[];
-  };
-  advanced: {
-    systemPrompt: string;
-    maxTokens: number;
-    maxIterations: number;
-    devMode: boolean;
-    memoryWindow: number;
-    searchEnabled: boolean;
-    spawnEnabled: boolean;
-    memoryOptimizerEnabled: boolean;
-    memoryOptimizerIntervalSeconds: number;
-    pluginsRawToml: string;
-  };
-};
-
-export type SettingsSnapshot = {
-  configPath: string;
-  formData: SettingsFormData;
-};
-
-export type SettingsBindingsSnapshot = {
-  bindings: SettingsChannelRoleBinding[];
-};
-
-type SaveSettingsResult = {
-  ok: boolean;
-  restart: {
-    ok: boolean;
-    running: boolean;
-    lastError: string | null;
-  };
-  health: {
-    ok: boolean;
-    message: string;
-  };
-};
+import type {
+  SaveSettingsResult,
+  SettingsBindingsSnapshot,
+  SettingsChannelGroup,
+  SettingsChannelRoleBinding,
+  SettingsFormData,
+  SettingsSnapshot,
+} from "./shared.js";
 
 type BridgeRestarter = () => Promise<{
   ok: boolean;
@@ -163,7 +38,7 @@ function splitList(value: string | string[] | undefined): string[] {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {};
 }
 
@@ -188,7 +63,6 @@ function parseTomlValue(raw: string): unknown {
 function parseToml(content: string): Record<string, unknown> {
   const root: Record<string, unknown> = {};
   let current = root;
-  let currentArrayName = "";
 
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -196,7 +70,6 @@ function parseToml(content: string): Record<string, unknown> {
 
     if (line.startsWith("[[") && line.endsWith("]]")) {
       const path = line.slice(2, -2).trim().split(".");
-      currentArrayName = path.join(".");
       let cursor: Record<string, unknown> = root;
       for (let index = 0; index < path.length - 1; index += 1) {
         const segment = path[index]!;
@@ -205,7 +78,9 @@ function parseToml(content: string): Record<string, unknown> {
         cursor = next;
       }
       const key = path[path.length - 1]!;
-      const list = Array.isArray(cursor[key]) ? cursor[key] as Record<string, unknown>[] : [];
+      const list = Array.isArray(cursor[key])
+        ? (cursor[key] as Record<string, unknown>[])
+        : [];
       const entry: Record<string, unknown> = {};
       list.push(entry);
       cursor[key] = list;
@@ -215,7 +90,6 @@ function parseToml(content: string): Record<string, unknown> {
 
     if (line.startsWith("[") && line.endsWith("]")) {
       const path = line.slice(1, -1).trim().split(".");
-      currentArrayName = "";
       let cursor: Record<string, unknown> = root;
       for (const segment of path) {
         const next = asRecord(cursor[segment]);
@@ -249,11 +123,11 @@ function renderPluginBlocks(rawToml: string): string {
   return trimmed ? `${trimmed}\n` : "";
 }
 
-function pickPreferredRecord(primary: Record<string, unknown>, fallback: Record<string, unknown>): Record<string, unknown> {
-  return Object.keys(primary).length > 0 ? primary : fallback;
-}
-
-function normalizeDesktopProactiveChatId(channel: string, roleId: string, chatId: string): string {
+function normalizeDesktopProactiveChatId(
+  channel: string,
+  roleId: string,
+  chatId: string,
+): string {
   if (channel !== "desktop") {
     return chatId;
   }
@@ -264,10 +138,42 @@ function normalizeDesktopProactiveChatId(channel: string, roleId: string, chatId
   return `role:${cleanRoleId}`;
 }
 
-function loadSettingsData(): SettingsSnapshot {
-  const content = existsSync(configPath)
-    ? readFileSync(configPath, "utf-8")
-    : "";
+function renderPluginSection(name: string, value: Record<string, unknown>): string {
+  const lines = [`[plugins.${name}]`];
+  for (const [key, rawValue] of Object.entries(value)) {
+    if (Array.isArray(rawValue)) {
+      lines.push(
+        `${key} = ${renderStringArray(rawValue.map((item) => String(item ?? "")))}`,
+      );
+      continue;
+    }
+    if (typeof rawValue === "boolean") {
+      lines.push(`${key} = ${rawValue ? "true" : "false"}`);
+      continue;
+    }
+    if (typeof rawValue === "number") {
+      lines.push(`${key} = ${rawValue}`);
+      continue;
+    }
+    lines.push(`${key} = ${quote(String(rawValue ?? ""))}`);
+  }
+  return lines.join("\n");
+}
+
+function sanitizeChannelRoleBindings(
+  bindings: SettingsChannelRoleBinding[],
+): SettingsChannelRoleBinding[] {
+  return bindings
+    .map((binding) => ({
+      channel: String(binding.channel ?? "").trim(),
+      chatId: String(binding.chatId ?? "").trim(),
+      roleId: String(binding.roleId ?? "").trim(),
+    }))
+    .filter((binding) => binding.channel && binding.chatId && binding.roleId);
+}
+
+export function loadSettingsData(): SettingsSnapshot {
+  const content = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
   const parsed = parseToml(content);
   const llm = asRecord(parsed.llm);
   const llmMain = asRecord(llm.main);
@@ -277,7 +183,6 @@ function loadSettingsData(): SettingsSnapshot {
   const channels = asRecord(parsed.channels);
   const telegram = asRecord(channels.telegram);
   const qq = asRecord(channels.qq);
-  const qqbotLegacy = asRecord(channels.qqbot);
   const memory = asRecord(parsed.memory);
   const embedding = asRecord(memory.embedding);
   const proactive = asRecord(parsed.proactive);
@@ -285,19 +190,16 @@ function loadSettingsData(): SettingsSnapshot {
   const proactiveAgent = asRecord(proactive.agent);
   const proactiveDrift = asRecord(proactive.drift);
   const integrations = asRecord(parsed.integrations);
-  const fitbit = asRecord(integrations.fitbit);
   const novelai = asRecord(integrations.novelai);
   const agent = asRecord(parsed.agent);
   const agentContext = asRecord(agent.context);
   const agentTools = asRecord(agent.tools);
   const agentMaintenance = asRecord(agent.maintenance);
-  const agentWiring = asRecord(agent.wiring);
   const plugins = asRecord(parsed.plugins);
-  const qqbot = pickPreferredRecord(asRecord(plugins.qqbot), qqbotLegacy);
-  const feishu = asRecord(plugins.feishu);
-  const cli = asRecord(channels.cli);
   const targetChannel = String(proactiveTarget.channel ?? "");
-  const targetRoleId = String(proactiveTarget.role_id ?? proactive.default_role_id ?? "");
+  const targetRoleId = String(
+    proactiveTarget.role_id ?? proactive.default_role_id ?? "",
+  );
   const targetChatId = normalizeDesktopProactiveChatId(
     targetChannel,
     targetRoleId,
@@ -327,7 +229,9 @@ function loadSettingsData(): SettingsSnapshot {
       },
       channels: {
         telegramToken: String(telegram.token ?? ""),
-        telegramAllowFrom: splitList(telegram.allow_from as string[] | undefined),
+        telegramAllowFrom: splitList(
+          telegram.allow_from as string[] | undefined,
+        ),
         qqBotUin: String(qq.bot_uin ?? ""),
         qqAllowFrom: splitList(qq.allow_from as string[] | undefined),
         qqGroups: asArray(qq.groups, (item) => {
@@ -336,24 +240,8 @@ function loadSettingsData(): SettingsSnapshot {
             groupId: String(group.group_id ?? ""),
             allowFrom: splitList(group.allow_from as string[] | undefined),
             requireAt: Boolean(group.require_at ?? true),
-          };
+          } satisfies SettingsChannelGroup;
         }),
-        qqbotAppId: String(qqbot.app_id ?? ""),
-        qqbotClientSecret: String(qqbot.client_secret ?? ""),
-        qqbotAllowFrom: splitList(qqbot.allow_from as string[] | undefined),
-        qqbotGroups: asArray(qqbot.groups, (item) => {
-          const group = asRecord(item);
-          return {
-            groupOpenid: String(group.group_openid ?? ""),
-            allowFrom: splitList(group.allow_from as string[] | undefined),
-            requireAt: Boolean(group.require_at ?? true),
-            allowProactive: Boolean(group.allow_proactive),
-          };
-        }),
-        feishuAppId: String(feishu.app_id ?? ""),
-        feishuAppSecret: String(feishu.app_secret ?? ""),
-        feishuAllowFrom: splitList(feishu.allow_from as string[] | undefined),
-        cliSessionKey: String(cli.session_key ?? ""),
         roleBindings: [],
       },
       memory: {
@@ -362,7 +250,10 @@ function loadSettingsData(): SettingsSnapshot {
         embeddingModel: String(embedding.model ?? ""),
         embeddingApiKey: String(embedding.api_key ?? ""),
         embeddingBaseUrl: String(embedding.base_url ?? ""),
-        outputDimensionality: embedding.output_dimensionality == null ? "" : String(embedding.output_dimensionality),
+        outputDimensionality:
+          embedding.output_dimensionality == null
+            ? ""
+            : String(embedding.output_dimensionality),
       },
       proactive: {
         enabled: Boolean(proactive.enabled),
@@ -372,32 +263,24 @@ function loadSettingsData(): SettingsSnapshot {
         targetRoleId,
         agentMaxSteps: Number(proactiveAgent.max_steps ?? 35),
         agentContentLimit: Number(proactiveAgent.content_limit ?? 5),
-        agentWebFetchMaxChars: Number(proactiveAgent.web_fetch_max_chars ?? 8000),
+        agentWebFetchMaxChars: Number(
+          proactiveAgent.web_fetch_max_chars ?? 8000,
+        ),
         driftEnabled: Boolean(proactiveDrift.enabled),
         driftMaxSteps: Number(proactiveDrift.max_steps ?? 20),
         driftMinIntervalHours: Number(proactiveDrift.min_interval_hours ?? 3),
       },
       integrations: {
-        fitbitEnabled: Boolean(fitbit.enabled),
         novelaiEnabled: Boolean(novelai.enabled),
         novelaiToken: String(novelai.token ?? ""),
         novelaiNsfwEnabled: Boolean(novelai.nsfw_enabled),
         novelaiAddQualityTags: Boolean(novelai.add_quality_tags),
-        novelaiUndesiredContentPreset: Number(novelai.undesired_content_preset ?? 0),
-        novelaiAutoWritebackRoleAssets: Boolean(novelai.auto_writeback_role_assets),
-        peerAgents: asArray(integrations.peer_agents, (item) => {
-          const peer = asRecord(item);
-          return {
-            name: String(peer.name ?? ""),
-            baseUrl: String(peer.base_url ?? ""),
-            launcher: asArray(peer.launcher, (part) => String(part ?? "")),
-            cwd: String(peer.cwd ?? ""),
-            description: String(peer.description ?? ""),
-            healthPath: String(peer.health_path ?? "/health"),
-            startupTimeoutSeconds: Number(peer.startup_timeout_s ?? 30),
-            shutdownTimeoutSeconds: Number(peer.shutdown_timeout_s ?? 10),
-          };
-        }),
+        novelaiUndesiredContentPreset: Number(
+          novelai.undesired_content_preset ?? 0,
+        ),
+        novelaiAutoWritebackRoleAssets: Boolean(
+          novelai.auto_writeback_role_assets,
+        ),
       },
       advanced: {
         systemPrompt: String(agent.system_prompt ?? ""),
@@ -407,8 +290,12 @@ function loadSettingsData(): SettingsSnapshot {
         memoryWindow: Number(agentContext.memory_window ?? 40),
         searchEnabled: Boolean(agentTools.search_enabled),
         spawnEnabled: Boolean(agentTools.spawn_enabled ?? true),
-        memoryOptimizerEnabled: Boolean(agentMaintenance.memory_optimizer_enabled ?? true),
-        memoryOptimizerIntervalSeconds: Number(agentMaintenance.memory_optimizer_interval_seconds ?? 64800),
+        memoryOptimizerEnabled: Boolean(
+          agentMaintenance.memory_optimizer_enabled ?? true,
+        ),
+        memoryOptimizerIntervalSeconds: Number(
+          agentMaintenance.memory_optimizer_interval_seconds ?? 64800,
+        ),
         pluginsRawToml: renderPluginBlocks(
           Object.entries(plugins)
             .filter(([name]) => name !== "qqbot" && name !== "feishu")
@@ -418,26 +305,6 @@ function loadSettingsData(): SettingsSnapshot {
       },
     },
   };
-}
-
-function renderPluginSection(name: string, value: Record<string, unknown>): string {
-  const lines = [`[plugins.${name}]`];
-  for (const [key, rawValue] of Object.entries(value)) {
-    if (Array.isArray(rawValue)) {
-      lines.push(`${key} = ${renderStringArray(rawValue.map((item) => String(item ?? "")))}`);
-      continue;
-    }
-    if (typeof rawValue === "boolean") {
-      lines.push(`${key} = ${rawValue ? "true" : "false"}`);
-      continue;
-    }
-    if (typeof rawValue === "number") {
-      lines.push(`${key} = ${rawValue}`);
-      continue;
-    }
-    lines.push(`${key} = ${quote(String(rawValue ?? ""))}`);
-  }
-  return lines.join("\n");
 }
 
 function renderSettingsToml(formData: SettingsFormData): string {
@@ -450,41 +317,15 @@ function renderSettingsToml(formData: SettingsFormData): string {
   );
   const qqGroupBlocks = formData.channels.qqGroups
     .filter((group) => group.groupId.trim())
-    .map((group) => [
-      "[[channels.qq.groups]]",
-      `group_id = ${quote(group.groupId.trim())}`,
-      `allow_from = ${renderStringArray(group.allowFrom)}`,
-      `require_at = ${group.requireAt ? "true" : "false"}`,
-      "",
-    ].join("\n"))
-    .join("\n");
-
-  const qqbotGroupBlocks = formData.channels.qqbotGroups
-    .filter((group) => group.groupOpenid.trim())
-    .map((group) => [
-      "[[plugins.qqbot.groups]]",
-      `group_openid = ${quote(group.groupOpenid.trim())}`,
-      `allow_from = ${renderStringArray(group.allowFrom)}`,
-      `require_at = ${group.requireAt ? "true" : "false"}`,
-      `allow_proactive = ${group.allowProactive ? "true" : "false"}`,
-      "",
-    ].join("\n"))
-    .join("\n");
-
-  const peerAgentBlocks = formData.integrations.peerAgents
-    .filter((agent) => agent.name.trim() || agent.baseUrl.trim())
-    .map((agent) => [
-      "[[integrations.peer_agents]]",
-      `name = ${quote(agent.name.trim())}`,
-      `base_url = ${quote(agent.baseUrl.trim())}`,
-      `launcher = ${renderStringArray(agent.launcher.filter((part) => part.trim()))}`,
-      `cwd = ${quote(agent.cwd.trim())}`,
-      `description = ${quote(agent.description)}`,
-      `health_path = ${quote(agent.healthPath || "/health")}`,
-      `startup_timeout_s = ${agent.startupTimeoutSeconds}`,
-      `shutdown_timeout_s = ${agent.shutdownTimeoutSeconds}`,
-      "",
-    ].join("\n"))
+    .map((group) =>
+      [
+        "[[channels.qq.groups]]",
+        `group_id = ${quote(group.groupId.trim())}`,
+        `allow_from = ${renderStringArray(group.allowFrom)}`,
+        `require_at = ${group.requireAt ? "true" : "false"}`,
+        "",
+      ].join("\n"),
+    )
     .join("\n");
 
   const outputDimensionality = formData.memory.outputDimensionality.trim();
@@ -498,7 +339,9 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `api_key = ${quote(formData.models.mainApiKey)}`,
     `base_url = ${quote(formData.models.mainBaseUrl)}`,
     `enable_thinking = ${formData.models.enableThinking ? "true" : "false"}`,
-    formData.models.reasoningEffort.trim() ? `reasoning_effort = ${quote(formData.models.reasoningEffort.trim())}` : "",
+    formData.models.reasoningEffort.trim()
+      ? `reasoning_effort = ${quote(formData.models.reasoningEffort.trim())}`
+      : "",
     `multimodal = ${formData.models.multimodal ? "true" : "false"}`,
     "",
     "[llm.fast]",
@@ -530,7 +373,9 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `spawn_enabled = ${formData.advanced.spawnEnabled ? "true" : "false"}`,
     "",
     "[agent.maintenance]",
-    `memory_optimizer_enabled = ${formData.advanced.memoryOptimizerEnabled ? "true" : "false"}`,
+    `memory_optimizer_enabled = ${
+      formData.advanced.memoryOptimizerEnabled ? "true" : "false"
+    }`,
     `memory_optimizer_interval_seconds = ${formData.advanced.memoryOptimizerIntervalSeconds}`,
     "",
     "[agent.wiring]",
@@ -549,22 +394,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "websocket_open_timeout_seconds = 5",
     "",
     qqGroupBlocks,
-    "[channels.cli]",
-    `socket = ${quote(DEFAULT_SOCKET)}`,
-    `session_key = ${quote(formData.channels.cliSessionKey)}`,
-    "",
-    "[plugins.qqbot]",
-    `app_id = ${quote(formData.channels.qqbotAppId)}`,
-    `client_secret = ${quote(formData.channels.qqbotClientSecret)}`,
-    `allow_from = ${renderStringArray(formData.channels.qqbotAllowFrom)}`,
-    "",
-    qqbotGroupBlocks,
-    "[plugins.feishu]",
-    `app_id = ${quote(formData.channels.feishuAppId)}`,
-    `app_secret = ${quote(formData.channels.feishuAppSecret)}`,
-    `allow_from = ${renderStringArray(formData.channels.feishuAllowFrom)}`,
-    'domain = "https://open.feishu.cn"',
-    "",
     "[memory]",
     `enabled = ${formData.memory.enabled ? "true" : "false"}`,
     `engine = ${quote(formData.memory.engine)}`,
@@ -573,7 +402,9 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `model = ${quote(formData.memory.embeddingModel)}`,
     `api_key = ${quote(formData.memory.embeddingApiKey)}`,
     `base_url = ${quote(formData.memory.embeddingBaseUrl)}`,
-    outputDimensionality ? `output_dimensionality = ${Number(outputDimensionality)}` : "",
+    outputDimensionality
+      ? `output_dimensionality = ${Number(outputDimensionality)}`
+      : "",
     "",
     "[proactive]",
     `enabled = ${formData.proactive.enabled ? "true" : "false"}`,
@@ -594,26 +425,28 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `max_steps = ${formData.proactive.driftMaxSteps}`,
     `min_interval_hours = ${formData.proactive.driftMinIntervalHours}`,
     "",
-    "[integrations.fitbit]",
-    `enabled = ${formData.integrations.fitbitEnabled ? "true" : "false"}`,
-    "",
     "[integrations.novelai]",
     `enabled = ${formData.integrations.novelaiEnabled ? "true" : "false"}`,
     `token = ${quote(formData.integrations.novelaiToken)}`,
     'base_url = "https://image.novelai.net"',
     'default_model = "nai-diffusion-4-5-curated"',
     'nsfw_model = "nai-diffusion-4-5-full"',
-    `nsfw_enabled = ${formData.integrations.novelaiNsfwEnabled ? "true" : "false"}`,
-    `add_quality_tags = ${formData.integrations.novelaiAddQualityTags ? "true" : "false"}`,
+    `nsfw_enabled = ${
+      formData.integrations.novelaiNsfwEnabled ? "true" : "false"
+    }`,
+    `add_quality_tags = ${
+      formData.integrations.novelaiAddQualityTags ? "true" : "false"
+    }`,
     `undesired_content_preset = ${formData.integrations.novelaiUndesiredContentPreset}`,
     "allow_txt2img = true",
     "allow_img2img = true",
-    `auto_writeback_role_assets = ${formData.integrations.novelaiAutoWritebackRoleAssets ? "true" : "false"}`,
+    `auto_writeback_role_assets = ${
+      formData.integrations.novelaiAutoWritebackRoleAssets ? "true" : "false"
+    }`,
     "max_pixels = 1048576",
     "max_steps = 28",
-    `default_samples = 1`,
+    "default_samples = 1",
     "",
-    peerAgentBlocks,
     formData.advanced.pluginsRawToml.trim(),
     "",
   ]
@@ -636,7 +469,10 @@ function validateSettings(formData: SettingsFormData): void {
   if (formData.advanced.maxIterations < 0) {
     throw new Error("max_iterations 不能小于 0");
   }
-  if (!Number.isInteger(formData.integrations.novelaiUndesiredContentPreset) || formData.integrations.novelaiUndesiredContentPreset < 0) {
+  if (
+    !Number.isInteger(formData.integrations.novelaiUndesiredContentPreset) ||
+    formData.integrations.novelaiUndesiredContentPreset < 0
+  ) {
     throw new Error("NovelAI undesired content preset 必须是非负整数");
   }
   if (formData.memory.outputDimensionality.trim()) {
@@ -650,16 +486,6 @@ function validateSettings(formData: SettingsFormData): void {
   }
 }
 
-function sanitizeChannelRoleBindings(bindings: SettingsChannelRoleBinding[]): SettingsChannelRoleBinding[] {
-  return bindings
-    .map((binding) => ({
-      channel: String(binding.channel ?? "").trim(),
-      chatId: String(binding.chatId ?? "").trim(),
-      roleId: String(binding.roleId ?? "").trim(),
-    }))
-    .filter((binding) => binding.channel && binding.chatId && binding.roleId);
-}
-
 export async function saveSettings(
   formData: SettingsFormData,
   restartBridge: BridgeRestarter,
@@ -668,10 +494,12 @@ export async function saveSettings(
   validateSettings(formData);
   writeFileSync(configPath, renderSettingsToml(formData), { encoding: "utf-8" });
   const restart = await restartBridge();
-  const health = restart.ok ? await checkHealth() : {
-    ok: false,
-    message: restart.lastError || "bridge restart failed",
-  };
+  const health = restart.ok
+    ? await checkHealth()
+    : {
+        ok: false,
+        message: restart.lastError || "bridge restart failed",
+      };
   return {
     ok: restart.ok && health.ok,
     restart,
@@ -679,10 +507,10 @@ export async function saveSettings(
   };
 }
 
-export function loadChannelRoleBindings(bindings: SettingsChannelRoleBinding[]): SettingsBindingsSnapshot {
+export function loadChannelRoleBindings(
+  bindings: SettingsChannelRoleBinding[],
+): SettingsBindingsSnapshot {
   return {
     bindings: sanitizeChannelRoleBindings(bindings),
   };
 }
-
-export { loadSettingsData };

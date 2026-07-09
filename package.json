@@ -4,10 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "npm run desktop:start",
-    "build": "npm run build:plugins && npm run build:desktop",
+    "build": "npm run build:desktop",
     "build:desktop": "npm --prefix desktop run build",
-    "build:plugins": "node scripts/build-plugins.mjs",
-    "build:watch": "node scripts/build-plugins.mjs --watch",
     "smoke": "npm run desktop:smoke:all",
     "desktop:build": "npm run build:desktop",
     "desktop:dev": "npm --prefix desktop run dev",
@@ -19,7 +17,7 @@
     "desktop:start": "npm --prefix desktop run start:built",
     "desktop:typecheck": "npm --prefix desktop run typecheck",
     "dev": "npm run desktop:dev",
-    "lint": "eslint \"frontend/dashboard/src/**/*.{ts,tsx}\" \"plugins/**/*.ts\" \"types/**/*.d.ts\"",
+    "lint": "eslint \"plugins/**/*.ts\" \"types/**/*.d.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

@@ -15,8 +15,6 @@ import type {
   SettingsChannelGroup,
   SettingsChannelRoleBinding,
   SettingsFormData,
-  SettingsPeerAgent,
-  SettingsQQBotGroup,
   SettingsSnapshot,
 } from "../shared/types";
 import {
@@ -59,17 +57,6 @@ function splitLines(value: string): string[] {
     .filter(Boolean);
 }
 
-function parseLauncher(value: string): string[] {
-  return value
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function formatLauncher(values: string[]): string {
-  return values.join("\n");
-}
-
 function parseNumber(value: string, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -95,24 +82,6 @@ function getBindingChatIdMeta(channel: string): { label: string; placeholder: st
         placeholder: "例如好友 QQ 号或群号",
         hint: "",
       };
-    case "qqbot":
-      return {
-        label: "QQBot Chat ID",
-        placeholder: "例如 c2c:USER_OPENID",
-        hint: "",
-      };
-    case "feishu":
-      return {
-        label: "Feishu Chat ID",
-        placeholder: "例如 open_id / chat_id",
-        hint: "",
-      };
-    case "cli":
-      return {
-        label: "CLI Session Key",
-        placeholder: "例如 local 或 cli:local",
-        hint: "",
-      };
     default:
       return {
         label: "Chat ID",
@@ -126,9 +95,6 @@ const proactiveTargetOptions: ProactiveTargetOption[] = [
   { value: "desktop", label: "桌面端" },
   { value: "telegram", label: "Telegram" },
   { value: "qq", label: "QQ" },
-  { value: "qqbot", label: "QQBot" },
-  { value: "feishu", label: "Feishu" },
-  { value: "cli", label: "CLI" },
 ];
 
 const proactiveProfileOptions: Array<{ value: string; label: string }> = [
@@ -311,9 +277,6 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
   channels: [
     { id: "telegram", label: "Telegram" },
     { id: "qq", label: "QQ" },
-    { id: "qqbot", label: "QQBot" },
-    { id: "feishu", label: "Feishu" },
-    { id: "cli", label: "CLI" },
   ],
   memory: [
     { id: "general", label: "基础" },
@@ -327,8 +290,6 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
   ],
   integrations: [
     { id: "novelai", label: "NovelAI" },
-    { id: "fitbit", label: "Fitbit" },
-    { id: "peer-agents", label: "Peer Agents" },
   ],
   advanced: [
     { id: "general", label: "基础" },
@@ -713,74 +674,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 {renderRoleBindingsForChannel("qq")}
               </SectionCard>
             );
-          case "qqbot":
-            return (
-              <SectionCard>
-                <Field label="QQBot App ID">
-                  <input className={cx(inputClass, "bg-white")} value={draft.channels.qqbotAppId} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqbotAppId: event.target.value } }))} />
-                </Field>
-                <Field label="QQBot Client Secret">
-                  <SecretInput value={draft.channels.qqbotClientSecret} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqbotClientSecret: value } }))} />
-                </Field>
-                <Field label="QQBot Allow From" hint="每行一个 user_openid。">
-                  <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.qqbotAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqbotAllowFrom: splitLines(event.target.value) } }))} />
-                </Field>
-                <Field label="QQBot 群组规则" layout="stack">
-                  <div className="grid gap-3">
-                    {draft.channels.qqbotGroups.map((group, index) => (
-                      <QQBotGroupEditor
-                        key={`${group.groupOpenid}-${index}`}
-                        group={group}
-                        onChange={(nextGroup) => updateDraft((current) => {
-                          const next = [...current.channels.qqbotGroups];
-                          next[index] = nextGroup;
-                          return { ...current, channels: { ...current.channels, qqbotGroups: next } };
-                        })}
-                        onRemove={() => updateDraft((current) => ({
-                          ...current,
-                          channels: {
-                            ...current.channels,
-                            qqbotGroups: current.channels.qqbotGroups.filter((_, groupIndex) => groupIndex !== index),
-                          },
-                        }))}
-                      />
-                    ))}
-                    <AddListAction label="添加 QQBot 群组" onAdd={() => updateDraft((current) => ({
-                      ...current,
-                      channels: {
-                        ...current.channels,
-                        qqbotGroups: [...current.channels.qqbotGroups, { groupOpenid: "", allowFrom: [], requireAt: true, allowProactive: false }],
-                      },
-                    }))} />
-                  </div>
-                </Field>
-                {renderRoleBindingsForChannel("qqbot")}
-              </SectionCard>
-            );
-          case "feishu":
-            return (
-              <SectionCard>
-                <Field label="Feishu App ID">
-                  <input className={cx(inputClass, "bg-white")} value={draft.channels.feishuAppId} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuAppId: event.target.value } }))} />
-                </Field>
-                <Field label="Feishu App Secret">
-                  <SecretInput value={draft.channels.feishuAppSecret} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuAppSecret: value } }))} />
-                </Field>
-                <Field label="Feishu Allow From" hint="每行一个 open_id / user_id / union_id；留空表示允许所有人。">
-                  <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.feishuAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, feishuAllowFrom: splitLines(event.target.value) } }))} />
-                </Field>
-                {renderRoleBindingsForChannel("feishu")}
-              </SectionCard>
-            );
-          case "cli":
-            return (
-              <SectionCard>
-                <Field label="CLI Session Key">
-                  <input className={cx(inputClass, "bg-white")} value={draft.channels.cliSessionKey} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, cliSessionKey: event.target.value } }))} />
-                </Field>
-                {renderRoleBindingsForChannel("cli")}
-              </SectionCard>
-            );
           default:
             return null;
         }
@@ -927,63 +820,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <ToggleField label="NSFW 模式（开启时使用 Full）" checked={draft.integrations.novelaiNsfwEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiNsfwEnabled: checked } }))} />
               </SectionCard>
             );
-          case "fitbit":
-            return (
-              <SectionCard>
-                <ToggleField
-                  label="启用 Fitbit"
-                  hint="启用后允许 Agent 接入 Fitbit 健康数据能力，例如睡眠、步数、心率等信息。"
-                  checked={draft.integrations.fitbitEnabled}
-                  onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, fitbitEnabled: checked } }))}
-                />
-              </SectionCard>
-            );
-          case "peer-agents":
-            return (
-              <SectionCard>
-                <Field label="Peer Agents" layout="stack">
-                  <div className="grid gap-3">
-                    {draft.integrations.peerAgents.map((agent, index) => (
-                      <PeerAgentEditor
-                        key={`${agent.name}-${index}`}
-                        agent={agent}
-                        onChange={(nextAgent) => updateDraft((current) => {
-                          const next = [...current.integrations.peerAgents];
-                          next[index] = nextAgent;
-                          return { ...current, integrations: { ...current.integrations, peerAgents: next } };
-                        })}
-                        onRemove={() => updateDraft((current) => ({
-                          ...current,
-                          integrations: {
-                            ...current.integrations,
-                            peerAgents: current.integrations.peerAgents.filter((_, agentIndex) => agentIndex !== index),
-                          },
-                        }))}
-                      />
-                    ))}
-                    <AddListAction label="添加 Peer Agent" onAdd={() => updateDraft((current) => ({
-                      ...current,
-                      integrations: {
-                        ...current.integrations,
-                        peerAgents: [
-                          ...current.integrations.peerAgents,
-                          {
-                            name: "",
-                            baseUrl: "",
-                            launcher: [],
-                            cwd: "",
-                            description: "",
-                            healthPath: "/health",
-                            startupTimeoutSeconds: 30,
-                            shutdownTimeoutSeconds: 10,
-                          },
-                        ],
-                      },
-                    }))} />
-                  </div>
-                </Field>
-              </SectionCard>
-            );
           default:
             return null;
         }
@@ -1123,29 +959,6 @@ function GroupEditor({
   );
 }
 
-function QQBotGroupEditor({
-  group,
-  onChange,
-  onRemove,
-}: {
-  group: SettingsQQBotGroup;
-  onChange: (next: SettingsQQBotGroup) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <EditorCard title="QQBot 群组" onRemove={onRemove}>
-      <div className="grid gap-3">
-        <input className={cx(inputClass, "bg-white")} value={group.groupOpenid} onChange={(event) => onChange({ ...group, groupOpenid: event.target.value })} placeholder="群组 OpenID" />
-        <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
-        <div className="grid gap-3 md:grid-cols-2">
-          <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
-          <CompactToggleField label="allow_proactive" checked={group.allowProactive} onChange={(checked) => onChange({ ...group, allowProactive: checked })} />
-        </div>
-      </div>
-    </EditorCard>
-  );
-}
-
 function ChannelRoleBindingEditor({
   channel,
   binding,
@@ -1179,31 +992,6 @@ function ChannelRoleBindingEditor({
           </select>
         </div>
       </div>
-    </EditorCard>
-  );
-}
-
-function PeerAgentEditor({
-  agent,
-  onChange,
-  onRemove,
-}: {
-  agent: SettingsPeerAgent;
-  onChange: (next: SettingsPeerAgent) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <EditorCard title="Peer Agent" onRemove={onRemove}>
-      <div className="grid gap-3">
-        <input className={cx(inputClass, "bg-white")} value={agent.name} onChange={(event) => onChange({ ...agent, name: event.target.value })} placeholder="名称" />
-        <input className={cx(inputClass, "bg-white")} value={agent.baseUrl} onChange={(event) => onChange({ ...agent, baseUrl: event.target.value })} placeholder="基础地址" />
-        <input className={cx(inputClass, "bg-white")} value={agent.cwd} onChange={(event) => onChange({ ...agent, cwd: event.target.value })} placeholder="工作目录" />
-        <input className={cx(inputClass, "bg-white")} value={agent.healthPath} onChange={(event) => onChange({ ...agent, healthPath: event.target.value })} placeholder="健康检查路径" />
-        <input className={cx(inputClass, "bg-white")} value={String(agent.startupTimeoutSeconds)} onChange={(event) => onChange({ ...agent, startupTimeoutSeconds: parseNumber(event.target.value, agent.startupTimeoutSeconds) })} placeholder="启动超时秒数" />
-        <input className={cx(inputClass, "bg-white")} value={String(agent.shutdownTimeoutSeconds)} onChange={(event) => onChange({ ...agent, shutdownTimeoutSeconds: parseNumber(event.target.value, agent.shutdownTimeoutSeconds) })} placeholder="关闭超时秒数" />
-      </div>
-      <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={agent.description} onChange={(event) => onChange({ ...agent, description: event.target.value })} placeholder="描述" />
-      <textarea className={cx(textareaClass, "min-h-24 bg-white font-mono text-[12px]")} value={formatLauncher(agent.launcher)} onChange={(event) => onChange({ ...agent, launcher: parseLauncher(event.target.value) })} placeholder="每行一个启动命令片段" />
     </EditorCard>
   );
 }
