@@ -25,15 +25,6 @@ from bus.event_bus import EventBus
 from core.net.http import SharedHttpResources
 
 
-class _FakeDashboardServer:
-    def __init__(self) -> None:
-        self.should_exit = False
-
-    async def serve(self) -> None:
-        while not self.should_exit:
-            await asyncio.sleep(0)
-
-
 def _toml_value(value):
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -144,47 +135,25 @@ async def test_serve_smoke_loads_config_and_runs_shutdown(monkeypatch, tmp_path)
     config_path = tmp_path / "config.toml"
     socket_path = tmp_path / "akashic.sock"
     _write_config(config_path, socket_path)
-
-    original_build_core_runtime = bootstrap_app.build_core_runtime
     observed: dict[str, object] = {}
 
-    def _patched_build_core_runtime(config, workspace, http_resources):
-        runtime = original_build_core_runtime(config, workspace, http_resources)
-        agent_loop = runtime.loop
-        bus = runtime.bus
-        scheduler = runtime.scheduler
+    runtime = types.SimpleNamespace(run=AsyncMock())
 
-        async def _agent_loop_run():
-            return None
-
-        async def _bus_dispatch_outbound():
-            return None
-
-        async def _scheduler_run():
-            return None
-
-        agent_loop.run = _agent_loop_run  # type: ignore[assignment]
-        bus.dispatch_outbound = _bus_dispatch_outbound  # type: ignore[assignment]
-        scheduler.run = _scheduler_run  # type: ignore[assignment]
-        observed["scheduler"] = scheduler
-        observed["bus"] = bus
-        observed["http_resources"] = http_resources
+    def _fake_build_app_runtime(config, workspace, *, features):
+        observed["config"] = config
+        observed["workspace"] = workspace
+        observed["features"] = features
         return runtime
 
-    monkeypatch.setattr(
-        bootstrap_app, "build_core_runtime", _patched_build_core_runtime
-    )
-    monkeypatch.setattr(
-        bootstrap_app, "build_dashboard_server", lambda **_: _FakeDashboardServer()
-    )
+    monkeypatch.setattr(main, "build_app_runtime", _fake_build_app_runtime)
     monkeypatch.setattr(main.Path, "home", lambda: tmp_path)
 
     await main.serve(str(config_path))
 
-    assert socket_path.exists() is False
-    assert "scheduler" in observed
-    assert "bus" in observed
-    assert cast(SharedHttpResources, observed["http_resources"]).closed is True
+    assert observed["workspace"] == tmp_path / ".akashic" / "workspace"
+    assert observed["features"] == bootstrap_app.SERVICE_RUNTIME_FEATURES
+    assert cast(Config, observed["config"]).model == "test-model"
+    runtime.run.assert_awaited_once()
 
 
 @pytest.mark.asyncio

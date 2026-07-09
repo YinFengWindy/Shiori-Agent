@@ -10,7 +10,6 @@ from typing import Awaitable, Callable
 from agent.config_models import Config
 from bootstrap.channel_host import ChannelHost
 from bootstrap.channels import start_channels
-from bootstrap.dashboard_api import build_dashboard_server
 from bootstrap.memory import build_memory_runtime
 from bootstrap.proactive import build_memory_optimizer_task, build_proactive_runtime
 from bootstrap.providers import build_providers
@@ -49,14 +48,12 @@ logger = logging.getLogger(__name__)
 class RuntimeFeatures:
     start_ipc: bool = True
     enable_message_channels: bool = True
-    enable_dashboard: bool = True
     enable_proactive: bool = True
 
 
 SERVICE_RUNTIME_FEATURES = RuntimeFeatures()
 DESKTOP_RUNTIME_FEATURES = RuntimeFeatures(
     enable_message_channels=False,
-    enable_dashboard=False,
 )
 
 
@@ -108,8 +105,6 @@ class AppRuntime:
         self.proactive_loop = None
         self.peer_process_manager = None
         self.peer_poller = None
-        self.dashboard_server = None
-        self.dashboard_task: asyncio.Task[None] | None = None
         self._background_tasks: list[asyncio.Task[None]] = []
         self._memory_optimizer = None
         self._shutdown = False
@@ -193,18 +188,6 @@ class AppRuntime:
                         ),
                     ]
                 )
-            if self.features.enable_dashboard:
-                self.dashboard_server = build_dashboard_server(
-                    workspace=self.workspace,
-                    manual_consolidator=self.agent_loop,
-                    manual_memory_optimizer=self._memory_optimizer,
-                    memory_admin=self.memory_runtime.engine,
-                    memory_store=self.memory_runtime,
-                )
-                self.dashboard_task = asyncio.create_task(
-                    self.dashboard_server.serve(),
-                    name="dashboard_server",
-                )
             if self.features.enable_proactive:
                 proactive_tasks, self.proactive_loop = build_proactive_runtime(
                     self.config,
@@ -249,13 +232,6 @@ class AppRuntime:
                 self.bus.stop()
             if self.scheduler is not None:
                 self.scheduler.stop()
-            if self.dashboard_server is not None:
-                self.dashboard_server.should_exit = True
-            if self.dashboard_task is not None:
-                try:
-                    await self.dashboard_task
-                except asyncio.CancelledError:
-                    pass
             for task in self._background_tasks:
                 if task.done():
                     continue

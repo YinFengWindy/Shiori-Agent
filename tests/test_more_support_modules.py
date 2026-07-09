@@ -762,14 +762,6 @@ async def test_app_runtime_start_passes_markdown_store_to_memory_optimizer(
     monkeypatch.setattr(
         "bootstrap.app.build_memory_optimizer_task", build_memory_optimizer_task
     )
-    monkeypatch.setattr(
-        "bootstrap.app.build_dashboard_server",
-        lambda **kwargs: SimpleNamespace(
-            should_exit=False,
-            serve=AsyncMock(return_value=None),
-            manual_memory_optimizer=kwargs["manual_memory_optimizer"],
-        ),
-    )
 
     app = AppRuntime(
         config=cast(Any, SimpleNamespace()),
@@ -779,11 +771,11 @@ async def test_app_runtime_start_passes_markdown_store_to_memory_optimizer(
 
     build_memory_optimizer_task.assert_called_once()
     assert build_memory_optimizer_task.call_args.kwargs["memory_store"] is markdown_store
-    assert app.dashboard_server.manual_memory_optimizer is memory_optimizer
+    assert app._memory_optimizer is memory_optimizer
 
 
 @pytest.mark.asyncio
-async def test_app_runtime_desktop_mode_disables_dashboard_and_message_channels(
+async def test_app_runtime_desktop_mode_disables_message_channels(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     memory_runtime = SimpleNamespace(
@@ -843,11 +835,6 @@ async def test_app_runtime_desktop_mode_disables_dashboard_and_message_channels(
         MagicMock(return_value=([], None)),
     )
 
-    def _unexpected_dashboard(**kwargs):
-        raise AssertionError("desktop mode should not build dashboard server")
-
-    monkeypatch.setattr("bootstrap.app.build_dashboard_server", _unexpected_dashboard)
-
     app = AppRuntime(
         config=cast(Any, SimpleNamespace()),
         workspace=tmp_path,
@@ -857,7 +844,6 @@ async def test_app_runtime_desktop_mode_disables_dashboard_and_message_channels(
 
     assert observed["start_ipc"] is True
     assert observed["enable_message_channels"] is False
-    assert app.dashboard_server is None
 
 
 @pytest.mark.asyncio
