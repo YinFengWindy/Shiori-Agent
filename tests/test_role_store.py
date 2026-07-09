@@ -535,10 +535,16 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
 
     assert routed.session_key == "role:mira"
     assert routed.metadata["role_id"] == "mira"
+    assert routed.metadata["thread_id"] == "thread:mira:telegram:chat-1"
     assert routed.metadata["context_channel"] == "telegram"
     assert routed.metadata["context_chat_id"] == "chat-1"
     assert routed.metadata["transport_channel"] == "telegram"
     assert routed.metadata["transport_chat_id"] == "chat-1"
+    thread = session_manager.conversation_store.get_thread_by_legacy_session_key(
+        "telegram:chat-1"
+    )
+    assert thread is not None
+    assert thread.thread_kind == "network"
 
 
 def test_route_inbound_by_role_leaves_unbound_legacy_channel_untouched(tmp_path: Path):

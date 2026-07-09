@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from bus.events import InboundMessage
+from conversation.service import ConversationService, LegacySessionDescriptor
 
 from .services import RoleAggregateService
 from .store import RoleStore
@@ -14,6 +15,10 @@ class InboundRoleRouter:
 
     def __init__(self, service: RoleAggregateService) -> None:
         self._service = service
+        self._conversation = ConversationService(
+            service.sessions._session_manager,
+            binding_resolver=service.bindings.resolve_role_id,
+        )
 
     @classmethod
     def from_workspace(cls, workspace: Path, *, session_manager) -> "InboundRoleRouter":
@@ -36,8 +41,18 @@ class InboundRoleRouter:
             role_id = self._service.bindings.resolve_role_id(message.channel, message.chat_id)
         except KeyError:
             return message
+        thread = self._conversation.ensure_thread_for_session(
+            LegacySessionDescriptor(
+                session_key=f"{message.channel}:{message.chat_id}",
+                role_id=role_id,
+                channel=message.channel,
+                chat_id=message.chat_id,
+                metadata=metadata,
+            )
+        )
         session_key = self._service.sessions.derive_session_key(role_id)
         metadata["role_id"] = role_id
+        metadata["thread_id"] = thread.id
         metadata["session_key_override"] = session_key
         metadata.setdefault("context_channel", message.channel)
         metadata.setdefault("context_chat_id", message.chat_id)

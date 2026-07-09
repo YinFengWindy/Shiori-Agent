@@ -459,6 +459,35 @@ class SessionManager:
         }
         return {k: v for k, v in msg.items() if k not in skip}
 
+    def _conversation_fields(self, msg: dict[str, Any]) -> dict[str, Any]:
+        metadata = msg.get("metadata")
+        typed_metadata = metadata if isinstance(metadata, dict) else {}
+        fields: dict[str, Any] = {}
+        thread_id = str(
+            msg.get("thread_id") or typed_metadata.get("thread_id") or ""
+        ).strip()
+        if thread_id:
+            fields["thread_id"] = thread_id
+        sender_role = str(msg.get("sender_role") or "").strip()
+        if sender_role:
+            fields["sender_role"] = sender_role
+        media = msg.get("media")
+        if isinstance(media, list) and media:
+            fields["media"] = list(media)
+        external_message_id = str(
+            msg.get("external_message_id")
+            or typed_metadata.get("external_message_id")
+            or ""
+        ).strip()
+        if external_message_id:
+            fields["external_message_id"] = external_message_id
+        delivery_status = str(
+            msg.get("delivery_status") or typed_metadata.get("delivery_status") or ""
+        ).strip()
+        if delivery_status:
+            fields["delivery_status"] = delivery_status
+        return fields
+
     def _message_seq(self, session_key: str, msg: dict[str, Any]) -> int | None:
         raw_seq = msg.get("seq")
         if raw_seq is not None:
@@ -493,6 +522,7 @@ class SessionManager:
             "timestamp": timestamp,
             "tool_chain": msg.get("tool_chain"),
             "extra": self._extract_extra(msg),
+            **self._conversation_fields(msg),
         }
 
     def _requires_full_message_sync(self, session: Session) -> bool:
@@ -589,6 +619,7 @@ class SessionManager:
                 seq=next_seq,
                 tool_chain=msg.get("tool_chain"),
                 extra=self._extract_extra(msg),
+                **self._conversation_fields(msg),
             )
             msg.update(row)
             next_seq += 1

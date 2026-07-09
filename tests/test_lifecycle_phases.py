@@ -1573,6 +1573,48 @@ async def test_after_reasoning_persists_user_display_content_without_internal_me
 
 
 @pytest.mark.asyncio
+async def test_after_reasoning_copies_thread_id_into_persisted_messages():
+    session = _DummySession("role:mira")
+    session.metadata["thread_id"] = "thread:mira:telegram:123"
+    msg = InboundMessage(
+        channel="telegram",
+        sender="user",
+        chat_id="123",
+        content="hi",
+        timestamp=_now,
+        metadata={
+            "role_id": "mira",
+            "thread_id": "thread:mira:telegram:123",
+            "transport_channel": "telegram",
+            "transport_chat_id": "123",
+        },
+    )
+    state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=True)
+    state.session = session
+    services = SimpleNamespace(
+        presence=Mock(),
+        session_manager=SimpleNamespace(append_messages=AsyncMock()),
+    )
+    turn_result = TurnRunResult(
+        reply="reply",
+        tool_chain=[],
+        tools_used=[],
+        thinking=None,
+        streamed=False,
+        context_retry={},
+    )
+    phase = Phase(
+        default_after_reasoning_modules(EventBus(), cast(Any, services)),
+        frame_factory=AfterReasoningFrame,
+    )
+
+    await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
+
+    assert session.messages[0]["thread_id"] == "thread:mira:telegram:123"
+    assert session.messages[1]["thread_id"] == "thread:mira:telegram:123"
+
+
+@pytest.mark.asyncio
 async def test_after_reasoning_enriches_session_metadata_with_relationship_runtime():
     session = _DummySession("desktop:role:mira")
     msg = InboundMessage(

@@ -835,6 +835,9 @@ class DesktopBridgeService:
             metadata=dict(session.metadata),
         )
         session.metadata.setdefault("thread_id", thread.id)
+        for message in session.messages:
+            if not str(message.get("thread_id") or "").strip():
+                message["thread_id"] = thread.id
 
     def _serialize_role(self, role) -> dict[str, Any]:
         payload = role.to_dict()

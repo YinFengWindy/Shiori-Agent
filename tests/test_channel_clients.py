@@ -1027,7 +1027,9 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert bus.inbound[1].metadata["chat_type"] == "group"
     assert bus.inbound[0].session_key == "role:mira"
     assert bus.inbound[0].metadata["role_id"] == "mira"
+    assert bus.inbound[0].metadata["thread_id"] == "thread:mira:qq:1"
     assert bus.inbound[1].session_key == "role:mira"
+    assert bus.inbound[1].metadata["thread_id"] == "thread:mira:qq:gqq:100"
     assert channel._interrupt_controller.request_interrupt.call_count == 2
 
     channel._run_on_bot_loop = AsyncMock(side_effect=_drain)
@@ -1111,6 +1113,7 @@ async def test_telegram_channel_routes_bound_inbound_to_role_session(
     assert len(bus.inbound) == 1
     assert bus.inbound[0].session_key == "role:mira"
     assert bus.inbound[0].metadata["role_id"] == "mira"
+    assert bus.inbound[0].metadata["thread_id"] == "thread:mira:telegram:123"
     assert bus.inbound[0].metadata["transport_channel"] == "telegram"
     assert bus.inbound[0].metadata["transport_chat_id"] == "123"
     await channel.stop()

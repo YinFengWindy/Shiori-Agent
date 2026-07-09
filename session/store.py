@@ -9,6 +9,11 @@ from typing import Any
 
 from conversation.store import ensure_conversation_schema
 
+_MESSAGE_SELECT_COLUMNS = (
+    "id, session_key, seq, role, content, tool_chain, extra, ts, "
+    "thread_id, sender_role, media, external_message_id, delivery_status"
+)
+
 
 class SessionStore:
     """SQLite-backed store for session metadata and messages."""
@@ -582,6 +587,11 @@ class SessionStore:
         seq: int,
         tool_chain: Any | None = None,
         extra: dict[str, Any] | None = None,
+        thread_id: str | None = None,
+        sender_role: str | None = None,
+        media: list[str] | None = None,
+        external_message_id: str | None = None,
+        delivery_status: str | None = None,
     ) -> dict[str, Any]:
         message_id = f"{session_key}:{seq}"
         tool_chain_payload = (
@@ -590,11 +600,17 @@ class SessionStore:
             else None
         )
         extra_payload = json.dumps(extra or {}, ensure_ascii=False)
+        media_payload = (
+            json.dumps(list(media), ensure_ascii=False) if media else None
+        )
         with self._lock:
             self._conn.execute(
                 """
-                INSERT INTO messages (id, session_key, seq, role, content, tool_chain, extra, ts)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages (
+                    id, session_key, seq, role, content, tool_chain, extra, ts,
+                    thread_id, sender_role, media, external_message_id, delivery_status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     message_id,
@@ -605,6 +621,11 @@ class SessionStore:
                     tool_chain_payload,
                     extra_payload,
                     ts,
+                    thread_id,
+                    sender_role,
+                    media_payload,
+                    external_message_id,
+                    delivery_status,
                 ),
             )
             self._conn.execute(
@@ -626,6 +647,16 @@ class SessionStore:
         }
         if tool_chain is not None:
             row["tool_chain"] = tool_chain
+        if thread_id:
+            row["thread_id"] = thread_id
+        if sender_role:
+            row["sender_role"] = sender_role
+        if media:
+            row["media"] = list(media)
+        if external_message_id:
+            row["external_message_id"] = external_message_id
+        if delivery_status:
+            row["delivery_status"] = delivery_status
         if extra:
             row.update(extra)
         return row
@@ -652,8 +683,11 @@ class SessionStore:
                     extra = row.get("extra")
                     self._conn.execute(
                         """
-                        INSERT INTO messages (id, session_key, seq, role, content, tool_chain, extra, ts)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO messages (
+                            id, session_key, seq, role, content, tool_chain, extra, ts,
+                            thread_id, sender_role, media, external_message_id, delivery_status
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             str(row["id"]),
@@ -668,6 +702,15 @@ class SessionStore:
                             ),
                             json.dumps(extra or {}, ensure_ascii=False),
                             str(row["timestamp"]),
+                            str(row.get("thread_id") or "") or None,
+                            str(row.get("sender_role") or "") or None,
+                            (
+                                json.dumps(list(row.get("media") or []), ensure_ascii=False)
+                                if row.get("media")
+                                else None
+                            ),
+                            str(row.get("external_message_id") or "") or None,
+                            str(row.get("delivery_status") or "") or None,
                         ),
                     )
                 self._conn.execute(
@@ -694,7 +737,7 @@ class SessionStore:
         with self._lock:
             rows = self._conn.execute(
                 """
-                SELECT id, session_key, seq, role, content, tool_chain, extra, ts
+                SELECT """ + _MESSAGE_SELECT_COLUMNS + """
                 FROM messages
                 WHERE session_key = ?
                 ORDER BY seq ASC
@@ -738,7 +781,7 @@ class SessionStore:
 
         count_sql = f"SELECT COUNT(1) AS c FROM messages {where_sql}"
         data_sql = f"""
-            SELECT id, session_key, seq, role, content, tool_chain, extra, ts
+            SELECT {_MESSAGE_SELECT_COLUMNS}
             FROM messages
             {where_sql}
             ORDER BY {safe_sort_by} {safe_sort}, seq {safe_sort}, id ASC
@@ -756,8 +799,8 @@ class SessionStore:
     def get_message(self, message_id: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._conn.execute(
-                """
-                SELECT id, session_key, seq, role, content, tool_chain, extra, ts
+                f"""
+                SELECT {_MESSAGE_SELECT_COLUMNS}
                 FROM messages
                 WHERE id = ?
                 """,
@@ -958,7 +1001,7 @@ class SessionStore:
                         expanded.add(s)
                 placeholders = ",".join("?" * len(expanded))
                 rows = self._conn.execute(
-                    f"SELECT id, session_key, seq, role, content, tool_chain, extra, ts "
+                    f"SELECT {_MESSAGE_SELECT_COLUMNS} "
                     f"FROM messages WHERE session_key = ? AND seq IN ({placeholders}) ORDER BY seq",
                     [sk, *expanded],
                 ).fetchall()
@@ -974,7 +1017,7 @@ class SessionStore:
         placeholders = ",".join("?" for _ in ids)
         order_expr = " ".join(f"WHEN ? THEN {i}" for i in range(len(ids)))
         sql = (
-            "SELECT id, session_key, seq, role, content, tool_chain, extra, ts FROM messages "
+            f"SELECT {_MESSAGE_SELECT_COLUMNS} FROM messages "
             f"WHERE id IN ({placeholders}) ORDER BY CASE id {order_expr} END"
         )
         with self._lock:
@@ -1030,6 +1073,7 @@ class SessionStore:
                 fts_params: list[Any] = []
                 fts_sql = (
                     "SELECT m.id, m.session_key, m.seq, m.role, m.content, m.tool_chain, m.extra, m.ts, "
+                    "m.thread_id, m.sender_role, m.media, m.external_message_id, m.delivery_status, "
                     f"({score_expr}) AS match_score, "
                     "fts.rank_score AS rank_score "
                     "FROM messages m "
@@ -1066,6 +1110,7 @@ class SessionStore:
         count_params.extend(f"%{t}%" for t in terms)
         like_sql = (
             f"SELECT m.id, m.session_key, m.seq, m.role, m.content, m.tool_chain, m.extra, m.ts, "
+            "m.thread_id, m.sender_role, m.media, m.external_message_id, m.delivery_status, "
             f"({score_expr}) AS match_score "
             f"FROM messages m {where_sql} {connector} ({term_conditions_or}) "
             f"ORDER BY match_score DESC, m.seq DESC LIMIT ? OFFSET ?"
@@ -1081,6 +1126,7 @@ class SessionStore:
         return [self._row_to_message(row) for row in rows], total
 
     def _row_to_message(self, row: sqlite3.Row) -> dict[str, Any]:
+        row_keys = set(row.keys())
         message: dict[str, Any] = {
             "id": row["id"],
             "session_key": row["session_key"],
@@ -1092,6 +1138,19 @@ class SessionStore:
         tool_chain = row["tool_chain"]
         if tool_chain:
             message["tool_chain"] = json.loads(tool_chain)
+        if "thread_id" in row_keys and str(row["thread_id"] or "").strip():
+            message["thread_id"] = str(row["thread_id"]).strip()
+        if "sender_role" in row_keys and str(row["sender_role"] or "").strip():
+            message["sender_role"] = str(row["sender_role"]).strip()
+        if "media" in row_keys and row["media"]:
+            message["media"] = json.loads(row["media"] or "[]")
+        if (
+            "external_message_id" in row_keys
+            and str(row["external_message_id"] or "").strip()
+        ):
+            message["external_message_id"] = str(row["external_message_id"]).strip()
+        if "delivery_status" in row_keys and str(row["delivery_status"] or "").strip():
+            message["delivery_status"] = str(row["delivery_status"]).strip()
         extra = json.loads(row["extra"] or "{}")
         if extra:
             message.update(extra)

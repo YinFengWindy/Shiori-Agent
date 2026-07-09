@@ -48,6 +48,12 @@ _ASSISTANT_FIXED_FIELDS = {"tools_used", "tool_chain", "reasoning_content"}
 _USER_FIXED_FIELDS = {"media"}
 _PERSISTED_USER_CONTENT_METADATA_KEY = "persisted_user_content"
 _INTERNAL_USER_METADATA_KEYS = frozenset({_PERSISTED_USER_CONTENT_METADATA_KEY})
+_CONVERSATION_MESSAGE_FIELDS = (
+    "thread_id",
+    "sender_role",
+    "external_message_id",
+    "delivery_status",
+)
 
 
 def _build_synced_message_metadata(
@@ -68,6 +74,26 @@ def _build_synced_message_metadata(
         next_metadata.setdefault("transport_channel", channel)
         next_metadata.setdefault("transport_chat_id", chat_id)
     return next_metadata
+
+
+def _copy_conversation_message_fields(
+    *,
+    metadata: dict[str, Any] | None,
+    session: "Session",
+) -> dict[str, Any]:
+    source = dict(metadata or {})
+    session_metadata = getattr(session, "metadata", None)
+    if isinstance(session_metadata, dict):
+        for field in _CONVERSATION_MESSAGE_FIELDS:
+            source.setdefault(field, session_metadata.get(field))
+    copied: dict[str, Any] = {}
+    for field in _CONVERSATION_MESSAGE_FIELDS:
+        value = source.get(field)
+        if isinstance(value, str):
+            value = value.strip()
+        if value:
+            copied[field] = value
+    return copied
 
 
 class _BuildAfterReasoningCtxModule:
@@ -202,6 +228,12 @@ class _PersistUserMessageModule:
         if isinstance(llm_context_frame, str) and llm_context_frame.strip():
             user_kwargs["llm_context_frame"] = llm_context_frame
         user_kwargs.update(_collect_persist_user_slots(frame.slots))
+        user_kwargs.update(
+            _copy_conversation_message_fields(
+                metadata=cast(dict[str, Any] | None, msg.metadata),
+                session=session,
+            )
+        )
         persisted_user_content = msg.metadata.get(_PERSISTED_USER_CONTENT_METADATA_KEY)
         user_content = persisted_user_content if isinstance(persisted_user_content, str) else msg.content
         session.add_message(
@@ -239,6 +271,12 @@ class _PersistAssistantMessageModule:
         if ctx.media:
             assistant_kwargs["media"] = list(ctx.media)
         assistant_kwargs.update(_collect_persist_assistant_slots(frame.slots))
+        assistant_kwargs.update(
+            _copy_conversation_message_fields(
+                metadata=ctx.outbound_metadata,
+                session=session,
+            )
+        )
         session.add_message("assistant", ctx.reply, **assistant_kwargs)
         return frame
 
