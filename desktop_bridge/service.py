@@ -12,11 +12,12 @@ from bus.event_bus import EventBus
 from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
 from conversation.service import ConversationService
 from core.integrations.novelai import NovelAIClient, NovelAIService, NovelAIStore
-from core.integrations.novelai.models import GenerateImageRequest, NovelAISettings
+from core.integrations.novelai.models import NovelAISettings
 from core.net.http import get_default_http_requester
 from core.roles import RoleAggregateService, RoleRelationshipRuntimeService, RoleStore
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.app_service import DesktopAppService
+from desktop_bridge.image_service import DesktopImageService
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 from session.manager import Session, SessionManager
@@ -73,6 +74,11 @@ class DesktopBridgeService:
         )
         self.novelai_store = novelai_store or NovelAIStore(workspace)
         self.novelai_service = novelai_service or self._build_novelai_service()
+        self.image_service = DesktopImageService(
+            role_service=self.role_service,
+            novelai_service=self.novelai_service,
+            novelai_store=self.novelai_store,
+        )
         if push_tool is not None:
             self.register_desktop_push_channel(push_tool)
 
@@ -412,66 +418,14 @@ class DesktopBridgeService:
                     },
                 )
             if method == "novelai.generate":
-                if self.novelai_service is None:
-                    return self._error(
-                        request_id, method, "invalid_request", "NovelAI 未配置"
-                    )
-                role_id = str(payload.get("role_id") or "").strip()
-                session_key = str(payload.get("session_key") or "").strip()
-                if not session_key and role_id:
-                    session_key = self.role_service.sessions.derive_session_key(role_id)
-                result = await self.novelai_service.generate(
-                    GenerateImageRequest(
-                        prompt=str(payload.get("prompt") or ""),
-                        mode=str(payload.get("mode") or "txt2img"),  # type: ignore[arg-type]
-                        base_image_path=str(payload.get("base_image_path") or ""),
-                        strength=(
-                            float(payload["strength"])
-                            if payload.get("strength") is not None
-                            else None
-                        ),
-                        noise=(
-                            float(payload["noise"])
-                            if payload.get("noise") is not None
-                            else None
-                        ),
-                        negative_prompt=str(payload.get("negative_prompt") or ""),
-                        size_preset=str(payload.get("size_preset") or "square"),  # type: ignore[arg-type]
-                        custom_width=(
-                            int(payload["custom_width"])
-                            if payload.get("custom_width") is not None
-                            else None
-                        ),
-                        custom_height=(
-                            int(payload["custom_height"])
-                            if payload.get("custom_height") is not None
-                            else None
-                        ),
-                        steps=(
-                            int(payload["steps"])
-                            if payload.get("steps") is not None
-                            else None
-                        ),
-                        seed=(
-                            int(payload["seed"])
-                            if payload.get("seed") is not None
-                            else None
-                        ),
-                        sampler=str(payload.get("sampler") or "k_euler"),
-                        model=str(payload.get("model") or ""),
-                        role_id=role_id,
-                        session_key=session_key,
-                    )
-                )
+                result = await self.image_service.generate(payload)
                 return self._ok(
                     request_id,
                     method,
-                    {"result": result.to_public_payload()},
+                    {"result": result},
                 )
             if method == "novelai.history":
-                limit = int(payload.get("limit") or 20)
-                role_id = str(payload.get("role_id") or "").strip()
-                records = self.novelai_store.list_records(limit=limit, role_id=role_id)
+                records = self.image_service.history(payload)
                 return self._ok(
                     request_id,
                     method,
