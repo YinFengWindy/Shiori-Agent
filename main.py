@@ -1,9 +1,9 @@
 """
 入口
 
-两种模式：
-  python main.py          启动 agent 服务（AgentLoop + 所有 channel + IPC server）
-  python main.py cli      连接到运行中的 agent（CLI 客户端）
+正式模式：
+  python main.py          启动桌面 bridge 主链
+  python main.py bridge   启动桌面 bridge 主链
 """
 
 from __future__ import annotations
@@ -30,6 +30,12 @@ from core.net.http import SharedHttpResources
 from desktop_bridge import DesktopBridgeServer
 
 logger = logging.getLogger(__name__)
+_REMOVED_ENTRYPOINT_MESSAGES = {
+    "cli": "`python main.py cli` 已从正式后端入口移除。",
+    "desktop": "`python main.py desktop` 已从正式后端入口移除。",
+    "dashboard": "`python main.py dashboard` 已从正式后端入口移除。",
+    "gateway": "`python main.py gateway` 已从正式后端入口移除。",
+}
 
 
 def _default_workspace() -> Path:
@@ -64,6 +70,12 @@ def _log_init_summary(summary: InitSummary) -> None:
         logger.info("下一步：")
         for step in summary.next_steps:
             logger.info("  %s", step)
+
+
+def _exit_removed_entrypoint(name: str) -> None:
+    message = _REMOVED_ENTRYPOINT_MESSAGES.get(name, f"`python main.py {name}` 已移除。")
+    logger.error("%s 请改用 `python main.py bridge` 或桌面端启动脚本。", message)
+    sys.exit(2)
 
 
 def connect_cli(config_path: str = "config.toml") -> None:
@@ -227,14 +239,8 @@ if __name__ == "__main__":
         _log_init_summary(summary)
         sys.exit(0)
 
-    if args and args[0] == "gateway":
-        asyncio.run(serve(config_path, workspace))
-        sys.exit(0)
-
-    if args and args[0] == "desktop":
-        logger.warning("[deprecated] `python main.py desktop` 已进入兼容维护模式；请优先使用 `npm run desktop:start`，如需仅启动桌面后端请使用 `python main.py bridge`。")
-        asyncio.run(serve_bridge(config_path, workspace))
-        sys.exit(0)
+    if args and args[0] in {"gateway", "desktop", "cli", "dashboard"}:
+        _exit_removed_entrypoint(args[0])
 
     if args and args[0] == "bridge":
         asyncio.run(serve_bridge(config_path, workspace))
@@ -248,7 +254,5 @@ if __name__ == "__main__":
 
     if "--inspect-modules" in args:
         asyncio.run(inspect_modules(config_path, workspace))
-    elif "cli" in args:
-        connect_cli(config_path)
     else:
-        asyncio.run(serve(config_path, workspace))
+        asyncio.run(serve_bridge(config_path, workspace))

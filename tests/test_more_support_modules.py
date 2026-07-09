@@ -948,7 +948,9 @@ async def test_bootstrap_trigger_and_entrypoints_cover_paths(
         lambda *args, **kwargs: SimpleNamespace(run=AsyncMock()),
     )
     monkeypatch.setattr(sys, "argv", ["main.py", "cli"])
-    runpy.run_module("main", run_name="__main__")
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_module("main", run_name="__main__")
+    assert exc.value.code == 2
 
     monkeypatch.setattr(sys, "argv", ["main.py"])
     runpy.run_module("main", run_name="__main__")

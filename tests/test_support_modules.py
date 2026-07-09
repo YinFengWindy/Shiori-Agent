@@ -903,50 +903,7 @@ async def test_loop_trigger_and_main_entry_cover_paths(
     core_runtime.stop.assert_awaited_once()
 
 
-def test_main_dashboard_entry_prints_deprecation_notice(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-):
-    import main as module
-
-    config_path = tmp_path / "config.toml"
-    config_path.write_text("[llm]\nprovider='openai'\n", encoding="utf-8")
-
-    monkeypatch.setattr(
-        module.Config,
-        "load",
-        classmethod(lambda cls, path="config.toml": SimpleNamespace()),
-    )
-    monkeypatch.setattr(
-        "bootstrap.providers.build_providers",
-        lambda config: (MagicMock(), MagicMock(), MagicMock()),
-    )
-    monkeypatch.setattr(
-        "bootstrap.memory.build_memory_admin_runtime",
-        lambda **kwargs: SimpleNamespace(
-            engine=MagicMock(),
-            aclose=AsyncMock(),
-        ),
-    )
-    monkeypatch.setattr("bootstrap.dashboard_api.run_dashboard_api", MagicMock())
-    monkeypatch.setenv("AKASHIC_ENABLE_LEGACY_DASHBOARD", "1")
-
-    old_argv = sys.argv
-    try:
-        sys.argv = ["main.py", "dashboard", "--allow-legacy-dashboard", "--config", str(config_path)]
-        with pytest.raises(SystemExit) as exc:
-            runpy.run_module("main", run_name="__main__")
-    finally:
-        sys.argv = old_argv
-
-    assert exc.value.code == 0
-    output = capsys.readouterr().err
-    assert "[deprecated]" in output
-    assert "desktop:start" in output
-
-
-def test_main_dashboard_entry_requires_legacy_flag(
+def test_main_dashboard_entry_is_removed(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ):
@@ -963,45 +920,14 @@ def test_main_dashboard_entry_requires_legacy_flag(
 
     assert exc.value.code == 2
     output = capsys.readouterr().err
-    assert "--allow-legacy-dashboard" in output
+    assert "已从正式后端入口移除" in output
+    assert "main.py bridge" in output
 
 
-def test_main_dashboard_entry_requires_internal_env_gate(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-):
-    config_path = tmp_path / "config.toml"
-    config_path.write_text("[llm]\nprovider='openai'\n", encoding="utf-8")
-
-    old_argv = sys.argv
-    try:
-        sys.argv = [
-            "main.py",
-            "dashboard",
-            "--allow-legacy-dashboard",
-            "--config",
-            str(config_path),
-        ]
-        with pytest.raises(SystemExit) as exc:
-            runpy.run_module("main", run_name="__main__")
-    finally:
-        sys.argv = old_argv
-
-    assert exc.value.code == 3
-    output = capsys.readouterr().err
-    assert "AKASHIC_ENABLE_LEGACY_DASHBOARD=1" in output
-
-
-def test_main_desktop_entry_prints_deprecation_notice_and_uses_bridge(
+def test_main_desktop_entry_is_removed(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    def _fake_asyncio_run(coro):
-        coro.close()
-        return None
-
-    monkeypatch.setattr("asyncio.run", _fake_asyncio_run)
-
     old_argv = sys.argv
     try:
         sys.argv = ["main.py", "desktop"]
@@ -1010,10 +936,9 @@ def test_main_desktop_entry_prints_deprecation_notice_and_uses_bridge(
     finally:
         sys.argv = old_argv
 
-    assert exc.value.code == 0
+    assert exc.value.code == 2
     output = capsys.readouterr().err
-    assert "[deprecated]" in output
-    assert "desktop:start" in output
+    assert "已从正式后端入口移除" in output
     assert "main.py bridge" in output
 
 
