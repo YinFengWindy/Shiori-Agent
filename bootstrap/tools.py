@@ -62,6 +62,7 @@ from core.roles import (
     RoleRelationshipRuntimeService,
     RoleRepository,
     RoleStore,
+    RoleWorldRegistry,
 )
 from proactive_v2.presence import PresenceStore
 from session.manager import Session, SessionManager
@@ -340,6 +341,7 @@ def _build_loop_deps(
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
     relationship_runtime: RoleRelationshipRuntimeService,
+    role_world_registry: RoleWorldRegistry,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
     context = resolve_context_factory(wiring.context)(
@@ -391,6 +393,7 @@ def _build_loop_deps(
         llm_services=llm_services,
         memory_services=memory_services,
         session_services=session_services,
+        role_world_registry=role_world_registry,
     )
 
 
@@ -434,9 +437,10 @@ def build_core_runtime(
     loop_model = config.agent_model or config.model
     session_manager = SessionManager(workspace)
     role_store = RoleStore(workspace)
+    role_repository = RoleRepository(role_store)
     role_migration = RoleConfigMigrator(
         workspace,
-        RoleRepository(role_store),
+        role_repository,
     ).migrate(config.proactive)
     if (
         role_migration.bindings_migrated
@@ -478,6 +482,7 @@ def build_core_runtime(
         presence=presence,
     )
     processing_state = ProcessingState()
+    role_world_registry = RoleWorldRegistry(role_repository)
     loop_deps = _build_loop_deps(
         config=config,
         workspace=workspace,
@@ -544,6 +549,7 @@ def build_core_runtime(
         memory_runtime=memory_runtime,
         presence=presence,
         relationship_runtime=relationship_runtime,
+        role_world_registry=role_world_registry,
         plugin_manager=plugin_manager,
     )
 

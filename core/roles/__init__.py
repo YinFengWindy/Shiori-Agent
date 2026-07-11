@@ -18,6 +18,7 @@ from .relationship_runtime import (
 from .store import RoleRecord, RoleStore
 from .store import RoleChannelBindingConfig, RoleProactiveConfig
 from .config_migration import RoleConfigMigrationSummary, RoleConfigMigrator
+from .world import RoleExecutionContext, RoleWorld, RoleWorldRegistry
 
 __all__ = [
     "InboundRoleRouter",
@@ -35,11 +36,14 @@ __all__ = [
     "RoleRecord",
     "RoleProactiveConfig",
     "RoleRepository",
+    "RoleExecutionContext",
     "RoleRequest",
     "RelationshipSnapshotLoop",
     "RelationshipSnapshotOptimizer",
     "RoleSessionService",
     "RoleStore",
+    "RoleWorld",
+    "RoleWorldRegistry",
     "route_inbound_by_role",
 ]
 

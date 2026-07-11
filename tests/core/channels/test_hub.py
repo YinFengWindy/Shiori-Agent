@@ -167,3 +167,36 @@ def test_channel_hub_resolves_control_actions_to_thread_session(tmp_path: Path) 
     )
 
     assert hub.resolve_runtime_session_key("telegram", "123") == "thread:mira:telegram:123"
+
+
+def test_channel_hub_attaches_complete_role_execution_context(tmp_path: Path) -> None:
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="bound role",
+        system_prompt="you are mira",
+    )
+    _ = service.bindings.bind("telegram", "123", "mira")
+
+    routed = ChannelHub(service).route_inbound(
+        InboundMessage(
+            channel="telegram",
+            sender="u1",
+            chat_id="123",
+            content="hello",
+            metadata={"external_message_id": "message-1"},
+        )
+    )
+
+    assert routed.metadata["role_id"] == "mira"
+    assert routed.metadata["thread_id"] == "thread:mira:telegram:123"
+    assert routed.metadata["role_config_version"]
+    assert routed.metadata["request_id"] == "message-1"
+    assert routed.metadata["delivery_key"]
+    assert routed.metadata["role_work_kind"] == "passive_turn"

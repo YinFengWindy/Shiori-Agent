@@ -7,6 +7,7 @@ from bus.events import InboundMessage, OutboundMessage
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
+from core.roles.world import RoleExecutionContext
 
 
 class ChannelHub:
@@ -82,6 +83,16 @@ class ChannelHub:
         metadata.setdefault("transport_channel", message.channel)
         metadata.setdefault("transport_chat_id", message.chat_id)
         metadata.setdefault("source", "role_channel_binding")
+        context = RoleExecutionContext.create(
+            role=role,
+            thread_id=thread.id,
+            transport_channel=message.channel,
+            transport_chat_id=message.chat_id,
+            source=str(metadata["source"]),
+            work_kind="passive_turn",
+            request_id=external_message_id,
+        )
+        metadata.update(context.to_metadata())
         return InboundMessage(
             channel=message.channel,
             sender=message.sender,

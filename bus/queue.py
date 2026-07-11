@@ -65,6 +65,7 @@ class MessageBus:
                                 channel=msg.channel,
                                 chat_id=msg.chat_id,
                                 content="（消息发送失败，请稍后重试）",
+                                metadata=dict(msg.metadata or {}),
                             )
                             try:
                                 await cb(fallback)

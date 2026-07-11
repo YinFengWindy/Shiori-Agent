@@ -120,6 +120,7 @@ class AgentLoop:
         self._running = False
         self._processing_state = deps.processing_state
         self._event_bus = deps.event_bus or EventBus()
+        self._role_world_registry = deps.role_world_registry
 
         # ── 中断控制面（纯内存态） ──
         self._active_tasks: dict[str, asyncio.Task] = {}
@@ -379,7 +380,7 @@ class AgentLoop:
 
             key = item.session_key
             self._active_turn_states[key] = self._build_initial_turn_state(item, key)
-            task = asyncio.create_task(self._process(item))
+            task = asyncio.create_task(self._process_role_scoped(item, key))
             self._active_tasks[key] = task
             try:
                 await task
@@ -611,6 +612,39 @@ class AgentLoop:
                 self._processing_state.exit(key)
             _ = started
 
+    async def _process_role_scoped(
+        self,
+        item: InboundItem,
+        session_key: str,
+        *,
+        dispatch_outbound: bool = True,
+    ) -> OutboundMessage:
+        """Dispatches role-bound messages through their owning world before a turn."""
+
+        registry = self._role_world_registry
+        metadata = getattr(item, "metadata", None)
+        if registry is None or not isinstance(metadata, dict):
+            return await self._process(
+                item,
+                session_key=session_key,
+                dispatch_outbound=dispatch_outbound,
+            )
+        context = registry.context_from_metadata(metadata)
+        if context is None:
+            return await self._process(
+                item,
+                session_key=session_key,
+                dispatch_outbound=dispatch_outbound,
+            )
+        return await registry.dispatch_thread(
+            context,
+            lambda: self._process(
+                item,
+                session_key=session_key,
+                dispatch_outbound=dispatch_outbound,
+            ),
+        )
+
     async def process_direct(
         self,
         content: str,
@@ -647,7 +681,7 @@ class AgentLoop:
         key = session_key
         self._active_turn_states[key] = self._build_initial_turn_state(msg, key)
         task = asyncio.create_task(
-            self._process(
+            self._process_role_scoped(
                 msg,
                 session_key=key,
                 dispatch_outbound=False,
