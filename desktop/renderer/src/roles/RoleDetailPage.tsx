@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef } from "react";
 import { ResetIcon, SaveIcon } from "../shared/icons";
 import { cx, focusVisibleRingClass, focusVisibleWhiteRingClass, inputClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
+import { changeRoleBindingChannel, createRoleChannelBinding, isDesktopRoleBinding } from "./roleChannelBindings";
 import { captureRoleDetailScrollTop, restoreRoleDetailScrollTop } from "./roleDetailScrollState";
 
 type RoleDetailPageProps = {
@@ -25,6 +26,7 @@ type RoleDetailPageProps = {
 /** Renders the second-level role detail page and hosts the role editor form. */
 export function RoleDetailPage({
   activeRole,
+  activeRoleId,
   bridgeReady,
   previewAvatar,
   chatBackgroundUrl,
@@ -185,7 +187,7 @@ export function RoleDetailPage({
                     type="button"
                     onClick={() => preserveScrollDuringFormUpdate((current) => ({
                       ...current,
-                      channelBindings: [...(current.channelBindings ?? []), { channel: "telegram", chat_id: "", allow_from: [] }],
+                      channelBindings: [...(current.channelBindings ?? []), createRoleChannelBinding(activeRoleId)],
                     }))}
                   >
                     添加
@@ -197,7 +199,7 @@ export function RoleDetailPage({
                       <select
                         className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
                         value={binding.channel}
-                        onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, channel: event.target.value } : item) }))}
+                        onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? changeRoleBindingChannel(item, event.target.value, activeRoleId) : item) }))}
                       >
                         <option value="telegram">Telegram</option>
                         <option value="qq">QQ</option>
@@ -207,6 +209,7 @@ export function RoleDetailPage({
                         className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
                         value={binding.chat_id}
                         placeholder="会话 / 群组 ID"
+                        readOnly={isDesktopRoleBinding(binding)}
                         onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, chat_id: event.target.value } : item) }))}
                       />
                       <button className="text-[#a33] transition hover:text-[#711]" type="button" onClick={() => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).filter((_, itemIndex) => itemIndex !== index) }))}>移除</button>

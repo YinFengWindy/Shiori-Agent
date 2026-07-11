@@ -331,6 +331,7 @@ class RoleStore:
                     role.runtime_config = dict(runtime_config)
                 if channel_bindings is not None:
                     role.channel_bindings = self._normalize_channel_bindings(channel_bindings)
+                    self._validate_desktop_bindings(role.id, role.channel_bindings)
                     self._ensure_bindings_unique(roles, role.id, role.channel_bindings)
                     if role.proactive.enabled and not any(
                         binding.channel == role.proactive.target_channel
@@ -492,3 +493,15 @@ class RoleStore:
         )
         if conflict is not None:
             raise ValueError(f"渠道会话已绑定其他角色: {conflict[0]}:{conflict[1]}")
+
+    def _validate_desktop_bindings(
+        self,
+        role_id: str,
+        bindings: list[RoleChannelBindingConfig],
+    ) -> None:
+        expected_chat_id = f"role:{role_id}"
+        if any(
+            binding.channel == "desktop" and binding.chat_id != expected_chat_id
+            for binding in bindings
+        ):
+            raise ValueError(f"桌面端渠道必须绑定当前角色会话: {expected_chat_id}")

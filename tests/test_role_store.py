@@ -185,6 +185,21 @@ def test_role_store_disables_proactive_when_its_target_binding_is_removed(tmp_pa
     assert updated.proactive.target_channel == ""
 
 
+def test_role_store_rejects_desktop_binding_for_another_role_session(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+
+    try:
+        store.update_role(
+            "mira",
+            channel_bindings=[{"channel": "desktop", "chat_id": "role:luna", "allow_from": []}],
+        )
+    except ValueError as exc:
+        assert "role:mira" in str(exc)
+    else:
+        raise AssertionError("桌面端绑定不能指向其他角色会话")
+
+
 def test_role_config_migration_copies_legacy_file_once_without_runtime_fallback(tmp_path: Path):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
