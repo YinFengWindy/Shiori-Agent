@@ -44,6 +44,7 @@ class DesktopBridgeService:
         push_tool: MessagePushTool | None = None,
         relationship_runtime: RoleRelationshipRuntimeService | None = None,
         presence: Any | None = None,
+        scheduler: Any | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -67,6 +68,7 @@ class DesktopBridgeService:
         )
         self.relationship_runtime = relationship_runtime
         self.presence = presence
+        self.scheduler = scheduler
         self.app_service = DesktopAppService(
             role_service=self.role_service,
             session_manager=session_manager,
@@ -364,6 +366,28 @@ class DesktopBridgeService:
                     method,
                     {"session": self.session_presenter.serialize(session)},
                 )
+            if method == "roles.tasks.list":
+                role_id = str(payload.get("role_id") or "").strip()
+                self.role_service.repository.get_required(role_id)
+                return self._ok(
+                    request_id,
+                    method,
+                    {"tasks": self._list_role_tasks(role_id)},
+                )
+            if method == "roles.tasks.cancel":
+                role_id = str(payload.get("role_id") or "").strip()
+                task_id = str(payload.get("task_id") or "").strip()
+                self.role_service.repository.get_required(role_id)
+                if not task_id:
+                    raise ValueError("task_id 不能为空")
+                if self.scheduler is None:
+                    raise RuntimeError("调度器未启用")
+                job = next((item for item in self.scheduler.list_jobs() if item.id == task_id), None)
+                if job is None or job.role_id != role_id:
+                    raise KeyError("角色任务不存在")
+                if not self.scheduler.cancel_job(task_id):
+                    raise RuntimeError("取消任务失败")
+                return self._ok(request_id, method, {"tasks": self._list_role_tasks(role_id)})
             if method == "chat.send":
                 role_id = str(payload.get("role_id") or "").strip()
                 content = str(payload.get("content") or "").strip()
@@ -599,6 +623,25 @@ class DesktopBridgeService:
             role_store=self.role_store,
             workspace=self.workspace,
         )
+
+    def _list_role_tasks(self, role_id: str) -> list[dict[str, object]]:
+        if self.scheduler is None:
+            return []
+        return [
+            {
+                "id": job.id,
+                "role_id": job.role_id,
+                "kind": "schedule",
+                "status": "running" if job.id in self.scheduler._active_tasks else "scheduled",
+                "label": job.name or job.id[:8],
+                "detail": job.message or job.prompt or "",
+                "created_at": job.created_at.isoformat(),
+                "next_run_at": job.fire_at.isoformat(),
+                "cancellable": True,
+            }
+            for job in self.scheduler.list_jobs()
+            if job.role_id == role_id
+        ]
 
     def _build_self_seed_generator(self) -> LlmRoleSelfSeedGenerator | None:
         if self.config is None:

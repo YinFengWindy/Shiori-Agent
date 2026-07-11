@@ -30,6 +30,7 @@ class DesktopBridgeServer:
             push_tool=getattr(runtime, "push_tool", None),
             relationship_runtime=getattr(runtime, "relationship_runtime", None),
             presence=getattr(runtime, "presence", None),
+            scheduler=getattr(runtime, "scheduler", None),
         )
 
     async def serve_streams(self, *, read_line, write_payload) -> None:
