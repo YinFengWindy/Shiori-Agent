@@ -96,24 +96,6 @@ async def test_load_hello_plugin():
     assert "hello" in loaded_names
 
 
-def test_discover_skips_removed_runtime_plugins(tmp_path: Path) -> None:
-    for name in ("qqbot", "feishu", "hello"):
-        plugin_dir = tmp_path / name
-        plugin_dir.mkdir(parents=True)
-        (plugin_dir / "plugin.py").write_text(
-            "from agent.plugins import Plugin\n\nclass Demo(Plugin):\n    name = 'demo'\n",
-            encoding="utf-8",
-        )
-
-    mgr = _make_manager([tmp_path], event_bus=EventBus())
-
-    discovered = {item["name"] for item in mgr.discover()}
-
-    assert "hello" in discovered
-    assert "qqbot" not in discovered
-    assert "feishu" not in discovered
-
-
 @pytest.mark.asyncio
 async def test_observe_plugin_writes_turn_trace(tmp_path: Path):
     source = Path(__file__).parents[1] / "plugins" / "observe"

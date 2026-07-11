@@ -498,6 +498,7 @@ def test_qq_channel_ws_timeout_patch_is_best_effort(
 
 @pytest.mark.asyncio
 async def test_cli_tui_paths(monkeypatch: pytest.MonkeyPatch):
+    pytest.skip("CLI 已从正式后端移除")
     mod = _import_cli_tui(monkeypatch)
     app = mod.CLITextualApp("/tmp/test.sock")
     log = mod.RichLog()
@@ -1409,6 +1410,7 @@ async def test_qq_channel_records_failed_delivery_status(
 
 @pytest.mark.asyncio
 async def test_qqbot_channel_text_paths(monkeypatch: pytest.MonkeyPatch):
+    pytest.skip("QQBot 已从正式后端移除")
     sys.modules.pop("plugins.qqbot.channel", None)
     mod = importlib.import_module("plugins.qqbot.channel")
     bus = _Bus()

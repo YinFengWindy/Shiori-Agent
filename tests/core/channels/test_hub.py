@@ -92,3 +92,51 @@ def test_channel_hub_marks_delivery_by_thread_session(tmp_path: Path) -> None:
     assert updated is not None
     assert updated["delivery_status"] == "sent"
     assert updated["external_message_id"] == "tg-1"
+
+
+def test_channel_hub_marks_archived_external_messages_as_duplicates(
+    tmp_path: Path,
+) -> None:
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    role = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="bound role",
+        system_prompt="you are mira",
+    ).role
+    _ = service.bindings.bind("telegram", "123", role.id)
+    hub = ChannelHub(service)
+    first = hub.route_inbound(
+        InboundMessage(
+            channel="telegram",
+            sender="u1",
+            chat_id="123",
+            content="hello",
+            metadata={"external_message_id": "message-1"},
+        )
+    )
+    session = session_manager.get_or_create(first.session_key)
+    session.add_message(
+        "user",
+        "hello",
+        thread_id=str(first.metadata["thread_id"]),
+        external_message_id="message-1",
+    )
+    session_manager.save(session)
+
+    duplicate = hub.route_inbound(
+        InboundMessage(
+            channel="telegram",
+            sender="u1",
+            chat_id="123",
+            content="hello",
+            metadata={"external_message_id": "message-1"},
+        )
+    )
+
+    assert duplicate.metadata["conversation_duplicate"] is True

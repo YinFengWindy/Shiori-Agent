@@ -33,18 +33,18 @@ class ChannelHub:
     def route_inbound(self, message: InboundMessage) -> InboundMessage:
         """Maps a bound channel message onto its formal network thread session."""
         metadata = dict(message.metadata or {})
-        if str(metadata.get("role_id") or "").strip():
-            return message
         if message.channel == "desktop":
             return message
 
-        try:
-            role_id = self._service.bindings.resolve_role_id(
-                message.channel,
-                message.chat_id,
-            )
-        except KeyError:
-            return message
+        role_id = str(metadata.get("role_id") or "").strip()
+        if not role_id:
+            try:
+                role_id = self._service.bindings.resolve_role_id(
+                    message.channel,
+                    message.chat_id,
+                )
+            except KeyError:
+                return message
         role = self._service.repository.get_required(role_id)
         thread = self._conversation.ensure_thread_for_session(
             LegacySessionDescriptor(
@@ -55,6 +55,13 @@ class ChannelHub:
                 metadata=metadata,
             )
         )
+        external_message_id = str(
+            metadata.get("external_message_id") or metadata.get("message_id") or ""
+        ).strip()
+        if external_message_id:
+            metadata["external_message_id"] = external_message_id
+            if self._conversation.has_external_message(thread.id, external_message_id):
+                metadata["conversation_duplicate"] = True
         session = self._service.sessions._session_manager.sync_thread_session_metadata(
             thread.id,
             role_id=role.id,

@@ -600,6 +600,8 @@ class QQChannel:
     async def _publish_inbound(self, message: InboundMessage) -> None:
         if self._channel_hub is not None:
             message = self._channel_hub.route_inbound(message)
+        if message.metadata.get("conversation_duplicate"):
+            return
         await self._bus.publish_inbound(message)
 
     async def _handle_stop_group(self, group_id: str, user_id: str) -> None:

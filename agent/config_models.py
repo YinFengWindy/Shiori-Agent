@@ -31,14 +31,6 @@ class QQChannelConfig:
 
 
 @dataclass
-class QQBotGroupConfig:
-    group_openid: str
-    allow_from: list[str] = field(default_factory=list)
-    require_at: bool = True
-    allow_proactive: bool = False
-
-
-@dataclass
 class ChannelsConfig:
     telegram: TelegramChannelConfig | None = None
     qq: QQChannelConfig | None = None
@@ -120,7 +112,6 @@ __all__ = [
     "MemoryEmbeddingConfig",
     "NovelAISettings",
     "QQChannelConfig",
-    "QQBotGroupConfig",
     "QQGroupConfig",
     "TelegramChannelConfig",
     "WiringConfig",

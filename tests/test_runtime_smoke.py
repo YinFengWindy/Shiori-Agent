@@ -130,57 +130,6 @@ system_prompt = "test"
 
 
 @pytest.mark.asyncio
-async def test_serve_smoke_loads_config_and_runs_shutdown(monkeypatch, tmp_path):
-    config_path = tmp_path / "config.toml"
-    socket_path = tmp_path / "akashic.sock"
-    _write_config(config_path, socket_path)
-    observed: dict[str, object] = {}
-
-    runtime = types.SimpleNamespace(run=AsyncMock())
-
-    def _fake_build_app_runtime(config, workspace, *, features):
-        observed["config"] = config
-        observed["workspace"] = workspace
-        observed["features"] = features
-        return runtime
-
-    monkeypatch.setattr(main, "build_app_runtime", _fake_build_app_runtime)
-    monkeypatch.setattr(main.Path, "home", lambda: tmp_path)
-
-    await main.serve(str(config_path))
-
-    assert observed["workspace"] == tmp_path / ".akashic" / "workspace"
-    assert observed["features"] == bootstrap_app.SERVICE_RUNTIME_FEATURES
-    assert cast(Config, observed["config"]).model == "test-model"
-    runtime.run.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_serve_desktop_mode_passes_runtime_features(monkeypatch, tmp_path):
-    config_path = tmp_path / "config.toml"
-    socket_path = tmp_path / "akashic.sock"
-    _write_config(config_path, socket_path)
-    observed: dict[str, object] = {}
-
-    runtime = types.SimpleNamespace(run=AsyncMock())
-
-    def _fake_build_app_runtime(config, workspace, *, features):
-        observed["features"] = features
-        observed["workspace"] = workspace
-        return runtime
-
-    monkeypatch.setattr(main, "build_app_runtime", _fake_build_app_runtime)
-
-    await main.serve(
-        str(config_path),
-        features=bootstrap_app.DESKTOP_RUNTIME_FEATURES,
-    )
-
-    assert observed["features"] == bootstrap_app.DESKTOP_RUNTIME_FEATURES
-    runtime.run.assert_awaited_once()
-
-
-@pytest.mark.asyncio
 async def test_run_cleanup_steps_continues_after_failure():
     calls: list[str] = []
 

@@ -59,18 +59,6 @@ def _format_reply(chat_id: str, channel: str = "telegram") -> str:
         f'chat_id = "{chat_id}"',
         "```",
     ]
-    if channel == "qqbot":
-        # user_openid 也需要加入 allow_from 白名单
-        raw_openid = chat_id.removeprefix("c2c:")
-        lines += [
-            "",
-            "同时确认 allow_from 已包含你的 user_openid：",
-            "",
-            "```toml",
-            "[plugins.qqbot]",
-            f'allow_from = ["{raw_openid}"]',
-            "```",
-        ]
     return "\n".join(lines)
 
 

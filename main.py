@@ -10,33 +10,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import signal
 import sys
-from contextlib import suppress
 from pathlib import Path
 
 from agent.config import Config
 from bootstrap.app import (
     DESKTOP_RUNTIME_FEATURES,
-    SERVICE_RUNTIME_FEATURES,
-    RuntimeFeatures,
     build_app_runtime,
     configure_logging_stream,
 )
 from bootstrap.init_workspace import InitSummary, init_workspace
-from bootstrap.tools import build_core_runtime
 from core.net.http import SharedHttpResources
 from desktop_bridge import DesktopBridgeServer
 
 logger = logging.getLogger(__name__)
-_REMOVED_ENTRYPOINT_MESSAGES = {
-    "cli": "`python main.py cli` 已从正式后端入口移除。",
-    "desktop": "`python main.py desktop` 已从正式后端入口移除。",
-    "dashboard": "`python main.py dashboard` 已从正式后端入口移除。",
-    "gateway": "`python main.py gateway` 已从正式后端入口移除。",
-}
-
-
 def _default_workspace() -> Path:
     return Path.home() / ".akashic" / "workspace"
 
@@ -71,12 +58,6 @@ def _log_init_summary(summary: InitSummary) -> None:
             logger.info("  %s", step)
 
 
-def _exit_removed_entrypoint(name: str) -> None:
-    message = _REMOVED_ENTRYPOINT_MESSAGES.get(name, f"`python main.py {name}` 已移除。")
-    logger.error("%s 请改用 `python main.py bridge` 或桌面端启动脚本。", message)
-    sys.exit(2)
-
-
 async def inspect_modules(
     config_path: str = "config.toml",
     workspace: Path | None = None,
@@ -104,87 +85,20 @@ async def serve_bridge(
     workspace: Path | None = None,
 ) -> None:
     configure_logging_stream(sys.stderr)
-    fallback_core_runtime = None
-    fallback_http_resources = None
     runtime = build_app_runtime(
         Config.load(config_path),
         workspace=workspace or _default_workspace(),
         features=DESKTOP_RUNTIME_FEATURES,
     )
     try:
-        if hasattr(runtime, "start") and callable(runtime.start):
-            await runtime.start()
-            core_runtime = getattr(runtime, "core", None)
-        else:
-            fallback_http_resources = SharedHttpResources()
-            fallback_core_runtime = build_core_runtime(
-                Config.load(config_path),
-                workspace or _default_workspace(),
-                fallback_http_resources,
-            )
-            core_runtime = fallback_core_runtime
-            await core_runtime.start()
+        await runtime.start()
+        core_runtime = runtime.core
         if core_runtime is None:
             raise RuntimeError("desktop bridge runtime 未正确初始化 core")
         server = DesktopBridgeServer(core_runtime)
         await server.serve_stdio()
     finally:
-        if hasattr(runtime, "shutdown") and callable(runtime.shutdown):
-            await runtime.shutdown()
-        if fallback_core_runtime is not None:
-            await fallback_core_runtime.stop()
-        if fallback_http_resources is not None:
-            await fallback_http_resources.aclose()
-
-
-async def serve(
-    config_path: str = "config.toml",
-    workspace: Path | None = None,
-    *,
-    features: RuntimeFeatures = SERVICE_RUNTIME_FEATURES,
-) -> None:
-    config = Config.load(config_path)
-    runtime = build_app_runtime(
-        config,
-        workspace=workspace or _default_workspace(),
-        features=features,
-    )
-    loop = asyncio.get_running_loop()
-    stop_event = asyncio.Event()
-    watched_signals = (signal.SIGINT, signal.SIGTERM)
-    signal_handlers_registered = False
-    for sig in watched_signals:
-        try:
-            loop.add_signal_handler(sig, stop_event.set)
-            signal_handlers_registered = True
-        except NotImplementedError:
-            # Windows' default event loop does not support add_signal_handler.
-            signal.signal(
-                sig,
-                lambda _sig, _frame: loop.call_soon_threadsafe(stop_event.set),
-            )
-
-    runtime_task = asyncio.create_task(runtime.run(), name="app_runtime")
-    stop_task = asyncio.create_task(stop_event.wait(), name="shutdown_signal")
-    try:
-        done, _ = await asyncio.wait(
-            {runtime_task, stop_task},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        if runtime_task in done:
-            _ = stop_task.cancel()
-            await runtime_task
-            return
-        _ = runtime_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await runtime_task
-    finally:
-        if signal_handlers_registered:
-            for sig in watched_signals:
-                _ = loop.remove_signal_handler(sig)
-        _ = stop_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await stop_task
+        await runtime.shutdown()
 
 
 if __name__ == "__main__":
@@ -223,12 +137,13 @@ if __name__ == "__main__":
         _log_init_summary(summary)
         sys.exit(0)
 
-    if args and args[0] in {"gateway", "desktop", "cli", "dashboard"}:
-        _exit_removed_entrypoint(args[0])
-
     if args and args[0] == "bridge":
         asyncio.run(serve_bridge(config_path, workspace))
         sys.exit(0)
+
+    if args and not args[0].startswith("-"):
+        logger.error("未知命令: %s", args[0])
+        sys.exit(2)
 
     if not Path(config_path).exists():
         logger.error(

@@ -325,19 +325,18 @@ class TelegramChannel:
                 logger.warning(
                     f"[telegram] 被回复文件下载失败  chat_id={chat.id}  err={e}"
                 )
-        await self._bus.publish_inbound(
-            self._route_inbound(
-                InboundMessage(
-                    channel=self._channel,
-                    sender=str(user.id),
-                    chat_id=str(chat.id),
-                    content=inbound_text,
-                    media=reply_media,
-                    metadata={
-                        "username": user.username or "",
-                        **reply_meta,
-                    },
-                )
+        await self._publish_inbound(
+            InboundMessage(
+                channel=self._channel,
+                sender=str(user.id),
+                chat_id=str(chat.id),
+                content=inbound_text,
+                media=reply_media,
+                metadata={
+                    "username": user.username or "",
+                    "external_message_id": str(msg.message_id),
+                    **reply_meta,
+                },
             )
         )
 
@@ -347,7 +346,10 @@ class TelegramChannel:
         return self._channel_hub.route_inbound(message)
 
     async def _publish_inbound(self, message: InboundMessage) -> None:
-        await self._bus.publish_inbound(self._route_inbound(message))
+        routed = self._route_inbound(message)
+        if routed.metadata.get("conversation_duplicate"):
+            return
+        await self._bus.publish_inbound(routed)
 
     async def _publish_telegram_inbound(
         self,

@@ -10,7 +10,6 @@ import os
 import re
 import sys
 import tomllib
-import zlib
 from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -36,27 +35,6 @@ _PRESETS: dict[str, str] = {
     "deepseek": "https://api.deepseek.com/v1",
     "openai": "https://api.openai.com/v1",
 }
-
-DEFAULT_SOCKET = "127.0.0.1:8765" if os.name == "nt" else "/tmp/akashic.sock"
-
-
-def _normalize_cli_socket_endpoint(value: str | None) -> str:
-    """保留给孤立的 CLI 调试模块使用；正式 runtime 不再读取该配置。"""
-    text = str(value or "").strip()
-    if not text:
-        return DEFAULT_SOCKET
-    if os.name != "nt":
-        return text
-    host, sep, port = text.rpartition(":")
-    if sep and host:
-        try:
-            int(port)
-            return text
-        except ValueError:
-            pass
-    port_seed = zlib.crc32(text.encode("utf-8")) % 20000
-    return f"127.0.0.1:{20000 + port_seed}"
-
 
 def _validated_timezone(tz_name: str, *, enabled: bool) -> str:
     """仅当 anyaction_enabled=True 时校验时区合法性，无效则启动时 fail-fast。"""
@@ -376,7 +354,6 @@ def _load_config_data(path: str | Path) -> dict:
 __all__ = [
     "ChannelsConfig",
     "Config",
-    "DEFAULT_SOCKET",
     "MemoryConfig",
     "MemoryEmbeddingConfig",
     "QQChannelConfig",
