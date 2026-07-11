@@ -483,6 +483,14 @@ def build_core_runtime(
     )
     processing_state = ProcessingState()
     role_world_registry = RoleWorldRegistry(role_repository)
+    push_tool.set_role_target_validator(
+        lambda role_id, channel, chat_id: _role_owns_channel_target(
+            role_repository,
+            role_id=role_id,
+            channel=channel,
+            chat_id=chat_id,
+        )
+    )
     loop_deps = _build_loop_deps(
         config=config,
         workspace=workspace,
@@ -557,3 +565,17 @@ def build_core_runtime(
 def _resolve_plugin_dirs(workspace: Path) -> list[Path]:
     project_root = Path(__file__).resolve().parent.parent
     return [project_root / "plugins"]
+
+
+def _role_owns_channel_target(
+    repository: RoleRepository,
+    *,
+    role_id: str,
+    channel: str,
+    chat_id: str,
+) -> bool:
+    role = repository.get_required(role_id)
+    return any(
+        binding.channel == channel and binding.chat_id == chat_id
+        for binding in role.channel_bindings
+    )

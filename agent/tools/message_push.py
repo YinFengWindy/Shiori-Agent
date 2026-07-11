@@ -48,6 +48,15 @@ class MessagePushTool(Tool):
     def __init__(self) -> None:
         # channel -> {type: sender_fn}
         self._senders: dict[str, dict[str, Callable[..., Awaitable[None]]]] = {}
+        self._role_target_validator: Callable[[str, str, str], bool] | None = None
+
+    def set_role_target_validator(
+        self,
+        validator: Callable[[str, str, str], bool],
+    ) -> None:
+        """Registers the authoritative binding check for role-scoped sends."""
+
+        self._role_target_validator = validator
 
     def register_channel(
         self,
@@ -82,9 +91,16 @@ class MessagePushTool(Tool):
         message: str | None = kwargs.get("message")
         file: str | None = kwargs.get("file")
         image: str | None = kwargs.get("image")
+        role_id = str(kwargs.get("role_id") or "").strip()
 
         if not message and not file and not image:
             return "错误：message、file、image 至少提供一个"
+
+        if role_id and self._role_target_validator is not None:
+            if not self._role_target_validator(role_id, channel, chat_id):
+                raise PermissionError(
+                    f"角色 {role_id} 未绑定目标渠道: {channel}:{chat_id}"
+                )
 
         senders = self._senders.get(channel)
         if senders is None:

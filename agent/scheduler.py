@@ -506,6 +506,7 @@ class SchedulerService:
                     channel=job.channel,
                     chat_id=job.chat_id,
                     message=job.message,
+                    **({"role_id": job.role_id} if job.role_id else {}),
                 ),
             )
             logger.info(f"[scheduler] instant 推送完成 {label!r}: {result}")
@@ -540,6 +541,7 @@ class SchedulerService:
                         channel=job.channel,
                         chat_id=job.chat_id,
                         message=content,
+                        **({"role_id": job.role_id} if job.role_id else {}),
                     ),
                 )
                 logger.info(f"[scheduler] soft 推送完成 {label!r}: {result}")
