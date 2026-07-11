@@ -42,8 +42,14 @@ class BusOutboundPort:
 
 
 class PushToolOutboundPort:
-    def __init__(self, push_tool: Any) -> None:
+    def __init__(
+        self,
+        push_tool: Any,
+        *,
+        execution_context: dict[str, str] | None = None,
+    ) -> None:
         self._push = push_tool
+        self._execution_context = dict(execution_context or {})
 
     async def dispatch(self, outbound: OutboundDispatch) -> bool:
         message = str(outbound.content or "").strip()
@@ -60,12 +66,14 @@ class PushToolOutboundPort:
                     chat_id=chat_id,
                     message=message,
                     image=media[0] if media else None,
+                    **self._execution_context,
                 )
             for image in media[1:]:
                 result = await self._push.execute(
                     channel=channel,
                     chat_id=chat_id,
                     image=image,
+                    **self._execution_context,
                 )
         except Exception:
             return False

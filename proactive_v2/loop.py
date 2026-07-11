@@ -130,7 +130,12 @@ class ProactiveLoop:
                     presence=self._presence,
                     relationship_runtime=self._relationship_runtime,
                 ),
-                outbound=PushToolOutboundPort(self._push),
+                outbound=PushToolOutboundPort(
+                    self._push,
+                    execution_context={
+                        "role_id": str(self._cfg.default_role_id or "").strip(),
+                    },
+                ),
             )
         )
 
