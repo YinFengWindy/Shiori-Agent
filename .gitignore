@@ -43,6 +43,7 @@ data/
 plugins/**/.data/
 /data
 /memory/
+/roles
 
 # IDE
 .idea/
