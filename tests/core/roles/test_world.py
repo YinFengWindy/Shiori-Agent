@@ -89,7 +89,7 @@ async def test_registry_allows_different_roles_to_execute_independently(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_registry_rejects_context_after_role_configuration_changes(tmp_path):
+async def test_registry_refreshes_configuration_without_replacing_the_world(tmp_path):
     repository = RoleRepository(RoleStore(tmp_path))
     role = repository.create_role(
         role_id="mira",
@@ -98,11 +98,21 @@ async def test_registry_rejects_context_after_role_configuration_changes(tmp_pat
     )
     registry = RoleWorldRegistry(repository)
     context = _context(role)
-    _ = await registry.get(role.id)
-    _ = repository.update_role(role.id, description="updated")
+    first_world = await registry.get(role.id)
+    updated = repository.update_role(role.id, description="updated")
+    refreshed_world = await registry.get(role.id)
 
-    with pytest.raises(RuntimeError, match="角色配置已过期"):
-        await registry.dispatch_thread(context, lambda: _return_none())
+    assert refreshed_world is first_world
+    assert refreshed_world.config_version != context.role_config_version
+    await registry.dispatch_thread(context, lambda: _return_none())
+    assert refreshed_world.config_version == RoleExecutionContext.create(
+        role=updated,
+        thread_id=context.thread_id,
+        transport_channel=context.transport_channel,
+        transport_chat_id=context.transport_chat_id,
+        source=context.source,
+        work_kind=context.work_kind,
+    ).role_config_version
 
 
 async def _return_none() -> None:

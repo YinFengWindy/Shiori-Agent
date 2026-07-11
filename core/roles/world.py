@@ -108,9 +108,16 @@ class RoleWorld:
 
     @property
     def config_version(self) -> str:
-        """Returns the role snapshot version used to create this world."""
+        """Returns the newest role configuration snapshot observed by this world."""
 
         return _role_config_version(self._role)
+
+    def refresh_role(self, role: RoleRecord) -> None:
+        """Applies a role configuration update without replacing the world identity."""
+
+        if role.id != self.role_id:
+            raise ValueError("不能用其他角色配置刷新 RoleWorld")
+        self._role = role
 
     @property
     def active_work(self) -> int:
@@ -177,8 +184,6 @@ class RoleWorld:
             raise RuntimeError(f"角色世界已停止: {self.role_id}")
         if context.role_id != self.role_id:
             raise ValueError("RoleExecutionContext 角色与 RoleWorld 不匹配")
-        if context.role_config_version != self.config_version:
-            raise RuntimeError(f"角色配置已过期: {self.role_id}")
 
 
 class RoleWorldRegistry:
@@ -190,18 +195,14 @@ class RoleWorldRegistry:
         self._lock = asyncio.Lock()
 
     async def get(self, role_id: str) -> RoleWorld:
-        """Returns the current world for a role, replacing stale snapshots atomically."""
+        """Returns the stable world for a role and refreshes its current configuration."""
 
         role = self._repository.get_required(role_id)
         async with self._lock:
             current = self._worlds.get(role.id)
-            if current is not None and current.config_version == _role_config_version(role):
-                return current
             if current is not None:
-                current.begin_closing()
-                current.cancel_active_work()
-                if current.active_work:
-                    raise RuntimeError(f"角色世界正在重载: {role.id}")
+                current.refresh_role(role)
+                return current
             world = RoleWorld(role)
             self._worlds[role.id] = world
             return world
