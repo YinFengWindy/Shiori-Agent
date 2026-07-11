@@ -97,6 +97,7 @@ class RoleWorld:
         self._thread_locks: dict[str, asyncio.Lock] = {}
         self._state_lock = asyncio.Lock()
         self._active_work = 0
+        self._tasks: set[asyncio.Task[object]] = set()
         self._closing = False
 
     @property
@@ -122,6 +123,12 @@ class RoleWorld:
 
         self._closing = True
 
+    def cancel_active_work(self) -> None:
+        """Cancels all registered work before the world is reloaded or removed."""
+
+        for task in tuple(self._tasks):
+            task.cancel()
+
     async def execute_thread(
         self,
         context: RoleExecutionContext,
@@ -134,9 +141,14 @@ class RoleWorld:
         async with lock:
             self._validate_context(context)
             self._active_work += 1
+            task = asyncio.current_task()
+            if task is not None:
+                self._tasks.add(task)
             try:
                 return await operation()
             finally:
+                if task is not None:
+                    self._tasks.discard(task)
                 self._active_work -= 1
 
     async def execute_role_state(
@@ -150,9 +162,14 @@ class RoleWorld:
         async with self._state_lock:
             self._validate_context(context)
             self._active_work += 1
+            task = asyncio.current_task()
+            if task is not None:
+                self._tasks.add(task)
             try:
                 return await operation()
             finally:
+                if task is not None:
+                    self._tasks.discard(task)
                 self._active_work -= 1
 
     def _validate_context(self, context: RoleExecutionContext) -> None:
@@ -182,6 +199,7 @@ class RoleWorldRegistry:
                 return current
             if current is not None:
                 current.begin_closing()
+                current.cancel_active_work()
                 if current.active_work:
                     raise RuntimeError(f"角色世界正在重载: {role.id}")
             world = RoleWorld(role)
@@ -242,6 +260,7 @@ class RoleWorldRegistry:
             if world is None:
                 return
             world.begin_closing()
+            world.cancel_active_work()
             if world.active_work:
                 raise RuntimeError(f"角色世界仍有运行中的工作: {clean_role_id}")
             self._worlds.pop(clean_role_id, None)
