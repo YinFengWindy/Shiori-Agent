@@ -220,7 +220,7 @@ class MemoryAdminApi(Protocol):
         limit: int = 200,
     ) -> list[dict[str, object]]: ...
 
-    def list_items_for_dashboard(
+    def list_items_for_admin(
         self,
         *,
         q: str = "",
@@ -238,14 +238,14 @@ class MemoryAdminApi(Protocol):
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]: ...
 
-    def get_item_for_dashboard(
+    def get_item_for_admin(
         self,
         item_id: str,
         *,
         include_embedding: bool = False,
     ) -> dict[str, object] | None: ...
 
-    def update_item_for_dashboard(
+    def update_item_for_admin(
         self,
         item_id: str,
         *,
@@ -260,7 +260,7 @@ class MemoryAdminApi(Protocol):
 
     def delete_items_batch(self, ids: list[str]) -> int: ...
 
-    def find_similar_items_for_dashboard(
+    def find_similar_items_for_admin(
         self,
         item_id: str,
         *,

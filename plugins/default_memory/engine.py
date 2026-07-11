@@ -993,7 +993,7 @@ class DefaultMemoryEngine:
             return []
         return store.list_events_by_time_range(time_start, time_end, limit=limit)
 
-    def list_items_for_dashboard(
+    def list_items_for_admin(
         self,
         *,
         q: str = "",
@@ -1011,7 +1011,7 @@ class DefaultMemoryEngine:
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         store = self._require_v2_store()
-        return store.list_items_for_dashboard(
+        return store.list_items_for_admin(
             q=q,
             memory_type=memory_type,
             memory_domain=memory_domain,
@@ -1027,18 +1027,18 @@ class DefaultMemoryEngine:
             sort_order=sort_order,
         )
 
-    def get_item_for_dashboard(
+    def get_item_for_admin(
         self,
         item_id: str,
         *,
         include_embedding: bool = False,
     ) -> dict[str, object] | None:
-        return self._require_v2_store().get_item_for_dashboard(
+        return self._require_v2_store().get_item_for_admin(
             item_id,
             include_embedding=include_embedding,
         )
 
-    def update_item_for_dashboard(
+    def update_item_for_admin(
         self,
         item_id: str,
         *,
@@ -1048,7 +1048,7 @@ class DefaultMemoryEngine:
         happened_at: str | None = None,
         emotional_weight: int | None = None,
     ) -> dict[str, object] | None:
-        return self._require_v2_store().update_item_for_dashboard(
+        return self._require_v2_store().update_item_for_admin(
             item_id,
             status=status,
             extra_json=extra_json,
@@ -1075,7 +1075,7 @@ class DefaultMemoryEngine:
             dry_run=dry_run,
         )
 
-    def find_similar_items_for_dashboard(
+    def find_similar_items_for_admin(
         self,
         item_id: str,
         *,
@@ -1084,7 +1084,7 @@ class DefaultMemoryEngine:
         score_threshold: float = 0.0,
         include_superseded: bool = False,
     ) -> list[dict[str, object]]:
-        return self._require_v2_store().find_similar_items_for_dashboard(
+        return self._require_v2_store().find_similar_items_for_admin(
             item_id,
             top_k=top_k,
             memory_type=memory_type,

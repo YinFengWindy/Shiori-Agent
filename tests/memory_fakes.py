@@ -188,10 +188,10 @@ class FakeMemoryEngine:
     ) -> list[dict[str, object]]:
         return []
 
-    def list_items_for_dashboard(self, **kwargs: Any) -> tuple[list[dict[str, object]], int]:
+    def list_items_for_admin(self, **kwargs: Any) -> tuple[list[dict[str, object]], int]:
         return [], 0
 
-    def get_item_for_dashboard(
+    def get_item_for_admin(
         self,
         item_id: str,
         *,
@@ -199,7 +199,7 @@ class FakeMemoryEngine:
     ) -> dict[str, object] | None:
         return None
 
-    def update_item_for_dashboard(self, item_id: str, **kwargs: Any) -> dict[str, object] | None:
+    def update_item_for_admin(self, item_id: str, **kwargs: Any) -> dict[str, object] | None:
         return None
 
     def delete_item(self, item_id: str) -> bool:
@@ -208,5 +208,5 @@ class FakeMemoryEngine:
     def delete_items_batch(self, ids: list[str]) -> int:
         return 0
 
-    def find_similar_items_for_dashboard(self, item_id: str, **kwargs: Any) -> list[dict[str, object]]:
+    def find_similar_items_for_admin(self, item_id: str, **kwargs: Any) -> list[dict[str, object]]:
         return []

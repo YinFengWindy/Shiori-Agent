@@ -705,7 +705,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
     # 读操作
     # ------------------------------------------------------------------
 
-    def list_items_for_dashboard(
+    def list_items_for_admin(
         self,
         *,
         q: str = "",
@@ -829,7 +829,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 )
             return items, total
 
-    def get_item_for_dashboard(
+    def get_item_for_admin(
         self,
         item_id: str,
         *,
@@ -881,7 +881,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             "embedding": embedding if include_embedding else None,
         }
 
-    def update_item_for_dashboard(
+    def update_item_for_admin(
         self,
         item_id: str,
         *,
@@ -914,7 +914,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
                 updates.append("emotional_weight=?")
                 params.append(_coerce_emotional_weight(emotional_weight))
             if not updates:
-                return self.get_item_for_dashboard(item_id)
+                return self.get_item_for_admin(item_id)
 
             updates.append("updated_at=?")
             params.append(_now_iso())
@@ -926,7 +926,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             self._db.commit()
             if cur.rowcount <= 0:
                 return None
-        return self.get_item_for_dashboard(item_id)
+        return self.get_item_for_admin(item_id)
 
     def delete_item(self, item_id: str) -> bool:
         with self._lock:
@@ -964,7 +964,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
             self._db.commit()
             return int(cur.rowcount or 0)
 
-    def find_similar_items_for_dashboard(
+    def find_similar_items_for_admin(
         self,
         item_id: str,
         *,
@@ -973,7 +973,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         score_threshold: float = 0.0,
         include_superseded: bool = False,
     ) -> list[dict[str, object]]:
-        base = self.get_item_for_dashboard(item_id, include_embedding=True)
+        base = self.get_item_for_admin(item_id, include_embedding=True)
         if base is None:
             raise KeyError(item_id)
         embedding = base.get("embedding")

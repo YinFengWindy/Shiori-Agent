@@ -5,11 +5,10 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["static/dashboard/*.js", "plugins/*/dashboard_panel.js"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["frontend/dashboard/src/**/*.{ts,tsx}", "plugins/**/*.ts", "types/**/*.d.ts"],
+    files: ["plugins/**/*.ts", "plugins/**/*.tsx", "types/**/*.d.ts"],
     languageOptions: {
       ecmaVersion: 2021,
       globals: globals.browser,

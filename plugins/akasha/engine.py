@@ -423,7 +423,7 @@ class AkashaMemoryEngine:
 
     # 返回引擎描述。
     def describe(self) -> MemoryEngineDescriptor:
-        # 1. runtime 和 dashboard 都通过 descriptor 识别当前 engine。
+        # 1. runtime 与管理工具都通过 descriptor 识别当前 engine。
         return self.DESCRIPTOR
 
     # Akasha 不提供 procedure 关键词规则。
@@ -445,8 +445,8 @@ class AkashaMemoryEngine:
         # 1. 时间线问题使用 search_messages/fetch_messages 更贴近原始事实。
         return []
 
-    # dashboard 列出 Akasha turn 节点。
-    def list_items_for_dashboard(
+    # 管理工具列出 Akasha turn 节点。
+    def list_items_for_admin(
         self,
         *,
         q: str = "",
@@ -463,7 +463,7 @@ class AkashaMemoryEngine:
     ) -> tuple[list[dict[str, object]], int]:
         # 1. 过滤项先保持 MVP，只支持 q 和分页排序。
         _ = (memory_type, status, source_ref, scope_channel, scope_chat_id, has_embedding)
-        return self._store.list_items_for_dashboard(
+        return self._store.list_items_for_admin(
             q=q,
             page=page,
             page_size=page_size,
@@ -471,19 +471,19 @@ class AkashaMemoryEngine:
             sort_order=sort_order,
         )
 
-    # dashboard 读取 Akasha 节点详情。
-    def get_item_for_dashboard(
+    # 管理工具读取 Akasha 节点详情。
+    def get_item_for_admin(
         self,
         item_id: str,
         *,
         include_embedding: bool = False,
     ) -> dict[str, object] | None:
-        # 1. include_embedding 由 store MVP 忽略，避免把大向量塞进 dashboard。
+        # 1. include_embedding 由 store MVP 忽略，避免返回大向量。
         _ = include_embedding
-        return self._store.get_item_for_dashboard(item_id)
+        return self._store.get_item_for_admin(item_id)
 
-    # dashboard 更新 Akasha 节点。
-    def update_item_for_dashboard(
+    # 管理工具更新 Akasha 节点。
+    def update_item_for_admin(
         self,
         item_id: str,
         *,
@@ -495,7 +495,7 @@ class AkashaMemoryEngine:
     ) -> dict[str, object] | None:
         # 1. Akasha sidecar 不支持手改事实或状态，直接返回当前详情。
         _ = (status, extra_json, source_ref, happened_at, emotional_weight)
-        return self._store.get_item_for_dashboard(item_id)
+        return self._store.get_item_for_admin(item_id)
 
     # 删除 Akasha sidecar 节点。
     def delete_item(self, item_id: str) -> bool:
@@ -514,7 +514,7 @@ class AkashaMemoryEngine:
         return deleted
 
     # 查找相似 Akasha 节点。
-    def find_similar_items_for_dashboard(
+    def find_similar_items_for_admin(
         self,
         item_id: str,
         *,
@@ -523,7 +523,7 @@ class AkashaMemoryEngine:
         score_threshold: float = 0.0,
         include_superseded: bool = False,
     ) -> list[dict[str, object]]:
-        # 1. MVP dashboard 不做相似节点展开。
+        # 1. MVP 不做相似节点展开。
         _ = (item_id, top_k, memory_type, score_threshold, include_superseded)
         return []
 
@@ -823,7 +823,7 @@ class AkashaMemoryEngine:
                 self._edges_by_src.setdefault(item.src_key, {})[item.dst_key] = weight
             self._fan = _fan_counts(self._edges)
 
-    # 删除 dashboard 移除的节点和相关边。
+    # 删除管理工具移除的节点和相关边。
     def _remove_cached_nodes(self, ids: list[str]) -> None:
         remove_ids = set(ids)
         if not remove_ids:
@@ -1402,7 +1402,7 @@ def _card_to_record(card: AkashaCard, *, injected: bool) -> MemoryRecord:
 
 # 把 card 转成 raw item。
 def _card_to_raw(card: AkashaCard) -> dict[str, object]:
-    # 1. raw item 兼容 recall_memory 和 dashboard 里的通用命名。
+    # 1. raw item 兼容 recall_memory 和管理工具里的通用命名。
     return {
         "id": card.key,
         "memory_type": "turn",

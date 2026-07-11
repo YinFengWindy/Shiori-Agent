@@ -678,8 +678,8 @@ class AkashaStore:
             )
             self._db.commit()
 
-    # 读取 dashboard 需要的节点列表。
-    def list_items_for_dashboard(
+    # 读取管理工具需要的节点列表。
+    def list_items_for_admin(
         self,
         *,
         q: str = "",
@@ -688,7 +688,7 @@ class AkashaStore:
         sort_by: str = "updated_at",
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
-        # 1. Akasha dashboard MVP 只展示节点状态，不展示原文。
+        # 1. Akasha MVP 只展示节点状态，不展示原文。
         where = ""
         params: list[object] = []
         if q.strip():
@@ -716,17 +716,17 @@ class AkashaStore:
                 [*params, page_size, offset],
             ).fetchall()
         total = int((count_row["c"] if count_row else 0) or 0)
-        return [_node_row_to_dashboard(row) for row in rows], total
+        return [_node_row_to_admin(row) for row in rows], total
 
-    # 按 id 读取 dashboard 节点详情。
-    def get_item_for_dashboard(self, item_id: str) -> dict[str, object] | None:
+    # 按 id 读取管理工具节点详情。
+    def get_item_for_admin(self, item_id: str) -> dict[str, object] | None:
         # 1. item_id 对应 turn key。
         with self._lock:
             row = self._db.execute(
                 "SELECT * FROM akasha_nodes WHERE key = ?",
                 (item_id,),
             ).fetchone()
-        return _node_row_to_dashboard(row) if row is not None else None
+        return _node_row_to_admin(row) if row is not None else None
 
     # 物理删除一个 Akasha 节点和相关边。
     def delete_item(self, item_id: str) -> bool:
@@ -924,9 +924,9 @@ def _row_to_node(row: sqlite3.Row) -> AkashaNode | None:
     )
 
 
-# 把节点 row 转成 dashboard 通用 item。
-def _node_row_to_dashboard(row: sqlite3.Row) -> dict[str, object]:
-    # 1. dashboard 使用 MemoryAdminApi 的通用字段名。
+# 把节点 row 转成管理工具通用 item。
+def _node_row_to_admin(row: sqlite3.Row) -> dict[str, object]:
+    # 1. 管理工具使用 MemoryAdminApi 的通用字段名。
     return {
         "id": str(row["key"]),
         "memory_type": "turn",

@@ -9,12 +9,8 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "baseUrl": ".",
-    "paths": {
-      "akashic-dashboard": ["types/akashic-dashboard.d.ts"],
-      "@akashic/dashboard-ui": ["frontend/dashboard/src/design/sdk.ts"]
-    },
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["frontend/dashboard/src/**/*.ts", "frontend/dashboard/src/**/*.tsx", "plugins/**/*.ts", "plugins/**/*.tsx", "types/**/*.d.ts"]
+  "include": ["plugins/**/*.ts", "plugins/**/*.tsx", "types/**/*.d.ts"]
 }
