@@ -30,3 +30,14 @@ export function changeRoleBindingChannel(
 export function isDesktopRoleBinding(binding: RoleChannelBinding): boolean {
   return binding.channel === "desktop";
 }
+
+/** Returns the channel-specific description for an inbound sender allow-list. */
+export function roleBindingAllowFromLabel(channel: string): string {
+  if (channel === "telegram") {
+    return "允许对象（Telegram 用户 ID 或用户名，逗号分隔；留空允许全部）";
+  }
+  if (channel === "qq") {
+    return "允许对象（QQ 号，逗号分隔；留空允许全部）";
+  }
+  return "允许对象（逗号分隔；留空允许全部）";
+}

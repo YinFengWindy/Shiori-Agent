@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   changeRoleBindingChannel,
   createRoleChannelBinding,
+  roleBindingAllowFromLabel,
 } from "./roleChannelBindings";
 
 describe("roleChannelBindings", () => {
@@ -23,5 +24,10 @@ describe("roleChannelBindings", () => {
       ),
       { channel: "telegram", chat_id: "", allow_from: [] },
     );
+  });
+
+  it("explains each external channel's supported allow-list identity", () => {
+    assert.match(roleBindingAllowFromLabel("telegram"), /用户 ID 或用户名/);
+    assert.match(roleBindingAllowFromLabel("qq"), /QQ 号/);
   });
 });

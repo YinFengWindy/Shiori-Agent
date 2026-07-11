@@ -3,7 +3,12 @@ import { useLayoutEffect, useRef } from "react";
 import { ResetIcon, SaveIcon } from "../shared/icons";
 import { cx, focusVisibleRingClass, focusVisibleWhiteRingClass, inputClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
-import { changeRoleBindingChannel, createRoleChannelBinding, isDesktopRoleBinding } from "./roleChannelBindings";
+import {
+  changeRoleBindingChannel,
+  createRoleChannelBinding,
+  isDesktopRoleBinding,
+  roleBindingAllowFromLabel,
+} from "./roleChannelBindings";
 import { captureRoleDetailScrollTop, restoreRoleDetailScrollTop } from "./roleDetailScrollState";
 
 type RoleDetailPageProps = {
@@ -214,12 +219,16 @@ export function RoleDetailPage({
                       />
                       <button className="text-[#a33] transition hover:text-[#711]" type="button" onClick={() => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).filter((_, itemIndex) => itemIndex !== index) }))}>移除</button>
                     </div>
-                    <input
-                      className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
-                      value={binding.allow_from.join(", ")}
-                      placeholder="允许对象（逗号分隔；留空允许全部）"
-                      onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, allow_from: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) } : item) }))}
-                    />
+                    {!isDesktopRoleBinding(binding) ? (
+                      <label className="grid gap-1.5">
+                        <span>{roleBindingAllowFromLabel(binding.channel)}</span>
+                        <input
+                          className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                          value={binding.allow_from.join(", ")}
+                          onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, allow_from: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) } : item) }))}
+                        />
+                      </label>
+                    ) : null}
                   </div>
                 ))}
               </div>

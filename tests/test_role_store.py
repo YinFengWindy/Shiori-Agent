@@ -200,6 +200,21 @@ def test_role_store_rejects_desktop_binding_for_another_role_session(tmp_path: P
         raise AssertionError("桌面端绑定不能指向其他角色会话")
 
 
+def test_role_store_rejects_allow_list_for_desktop_binding(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+
+    try:
+        store.update_role(
+            "mira",
+            channel_bindings=[{"channel": "desktop", "chat_id": "role:mira", "allow_from": ["alice"]}],
+        )
+    except ValueError as exc:
+        assert "不支持允许对象" in str(exc)
+    else:
+        raise AssertionError("桌面端没有外部 sender，不能配置允许对象")
+
+
 def test_role_config_migration_copies_legacy_file_once_without_runtime_fallback(tmp_path: Path):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")

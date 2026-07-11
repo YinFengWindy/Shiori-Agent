@@ -505,3 +505,5 @@ class RoleStore:
             for binding in bindings
         ):
             raise ValueError(f"桌面端渠道必须绑定当前角色会话: {expected_chat_id}")
+        if any(binding.channel == "desktop" and binding.allow_from for binding in bindings):
+            raise ValueError("桌面端渠道不支持允许对象")
