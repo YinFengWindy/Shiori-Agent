@@ -82,6 +82,7 @@ class ProactiveLoop:
         passive_busy_fn: Callable[[str], bool] | None = None,
         shared_tools: ToolRegistry | None = None,
         tool_hooks: list[ToolHook] | None = None,
+        tick_dispatcher: Callable[[Callable[[], Any]], Any] | None = None,
     ) -> None:
         self._sessions = session_manager
         self._provider = provider
@@ -98,6 +99,7 @@ class ProactiveLoop:
         self._passive_busy_fn = passive_busy_fn
         self._shared_tools = shared_tools
         self._tool_hooks = tool_hooks or []
+        self._tick_dispatcher = tick_dispatcher
         self._workspace_context_mtime_ns: int | None = None
         self._workspace_context_text: str = ""
         self._relationship_runtime = self._build_relationship_runtime()
@@ -355,10 +357,17 @@ class ProactiveLoop:
             logger.info("[proactive] 下次 tick 间隔=%ds", interval)
             await asyncio.sleep(interval)
             try:
-                last_base_score = await self._tick()
+                last_base_score = await self._run_tick()
             except Exception:
                 logger.exception("ProactiveLoop tick 异常")
                 last_base_score = None
+
+    async def _run_tick(self) -> float | None:
+        """Runs one proactive tick through the owning role world when configured."""
+
+        if self._tick_dispatcher is None:
+            return await self._tick()
+        return await self._tick_dispatcher(self._tick)
 
     def _next_interval(self, base_score: float | None = None) -> int:
         """根据 base_score 返回自适应等待秒数。无 presence 时回退固定间隔。"""

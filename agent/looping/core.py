@@ -404,6 +404,12 @@ class AgentLoop:
         return self._processing_state
 
     @property
+    def role_world_registry(self):
+        """Returns the registry used by direct turns and role-owned background work."""
+
+        return self._role_world_registry
+
+    @property
     def active_turn_states(self) -> dict[str, TurnInterruptState]:
         return self._active_turn_states
 

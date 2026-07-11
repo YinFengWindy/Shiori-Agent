@@ -66,6 +66,7 @@ def build_proactive_runtime(
     proactive_state = ProactiveStateStore(workspace / "proactive.db")
     proactive_provider = _build_proactive_provider(config, provider)
     loops: list[ProactiveLoop] = []
+    role_world_registry = agent_loop.role_world_registry
     for role in roles:
         target = role.proactive
         proactive_cfg = replace(
@@ -92,10 +93,34 @@ def build_proactive_runtime(
             ),
             shared_tools=getattr(agent_loop, "tools", None),
             tool_hooks=tool_hooks,
+            tick_dispatcher=_build_role_tick_dispatcher(
+                role_id=role.id,
+                channel=target.target_channel,
+                chat_id=target.target_chat_id,
+                registry=role_world_registry,
+            ),
         )
         loops.append(loop)
         tasks.append(loop.run())
     return tasks, loops[0]
+
+
+def _build_role_tick_dispatcher(*, role_id: str, channel: str, chat_id: str, registry):
+    if registry is None:
+        raise RuntimeError("主动任务需要 RoleWorldRegistry")
+
+    async def dispatch(operation):
+        context = registry.create_context(
+            role_id=role_id,
+            thread_id=f"thread:{role_id}:{channel}:{chat_id}",
+            transport_channel=channel,
+            transport_chat_id=chat_id,
+            source="proactive",
+            work_kind="proactive_tick",
+        )
+        return await registry.dispatch_thread(context, operation)
+
+    return dispatch
 
 
 def build_memory_optimizer_task(
