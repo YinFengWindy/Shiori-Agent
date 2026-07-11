@@ -20,6 +20,8 @@ from desktop_bridge.app_service import DesktopAppService
 from desktop_bridge.chat_service import DesktopChatService
 from desktop_bridge.image_service import DesktopImageService
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
+from desktop_bridge.role_presenter import DesktopRolePresenter
+from desktop_bridge.session_presenter import DesktopSessionPresenter
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 from session.manager import Session, SessionManager
 
@@ -72,6 +74,11 @@ class DesktopBridgeService:
             relationship_runtime=relationship_runtime,
             presence=presence,
         )
+        self.session_presenter = DesktopSessionPresenter(
+            self.conversation_service,
+            relationship_runtime,
+        )
+        self.role_presenter = DesktopRolePresenter(role_store, relationship_runtime)
         self.chat_service = DesktopChatService(
             agent_loop=agent_loop,
             event_bus=event_bus,
@@ -191,7 +198,7 @@ class DesktopBridgeService:
                     method,
                     {
                         "roles": [
-                            self._serialize_role(role)
+                            self.role_presenter.serialize(role)
                             for role in self.role_service.repository.list_roles()
                         ]
                     },
@@ -219,7 +226,7 @@ class DesktopBridgeService:
                     illustration_sources=illustration_sources,
                 )
                 return self._ok(
-                    request_id, method, {"role": self._serialize_role(aggregate.role)}
+                    request_id, method, {"role": self.role_presenter.serialize(aggregate.role)}
                 )
             if method == "roles.update":
                 avatar_source = str(payload.get("avatar_source") or "").strip() or None
@@ -264,7 +271,7 @@ class DesktopBridgeService:
                     clear_illustrations=bool(payload.get("clear_illustrations")),
                 )
                 return self._ok(
-                    request_id, method, {"role": self._serialize_role(aggregate.role)}
+                    request_id, method, {"role": self.role_presenter.serialize(aggregate.role)}
                 )
             if method == "roles.delete":
                 role_id = str(payload.get("role_id") or "").strip()
@@ -325,7 +332,7 @@ class DesktopBridgeService:
                     request_id,
                     method,
                     {
-                        "session": self._serialize_session(session),
+                        "session": self.session_presenter.serialize(session),
                     },
                 )
             if method == "session.updateDisplayState":
@@ -345,7 +352,7 @@ class DesktopBridgeService:
                 return self._ok(
                     request_id,
                     method,
-                    {"session": self._serialize_session(session)},
+                    {"session": self.session_presenter.serialize(session)},
                 )
             if method == "chat.send":
                 role_id = str(payload.get("role_id") or "").strip()
@@ -405,7 +412,7 @@ class DesktopBridgeService:
                     request_id,
                     method,
                     {
-                        "session": self._serialize_session(session),
+                        "session": self.session_presenter.serialize(session),
                         "events": [],
                     },
                 )
@@ -517,55 +524,6 @@ class DesktopBridgeService:
             error=BridgeError(code=code, message=message),
         )
 
-    def _serialize_session(self, session: Session) -> dict[str, Any]:
-        thread = self.conversation_service.get_thread_for_runtime(
-            session.key,
-            thread_id=str(session.metadata.get("thread_id") or ""),
-        )
-
-        def _serialize_message(msg: dict[str, Any]) -> dict[str, Any]:
-            metadata = msg.get("metadata")
-            merged_metadata = dict(metadata) if isinstance(metadata, dict) else {}
-            skip_keys = {
-                "id",
-                "session_key",
-                "seq",
-                "role",
-                "content",
-                "timestamp",
-                "reasoning_content",
-                "tool_chain",
-                "media",
-                "metadata",
-            }
-            for key, value in msg.items():
-                if key in skip_keys:
-                    continue
-                merged_metadata[key] = value
-            return {
-                "id": msg.get("id"),
-                "role": msg.get("role"),
-                "content": msg.get("content"),
-                "timestamp": msg.get("timestamp"),
-                "reasoning_content": msg.get("reasoning_content"),
-                "media": list(msg.get("media") or []),
-                "metadata": merged_metadata,
-            }
-
-        return {
-            "key": session.key,
-            "created_at": session.created_at.isoformat(),
-            "updated_at": session.updated_at.isoformat(),
-            "last_consolidated": session.last_consolidated,
-            "metadata": self._enrich_session_metadata(dict(session.metadata)),
-            "thread": (
-                self.conversation_service.serialize_thread(thread)
-                if thread is not None
-                else None
-            ),
-            "messages": [_serialize_message(msg) for msg in session.messages],
-        }
-
     async def _emit_event(self, emit_event, payload: dict[str, Any]) -> None:
         result = emit_event(payload)
         if inspect.isawaitable(result):
@@ -587,7 +545,7 @@ class DesktopBridgeService:
             id=request_id,
             type="event",
             method="session.updated",
-            payload={"session": self._serialize_session(session)},
+            payload={"session": self.session_presenter.serialize(session)},
         )
         await self._emit_event(emit_event, event.to_dict())
 
@@ -601,7 +559,7 @@ class DesktopBridgeService:
             id=request_id,
             type="event",
             method="session.updated",
-            payload={"session": self._serialize_session(session)},
+            payload={"session": self.session_presenter.serialize(session)},
         )
         await self._broadcast_event(event.to_dict())
 
@@ -613,42 +571,6 @@ class DesktopBridgeService:
 
     def _sync_desktop_session_thread(self, session: Session, *, role_id: str) -> None:
         self.app_service.sync_desktop_session_thread(session, role_id=role_id)
-
-    def _serialize_role(self, role) -> dict[str, Any]:
-        payload = role.to_dict()
-        avatar = payload.get("avatar")
-        illustrations = payload.get("illustrations") or []
-        payload["avatar_abs"] = (
-            str((self.role_store.roles_dir / avatar).resolve())
-            if isinstance(avatar, str) and avatar
-            else None
-        )
-        chat_background = payload.get("chat_background")
-        payload["chat_background_abs"] = (
-            str((self.role_store.roles_dir / chat_background).resolve())
-            if isinstance(chat_background, str) and chat_background
-            else None
-        )
-        payload["illustrations_abs"] = [
-            str((self.role_store.roles_dir / rel).resolve())
-            for rel in illustrations
-            if isinstance(rel, str) and rel
-        ]
-        relationship_runtime = self.relationship_runtime
-        if relationship_runtime is not None:
-            snapshot = relationship_runtime.read_snapshot(role.id)
-            runtime = relationship_runtime.current_loneliness_runtime(role.id)
-            if snapshot is not None:
-                payload["relationship_snapshot"] = snapshot
-            if runtime is not None:
-                payload["loneliness_runtime"] = runtime
-        return payload
-
-    def _enrich_session_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        relationship_runtime = self.relationship_runtime
-        if relationship_runtime is None:
-            return metadata
-        return relationship_runtime.enrich_session_metadata(metadata)
 
     def _build_novelai_service(self) -> NovelAIService | None:
         if self.config is None:
