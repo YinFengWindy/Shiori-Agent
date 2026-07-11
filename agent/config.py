@@ -52,6 +52,7 @@ def _validated_timezone(tz_name: str, *, enabled: bool) -> str:
 
 def load_config(path: str | Path = "config.toml") -> Config:
     data = _load_config_data(path)
+    _reject_removed_runtime_config(data)
 
     llm = _as_dict(data.get("llm"))
     llm_main = _as_dict(llm.get("main"))
@@ -290,6 +291,22 @@ def _load_plugins_config(data: dict) -> dict[str, dict[str, Any]]:
         if isinstance(name, str) and isinstance(value, dict):
             plugins[name] = cast(dict[str, Any], _resolve_config_value(value))
     return plugins
+
+
+def _reject_removed_runtime_config(data: dict) -> None:
+    """Rejects configuration for product surfaces removed from the runtime."""
+    sections = {
+        "channels": {"cli", "qqbot", "socket"},
+        "plugins": {"feishu", "qqbot"},
+        "integrations": {"fitbit"},
+    }
+    for section, names in sections.items():
+        values = _as_dict(data.get(section))
+        for name in sorted(names):
+            if name in values:
+                raise ValueError(f"配置项已移除: [{section}.{name}]")
+    if "peer_agents" in data:
+        raise ValueError("配置项已移除: peer_agents")
 
 
 def _load_extra_body(data: dict) -> dict:

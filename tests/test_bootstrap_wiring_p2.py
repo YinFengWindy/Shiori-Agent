@@ -246,7 +246,7 @@ def test_config_load_reads_embedding_and_ignores_private_memory_sections(tmp_pat
     assert cfg.memory.embedding.output_dimensionality == 1536
 
 
-def test_config_load_reads_memory_window_and_ignores_legacy_socket(tmp_path: Path):
+def test_config_load_rejects_legacy_socket_configuration(tmp_path: Path):
     cfg_path = tmp_path / "config.toml"
     _write_toml(
         cfg_path,
@@ -270,10 +270,8 @@ def test_config_load_reads_memory_window_and_ignores_legacy_socket(tmp_path: Pat
         },
     )
 
-    cfg = Config.load(cfg_path)
-
-    assert cfg.memory_window == 20
-    assert not hasattr(cfg.channels, "socket")
+    with pytest.raises(ValueError, match=r"\[channels.socket\]"):
+        _ = Config.load(cfg_path)
 
 
 def test_config_load_reads_agent_dev_mode(tmp_path: Path):
@@ -324,7 +322,7 @@ def test_config_load_accepts_dev_model_alias(tmp_path: Path):
     assert cfg.dev_mode is True
 
 
-def test_config_load_skips_unfilled_channels_and_ignores_removed_qqbot_block(
+def test_config_load_rejects_removed_qqbot_channel_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -368,16 +366,11 @@ def test_config_load_skips_unfilled_channels_and_ignores_removed_qqbot_block(
         },
     )
 
-    monkeypatch.setenv("QQBOT_SECRET", "secret")
-    cfg = Config.load(cfg_path)
-
-    assert cfg.channels.telegram is None
-    assert cfg.channels.qq is None
-    assert "qqbot" not in cfg.plugins
-    assert not hasattr(cfg.channels, "socket")
+    with pytest.raises(ValueError, match=r"\[channels.qqbot\]"):
+        _ = Config.load(cfg_path)
 
 
-def test_config_load_ignores_removed_fitbit_integration_block(tmp_path: Path):
+def test_config_load_rejects_removed_fitbit_integration_block(tmp_path: Path):
     cfg_path = tmp_path / "config.toml"
     _write_toml(
         cfg_path,
@@ -400,12 +393,11 @@ def test_config_load_ignores_removed_fitbit_integration_block(tmp_path: Path):
         },
     )
 
-    cfg = Config.load(cfg_path)
+    with pytest.raises(ValueError, match=r"\[integrations.fitbit\]"):
+        _ = Config.load(cfg_path)
 
-    assert not hasattr(cfg, "fitbit")
 
-
-def test_config_load_reads_toml_layout_and_ignores_removed_integrations_and_socket(
+def test_config_load_rejects_removed_socket_configuration(
     tmp_path: Path,
 ):
     cfg_path = tmp_path / "config.toml"
@@ -435,14 +427,8 @@ enabled = true
         encoding="utf-8",
     )
 
-    cfg = Config.load(cfg_path)
-
-    assert cfg.provider == "openai"
-    assert cfg.model == "m"
-    assert cfg.max_tokens == 256
-    assert cfg.memory_window == 12
-    assert not hasattr(cfg.channels, "socket")
-    assert not hasattr(cfg, "fitbit")
+    with pytest.raises(ValueError, match=r"\[channels.socket\]"):
+        _ = Config.load(cfg_path)
 
 
 def test_config_load_reads_qq_websocket_timeout(tmp_path: Path):

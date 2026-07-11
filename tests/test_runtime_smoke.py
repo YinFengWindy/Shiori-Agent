@@ -52,7 +52,7 @@ def _dump_toml(data: dict, prefix: tuple[str, ...] = ()) -> list[str]:
     return lines
 
 
-def _write_config(path: Path, socket_path: Path) -> None:
+def _write_config(path: Path) -> None:
     payload = {
         "llm": {
             "provider": "openai",
@@ -72,11 +72,6 @@ def _write_config(path: Path, socket_path: Path) -> None:
         "proactive": {
             "enabled": False,
             "profile": "quiet",
-        },
-        "channels": {
-            "cli": {
-                "socket": str(socket_path),
-            }
         },
     }
     path.write_text("\n".join(_dump_toml(payload)).strip() + "\n", encoding="utf-8")
