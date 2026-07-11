@@ -627,7 +627,7 @@ class AgentLoop:
     ) -> OutboundMessage:
         """Dispatches role-bound messages through their owning world before a turn."""
 
-        registry = self._role_world_registry
+        registry = getattr(self, "_role_world_registry", None)
         metadata = getattr(item, "metadata", None)
         if registry is None or not isinstance(metadata, dict):
             return await self._process(
@@ -642,14 +642,14 @@ class AgentLoop:
                 session_key=session_key,
                 dispatch_outbound=dispatch_outbound,
             )
-        return await registry.dispatch_passive_turn(
-            context,
-            lambda: self._process(
-                item,
-                session_key=session_key,
-                dispatch_outbound=dispatch_outbound,
-            ),
+        operation = lambda: self._process(
+            item,
+            session_key=session_key,
+            dispatch_outbound=dispatch_outbound,
         )
+        if context.work_kind == "scheduled_job":
+            return await registry.dispatch_background_task(context, operation)
+        return await registry.dispatch_passive_turn(context, operation)
 
     async def process_direct(
         self,
@@ -719,7 +719,7 @@ class AgentLoop:
     ) -> None:
         """Adds a role context to direct entrypoints backed by a formal role session."""
 
-        registry = self._role_world_registry
+        registry = getattr(self, "_role_world_registry", None)
         if registry is None or registry.context_from_metadata(metadata) is not None:
             return
         session = self.session_manager.get_or_create(session_key)
@@ -737,8 +737,12 @@ class AgentLoop:
             transport_chat_id=str(
                 metadata.get("transport_chat_id") or session_metadata.get("transport_chat_id") or chat_id
             ),
-            source=str(metadata.get("source") or "direct_role_session"),
-            work_kind="passive_turn",
+            source=str(
+                metadata.get("role_source")
+                or metadata.get("source")
+                or "direct_role_session"
+            ),
+            work_kind=str(metadata.get("role_work_kind") or "passive_turn"),
             request_id=str(metadata.get("request_id") or ""),
             delivery_key=str(metadata.get("delivery_key") or ""),
         )
@@ -752,7 +756,22 @@ class AgentLoop:
             raise RuntimeError("RoleWorldRegistry 未配置")
         context = registry.context_from_metadata(metadata)
         if context is None:
-            raise ValueError("后台任务缺少完整 RoleExecutionContext")
+            role_id = str(metadata.get("role_id") or "").strip()
+            thread_id = str(metadata.get("thread_id") or "").strip()
+            transport_channel = str(metadata.get("transport_channel") or "").strip()
+            transport_chat_id = str(metadata.get("transport_chat_id") or "").strip()
+            if not all((role_id, thread_id, transport_channel, transport_chat_id)):
+                raise ValueError("后台任务缺少完整 RoleExecutionContext")
+            context = registry.create_context(
+                role_id=role_id,
+                thread_id=thread_id,
+                transport_channel=transport_channel,
+                transport_chat_id=transport_chat_id,
+                source=str(metadata.get("role_source") or "scheduler"),
+                work_kind=str(metadata.get("role_work_kind") or "scheduled_job"),
+                request_id=str(metadata.get("request_id") or ""),
+                delivery_key=str(metadata.get("delivery_key") or ""),
+            )
         return await registry.dispatch_background_task(context, operation)
 
     async def _run_agent_loop(

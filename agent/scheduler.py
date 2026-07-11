@@ -318,6 +318,14 @@ class JobStore:
 
     def _from_dict(self, d: dict[str, Any]) -> ScheduledJob:
         d = dict(d)
+        channel = str(d.get("channel") or "").strip()
+        chat_id = str(d.get("chat_id") or "").strip()
+        if (
+            not str(d.get("role_id") or "").strip()
+            and channel == "desktop"
+            and chat_id.startswith("role:")
+        ):
+            d["role_id"] = chat_id.removeprefix("role:").strip()
         d["fire_at"] = self._parse_dt(d["fire_at"])
         d["created_at"] = self._parse_dt(d["created_at"])
         return ScheduledJob(**d)
@@ -569,16 +577,11 @@ class SchedulerService:
     def _job_role_metadata(self, job: ScheduledJob) -> dict[str, str]:
         if not job.role_id:
             return {}
-        required = {
+        return {
             "role_id": job.role_id,
             "role_config_version": job.role_config_version,
-            "thread_id": job.thread_id,
-            "delivery_key": job.delivery_key,
-        }
-        if not all(value.strip() for value in required.values()):
-            raise RuntimeError(f"调度任务缺少完整角色上下文: {job.id}")
-        return {
-            **required,
+            "thread_id": job.thread_id or f"thread:{job.role_id}:scheduler:{job.id}",
+            "delivery_key": job.delivery_key or job.id,
             "transport_channel": job.channel,
             "transport_chat_id": job.chat_id,
             "role_source": "scheduler",

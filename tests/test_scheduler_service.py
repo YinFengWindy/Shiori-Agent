@@ -1,12 +1,13 @@
 """Tests for SchedulerService: tick, execution, misfire, rescheduling."""
 
 import asyncio
+import json
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, call
 
 import pytest
 
-from agent.scheduler import LatencyTracker, SchedulerService, ScheduledJob
+from agent.scheduler import JobStore, LatencyTracker, SchedulerService, ScheduledJob
 from tests.conftest import drain_tasks, make_job
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -382,6 +383,68 @@ def test_misfire_within_grace_loaded(tmp_path, mock_push, mock_loop, fixed_now):
     svc.load_and_recover()
 
     assert job.id in svc._jobs
+
+
+def test_job_store_restores_legacy_desktop_role_ownership(tmp_path):
+    path = tmp_path / "jobs.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "trigger": "every",
+                    "tier": "instant",
+                    "fire_at": "2026-07-12T09:00:00+08:00",
+                    "channel": "desktop",
+                    "chat_id": "role:mira",
+                    "message": "早上好",
+                    "created_at": "2026-07-01T09:00:00+08:00",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    jobs = JobStore(path).load()
+
+    assert jobs[0].role_id == "mira"
+
+
+def test_job_store_keeps_ambiguous_legacy_transport_unowned(tmp_path):
+    path = tmp_path / "jobs.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "trigger": "every",
+                    "tier": "instant",
+                    "fire_at": "2026-07-12T09:00:00+08:00",
+                    "channel": "telegram",
+                    "chat_id": "42",
+                    "message": "早上好",
+                    "created_at": "2026-07-01T09:00:00+08:00",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    jobs = JobStore(path).load()
+
+    assert jobs[0].role_id == ""
+
+
+def test_legacy_role_job_metadata_gets_stable_context_defaults(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(channel="desktop", chat_id="role:mira")
+    job.role_id = "mira"
+
+    metadata = svc._job_role_metadata(job)
+
+    assert metadata["thread_id"] == f"thread:mira:scheduler:{job.id}"
+    assert metadata["delivery_key"] == job.id
+    assert metadata["role_work_kind"] == "scheduled_job"
 
 
 def test_misfire_beyond_grace_discarded(tmp_path, mock_push, mock_loop, fixed_now):

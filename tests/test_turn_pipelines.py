@@ -24,6 +24,7 @@ from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import TurnCommitted
 from core.memory.engine import MemoryQueryResult
+from core.roles import RoleRepository, RoleStore, RoleWorldRegistry
 from bootstrap.wiring import wire_turn_lifecycle
 
 
@@ -191,6 +192,75 @@ async def test_process_direct_registers_interruptible_active_task():
         await task
     assert "role:mira" not in loop._active_tasks
     assert "role:mira" not in loop._active_turn_states
+
+
+@pytest.mark.asyncio
+async def test_run_role_operation_repairs_legacy_scheduled_context(tmp_path: Path):
+    repository = RoleRepository(RoleStore(tmp_path))
+    repository.create_role(role_id="mira", name="Mira", system_prompt="test")
+    loop = object.__new__(AgentLoop)
+    loop._role_world_registry = RoleWorldRegistry(repository)
+    operation = AsyncMock(return_value="done")
+
+    result = await loop.run_role_operation(
+        {
+            "role_id": "mira",
+            "role_config_version": "",
+            "thread_id": "thread:mira:scheduler:legacy-job",
+            "delivery_key": "legacy-job",
+            "transport_channel": "desktop",
+            "transport_chat_id": "role:mira",
+            "role_source": "scheduler",
+            "role_work_kind": "scheduled_job",
+            "request_id": "legacy-job",
+        },
+        operation,
+    )
+
+    assert result == "done"
+    operation.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_role_scoped_scheduled_turn_uses_background_capability(tmp_path: Path):
+    repository = RoleRepository(RoleStore(tmp_path))
+    repository.create_role(role_id="mira", name="Mira", system_prompt="test")
+    registry = RoleWorldRegistry(repository)
+    context = registry.create_context(
+        role_id="mira",
+        thread_id="thread:mira:scheduler:job-1",
+        transport_channel="desktop",
+        transport_chat_id="role:mira",
+        source="scheduler",
+        work_kind="scheduled_job",
+        request_id="job-1",
+        delivery_key="job-1",
+    )
+    loop = object.__new__(AgentLoop)
+    loop._role_world_registry = registry
+    loop._process = AsyncMock(
+        return_value=OutboundMessage(
+            channel="desktop",
+            chat_id="role:mira",
+            content="done",
+        )
+    )
+    item = InboundMessage(
+        channel="desktop",
+        sender="user",
+        chat_id="role:mira",
+        content="run",
+        metadata=context.to_metadata(),
+    )
+
+    result = await loop._process_role_scoped(
+        item,
+        "scheduler:job-1",
+        dispatch_outbound=False,
+    )
+
+    assert result.content == "done"
+    loop._process.assert_awaited_once()
 
 
 def _make_loop(
