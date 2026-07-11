@@ -15,7 +15,7 @@ def migrate_workspace_conversations(
     role_store = RoleStore(workspace)
     bindings = RoleBindingService(workspace, RoleRepository(role_store))
     migrator = ConversationMigrator(
-        session_manager.db_path,
+        session_manager,
         binding_resolver=bindings.resolve_role_id,
     )
     try:

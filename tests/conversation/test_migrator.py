@@ -4,6 +4,7 @@ from pathlib import Path
 
 from conversation.migrator import ConversationMigrator
 from conversation.store import ConversationStore
+from session.manager import SessionManager
 from session.store import SessionStore
 
 
@@ -131,3 +132,67 @@ def test_conversation_migrator_is_idempotent(tmp_path: Path) -> None:
     assert second.migrated_session_keys == []
     assert second.unresolved_session_keys == []
     migrator.close()
+
+
+def test_conversation_migrator_copies_network_history_to_thread_runtime_session(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    legacy = manager.get_or_create("telegram:123")
+    legacy.add_message("user", "old user")
+    legacy.add_message("assistant", "old assistant")
+    manager.save(legacy)
+    migrator = ConversationMigrator(
+        manager,
+        binding_resolver=lambda channel, chat_id: "mira"
+        if (channel, chat_id) == ("telegram", "123")
+        else "",
+    )
+
+    first = migrator.migrate()
+    runtime = manager.get_or_create("thread:mira:telegram:123")
+    second = migrator.migrate()
+
+    assert first.migrated_session_keys == ["telegram:123"]
+    assert [item["content"] for item in legacy.messages] == ["old user", "old assistant"]
+    assert [item["content"] for item in runtime.messages] == [
+        "old user",
+        "old assistant",
+    ]
+    assert all(
+        item["migration_source_session_key"] == "telegram:123"
+        for item in runtime.messages
+    )
+    assert second.migrated_session_keys == []
+    assert [item["content"] for item in runtime.messages] == [
+        "old user",
+        "old assistant",
+    ]
+
+
+def test_conversation_migrator_upgrades_unresolved_thread_when_binding_appears(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    legacy = manager.get_or_create("telegram:123")
+    legacy.add_message("user", "old user")
+    manager.save(legacy)
+
+    missing = ConversationMigrator(manager)
+    first = missing.migrate()
+    resolved = ConversationMigrator(
+        manager,
+        binding_resolver=lambda channel, chat_id: "mira"
+        if (channel, chat_id) == ("telegram", "123")
+        else "",
+    )
+    second = resolved.migrate()
+    thread = manager.conversation_store.get_thread_by_legacy_session_key("telegram:123")
+    runtime = manager.get_or_create("thread:mira:telegram:123")
+
+    assert first.unresolved_session_keys == ["telegram:123"]
+    assert second.migrated_session_keys == ["telegram:123"]
+    assert thread is not None
+    assert thread.thread_kind == "network"
+    assert thread.role_id == "mira"
+    assert [item["content"] for item in runtime.messages] == ["old user"]

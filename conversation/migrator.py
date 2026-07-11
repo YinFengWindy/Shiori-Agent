@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from conversation.service import ConversationService, LegacySessionDescriptor
+
+if TYPE_CHECKING:
+    from session.manager import SessionManager
 
 
 @dataclass
@@ -21,30 +24,35 @@ class ConversationMigrator:
 
     def __init__(
         self,
-        db_path: str | Path,
+        session_manager: "SessionManager | str | Path",
         *,
         binding_resolver: Any | None = None,
     ) -> None:
+        self._owns_session_manager = isinstance(session_manager, (str, Path))
+        if self._owns_session_manager:
+            from session.manager import SessionManager
+
+            session_manager = SessionManager(Path(session_manager).parent)
+        self._session_manager = session_manager
         self._service = ConversationService(
-            session_manager=_MigratorSessionManagerProxy(db_path),
+            session_manager=session_manager,
             binding_resolver=binding_resolver,
         )
         self._store = self._service._store
 
     def close(self) -> None:
-        self._store.close()
+        if self._owns_session_manager:
+            self._session_manager._store.close()
 
     def migrate(self) -> ConversationMigrationSummary:
         summary = ConversationMigrationSummary()
         for row in self._store.list_legacy_sessions():
             session_key = str(row.get("key") or "").strip()
-            if not session_key:
+            if not session_key or session_key.startswith("thread:"):
                 continue
             existing_thread = self._store.get_thread_by_legacy_session_key(session_key)
-            if (
-                existing_thread is not None
-                and self._store.count_unassigned_messages(session_key) == 0
-            ):
+            if existing_thread is not None and existing_thread.thread_kind != "legacy/unresolved":
+                self._sync_runtime_session(session_key, existing_thread, dict(row.get("metadata") or {}))
                 continue
 
             thread = self._service.sync_session_messages_to_thread(
@@ -59,9 +67,40 @@ class ConversationMigrator:
             if thread.thread_kind == "legacy/unresolved":
                 summary.unresolved_session_keys.append(session_key)
             else:
+                self._sync_runtime_session(session_key, thread, dict(row.get("metadata") or {}))
                 summary.migrated_session_keys.append(session_key)
             summary.migrated_thread_ids.append(thread.id)
         return summary
+
+    def _sync_runtime_session(
+        self,
+        source_session_key: str,
+        thread,
+        metadata: dict[str, Any],
+    ) -> None:
+        if thread.thread_kind != "network":
+            return
+        target = self._session_manager.sync_thread_session_metadata(
+            thread.id,
+            role_id=thread.role_id,
+            role_name=str(metadata.get("role_name") or thread.role_id),
+            role_prompt=str(metadata.get("role_prompt") or ""),
+            role_runtime_config=(
+                dict(metadata["role_runtime_config"])
+                if isinstance(metadata.get("role_runtime_config"), dict)
+                else None
+            ),
+            thread_id=thread.id,
+            context_channel=thread.channel,
+            context_chat_id=thread.external_thread_id,
+            transport_channel=thread.channel,
+            transport_chat_id=thread.external_thread_id,
+        )
+        self._session_manager.copy_legacy_messages_to_thread_session(
+            source_session_key,
+            target,
+            thread_id=thread.id,
+        )
 
     @staticmethod
     def _channel(session_key: str) -> str:
@@ -78,19 +117,3 @@ class ConversationMigrator:
         if str(session_key or "").startswith("role:"):
             return str(session_key).removeprefix("role:").strip()
         return str(metadata.get("role_id") or "").strip()
-
-
-class _MigratorSessionManagerProxy:
-    """Small adapter so `ConversationService` can reuse its thread derivation helpers."""
-
-    def __init__(self, db_path: str | Path) -> None:
-        from conversation.store import ConversationStore
-
-        self.db_path = str(db_path)
-        self.conversation_store = ConversationStore(self.db_path)
-
-    def role_session_key(self, role_id: str) -> str:
-        clean_role_id = str(role_id or "").strip()
-        if not clean_role_id:
-            raise ValueError("role_id 不能为空")
-        return f"role:{clean_role_id}"

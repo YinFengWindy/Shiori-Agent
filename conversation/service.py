@@ -96,7 +96,7 @@ class ConversationService:
         descriptor: LegacySessionDescriptor,
     ) -> ThreadRecord:
         existing = self._store.get_thread_by_legacy_session_key(descriptor.session_key)
-        if existing is not None:
+        if existing is not None and existing.thread_kind != "legacy/unresolved":
             return existing
 
         clean_session_key = str(descriptor.session_key or "").strip()
@@ -130,7 +130,11 @@ class ConversationService:
                     session_key=clean_session_key,
                     created_at=descriptor.created_at,
                     updated_at=descriptor.updated_at,
+                    unresolved_thread_id=existing.id if existing is not None else "",
                 )
+
+        if existing is not None:
+            return existing
 
         return self._build_unresolved_thread(
             session_key=clean_session_key,
@@ -244,6 +248,7 @@ class ConversationService:
         session_key: str,
         created_at: str,
         updated_at: str,
+        unresolved_thread_id: str = "",
     ) -> ThreadRecord:
         contact = self._store.upsert_contact(
             contact_id=f"contact:{role_id}:{channel}:{chat_id}",
@@ -254,19 +259,33 @@ class ConversationService:
             display_name=chat_id,
             metadata={"scope": "network"},
         )
+        thread_id = f"thread:{role_id}:{channel}:{chat_id}"
+        metadata = {
+            "migrated_from_session_key": session_key,
+            "source_created_at": created_at,
+            "source_updated_at": updated_at,
+        }
+        if unresolved_thread_id:
+            return self._store.replace_unresolved_thread(
+                unresolved_thread_id,
+                thread_id=thread_id,
+                role_id=role_id,
+                contact_id=contact.id,
+                channel=channel,
+                thread_kind="network",
+                external_thread_id=chat_id,
+                legacy_session_key=session_key,
+                metadata=metadata,
+            )
         return self._store.upsert_thread(
-            thread_id=f"thread:{role_id}:{channel}:{chat_id}",
+            thread_id=thread_id,
             role_id=role_id,
             contact_id=contact.id,
             channel=channel,
             thread_kind="network",
             external_thread_id=chat_id,
             legacy_session_key=session_key,
-            metadata={
-                "migrated_from_session_key": session_key,
-                "source_created_at": created_at,
-                "source_updated_at": updated_at,
-            },
+            metadata=metadata,
         )
 
     def _build_unresolved_thread(

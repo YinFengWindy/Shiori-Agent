@@ -6,10 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from infra.persistence.json_store import load_json
+from infra.persistence.json_store import atomic_save_json, load_json
 
 from .services import RoleRepository
 from .store import RoleProactiveConfig
+
+_CONFIG_MIGRATION_STATE_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,7 @@ class RoleConfigMigrator:
     def __init__(self, workspace: Path, repository: RoleRepository) -> None:
         self._workspace = Path(workspace)
         self._repository = repository
+        self._state_path = self._workspace / "roles" / "config_migration_state.json"
 
     def migrate(self, proactive: Any | None = None) -> RoleConfigMigrationSummary:
         bindings_migrated, unresolved = self._migrate_bindings()
@@ -34,13 +37,19 @@ class RoleConfigMigrator:
         return RoleConfigMigrationSummary(bindings_migrated, proactive_migrated, unresolved)
 
     def _migrate_bindings(self) -> tuple[int, int]:
+        if self._bindings_imported():
+            return 0, 0
+        legacy_path = self._workspace / "roles" / "channel_bindings.json"
+        if not legacy_path.exists():
+            return 0, 0
         payload = load_json(
-            self._workspace / "roles" / "channel_bindings.json",
+            legacy_path,
             default={"bindings": {}},
             domain="legacy_role_bindings",
         )
         raw_bindings = payload.get("bindings", {}) if isinstance(payload, dict) else {}
         if not isinstance(raw_bindings, dict):
+            self._mark_bindings_imported()
             return 0, 0
         migrated = 0
         unresolved = 0
@@ -65,7 +74,28 @@ class RoleConfigMigrator:
                 ],
             )
             migrated += 1
+        self._mark_bindings_imported()
         return migrated, unresolved
+
+    def _bindings_imported(self) -> bool:
+        state = load_json(
+            self._state_path,
+            default={"version": _CONFIG_MIGRATION_STATE_VERSION},
+            domain="role_config_migration",
+        )
+        return bool(
+            isinstance(state, dict) and state.get("legacy_bindings_imported")
+        )
+
+    def _mark_bindings_imported(self) -> None:
+        atomic_save_json(
+            self._state_path,
+            {
+                "version": _CONFIG_MIGRATION_STATE_VERSION,
+                "legacy_bindings_imported": True,
+            },
+            domain="role_config_migration",
+        )
 
     def _migrate_proactive(self, proactive: Any | None) -> int:
         role_id = str(getattr(proactive, "default_role_id", "") or "").strip()

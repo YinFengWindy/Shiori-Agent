@@ -238,6 +238,36 @@ def test_role_config_migration_copies_legacy_file_once_without_runtime_fallback(
     assert role.proactive.enabled is True
 
 
+def test_role_config_migration_does_not_restore_a_removed_legacy_binding(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    (tmp_path / "roles" / "channel_bindings.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "bindings": {
+                    "telegram:42": {
+                        "channel": "telegram",
+                        "chat_id": "42",
+                        "role_id": "mira",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    migrator = RoleConfigMigrator(tmp_path, RoleRepository(store))
+
+    _ = migrator.migrate()
+    _ = store.update_role("mira", channel_bindings=[])
+    second = migrator.migrate()
+    role = store.get_role("mira")
+
+    assert second.bindings_migrated == 0
+    assert role is not None
+    assert role.channel_bindings == []
+
+
 def test_role_store_delete_role_removes_role_runtime_directory(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,

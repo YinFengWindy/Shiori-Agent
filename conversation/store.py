@@ -375,6 +375,70 @@ class ConversationStore:
             raise ValueError(f"thread upsert failed: {thread_id}")
         return self._row_to_thread(row)
 
+    def replace_unresolved_thread(
+        self,
+        unresolved_thread_id: str,
+        *,
+        thread_id: str,
+        role_id: str,
+        contact_id: str,
+        channel: str,
+        thread_kind: str,
+        external_thread_id: str,
+        legacy_session_key: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> ThreadRecord:
+        """Promotes an unresolved legacy thread after its role binding becomes known."""
+        now = datetime.now().astimezone().isoformat()
+        with self._lock:
+            existing = self._conn.execute(
+                "SELECT id FROM threads WHERE id = ? AND thread_kind = 'legacy/unresolved'",
+                (unresolved_thread_id,),
+            ).fetchone()
+            if existing is None:
+                raise ValueError(f"unresolved thread 不存在: {unresolved_thread_id}")
+            self._conn.execute(
+                """
+                UPDATE threads
+                SET id = ?, role_id = ?, contact_id = ?, channel = ?, thread_kind = ?,
+                    external_thread_id = ?, legacy_session_key = ?, metadata = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    thread_id,
+                    role_id,
+                    contact_id,
+                    channel,
+                    thread_kind,
+                    external_thread_id,
+                    legacy_session_key,
+                    json.dumps(metadata or {}, ensure_ascii=False),
+                    now,
+                    unresolved_thread_id,
+                ),
+            )
+            self._conn.execute(
+                "UPDATE messages SET thread_id = ? WHERE thread_id = ?",
+                (thread_id, unresolved_thread_id),
+            )
+            self._conn.execute(
+                "UPDATE thread_state SET thread_id = ? WHERE thread_id = ?",
+                (thread_id, unresolved_thread_id),
+            )
+            row = self._conn.execute(
+                """
+                SELECT id, role_id, contact_id, channel, thread_kind, external_thread_id,
+                       legacy_session_key, archived, metadata, created_at, updated_at
+                FROM threads
+                WHERE id = ?
+                """,
+                (thread_id,),
+            ).fetchone()
+            self._conn.commit()
+        if row is None:
+            raise ValueError(f"unresolved thread 升级失败: {unresolved_thread_id}")
+        return self._row_to_thread(row)
+
     def upsert_thread_state(
         self,
         thread_id: str,

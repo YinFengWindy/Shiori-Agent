@@ -396,6 +396,19 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     bus = _Bus()
     event_bus = EventBus()
     session_manager = _SessionManager(tmp_path)
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="bound telegram role",
+        system_prompt="you are mira",
+    )
+    role_store.update_role(
+        "mira",
+        channel_bindings=[
+            {"channel": "telegram", "chat_id": "123", "allow_from": []}
+        ],
+    )
     interrupt_controller = MagicMock()
     interrupt_controller.request_interrupt.return_value = SimpleNamespace(
         status="interrupted",
@@ -794,9 +807,12 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         description="bound qq role",
         system_prompt="you are mira",
     )
-    (tmp_path / "roles" / "channel_bindings.json").write_text(
-        '{"version":1,"bindings":{"qq:1":{"channel":"qq","chat_id":"1","role_id":"mira","created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"},"qq:gqq:100":{"channel":"qq","chat_id":"gqq:100","role_id":"mira","created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}}}',
-        encoding="utf-8",
+    role_store.update_role(
+        "mira",
+        channel_bindings=[
+            {"channel": "qq", "chat_id": "1", "allow_from": []},
+            {"channel": "qq", "chat_id": "gqq:100", "allow_from": []},
+        ],
     )
     async def _request_get(url, **kwargs):
         if url.endswith("a.jpg") or url.endswith("a.png"):
@@ -930,9 +946,11 @@ async def test_telegram_channel_routes_bound_inbound_to_role_session(
         description="bound telegram role",
         system_prompt="you are mira",
     )
-    (tmp_path / "roles" / "channel_bindings.json").write_text(
-        '{"version":1,"bindings":{"telegram:123":{"channel":"telegram","chat_id":"123","role_id":"mira","created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}}}',
-        encoding="utf-8",
+    role_store.update_role(
+        "mira",
+        channel_bindings=[
+            {"channel": "telegram", "chat_id": "123", "allow_from": []}
+        ],
     )
 
     interrupt_controller = MagicMock()

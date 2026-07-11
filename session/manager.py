@@ -433,6 +433,46 @@ class SessionManager:
         self.save(session)
         return session
 
+    def copy_legacy_messages_to_thread_session(
+        self,
+        source_session_key: str,
+        target_session: Session,
+        *,
+        thread_id: str,
+    ) -> int:
+        """Copies legacy history into a network thread runtime session once."""
+        clean_source_key = str(source_session_key or "").strip()
+        clean_thread_id = str(thread_id or "").strip()
+        if not clean_source_key or not clean_thread_id:
+            raise ValueError("legacy session key 和 thread_id 不能为空")
+
+        copied_source_ids = {
+            str(message.get("migration_source_message_id") or "").strip()
+            for message in target_session.messages
+        }
+        copies: list[dict[str, Any]] = []
+        for source in self._store.fetch_session_messages(clean_source_key):
+            source_id = str(source.get("id") or "").strip()
+            if not source_id or source_id in copied_source_ids:
+                continue
+            copied = {
+                key: value
+                for key, value in source.items()
+                if key not in {"id", "session_key", "seq"}
+            }
+            copied["thread_id"] = clean_thread_id
+            copied.setdefault("sender_role", str(copied.get("role") or ""))
+            copied["migration_source_session_key"] = clean_source_key
+            copied["migration_source_message_id"] = source_id
+            copies.append(copied)
+            copied_source_ids.add(source_id)
+
+        if not copies:
+            return 0
+        target_session.messages[0:0] = copies
+        self.save(target_session)
+        return len(copies)
+
     def normalize_role_session_display_state(
         self,
         role_id: str,

@@ -58,7 +58,9 @@ from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
 from core.roles import (
     RelationshipSnapshotOptimizer,
+    RoleConfigMigrator,
     RoleRelationshipRuntimeService,
+    RoleRepository,
     RoleStore,
 )
 from proactive_v2.presence import PresenceStore
@@ -432,6 +434,21 @@ def build_core_runtime(
     loop_model = config.agent_model or config.model
     session_manager = SessionManager(workspace)
     role_store = RoleStore(workspace)
+    role_migration = RoleConfigMigrator(
+        workspace,
+        RoleRepository(role_store),
+    ).migrate(config.proactive)
+    if (
+        role_migration.bindings_migrated
+        or role_migration.proactive_migrated
+        or role_migration.unresolved_bindings
+    ):
+        logger.info(
+            "角色配置迁移完成: bindings=%d proactive=%d unresolved=%d",
+            role_migration.bindings_migrated,
+            role_migration.proactive_migrated,
+            role_migration.unresolved_bindings,
+        )
     migration_summary = migrate_workspace_conversations(workspace, session_manager)
     logger.info(
         "conversation migration complete: migrated=%d unresolved=%d",

@@ -17,8 +17,6 @@ from bootstrap.tools import CoreRuntime, build_core_runtime
 from bus.event_bus import EventBus
 from core.roles import (
     LonelinessHeartbeatLoop,
-    RoleConfigMigrator,
-    RoleRepository,
 )
 
 def configure_logging_stream(stream) -> None:
@@ -133,18 +131,6 @@ class AppRuntime:
             self.memory_runtime = self.core.memory_runtime
             self.presence = self.core.presence
             self.relationship_runtime = self.core.relationship_runtime
-            role_store = self.relationship_runtime._role_store
-            migration = RoleConfigMigrator(
-                self.workspace,
-                RoleRepository(role_store),
-            ).migrate(self.config.proactive)
-            if migration.bindings_migrated or migration.proactive_migrated or migration.unresolved_bindings:
-                logger.info(
-                    "角色配置迁移完成: bindings=%d proactive=%d unresolved=%d",
-                    migration.bindings_migrated,
-                    migration.proactive_migrated,
-                    migration.unresolved_bindings,
-                )
             await self.core.start()
 
             plugin_manager = getattr(self.core, "plugin_manager", None)

@@ -38,6 +38,7 @@ from agent.looping.interrupt import InterruptController
 from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
 from infra.channels.reply_context import build_inbound_text_with_reply_context
+from infra.channels.session_key import resolve_outbound_session_key
 from infra.channels.telegram_utils import (
     TelegramOutboundLimiter,
     TelegramLiveEditQueue,
@@ -834,7 +835,10 @@ class TelegramChannel:
         preview = msg.content[:60] + "..." if len(msg.content) > 60 else msg.content
         logger.info(f"[telegram] 发送回复  chat_id={msg.chat_id}  内容: {preview!r}")
         cid = int(self._resolve_chat_id(msg.chat_id))
-        session_key = f"{self._channel}:{msg.chat_id}"
+        session_key = resolve_outbound_session_key(
+            msg,
+            default_channel=self._channel,
+        )
         had_live = self._has_live_messages(session_key)
         if had_live:
             await self._cancel_live_tasks(session_key)

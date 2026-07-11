@@ -43,6 +43,7 @@ from infra.channels.group_filter import (
     GroupMessageFilter,
     strip_at_segments,
 )
+from infra.channels.session_key import resolve_outbound_session_key
 from core.net.http import HttpRequester, RequestBudget, get_default_http_requester
 from session.manager import SessionManager
 
@@ -633,7 +634,10 @@ class QQChannel:
         api = self._api
         if api is None:
             raise RuntimeError("QQChannel 尚未启动")
-        session_key = _session_key_for_chat(msg.chat_id)
+        session_key = resolve_outbound_session_key(
+            msg,
+            default_channel=_CHANNEL,
+        )
         if not msg.chat_id.startswith(_GROUP_PREFIX):
             try:
                 await self._send_private_trace(msg.chat_id, session_key, msg)
