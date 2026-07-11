@@ -562,7 +562,7 @@ class QQChannel:
             await self.send(user_id, "当前未启用中断功能。")
             return
         result = self._interrupt_controller.request_interrupt(
-            session_key=f"{_CHANNEL}:{user_id}",
+            session_key=self._resolve_runtime_session_key(user_id),
             sender=user_id,
             command="/stop",
         )
@@ -621,11 +621,16 @@ class QQChannel:
             await self.send(chat_id, "当前未启用中断功能。")
             return
         result = self._interrupt_controller.request_interrupt(
-            session_key=f"{_CHANNEL}:{chat_id}",
+            session_key=self._resolve_runtime_session_key(chat_id),
             sender=user_id,
             command="/stop",
         )
         await self.send(chat_id, result.message)
+
+    def _resolve_runtime_session_key(self, chat_id: str) -> str:
+        if self._channel_hub is not None:
+            return self._channel_hub.resolve_runtime_session_key(_CHANNEL, chat_id)
+        return f"{_CHANNEL}:{chat_id}"
 
     # ── 出站路由 ──────────────────────────────────────────────────────
 

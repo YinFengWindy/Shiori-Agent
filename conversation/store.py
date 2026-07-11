@@ -439,6 +439,35 @@ class ConversationStore:
             raise ValueError(f"unresolved thread 升级失败: {unresolved_thread_id}")
         return self._row_to_thread(row)
 
+    def archive_thread_and_release_legacy_session_key(
+        self,
+        thread_id: str,
+    ) -> ThreadRecord:
+        """Archives a former role thread before its channel session is rebound."""
+        now = datetime.now().astimezone().isoformat()
+        with self._lock:
+            self._conn.execute(
+                """
+                UPDATE threads
+                SET archived = 1, legacy_session_key = NULL, updated_at = ?
+                WHERE id = ?
+                """,
+                (now, thread_id),
+            )
+            row = self._conn.execute(
+                """
+                SELECT id, role_id, contact_id, channel, thread_kind, external_thread_id,
+                       legacy_session_key, archived, metadata, created_at, updated_at
+                FROM threads
+                WHERE id = ?
+                """,
+                (thread_id,),
+            ).fetchone()
+            self._conn.commit()
+        if row is None:
+            raise ValueError(f"thread 不存在: {thread_id}")
+        return self._row_to_thread(row)
+
     def upsert_thread_state(
         self,
         thread_id: str,

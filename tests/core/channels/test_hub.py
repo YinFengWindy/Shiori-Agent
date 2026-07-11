@@ -140,3 +140,30 @@ def test_channel_hub_marks_archived_external_messages_as_duplicates(
     )
 
     assert duplicate.metadata["conversation_duplicate"] is True
+
+
+def test_channel_hub_resolves_control_actions_to_thread_session(tmp_path: Path) -> None:
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    _ = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="bound role",
+        system_prompt="you are mira",
+    )
+    _ = service.bindings.bind("telegram", "123", "mira")
+    hub = ChannelHub(service)
+    _ = hub.route_inbound(
+        InboundMessage(
+            channel="telegram",
+            sender="u1",
+            chat_id="123",
+            content="hello",
+        )
+    )
+
+    assert hub.resolve_runtime_session_key("telegram", "123") == "thread:mira:telegram:123"

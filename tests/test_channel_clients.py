@@ -495,7 +495,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     )
     await channel._on_stop_command(stop_update, context)
     interrupt_controller.request_interrupt.assert_called_once_with(
-        session_key="telegram:123",
+        session_key="thread:mira:telegram:123",
         sender="1",
         command="/stop",
     )
@@ -885,6 +885,10 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert bus.inbound[1].session_key == "thread:mira:qq:gqq:100"
     assert bus.inbound[1].metadata["thread_id"] == "thread:mira:qq:gqq:100"
     assert channel._interrupt_controller.request_interrupt.call_count == 2
+    assert [
+        call.kwargs["session_key"]
+        for call in channel._interrupt_controller.request_interrupt.call_args_list
+    ] == ["thread:mira:qq:1", "thread:mira:qq:gqq:100"]
 
     channel._run_on_bot_loop = AsyncMock(side_effect=_drain)
     sample = tmp_path / "image.bin"

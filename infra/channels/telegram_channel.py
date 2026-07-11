@@ -403,7 +403,14 @@ class TelegramChannel:
             )
             return
 
-        session_key = f"{self._channel}:{chat.id}"
+        session_key = (
+            self._channel_hub.resolve_runtime_session_key(
+                self._channel,
+                str(chat.id),
+            )
+            if self._channel_hub is not None
+            else f"{self._channel}:{chat.id}"
+        )
         result = self._interrupt_controller.request_interrupt(
             session_key=session_key,
             sender=str(user.id),

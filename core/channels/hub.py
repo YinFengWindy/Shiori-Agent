@@ -118,6 +118,12 @@ class ChannelHub:
         """Returns whether a channel session belongs to any role."""
         return self._service.bindings.get_binding(channel, chat_id) is not None
 
+    def resolve_runtime_session_key(self, channel: str, chat_id: str) -> str:
+        """Resolves a channel control action to the thread currently owning it."""
+        legacy_session_key = f"{channel}:{chat_id}"
+        thread = self._conversation.get_thread_by_session_key(legacy_session_key)
+        return thread.id if thread is not None else legacy_session_key
+
     def mark_delivery(
         self,
         message: OutboundMessage,

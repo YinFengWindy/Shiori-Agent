@@ -531,6 +531,11 @@ class SessionManager:
             "content",
             "timestamp",
             "tool_chain",
+            "thread_id",
+            "sender_role",
+            "media",
+            "external_message_id",
+            "delivery_status",
         }
         return {k: v for k, v in msg.items() if k not in skip}
 
@@ -652,6 +657,7 @@ class SessionManager:
                 "timestamp": timestamp,
                 "tool_chain": msg.get("tool_chain"),
                 "extra": self._extract_extra(msg),
+                **self._conversation_fields(msg),
             }
             if not isinstance(row["content"], str):
                 row["content"] = json.dumps(row["content"], ensure_ascii=False)

@@ -191,3 +191,36 @@ def test_conversation_service_resolves_thread_runtime_key(tmp_path: Path) -> Non
     resolved = service.get_thread_for_runtime(thread.id)
 
     assert resolved == thread
+
+
+def test_conversation_service_archives_old_role_thread_on_channel_rebind(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    service = ConversationService(manager)
+    first = service.ensure_thread_for_session(
+        LegacySessionDescriptor(
+            session_key="telegram:123",
+            role_id="mira",
+            channel="telegram",
+            chat_id="123",
+        )
+    )
+
+    rebound = service.ensure_thread_for_session(
+        LegacySessionDescriptor(
+            session_key="telegram:123",
+            role_id="yuki",
+            channel="telegram",
+            chat_id="123",
+        )
+    )
+
+    archived = manager.conversation_store.get_thread(first.id)
+    mapped = manager.conversation_store.get_thread_by_legacy_session_key("telegram:123")
+
+    assert archived is not None
+    assert archived.archived is True
+    assert archived.legacy_session_key == ""
+    assert rebound.id == "thread:yuki:telegram:123"
+    assert mapped == rebound

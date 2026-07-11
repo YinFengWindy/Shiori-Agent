@@ -96,8 +96,6 @@ class ConversationService:
         descriptor: LegacySessionDescriptor,
     ) -> ThreadRecord:
         existing = self._store.get_thread_by_legacy_session_key(descriptor.session_key)
-        if existing is not None and existing.thread_kind != "legacy/unresolved":
-            return existing
 
         clean_session_key = str(descriptor.session_key or "").strip()
         if not clean_session_key:
@@ -106,6 +104,25 @@ class ConversationService:
         clean_role_id = str(descriptor.role_id or "").strip()
         clean_channel = str(descriptor.channel or "").strip()
         clean_chat_id = str(descriptor.chat_id or "").strip()
+
+        if existing is not None and existing.thread_kind != "legacy/unresolved":
+            if self._matches_descriptor(
+                existing,
+                role_id=clean_role_id,
+                channel=clean_channel,
+                chat_id=clean_chat_id,
+            ):
+                return existing
+            if (
+                existing.thread_kind == "network"
+                and clean_role_id
+                and clean_channel
+                and clean_chat_id
+            ):
+                self._store.archive_thread_and_release_legacy_session_key(existing.id)
+                existing = None
+            else:
+                return existing
 
         if clean_session_key.startswith("role:") or clean_channel == "desktop":
             resolved_role_id = clean_role_id or clean_session_key.removeprefix("role:").strip()
@@ -142,6 +159,21 @@ class ConversationService:
             external_id=clean_chat_id or clean_session_key,
             created_at=descriptor.created_at,
             updated_at=descriptor.updated_at,
+        )
+
+    @staticmethod
+    def _matches_descriptor(
+        thread: ThreadRecord,
+        *,
+        role_id: str,
+        channel: str,
+        chat_id: str,
+    ) -> bool:
+        """Checks whether a legacy session still belongs to the same role world."""
+        return (
+            (not role_id or thread.role_id == role_id)
+            and (not channel or thread.channel == channel)
+            and (not chat_id or thread.external_thread_id == chat_id)
         )
 
     def sync_session_messages_to_thread(
