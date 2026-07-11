@@ -89,15 +89,6 @@ case "$cmd" in
         ensure_socket_config
         exec_as_host python main.py cli --config "$CONFIG" "$@"
         ;;
-    dashboard)
-        exec setpriv --reuid "$HOST_UID" --regid "$HOST_GID" --clear-groups \
-            env AKASHIC_ENABLE_LEGACY_DASHBOARD=1 \
-            python main.py dashboard \
-            --workspace "$WORKSPACE" \
-            --host "$DASHBOARD_HOST" \
-            --port "$DASHBOARD_PORT" \
-            "$@"
-        ;;
     *)
         exec_as_host "$cmd" "$@"
         ;;

@@ -865,27 +865,6 @@ async def test_loop_trigger_and_main_entry_cover_paths(
     core_runtime.stop.assert_awaited_once()
 
 
-def test_main_dashboard_entry_is_removed(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-):
-    config_path = tmp_path / "config.toml"
-    config_path.write_text("[llm]\nprovider='openai'\n", encoding="utf-8")
-
-    old_argv = sys.argv
-    try:
-        sys.argv = ["main.py", "dashboard", "--config", str(config_path)]
-        with pytest.raises(SystemExit) as exc:
-            runpy.run_module("main", run_name="__main__")
-    finally:
-        sys.argv = old_argv
-
-    assert exc.value.code == 2
-    output = capsys.readouterr().err
-    assert "已从正式后端入口移除" in output
-    assert "main.py bridge" in output
-
-
 def test_main_desktop_entry_is_removed(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

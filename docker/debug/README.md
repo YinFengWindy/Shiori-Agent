@@ -72,14 +72,6 @@ docker compose -f docker/debug/docker-compose.yml run --rm akashic-debug cli
 
 CLI socket 固定为 `/sandbox/akashic.sock`，不会连接正式实例。
 
-## 打开内部兼容 Dashboard
-
-```bash
-docker compose -f docker/debug/docker-compose.yml run --rm --service-ports akashic-debug dashboard
-```
-
-这个入口只用于内部兼容调试，不代表当前产品主路径。宿主机访问 `http://127.0.0.1:2237`。
-
 ## 停止调试环境
 
 ```bash
