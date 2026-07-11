@@ -60,23 +60,6 @@ class MemoryConfig:
 
 
 @dataclass
-class FitbitIntegrationConfig:
-    enabled: bool = False
-
-
-@dataclass
-class PeerAgentConfig:
-    name: str
-    base_url: str
-    launcher: list[str]          # 拉起命令，如 ["uv", "run", "python", "-m", "app.a2a_server"]
-    cwd: str | None = None       # 子进程工作目录，None 表示继承父进程
-    description: str = ""        # 工具描述，用于 LLM 路由；服务器在线时会被 AgentCard 覆盖
-    health_path: str = "/health"
-    startup_timeout_s: int = 30
-    shutdown_timeout_s: int = 10
-
-
-@dataclass
 class WiringConfig:
     context: str = "default"
     memory: str = "default"
@@ -112,7 +95,6 @@ class Config:
     agent_api_key: str = ""
     agent_base_url: str = ""
     memory: MemoryConfig = field(default_factory=MemoryConfig)
-    fitbit: FitbitIntegrationConfig = field(default_factory=FitbitIntegrationConfig)
     multimodal: bool = True
     vl_model: str = ""
     vl_api_key: str = ""
@@ -120,7 +102,6 @@ class Config:
     tool_search_enabled: bool = False
     spawn_enabled: bool = True
     dev_mode: bool = False
-    peer_agents: list[PeerAgentConfig] = field(default_factory=list)
     novelai: NovelAISettings = field(default_factory=NovelAISettings)
     wiring: WiringConfig = field(default_factory=WiringConfig)
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -135,11 +116,9 @@ class Config:
 __all__ = [
     "ChannelsConfig",
     "Config",
-    "FitbitIntegrationConfig",
     "MemoryConfig",
     "MemoryEmbeddingConfig",
     "NovelAISettings",
-    "PeerAgentConfig",
     "QQChannelConfig",
     "QQBotGroupConfig",
     "QQGroupConfig",

@@ -234,6 +234,33 @@ class ConversationStore:
             return None
         return self._row_to_thread(row)
 
+    def get_thread(self, thread_id: str) -> ThreadRecord | None:
+        """Returns one formal thread by its business identifier."""
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT id, role_id, contact_id, channel, thread_kind, external_thread_id,
+                       legacy_session_key, archived, metadata, created_at, updated_at
+                FROM threads
+                WHERE id = ?
+                """,
+                (thread_id,),
+            ).fetchone()
+        return self._row_to_thread(row) if row is not None else None
+
+    def get_contact(self, contact_id: str) -> ContactRecord | None:
+        """Returns one formal contact by its business identifier."""
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT id, role_id, kind, channel, external_id, display_name, metadata, created_at, updated_at
+                FROM contacts
+                WHERE id = ?
+                """,
+                (contact_id,),
+            ).fetchone()
+        return self._row_to_contact(row) if row is not None else None
+
     def upsert_contact(
         self,
         *,
@@ -363,6 +390,10 @@ class ConversationStore:
             metadata=metadata,
         )
 
+    def get_thread_state(self, thread_id: str) -> StateRecord | None:
+        """Returns the current derived state for a formal thread."""
+        return self._get_state("thread_state", "thread_id", thread_id)
+
     def upsert_contact_state(
         self,
         contact_id: str,
@@ -378,6 +409,10 @@ class ConversationStore:
             metadata=metadata,
         )
 
+    def get_contact_state(self, contact_id: str) -> StateRecord | None:
+        """Returns the current derived state for a formal contact."""
+        return self._get_state("contact_state", "contact_id", contact_id)
+
     def upsert_role_state(
         self,
         role_id: str,
@@ -392,6 +427,10 @@ class ConversationStore:
             summary=summary,
             metadata=metadata,
         )
+
+    def get_role_state(self, role_id: str) -> StateRecord | None:
+        """Returns the current derived state for a formal role."""
+        return self._get_state("role_state", "role_id", role_id)
 
     def count_unassigned_messages(self, session_key: str) -> int:
         with self._lock:
@@ -437,6 +476,48 @@ class ConversationStore:
             ).fetchall()
         return [cast_value if cast_value else None for cast_value in (row["thread_id"] for row in rows)]
 
+    def list_thread_messages(self, thread_id: str) -> list[dict[str, Any]]:
+        """Returns persisted message facts belonging to one formal thread."""
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT id, sender_role, content, media, external_message_id, delivery_status, ts
+                FROM messages
+                WHERE thread_id = ?
+                ORDER BY ts ASC, id ASC
+                """,
+                (thread_id,),
+            ).fetchall()
+        return [
+            {
+                "id": str(row["id"]),
+                "sender_role": str(row["sender_role"] or ""),
+                "content": str(row["content"] or ""),
+                "media": json.loads(row["media"] or "[]"),
+                "external_message_id": str(row["external_message_id"] or ""),
+                "delivery_status": str(row["delivery_status"] or ""),
+                "ts": str(row["ts"]),
+            }
+            for row in rows
+        ]
+
+    def has_external_message(self, thread_id: str, external_message_id: str) -> bool:
+        """Checks whether a channel delivery has already been archived for a thread."""
+        clean_external_id = str(external_message_id or "").strip()
+        if not clean_external_id:
+            return False
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT 1
+                FROM messages
+                WHERE thread_id = ? AND external_message_id = ?
+                LIMIT 1
+                """,
+                (thread_id, clean_external_id),
+            ).fetchone()
+        return row is not None
+
     def _upsert_state(
         self,
         table: str,
@@ -471,6 +552,26 @@ class ConversationStore:
             self._conn.commit()
         if row is None:
             raise ValueError(f"state upsert failed: {table}:{owner_id}")
+        return StateRecord(
+            owner_id=str(row[owner_column]),
+            summary=str(row["summary"] or ""),
+            metadata=json.loads(row["metadata"] or "{}"),
+            updated_at=str(row["updated_at"]),
+        )
+
+    def _get_state(
+        self,
+        table: str,
+        owner_column: str,
+        owner_id: str,
+    ) -> StateRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                f"SELECT {owner_column}, summary, metadata, updated_at FROM {table} WHERE {owner_column} = ?",
+                (owner_id,),
+            ).fetchone()
+        if row is None:
+            return None
         return StateRecord(
             owner_id=str(row[owner_column]),
             summary=str(row["summary"] or ""),

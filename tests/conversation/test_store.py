@@ -4,6 +4,8 @@ import sqlite3
 from pathlib import Path
 
 from conversation.store import ConversationStore
+from conversation.service import ConversationService
+from session.manager import SessionManager
 from session.store import SessionStore
 
 
@@ -148,3 +150,27 @@ def test_session_store_updates_latest_assistant_delivery_by_thread(
     assert updated["content"] == "first"
     assert updated["delivery_status"] == "sent"
     assert updated["external_message_id"] == "tg-1"
+
+
+def test_conversation_service_projects_thread_contact_and_role_state(
+    tmp_path: Path,
+) -> None:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.add_message("user", "hello")
+    manager.save(session)
+
+    service = ConversationService(manager)
+    thread = service.sync_session_messages_to_thread(
+        session.key,
+        role_id="mira",
+        channel="desktop",
+        chat_id="self",
+    )
+
+    projected = manager.conversation_store.get_thread_state(thread.id)
+    assert projected is not None
+    assert projected.metadata["message_count"] == 1
+    stored_thread = manager.conversation_store.get_thread(thread.id)
+    assert stored_thread is not None
+    assert stored_thread.id == thread.id

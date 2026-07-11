@@ -12,9 +12,6 @@ logger = logging.getLogger(__name__)
 
 from agent.config_models import Config, WiringConfig
 from agent.context import ContextBuilder
-from agent.peer_agent.process_manager import PeerProcessManager
-from agent.peer_agent.poller import PeerAgentPoller
-from agent.peer_agent.registry import PeerAgentRegistry
 from agent.looping.core import AgentLoop
 from agent.looping.ports import (
     AgentLoopConfig,
@@ -39,7 +36,6 @@ from bootstrap.toolsets.meta import (
     SpawnToolsetProvider,
     build_readonly_tools,
 )
-from bootstrap.toolsets.peer import build_peer_agent_resources
 from bootstrap.toolsets.protocol import ToolsetDeps
 from bootstrap.toolsets.schedule import (
     SchedulerToolsetProvider,
@@ -61,9 +57,12 @@ from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
 from core.roles import (
     RelationshipSnapshotOptimizer,
+    RoleBindingService,
     RoleRelationshipRuntimeService,
+    RoleRepository,
     RoleStore,
 )
+from conversation.migrator import ConversationMigrator
 from proactive_v2.presence import PresenceStore
 from session.manager import Session, SessionManager
 
@@ -85,32 +84,11 @@ class CoreRuntime:
     memory_runtime: MemoryRuntime
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
-    peer_process_manager: PeerProcessManager | None
-    peer_poller: PeerAgentPoller | None
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginManager | None" = None
 
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
-
-        if (
-            self.peer_poller is not None
-            and self.peer_process_manager is not None
-            and self.config.peer_agents
-        ):
-            peer_registry = PeerAgentRegistry(
-                process_manager=self.peer_process_manager,
-                poller=self.peer_poller,
-                requester=self.http_resources.local_service,
-            )
-            peer_tools = await peer_registry.discover_all(self.config.peer_agents)
-            for t in peer_tools:
-                self.tools.register(
-                    t,
-                    always_on=False,
-                    risk="external-side-effect",
-                )
-            self.peer_poller.start()
         if self.plugin_manager is not None:
             await self.plugin_manager.load_all()
             logger.info("插件加载完成: %d 个", self.plugin_manager.loaded_count)
@@ -251,10 +229,6 @@ class CoreRuntime:
             await self.plugin_manager.terminate_all()
         await self.mcp_registry.shutdown()
         await self.event_bus.aclose()
-        if self.peer_poller is not None:
-            await self.peer_poller.stop()
-        if self.peer_process_manager is not None:
-            await self.peer_process_manager.shutdown_all()
 
 
 def build_registered_tools(
@@ -276,8 +250,6 @@ def build_registered_tools(
     SchedulerService,
     McpServerRegistry,
     MemoryRuntime,
-    PeerProcessManager | None,
-    PeerAgentPoller | None,
 ]:
     from session.store import SessionStore
 
@@ -307,9 +279,6 @@ def build_registered_tools(
         workspace,
         push_tool,
         agent_loop_provider=agent_loop_provider,
-    )
-    peer_process_manager, peer_poller = build_peer_agent_resources(
-        config, bus, http_resources
     )
 
     # ── 第二阶段：注册工具（所有服务已就绪）──────────────────────────────────
@@ -354,8 +323,6 @@ def build_registered_tools(
         scheduler,
         mcp_registry,
         memory_runtime,
-        peer_process_manager,
-        peer_poller,
     )
 
 
@@ -467,8 +434,22 @@ def build_core_runtime(
     loop_model = config.agent_model or config.model
     session_manager = SessionManager(workspace)
     role_store = RoleStore(workspace)
+    binding_service = RoleBindingService(workspace, RoleRepository(role_store))
+    migrator = ConversationMigrator(
+        session_manager.db_path,
+        binding_resolver=binding_service.resolve_role_id,
+    )
+    try:
+        migration_summary = migrator.migrate()
+        logger.info(
+            "conversation migration complete: migrated=%d unresolved=%d",
+            len(migration_summary.migrated_session_keys),
+            len(migration_summary.unresolved_session_keys),
+        )
+    finally:
+        migrator.close()
     loop_ref: dict[str, AgentLoop] = {}
-    tools, push_tool, scheduler, mcp_registry, memory_runtime, peer_pm, peer_poller = (
+    tools, push_tool, scheduler, mcp_registry, memory_runtime = (
         build_registered_tools(
             config,
             workspace,
@@ -556,8 +537,6 @@ def build_core_runtime(
         memory_runtime=memory_runtime,
         presence=presence,
         relationship_runtime=relationship_runtime,
-        peer_process_manager=peer_pm,
-        peer_poller=peer_poller,
         plugin_manager=plugin_manager,
     )
 

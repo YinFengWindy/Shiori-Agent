@@ -102,8 +102,6 @@ class AppRuntime:
         self.presence = None
         self.relationship_runtime = None
         self.proactive_loop = None
-        self.peer_process_manager = None
-        self.peer_poller = None
         self._background_tasks: list[asyncio.Task[None]] = []
         self._memory_optimizer = None
         self._shutdown = False
@@ -133,8 +131,6 @@ class AppRuntime:
             self.memory_runtime = self.core.memory_runtime
             self.presence = self.core.presence
             self.relationship_runtime = self.core.relationship_runtime
-            self.peer_process_manager = self.core.peer_process_manager
-            self.peer_poller = self.core.peer_poller
             await self.core.start()
 
             plugin_manager = getattr(self.core, "plugin_manager", None)

@@ -402,7 +402,7 @@ def test_config_load_ignores_removed_fitbit_integration_block(tmp_path: Path):
 
     cfg = Config.load(cfg_path)
 
-    assert cfg.fitbit.enabled is False
+    assert not hasattr(cfg, "fitbit")
 
 
 def test_config_load_reads_toml_layout_and_ignores_removed_integrations_and_socket(
@@ -442,7 +442,7 @@ enabled = true
     assert cfg.max_tokens == 256
     assert cfg.memory_window == 12
     assert not hasattr(cfg.channels, "socket")
-    assert cfg.fitbit.enabled is False
+    assert not hasattr(cfg, "fitbit")
 
 
 def test_config_load_reads_qq_websocket_timeout(tmp_path: Path):
@@ -507,11 +507,6 @@ def test_build_registered_tools_respects_toolset_order_and_subset(monkeypatch, t
         "bootstrap.tools.build_scheduler",
         lambda *_args, **_kwargs: SimpleNamespace(),
     )
-    monkeypatch.setattr(
-        "bootstrap.tools.build_peer_agent_resources",
-        lambda *_args, **_kwargs: (None, None),
-    )
-
     config = ConfigModel(
         provider="openai",
         model="m",
@@ -724,11 +719,6 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
         "bootstrap.tools.build_scheduler",
         lambda *_args, **_kwargs: SimpleNamespace(),
     )
-    monkeypatch.setattr(
-        "bootstrap.tools.build_peer_agent_resources",
-        lambda *_args, **_kwargs: (None, None),
-    )
-
     config = ConfigModel(
         provider="openai",
         model="m",
@@ -736,7 +726,7 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
         system_prompt="s",
         wiring=WiringConfig(toolsets=["schedule"]),
     )
-    _, _, _, mcp_registry, _, _, _ = build_registered_tools(
+    _, _, _, mcp_registry, _ = build_registered_tools(
         config=config,
         workspace=tmp_path,
         http_resources=cast(Any, SimpleNamespace()),

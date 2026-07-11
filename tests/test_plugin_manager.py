@@ -1097,7 +1097,7 @@ async def test_core_runtime_start_wires_plugin_tool_hooks_to_loop_and_spawn():
     plugin_manager = FakePluginManager()
 
     runtime = CoreRuntime(
-        config=SimpleNamespace(peer_agents=[]),  # type: ignore[arg-type]
+        config=SimpleNamespace(),  # type: ignore[arg-type]
         http_resources=SimpleNamespace(local_service=None),  # type: ignore[arg-type]
         loop=loop,  # type: ignore[arg-type]
         bus=SimpleNamespace(),  # type: ignore[arg-type]
@@ -1112,8 +1112,6 @@ async def test_core_runtime_start_wires_plugin_tool_hooks_to_loop_and_spawn():
         memory_runtime=SimpleNamespace(),  # type: ignore[arg-type]
         presence=SimpleNamespace(),  # type: ignore[arg-type]
         relationship_runtime=SimpleNamespace(),  # type: ignore[arg-type]
-        peer_process_manager=None,
-        peer_poller=None,
         plugin_manager=plugin_manager,  # type: ignore[arg-type]
     )
 

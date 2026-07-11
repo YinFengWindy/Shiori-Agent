@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
 from conversation.models import ThreadRecord
+from conversation.projector import ConversationStateProjector
 from conversation.store import ConversationStore
 
 if TYPE_CHECKING:
@@ -49,9 +50,14 @@ class ConversationService:
                 db_path = workspace / "sessions.db"
             self._store = ConversationStore(db_path)
         self._binding_resolver = binding_resolver
+        self._projector = ConversationStateProjector(self._store)
 
     def get_thread_by_session_key(self, session_key: str) -> ThreadRecord | None:
         return self._store.get_thread_by_legacy_session_key(session_key)
+
+    def get_thread(self, thread_id: str) -> ThreadRecord | None:
+        """Looks up a formal thread without exposing a legacy session key."""
+        return self._store.get_thread(thread_id)
 
     def ensure_desktop_thread(self, role_id: str) -> ThreadRecord:
         clean_role_id = str(role_id or "").strip()
@@ -139,7 +145,12 @@ class ConversationService:
             )
         )
         self._store.assign_legacy_messages_to_thread(session_key, thread.id)
+        self._projector.project_thread(thread)
         return thread
+
+    def has_external_message(self, thread_id: str, external_message_id: str) -> bool:
+        """Checks inbound channel idempotency against archived thread messages."""
+        return self._store.has_external_message(thread_id, external_message_id)
 
     @staticmethod
     def serialize_thread(thread: ThreadRecord) -> dict[str, Any]:
