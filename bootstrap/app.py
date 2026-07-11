@@ -165,6 +165,7 @@ class AppRuntime:
                 provider=self.provider,
                 memory_store=self.memory_runtime.markdown.store,
             )
+            self.core.memory_optimizer = self._memory_optimizer
             self._background_tasks.extend(
                 asyncio.create_task(task, name=f"memory_optimizer:{index}")
                 for index, task in enumerate(optimizer_tasks)

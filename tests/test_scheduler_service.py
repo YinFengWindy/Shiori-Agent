@@ -166,6 +166,42 @@ async def test_stop_cancels_inflight_job_tasks(
     assert job.id not in svc._active_tasks
 
 
+async def test_cancel_job_stops_active_work(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def _slow_process_direct(**kwargs):
+        started.set()
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    mock_loop.process_direct = AsyncMock(side_effect=_slow_process_direct)
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    job = make_job(
+        trigger="at",
+        tier="soft",
+        fire_at=fixed_now - timedelta(seconds=30),
+        prompt="查询北京天气",
+    )
+    svc._jobs[job.id] = job
+
+    await svc._tick()
+    await started.wait()
+
+    assert svc.is_job_active(job.id) is True
+    assert svc.cancel_job(job.id) is True
+    await asyncio.wait_for(cancelled.wait(), timeout=0.1)
+    await drain_tasks()
+
+    assert job.id not in svc._jobs
+    assert svc.is_job_active(job.id) is False
+
+
 # ── Timing: pre-trigger ──────────────────────────────────────────
 
 

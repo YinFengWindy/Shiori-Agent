@@ -68,9 +68,6 @@ function createSettingsFormData(
     proactive: {
       enabled: false,
       profile: "default",
-      targetChannel: "desktop",
-      targetChatId: "",
-      targetRoleId: "",
       agentMaxSteps: 35,
       agentContentLimit: 5,
       agentWebFetchMaxChars: 8000,

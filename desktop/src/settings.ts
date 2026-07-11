@@ -123,21 +123,6 @@ function renderPluginBlocks(rawToml: string): string {
   return trimmed ? `${trimmed}\n` : "";
 }
 
-function normalizeDesktopProactiveChatId(
-  channel: string,
-  roleId: string,
-  chatId: string,
-): string {
-  if (channel !== "desktop") {
-    return chatId;
-  }
-  const cleanRoleId = roleId.trim();
-  if (!cleanRoleId) {
-    return "";
-  }
-  return `role:${cleanRoleId}`;
-}
-
 function renderPluginSection(name: string, value: Record<string, unknown>): string {
   const lines = [`[plugins.${name}]`];
   for (const [key, rawValue] of Object.entries(value)) {
@@ -186,7 +171,6 @@ export function loadSettingsData(): SettingsSnapshot {
   const memory = asRecord(parsed.memory);
   const embedding = asRecord(memory.embedding);
   const proactive = asRecord(parsed.proactive);
-  const proactiveTarget = asRecord(proactive.target);
   const proactiveAgent = asRecord(proactive.agent);
   const proactiveDrift = asRecord(proactive.drift);
   const integrations = asRecord(parsed.integrations);
@@ -196,16 +180,6 @@ export function loadSettingsData(): SettingsSnapshot {
   const agentTools = asRecord(agent.tools);
   const agentMaintenance = asRecord(agent.maintenance);
   const plugins = asRecord(parsed.plugins);
-  const targetChannel = String(proactiveTarget.channel ?? "");
-  const targetRoleId = String(
-    proactiveTarget.role_id ?? proactive.default_role_id ?? "",
-  );
-  const targetChatId = normalizeDesktopProactiveChatId(
-    targetChannel,
-    targetRoleId,
-    String(proactiveTarget.chat_id ?? ""),
-  );
-
   return {
     configPath,
     formData: {
@@ -258,9 +232,6 @@ export function loadSettingsData(): SettingsSnapshot {
       proactive: {
         enabled: Boolean(proactive.enabled),
         profile: String(proactive.profile ?? ""),
-        targetChannel,
-        targetChatId,
-        targetRoleId,
         agentMaxSteps: Number(proactiveAgent.max_steps ?? 35),
         agentContentLimit: Number(proactiveAgent.content_limit ?? 5),
         agentWebFetchMaxChars: Number(
@@ -308,13 +279,6 @@ export function loadSettingsData(): SettingsSnapshot {
 }
 
 function renderSettingsToml(formData: SettingsFormData): string {
-  const proactiveTargetChannel = formData.proactive.targetChannel.trim();
-  const proactiveTargetRoleId = formData.proactive.targetRoleId.trim();
-  const proactiveTargetChatId = normalizeDesktopProactiveChatId(
-    proactiveTargetChannel,
-    proactiveTargetRoleId,
-    formData.proactive.targetChatId.trim(),
-  );
   const qqGroupBlocks = formData.channels.qqGroups
     .filter((group) => group.groupId.trim())
     .map((group) =>
@@ -410,11 +374,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `enabled = ${formData.proactive.enabled ? "true" : "false"}`,
     `profile = ${quote(formData.proactive.profile)}`,
     "",
-    "[proactive.target]",
-    `channel = ${quote(proactiveTargetChannel)}`,
-    `chat_id = ${quote(proactiveTargetChatId)}`,
-    `role_id = ${quote(proactiveTargetRoleId)}`,
-    "",
     "[proactive.agent]",
     `max_steps = ${formData.proactive.agentMaxSteps}`,
     `content_limit = ${formData.proactive.agentContentLimit}`,
@@ -480,9 +439,6 @@ function validateSettings(formData: SettingsFormData): void {
     if (!Number.isInteger(value) || value <= 0) {
       throw new Error("embedding output_dimensionality 必须是正整数");
     }
-  }
-  if (formData.proactive.enabled && !formData.proactive.targetRoleId.trim()) {
-    throw new Error("启用 proactive 时必须指定默认角色");
   }
 }
 

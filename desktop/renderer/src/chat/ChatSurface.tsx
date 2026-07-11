@@ -13,6 +13,8 @@ import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { normalizeSessionMediaPaths } from "./chatMedia";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
+import { RoleTasksPanel } from "./RoleTasksPanel";
+import { useRoleTasks } from "./useRoleTasks";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { CopyIcon, DocumentIcon, QuoteIcon } from "../shared/icons";
 import { cx, focusVisibleRingClass } from "../shared/styles";
@@ -24,16 +26,6 @@ type MessageContextMenuState = {
   message: SessionMessage;
   messageKey: string;
   sender: string;
-};
-
-type RoleTask = {
-  id: string;
-  kind: string;
-  status: string;
-  label: string;
-  detail: string;
-  next_run_at: string;
-  cancellable: boolean;
 };
 
 type ChatSurfaceProps = {
@@ -130,23 +122,11 @@ export function ChatSurface({
   const [sidebarMode, setSidebarMode] = useState<"status" | "images" | "tasks">(
     hasStatusIllustration ? "status" : "images",
   );
-  const [roleTasks, setRoleTasks] = useState<RoleTask[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadTasks() {
-      if (!activeRoleId) return;
-      const response = await window.miraDesktop.invoke({ method: "roles.tasks.list", payload: { role_id: activeRoleId } });
-      if (!cancelled && !response.error) setRoleTasks((response.payload.tasks as RoleTask[]) ?? []);
-    }
-    void loadTasks();
-    return () => { cancelled = true; };
-  }, [activeRoleId]);
-
-  async function cancelRoleTask(taskId: string): Promise<void> {
-    const response = await window.miraDesktop.invoke({ method: "roles.tasks.cancel", payload: { role_id: activeRoleId, task_id: taskId } });
-    if (!response.error) setRoleTasks((response.payload.tasks as RoleTask[]) ?? []);
-  }
+  const roleTasks = useRoleTasks({
+    activeRoleId,
+    bridgeReady,
+    enabled: sidebarMode === "tasks" && !chatLatestImageSidebarCollapsed,
+  });
   const sessionMessages = activeSession?.messages ?? [];
   const currentLastMessageContent = sessionMessages.at(-1)?.content ?? "";
   const sidebarToggleGlyphClass =
@@ -756,18 +736,11 @@ export function ChatSurface({
                   visualsActive={renderHeavyVisuals}
                 />
               ) : sidebarMode === "tasks" ? (
-                <div className="grid h-full min-h-0 rounded-[20px] bg-[#F1F5F9] p-4 text-sm text-[#334155]">
-                  <div className="min-h-0 overflow-y-auto rounded-[16px] bg-white/90 p-3">
-                    {roleTasks.length ? roleTasks.map((task) => (
-                      <div key={task.id} className="border-b border-[#E6EBF2] py-3 last:border-b-0">
-                        <div className="flex items-center justify-between gap-2"><span className="font-semibold">{task.label}</span><span className="text-xs text-[#7A8593]">{task.status}</span></div>
-                        <div className="mt-1 text-xs text-[#667085]">{task.detail || task.kind}</div>
-                        {task.next_run_at ? <div className="mt-1 text-xs text-[#98A2B3]">{formatTimestamp(task.next_run_at)}</div> : null}
-                        {task.cancellable ? <button className="mt-2 rounded-md border border-[#D8DFE7] px-2 py-1 text-xs" type="button" onClick={() => void cancelRoleTask(task.id)}>取消</button> : null}
-                      </div>
-                    )) : <div className="grid h-full place-items-center text-xs text-[#98A2B3]">当前角色没有后台任务</div>}
-                  </div>
-                </div>
+                <RoleTasksPanel
+                  tasks={roleTasks.tasks}
+                  cancellingTaskId={roleTasks.cancellingTaskId}
+                  onCancel={(taskId) => void roleTasks.cancel(taskId).catch(() => undefined)}
+                />
               ) : (
                 <div className="grid h-full min-h-0 rounded-[20px] bg-[#F1F5F9] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
                   <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-[16px] bg-[#F1F5F9]">

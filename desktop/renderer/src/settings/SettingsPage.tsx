@@ -41,11 +41,6 @@ type SettingsPageProps = {
   onMetaChange?: (meta: { configPath: string; dirty: boolean }) => void;
 };
 
-type ProactiveTargetOption = {
-  value: string;
-  label: string;
-};
-
 function joinLines(values: string[]): string {
   return values.join("\n");
 }
@@ -90,12 +85,6 @@ function getBindingChatIdMeta(channel: string): { label: string; placeholder: st
       };
   }
 }
-
-const proactiveTargetOptions: ProactiveTargetOption[] = [
-  { value: "desktop", label: "桌面端" },
-  { value: "telegram", label: "Telegram" },
-  { value: "qq", label: "QQ" },
-];
 
 const proactiveProfileOptions: Array<{ value: string; label: string }> = [
   { value: "daily", label: "daily" },
@@ -318,10 +307,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   const loadRequestIdRef = useRef(0);
   const floatingActionClass =
     "grid h-10 w-10 place-items-center rounded-full border bg-white/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-default disabled:border-black/6 disabled:bg-white/60 disabled:text-[#b8b8b8] disabled:shadow-none";
-  const desktopTargetRoleId = draft?.proactive.targetRoleId.trim() ?? "";
-  const desktopTargetChatId = desktopTargetRoleId ? `role:${desktopTargetRoleId}` : "";
-  const proactiveTargetMeta = getBindingChatIdMeta(draft?.proactive.targetChannel ?? "");
-
   const loadPageData = useEffectEvent(async () => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
@@ -363,44 +348,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
       loadRequestIdRef.current += 1;
     };
   }, []);
-
-  function updateProactiveTargetChannel(nextChannel: string): void {
-    setDraft((current) => {
-      if (!current) return current;
-      const currentRoleId = current.proactive.targetRoleId.trim();
-      const currentDesktopChatId = currentRoleId ? `role:${currentRoleId}` : "";
-      const currentChatId = current.proactive.targetChatId;
-      const nextChatId = nextChannel === "desktop"
-        ? currentDesktopChatId
-        : (current.proactive.targetChannel === "desktop" && currentChatId === currentDesktopChatId ? "" : currentChatId);
-      return {
-        ...current,
-        proactive: {
-          ...current.proactive,
-          targetChannel: nextChannel,
-          targetChatId: nextChatId,
-        },
-      };
-    });
-  }
-
-  function updateProactiveTargetRoleId(nextRoleId: string): void {
-    setDraft((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        proactive: {
-          ...current.proactive,
-          targetRoleId: nextRoleId,
-          targetChatId: current.proactive.targetChannel === "desktop" && nextRoleId.trim()
-            ? `role:${nextRoleId.trim()}`
-            : current.proactive.targetChannel === "desktop"
-              ? ""
-              : current.proactive.targetChatId,
-        },
-      };
-    });
-  }
 
   useEffect(() => {
     if (!snapshot || !draft) return;

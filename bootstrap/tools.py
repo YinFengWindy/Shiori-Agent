@@ -85,8 +85,10 @@ class CoreRuntime:
     memory_runtime: MemoryRuntime
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
+    role_world_registry: RoleWorldRegistry
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginManager | None" = None
+    memory_optimizer: Any | None = None
 
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
@@ -341,7 +343,7 @@ def _build_loop_deps(
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
     relationship_runtime: RoleRelationshipRuntimeService,
-    role_world_registry: RoleWorldRegistry,
+    role_world_registry: RoleWorldRegistry | None = None,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
     context = resolve_context_factory(wiring.context)(
@@ -504,6 +506,7 @@ def build_core_runtime(
         event_bus=event_bus,
         memory_runtime=memory_runtime,
         relationship_runtime=relationship_runtime,
+        role_world_registry=role_world_registry,
     )
     loop = AgentLoop(
         loop_deps,

@@ -30,6 +30,11 @@ class SpawnTool(Tool):
         self._manager.add_tool_hooks(hooks)
 
     @property
+    def manager(self) -> SubagentManager:
+        """Returns the manager that owns spawned background jobs."""
+        return self._manager
+
+    @property
     def name(self) -> str:
         return "spawn"
 

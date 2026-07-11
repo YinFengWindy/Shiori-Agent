@@ -73,9 +73,6 @@ export type SettingsFormData = {
   proactive: {
     enabled: boolean;
     profile: string;
-    targetChannel: string;
-    targetChatId: string;
-    targetRoleId: string;
     agentMaxSteps: number;
     agentContentLimit: number;
     agentWebFetchMaxChars: number;

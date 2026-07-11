@@ -65,6 +65,21 @@ export type RoleProactiveConfig = {
   target_chat_id: string;
 };
 
+export type RoleTaskKind = "schedule" | "subagent" | "memory_maintenance";
+
+/** Role-owned background work returned by the desktop bridge. */
+export type RoleTask = {
+  id: string;
+  role_id: string;
+  kind: RoleTaskKind;
+  status: string;
+  label: string;
+  detail: string;
+  created_at: string;
+  next_run_at: string;
+  cancellable: boolean;
+};
+
 /** Single message in a role-bound session. */
 export type SessionMessage = {
   id?: string;

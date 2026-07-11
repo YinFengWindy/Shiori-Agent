@@ -173,11 +173,15 @@ def test_optimize_reports_busy_instead_of_waiting(tmp_path):
         await started.wait()
 
         assert optimizer.is_running
+        assert optimizer.active_role_id == "mira"
+        assert optimizer.active_started_at
         with pytest.raises(MemoryOptimizerBusy):
             await optimizer.optimize(role_id="mira")
 
         release.set()
         await running
+        assert optimizer.active_role_id == ""
+        assert optimizer.active_started_at == ""
 
     asyncio.run(run_case())
 

@@ -393,8 +393,16 @@ class SchedulerService:
         if job_id not in self._jobs:
             return False
         del self._jobs[job_id]
+        active_task = self._active_tasks.pop(job_id, None)
+        if active_task is not None:
+            active_task.cancel()
         self.store.save(self._jobs)
         return True
+
+    def is_job_active(self, job_id: str) -> bool:
+        """Returns whether a scheduled job currently has running work."""
+        task = self._active_tasks.get(job_id)
+        return task is not None and not task.done()
 
     def cancel_job_by_name(self, name: str) -> list[str]:
         cancelled = [jid for jid, j in self._jobs.items() if j.name == name]

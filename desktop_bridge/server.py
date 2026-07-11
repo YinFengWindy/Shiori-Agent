@@ -19,6 +19,7 @@ class DesktopBridgeServer:
     def __init__(self, runtime: CoreRuntime) -> None:
         self.runtime = runtime
         self.role_store = RoleStore(runtime.session_manager.workspace)
+        spawn_tool = runtime.tools.get_tool("spawn") if getattr(runtime, "tools", None) else None
         self.service = DesktopBridgeService(
             workspace=runtime.session_manager.workspace,
             role_store=self.role_store,
@@ -31,6 +32,8 @@ class DesktopBridgeServer:
             relationship_runtime=getattr(runtime, "relationship_runtime", None),
             presence=getattr(runtime, "presence", None),
             scheduler=getattr(runtime, "scheduler", None),
+            subagent_manager=getattr(spawn_tool, "manager", None),
+            memory_optimizer=getattr(runtime, "memory_optimizer", None),
         )
 
     async def serve_streams(self, *, read_line, write_payload) -> None:

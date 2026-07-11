@@ -101,14 +101,9 @@ base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 # =============================================================================
 
 [proactive]
-# 开启后 agent 会主动向你推送消息。需要先填好下方 chat_id 再设为 true。
+# 进程级主动能力开关；具体目标在角色详情中配置。
 enabled = false
 profile = "daily"
-
-[proactive.target]
-channel = "telegram"
-# 你的 Telegram user id（向 bot 发一条消息后从日志里可以拿到）。
-chat_id = ""
 
 [proactive.agent]
 max_steps = 35

@@ -223,6 +223,8 @@ class MemoryOptimizer:
         self._workspace = Path(workspace)
         self._max_tokens = max_tokens
         self._lock = asyncio.Lock()
+        self._active_role_id = ""
+        self._active_started_at = ""
 
     # 各步骤之间的间隔（秒），避免短时间内连续请求触发 limit_burst_rate
     _STEP_DELAY_SECONDS: int = 15
@@ -230,6 +232,16 @@ class MemoryOptimizer:
     @property
     def is_running(self) -> bool:
         return self._lock.locked()
+
+    @property
+    def active_role_id(self) -> str:
+        """Returns the role currently being maintained, if any."""
+        return self._active_role_id
+
+    @property
+    def active_started_at(self) -> str:
+        """Returns the start timestamp for the active maintenance run."""
+        return self._active_started_at
 
     async def optimize(self, *, role_id: str | None = None) -> None:
         """两步优化：合并 PENDING → MEMORY，更新 SELF。"""
@@ -239,7 +251,13 @@ class MemoryOptimizer:
         if self._lock.locked():
             raise MemoryOptimizerBusy("memory optimizer 正在运行")
         async with self._lock:
-            await self._optimize(role_id=clean_role_id)
+            self._active_role_id = clean_role_id
+            self._active_started_at = datetime.now().astimezone().isoformat()
+            try:
+                await self._optimize(role_id=clean_role_id)
+            finally:
+                self._active_role_id = ""
+                self._active_started_at = ""
 
     async def _optimize(self, *, role_id: str | None = None) -> None:
         clean_role_id = str(role_id or "").strip()

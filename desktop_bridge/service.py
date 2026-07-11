@@ -21,6 +21,7 @@ from desktop_bridge.chat_service import DesktopChatService
 from desktop_bridge.image_service import DesktopImageService
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from desktop_bridge.role_presenter import DesktopRolePresenter
+from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 from session.manager import Session, SessionManager
@@ -45,6 +46,8 @@ class DesktopBridgeService:
         relationship_runtime: RoleRelationshipRuntimeService | None = None,
         presence: Any | None = None,
         scheduler: Any | None = None,
+        subagent_manager: Any | None = None,
+        memory_optimizer: Any | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -69,6 +72,12 @@ class DesktopBridgeService:
         self.relationship_runtime = relationship_runtime
         self.presence = presence
         self.scheduler = scheduler
+        self.role_tasks = RoleTaskService(
+            scheduler=scheduler,
+            subagent_manager=subagent_manager,
+            memory_optimizer=memory_optimizer,
+            session_key_for_role=self.role_service.sessions.derive_session_key,
+        )
         self.app_service = DesktopAppService(
             role_service=self.role_service,
             session_manager=session_manager,
@@ -372,7 +381,7 @@ class DesktopBridgeService:
                 return self._ok(
                     request_id,
                     method,
-                    {"tasks": self._list_role_tasks(role_id)},
+                    {"tasks": self.role_tasks.list_tasks(role_id)},
                 )
             if method == "roles.tasks.cancel":
                 role_id = str(payload.get("role_id") or "").strip()
@@ -380,14 +389,8 @@ class DesktopBridgeService:
                 self.role_service.repository.get_required(role_id)
                 if not task_id:
                     raise ValueError("task_id 不能为空")
-                if self.scheduler is None:
-                    raise RuntimeError("调度器未启用")
-                job = next((item for item in self.scheduler.list_jobs() if item.id == task_id), None)
-                if job is None or job.role_id != role_id:
-                    raise KeyError("角色任务不存在")
-                if not self.scheduler.cancel_job(task_id):
-                    raise RuntimeError("取消任务失败")
-                return self._ok(request_id, method, {"tasks": self._list_role_tasks(role_id)})
+                tasks = await self.role_tasks.cancel_task(role_id, task_id)
+                return self._ok(request_id, method, {"tasks": tasks})
             if method == "chat.send":
                 role_id = str(payload.get("role_id") or "").strip()
                 content = str(payload.get("content") or "").strip()
@@ -623,44 +626,6 @@ class DesktopBridgeService:
             role_store=self.role_store,
             workspace=self.workspace,
         )
-
-    def _list_role_tasks(self, role_id: str) -> list[dict[str, object]]:
-        schedule_tasks = [] if self.scheduler is None else [
-            {
-                "id": job.id,
-                "role_id": job.role_id,
-                "kind": "schedule",
-                "status": "running" if job.id in self.scheduler._active_tasks else "scheduled",
-                "label": job.name or job.id[:8],
-                "detail": job.message or job.prompt or "",
-                "created_at": job.created_at.isoformat(),
-                "next_run_at": job.fire_at.isoformat(),
-                "cancellable": True,
-            }
-            for job in self.scheduler.list_jobs()
-            if job.role_id == role_id
-        ]
-        spawn_tool = self.agent_loop.tools.get_tool("spawn")
-        manager = getattr(spawn_tool, "_manager", None)
-        if manager is None:
-            return schedule_tasks
-        role_session_key = self.role_service.sessions.derive_session_key(role_id)
-        subagent_tasks = [
-            {
-                "id": str(job["job_id"]),
-                "role_id": role_id,
-                "kind": "subagent",
-                "status": "running",
-                "label": str(job["label"]),
-                "detail": str(job["task"]),
-                "created_at": str(job["started_at"]),
-                "next_run_at": "",
-                "cancellable": True,
-            }
-            for job in manager.list_running_jobs()
-            if str(job.get("origin_chat_id") or "") == role_session_key
-        ]
-        return [*schedule_tasks, *subagent_tasks]
 
     def _build_self_seed_generator(self) -> LlmRoleSelfSeedGenerator | None:
         if self.config is None:
