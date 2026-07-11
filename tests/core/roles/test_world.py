@@ -89,6 +89,16 @@ async def test_registry_allows_different_roles_to_execute_independently(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_role_capabilities_reject_the_wrong_work_kind(tmp_path):
+    repository = RoleRepository(RoleStore(tmp_path))
+    role = repository.create_role(role_id="mira", name="Mira", system_prompt="test")
+    registry = RoleWorldRegistry(repository)
+
+    with pytest.raises(ValueError, match="不接受工作类型"):
+        await registry.dispatch_proactive_tick(_context(role), _return_none)
+
+
+@pytest.mark.asyncio
 async def test_registry_refreshes_configuration_without_replacing_the_world(tmp_path):
     repository = RoleRepository(RoleStore(tmp_path))
     role = repository.create_role(

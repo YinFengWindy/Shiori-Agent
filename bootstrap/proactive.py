@@ -118,7 +118,7 @@ def _build_role_tick_dispatcher(*, role_id: str, channel: str, chat_id: str, reg
             source="proactive",
             work_kind="proactive_tick",
         )
-        return await registry.dispatch_thread(context, operation)
+        return await registry.dispatch_proactive_tick(context, operation)
 
     return dispatch
 

@@ -642,7 +642,7 @@ class AgentLoop:
                 session_key=session_key,
                 dispatch_outbound=dispatch_outbound,
             )
-        return await registry.dispatch_thread(
+        return await registry.dispatch_passive_turn(
             context,
             lambda: self._process(
                 item,
@@ -753,7 +753,7 @@ class AgentLoop:
         context = registry.context_from_metadata(metadata)
         if context is None:
             raise ValueError("后台任务缺少完整 RoleExecutionContext")
-        return await registry.dispatch_thread(context, operation)
+        return await registry.dispatch_background_task(context, operation)
 
     async def _run_agent_loop(
         self,

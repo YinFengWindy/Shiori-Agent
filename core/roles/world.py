@@ -158,6 +158,25 @@ class RoleWorld:
                     self._tasks.discard(task)
                 self._active_work -= 1
 
+    async def run_passive_turn(self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]) -> T:
+        """Runs the role's inbound conversation capability."""
+        self._require_work_kind(context, "passive_turn")
+        return await self.execute_thread(context, operation)
+
+    async def run_proactive_tick(self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]) -> T:
+        """Runs the role's proactive capability."""
+        self._require_work_kind(context, "proactive_tick")
+        return await self.execute_thread(context, operation)
+
+    async def run_background_task(self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]) -> T:
+        """Runs the role's persisted or deferred background capability."""
+        self._require_work_kind(context, "scheduled_job")
+        return await self.execute_thread(context, operation)
+
+    async def send_channel(self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]) -> T:
+        """Runs a role-authorized channel send through its owning world."""
+        return await self.execute_thread(context, operation)
+
     async def execute_role_state(
         self,
         context: RoleExecutionContext,
@@ -184,6 +203,11 @@ class RoleWorld:
             raise RuntimeError(f"角色世界已停止: {self.role_id}")
         if context.role_id != self.role_id:
             raise ValueError("RoleExecutionContext 角色与 RoleWorld 不匹配")
+
+    @staticmethod
+    def _require_work_kind(context: RoleExecutionContext, expected: str) -> None:
+        if context.work_kind != expected:
+            raise ValueError(f"角色能力不接受工作类型: {context.work_kind}")
 
 
 class RoleWorldRegistry:
@@ -241,6 +265,18 @@ class RoleWorldRegistry:
 
         world = await self.get(context.role_id)
         return await world.execute_thread(context, operation)
+
+    async def dispatch_passive_turn(self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]) -> T:
+        """Dispatches the inbound conversation capability for a role."""
+        return await (await self.get(context.role_id)).run_passive_turn(context, operation)
+
+    async def dispatch_proactive_tick(self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]) -> T:
+        """Dispatches the proactive capability for a role."""
+        return await (await self.get(context.role_id)).run_proactive_tick(context, operation)
+
+    async def dispatch_background_task(self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]) -> T:
+        """Dispatches a background capability for a role."""
+        return await (await self.get(context.role_id)).run_background_task(context, operation)
 
     async def dispatch_role_state(
         self,
