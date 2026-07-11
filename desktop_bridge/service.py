@@ -625,9 +625,7 @@ class DesktopBridgeService:
         )
 
     def _list_role_tasks(self, role_id: str) -> list[dict[str, object]]:
-        if self.scheduler is None:
-            return []
-        return [
+        schedule_tasks = [] if self.scheduler is None else [
             {
                 "id": job.id,
                 "role_id": job.role_id,
@@ -642,6 +640,27 @@ class DesktopBridgeService:
             for job in self.scheduler.list_jobs()
             if job.role_id == role_id
         ]
+        spawn_tool = self.agent_loop.tools.get_tool("spawn")
+        manager = getattr(spawn_tool, "_manager", None)
+        if manager is None:
+            return schedule_tasks
+        role_session_key = self.role_service.sessions.derive_session_key(role_id)
+        subagent_tasks = [
+            {
+                "id": str(job["job_id"]),
+                "role_id": role_id,
+                "kind": "subagent",
+                "status": "running",
+                "label": str(job["label"]),
+                "detail": str(job["task"]),
+                "created_at": str(job["started_at"]),
+                "next_run_at": "",
+                "cancellable": True,
+            }
+            for job in manager.list_running_jobs()
+            if str(job.get("origin_chat_id") or "") == role_session_key
+        ]
+        return [*schedule_tasks, *subagent_tasks]
 
     def _build_self_seed_generator(self) -> LlmRoleSelfSeedGenerator | None:
         if self.config is None:
