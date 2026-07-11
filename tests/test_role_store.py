@@ -8,7 +8,9 @@ from datetime import datetime
 from bus.events import InboundMessage
 from core.roles import (
     RoleAggregateService,
+    RoleConfigMigrator,
     RoleLegacyMigrator,
+    RoleRepository,
     RoleStore,
     route_inbound_by_role,
 )
@@ -130,6 +132,80 @@ def test_role_store_persists_runtime_config_updates(tmp_path: Path):
     reloaded = store.get_role("mira")
     assert reloaded is not None
     assert reloaded.runtime_config["nsfw_memory_enabled"] is True
+
+
+def test_role_store_keeps_channel_access_and_proactive_target_on_the_role(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    store.create_role(name="Luna", system_prompt="luna", role_id="luna")
+
+    updated = store.update_role(
+        "mira",
+        channel_bindings=[
+            {"channel": "telegram", "chat_id": "42", "allow_from": ["alice", "42"]},
+            {"channel": "qq", "chat_id": "gqq:7", "allow_from": []},
+        ],
+        proactive={"enabled": True, "target_channel": "qq", "target_chat_id": "gqq:7"},
+    )
+
+    assert updated.channel_bindings[0].allow_from == ["42", "alice"]
+    assert updated.proactive.target_channel == "qq"
+    luna = store.get_role("luna")
+    assert luna is not None
+    assert luna.channel_bindings == []
+
+
+def test_role_store_rejects_proactive_target_outside_its_bindings(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+
+    try:
+        store.update_role(
+            "mira",
+            proactive={"enabled": True, "target_channel": "telegram", "target_chat_id": "42"},
+        )
+    except ValueError as exc:
+        assert "当前角色已绑定" in str(exc)
+    else:
+        raise AssertionError("主动推送目标必须属于当前角色")
+
+
+def test_role_store_disables_proactive_when_its_target_binding_is_removed(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    store.update_role(
+        "mira",
+        channel_bindings=[{"channel": "telegram", "chat_id": "42", "allow_from": []}],
+        proactive={"enabled": True, "target_channel": "telegram", "target_chat_id": "42"},
+    )
+
+    updated = store.update_role("mira", channel_bindings=[])
+
+    assert updated.proactive.enabled is False
+    assert updated.proactive.target_channel == ""
+
+
+def test_role_config_migration_copies_legacy_file_once_without_runtime_fallback(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    (tmp_path / "roles" / "channel_bindings.json").write_text(
+        json.dumps({"version": 1, "bindings": {"telegram:42": {"channel": "telegram", "chat_id": "42", "role_id": "mira"}}}),
+        encoding="utf-8",
+    )
+    proactive = type("LegacyProactive", (), {"enabled": True, "default_role_id": "mira", "default_channel": "telegram", "default_chat_id": "42"})()
+
+    migrator = RoleConfigMigrator(tmp_path, RoleRepository(store))
+    first = migrator.migrate(proactive)
+    second = migrator.migrate(proactive)
+
+    role = store.get_role("mira")
+    assert first.bindings_migrated == 1
+    assert first.proactive_migrated == 1
+    assert second.bindings_migrated == 0
+    assert second.proactive_migrated == 0
+    assert role is not None
+    assert role.channel_bindings[0].chat_id == "42"
+    assert role.proactive.enabled is True
 
 
 def test_role_store_delete_role_removes_role_runtime_directory(tmp_path: Path):

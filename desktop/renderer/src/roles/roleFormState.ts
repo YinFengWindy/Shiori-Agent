@@ -9,6 +9,10 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     description: role.description,
     systemPrompt: role.system_prompt,
     nsfwMemoryEnabled: Boolean(role.runtime_config?.nsfw_memory_enabled),
+    channelBindings: role.channel_bindings ?? [],
+    proactiveEnabled: role.proactive?.enabled ?? false,
+    proactiveTargetChannel: role.proactive?.target_channel ?? "",
+    proactiveTargetChatId: role.proactive?.target_chat_id ?? "",
     avatarSource: "",
     illustrationSources: [],
     removedIllustrations: [],
@@ -28,6 +32,10 @@ export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null
         || roleForm.description !== role.description
         || roleForm.systemPrompt !== role.system_prompt
         || roleForm.nsfwMemoryEnabled !== Boolean(role.runtime_config?.nsfw_memory_enabled)
+        || JSON.stringify(roleForm.channelBindings ?? []) !== JSON.stringify(role.channel_bindings ?? [])
+        || Boolean(roleForm.proactiveEnabled) !== Boolean(role.proactive?.enabled)
+        || (roleForm.proactiveTargetChannel ?? "") !== (role.proactive?.target_channel ?? "")
+        || (roleForm.proactiveTargetChatId ?? "") !== (role.proactive?.target_chat_id ?? "")
         || !roleMoodConfigEqual(roleForm, persistedMoodConfig)
         || Boolean(roleForm.avatarSource)
         || roleForm.illustrationSources.length > 0

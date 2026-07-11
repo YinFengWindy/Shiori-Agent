@@ -81,7 +81,7 @@ class ChannelHub:
         metadata.setdefault("context_chat_id", message.chat_id)
         metadata.setdefault("transport_channel", message.channel)
         metadata.setdefault("transport_chat_id", message.chat_id)
-        metadata.setdefault("source", "legacy_channel_binding")
+        metadata.setdefault("source", "role_channel_binding")
         return InboundMessage(
             channel=message.channel,
             sender=message.sender,
@@ -91,6 +91,32 @@ class ChannelHub:
             media=list(message.media),
             metadata=metadata,
         )
+
+    def is_sender_allowed(
+        self,
+        *,
+        channel: str,
+        chat_id: str,
+        sender_id: str,
+        sender_alias: str = "",
+    ) -> bool:
+        """Checks the owning role binding's allow-list before inbound handling."""
+        binding = self._service.bindings.get_binding(channel, chat_id)
+        if binding is None:
+            return False
+        role = self._service.repository.get_required(binding.role_id)
+        config = next(
+            item for item in role.channel_bindings
+            if item.channel == channel and item.chat_id == chat_id
+        )
+        if not config.allow_from:
+            return True
+        allowed = set(config.allow_from)
+        return sender_id in allowed or (sender_alias and sender_alias.lower() in {item.lower() for item in allowed})
+
+    def has_binding(self, channel: str, chat_id: str) -> bool:
+        """Returns whether a channel session belongs to any role."""
+        return self._service.bindings.get_binding(channel, chat_id) is not None
 
     def mark_delivery(
         self,

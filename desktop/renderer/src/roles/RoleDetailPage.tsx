@@ -57,7 +57,7 @@ export function RoleDetailPage({
 
   useLayoutEffect(() => {
     pendingScrollTopRef.current = restoreRoleDetailScrollTop(pageRef.current, pendingScrollTopRef.current);
-  }, [roleForm.name, roleForm.description, roleForm.systemPrompt, roleForm.nsfwMemoryEnabled]);
+  }, [roleForm]);
 
   function preserveScrollDuringFormUpdate(
     next: React.SetStateAction<RoleFormState>,
@@ -177,6 +177,66 @@ export function RoleDetailPage({
                 />
                 <span>NSFW 记忆</span>
               </label>
+              <div className="grid gap-3 rounded-md border border-[#D8DFE7] bg-white/82 p-4 text-xs text-[#374151]" data-testid="role-channel-config">
+                <div className="flex items-center justify-between gap-3">
+                  <span>渠道绑定</span>
+                  <button
+                    className="rounded-md border border-[#D8DFE7] px-2 py-1 transition hover:border-primary"
+                    type="button"
+                    onClick={() => preserveScrollDuringFormUpdate((current) => ({
+                      ...current,
+                      channelBindings: [...(current.channelBindings ?? []), { channel: "telegram", chat_id: "", allow_from: [] }],
+                    }))}
+                  >
+                    添加
+                  </button>
+                </div>
+                {(roleForm.channelBindings ?? []).map((binding, index) => (
+                  <div className="grid gap-2 rounded-md border border-[#E4EAF0] p-3" key={`${binding.channel}:${binding.chat_id}:${index}`}>
+                    <div className="grid gap-2 md:grid-cols-[120px_minmax(0,1fr)_auto]">
+                      <select
+                        className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                        value={binding.channel}
+                        onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, channel: event.target.value } : item) }))}
+                      >
+                        <option value="telegram">Telegram</option>
+                        <option value="qq">QQ</option>
+                        <option value="desktop">桌面端</option>
+                      </select>
+                      <input
+                        className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                        value={binding.chat_id}
+                        placeholder="会话 / 群组 ID"
+                        onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, chat_id: event.target.value } : item) }))}
+                      />
+                      <button className="text-[#a33] transition hover:text-[#711]" type="button" onClick={() => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).filter((_, itemIndex) => itemIndex !== index) }))}>移除</button>
+                    </div>
+                    <input
+                      className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                      value={binding.allow_from.join(", ")}
+                      placeholder="允许对象（逗号分隔；留空允许全部）"
+                      onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, allow_from: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) } : item) }))}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="grid gap-3 rounded-md border border-[#D8DFE7] bg-white/82 p-4 text-xs text-[#374151]" data-testid="role-proactive-config">
+                <label className="flex items-center gap-3">
+                  <input className={cx("h-4 w-4 rounded border-[#D8DFE7] text-[#111827]", focusVisibleRingClass)} type="checkbox" checked={Boolean(roleForm.proactiveEnabled)} onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveEnabled: event.target.checked }))} />
+                  <span>主动推送</span>
+                </label>
+                <select
+                  className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                  value={`${roleForm.proactiveTargetChannel ?? ""}:${roleForm.proactiveTargetChatId ?? ""}`}
+                  onChange={(event) => {
+                    const selected = (roleForm.channelBindings ?? []).find((binding) => `${binding.channel}:${binding.chat_id}` === event.target.value);
+                    preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveTargetChannel: selected?.channel ?? "", proactiveTargetChatId: selected?.chat_id ?? "" }));
+                  }}
+                >
+                  <option value=":">不主动推送</option>
+                  {(roleForm.channelBindings ?? []).filter((binding) => binding.chat_id.trim()).map((binding) => <option key={`${binding.channel}:${binding.chat_id}`} value={`${binding.channel}:${binding.chat_id}`}>{binding.channel}: {binding.chat_id}</option>)}
+                </select>
+              </div>
             </div>
           </div>
         </div>

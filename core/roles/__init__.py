@@ -17,6 +17,8 @@ from .relationship_runtime import (
     RoleRelationshipRuntimeService,
 )
 from .store import RoleRecord, RoleStore
+from .store import RoleChannelBindingConfig, RoleProactiveConfig
+from .config_migration import RoleConfigMigrationSummary, RoleConfigMigrator
 
 __all__ = [
     "InboundRoleRouter",
@@ -25,11 +27,15 @@ __all__ = [
     "RoleAggregateService",
     "RoleBindingService",
     "RoleChannelBinding",
+    "RoleChannelBindingConfig",
+    "RoleConfigMigrationSummary",
+    "RoleConfigMigrator",
     "RoleMemoryService",
     "RoleRelationshipRuntimeService",
     "RoleSelfSeedGenerator",
     "RoleMigrationSummary",
     "RoleRecord",
+    "RoleProactiveConfig",
     "RoleRepository",
     "RoleRequest",
     "RelationshipSnapshotLoop",

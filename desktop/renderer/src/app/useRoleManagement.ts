@@ -206,6 +206,12 @@ export function useRoleManagement({
           },
           nextRoleForm,
         ),
+        channel_bindings: nextRoleForm.channelBindings ?? [],
+        proactive: {
+          enabled: Boolean(nextRoleForm.proactiveEnabled),
+          target_channel: nextRoleForm.proactiveTargetChannel ?? "",
+          target_chat_id: nextRoleForm.proactiveTargetChatId ?? "",
+        },
         avatar_source: nextRoleForm.avatarSource || undefined,
         illustration_sources: nextRoleForm.illustrationSources,
         removed_illustrations: nextRoleForm.removedIllustrations,

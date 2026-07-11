@@ -284,7 +284,6 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
   ],
   proactive: [
     { id: "general", label: "基础" },
-    { id: "target", label: "目标" },
     { id: "agent", label: "Agent 参数" },
     { id: "drift", label: "Drift" },
   ],
@@ -520,49 +519,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     if (!currentId || !currentSubsectionId) return null;
     const draft = formData;
 
-    function renderRoleBindingsForChannel(channel: SettingsChannelRoleBinding["channel"]): React.ReactNode {
-      const bindings = draft.channels.roleBindings
-        .map((binding, index) => ({ binding, index }))
-        .filter((entry) => entry.binding.channel === channel);
-
-      return (
-        <Field label="角色绑定" hint="把当前频道里的具体会话身份绑定到角色。" layout="stack">
-          <div className="grid gap-3">
-            {bindings.length ? bindings.map(({ binding, index }) => (
-              <ChannelRoleBindingEditor
-                channel={channel}
-                key={`${binding.channel}-${binding.chatId}-${index}`}
-                binding={binding}
-                roles={roles}
-                onChange={(nextBinding) => updateDraft((current) => {
-                  const nextBindings = [...current.channels.roleBindings];
-                  nextBindings[index] = nextBinding;
-                  return {
-                    ...current,
-                    channels: { ...current.channels, roleBindings: nextBindings },
-                  };
-                })}
-                onRemove={() => updateDraft((current) => ({
-                  ...current,
-                  channels: {
-                    ...current.channels,
-                    roleBindings: current.channels.roleBindings.filter((_, bindingIndex) => bindingIndex !== index),
-                  },
-                }))}
-              />
-            )) : null}
-            <AddListAction label="添加角色绑定" onAdd={() => updateDraft((current) => ({
-              ...current,
-              channels: {
-                ...current.channels,
-                roleBindings: [...current.channels.roleBindings, { channel, chatId: "", roleId: "" }],
-              },
-            }))} />
-          </div>
-        </Field>
-      );
-    }
-
     switch (currentId) {
       case "models":
         switch (currentSubsectionId) {
@@ -627,10 +583,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="Telegram Token">
                   <SecretInput value={draft.channels.telegramToken} onChange={(value) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramToken: value } }))} />
                 </Field>
-                <Field label="Telegram Allow From" hint="每行一个用户名，不带 @。">
-                  <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.telegramAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, telegramAllowFrom: splitLines(event.target.value) } }))} />
-                </Field>
-                {renderRoleBindingsForChannel("telegram")}
               </SectionCard>
             );
           case "qq":
@@ -639,39 +591,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <Field label="Bot QQ号" hint="填入Bot 的QQ号；留空则不启用 QQ 渠道。">
                   <input className={cx(inputClass, "bg-white")} value={draft.channels.qqBotUin} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqBotUin: event.target.value } }))} />
                 </Field>
-                <Field label="QQ Allow From" hint="每行一个 QQ 号。">
-                  <textarea className={cx(textareaClass, "min-h-20 bg-white")} value={joinLines(draft.channels.qqAllowFrom)} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqAllowFrom: splitLines(event.target.value) } }))} />
-                </Field>
-                <Field label="QQ 群组规则" layout="stack">
-                  <div className="grid gap-3">
-                    {draft.channels.qqGroups.map((group, index) => (
-                      <GroupEditor
-                        key={`${group.groupId}-${index}`}
-                        group={group}
-                        onChange={(nextGroup) => updateDraft((current) => {
-                          const next = [...current.channels.qqGroups];
-                          next[index] = nextGroup;
-                          return { ...current, channels: { ...current.channels, qqGroups: next } };
-                        })}
-                        onRemove={() => updateDraft((current) => ({
-                          ...current,
-                          channels: {
-                            ...current.channels,
-                            qqGroups: current.channels.qqGroups.filter((_, groupIndex) => groupIndex !== index),
-                          },
-                        }))}
-                      />
-                    ))}
-                    <AddListAction label="添加 QQ 群组" onAdd={() => updateDraft((current) => ({
-                      ...current,
-                      channels: {
-                        ...current.channels,
-                        qqGroups: [...current.channels.qqGroups, { groupId: "", allowFrom: [], requireAt: true }],
-                      },
-                    }))} />
-                  </div>
-                </Field>
-                {renderRoleBindingsForChannel("qq")}
               </SectionCard>
             );
           default:
@@ -717,7 +636,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           case "general":
             return (
               <SectionCard>
-                <ToggleField label="主动推送" checked={draft.proactive.enabled} onChange={(checked) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, enabled: checked } }))} />
                 <Field label="推送策略" hint="当前设置页先开放内置的 `daily` 策略。">
                   <select className={cx(inputClass, "bg-white")} value={draft.proactive.profile} onChange={(event) => updateDraft((current) => ({ ...current, proactive: { ...current.proactive, profile: event.target.value } }))}>
                     {proactiveProfileOptions.map((option) => (
@@ -725,36 +643,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                     ))}
                   </select>
                 </Field>
-              </SectionCard>
-            );
-          case "target":
-            return (
-              <SectionCard>
-                <Field label="目标">
-                  <select className={cx(inputClass, "bg-white")} value={draft.proactive.targetChannel} onChange={(event) => updateProactiveTargetChannel(event.target.value)}>
-                    <option value="">请选择目标</option>
-                    {proactiveTargetOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="默认角色" hint="主动推送优先使用这个角色；如果该角色绑定了多个 transport，仍建议同时明确填写目标频道和 Chat ID。">
-                  <select className={cx(inputClass, "bg-white")} value={draft.proactive.targetRoleId} onChange={(event) => updateProactiveTargetRoleId(event.target.value)}>
-                    <option value="" disabled={draft.proactive.enabled}>请选择角色</option>
-                    {roles.map((role) => (
-                      <option key={role.id} value={role.id}>{role.name}</option>
-                    ))}
-                  </select>
-                </Field>
-                {draft.proactive.targetChannel ? (
-                  <Field label={proactiveTargetMeta.label} hint={proactiveTargetMeta.hint}>
-                    {draft.proactive.targetChannel === "desktop" ? (
-                      <input className={cx(inputClass, "bg-[#F6F7F9] text-[#6D737D]")} value={desktopTargetChatId} readOnly placeholder={proactiveTargetMeta.placeholder} />
-                    ) : (
-                      <input className={cx(inputClass, "bg-white")} value={draft.proactive.targetChatId} onChange={(event) => updateDraft((current) => current ? ({ ...current, proactive: { ...current.proactive, targetChatId: event.target.value } }) : current)} placeholder={proactiveTargetMeta.placeholder} />
-                    )}
-                  </Field>
-                ) : null}
               </SectionCard>
             );
           case "agent":

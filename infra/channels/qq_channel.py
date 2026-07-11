@@ -431,8 +431,11 @@ class QQChannel:
 
             group_cfg = self._groups.get(group_id)
             if group_cfg is None:
-                logger.debug(f"[qq] 忽略未配置群  group_id={group_id}")
-                return
+                chat_id = f"{_GROUP_PREFIX}{group_id}"
+                if self._channel_hub is None or not self._channel_hub.has_binding(_CHANNEL, chat_id):
+                    logger.debug(f"[qq] 忽略未绑定群  group_id={group_id}")
+                    return
+                group_cfg = QQGroupConfig(group_id=group_id, require_at=True)
 
             # 过滤判断（同步包装异步 filter，在 bot loop 里执行）
             future = asyncio.run_coroutine_threadsafe(
@@ -599,6 +602,13 @@ class QQChannel:
 
     async def _publish_inbound(self, message: InboundMessage) -> None:
         if self._channel_hub is not None:
+            if not self._channel_hub.is_sender_allowed(
+                channel=message.channel,
+                chat_id=message.chat_id,
+                sender_id=message.sender,
+            ):
+                logger.warning("[qq] 拒绝未绑定渠道或未授权用户 chat_id=%s", message.chat_id)
+                return
             message = self._channel_hub.route_inbound(message)
         if message.metadata.get("conversation_duplicate"):
             return

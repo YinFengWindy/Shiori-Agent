@@ -23,6 +23,58 @@ def _normalize_rel_path(path: str | None) -> str | None:
     return path.replace("\\", "/")
 
 
+@dataclass(frozen=True)
+class RoleChannelBindingConfig:
+    """一个角色拥有的渠道会话与其入站白名单。"""
+
+    channel: str
+    chat_id: str
+    allow_from: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"channel": self.channel, "chat_id": self.chat_id, "allow_from": list(self.allow_from)}
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "RoleChannelBindingConfig":
+        channel = str(payload.get("channel") or "").strip()
+        chat_id = str(payload.get("chat_id") or "").strip()
+        if not channel or not chat_id:
+            raise ValueError("角色渠道绑定必须包含 channel 和 chat_id")
+        raw_allow_from = payload.get("allow_from", [])
+        if not isinstance(raw_allow_from, list):
+            raise ValueError("角色渠道 allow_from 必须是数组")
+        return cls(
+            channel=channel,
+            chat_id=chat_id,
+            allow_from=sorted({str(item).strip() for item in raw_allow_from if str(item).strip()}),
+        )
+
+
+@dataclass(frozen=True)
+class RoleProactiveConfig:
+    """角色自己的主动推送开关及唯一目标。"""
+
+    enabled: bool = False
+    target_channel: str = ""
+    target_chat_id: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "target_channel": self.target_channel,
+            "target_chat_id": self.target_chat_id,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any] | None) -> "RoleProactiveConfig":
+        data = payload if isinstance(payload, dict) else {}
+        return cls(
+            enabled=bool(data.get("enabled", False)),
+            target_channel=str(data.get("target_channel") or "").strip(),
+            target_chat_id=str(data.get("target_chat_id") or "").strip(),
+        )
+
+
 @dataclass
 class RoleRecord:
     """角色聚合根的持久化快照。"""
@@ -36,6 +88,8 @@ class RoleRecord:
     chat_background: str | None
     illustrations: list[str]
     runtime_config: dict[str, Any]
+    channel_bindings: list[RoleChannelBindingConfig]
+    proactive: RoleProactiveConfig
     memory_init_state: dict[str, Any]
     created_at: str
     updated_at: str
@@ -65,6 +119,12 @@ class RoleRecord:
                 if str(item).strip()
             ],
             runtime_config=dict(payload.get("runtime_config") or {}),
+            channel_bindings=[
+                RoleChannelBindingConfig.from_dict(item)
+                for item in payload.get("channel_bindings", [])
+                if isinstance(item, dict)
+            ],
+            proactive=RoleProactiveConfig.from_dict(payload.get("proactive")),
             memory_init_state=dict(payload.get("memory_init_state") or {}),
             created_at=str(payload.get("created_at") or _now_iso()),
             updated_at=str(payload.get("updated_at") or _now_iso()),
@@ -206,6 +266,8 @@ class RoleStore:
                 chat_background=None,
                 illustrations=[],
                 runtime_config=dict(runtime_config or {}),
+                channel_bindings=[],
+                proactive=RoleProactiveConfig(),
                 memory_init_state={},
                 created_at=now,
                 updated_at=now,
@@ -234,6 +296,8 @@ class RoleStore:
         system_prompt: str | None = None,
         background: str | None = None,
         runtime_config: dict[str, Any] | None = None,
+        channel_bindings: list[RoleChannelBindingConfig | dict[str, Any]] | None = None,
+        proactive: RoleProactiveConfig | dict[str, Any] | None = None,
         memory_init_state: dict[str, Any] | None = None,
         avatar_source: str | Path | None = None,
         avatar_asset: str | None = None,
@@ -265,6 +329,32 @@ class RoleStore:
                     role.background = str(background)
                 if runtime_config is not None:
                     role.runtime_config = dict(runtime_config)
+                if channel_bindings is not None:
+                    role.channel_bindings = self._normalize_channel_bindings(channel_bindings)
+                    self._ensure_bindings_unique(roles, role.id, role.channel_bindings)
+                    if role.proactive.enabled and not any(
+                        binding.channel == role.proactive.target_channel
+                        and binding.chat_id == role.proactive.target_chat_id
+                        for binding in role.channel_bindings
+                    ):
+                        role.proactive = RoleProactiveConfig()
+                if proactive is not None:
+                    next_proactive = (
+                        proactive
+                        if isinstance(proactive, RoleProactiveConfig)
+                        else RoleProactiveConfig.from_dict(proactive)
+                    )
+                    if next_proactive.enabled and (
+                        not next_proactive.target_channel or not next_proactive.target_chat_id
+                    ):
+                        raise ValueError("启用主动推送时必须显式选择一个目标渠道")
+                    if next_proactive.target_channel and next_proactive.target_chat_id and not any(
+                        binding.channel == next_proactive.target_channel
+                        and binding.chat_id == next_proactive.target_chat_id
+                        for binding in role.channel_bindings
+                    ):
+                        raise ValueError("主动推送目标必须是当前角色已绑定的渠道")
+                    role.proactive = next_proactive
                 if memory_init_state is not None:
                     role.memory_init_state = dict(memory_init_state)
                 if clear_avatar:
@@ -370,3 +460,35 @@ class RoleStore:
         except ValueError:
             return False
         return target.is_file()
+
+    def _normalize_channel_bindings(
+        self,
+        bindings: list[RoleChannelBindingConfig | dict[str, Any]],
+    ) -> list[RoleChannelBindingConfig]:
+        next_bindings = [
+            item if isinstance(item, RoleChannelBindingConfig) else RoleChannelBindingConfig.from_dict(item)
+            for item in bindings
+        ]
+        keys = [(item.channel, item.chat_id) for item in next_bindings]
+        if len(keys) != len(set(keys)):
+            raise ValueError("同一角色不能重复绑定相同渠道会话")
+        return next_bindings
+
+    def _ensure_bindings_unique(
+        self,
+        roles: list[RoleRecord],
+        role_id: str,
+        bindings: list[RoleChannelBindingConfig],
+    ) -> None:
+        assigned = {
+            (binding.channel, binding.chat_id)
+            for other in roles
+            if other.id != role_id
+            for binding in other.channel_bindings
+        }
+        conflict = next(
+            ((binding.channel, binding.chat_id) for binding in bindings if (binding.channel, binding.chat_id) in assigned),
+            None,
+        )
+        if conflict is not None:
+            raise ValueError(f"渠道会话已绑定其他角色: {conflict[0]}:{conflict[1]}")

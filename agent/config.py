@@ -198,23 +198,8 @@ def _load_proactive_config(data: dict) -> ProactiveConfig:
         try:
             proactive = load_proactive_config(p)
         except ProactiveConfigError as e:
-            message = str(e)
-            if "proactive.target.role_id" in message:
-                logger.warning(
-                    "Proactive 配置错误，已自动禁用 proactive: %s",
-                    message,
-                )
-                proactive.enabled = False
-                proactive.default_role_id = ""
-                proactive.default_channel = str(
-                    _as_dict(p.get("target")).get("channel", p.get("default_channel", "telegram"))
-                )
-                proactive.default_chat_id = str(
-                    _as_dict(p.get("target")).get("chat_id", p.get("default_chat_id", ""))
-                )
-            else:
-                logger.error("Proactive 配置错误: %s", e)
-                sys.exit(1)
+            logger.error("Proactive 配置错误: %s", e)
+            sys.exit(1)
     return proactive
 
 

@@ -346,6 +346,14 @@ class TelegramChannel:
         return self._channel_hub.route_inbound(message)
 
     async def _publish_inbound(self, message: InboundMessage) -> None:
+        if self._channel_hub is not None and not self._channel_hub.is_sender_allowed(
+            channel=message.channel,
+            chat_id=message.chat_id,
+            sender_id=message.sender,
+            sender_alias=str(message.metadata.get("username") or ""),
+        ):
+            logger.warning("[telegram] 拒绝未绑定渠道或未授权用户 chat_id=%s", message.chat_id)
+            return
         routed = self._route_inbound(message)
         if routed.metadata.get("conversation_duplicate"):
             return

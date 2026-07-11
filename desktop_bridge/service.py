@@ -261,6 +261,16 @@ class DesktopBridgeService:
                         if isinstance(payload.get("runtime_config"), dict)
                         else None
                     ),
+                    channel_bindings=(
+                        list(payload.get("channel_bindings"))
+                        if isinstance(payload.get("channel_bindings"), list)
+                        else None
+                    ),
+                    proactive=(
+                        dict(payload.get("proactive"))
+                        if isinstance(payload.get("proactive"), dict)
+                        else None
+                    ),
                     avatar_source=avatar_source,
                     avatar_asset=avatar_asset,
                     chat_background=chat_background,

@@ -240,12 +240,6 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
     default_role_id = str(target.get("role_id", p.get("default_role_id", "")))
     model = p.get("model", "")
 
-    if enabled and not default_role_id.strip():
-        raise ProactiveConfigError(
-            "proactive.enabled=true 时必须配置 proactive.target.role_id；"
-            "strict role-first memory 不再支持无角色 proactive。"
-        )
-
     # 预设名称（必填）
     preset_name = p.get("profile", p.get("preset"))
     if not preset_name:

@@ -39,6 +39,8 @@ export type RoleRecord = {
   description: string;
   system_prompt: string;
   runtime_config: Record<string, unknown>;
+  channel_bindings?: RoleChannelBinding[];
+  proactive?: RoleProactiveConfig;
   avatar: string | null;
   avatar_abs: string | null;
   chat_background: string | null;
@@ -49,6 +51,18 @@ export type RoleRecord = {
   loneliness_runtime?: LonelinessRuntime | null;
   created_at: string;
   updated_at: string;
+};
+
+export type RoleChannelBinding = {
+  channel: string;
+  chat_id: string;
+  allow_from: string[];
+};
+
+export type RoleProactiveConfig = {
+  enabled: boolean;
+  target_channel: string;
+  target_chat_id: string;
 };
 
 /** Single message in a role-bound session. */
@@ -104,6 +118,10 @@ export type RoleFormState = {
   description: string;
   systemPrompt: string;
   nsfwMemoryEnabled: boolean;
+  channelBindings?: RoleChannelBinding[];
+  proactiveEnabled?: boolean;
+  proactiveTargetChannel?: string;
+  proactiveTargetChatId?: string;
   avatarSource: string;
   illustrationSources: string[];
   removedIllustrations: string[];

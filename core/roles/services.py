@@ -7,12 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from infra.persistence.json_store import atomic_save_json, load_json
 from session.manager import Session, SessionManager
 
 from .store import RoleRecord, RoleStore
-
-_BINDINGS_VERSION = 1
 
 
 def _now_iso() -> str:
@@ -409,21 +406,27 @@ class RoleMemoryService:
 
 
 class RoleBindingService:
-    """旧渠道 transport 身份到 role_id 的绑定服务。"""
+    """角色配置中的渠道绑定查询与兼容服务。"""
 
     def __init__(self, workspace: Path, repository: RoleRepository) -> None:
-        self._path = Path(workspace) / "roles" / "channel_bindings.json"
         self._repository = repository
         self._lock = threading.RLock()
 
     def get_binding(self, channel: str, chat_id: str) -> RoleChannelBinding | None:
         key = _binding_key(channel, chat_id)
         with self._lock:
-            payload = self._load_payload()
-            item = payload["bindings"].get(key)
-        if not isinstance(item, dict):
-            return None
-        return RoleChannelBinding.from_dict(item)
+            for role in self._repository.list_roles():
+                if any(
+                    binding.channel == str(channel).strip()
+                    and binding.chat_id == str(chat_id).strip()
+                    for binding in role.channel_bindings
+                ):
+                    return RoleChannelBinding(
+                        channel=str(channel).strip(), chat_id=str(chat_id).strip(), role_id=role.id,
+                        created_at=role.created_at, updated_at=role.updated_at,
+                    )
+        _ = key
+        return None
 
     def resolve_role_id(self, channel: str, chat_id: str) -> str:
         binding = self.get_binding(channel, chat_id)
@@ -434,110 +437,54 @@ class RoleBindingService:
 
     def bind(self, channel: str, chat_id: str, role_id: str) -> RoleChannelBinding:
         role = self._repository.get_required(role_id)
-        key = _binding_key(channel, chat_id)
-        now = _now_iso()
-        with self._lock:
-            payload = self._load_payload()
-            existing = payload["bindings"].get(key)
-            created_at = (
-                str(existing.get("created_at"))
-                if isinstance(existing, dict) and existing.get("created_at")
-                else now
-            )
-            binding = RoleChannelBinding(
-                channel=str(channel).strip(),
-                chat_id=str(chat_id).strip(),
-                role_id=role.id,
-                created_at=created_at,
-                updated_at=now,
-            )
-            payload["bindings"][key] = binding.to_dict()
-            self._save_payload(payload)
-        return binding
+        clean_channel, clean_chat_id = str(channel).strip(), str(chat_id).strip()
+        _ = _binding_key(clean_channel, clean_chat_id)
+        next_bindings = [
+            binding.to_dict()
+            for binding in role.channel_bindings
+            if (binding.channel, binding.chat_id) != (clean_channel, clean_chat_id)
+        ]
+        next_bindings.append({"channel": clean_channel, "chat_id": clean_chat_id, "allow_from": []})
+        updated = self._repository.update_role(role.id, channel_bindings=next_bindings)
+        return RoleChannelBinding(clean_channel, clean_chat_id, updated.id, updated.created_at, updated.updated_at)
 
     def unbind(self, channel: str, chat_id: str) -> bool:
-        key = _binding_key(channel, chat_id)
-        with self._lock:
-            payload = self._load_payload()
-            existed = key in payload["bindings"]
-            payload["bindings"].pop(key, None)
-            self._save_payload(payload)
-        return existed
+        clean_channel, clean_chat_id = str(channel).strip(), str(chat_id).strip()
+        _ = _binding_key(clean_channel, clean_chat_id)
+        binding = self.get_binding(clean_channel, clean_chat_id)
+        if binding is None:
+            return False
+        role = self._repository.get_required(binding.role_id)
+        self._repository.update_role(
+            role.id,
+            channel_bindings=[
+                item.to_dict() for item in role.channel_bindings
+                if (item.channel, item.chat_id) != (clean_channel, clean_chat_id)
+            ],
+        )
+        return True
 
     def list_bindings(self) -> list[RoleChannelBinding]:
-        with self._lock:
-            payload = self._load_payload()
-            values = list(payload["bindings"].values())
         return [
-            RoleChannelBinding.from_dict(item)
-            for item in values
-            if isinstance(item, dict)
+            RoleChannelBinding(
+                channel=binding.channel, chat_id=binding.chat_id, role_id=role.id,
+                created_at=role.created_at, updated_at=role.updated_at,
+            )
+            for role in self._repository.list_roles()
+            for binding in role.channel_bindings
         ]
 
     def replace_bindings(
         self,
         bindings: list[RoleChannelBinding | dict[str, Any]],
     ) -> list[RoleChannelBinding]:
-        with self._lock:
-            payload = self._load_payload()
-            existing_bindings = {
-                key: value
-                for key, value in payload["bindings"].items()
-                if isinstance(value, dict)
-            }
-            next_bindings: dict[str, dict[str, str]] = {}
-            now = _now_iso()
-            for item in bindings:
-                binding = (
-                    item
-                    if isinstance(item, RoleChannelBinding)
-                    else RoleChannelBinding.from_dict(item)
-                )
-                role = self._repository.get_required(binding.role_id)
-                key = _binding_key(binding.channel, binding.chat_id)
-                existing = existing_bindings.get(key)
-                created_at = (
-                    str(existing.get("created_at"))
-                    if isinstance(existing, dict) and existing.get("created_at")
-                    else now
-                )
-                next_binding = RoleChannelBinding(
-                    channel=binding.channel.strip(),
-                    chat_id=binding.chat_id.strip(),
-                    role_id=role.id,
-                    created_at=created_at,
-                    updated_at=now,
-                )
-                next_bindings[key] = next_binding.to_dict()
-            payload["bindings"] = next_bindings
-            self._save_payload(payload)
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for item in bindings:
+            binding = item if isinstance(item, RoleChannelBinding) else RoleChannelBinding.from_dict(item)
+            grouped.setdefault(binding.role_id, []).append({"channel": binding.channel, "chat_id": binding.chat_id, "allow_from": []})
+        for role in self._repository.list_roles():
+            self._repository.update_role(role.id, channel_bindings=grouped.get(role.id, []))
         return self.list_bindings()
-
-    def _load_payload(self) -> dict[str, Any]:
-        payload = load_json(
-            self._path,
-            default={"version": _BINDINGS_VERSION, "bindings": {}},
-            domain="role_bindings",
-        )
-        if not isinstance(payload, dict):
-            return {"version": _BINDINGS_VERSION, "bindings": {}}
-        bindings = payload.get("bindings")
-        if not isinstance(bindings, dict):
-            bindings = {}
-        return {
-            "version": int(payload.get("version") or _BINDINGS_VERSION),
-            "bindings": bindings,
-        }
-
-    def _save_payload(self, payload: dict[str, Any]) -> None:
-        atomic_save_json(
-            self._path,
-            {
-                "version": _BINDINGS_VERSION,
-                "bindings": dict(payload.get("bindings") or {}),
-            },
-            domain="role_bindings",
-        )
 
 
 class RoleAggregateService:
