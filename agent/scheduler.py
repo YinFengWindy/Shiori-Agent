@@ -263,6 +263,10 @@ class ScheduledJob:
     fire_at: datetime  # 下次名义触发时间（UTC-aware）
     channel: str
     chat_id: str
+    role_id: str = ""
+    role_config_version: str = ""
+    thread_id: str = ""
+    delivery_key: str = ""
 
     interval_seconds: int | None = None  # every + interval 模式
     cron_expr: str | None = None  # every + cron 模式
@@ -496,10 +500,13 @@ class SchedulerService:
     async def _execute(self, job: ScheduledJob) -> None:
         label = job.name or job.id[:8]
         if job.tier == "instant":
-            result = await self.push_tool.execute(
-                channel=job.channel,
-                chat_id=job.chat_id,
-                message=job.message,
+            result = await self._run_role_scoped(
+                job,
+                lambda: self.push_tool.execute(
+                    channel=job.channel,
+                    chat_id=job.chat_id,
+                    message=job.message,
+                ),
             )
             logger.info(f"[scheduler] instant 推送完成 {label!r}: {result}")
         else:
@@ -519,6 +526,7 @@ class SchedulerService:
                     "memorize",
                     "forget_memory",
                 ],
+                metadata=self._job_role_metadata(job),
             )
             elapsed = time.monotonic() - t0
             self.tracker.record(elapsed)
@@ -526,10 +534,13 @@ class SchedulerService:
                 f"[scheduler] soft AI 完成 {label!r}  耗时={elapsed:.1f}s  P90={self.tracker.lead:.1f}s"
             )
             if content:
-                result = await self.push_tool.execute(
-                    channel=job.channel,
-                    chat_id=job.chat_id,
-                    message=content,
+                result = await self._run_role_scoped(
+                    job,
+                    lambda: self.push_tool.execute(
+                        channel=job.channel,
+                        chat_id=job.chat_id,
+                        message=content,
+                    ),
                 )
                 logger.info(f"[scheduler] soft 推送完成 {label!r}: {result}")
             else:
@@ -544,6 +555,36 @@ class SchedulerService:
         if loop is None:
             raise RuntimeError("scheduler soft job requires agent_loop")
         return loop
+
+    def _job_role_metadata(self, job: ScheduledJob) -> dict[str, str]:
+        if not job.role_id:
+            return {}
+        required = {
+            "role_id": job.role_id,
+            "role_config_version": job.role_config_version,
+            "thread_id": job.thread_id,
+            "delivery_key": job.delivery_key,
+        }
+        if not all(value.strip() for value in required.values()):
+            raise RuntimeError(f"调度任务缺少完整角色上下文: {job.id}")
+        return {
+            **required,
+            "transport_channel": job.channel,
+            "transport_chat_id": job.chat_id,
+            "role_source": "scheduler",
+            "role_work_kind": "scheduled_job",
+            "request_id": job.id,
+            "role_context_created_at": job.created_at.isoformat(),
+        }
+
+    async def _run_role_scoped(self, job: ScheduledJob, operation):
+        if not job.role_id:
+            return await operation()
+        loop = self._get_agent_loop()
+        return await loop.run_role_operation(
+            self._job_role_metadata(job),
+            operation,
+        )
 
     def _advance_every(self, job: ScheduledJob, after: datetime) -> datetime:
         """将 every job 的 fire_at 推进到 after 之后的下一个触发时间。"""

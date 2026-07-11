@@ -738,6 +738,17 @@ class AgentLoop:
         )
         metadata.update(context.to_metadata())
 
+    async def run_role_operation(self, metadata: dict[str, str], operation):
+        """Runs non-turn role work through the world's thread execution boundary."""
+
+        registry = self._role_world_registry
+        if registry is None:
+            raise RuntimeError("RoleWorldRegistry 未配置")
+        context = registry.context_from_metadata(metadata)
+        if context is None:
+            raise ValueError("后台任务缺少完整 RoleExecutionContext")
+        return await registry.dispatch_thread(context, operation)
+
     async def _run_agent_loop(
         self,
         initial_messages: list[dict],

@@ -107,6 +107,31 @@ async def test_instant_after_registers_job(tmp_path, mock_push, mock_loop):
     assert job.message == "喝水了"
 
 
+async def test_schedule_persists_role_execution_identity(tmp_path, mock_push, mock_loop):
+    svc = make_svc(tmp_path, mock_push, mock_loop)
+    tool = ScheduleTool(svc, default_tz="UTC")
+
+    _ = await tool.execute(
+        tier="instant",
+        trigger="after",
+        when="5m",
+        channel="telegram",
+        chat_id="123",
+        message="喝水了",
+        request_time=_NOW.isoformat(),
+        role_id="mira",
+        role_config_version="version-1",
+        thread_id="thread:mira:telegram:123",
+        delivery_key="delivery-1",
+    )
+
+    job = next(iter(svc._jobs.values()))
+    assert job.role_id == "mira"
+    assert job.role_config_version == "version-1"
+    assert job.thread_id == "thread:mira:telegram:123"
+    assert job.delivery_key == "delivery-1"
+
+
 async def test_after_request_time_used_for_fire_at(tmp_path, mock_push, mock_loop):
     svc = make_svc(tmp_path, mock_push, mock_loop)
     tool = ScheduleTool(svc, default_tz="UTC")

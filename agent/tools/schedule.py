@@ -101,6 +101,10 @@ class ScheduleTool(Tool):
         tz = kwargs.get("timezone") or self._default_tz
         name = kwargs.get("name")
         request_time = kwargs.get("request_time")
+        role_id = str(kwargs.get("role_id") or "").strip()
+        role_config_version = str(kwargs.get("role_config_version") or "").strip()
+        thread_id = str(kwargs.get("thread_id") or "").strip()
+        delivery_key = str(kwargs.get("delivery_key") or "").strip()
 
         # ── validation ──
         if tier not in ("instant", "soft"):
@@ -145,6 +149,10 @@ class ScheduleTool(Tool):
             fire_at=fire_at,
             channel=channel,
             chat_id=chat_id,
+            role_id=role_id,
+            role_config_version=role_config_version,
+            thread_id=thread_id,
+            delivery_key=delivery_key,
             interval_seconds=interval_seconds,
             cron_expr=cron_expr,
             message=message,
