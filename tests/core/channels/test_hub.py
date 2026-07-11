@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from bus.events import InboundMessage, OutboundMessage
 from core.channels import ChannelHub
 from core.roles import RoleAggregateService, RoleStore
@@ -167,6 +169,18 @@ def test_channel_hub_resolves_control_actions_to_thread_session(tmp_path: Path) 
     )
 
     assert hub.resolve_runtime_session_key("telegram", "123") == "thread:mira:telegram:123"
+
+
+def test_channel_hub_rejects_unbound_control_actions(tmp_path: Path) -> None:
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+
+    with pytest.raises(KeyError):
+        ChannelHub(service).resolve_runtime_session_key("telegram", "123")
 
 
 def test_channel_hub_attaches_complete_role_execution_context(tmp_path: Path) -> None:

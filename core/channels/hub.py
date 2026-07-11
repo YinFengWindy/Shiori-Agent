@@ -130,10 +130,14 @@ class ChannelHub:
         return self._service.bindings.get_binding(channel, chat_id) is not None
 
     def resolve_runtime_session_key(self, channel: str, chat_id: str) -> str:
-        """Resolves a channel control action to the thread currently owning it."""
+        """Resolves a channel control action to its bound role's formal thread."""
+
         legacy_session_key = f"{channel}:{chat_id}"
         thread = self._conversation.get_thread_by_session_key(legacy_session_key)
-        return thread.id if thread is not None else legacy_session_key
+        if thread is not None:
+            return thread.id
+        role_id = self._service.bindings.resolve_role_id(channel, chat_id)
+        return f"thread:{role_id}:{channel}:{chat_id}"
 
     def mark_delivery(
         self,
