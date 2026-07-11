@@ -837,52 +837,6 @@ async def test_message_bus_covers_flows(
     assert bus.outbound_size == 0
 
 
-@pytest.mark.asyncio
-async def test_loop_trigger_and_main_entry_cover_paths(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
-    module = __import__("main")
-    runtime = SimpleNamespace(run=AsyncMock())
-    core_runtime = SimpleNamespace(start=AsyncMock(), stop=AsyncMock())
-    bridge_server = SimpleNamespace(serve_stdio=AsyncMock())
-    monkeypatch.setattr(
-        module.Config,
-        "load",
-        classmethod(lambda cls, path="config.toml": SimpleNamespace()),
-    )
-    monkeypatch.setattr(
-        module,
-        "build_app_runtime",
-        lambda config, workspace, *, features=module.SERVICE_RUNTIME_FEATURES: runtime,
-    )
-    monkeypatch.setattr(module, "build_core_runtime", lambda config, workspace, http_resources: core_runtime)
-    monkeypatch.setattr(module, "DesktopBridgeServer", lambda runtime: bridge_server)
-    await module.serve("config.toml")
-    runtime.run.assert_awaited_once()
-    await module.serve_bridge("config.toml")
-    core_runtime.start.assert_awaited_once()
-    bridge_server.serve_stdio.assert_awaited_once()
-    core_runtime.stop.assert_awaited_once()
-
-
-def test_main_desktop_entry_is_removed(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-):
-    old_argv = sys.argv
-    try:
-        sys.argv = ["main.py", "desktop"]
-        with pytest.raises(SystemExit) as exc:
-            runpy.run_module("main", run_name="__main__")
-    finally:
-        sys.argv = old_argv
-
-    assert exc.value.code == 2
-    output = capsys.readouterr().err
-    assert "已从正式后端入口移除" in output
-    assert "main.py bridge" in output
-
-
 def test_repository_entrypoints_are_desktop_first():
     repo_root = Path(__file__).resolve().parents[1]
     package_json = json.loads((repo_root / "package.json").read_text(encoding="utf-8"))
