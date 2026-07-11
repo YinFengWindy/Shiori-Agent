@@ -1,4 +1,3 @@
-from .migration import RoleLegacyMigrator, RoleMigrationSummary
 from .services import (
     RoleAggregate,
     RoleAggregateService,
@@ -33,7 +32,6 @@ __all__ = [
     "RoleMemoryService",
     "RoleRelationshipRuntimeService",
     "RoleSelfSeedGenerator",
-    "RoleMigrationSummary",
     "RoleRecord",
     "RoleProactiveConfig",
     "RoleRepository",
@@ -42,7 +40,6 @@ __all__ = [
     "RelationshipSnapshotOptimizer",
     "RoleSessionService",
     "RoleStore",
-    "RoleLegacyMigrator",
     "route_inbound_by_role",
 ]
 
