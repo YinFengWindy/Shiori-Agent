@@ -518,7 +518,10 @@ class DesktopBridgeService:
         )
 
     def _serialize_session(self, session: Session) -> dict[str, Any]:
-        thread = self.conversation_service.get_thread_by_session_key(session.key)
+        thread = self.conversation_service.get_thread_for_runtime(
+            session.key,
+            thread_id=str(session.metadata.get("thread_id") or ""),
+        )
 
         def _serialize_message(msg: dict[str, Any]) -> dict[str, Any]:
             metadata = msg.get("metadata")

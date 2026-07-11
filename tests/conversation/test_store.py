@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from conversation.store import ConversationStore
-from conversation.service import ConversationService
+from conversation.service import ConversationService, LegacySessionDescriptor
 from session.manager import SessionManager
 from session.store import SessionStore
 
@@ -174,3 +174,20 @@ def test_conversation_service_projects_thread_contact_and_role_state(
     stored_thread = manager.conversation_store.get_thread(thread.id)
     assert stored_thread is not None
     assert stored_thread.id == thread.id
+
+
+def test_conversation_service_resolves_thread_runtime_key(tmp_path: Path) -> None:
+    manager = SessionManager(tmp_path)
+    service = ConversationService(manager)
+    thread = service.ensure_thread_for_session(
+        LegacySessionDescriptor(
+            session_key="telegram:123",
+            role_id="mira",
+            channel="telegram",
+            chat_id="123",
+        )
+    )
+
+    resolved = service.get_thread_for_runtime(thread.id)
+
+    assert resolved == thread

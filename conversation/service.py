@@ -59,6 +59,24 @@ class ConversationService:
         """Looks up a formal thread without exposing a legacy session key."""
         return self._store.get_thread(thread_id)
 
+    def get_thread_for_runtime(
+        self,
+        runtime_key: str,
+        *,
+        thread_id: str = "",
+    ) -> ThreadRecord | None:
+        """Resolves a runtime adapter key to its formal thread identity."""
+        clean_thread_id = str(thread_id or "").strip()
+        if clean_thread_id:
+            thread = self._store.get_thread(clean_thread_id)
+            if thread is not None:
+                return thread
+        if str(runtime_key or "").startswith("thread:"):
+            thread = self._store.get_thread(runtime_key)
+            if thread is not None:
+                return thread
+        return self._store.get_thread_by_legacy_session_key(runtime_key)
+
     def ensure_desktop_thread(self, role_id: str) -> ThreadRecord:
         clean_role_id = str(role_id or "").strip()
         if not clean_role_id:
