@@ -26,6 +26,16 @@ type MessageContextMenuState = {
   sender: string;
 };
 
+type RoleTask = {
+  id: string;
+  kind: string;
+  status: string;
+  label: string;
+  detail: string;
+  next_run_at: string;
+  cancellable: boolean;
+};
+
 type ChatSurfaceProps = {
   activeRole: RoleRecord | null;
   activeRoleId: string;
@@ -117,9 +127,26 @@ export function ChatSurface({
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
   const [visibleMessageCount, setVisibleMessageCount] = useState(initialVisibleChatMessageCount);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
-  const [sidebarMode, setSidebarMode] = useState<"status" | "images">(
+  const [sidebarMode, setSidebarMode] = useState<"status" | "images" | "tasks">(
     hasStatusIllustration ? "status" : "images",
   );
+  const [roleTasks, setRoleTasks] = useState<RoleTask[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadTasks() {
+      if (!activeRoleId) return;
+      const response = await window.miraDesktop.invoke({ method: "roles.tasks.list", payload: { role_id: activeRoleId } });
+      if (!cancelled && !response.error) setRoleTasks((response.payload.tasks as RoleTask[]) ?? []);
+    }
+    void loadTasks();
+    return () => { cancelled = true; };
+  }, [activeRoleId]);
+
+  async function cancelRoleTask(taskId: string): Promise<void> {
+    const response = await window.miraDesktop.invoke({ method: "roles.tasks.cancel", payload: { role_id: activeRoleId, task_id: taskId } });
+    if (!response.error) setRoleTasks((response.payload.tasks as RoleTask[]) ?? []);
+  }
   const sessionMessages = activeSession?.messages ?? [];
   const currentLastMessageContent = sessionMessages.at(-1)?.content ?? "";
   const sidebarToggleGlyphClass =
@@ -728,6 +755,19 @@ export function ChatSurface({
                   lonelinessValue={lonelinessValue}
                   visualsActive={renderHeavyVisuals}
                 />
+              ) : sidebarMode === "tasks" ? (
+                <div className="grid h-full min-h-0 rounded-[20px] bg-[#F1F5F9] p-4 text-sm text-[#334155]">
+                  <div className="min-h-0 overflow-y-auto rounded-[16px] bg-white/90 p-3">
+                    {roleTasks.length ? roleTasks.map((task) => (
+                      <div key={task.id} className="border-b border-[#E6EBF2] py-3 last:border-b-0">
+                        <div className="flex items-center justify-between gap-2"><span className="font-semibold">{task.label}</span><span className="text-xs text-[#7A8593]">{task.status}</span></div>
+                        <div className="mt-1 text-xs text-[#667085]">{task.detail || task.kind}</div>
+                        {task.next_run_at ? <div className="mt-1 text-xs text-[#98A2B3]">{formatTimestamp(task.next_run_at)}</div> : null}
+                        {task.cancellable ? <button className="mt-2 rounded-md border border-[#D8DFE7] px-2 py-1 text-xs" type="button" onClick={() => void cancelRoleTask(task.id)}>取消</button> : null}
+                      </div>
+                    )) : <div className="grid h-full place-items-center text-xs text-[#98A2B3]">当前角色没有后台任务</div>}
+                  </div>
+                </div>
               ) : (
                 <div className="grid h-full min-h-0 rounded-[20px] bg-[#F1F5F9] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
                   <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-[16px] bg-[#F1F5F9]">
@@ -795,6 +835,14 @@ export function ChatSurface({
                   <svg viewBox="0 0 1024 1024" className="h-[14px] w-[14px] fill-current" aria-hidden="true">
                     <path d="M512 133.567c51.136 0 100.66 10.053 147.327 29.664 45.055 19.114 85.517 46.42 120.27 81.172 34.753 34.753 62.058 75.215 81.172 120.27 19.735 46.668 29.664 96.19 29.664 147.327S880.38 612.66 860.77 659.327c-19.114 45.055-46.42 85.517-81.172 120.27-34.753 34.753-75.215 62.058-120.27 81.172-46.668 19.735-96.19 29.664-147.327 29.664S411.34 880.38 364.673 860.77c-45.055-19.114-85.517-46.42-120.27-81.172-34.753-34.753-62.058-75.215-81.172-120.27-19.735-46.668-29.664-96.19-29.664-147.327s10.053-100.66 29.664-147.327c19.114-45.055 46.42-85.517 81.172-120.27 34.753-34.753 75.215-62.058 120.27-81.172 46.668-19.735 96.19-29.664 147.327-29.664m0-65.783C266.62 67.784 67.784 266.62 67.784 512S266.62 956.216 512 956.216 956.216 757.38 956.216 512 757.38 67.784 512 67.784zM346.8 349.903c-26.065 0-47.165 21.1-47.165 47.164s21.1 47.165 47.165 47.165 47.165-21.1 47.165-47.165-21.1-47.164-47.165-47.164z m330.4 0c-26.065 0-47.165 21.1-47.165 47.164s21.1 47.165 47.165 47.165 47.165-21.1 47.165-47.165-21.1-47.164-47.165-47.164z m11.791 288.448c8.192-15.018 2.483-33.884-12.536-42.075-15.018-8.192-33.884-2.483-42.075 12.535-24.327 45.055-71.368 73.106-122.504 73.106-51.012 0-97.929-27.927-122.38-72.857-8.191-15.019-27.057-20.604-42.075-12.412-15.019 8.192-20.604 27.058-12.412 42.076 35.25 64.913 103.017 105.251 176.867 105.251 74.098 0 141.866-40.462 177.115-105.624z" />
                   </svg>
+                </button>
+                <button
+                  className={cx("grid h-7 w-7 place-items-center rounded-full text-sm transition", sidebarMode === "tasks" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]")}
+                  type="button"
+                  aria-label="任务侧栏"
+                  onClick={() => setSidebarMode("tasks")}
+                >
+                  <svg viewBox="0 0 1024 1024" className="h-[14px] w-[14px] fill-current" aria-hidden="true"><path d="M884.8 1014.4H144c-36.8 0-67.2-30.4-67.2-67.2V209.6c0-36.8 30.4-67.2 67.2-67.2h33.6v100.8c0 36.8 30.4 67.2 67.2 67.2h538.4c36.8 0 67.2-30.4 67.2-67.2V142.4H884c36.8 0 67.2 30.4 67.2 67.2v737.6c.8 36.8-29.6 67.2-66.4 67.2z m-150.4-456c-20-19.2-52-19.2-72 0l-180 171.2-84-80c-20-19.2-52-19.2-72 0s-20 49.6 0 68l120 113.6c20 19.2 52 19.2 72 0l216-204.8c20-18.4 20-48.8 0-68z" /></svg>
                 </button>
                 <button
                   className={cx(
