@@ -193,7 +193,10 @@ class ConversationService:
         metadata: dict[str, Any],
     ) -> str:
         if self._binding_resolver is not None:
-            resolved = str(self._binding_resolver(channel, chat_id) or "").strip()
+            try:
+                resolved = str(self._binding_resolver(channel, chat_id) or "").strip()
+            except KeyError:
+                resolved = ""
             if resolved:
                 return resolved
         return str(metadata.get("role_id") or "").strip()

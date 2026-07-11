@@ -101,6 +101,23 @@ def test_conversation_migrator_routes_unknown_session_to_legacy_unresolved(
     store.close()
 
 
+def test_conversation_migrator_handles_missing_binding_as_unresolved(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    legacy = SessionStore(db_path)
+    _seed_legacy_session(legacy, "qq:404")
+
+    def _missing_binding(_channel: str, _chat_id: str) -> str:
+        raise KeyError("missing binding")
+
+    migrator = ConversationMigrator(db_path, binding_resolver=_missing_binding)
+    summary = migrator.migrate()
+
+    assert summary.unresolved_session_keys == ["qq:404"]
+    migrator.close()
+
+
 def test_conversation_migrator_is_idempotent(tmp_path: Path) -> None:
     db_path = tmp_path / "sessions.db"
     legacy = SessionStore(db_path)
