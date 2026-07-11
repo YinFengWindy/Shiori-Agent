@@ -1,6 +1,7 @@
 import { startTransition, useEffect } from "react";
 import { ensureChatMessageRenderId } from "../chat/chatMessageIdentity";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
+import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
 import type { EventLog, RoleRecord, SessionPayload, AppMainView } from "../shared/types";
 
 type UseDesktopBridgeLifecycleArgs = {
@@ -138,10 +139,13 @@ export function useDesktopBridgeLifecycle({
 
   useEffect(() => {
     const off = window.miraDesktop.onEvent((event) => {
-      startTransition(() => {
-        if (event.method !== "chat.delta") {
+      if (event.method !== "chat.delta") {
+        startTransition(() => {
           setEvents((items) => [...items, { method: event.method, payload: event.payload }].slice(-12));
-        }
+        });
+      }
+
+      const processEvent = () => {
         if (event.method === "window.state") {
           setWindowMaximized(Boolean(event.payload.isMaximized));
           setWindowVisible(Boolean(event.payload.isVisible));
@@ -214,7 +218,13 @@ export function useDesktopBridgeLifecycle({
           setError(message);
           appendSessionErrorMessage(currentSession.key, message);
         }
-      });
+      };
+
+      if (shouldProcessDesktopBridgeEventSynchronously(event.method)) {
+        processEvent();
+        return;
+      }
+      startTransition(processEvent);
     });
     return off;
   }, [
