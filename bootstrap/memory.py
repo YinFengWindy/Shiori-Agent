@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from core.memory.markdown import MarkdownMemoryRuntime
 
 
-# 统一插件构造入口，正常 runtime 和 dashboard 复用同一套路由。
+# 统一插件构造入口，运行时与管理工具复用同一套路由。
 def _build_memory_plugin_runtime(
     *,
     config: Config,
@@ -139,7 +139,7 @@ def build_memory_admin_runtime(
     http_resources: SharedHttpResources,
     event_publisher: "EventBus | None" = None,
 ) -> MemoryRuntime:
-    # dashboard 不注册工具，只需要同一套 engine admin 能力和关闭生命周期。
+    # 管理工具不注册工具，只需要同一套 engine admin 能力和关闭生命周期。
     markdown = build_markdown_memory_runtime(
         workspace=workspace,
         provider=provider,

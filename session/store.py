@@ -236,7 +236,7 @@ class SessionStore:
             for row in rows
         ]
 
-    def list_sessions_for_dashboard(
+    def list_sessions_for_admin(
         self,
         *,
         q: str = "",
@@ -746,7 +746,7 @@ class SessionStore:
             ).fetchall()
         return [self._row_to_message(row) for row in rows]
 
-    def list_messages_for_dashboard(
+    def list_messages_for_admin(
         self,
         *,
         session_key: str | None = None,
