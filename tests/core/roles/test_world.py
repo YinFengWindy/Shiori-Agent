@@ -107,3 +107,26 @@ async def test_registry_rejects_context_after_role_configuration_changes(tmp_pat
 
 async def _return_none() -> None:
     return None
+
+
+def test_registry_builds_direct_context_from_authoritative_role(tmp_path):
+    repository = RoleRepository(RoleStore(tmp_path))
+    role = repository.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="test",
+    )
+    registry = RoleWorldRegistry(repository)
+
+    context = registry.create_context(
+        role_id=role.id,
+        thread_id="thread:mira:desktop",
+        transport_channel="desktop",
+        transport_chat_id="role:mira",
+        source="desktop",
+        work_kind="passive_turn",
+    )
+
+    assert context.role_id == "mira"
+    assert context.thread_id == "thread:mira:desktop"
+    assert context.role_config_version

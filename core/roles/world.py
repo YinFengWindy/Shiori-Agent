@@ -188,6 +188,31 @@ class RoleWorldRegistry:
             self._worlds[role.id] = world
             return world
 
+    def create_context(
+        self,
+        *,
+        role_id: str,
+        thread_id: str,
+        transport_channel: str,
+        transport_chat_id: str,
+        source: str,
+        work_kind: str,
+        request_id: str = "",
+        delivery_key: str = "",
+    ) -> RoleExecutionContext:
+        """Builds an authoritative context for a direct role-owned entrypoint."""
+
+        return RoleExecutionContext.create(
+            role=self._repository.get_required(role_id),
+            thread_id=thread_id,
+            transport_channel=transport_channel,
+            transport_chat_id=transport_chat_id,
+            source=source,
+            work_kind=work_kind,
+            request_id=request_id,
+            delivery_key=delivery_key,
+        )
+
     async def dispatch_thread(
         self,
         context: RoleExecutionContext,

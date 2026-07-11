@@ -660,6 +660,12 @@ class AgentLoop:
         metadata: dict[str, object] | None = None,
     ) -> str:
         merged_metadata: dict[str, object] = dict(metadata or {})
+        self._ensure_direct_role_context(
+            merged_metadata,
+            session_key=session_key,
+            channel=channel,
+            chat_id=chat_id,
+        )
         if omit_user_turn:
             merged_metadata["omit_user_turn"] = True
         if skip_post_memory:
@@ -696,6 +702,41 @@ class AgentLoop:
             if self._active_tasks.get(key) is task:
                 self._active_tasks.pop(key, None)
                 self._active_turn_states.pop(key, None)
+
+    def _ensure_direct_role_context(
+        self,
+        metadata: dict[str, object],
+        *,
+        session_key: str,
+        channel: str,
+        chat_id: str,
+    ) -> None:
+        """Adds a role context to direct entrypoints backed by a formal role session."""
+
+        registry = self._role_world_registry
+        if registry is None or registry.context_from_metadata(metadata) is not None:
+            return
+        session = self.session_manager.get_or_create(session_key)
+        session_metadata = session.metadata if isinstance(session.metadata, dict) else {}
+        role_id = str(metadata.get("role_id") or session_metadata.get("role_id") or "").strip()
+        thread_id = str(metadata.get("thread_id") or session_metadata.get("thread_id") or "").strip()
+        if not role_id or not thread_id:
+            return
+        context = registry.create_context(
+            role_id=role_id,
+            thread_id=thread_id,
+            transport_channel=str(
+                metadata.get("transport_channel") or session_metadata.get("transport_channel") or channel
+            ),
+            transport_chat_id=str(
+                metadata.get("transport_chat_id") or session_metadata.get("transport_chat_id") or chat_id
+            ),
+            source=str(metadata.get("source") or "direct_role_session"),
+            work_kind="passive_turn",
+            request_id=str(metadata.get("request_id") or ""),
+            delivery_key=str(metadata.get("delivery_key") or ""),
+        )
+        metadata.update(context.to_metadata())
 
     async def _run_agent_loop(
         self,
