@@ -49,6 +49,7 @@ from bootstrap.wiring import (
 )
 from agent.lifecycle.facade import TurnLifecycle
 from bootstrap.providers import build_providers, build_vl_provider
+from bootstrap.conversation import migrate_workspace_conversations
 from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from bus.queue import MessageBus
@@ -57,12 +58,9 @@ from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
 from core.roles import (
     RelationshipSnapshotOptimizer,
-    RoleBindingService,
     RoleRelationshipRuntimeService,
-    RoleRepository,
     RoleStore,
 )
-from conversation.migrator import ConversationMigrator
 from proactive_v2.presence import PresenceStore
 from session.manager import Session, SessionManager
 
@@ -434,20 +432,12 @@ def build_core_runtime(
     loop_model = config.agent_model or config.model
     session_manager = SessionManager(workspace)
     role_store = RoleStore(workspace)
-    binding_service = RoleBindingService(workspace, RoleRepository(role_store))
-    migrator = ConversationMigrator(
-        session_manager.db_path,
-        binding_resolver=binding_service.resolve_role_id,
+    migration_summary = migrate_workspace_conversations(workspace, session_manager)
+    logger.info(
+        "conversation migration complete: migrated=%d unresolved=%d",
+        len(migration_summary.migrated_session_keys),
+        len(migration_summary.unresolved_session_keys),
     )
-    try:
-        migration_summary = migrator.migrate()
-        logger.info(
-            "conversation migration complete: migrated=%d unresolved=%d",
-            len(migration_summary.migrated_session_keys),
-            len(migration_summary.unresolved_session_keys),
-        )
-    finally:
-        migrator.close()
     loop_ref: dict[str, AgentLoop] = {}
     tools, push_tool, scheduler, mcp_registry, memory_runtime = (
         build_registered_tools(

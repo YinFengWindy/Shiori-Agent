@@ -38,7 +38,6 @@ class Sensor:
         memory: "MemoryProfileApi | None",
         presence: PresenceStore | None,
         rng: Any,
-        fitbit: Any | None = None,
         role_bindings: RoleBindingService | None = None,
     ) -> None:
         self._cfg = cfg
@@ -47,24 +46,7 @@ class Sensor:
         self._memory = memory
         self._presence = presence
         self._rng = rng
-        self._fitbit = fitbit
         self._role_bindings = role_bindings
-
-    def sleep_context(self) -> Any:
-        if self._fitbit is None:
-            return None
-        return self._fitbit.get()
-
-    def refresh_sleep_context(self) -> bool:
-        if self._fitbit is None:
-            return False
-        refresh = getattr(self._fitbit, "refresh_now", None)
-        if not callable(refresh):
-            return False
-        try:
-            return bool(refresh())
-        except Exception:
-            return False
 
     def target_session_key(self) -> str:
         default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
