@@ -187,7 +187,7 @@ export function useRoleManagement({
   }
 
   async function saveRole(): Promise<void> {
-    if (!activeRoleId) return;
+    if (!detailRoleId) return;
     setSavingRole(true);
     setError("");
     setWorkspaceFeedback(null);
@@ -195,7 +195,7 @@ export function useRoleManagement({
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
-        role_id: activeRoleId,
+        role_id: detailRoleId,
         name: nextRoleForm.name,
         description: nextRoleForm.description,
         system_prompt: nextRoleForm.systemPrompt,
@@ -227,7 +227,6 @@ export function useRoleManagement({
     const { resolvedRole } = await refreshRolesAndResolveRole(updated);
     updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [], removedIllustrations: [] }));
     await openRole(updated.id, resolvedRole, { recordHistory: false });
-    navigateToRolesList(updated.id);
     setWorkspaceFeedback({ tone: "success", message: "角色保存成功。" });
   }
 
