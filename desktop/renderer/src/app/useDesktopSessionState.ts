@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 import { buildOptimisticUserChatMessage, normalizeChatAttachmentPaths } from "../chat/chatComposerState";
 import { ensureChatMessageRenderId, reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
-import { mergeIncomingSessionDuringSend } from "../chat/chatSessionMerge";
+import {
+  isPendingUserMessageAcknowledged,
+  mergeIncomingSessionDuringSend,
+} from "../chat/chatSessionMerge";
 import {
   readRoleSessionCache,
   removeRoleSessionCache,
@@ -19,6 +22,7 @@ import type {
   NewRoleFormState,
   RoleFormState,
   RoleRecord,
+  SessionMessage,
   SessionPayload,
 } from "../shared/types";
 import type { NavigationEntry } from "./appState";
@@ -133,6 +137,7 @@ export function useDesktopSessionState({
   const pushNavigationEntryRef = useRef(pushNavigationEntry);
   const replaceNavigationEntryRef = useRef(replaceNavigationEntry);
   const applyRoleSnapshotRef = useRef(applyRoleSnapshot);
+  const pendingUserMessagesRef = useRef<Record<string, SessionMessage>>({});
 
   useEffect(() => {
     chooseIllustrationRef.current = chooseIllustration;
@@ -162,11 +167,22 @@ export function useDesktopSessionState({
   }
 
   function commitActiveSession(nextSession: SessionPayload | null): void {
+    const pendingUserMessage = nextSession
+      ? pendingUserMessagesRef.current[nextSession.key] ?? null
+      : null;
     const mergedSession = mergeIncomingSessionDuringSend(
       activeSessionRef.current,
       nextSession,
       Boolean(nextSession?.key && sendingSessionsRef.current[nextSession.key]),
+      pendingUserMessage,
     );
+    if (
+      pendingUserMessage
+      && nextSession
+      && isPendingUserMessageAcknowledged(pendingUserMessage, nextSession)
+    ) {
+      delete pendingUserMessagesRef.current[nextSession.key];
+    }
     const resolvedSession = reconcileSessionMessageRenderIds(activeSessionRef.current, mergedSession);
     activeSessionRef.current = resolvedSession;
     if (resolvedSession) {
@@ -251,6 +267,7 @@ export function useDesktopSessionState({
   function appendSessionErrorMessage(sessionKey: string, message: string): void {
     const content = message.trim();
     if (!content) return;
+    delete pendingUserMessagesRef.current[sessionKey];
     updateCommittedActiveSession((current) => {
       if (!current || current.key !== sessionKey) return current;
       return {
@@ -278,6 +295,7 @@ export function useDesktopSessionState({
   }
 
   function clearAllSendingSessions(): void {
+    pendingUserMessagesRef.current = {};
     sendingSessionsRef.current = clearAllSendingSessionsState(sendingSessionsRef.current);
     setSendingSessions((current) => clearAllSendingSessionsState(current));
   }
@@ -389,6 +407,13 @@ export function useDesktopSessionState({
     if (!canSendSessionState(sendingSessionsRef.current, sessionKey)) return false;
     const persistedReplyTarget = currentReplyTarget;
     const clientMessageId = window.crypto.randomUUID();
+    const pendingUserMessage = buildOptimisticUserChatMessage(
+      content,
+      media,
+      persistedReplyTarget,
+      clientMessageId,
+    );
+    pendingUserMessagesRef.current[sessionKey] = pendingUserMessage;
     markSessionSending(sessionKey, roleId);
     setError("");
     updateCommittedActiveSession((current) =>
@@ -397,7 +422,7 @@ export function useDesktopSessionState({
             ...current,
             messages: [
               ...current.messages,
-              buildOptimisticUserChatMessage(content, media, persistedReplyTarget, clientMessageId),
+              pendingUserMessage,
             ],
           }
         : current,
@@ -416,6 +441,7 @@ export function useDesktopSessionState({
         },
       });
       if (res.error) {
+        delete pendingUserMessagesRef.current[sessionKey];
         clearSessionSending(sessionKey);
         const { session: recoveredSession } = await fetchRoleSession(roleId);
         if (recoveredSession) {
@@ -437,6 +463,7 @@ export function useDesktopSessionState({
       commitActiveSession(nextSession);
       return true;
     } catch (error) {
+      delete pendingUserMessagesRef.current[sessionKey];
       clearSessionSending(sessionKey);
       const { session: recoveredSession } = await fetchRoleSession(roleId);
       if (recoveredSession) {

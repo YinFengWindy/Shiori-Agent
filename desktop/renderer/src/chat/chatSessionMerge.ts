@@ -89,14 +89,9 @@ function hasMatchingPersistedPrefixBeforeOptimisticUser(
 }
 
 function findMissingOptimisticUserMessage(
-  currentSession: SessionPayload,
+  optimisticUserMessage: SessionMessage | null,
   incomingSession: SessionPayload,
-  optimisticUserIndex: number,
 ): SessionMessage | null {
-  if (optimisticUserIndex < 0) {
-    return null;
-  }
-  const optimisticUserMessage = currentSession.messages[optimisticUserIndex];
   if (!optimisticUserMessage || !isOptimisticUserMessage(optimisticUserMessage)) {
     return null;
   }
@@ -108,6 +103,22 @@ function findMissingOptimisticUserMessage(
     return areEquivalentMessagesIgnoringMissingIds(optimisticUserMessage, message);
   });
   return alreadyPersisted ? null : optimisticUserMessage;
+}
+
+/** Returns whether an authoritative session contains the persisted form of one pending user message. */
+export function isPendingUserMessageAcknowledged(
+  pendingUserMessage: SessionMessage,
+  incomingSession: SessionPayload,
+): boolean {
+  const clientMessageId = normalizeClientMessageId(pendingUserMessage);
+  return incomingSession.messages.some((message) => {
+    const incomingClientMessageId = normalizeClientMessageId(message);
+    if (clientMessageId) {
+      return clientMessageId === incomingClientMessageId;
+    }
+    return Boolean(normalizeMessageId(message))
+      && areEquivalentMessagesIgnoringMissingIds(pendingUserMessage, message);
+  });
 }
 
 function hasEquivalentIncomingPrefix(
@@ -144,20 +155,48 @@ export function mergeIncomingSessionDuringSend(
   currentSession: SessionPayload | null,
   incomingSession: SessionPayload | null,
   sending: boolean,
+  pendingUserMessage: SessionMessage | null = null,
 ): SessionPayload | null {
-  if (!currentSession || !incomingSession || currentSession.key !== incomingSession.key) {
+  if (!incomingSession) {
     return incomingSession;
   }
 
-  if (hasEquivalentIncomingPrefix(currentSession, incomingSession)) {
+  if (!currentSession || currentSession.key !== incomingSession.key) {
+    if (!pendingUserMessage || isPendingUserMessageAcknowledged(pendingUserMessage, incomingSession)) {
+      return incomingSession;
+    }
+    return {
+      ...incomingSession,
+      messages: [...incomingSession.messages, pendingUserMessage],
+    };
+  }
+
+  const pendingClientMessageId = pendingUserMessage
+    ? normalizeClientMessageId(pendingUserMessage)
+    : "";
+  const pendingUserIndex = pendingClientMessageId
+    ? currentSession.messages.findIndex((message) => (
+        normalizeClientMessageId(message) === pendingClientMessageId
+      ))
+    : -1;
+
+  if (
+    (!pendingUserMessage || pendingUserIndex >= 0)
+    && hasEquivalentIncomingPrefix(currentSession, incomingSession)
+  ) {
     return preserveCurrentMessageTail(currentSession, incomingSession);
   }
 
-  const optimisticUserIndex = findOptimisticUserIndex(currentSession.messages);
+  const currentOptimisticUserIndex = findOptimisticUserIndex(currentSession.messages);
+  const optimisticUserIndex = pendingUserMessage
+    ? (pendingUserIndex >= 0 ? pendingUserIndex : currentSession.messages.length)
+    : currentOptimisticUserIndex;
+  const optimisticUserMessage = pendingUserMessage
+    ?? currentSession.messages[currentOptimisticUserIndex]
+    ?? null;
   const missingOptimisticUserMessage = findMissingOptimisticUserMessage(
-    currentSession,
+    optimisticUserMessage,
     incomingSession,
-    optimisticUserIndex,
   );
 
   if (!sending && !missingOptimisticUserMessage) {

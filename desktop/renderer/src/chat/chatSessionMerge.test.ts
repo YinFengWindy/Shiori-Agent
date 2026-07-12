@@ -2,7 +2,10 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mergeIncomingSessionDuringSend } from "./chatSessionMerge.js";
+import {
+  isPendingUserMessageAcknowledged,
+  mergeIncomingSessionDuringSend,
+} from "./chatSessionMerge.js";
 import type { SessionMessage, SessionPayload } from "../shared/types.js";
 
 function createSession(messages: SessionMessage[]): SessionPayload {
@@ -185,6 +188,77 @@ describe("mergeIncomingSessionDuringSend", () => {
     const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
 
     assert.deepEqual(merged?.messages, [incomingSession.messages[0], optimisticUserMessage]);
+  });
+
+  it("restores a pending user turn after an earlier snapshot already removed it", () => {
+    const pendingUserMessage: SessionMessage = {
+      role: "user",
+      content: "不会消失的消息",
+      metadata: { client_message_id: "desktop-message-pending" },
+    };
+    const overwrittenSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+    ]);
+    const nextStaleSnapshot = createSession([...overwrittenSession.messages]);
+
+    const merged = mergeIncomingSessionDuringSend(
+      overwrittenSession,
+      nextStaleSnapshot,
+      true,
+      pendingUserMessage,
+    );
+
+    assert.deepEqual(merged?.messages, [...nextStaleSnapshot.messages, pendingUserMessage]);
+  });
+
+  it("removes the pending overlay once the server acknowledges its client message id", () => {
+    const pendingUserMessage: SessionMessage = {
+      role: "user",
+      content: "已经确认的消息",
+      metadata: { client_message_id: "desktop-message-acknowledged" },
+    };
+    const currentSession = createSession([pendingUserMessage]);
+    const acknowledgedSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "user",
+        content: "已经确认的消息",
+        metadata: { client_message_id: "desktop-message-acknowledged" },
+      },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(
+      currentSession,
+      acknowledgedSession,
+      true,
+      pendingUserMessage,
+    );
+
+    assert.equal(merged, acknowledgedSession);
+  });
+
+  it("does not acknowledge an identified pending turn from matching historical content", () => {
+    const pendingUserMessage: SessionMessage = {
+      role: "user",
+      content: "重复发送的内容",
+      metadata: { client_message_id: "desktop-message-new" },
+    };
+    const historicalSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "user",
+        content: "重复发送的内容",
+      },
+    ]);
+
+    assert.equal(
+      isPendingUserMessageAcknowledged(pendingUserMessage, historicalSession),
+      false,
+    );
   });
 
   it("preserves fresh incoming metadata while keeping the optimistic local user turn", () => {
