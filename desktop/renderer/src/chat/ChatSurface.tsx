@@ -692,7 +692,7 @@ export function ChatSurface({
                                   onDragStart={(event) => handleAttachmentDragStart(event, item)}
                                   onClick={() => handleOpenChatImagePreview(buildChatImageHistoryKey(messageDomKey, mediaIndex))}
                                 >
-                                  <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" />
+                                  <img className="block max-h-[280px] max-w-full w-auto object-contain" src={toFileUrl(item)} alt="message attachment" />
                                 </button>
                               ) : (
                                 <a

@@ -137,6 +137,22 @@ describe("ChatSurface", () => {
     assert.doesNotMatch(markup, /data-message-media="separate"[\s\S]*先看文字/);
   });
 
+  it("preserves the full image inside the message attachment frame", () => {
+    const session = createSession();
+    session.messages = [
+      {
+        role: "assistant",
+        content: "看这张图",
+        media: ["D:\\files\\portrait.png"],
+      },
+    ];
+
+    const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
+
+    assert.match(markup, /max-h-\[280px\] max-w-full w-auto object-contain/);
+    assert.doesNotMatch(markup, /max-h-\[280px\] w-full object-cover/);
+  });
+
   it("renders persisted reply previews inside message bubbles", () => {
     const session = createSession();
     session.messages = [
