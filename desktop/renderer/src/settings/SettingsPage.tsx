@@ -24,7 +24,6 @@ import {
   settingsEqual,
   shouldRetryFailedSettingsLoad,
 } from "./settingsPersistence";
-import { RoleEmojiSettings } from "./RoleEmojiSettings";
 
 type SavePhase =
   | "idle"
@@ -282,7 +281,6 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
   ],
   advanced: [
     { id: "general", label: "基础" },
-    { id: "emoji", label: "Emoji" },
   ],
 };
 
@@ -662,16 +660,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
         }
       case "advanced":
         switch (currentSubsectionId) {
-          case "emoji":
-            return (
-              <RoleEmojiSettings
-                entries={draft.emoji.entries}
-                onChange={(entries) => updateDraft((current) => ({
-                  ...current,
-                  emoji: { entries },
-                }))}
-              />
-            );
           case "general":
             return (
               <SectionCard>

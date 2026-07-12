@@ -83,9 +83,6 @@ function createSettingsFormData(
       novelaiUndesiredContentPreset: 0,
       novelaiAutoWritebackRoleAssets: false,
     },
-    emoji: {
-      entries: [],
-    },
     advanced: {
       systemPrompt: "",
       maxTokens: 4000,

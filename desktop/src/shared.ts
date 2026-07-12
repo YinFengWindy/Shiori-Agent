@@ -35,11 +35,6 @@ export type SettingsChannelRoleBinding = {
   roleId: string;
 };
 
-export type SettingsRoleEmoji = {
-  name: string;
-  value: string;
-};
-
 export type SettingsFormData = {
   models: {
     provider: string;
@@ -92,9 +87,6 @@ export type SettingsFormData = {
     novelaiAddQualityTags: boolean;
     novelaiUndesiredContentPreset: number;
     novelaiAutoWritebackRoleAssets: boolean;
-  };
-  emoji: {
-    entries: SettingsRoleEmoji[];
   };
   advanced: {
     systemPrompt: string;

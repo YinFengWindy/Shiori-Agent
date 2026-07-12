@@ -1,30 +1,7 @@
-/** Fixed set of common emoji exposed from the desktop chat composer. */
-export const commonChatEmojis = [
-  "😀",
-  "😁",
-  "😂",
-  "🤣",
-  "😊",
-  "😍",
-  "😘",
-  "🥰",
-  "🤔",
-  "😭",
-  "😡",
-  "🥺",
-  "👍",
-  "👎",
-  "👏",
-  "🙏",
-  "💪",
-  "🎉",
-  "❤️",
-  "💔",
-  "✨",
-  "🔥",
-  "🌙",
-  "☀️",
-] as const;
+import commonEmojiEntries from "./common_emojis.json";
+
+/** Shared emoji entries exposed to both the desktop composer and role replies. */
+export const commonChatEmojis = commonEmojiEntries.map((entry) => entry.value) as readonly string[];
 
 /** Caret placement returned after inserting an emoji into the draft. */
 export type ChatEmojiInsertion = {

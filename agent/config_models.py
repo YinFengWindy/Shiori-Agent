@@ -97,7 +97,6 @@ class Config:
     novelai: NovelAISettings = field(default_factory=NovelAISettings)
     wiring: WiringConfig = field(default_factory=WiringConfig)
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
-    role_emojis: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: str | Path = "config.toml") -> Config:

@@ -179,7 +179,6 @@ export function loadSettingsData(): SettingsSnapshot {
   const agentContext = asRecord(agent.context);
   const agentTools = asRecord(agent.tools);
   const agentMaintenance = asRecord(agent.maintenance);
-  const agentEmoji = asRecord(agent.emoji);
   const plugins = asRecord(parsed.plugins);
   return {
     configPath,
@@ -253,15 +252,6 @@ export function loadSettingsData(): SettingsSnapshot {
         novelaiAutoWritebackRoleAssets: Boolean(
           novelai.auto_writeback_role_assets,
         ),
-      },
-      emoji: {
-        entries: asArray(agentEmoji.entries, (item) => {
-          const [name, ...valueParts] = String(item ?? "").split("=");
-          return {
-            name: name?.trim() ?? "",
-            value: valueParts.join("=").trim(),
-          };
-        }).filter((item) => item.name && item.value),
       },
       advanced: {
         systemPrompt: String(agent.system_prompt ?? ""),
@@ -351,11 +341,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
       formData.advanced.memoryOptimizerEnabled ? "true" : "false"
     }`,
     `memory_optimizer_interval_seconds = ${formData.advanced.memoryOptimizerIntervalSeconds}`,
-    "",
-    "[agent.emoji]",
-    `entries = ${renderStringArray(
-      formData.emoji.entries.map((entry) => `${entry.name.trim()}=${entry.value.trim()}`),
-    )}`,
     "",
     "[agent.wiring]",
     'context = "default"',
@@ -454,19 +439,6 @@ function validateSettings(formData: SettingsFormData): void {
     if (!Number.isInteger(value) || value <= 0) {
       throw new Error("embedding output_dimensionality 必须是正整数");
     }
-  }
-  const emojiNames = formData.emoji.entries.map((entry) => entry.name.trim().toLowerCase());
-  for (let index = 0; index < formData.emoji.entries.length; index += 1) {
-    const entry = formData.emoji.entries[index]!;
-    if (!/^[a-z0-9_-]+$/i.test(entry.name.trim())) {
-      throw new Error("Emoji 名称只能包含字母、数字、下划线和连字符");
-    }
-    if (!entry.value.trim()) {
-      throw new Error("Emoji 字符不能为空");
-    }
-  }
-  if (emojiNames.length !== new Set(emojiNames).size) {
-    throw new Error("Emoji 名称不能重复");
   }
 }
 

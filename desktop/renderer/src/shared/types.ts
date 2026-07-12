@@ -3,7 +3,6 @@ import type {
   SettingsChannelGroup,
   SettingsChannelRoleBinding,
   SettingsFormData,
-  SettingsRoleEmoji,
   SettingsSnapshot,
 } from "../../../src/shared.js";
 
@@ -195,6 +194,5 @@ export type {
   SettingsChannelGroup,
   SettingsChannelRoleBinding,
   SettingsFormData,
-  SettingsRoleEmoji,
   SettingsSnapshot,
 };

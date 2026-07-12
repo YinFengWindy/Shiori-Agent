@@ -12,6 +12,7 @@ from .runtime import (
     MemeDecorator,
     RoleReactionCatalog,
     RoleReactionDecorator,
+    load_common_emojis,
 )
 
 _CTX_SLOT = "prompt:ctx"
@@ -59,10 +60,9 @@ class MemePlugin(Plugin):
         self._decorator = MemeDecorator(self._catalog)
         workspace = _workspace(self.context.plugin_dir, self.context.workspace)
         self._role_catalog = RoleReactionCatalog(workspace, self._catalog)
-        emojis = getattr(self.context.app_config, "role_emojis", {})
         self._role_decorator = RoleReactionDecorator(
             self._role_catalog,
-            emojis if isinstance(emojis, dict) else {},
+            load_common_emojis(workspace),
         )
 
     def prompt_render_modules(self) -> list[object]:
@@ -107,10 +107,13 @@ class MemePlugin(Plugin):
     def build_prompt_block(self, role_id: str) -> str | None:
         if self._role_catalog is None:
             raise RuntimeError("meme 插件尚未初始化")
-        emojis = getattr(self.context.app_config, "role_emojis", {}) if role_id else {}
         return self._role_catalog.build_prompt_block(
             role_id=role_id,
-            emojis=emojis if isinstance(emojis, dict) else {},
+            emojis=(
+                load_common_emojis(_workspace(self.context.plugin_dir, self.context.workspace))
+                if role_id
+                else {}
+            ),
         )
 
     def _role_id_for_session(self, session_key: str) -> str:

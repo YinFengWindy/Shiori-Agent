@@ -200,11 +200,7 @@ async def test_role_reactions_use_sendable_assets_and_global_emoji(tmp_path: Pat
     session_manager = SimpleNamespace(
         get_or_create=lambda _key: SimpleNamespace(metadata={"role_id": "mira"})
     )
-    plugin = await _make_plugin(
-        tmp_path,
-        app_config=SimpleNamespace(role_emojis={"heart": "❤️"}),
-        session_manager=session_manager,
-    )
+    plugin = await _make_plugin(tmp_path, session_manager=session_manager)
     prompt_ctx = PromptRenderCtx(
         session_key="role:mira",
         channel="desktop",
@@ -264,7 +260,6 @@ async def test_role_reactions_reject_disabled_category_and_unknown_emoji(tmp_pat
     )
     plugin = await _make_plugin(
         tmp_path,
-        app_config=SimpleNamespace(role_emojis={"heart": "❤️"}),
         session_manager=SimpleNamespace(
             get_or_create=lambda _key: SimpleNamespace(metadata={"role_id": "mira"})
         ),

@@ -9,6 +9,29 @@ from typing import cast
 from core.roles import RoleStore
 
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+_COMMON_EMOJIS_PATH = Path("desktop/renderer/src/chat/common_emojis.json")
+
+
+def load_common_emojis(workspace: Path) -> dict[str, str]:
+    """Load the user-sendable emoji list shared with the desktop picker."""
+    path = workspace / _COMMON_EMOJIS_PATH
+    if not path.is_file():
+        path = Path(__file__).parents[2] / _COMMON_EMOJIS_PATH
+    try:
+        raw: object = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, list):
+        return {}
+    emojis: dict[str, str] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        value = item.get("value")
+        if isinstance(name, str) and isinstance(value, str):
+            emojis[name] = value
+    return emojis
 
 
 def _empty_aliases() -> list[str]:
