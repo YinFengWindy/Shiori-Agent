@@ -67,6 +67,26 @@ class NovelAIPlugin(Plugin):
             return
         self._pending_media.setdefault(event.session_key, []).extend(media)
 
+    @on_tool_result()
+    async def consume_pushed_media(self, event: AfterToolResultCtx) -> None:
+        if event.tool_name != "message_push" or event.status != "success":
+            return
+        sent_paths = {
+            str(event.arguments.get(key) or "").strip()
+            for key in ("image", "file")
+        }
+        sent_paths.discard("")
+        if not sent_paths:
+            return
+        pending = self._pending_media.get(event.session_key)
+        if not pending:
+            return
+        remaining = [path for path in pending if path not in sent_paths]
+        if remaining:
+            self._pending_media[event.session_key] = remaining
+        else:
+            self._pending_media.pop(event.session_key, None)
+
     @on_after_reasoning()
     async def attach_generated_media(self, ctx: AfterReasoningCtx) -> AfterReasoningCtx:
         media = self._pending_media.pop(ctx.session_key, [])
