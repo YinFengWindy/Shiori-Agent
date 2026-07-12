@@ -6,6 +6,9 @@ export function cx(...classes: Array<string | false | null | undefined>) {
 /** Shared card surface used by empty states and diagnostic rows. */
 export const cardClass = "rounded-[18px] border border-stroke bg-panel";
 
+/** Shared background for secondary workspace navigation sidebars. */
+export const secondarySidebarSurfaceClass = "bg-[#EFF4F9]";
+
 /** Shared small-body text class for non-titlebar desktop content. */
 export const bodyTextClass = "text-xs leading-5";
 
