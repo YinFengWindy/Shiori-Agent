@@ -184,6 +184,7 @@ export type RoleSearchResult = {
 export type AppMainView =
   | { kind: "chat" }
   | { kind: "image-studio" }
+  | { kind: "image-prompt-tags" }
   | { kind: "roles-list" }
   | { kind: "role-create" }
   | { kind: "role-detail"; roleId: string }

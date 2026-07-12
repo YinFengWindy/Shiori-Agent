@@ -143,6 +143,15 @@ export function useNavigationHistory({
     }
   }
 
+  function openPromptTagLibrary(options?: { recordHistory?: boolean }): void {
+    const nextView: AppMainView = { kind: "image-prompt-tags" };
+    setSidebarCollapsed(true);
+    setMainView(nextView);
+    if (options?.recordHistory !== false) {
+      pushNavigationEntry(buildNavigationEntry(nextView));
+    }
+  }
+
   function openSettingsWorkspace(
     section: SettingsSectionId = "models",
     options?: { recordHistory?: boolean },
@@ -181,6 +190,10 @@ export function useNavigationHistory({
     }
     if (nextEntry.view.kind === "image-studio") {
       openImageStudio({ recordHistory: false });
+      return;
+    }
+    if (nextEntry.view.kind === "image-prompt-tags") {
+      openPromptTagLibrary({ recordHistory: false });
       return;
     }
     if (nextEntry.view.kind === "roles-list" || nextEntry.view.kind === "role-create") {
@@ -227,6 +240,7 @@ export function useNavigationHistory({
     replaceNavigationEntry,
     openChatView,
     openImageStudio,
+    openPromptTagLibrary,
     openSettingsWorkspace,
     openRoleWorkspace,
     navigateHistory,

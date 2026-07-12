@@ -3,6 +3,7 @@ import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { ChatSurface } from "../chat/ChatSurface";
 import { ImageStudioPage } from "../image/ImageStudioPage";
 import { ImageStudioSidebar } from "../image/ImageStudioSidebar";
+import { PromptTagLibraryPage } from "../image/PromptTagLibraryPage";
 import { useImageStudioState } from "../image/useImageStudioState";
 import { ConfirmDialog } from "../roles/ConfirmDialog";
 import { RoleAssetsPage } from "../roles/RoleAssetsPage";
@@ -73,6 +74,7 @@ type DesktopAppFrameProps = {
   onBackToChat: () => void;
   onOpenSettingsSection: (section: SettingsSectionId) => void;
   imageStudioViewActive: boolean;
+  imagePromptTagsViewActive: boolean;
   roleWorkspaceViewActive: boolean;
   roleWorkspaceSection: RoleWorkspaceSectionId;
   onOpenRoleWorkspaceSection: (section: RoleWorkspaceSectionId) => void;
@@ -84,6 +86,7 @@ type DesktopAppFrameProps = {
   onOpenRolesWorkspace: () => void;
   onOpenRole: (roleId: string) => void;
   onOpenImageStudio: () => void;
+  onOpenPromptTagLibrary: () => void;
   imageStudioState: ImageStudioStateViewModel;
   workspaceFeedback: WorkspaceFeedback | null;
   activeRole: RoleRecord | null;
@@ -197,6 +200,7 @@ export function DesktopAppFrame({
   onBackToChat,
   onOpenSettingsSection,
   imageStudioViewActive,
+  imagePromptTagsViewActive,
   roleWorkspaceViewActive,
   roleWorkspaceSection,
   onOpenRoleWorkspaceSection,
@@ -208,6 +212,7 @@ export function DesktopAppFrame({
   onOpenRolesWorkspace,
   onOpenRole,
   onOpenImageStudio,
+  onOpenPromptTagLibrary,
   imageStudioState,
   workspaceFeedback,
   activeRole,
@@ -326,7 +331,7 @@ export function DesktopAppFrame({
             "sidebar-track relative min-h-0 overflow-hidden",
             sidebarState.animating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           )}
-          style={{ width: sidebarState.collapsed ? 0 : sidebarState.width }}
+          style={{ width: imagePromptTagsViewActive || sidebarState.collapsed ? 0 : sidebarState.width }}
         >
           {mainView.kind === "settings" ? (
             <SettingsSidebar
@@ -355,6 +360,7 @@ export function DesktopAppFrame({
               submitting={imageStudioState.submitting}
               validationError={imageStudioState.validationError}
               onBackToChat={onBackToChat}
+              onOpenPromptTagLibrary={onOpenPromptTagLibrary}
               onBeginResize={sidebarState.onBeginResize}
               onChange={imageStudioState.onChange}
               onPickBaseImage={imageStudioState.onPickBaseImage}
@@ -459,6 +465,12 @@ export function DesktopAppFrame({
               onSelectRecord={imageStudioState.onSelectRecord}
               onToggleHistorySidebar={imageHistorySidebar.toggle}
               onBeginHistorySidebarResize={imageHistorySidebar.beginResize}
+            />
+          ) : null}
+          {mainView.kind === "image-prompt-tags" ? (
+            <PromptTagLibraryPage
+              bridgeReady={bridgeReady}
+              onBackToImageStudio={onOpenImageStudio}
             />
           ) : null}
           {mainView.kind === "roles-list" ? (

@@ -17,9 +17,8 @@ const emptyDraft: PromptTagDraft = {
   rating: "general",
 };
 
-/** Manages the editable prompt-tag catalog inside the image studio sidebar. */
+/** Manages the editable prompt-tag catalog on its dedicated page. */
 export function PromptTagLibraryPanel({ bridgeReady }: PromptTagLibraryPanelProps) {
-  const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<PromptTagEntry[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [draft, setDraft] = useState<PromptTagDraft>(emptyDraft);
@@ -44,9 +43,9 @@ export function PromptTagLibraryPanel({ bridgeReady }: PromptTagLibraryPanelProp
   }, []);
 
   useEffect(() => {
-    if (!open || !bridgeReady) return;
+    if (!bridgeReady) return;
     void loadEntries();
-  }, [bridgeReady, loadEntries, open]);
+  }, [bridgeReady, loadEntries]);
 
   async function saveEntry(): Promise<void> {
     const payload = {
@@ -90,18 +89,8 @@ export function PromptTagLibraryPanel({ bridgeReady }: PromptTagLibraryPanelProp
   }
 
   return (
-    <section className="mt-3 rounded-md border border-[#D8DEE8] bg-white/85 p-3" data-testid="prompt-tag-library">
-      <button
-        className="flex w-full items-center justify-between text-left text-sm font-medium text-[#374151]"
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        aria-expanded={open}
-      >
-        <span>提示词库</span>
-        <span aria-hidden="true">{open ? "−" : "+"}</span>
-      </button>
-      {open ? (
-        <div className="mt-3 grid gap-2">
+    <section className="grid gap-4" data-testid="prompt-tag-library">
+        <div className="grid gap-4">
           <select className="rounded-md border border-[#D8DFE7] bg-white px-2 py-1.5 text-xs" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
             <option value="">全部分类</option>
             {categories.map((category) => <option key={category} value={category}>{category}</option>)}
@@ -121,7 +110,6 @@ export function PromptTagLibraryPanel({ bridgeReady }: PromptTagLibraryPanelProp
             onSave={() => void saveEntry()}
           />
         </div>
-      ) : null}
     </section>
   );
 }

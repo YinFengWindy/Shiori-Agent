@@ -311,6 +311,7 @@ function App(): React.ReactElement {
     replaceNavigationEntry,
     openChatView,
     openImageStudio,
+    openPromptTagLibrary,
     openSettingsWorkspace,
     openRoleWorkspace,
     navigateHistory,
@@ -621,6 +622,7 @@ function App(): React.ReactElement {
       onBackToChat={() => openChatView()}
       onOpenSettingsSection={(section) => openSettingsWorkspace(section)}
       imageStudioViewActive={imageStudioViewActive}
+      imagePromptTagsViewActive={mainView.kind === "image-prompt-tags"}
       roleWorkspaceViewActive={roleWorkspaceViewActive}
       roleWorkspaceSection={roleWorkspaceSection}
       onOpenRoleWorkspaceSection={(section) => {
@@ -638,6 +640,7 @@ function App(): React.ReactElement {
       onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
       onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
       onOpenImageStudio={() => openImageStudio()}
+      onOpenPromptTagLibrary={() => openPromptTagLibrary()}
       imageStudioState={imageStudioState}
       workspaceFeedback={workspaceFeedback}
       activeRole={activeRole}

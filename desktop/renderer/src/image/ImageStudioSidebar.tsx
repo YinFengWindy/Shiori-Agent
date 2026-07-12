@@ -1,6 +1,5 @@
 import type React from "react";
 import { ImageFormPanel } from "./ImageFormPanel";
-import { PromptTagLibraryPanel } from "./PromptTagLibraryPanel";
 import type { ImageStudioFormState } from "./types";
 import { cx, secondarySidebarSurfaceClass } from "../shared/styles";
 
@@ -19,6 +18,7 @@ type ImageStudioSidebarProps = {
   submitting: boolean;
   validationError: string;
   onBackToChat: () => void;
+  onOpenPromptTagLibrary: () => void;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
   onChange: (next: Partial<ImageStudioFormState>) => void;
   onPickBaseImage: () => void;
@@ -42,6 +42,7 @@ export function ImageStudioSidebar({
   submitting,
   validationError,
   onBackToChat,
+  onOpenPromptTagLibrary,
   onBeginResize,
   onChange,
   onPickBaseImage,
@@ -73,6 +74,13 @@ export function ImageStudioSidebar({
         <span className="text-base leading-none">←</span>
         <span>返回应用</span>
       </button>
+      <button
+        className={sidebarBackClass}
+        type="button"
+        onClick={onOpenPromptTagLibrary}
+      >
+        <span>提示词库</span>
+      </button>
       <div className="scrollbar-soft min-h-0 overflow-y-auto px-2 pb-1">
         <ImageFormPanel
           bridgeReady={bridgeReady}
@@ -90,7 +98,6 @@ export function ImageStudioSidebar({
           onToggleAddQualityTags={onToggleAddQualityTags}
           onChangeUndesiredContentPreset={onChangeUndesiredContentPreset}
         />
-        <PromptTagLibraryPanel bridgeReady={bridgeReady} />
       </div>
       <div
         className={cx(
