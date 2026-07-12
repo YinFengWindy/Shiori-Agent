@@ -112,6 +112,8 @@ export function ChatSurface({
   const previousMessageCountRef = useRef(0);
   const previousLastMessageContentRef = useRef("");
   const previousChatImageCountRef = useRef(0);
+  const previousRoleSelfViewRef = useRef(roleSelfView);
+  const imagePriorityUserMessageCountRef = useRef(-1);
   const autoScrollingRef = useRef(false);
   const stickToBottomRef = useRef(true);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
@@ -120,8 +122,9 @@ export function ChatSurface({
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
   const [visibleMessageCount, setVisibleMessageCount] = useState(initialVisibleChatMessageCount);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
+  const hasStatusContent = hasStatusIllustration || Boolean(roleSelfView);
   const [sidebarMode, setSidebarMode] = useState<"status" | "images" | "tasks">(
-    hasStatusIllustration ? "status" : "images",
+    hasStatusContent ? "status" : "images",
   );
   const roleTasks = useRoleTasks({
     activeRoleId,
@@ -129,6 +132,10 @@ export function ChatSurface({
     enabled: sidebarMode === "tasks" && !chatLatestImageSidebarCollapsed,
   });
   const sessionMessages = activeSession?.messages ?? [];
+  const currentUserMessageCount = sessionMessages.reduce(
+    (count, message) => count + (message.role === "user" ? 1 : 0),
+    0,
+  );
   const currentLastMessageContent = sessionMessages.at(-1)?.content ?? "";
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
@@ -221,11 +228,11 @@ export function ChatSurface({
   }, [chatLatestImageSidebarCollapsed]);
 
   useEffect(() => {
-    if (hasStatusIllustration || sidebarMode !== "status") {
+    if (hasStatusContent || sidebarMode !== "status") {
       return;
     }
     setSidebarMode("images");
-  }, [hasStatusIllustration, sidebarMode]);
+  }, [hasStatusContent, sidebarMode]);
 
   useEffect(() => {
     if (!messageContextMenu) return undefined;
@@ -261,6 +268,8 @@ export function ChatSurface({
     previousMessageCountRef.current = activeSession?.messages.length ?? 0;
     previousLastMessageContentRef.current = activeSession?.messages.at(-1)?.content ?? "";
     previousChatImageCountRef.current = chatLatestImageSidebarCount;
+    previousRoleSelfViewRef.current = roleSelfView;
+    imagePriorityUserMessageCountRef.current = -1;
     const container = conversationListRef.current;
     if (!container) return;
     stickToBottomRef.current = true;
@@ -268,19 +277,32 @@ export function ChatSurface({
   }, [activeSession?.key]);
 
   useEffect(() => {
-    const previousCount = previousChatImageCountRef.current;
+    const previousImageCount = previousChatImageCountRef.current;
+    const previousRoleSelfView = previousRoleSelfViewRef.current;
     previousChatImageCountRef.current = chatLatestImageSidebarCount;
-    if (chatLatestImageSidebarCount <= previousCount) {
+    previousRoleSelfViewRef.current = roleSelfView;
+    const hasNewImage = chatLatestImageSidebarCount > previousImageCount;
+    const hasUpdatedSelfView = Boolean(roleSelfView) && roleSelfView !== previousRoleSelfView;
+    if (!hasNewImage && !hasUpdatedSelfView) {
       return;
     }
-    setSidebarMode("images");
+    if (hasNewImage) {
+      imagePriorityUserMessageCountRef.current = currentUserMessageCount;
+      setSidebarMode("images");
+    } else if (imagePriorityUserMessageCountRef.current !== currentUserMessageCount) {
+      setSidebarMode("status");
+    } else {
+      return;
+    }
     if (chatLatestImageSidebarCollapsed) {
       onToggleChatLatestImageSidebar();
     }
   }, [
     chatLatestImageSidebarCollapsed,
     chatLatestImageSidebarCount,
+    currentUserMessageCount,
     onToggleChatLatestImageSidebar,
+    roleSelfView,
   ]);
 
   useEffect(() => {
@@ -820,11 +842,11 @@ export function ChatSurface({
                   className={cx(
                     "grid h-7 w-7 place-items-center rounded-full text-sm transition",
                     sidebarMode === "status" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
-                    !hasStatusIllustration && "cursor-default opacity-45 hover:text-[#5B6472]",
+                    !hasStatusContent && "cursor-default opacity-45 hover:text-[#5B6472]",
                   )}
                   type="button"
                   aria-label="状态侧栏"
-                  disabled={!hasStatusIllustration}
+                  disabled={!hasStatusContent}
                   onClick={() => setSidebarMode("status")}
                 >
                   <svg viewBox="0 0 1024 1024" className="h-[14px] w-[14px] fill-current" aria-hidden="true">
