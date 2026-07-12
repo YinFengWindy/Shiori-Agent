@@ -9,12 +9,12 @@ describe("PromptTagLibraryPage", () => {
     const markup = renderToStaticMarkup(
       <PromptTagLibraryPage
         bridgeReady={false}
-        onBackToImageStudio={() => undefined}
+        onBackToApp={() => undefined}
       />,
     );
 
     assert.match(markup, /data-testid="prompt-tag-library-page"/);
-    assert.match(markup, /返回生图工作台/);
+    assert.match(markup, /返回应用/);
     assert.match(markup, /data-testid="prompt-tag-library"/);
   });
 });

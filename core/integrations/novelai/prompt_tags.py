@@ -23,6 +23,7 @@ class PromptTagEntry:
     positive_tags: list[str]
     negative_tags: list[str]
     rating: str = "general"
+    image_path: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Return the JSON representation used by the desktop bridge."""
@@ -36,6 +37,7 @@ class PromptTagEntry:
             "positive_tags": list(self.positive_tags),
             "negative_tags": list(self.negative_tags),
             "rating": self.rating,
+            "image_path": self.image_path,
         }
 
 
@@ -144,6 +146,7 @@ class PromptTagStore:
                 allow_empty=True,
             ),
             rating=rating,
+            image_path=str(payload.get("image_path") or "").strip(),
         )
 
     def _write(self, entries: list[PromptTagEntry]) -> None:

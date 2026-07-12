@@ -60,4 +60,5 @@ export type PromptTagEntry = {
   positive_tags: string[];
   negative_tags: string[];
   rating: "general" | "sensitive" | "adult";
+  image_path: string;
 };

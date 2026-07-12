@@ -470,7 +470,7 @@ export function DesktopAppFrame({
           {mainView.kind === "image-prompt-tags" ? (
             <PromptTagLibraryPage
               bridgeReady={bridgeReady}
-              onBackToImageStudio={onOpenImageStudio}
+              onBackToApp={onBackToChat}
             />
           ) : null}
           {mainView.kind === "roles-list" ? (

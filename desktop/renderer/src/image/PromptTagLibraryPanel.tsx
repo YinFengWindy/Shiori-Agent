@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PromptTagEntryEditor, type PromptTagDraft } from "./PromptTagEntryEditor";
 import type { PromptTagEntry } from "./types";
 import { BackIcon, DeleteIcon, PlusIcon } from "../shared/icons";
+import { PromptLibraryIcon } from "../shared/icons";
+import { toFileUrl } from "../shared/format";
 
 type PromptTagLibraryPanelProps = {
   bridgeReady: boolean;
-  onBackToImageStudio: () => void;
+  onBackToApp: () => void;
 };
 
 const emptyDraft: PromptTagDraft = {
@@ -17,10 +19,11 @@ const emptyDraft: PromptTagDraft = {
   positive_tags: [],
   negative_tags: [],
   rating: "general",
+  image_path: "",
 };
 
 /** Manages the editable prompt-tag catalog on its dedicated page. */
-export function PromptTagLibraryPanel({ bridgeReady, onBackToImageStudio }: PromptTagLibraryPanelProps) {
+export function PromptTagLibraryPanel({ bridgeReady, onBackToApp }: PromptTagLibraryPanelProps) {
   const [entries, setEntries] = useState<PromptTagEntry[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,20 +110,17 @@ export function PromptTagLibraryPanel({ bridgeReady, onBackToImageStudio }: Prom
   }
 
   return (
-    <section className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)] bg-white" data-testid="prompt-tag-library">
-        <aside className="flex min-h-0 flex-col border-r border-[#E5EAF0] bg-[#FBFCFE] p-4">
-          <button className="mb-5 grid h-10 w-10 place-items-center self-start rounded-full border border-black/8 bg-white text-[#111111] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] focus:outline-none" type="button" aria-label="返回生图工作台" title="返回生图工作台" onClick={onBackToImageStudio}><BackIcon className="h-5 w-5 fill-current" /></button>
-          <div className="mb-4 flex items-center justify-between"><div><h1 className="text-lg font-semibold text-[#263241]">提示词库</h1><p className="mt-1 text-xs text-[#7B8490]">{entries.length} 个条目</p></div></div>
-          <div className="grid gap-2">
-            <input className="rounded-md border border-[#D8DFE7] bg-white px-3 py-2 text-xs outline-none transition focus:border-[#2F6FED]" placeholder="搜索名称或 ID" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
-            <div className="flex items-center gap-2"><select className="min-w-0 flex-1 rounded-md border border-[#D8DFE7] bg-white px-2 py-2 text-xs outline-none" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">全部分类</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select><button className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md border border-[#D8DFE7] bg-white text-[#64748B] transition hover:bg-[#F1F5F9] hover:text-[#334155]" type="button" aria-label="新建条目" title="新建条目" onClick={() => { setDraft(emptyDraft); setSelectedId(""); setIsCreating(true); setError(""); }}><PlusIcon className="h-3.5 w-3.5 fill-current" /></button></div>
-          </div>
-          <div className="scrollbar-soft mt-3 min-h-0 flex-1 overflow-y-auto pr-1"><div className="grid gap-1.5">
-            {visibleEntries.map((entry) => <div className={`group flex items-center gap-2 rounded-md px-2.5 py-2 text-xs transition ${selectedId === entry.id && !isCreating ? "bg-[#E7F0FF] text-[#245BC2]" : "text-[#374151] hover:bg-white"}`} key={entry.id}><button className="min-w-0 flex-1 text-left" type="button" onClick={() => { setDraft(entry); setSelectedId(entry.id); setIsCreating(false); setError(""); }}><span className="block truncate font-medium">{entry.name || entry.id}</span><span className="mt-0.5 block truncate text-[10px] text-[#8A94A1]">{entry.category} · {entry.enabled ? "启用" : "停用"}</span></button><button className="rounded p-1 text-[#A4ACB6] opacity-0 transition hover:bg-[#FDECEC] hover:text-[#B33A3A] group-hover:opacity-100" type="button" aria-label={`删除 ${entry.name}`} onClick={() => void deleteEntry(entry.id)}><DeleteIcon className="h-3 w-3 fill-current" /></button></div>)}
-            {!visibleEntries.length ? <div className="px-2 py-8 text-center text-xs text-[#8A94A1]">暂无条目</div> : null}
-          </div></div>
-        </aside>
-        <div className="min-w-0 bg-white p-6">{selectedId || isCreating ? <PromptTagEntryEditor draft={draft} error={error} saving={saving} bridgeReady={bridgeReady} isCreating={isCreating} onChange={setDraft} onSave={() => void saveEntry()} /> : null}</div>
+    <section className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)] bg-white" data-testid="prompt-tag-library">
+      <aside className="flex min-h-0 flex-col border-r border-[#E5EAF0] bg-[#EFF4F9] px-[18px] py-[18px]">
+        <button className="mb-5 flex min-h-[38px] items-center gap-2.5 rounded-[10px] px-2 text-[13px] text-[#3F3F3F] transition hover:bg-[#E2E8EF]" type="button" onClick={onBackToApp}><BackIcon className="h-4 w-4 fill-current" /><span>返回应用</span></button>
+        <div className="grid gap-1.5">
+          <button className="grid min-h-[42px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[10px] bg-white/70 px-3 text-left text-sm text-[#272536] shadow-[0_6px_18px_rgba(15,23,42,0.06)]" type="button" onClick={() => { setSelectedId(""); setIsCreating(false); setError(""); }}><PromptLibraryIcon className="h-4 w-4 fill-current" /><span>提示词列表</span></button>
+          <button className="grid min-h-[42px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[10px] px-3 text-left text-sm text-[#272536] transition hover:bg-[#E2E8EF]" type="button" onClick={() => { setDraft(emptyDraft); setSelectedId(""); setIsCreating(true); setError(""); }}><PlusIcon className="h-4 w-4 fill-current" /><span>新建提示词</span></button>
+        </div>
+      </aside>
+      <main className="scrollbar-soft min-w-0 overflow-y-auto bg-white p-8">
+        {selectedId || isCreating ? <PromptTagEntryEditor draft={draft} error={error} saving={saving} bridgeReady={bridgeReady} isCreating={isCreating} onChange={setDraft} onSave={() => void saveEntry()} /> : <div><div className="mb-5 flex items-center justify-between gap-3"><div><h1 className="text-xl font-semibold text-[#263241]">提示词列表</h1><p className="mt-1 text-xs text-[#7B8490]">{entries.length} 个素材</p></div><div className="flex gap-2"><input className="rounded-md border border-[#D8DFE7] px-3 py-2 text-xs outline-none focus:border-[#9AA3B2]" placeholder="搜索" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /><select className="rounded-md border border-[#D8DFE7] bg-white px-2 text-xs outline-none" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">全部分类</option>{categories.map((category) => <option key={category}>{category}</option>)}</select></div></div><div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4">{visibleEntries.map((entry) => <div className="group relative aspect-square overflow-hidden rounded-[18px] border border-[#D8DFE7] bg-[#F5F7FA] transition hover:border-[#9AA3B2]" key={entry.id}><button className="h-full w-full" type="button" title={entry.name} onClick={() => { setDraft(entry); setSelectedId(entry.id); setIsCreating(false); setError(""); }}>{entry.image_path ? <img className="h-full w-full object-cover" src={toFileUrl(entry.image_path)} alt={entry.name} /> : <span className="grid h-full place-items-center text-[#9AA3B2]"><PromptLibraryIcon className="h-10 w-10 fill-current" /></span>}</button><button className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border border-black/10 bg-white/90 text-[#64748B] opacity-0 transition hover:text-[#B33A3A] group-hover:opacity-100" type="button" aria-label={`删除 ${entry.name}`} onClick={() => void deleteEntry(entry.id)}><DeleteIcon className="h-3.5 w-3.5 fill-current" /></button></div>)}</div></div>}
+      </main>
     </section>
   );
 }
