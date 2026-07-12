@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toFileUrl } from "../shared/format";
 import { DeleteIcon, ResetIcon, UploadIcon } from "../shared/icons";
-import { cx, focusVisibleRingClass, focusVisibleWhiteRingClass, inputClass } from "../shared/styles";
+import { cx, focusResetClass, inputClass } from "../shared/styles";
 import type { ImageSizePreset, ImageStudioFormState } from "./types";
 
 type RolePickerItem = {
@@ -79,11 +79,11 @@ export function ImageFormPanel({
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectClass = cx(
     inputClass,
-    "h-11 appearance-none py-0 pr-10 text-sm leading-5 focus:border-[#D8DCE2] focus:ring-2 focus:ring-gray-300/70 focus-visible:border-[#D8DCE2] focus-visible:ring-2 focus-visible:ring-gray-300/70",
+    "h-11 appearance-none py-0 pr-10 text-sm leading-5 focus:border-[#D8DCE2] focus-visible:border-[#D8DCE2]",
   );
   const promptTextareaClass = cx(
     inputClass,
-    "min-h-[96px] resize-none overflow-hidden rounded-md border-[#D6DCE3] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus:ring-2 focus:ring-gray-300/70 focus-visible:border-[#D6DCE3] focus-visible:ring-2 focus-visible:ring-gray-300/70",
+    "min-h-[96px] resize-none overflow-hidden rounded-md border-[#D6DCE3] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus-visible:border-[#D6DCE3]",
   );
   const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-md bg-[#F3F5F7] p-1";
   const segmentedButtonBaseClassName = "min-w-0 rounded-md px-3 py-1.5 text-[13px] font-semibold transition";
@@ -236,7 +236,7 @@ export function ImageFormPanel({
                       type="button"
                       className={cx(
                         "relative inline-flex h-7 w-12 rounded-full transition",
-                        focusVisibleRingClass,
+                        focusResetClass,
                         nsfwEnabled ? "bg-[#20242A]" : "bg-[#BFC6D0]",
                       )}
                       aria-pressed={nsfwEnabled}
@@ -256,7 +256,7 @@ export function ImageFormPanel({
                       type="button"
                       className={cx(
                         "relative inline-flex h-7 w-12 rounded-full transition",
-                        focusVisibleRingClass,
+                        focusResetClass,
                         addQualityTags ? "bg-[#20242A]" : "bg-[#BFC6D0]",
                       )}
                       aria-pressed={addQualityTags}
@@ -436,7 +436,7 @@ export function ImageFormPanel({
       <button
         className={cx(
           "rounded-md bg-[#1F1F1F] px-4 py-3 text-sm text-white transition hover:bg-[#2A2A2A] disabled:cursor-default disabled:opacity-40",
-          focusVisibleWhiteRingClass,
+          focusResetClass,
         )}
         type="button"
         disabled={generateDisabled}

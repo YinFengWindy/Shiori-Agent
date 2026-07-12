@@ -615,7 +615,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 <ToggleField label="Add Quality Tags" checked={draft.integrations.novelaiAddQualityTags} onChange={(checked) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiAddQualityTags: checked } }))} />
                 <Field label="内容过滤预设" hint="控制默认 undesired content 强度。">
                   <select
-                    className="h-12 w-full rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-3.5 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-2 focus:ring-gray-300/70 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300/70"
+                    className="h-12 w-full rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-3.5 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus-visible:border-[#D8DCE2] focus-visible:outline-none"
                     value={String(draft.integrations.novelaiUndesiredContentPreset)}
                     onChange={(event) => updateDraft((current) => ({ ...current, integrations: { ...current.integrations, novelaiUndesiredContentPreset: parseNumber(event.target.value, current.integrations.novelaiUndesiredContentPreset) } }))}
                   >
@@ -688,7 +688,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
               {visibleSubsections.length ? (
                 <div className="relative max-w-full sm:max-w-[260px]">
                   <select
-                    className="h-10 w-full appearance-none rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-3.5 pr-10 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus:ring-2 focus:ring-gray-300/70 focus-visible:border-[#D8DCE2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300/70"
+                    className="h-10 w-full appearance-none rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-3.5 pr-10 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus-visible:border-[#D8DCE2] focus-visible:outline-none"
                     value={currentSubsectionId ?? ""}
                     onChange={(event) => updateActiveSubsection(event.target.value)}
                   >

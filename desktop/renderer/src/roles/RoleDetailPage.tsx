@@ -1,7 +1,7 @@
 import { toFileUrl } from "../shared/format";
 import { useLayoutEffect, useRef } from "react";
 import { ResetIcon, SaveIcon } from "../shared/icons";
-import { cx, focusVisibleRingClass, focusVisibleWhiteRingClass, inputClass } from "../shared/styles";
+import { cx, focusResetClass, inputClass } from "../shared/styles";
 import type { RoleFormState, RoleRecord } from "../shared/types";
 import {
   changeRoleBindingChannel,
@@ -131,7 +131,7 @@ export function RoleDetailPage({
               data-has-preview-avatar={previewAvatar ? "true" : "false"}
               className={cx(
                 "group relative h-[116px] w-[116px] overflow-hidden rounded-[28px] border border-white/22 bg-[rgba(255,255,255,0.08)] text-left shadow-[0_14px_32px_rgba(15,23,42,0.14)] transition hover:scale-[1.01]",
-                focusVisibleWhiteRingClass,
+                focusResetClass,
               )}
               onClick={onOpenAssetsPage}
             >
@@ -177,7 +177,7 @@ export function RoleDetailPage({
               </label>
               <label className="flex items-center gap-3 text-xs text-[#374151]">
                 <input
-                  className={cx("h-4 w-4 rounded border-[#D8DFE7] text-[#111827]", focusVisibleRingClass)}
+                  className={cx("h-4 w-4 rounded border-[#D8DFE7] text-[#111827]", focusResetClass)}
                   type="checkbox"
                   checked={roleForm.nsfwMemoryEnabled}
                   onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, nsfwMemoryEnabled: event.target.checked }))}
@@ -234,7 +234,7 @@ export function RoleDetailPage({
               </div>
               <div className="grid gap-3 rounded-md border border-[#D8DFE7] bg-white/82 p-4 text-xs text-[#374151]" data-testid="role-proactive-config">
                 <label className="flex items-center gap-3">
-                  <input className={cx("h-4 w-4 rounded border-[#D8DFE7] text-[#111827]", focusVisibleRingClass)} type="checkbox" checked={Boolean(roleForm.proactiveEnabled)} onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveEnabled: event.target.checked }))} />
+                  <input className={cx("h-4 w-4 rounded border-[#D8DFE7] text-[#111827]", focusResetClass)} type="checkbox" checked={Boolean(roleForm.proactiveEnabled)} onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveEnabled: event.target.checked }))} />
                   <span>主动推送</span>
                 </label>
                 <select

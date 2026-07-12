@@ -1,6 +1,6 @@
 import { toFileUrl } from "../shared/format";
 import { DeleteIcon, SpinnerIcon } from "../shared/icons";
-import { bodyTextClass, cardClass, cx, focusVisibleRingClass, focusVisibleWhiteRingClass } from "../shared/styles";
+import { bodyTextClass, cardClass, cx, focusResetClass } from "../shared/styles";
 import type { PendingRoleCardAction, RoleRecord } from "../shared/types";
 
 type RoleManagementPageProps = {
@@ -44,7 +44,7 @@ export function RoleManagementPage({
                   onClick={() => onOpenRoleDetail(role.id)}
                   className={cx(
                     "group relative grid h-[420px] w-full overflow-hidden rounded-[22px] border border-[#D9E0E8] bg-[#EEF1F5] text-left shadow-[0_14px_40px_rgba(31,41,55,0.06)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(31,41,55,0.1)] disabled:cursor-default disabled:opacity-60",
-                    focusVisibleRingClass,
+                    focusResetClass,
                     isActive && "shadow-[0_18px_44px_rgba(31,41,55,0.12)]",
                   )}
                   style={coverImage ? { backgroundImage: `url("${coverImage}")`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
@@ -70,7 +70,7 @@ export function RoleManagementPage({
                     data-testid={`delete-role-card-${role.id}`}
                     className={cx(
                       "absolute right-4 top-4 z-[2] grid h-9 w-9 place-items-center rounded-full border border-white/24 bg-[rgba(15,23,42,0.62)] text-lg text-white opacity-0 transition duration-200 hover:bg-[rgba(143,43,24,0.88)] group-hover:opacity-100 focus-visible:opacity-100",
-                      focusVisibleWhiteRingClass,
+                      focusResetClass,
                     )}
                     type="button"
                     disabled={isPending}

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { cx, focusVisibleDangerRingClass, focusVisibleRingClass } from "../shared/styles";
+import { cx, focusResetClass } from "../shared/styles";
 
 type ConfirmDialogProps = {
   open: boolean;
@@ -65,7 +65,7 @@ export function ConfirmDialog({
             className={cx(
               "rounded-md border border-[#D8DFE7] bg-white px-4 py-2.5 text-sm text-[#3B4652] transition",
               "hover:border-[#C7D1DB] hover:bg-[#F7F9FB]",
-              focusVisibleRingClass,
+              focusResetClass,
               busy && "cursor-default opacity-60",
             )}
             type="button"
@@ -78,7 +78,7 @@ export function ConfirmDialog({
             className={cx(
               "rounded-md border border-[rgba(143,43,24,0.22)] bg-[rgba(143,43,24,0.92)] px-4 py-2.5 text-sm text-white transition",
               "hover:bg-[rgba(143,43,24,1)]",
-              focusVisibleDangerRingClass,
+              focusResetClass,
               busy && "cursor-default opacity-60",
             )}
             type="button"

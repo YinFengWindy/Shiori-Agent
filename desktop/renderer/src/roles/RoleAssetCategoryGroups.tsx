@@ -183,7 +183,7 @@ export function RoleAssetCategoryGroups({
         <div className="mb-2 flex items-center gap-2 px-2">
           <input
             autoFocus
-            className="h-10 min-w-0 flex-1 rounded-md border border-[#D8DFE7] bg-white px-3 text-sm transition focus:border-[#B8BEC7] focus:outline-none focus:ring-2 focus:ring-gray-300/70"
+            className="h-10 min-w-0 flex-1 rounded-md border border-[#D8DFE7] bg-white px-3 text-sm transition focus:border-[#B8BEC7] focus:outline-none"
             value={newCategoryName}
             placeholder="分类名称"
             onChange={(event) => setNewCategoryName(event.target.value)}
@@ -230,7 +230,7 @@ export function RoleAssetCategoryGroups({
                   <CaretRightIcon className={cx("h-4 w-4 shrink-0 transition-transform", expanded && "rotate-90")} />
                 </button>
                 <input
-            className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium transition focus:border-[#B8BEC7] focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300/70"
+            className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium transition focus:border-[#B8BEC7] focus:bg-white focus:outline-none"
                   defaultValue={category.name}
                   aria-label={`${category.name}分类名称`}
                   onBlur={(event) => renameCategory(category, event.target.value)}

@@ -82,7 +82,7 @@ export function RoleSearchDialog({
               data-testid="role-search-input"
               className={cx(
                 "h-12 w-full rounded-[12px] border border-transparent bg-[#F3F3F3] px-4 py-0 text-[15px] text-[#202020] outline-none transition-none placeholder:text-[#9A9A9A]",
-                "hover:border-transparent focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gray-300/70 focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300/70",
+                "hover:border-transparent focus:border-transparent focus:outline-none focus-visible:border-transparent focus-visible:outline-none",
               )}
               value={query}
               onChange={(event) => onUpdateQuery(event.target.value)}

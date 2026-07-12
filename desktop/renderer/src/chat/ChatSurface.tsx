@@ -17,7 +17,7 @@ import { RoleTasksPanel } from "./RoleTasksPanel";
 import { useRoleTasks } from "./useRoleTasks";
 import { formatTimestamp, toFileUrl } from "../shared/format";
 import { CopyIcon, DocumentIcon, QuoteIcon } from "../shared/icons";
-import { cx, focusVisibleRingClass } from "../shared/styles";
+import { cx, focusResetClass } from "../shared/styles";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
 
 type MessageContextMenuState = {
@@ -592,7 +592,7 @@ export function ChatSurface({
                 <button
                   className={cx(
                     "rounded-md border border-[#D8DEE8] bg-white/85 px-3 py-1.5 text-[12px] text-[#5B6472] transition hover:border-[#C6CEDA] hover:bg-white",
-                    focusVisibleRingClass,
+                    focusResetClass,
                   )}
                   type="button"
                   onClick={() => setVisibleMessageCount((current) => current + visibleChatMessageCountStep)}
