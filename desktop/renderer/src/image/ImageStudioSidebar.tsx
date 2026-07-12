@@ -18,7 +18,6 @@ type ImageStudioSidebarProps = {
   submitting: boolean;
   validationError: string;
   onBackToChat: () => void;
-  onOpenPromptTagLibrary: () => void;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
   onChange: (next: Partial<ImageStudioFormState>) => void;
   onPickBaseImage: () => void;
@@ -42,7 +41,6 @@ export function ImageStudioSidebar({
   submitting,
   validationError,
   onBackToChat,
-  onOpenPromptTagLibrary,
   onBeginResize,
   onChange,
   onPickBaseImage,
@@ -86,7 +84,6 @@ export function ImageStudioSidebar({
           submitting={submitting}
           onChange={onChange}
           onPickBaseImage={onPickBaseImage}
-          onOpenPromptTagLibrary={onOpenPromptTagLibrary}
           onSubmit={onSubmit}
           onToggleNsfwEnabled={onToggleNsfwEnabled}
           onToggleAddQualityTags={onToggleAddQualityTags}

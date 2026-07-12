@@ -360,7 +360,6 @@ export function DesktopAppFrame({
               submitting={imageStudioState.submitting}
               validationError={imageStudioState.validationError}
               onBackToChat={onBackToChat}
-              onOpenPromptTagLibrary={onOpenPromptTagLibrary}
               onBeginResize={sidebarState.onBeginResize}
               onChange={imageStudioState.onChange}
               onPickBaseImage={imageStudioState.onPickBaseImage}
@@ -392,6 +391,7 @@ export function DesktopAppFrame({
               onOpenRolesWorkspace={onOpenRolesWorkspace}
               onOpenRole={onOpenRole}
               onOpenImageStudio={onOpenImageStudio}
+              onOpenPromptTagLibrary={onOpenPromptTagLibrary}
               onOpenSettings={onOpenSettings}
               onBeginResize={sidebarState.onBeginResize}
             />

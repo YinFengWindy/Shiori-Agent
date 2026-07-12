@@ -32,7 +32,6 @@ describe("ImageStudioSidebar", () => {
         submitting={false}
         validationError=""
         onBackToChat={() => undefined}
-        onOpenPromptTagLibrary={() => undefined}
         onBeginResize={() => undefined}
         onChange={() => undefined}
         onPickBaseImage={() => undefined}
