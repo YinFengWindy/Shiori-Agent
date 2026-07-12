@@ -129,6 +129,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
                 "role_id": role_id,
                 "content": "hi",
                 "media": ["D:\\files\\scene.png"],
+                "client_message_id": "desktop-message-1",
             },
         },
         emit_event=emitted.append,
@@ -144,6 +145,9 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
     assert response.payload["session"]["messages"][0]["media"] == [
         "D:\\files\\scene.png"
     ]
+    assert response.payload["session"]["messages"][0]["metadata"][
+        "client_message_id"
+    ] == "desktop-message-1"
     await _wait_until(
         lambda: [item["method"] for item in emitted]
         == ["session.updated", "chat.delta", "chat.done", "session.updated"]

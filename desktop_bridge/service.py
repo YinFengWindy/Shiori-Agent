@@ -405,6 +405,9 @@ class DesktopBridgeService:
                 ).strip()
                 reply_to_content = str(payload.get("reply_to_content") or "").strip()
                 reply_to_sender = str(payload.get("reply_to_sender") or "").strip()
+                client_message_id = str(
+                    payload.get("client_message_id") or ""
+                ).strip()
                 if not content and not media:
                     return self._error(
                         request_id,
@@ -417,6 +420,8 @@ class DesktopBridgeService:
                 inbound_content = content
                 persisted_user_content = content
                 metadata: dict[str, object] = {}
+                if client_message_id:
+                    metadata["client_message_id"] = client_message_id
                 if reply_to_message_id:
                     metadata["reply_to_message_id"] = reply_to_message_id
                 if reply_to_sender:

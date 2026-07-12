@@ -388,13 +388,17 @@ export function useDesktopSessionState({
     if ((!content && media.length === 0) || !roleId || !sessionKey) return false;
     if (!canSendSessionState(sendingSessionsRef.current, sessionKey)) return false;
     const persistedReplyTarget = currentReplyTarget;
+    const clientMessageId = window.crypto.randomUUID();
     markSessionSending(sessionKey, roleId);
     setError("");
     updateCommittedActiveSession((current) =>
       current?.key === sessionKey
         ? {
             ...current,
-            messages: [...current.messages, buildOptimisticUserChatMessage(content, media, persistedReplyTarget)],
+            messages: [
+              ...current.messages,
+              buildOptimisticUserChatMessage(content, media, persistedReplyTarget, clientMessageId),
+            ],
           }
         : current,
     );
@@ -405,6 +409,7 @@ export function useDesktopSessionState({
           role_id: roleId,
           content,
           media,
+          client_message_id: clientMessageId,
           reply_to_message_id: persistedReplyTarget?.messageId ?? "",
           reply_to_content: persistedReplyTarget?.content ?? "",
           reply_to_sender: persistedReplyTarget?.sender ?? "",

@@ -34,16 +34,21 @@ export function summarizeChatReplyContent(content: string): string {
 export function buildOptimisticUserChatMessage(
   content: string,
   attachments: string[],
-  replyTarget?: ChatReplyTarget | null,
+  replyTarget: ChatReplyTarget | null | undefined,
+  clientMessageId: string,
 ): SessionMessage {
   const normalizedContent = content.trim();
   const media = normalizeChatAttachmentPaths(attachments);
   const message: SessionMessage = {
     role: "user",
     content: normalizedContent,
+    metadata: {
+      client_message_id: clientMessageId.trim(),
+    },
   };
   if (replyTarget) {
     message.metadata = {
+      ...message.metadata,
       reply_to_message_id: replyTarget.messageId,
       reply_to_content: replyTarget.content,
       reply_to_sender: replyTarget.sender,

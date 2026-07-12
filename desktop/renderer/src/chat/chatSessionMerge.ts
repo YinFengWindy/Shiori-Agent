@@ -5,6 +5,10 @@ function normalizeMessageId(message: SessionMessage): string {
   return String(message.id ?? "").trim();
 }
 
+function normalizeClientMessageId(message: SessionMessage): string {
+  return String(message.metadata?.client_message_id ?? "").trim();
+}
+
 function normalizeReplyMetadata(message: SessionMessage) {
   return {
     messageId: String(message.metadata?.reply_to_message_id ?? "").trim(),
@@ -96,9 +100,13 @@ function findMissingOptimisticUserMessage(
   if (!optimisticUserMessage || !isOptimisticUserMessage(optimisticUserMessage)) {
     return null;
   }
-  const alreadyPersisted = incomingSession.messages.some((message) => (
-    areEquivalentMessagesIgnoringMissingIds(optimisticUserMessage, message)
-  ));
+  const clientMessageId = normalizeClientMessageId(optimisticUserMessage);
+  const alreadyPersisted = incomingSession.messages.some((message) => {
+    if (clientMessageId) {
+      return normalizeClientMessageId(message) === clientMessageId;
+    }
+    return areEquivalentMessagesIgnoringMissingIds(optimisticUserMessage, message);
+  });
   return alreadyPersisted ? null : optimisticUserMessage;
 }
 
@@ -160,7 +168,10 @@ export function mergeIncomingSessionDuringSend(
     return incomingSession;
   }
 
-  if (!hasMatchingPersistedPrefixBeforeOptimisticUser(currentSession, incomingSession, optimisticUserIndex)) {
+  if (
+    !normalizeClientMessageId(missingOptimisticUserMessage)
+    && !hasMatchingPersistedPrefixBeforeOptimisticUser(currentSession, incomingSession, optimisticUserIndex)
+  ) {
     return incomingSession;
   }
 

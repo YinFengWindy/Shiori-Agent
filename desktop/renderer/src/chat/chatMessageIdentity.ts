@@ -12,6 +12,10 @@ function normalizeRenderId(message: SessionMessage): string {
   return String(message.render_id ?? "").trim();
 }
 
+function normalizeClientMessageId(message: SessionMessage): string {
+  return String(message.metadata?.client_message_id ?? "").trim();
+}
+
 function normalizeReplyMetadata(message: SessionMessage) {
   return {
     messageId: String(message.metadata?.reply_to_message_id ?? "").trim(),
@@ -42,6 +46,11 @@ function sameReplyMetadata(left: SessionMessage, right: SessionMessage): boolean
 }
 
 function canReuseRenderIdForStreamingUpdate(current: SessionMessage, incoming: SessionMessage): boolean {
+  const currentClientMessageId = normalizeClientMessageId(current);
+  const incomingClientMessageId = normalizeClientMessageId(incoming);
+  if (currentClientMessageId && incomingClientMessageId) {
+    return current.role === incoming.role && currentClientMessageId === incomingClientMessageId;
+  }
   const currentId = normalizeMessageId(current);
   const incomingId = normalizeMessageId(incoming);
   if (currentId && incomingId && currentId !== incomingId) {

@@ -160,6 +160,33 @@ describe("mergeIncomingSessionDuringSend", () => {
     assert.equal(merged, incomingSession);
   });
 
+  it("keeps an identified optimistic turn when a stale snapshot has divergent history", () => {
+    const optimisticUserMessage: SessionMessage = {
+      role: "user",
+      content: "刚发出去的消息",
+      metadata: { client_message_id: "desktop-message-1" },
+    };
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息",
+      },
+      optimisticUserMessage,
+    ]);
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "assistant",
+        content: "上一条消息（服务端旧快照）",
+      },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(currentSession, incomingSession, true);
+
+    assert.deepEqual(merged?.messages, [incomingSession.messages[0], optimisticUserMessage]);
+  });
+
   it("preserves fresh incoming metadata while keeping the optimistic local user turn", () => {
     const currentSession = createSession([
       {

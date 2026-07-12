@@ -76,6 +76,27 @@ describe("reconcileSessionMessageRenderIds", () => {
     assert.equal(getChatMessageReactKey(reconciled?.messages[1] as SessionMessage, 1), optimisticUserMessage.render_id);
   });
 
+  it("reuses the optimistic render id by client message id", () => {
+    const optimisticUserMessage = ensureChatMessageRenderId({
+      role: "user",
+      content: "发送中的内容",
+      metadata: { client_message_id: "desktop-message-1" },
+    });
+    const currentSession = createSession([optimisticUserMessage]);
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "user",
+        content: "服务端持久化内容",
+        metadata: { client_message_id: "desktop-message-1", source: "desktop" },
+      },
+    ]);
+
+    const reconciled = reconcileSessionMessageRenderIds(currentSession, incomingSession);
+
+    assert.equal(reconciled?.messages[0]?.render_id, optimisticUserMessage.render_id);
+  });
+
   it("reuses the streaming assistant render id when the authoritative snapshot extends the same reply", () => {
     const streamingAssistantMessage = ensureChatMessageRenderId({
       role: "assistant",
