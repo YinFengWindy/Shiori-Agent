@@ -227,7 +227,7 @@ export function RoleAssetCategoryGroups({
                   aria-label={expanded ? `收起${category.name}` : `展开${category.name}`}
                   onClick={() => toggleCategory(category.id)}
                 >
-                  <CaretRightIcon className={cx("h-4 w-4 shrink-0 transition-transform", expanded && "rotate-90")} />
+                  <CaretRightIcon className={cx("h-4 w-4 shrink-0 stroke-current transition-transform", expanded && "rotate-90")} />
                 </button>
                 <input
             className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium transition focus:border-[#B8BEC7] focus:bg-white focus:outline-none"

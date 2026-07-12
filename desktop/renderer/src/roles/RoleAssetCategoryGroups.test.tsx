@@ -63,6 +63,6 @@ describe("RoleAssetCategoryGroups", () => {
 
     const backButtonClass = markup.match(/<button class="([^"]+)" type="button" aria-label="返回角色详情"/)?.[1] ?? "";
     assert.doesNotMatch(backButtonClass, /shadow/);
-    assert.match(markup, /aria-label="展开默认"[^>]*><svg[^>]*class="h-4 w-4 shrink-0 transition-transform"/);
+    assert.match(markup, /aria-label="展开默认"[^>]*><svg[^>]*class="h-4 w-4 shrink-0 stroke-current transition-transform"/);
   });
 });
