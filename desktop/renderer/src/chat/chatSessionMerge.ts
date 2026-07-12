@@ -121,6 +121,15 @@ export function isPendingUserMessageAcknowledged(
   });
 }
 
+/** Clears a pending user overlay only after its chat turn has finished and a snapshot confirms it. */
+export function shouldClearPendingUserMessage(
+  pendingUserMessage: SessionMessage,
+  incomingSession: SessionPayload,
+  sending: boolean,
+): boolean {
+  return !sending && isPendingUserMessageAcknowledged(pendingUserMessage, incomingSession);
+}
+
 function hasEquivalentIncomingPrefix(
   currentSession: SessionPayload,
   incomingSession: SessionPayload,

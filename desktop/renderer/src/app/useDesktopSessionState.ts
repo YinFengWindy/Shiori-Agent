@@ -2,8 +2,8 @@ import { useEffect, useRef } from "react";
 import { buildOptimisticUserChatMessage, normalizeChatAttachmentPaths } from "../chat/chatComposerState";
 import { ensureChatMessageRenderId, reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
 import {
-  isPendingUserMessageAcknowledged,
   mergeIncomingSessionDuringSend,
+  shouldClearPendingUserMessage,
 } from "../chat/chatSessionMerge";
 import {
   readRoleSessionCache,
@@ -170,16 +170,17 @@ export function useDesktopSessionState({
     const pendingUserMessage = nextSession
       ? pendingUserMessagesRef.current[nextSession.key] ?? null
       : null;
+    const sending = Boolean(nextSession?.key && sendingSessionsRef.current[nextSession.key]);
     const mergedSession = mergeIncomingSessionDuringSend(
       activeSessionRef.current,
       nextSession,
-      Boolean(nextSession?.key && sendingSessionsRef.current[nextSession.key]),
+      sending,
       pendingUserMessage,
     );
     if (
       pendingUserMessage
       && nextSession
-      && isPendingUserMessageAcknowledged(pendingUserMessage, nextSession)
+      && shouldClearPendingUserMessage(pendingUserMessage, nextSession, sending)
     ) {
       delete pendingUserMessagesRef.current[nextSession.key];
     }

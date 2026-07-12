@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import {
   isPendingUserMessageAcknowledged,
   mergeIncomingSessionDuringSend,
+  shouldClearPendingUserMessage,
 } from "./chatSessionMerge.js";
 import type { SessionMessage, SessionPayload } from "../shared/types.js";
 
@@ -258,6 +259,62 @@ describe("mergeIncomingSessionDuringSend", () => {
     assert.equal(
       isPendingUserMessageAcknowledged(pendingUserMessage, historicalSession),
       false,
+    );
+  });
+
+  it("keeps the pending overlay through an early acknowledgement and a later stale snapshot", () => {
+    const pendingUserMessage: SessionMessage = {
+      role: "user",
+      content: "发送后不能闪烁",
+      metadata: { client_message_id: "desktop-message-race" },
+    };
+    const optimisticSession = createSession([pendingUserMessage]);
+    const earlyAcknowledgement = createSession([
+      {
+        id: "role:mira:1",
+        role: "user",
+        content: "发送后不能闪烁",
+        metadata: { client_message_id: "desktop-message-race" },
+      },
+    ]);
+    const staleSnapshot = createSession([]);
+
+    const acknowledgedWhileSending = mergeIncomingSessionDuringSend(
+      optimisticSession,
+      earlyAcknowledgement,
+      true,
+      pendingUserMessage,
+    );
+    assert.equal(
+      shouldClearPendingUserMessage(pendingUserMessage, earlyAcknowledgement, true),
+      false,
+    );
+
+    const restoredFromStaleSnapshot = mergeIncomingSessionDuringSend(
+      acknowledgedWhileSending,
+      staleSnapshot,
+      true,
+      pendingUserMessage,
+    );
+    assert.equal(restoredFromStaleSnapshot?.messages.length, 1);
+    assert.equal(
+      restoredFromStaleSnapshot?.messages[0]?.metadata?.client_message_id,
+      "desktop-message-race",
+    );
+
+    const finalSnapshot = createSession([...earlyAcknowledgement.messages]);
+    assert.equal(
+      shouldClearPendingUserMessage(pendingUserMessage, finalSnapshot, false),
+      true,
+    );
+    assert.equal(
+      mergeIncomingSessionDuringSend(
+        restoredFromStaleSnapshot,
+        finalSnapshot,
+        false,
+        pendingUserMessage,
+      ),
+      finalSnapshot,
     );
   });
 
