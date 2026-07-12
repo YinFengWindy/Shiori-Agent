@@ -199,6 +199,34 @@ def test_role_store_accepts_category_removal_with_reassigned_bindings(tmp_path: 
     assert updated.asset_category_bindings[asset_path] == "default"
 
 
+def test_role_store_deletes_category_assets_when_paths_are_removed_together(tmp_path: Path):
+    image = tmp_path / "reaction.png"
+    image.write_bytes(b"reaction")
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    role = store.update_role(
+        "mira",
+        asset_categories=[
+            {"id": "default", "name": "默认"},
+            {"id": "reactions", "name": "表情包", "allow_role_send": True},
+        ],
+        illustration_sources=[image],
+        illustration_category_id="reactions",
+    )
+    asset_path = role.illustrations[0]
+    asset_absolute_path = tmp_path / "roles" / asset_path
+
+    updated = store.update_role(
+        "mira",
+        asset_categories=[{"id": "default", "name": "默认"}],
+        asset_category_bindings={},
+        removed_illustrations=[asset_path],
+    )
+
+    assert updated.illustrations == []
+    assert not asset_absolute_path.exists()
+
+
 def test_role_store_updates_and_deletes_role(tmp_path: Path):
     store = RoleStore(tmp_path)
     role = store.create_role(

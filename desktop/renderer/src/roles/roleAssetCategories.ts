@@ -60,3 +60,17 @@ export function removeRoleAssetCategory(
     ),
   };
 }
+
+/** Removes a category and its asset bindings without reassigning the assets. */
+export function deleteRoleAssetCategory(
+  categories: RoleAssetCategory[],
+  bindings: Record<string, string>,
+  categoryId: string,
+) {
+  return {
+    categories: categories.filter((category) => category.id !== categoryId),
+    bindings: Object.fromEntries(
+      Object.entries(bindings).filter(([, currentCategoryId]) => currentCategoryId !== categoryId),
+    ),
+  };
+}

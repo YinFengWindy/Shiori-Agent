@@ -8,8 +8,9 @@ import {
   getRoleAssetCategories,
   groupRoleAssetsByCategory,
   moveRoleAssetToCategory,
-  removeRoleAssetCategory,
 } from "./roleAssetCategories";
+import { deleteRoleAssetCategory } from "./roleAssetCategories";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 type RoleAssetCategoryGroupsProps = {
   role: RoleRecord | null;
@@ -23,6 +24,7 @@ type RoleAssetCategoryGroupsProps = {
   onUpdateOrganization: (
     categories: RoleAssetCategory[],
     bindings: Record<string, string>,
+    removedIllustrations?: string[],
   ) => Promise<boolean>;
 };
 
@@ -48,6 +50,7 @@ export function RoleAssetCategoryGroups({
   const [newCategoryName, setNewCategoryName] = useState("");
   const [draggedAssetPath, setDraggedAssetPath] = useState("");
   const [dropCategoryId, setDropCategoryId] = useState("");
+  const [pendingDeleteCategory, setPendingDeleteCategory] = useState<RoleAssetCategory | null>(null);
   const visibleCategories = organizationDraft?.categories ?? categories;
   const visibleBindings = organizationDraft?.bindings ?? role?.asset_category_bindings ?? {};
   const groupedAssets = groupRoleAssetsByCategory(
@@ -65,12 +68,14 @@ export function RoleAssetCategoryGroups({
   async function persistOrganization(
     nextCategories: RoleAssetCategory[],
     nextBindings: Record<string, string>,
-  ): Promise<void> {
+    removedIllustrations: string[] = [],
+  ): Promise<boolean> {
     setOrganizationDraft({ categories: nextCategories, bindings: nextBindings });
-    const persisted = await onUpdateOrganization(nextCategories, nextBindings);
+    const persisted = await onUpdateOrganization(nextCategories, nextBindings, removedIllustrations);
     if (!persisted) {
       setOrganizationDraft(null);
     }
+    return persisted;
   }
 
   function toggleCategory(categoryId: string): void {
@@ -122,22 +127,18 @@ export function RoleAssetCategoryGroups({
   }
 
   function deleteCategory(category: RoleAssetCategory): void {
-    const destination = visibleCategories.find((item) => item.id !== category.id);
-    if (!destination) return;
-    const assetCount = groupedAssets.get(category.id)?.length ?? 0;
-    const confirmed = window.confirm(
-      assetCount
-        ? `删除“${category.name}”并将其中 ${assetCount} 张素材移动到“${destination.name}”？`
-        : `删除“${category.name}”？`,
-    );
-    if (!confirmed) return;
-    const result = removeRoleAssetCategory(
-      visibleCategories,
-      visibleBindings,
-      category.id,
-      destination.id,
-    );
-    void persistOrganization(result.categories, result.bindings);
+    setPendingDeleteCategory(category);
+  }
+
+  async function confirmDeleteCategory(): Promise<void> {
+    if (!pendingDeleteCategory) return;
+    const categoryId = pendingDeleteCategory.id;
+    const removedIllustrations = (groupedAssets.get(categoryId) ?? []).map((item) => item.relPath);
+    const result = deleteRoleAssetCategory(visibleCategories, visibleBindings, categoryId);
+    const persisted = await persistOrganization(result.categories, result.bindings, removedIllustrations);
+    if (persisted) {
+      setPendingDeleteCategory(null);
+    }
   }
 
   function dropAsset(categoryId: string): void {
@@ -312,6 +313,17 @@ export function RoleAssetCategoryGroups({
           );
         })}
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDeleteCategory)}
+        title="确认删除分类"
+        description={pendingDeleteCategory
+          ? `“${pendingDeleteCategory.name}” 删除后会同时移除其中 ${groupedAssets.get(pendingDeleteCategory.id)?.length ?? 0} 张素材。`
+          : ""}
+        confirmLabel="确认删除"
+        busy={saving}
+        onClose={() => setPendingDeleteCategory(null)}
+        onConfirm={() => void confirmDeleteCategory()}
+      />
     </div>
   );
 }

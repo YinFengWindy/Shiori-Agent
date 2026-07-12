@@ -142,7 +142,7 @@ type DesktopAppFrameProps = {
   selectedChatBackground: string;
   onBackToRoleDetail: () => void;
   onPickRoleAssets: (categoryId: string) => void;
-  onUpdateRoleAssetOrganization: (categories: import("../shared/types").RoleAssetCategory[], bindings: Record<string, string>) => Promise<boolean>;
+  onUpdateRoleAssetOrganization: (categories: import("../shared/types").RoleAssetCategory[], bindings: Record<string, string>, removedIllustrations?: string[]) => Promise<boolean>;
   onRemoveRoleAsset: (path: string) => void;
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;

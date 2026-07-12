@@ -368,6 +368,7 @@ export function useRoleManagement({
   async function updateRoleAssetOrganization(
     assetCategories: RoleAssetCategory[],
     assetCategoryBindings: Record<string, string>,
+    removedIllustrations: string[] = [],
   ): Promise<boolean> {
     if (!detailRoleId) return false;
     setSavingRoleAssets(true);
@@ -378,6 +379,7 @@ export function useRoleManagement({
         role_id: detailRoleId,
         asset_categories: assetCategories,
         asset_category_bindings: assetCategoryBindings,
+        removed_illustrations: removedIllustrations,
       },
     });
     setSavingRoleAssets(false);
