@@ -687,7 +687,7 @@ export function ChatSurface({
                               isChatImageAsset(item) ? (
                                 <button
                                   key={`${messageDomKey}:${mediaIndex}:${item}`}
-                                  className="block max-w-[420px] cursor-grab overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white active:cursor-grabbing focus:outline-none"
+                                  className="block w-fit max-w-full cursor-grab overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white active:cursor-grabbing focus:outline-none"
                                   type="button"
                                   draggable
                                   onDragStart={(event) => handleAttachmentDragStart(event, item)}

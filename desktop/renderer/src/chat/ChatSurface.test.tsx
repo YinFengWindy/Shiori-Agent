@@ -150,6 +150,7 @@ describe("ChatSurface", () => {
     const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
 
     assert.match(markup, /alt="message attachment"/);
+    assert.match(markup, /block w-fit max-w-full cursor-grab/);
     assert.doesNotMatch(markup, /object-cover/);
   });
 
