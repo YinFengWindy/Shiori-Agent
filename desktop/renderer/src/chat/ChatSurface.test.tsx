@@ -149,7 +149,7 @@ describe("ChatSurface", () => {
 
     const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
 
-    assert.match(markup, /max-h-\[280px\] max-w-full w-auto object-contain/);
+    assert.match(markup, /max-w-\[420px\][\s\S]*max-h-\[280px\] max-w-\[420px\] object-contain/);
     assert.doesNotMatch(markup, /max-h-\[280px\] w-full object-cover/);
   });
 

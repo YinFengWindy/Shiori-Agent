@@ -686,13 +686,13 @@ export function ChatSurface({
                               isChatImageAsset(item) ? (
                                 <button
                                   key={`${messageDomKey}:${mediaIndex}:${item}`}
-                                  className="block cursor-grab overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white active:cursor-grabbing focus:outline-none"
+                                  className="block max-w-[420px] cursor-grab overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white active:cursor-grabbing focus:outline-none"
                                   type="button"
                                   draggable
                                   onDragStart={(event) => handleAttachmentDragStart(event, item)}
                                   onClick={() => handleOpenChatImagePreview(buildChatImageHistoryKey(messageDomKey, mediaIndex))}
                                 >
-                                  <img className="block max-h-[280px] max-w-full w-auto object-contain" src={toFileUrl(item)} alt="message attachment" />
+                                  <img className="block h-auto max-h-[280px] max-w-[420px] object-contain" src={toFileUrl(item)} alt="message attachment" />
                                 </button>
                               ) : (
                                 <a
