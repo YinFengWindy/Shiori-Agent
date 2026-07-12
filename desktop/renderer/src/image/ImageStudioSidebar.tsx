@@ -74,13 +74,6 @@ export function ImageStudioSidebar({
         <span className="text-base leading-none">←</span>
         <span>返回应用</span>
       </button>
-      <button
-        className={sidebarBackClass}
-        type="button"
-        onClick={onOpenPromptTagLibrary}
-      >
-        <span>提示词库</span>
-      </button>
       <div className="scrollbar-soft min-h-0 overflow-y-auto px-2 pb-1">
         <ImageFormPanel
           bridgeReady={bridgeReady}
@@ -93,6 +86,7 @@ export function ImageStudioSidebar({
           submitting={submitting}
           onChange={onChange}
           onPickBaseImage={onPickBaseImage}
+          onOpenPromptTagLibrary={onOpenPromptTagLibrary}
           onSubmit={onSubmit}
           onToggleNsfwEnabled={onToggleNsfwEnabled}
           onToggleAddQualityTags={onToggleAddQualityTags}

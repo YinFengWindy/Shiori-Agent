@@ -146,3 +146,12 @@ export function QuoteIcon({ className = "h-4 w-4 fill-current" }: DesktopIconPro
     </svg>
   );
 }
+
+/** Renders the prompt-library glyph used by image generation tools. */
+export function PromptLibraryIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 1024 1024" className={className} aria-hidden="true">
+      <path d="M792 208H480.88c-13.28 0-24 10.72-24 24v560c0 13.28 10.72 24 24 24H792c13.28 0 24-10.72 24-24V232c0-13.28-10.72-24-24-24z m-287.12 48h107.52v512H504.88V256zM768 768H660.48V256H768v512zM421.68 223.76l-124.48-15.52a24.056 24.056 0 0 0-26.88 21.12l-62.24 544.48c-1.52 13.12 7.92 25.04 21.04 26.56l132.24 15.52c0.96 0.08 1.84 0.16 2.8 0.16 5.44 0 10.72-1.84 15.04-5.28 5.04-4 8.24-9.92 8.88-16.32l54.48-544.48a24 24 0 0 0-20.88-26.24z m-78.88 541.52l-84.24-9.92 56.72-496.56 77.12 9.68-49.6 496.8zM690.24 372h48v46.64h-48zM534.64 372h48v46.64h-48z" />
+    </svg>
+  );
+}

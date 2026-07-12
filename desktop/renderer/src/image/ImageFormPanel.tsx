@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toFileUrl } from "../shared/format";
-import { DeleteIcon, ResetIcon, UploadIcon } from "../shared/icons";
+import { DeleteIcon, PromptLibraryIcon, ResetIcon, UploadIcon } from "../shared/icons";
 import { cx, focusResetClass, inputClass } from "../shared/styles";
 import type { ImageSizePreset, ImageStudioFormState } from "./types";
 
@@ -21,6 +21,7 @@ type ImageFormPanelProps = {
   submitting: boolean;
   onChange: (next: Partial<ImageStudioFormState>) => void;
   onPickBaseImage: () => void;
+  onOpenPromptTagLibrary: () => void;
   onSubmit: () => void;
   onToggleNsfwEnabled: () => void;
   onToggleAddQualityTags: () => void;
@@ -66,6 +67,7 @@ export function ImageFormPanel({
   submitting,
   onChange,
   onPickBaseImage,
+  onOpenPromptTagLibrary,
   onSubmit,
   onToggleNsfwEnabled,
   onToggleAddQualityTags,
@@ -130,7 +132,8 @@ export function ImageFormPanel({
 
   return (
     <section className="grid min-h-0 min-w-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-white p-5">
-      <div className="relative" ref={rolePanelRef}>
+      <div className="flex items-center gap-2">
+      <div className="relative min-w-0 flex-1" ref={rolePanelRef}>
         <button
           type="button"
           className="flex h-11 w-full min-w-0 items-center gap-3 rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-3 pr-4 text-left transition hover:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2]"
@@ -182,6 +185,10 @@ export function ImageFormPanel({
             </div>
           </div>
         ) : null}
+      </div>
+      <button type="button" className="inline-flex h-11 w-11 flex-none items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-[#D6DCE3] hover:text-[#20242A] focus:outline-none focus:ring-0 focus-visible:border-[#D6DCE3]" aria-label="打开提示词库" title="打开提示词库" onClick={onOpenPromptTagLibrary}>
+        <PromptLibraryIcon className="h-5 w-5 fill-current" />
+      </button>
       </div>
 
       <div className="grid gap-2">
