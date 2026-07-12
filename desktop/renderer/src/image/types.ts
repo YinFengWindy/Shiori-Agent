@@ -50,3 +50,14 @@ export type ImageGenerateResult = {
   role_asset_paths: string[];
   message?: string;
 };
+
+export type PromptTagEntry = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  category: string;
+  match_terms: string[];
+  positive_tags: string[];
+  negative_tags: string[];
+  rating: "general" | "sensitive" | "adult";
+};

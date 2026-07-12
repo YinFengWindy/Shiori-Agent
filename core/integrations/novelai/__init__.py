@@ -9,6 +9,7 @@ from .models import (
 )
 from .service import NovelAIService
 from .store import NovelAIStore
+from .prompt_tags import PromptTagEntry, PromptTagExpansion, PromptTagStore
 
 __all__ = [
     "GenerateImageRequest",
@@ -18,4 +19,7 @@ __all__ = [
     "NovelAIService",
     "NovelAISettings",
     "NovelAIStore",
+    "PromptTagEntry",
+    "PromptTagExpansion",
+    "PromptTagStore",
 ]

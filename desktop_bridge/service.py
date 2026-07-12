@@ -11,7 +11,12 @@ from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
 from conversation.service import ConversationService
-from core.integrations.novelai import NovelAIClient, NovelAIService, NovelAIStore
+from core.integrations.novelai import (
+    NovelAIClient,
+    NovelAIService,
+    NovelAIStore,
+    PromptTagStore,
+)
 from core.integrations.novelai.models import NovelAISettings
 from core.net.http import get_default_http_requester
 from core.roles import RoleAggregateService, RoleRelationshipRuntimeService, RoleStore
@@ -100,11 +105,13 @@ class DesktopBridgeService:
             emit_session_updated=self._emit_session_updated,
         )
         self.novelai_store = novelai_store or NovelAIStore(workspace)
+        self.prompt_tag_store = PromptTagStore(workspace)
         self.novelai_service = novelai_service or self._build_novelai_service()
         self.image_service = DesktopImageService(
             role_service=self.role_service,
             novelai_service=self.novelai_service,
             novelai_store=self.novelai_store,
+            prompt_tag_store=self.prompt_tag_store,
         )
         if push_tool is not None:
             self.register_desktop_push_channel(push_tool)
@@ -237,7 +244,9 @@ class DesktopBridgeService:
                     illustration_sources=illustration_sources,
                 )
                 return self._ok(
-                    request_id, method, {"role": self.role_presenter.serialize(aggregate.role)}
+                    request_id,
+                    method,
+                    {"role": self.role_presenter.serialize(aggregate.role)},
                 )
             if method == "roles.update":
                 avatar_source = str(payload.get("avatar_source") or "").strip() or None
@@ -263,7 +272,11 @@ class DesktopBridgeService:
                 )
                 raw_asset_categories = payload.get("asset_categories")
                 asset_categories = (
-                    [dict(item) for item in raw_asset_categories if isinstance(item, dict)]
+                    [
+                        dict(item)
+                        for item in raw_asset_categories
+                        if isinstance(item, dict)
+                    ]
                     if isinstance(raw_asset_categories, list)
                     else None
                 )
@@ -313,7 +326,9 @@ class DesktopBridgeService:
                     asset_category_bindings=asset_category_bindings,
                 )
                 return self._ok(
-                    request_id, method, {"role": self.role_presenter.serialize(aggregate.role)}
+                    request_id,
+                    method,
+                    {"role": self.role_presenter.serialize(aggregate.role)},
                 )
             if method == "roles.delete":
                 role_id = str(payload.get("role_id") or "").strip()
@@ -426,9 +441,7 @@ class DesktopBridgeService:
                 ).strip()
                 reply_to_content = str(payload.get("reply_to_content") or "").strip()
                 reply_to_sender = str(payload.get("reply_to_sender") or "").strip()
-                client_message_id = str(
-                    payload.get("client_message_id") or ""
-                ).strip()
+                client_message_id = str(payload.get("client_message_id") or "").strip()
                 if not content and not media:
                     return self._error(
                         request_id,
@@ -510,6 +523,21 @@ class DesktopBridgeService:
                     method,
                     {"records": records},
                 )
+            if method == "novelai.prompt_tags.list":
+                return self._ok(
+                    request_id,
+                    method,
+                    {"entries": self.image_service.prompt_tags_list()},
+                )
+            if method == "novelai.prompt_tags.upsert":
+                return self._ok(
+                    request_id,
+                    method,
+                    {"entry": self.image_service.prompt_tags_upsert(payload)},
+                )
+            if method == "novelai.prompt_tags.delete":
+                self.image_service.prompt_tags_delete(payload)
+                return self._ok(request_id, method, {})
         except KeyError as exc:
             return self._error(request_id, method, "role_not_found", str(exc))
         except ValueError as exc:

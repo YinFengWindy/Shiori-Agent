@@ -1,5 +1,6 @@
 import type React from "react";
 import { ImageFormPanel } from "./ImageFormPanel";
+import { PromptTagLibraryPanel } from "./PromptTagLibraryPanel";
 import type { ImageStudioFormState } from "./types";
 import { cx, secondarySidebarSurfaceClass } from "../shared/styles";
 
@@ -89,6 +90,7 @@ export function ImageStudioSidebar({
           onToggleAddQualityTags={onToggleAddQualityTags}
           onChangeUndesiredContentPreset={onChangeUndesiredContentPreset}
         />
+        <PromptTagLibraryPanel bridgeReady={bridgeReady} />
       </div>
       <div
         className={cx(

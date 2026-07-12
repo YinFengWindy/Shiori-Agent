@@ -4,12 +4,16 @@ import base64
 import io
 import zipfile
 from datetime import datetime, timezone
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from agent.tools.filesystem import _detect_supported_image_mime_from_header, _resolve_path
+from agent.tools.filesystem import (
+    _detect_supported_image_mime_from_header,
+    _resolve_path,
+)
 from core.integrations.novelai.client import NovelAIClient
 from core.integrations.novelai.models import (
     GenerateImageRequest,
@@ -18,6 +22,7 @@ from core.integrations.novelai.models import (
     NovelAISettings,
 )
 from core.integrations.novelai.store import NovelAIStore
+from core.integrations.novelai.prompt_tags import PromptTagStore
 from core.roles.store import RoleStore
 
 _SIZE_PRESETS: dict[str, tuple[int, int]] = {
@@ -45,12 +50,14 @@ class NovelAIService:
         store: NovelAIStore,
         role_store: RoleStore,
         workspace: Path,
+        prompt_tag_store: PromptTagStore | None = None,
     ) -> None:
         self._settings = settings
         self._client = client
         self._store = store
         self._role_store = role_store
         self._workspace = workspace
+        self._prompt_tag_store = prompt_tag_store or PromptTagStore(workspace)
 
     async def generate(self, request: GenerateImageRequest) -> GenerateImageResult:
         """Execute a validated NovelAI generation request end-to-end."""
@@ -59,6 +66,17 @@ class NovelAIService:
         prompt = request.prompt.strip()
         if not prompt:
             raise ValueError("prompt 不能为空")
+        expansion = self._prompt_tag_store.expand(
+            prompt,
+            request.negative_prompt,
+            allow_adult=self._settings.nsfw_enabled,
+        )
+        request = replace(
+            request,
+            prompt=expansion.prompt,
+            negative_prompt=expansion.negative_prompt,
+        )
+        prompt = request.prompt
         width, height = self._resolve_dimensions(request)
         steps = self._resolve_steps(request)
         model = self._resolve_model(request)
@@ -230,13 +248,19 @@ class NovelAIService:
         )
 
     def _resolve_img2img_strength(self, request: GenerateImageRequest) -> float:
-        value = _DEFAULT_IMG2IMG_STRENGTH if request.strength is None else float(request.strength)
+        value = (
+            _DEFAULT_IMG2IMG_STRENGTH
+            if request.strength is None
+            else float(request.strength)
+        )
         if value < 0.01 or value > 1:
             raise ValueError("strength 必须在 0.01 到 1 之间")
         return value
 
     def _resolve_img2img_noise(self, request: GenerateImageRequest) -> float:
-        value = _DEFAULT_IMG2IMG_NOISE if request.noise is None else float(request.noise)
+        value = (
+            _DEFAULT_IMG2IMG_NOISE if request.noise is None else float(request.noise)
+        )
         if value < 0 or value > 0.99:
             raise ValueError("noise 必须在 0 到 0.99 之间")
         return value
@@ -377,9 +401,7 @@ class NovelAIService:
         active = bool(subscription.get("active"))
         perks = subscription.get("perks")
         image_generation = (
-            bool(perks.get("imageGeneration"))
-            if isinstance(perks, dict)
-            else False
+            bool(perks.get("imageGeneration")) if isinstance(perks, dict) else False
         )
         trial_images_left = int(information.get("trialImagesLeft") or 0)
         return ValueError(

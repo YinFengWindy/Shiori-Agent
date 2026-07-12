@@ -9,6 +9,7 @@ import pytest
 
 from core.integrations.novelai.client import NovelAIClient
 from core.integrations.novelai.models import GenerateImageRequest, NovelAISettings
+from core.integrations.novelai.prompt_tags import PromptTagStore
 from core.integrations.novelai.service import NovelAIService
 from core.integrations.novelai.store import NovelAIStore
 from core.roles.store import RoleStore
@@ -92,7 +93,44 @@ async def test_service_persists_generated_image_and_metadata(tmp_path: Path) -> 
     assert request_payload["parameters"]["negative_prompt"] == "blurry"
     assert request_payload["parameters"]["qualityToggle"] is True
     assert request_payload["parameters"]["ucPreset"] == 2
-    assert request_payload["parameters"]["v4_prompt"]["caption"]["base_caption"] == "a girl under moonlight"
+    assert (
+        request_payload["parameters"]["v4_prompt"]["caption"]["base_caption"]
+        == "a girl under moonlight"
+    )
+
+
+@pytest.mark.asyncio
+async def test_service_expands_prompts_from_tag_knowledge_base(tmp_path: Path) -> None:
+    settings = NovelAISettings(enabled=True, token="novel-token")
+    prompt_tags = PromptTagStore(tmp_path)
+    prompt_tags.upsert(
+        {
+            "id": "rain",
+            "name": "雨景",
+            "enabled": True,
+            "category": "atmosphere",
+            "match_terms": ["rain"],
+            "positive_tags": ["rainy atmosphere"],
+            "negative_tags": ["flat lighting"],
+            "rating": "general",
+        }
+    )
+    service = NovelAIService(
+        settings=settings,
+        client=_FakeClient(_json_response(), settings),
+        store=NovelAIStore(tmp_path),
+        role_store=RoleStore(tmp_path),
+        workspace=tmp_path,
+        prompt_tag_store=prompt_tags,
+    )
+
+    result = await service.generate(
+        GenerateImageRequest(prompt="girl in rain", negative_prompt="blurry")
+    )
+
+    request_payload = json.loads(Path(result.request_path).read_text(encoding="utf-8"))
+    assert request_payload["input"] == "girl in rain, rainy atmosphere"
+    assert request_payload["parameters"]["negative_prompt"] == "blurry, flat lighting"
 
 
 @pytest.mark.asyncio
