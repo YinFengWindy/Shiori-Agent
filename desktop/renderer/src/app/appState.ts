@@ -127,6 +127,8 @@ export function createPendingRoleRecord(
     chat_background_abs: null,
     illustrations: [],
     illustrations_abs: [],
+    asset_categories: [{ id: "default", name: "默认", allow_role_send: false }],
+    asset_category_bindings: {},
     created_at: timestamp,
     updated_at: timestamp,
   };

@@ -18,3 +18,7 @@ def test_role_presenter_serializes_desktop_asset_fields(tmp_path) -> None:
     assert payload["id"] == role.id
     assert payload["avatar_abs"] is None
     assert payload["illustrations_abs"] == []
+    assert payload["asset_categories"] == [
+        {"id": "default", "name": "默认", "allow_role_send": False}
+    ]
+    assert payload["asset_category_bindings"] == {}

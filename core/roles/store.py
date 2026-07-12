@@ -10,7 +10,8 @@ from typing import Any
 
 from infra.persistence.json_store import atomic_save_json, load_json
 
-_MANIFEST_VERSION = 1
+_MANIFEST_VERSION = 2
+_DEFAULT_ASSET_CATEGORY_ID = "default"
 
 
 def _now_iso() -> str:
@@ -75,6 +76,38 @@ class RoleProactiveConfig:
         )
 
 
+@dataclass(frozen=True)
+class RoleAssetCategory:
+    """角色素材库中的单归属分类。"""
+
+    id: str
+    name: str
+    allow_role_send: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "allow_role_send": self.allow_role_send,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "RoleAssetCategory":
+        category_id = str(payload.get("id") or "").strip()
+        name = str(payload.get("name") or "").strip()
+        if not category_id or not name:
+            raise ValueError("角色素材分类必须包含 id 和 name")
+        return cls(
+            id=category_id,
+            name=name,
+            allow_role_send=bool(payload.get("allow_role_send", False)),
+        )
+
+
+def _default_asset_category() -> RoleAssetCategory:
+    return RoleAssetCategory(id=_DEFAULT_ASSET_CATEGORY_ID, name="默认")
+
+
 @dataclass
 class RoleRecord:
     """角色聚合根的持久化快照。"""
@@ -87,6 +120,8 @@ class RoleRecord:
     avatar: str | None
     chat_background: str | None
     illustrations: list[str]
+    asset_categories: list[RoleAssetCategory]
+    asset_category_bindings: dict[str, str]
     runtime_config: dict[str, Any]
     channel_bindings: list[RoleChannelBindingConfig]
     proactive: RoleProactiveConfig
@@ -101,10 +136,43 @@ class RoleRecord:
         payload["illustrations"] = [
             _normalize_rel_path(path) or "" for path in self.illustrations
         ]
+        payload["asset_categories"] = [
+            category.to_dict() for category in self.asset_categories
+        ]
+        payload["asset_category_bindings"] = {
+            _normalize_rel_path(path) or "": category_id
+            for path, category_id in self.asset_category_bindings.items()
+            if _normalize_rel_path(path)
+        }
         return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "RoleRecord":
+        illustrations = [
+            _normalize_rel_path(str(item)) or ""
+            for item in payload.get("illustrations", [])
+            if str(item).strip()
+        ]
+        raw_categories = payload.get("asset_categories", [])
+        categories = [
+            RoleAssetCategory.from_dict(item)
+            for item in raw_categories
+            if isinstance(item, dict)
+        ]
+        if not categories:
+            categories = [_default_asset_category()]
+        category_ids = {category.id for category in categories}
+        raw_bindings = payload.get("asset_category_bindings", {})
+        binding_items = raw_bindings.items() if isinstance(raw_bindings, dict) else []
+        bindings = {
+            _normalize_rel_path(str(path)) or "": str(category_id).strip()
+            for path, category_id in binding_items
+            if str(path).strip()
+            and str(category_id).strip() in category_ids
+        }
+        default_category_id = categories[0].id
+        for path in illustrations:
+            bindings.setdefault(path, default_category_id)
         return cls(
             id=str(payload.get("id") or "").strip(),
             name=str(payload.get("name") or "").strip(),
@@ -113,11 +181,9 @@ class RoleRecord:
             background=str(payload.get("background") or ""),
             avatar=_normalize_rel_path(payload.get("avatar")),
             chat_background=_normalize_rel_path(payload.get("chat_background")),
-            illustrations=[
-                _normalize_rel_path(str(item)) or ""
-                for item in payload.get("illustrations", [])
-                if str(item).strip()
-            ],
+            illustrations=illustrations,
+            asset_categories=categories,
+            asset_category_bindings=bindings,
             runtime_config=dict(payload.get("runtime_config") or {}),
             channel_bindings=[
                 RoleChannelBindingConfig.from_dict(item)
@@ -166,10 +232,28 @@ class RoleStore:
                     role_payload["chat_background"] = role_payload.get("featured_image")
                 del role_payload["featured_image"]
                 migrated = True
+            if not isinstance(role_payload.get("asset_categories"), list):
+                role_payload["asset_categories"] = [_default_asset_category().to_dict()]
+                migrated = True
+            if not isinstance(role_payload.get("asset_category_bindings"), dict):
+                raw_categories = role_payload.get("asset_categories")
+                first_category_id = (
+                    str(raw_categories[0].get("id") or "").strip()
+                    if isinstance(raw_categories, list)
+                    and raw_categories
+                    and isinstance(raw_categories[0], dict)
+                    else _DEFAULT_ASSET_CATEGORY_ID
+                )
+                role_payload["asset_category_bindings"] = {
+                    str(path): first_category_id
+                    for path in role_payload.get("illustrations", [])
+                    if str(path).strip()
+                }
+                migrated = True
             normalized_roles.append(role_payload)
         if migrated:
             payload = {
-                "version": int(payload.get("version") or _MANIFEST_VERSION),
+                "version": _MANIFEST_VERSION,
                 "roles": normalized_roles,
             }
             atomic_save_json(
@@ -178,7 +262,10 @@ class RoleStore:
                 domain="roles",
             )
         return {
-            "version": int(payload.get("version") or _MANIFEST_VERSION),
+            "version": max(
+                int(payload.get("version") or _MANIFEST_VERSION),
+                _MANIFEST_VERSION,
+            ),
             "roles": normalized_roles,
         }
 
@@ -265,6 +352,8 @@ class RoleStore:
                 avatar=None,
                 chat_background=None,
                 illustrations=[],
+                asset_categories=[_default_asset_category()],
+                asset_category_bindings={},
                 runtime_config=dict(runtime_config or {}),
                 channel_bindings=[],
                 proactive=RoleProactiveConfig(),
@@ -283,6 +372,9 @@ class RoleStore:
                     self.import_asset(resolved_id, source, prefix="illustration")
                     for source in illustration_sources
                 ]
+                record.asset_category_bindings = {
+                    path: _DEFAULT_ASSET_CATEGORY_ID for path in record.illustrations
+                }
             roles.append(record)
             self._save_roles(roles)
             return record
@@ -305,8 +397,11 @@ class RoleStore:
         clear_chat_background: bool = False,
         clear_avatar: bool = False,
         illustration_sources: list[str | Path] | None = None,
+        illustration_category_id: str | None = None,
         removed_illustrations: list[str] | None = None,
         clear_illustrations: bool = False,
+        asset_categories: list[RoleAssetCategory | dict[str, Any]] | None = None,
+        asset_category_bindings: dict[str, str] | None = None,
     ) -> RoleRecord:
         with self._lock:
             roles = self.list_roles()
@@ -358,6 +453,34 @@ class RoleStore:
                     role.proactive = next_proactive
                 if memory_init_state is not None:
                     role.memory_init_state = dict(memory_init_state)
+                next_categories = (
+                    self._normalize_asset_categories(asset_categories)
+                    if asset_categories is not None
+                    else role.asset_categories
+                )
+                next_bindings = (
+                    self._normalize_asset_category_bindings(
+                        role,
+                        asset_category_bindings,
+                        categories=next_categories,
+                    )
+                    if asset_category_bindings is not None
+                    else role.asset_category_bindings
+                )
+                if asset_categories is not None and asset_category_bindings is None:
+                    category_ids = {category.id for category in next_categories}
+                    invalid_binding = next(
+                        (
+                            category_id
+                            for category_id in role.asset_category_bindings.values()
+                            if category_id not in category_ids
+                        ),
+                        None,
+                    )
+                    if invalid_binding is not None:
+                        raise ValueError(f"素材分类仍被图片使用: {invalid_binding}")
+                role.asset_categories = next_categories
+                role.asset_category_bindings = next_bindings
                 if clear_avatar:
                     self._remove_asset_relpath(role.avatar)
                     role.avatar = None
@@ -386,6 +509,7 @@ class RoleStore:
                     for rel_path in role.illustrations:
                         self._remove_asset_relpath(rel_path)
                     role.illustrations = []
+                    role.asset_category_bindings = {}
                 if removed_illustrations:
                     removed_set = {
                         _normalize_rel_path(str(path)) or ""
@@ -402,13 +526,23 @@ class RoleStore:
                                 if role.chat_background == normalized:
                                     role.chat_background = None
                                 self._remove_asset_relpath(normalized)
+                                role.asset_category_bindings.pop(normalized, None)
                                 continue
                             kept_illustrations.append(rel_path)
                         role.illustrations = kept_illustrations
                 if illustration_sources:
-                    role.illustrations.extend(
+                    category_id = str(illustration_category_id or "").strip()
+                    if not category_id:
+                        category_id = role.asset_categories[0].id
+                    if category_id not in {category.id for category in role.asset_categories}:
+                        raise ValueError(f"角色素材分类不存在: {category_id}")
+                    imported = [
                         self.import_asset(role.id, source, prefix="illustration")
                         for source in illustration_sources
+                    ]
+                    role.illustrations.extend(imported)
+                    role.asset_category_bindings.update(
+                        {path: category_id for path in imported}
                     )
                 role.updated_at = _now_iso()
                 roles[index] = role
@@ -474,6 +608,48 @@ class RoleStore:
         if len(keys) != len(set(keys)):
             raise ValueError("同一角色不能重复绑定相同渠道会话")
         return next_bindings
+
+    def _normalize_asset_categories(
+        self,
+        categories: list[RoleAssetCategory | dict[str, Any]],
+    ) -> list[RoleAssetCategory]:
+        normalized = [
+            item if isinstance(item, RoleAssetCategory) else RoleAssetCategory.from_dict(item)
+            for item in categories
+        ]
+        if not normalized:
+            raise ValueError("角色素材库至少需要一个分类")
+        ids = [category.id for category in normalized]
+        names = [category.name.casefold() for category in normalized]
+        if len(ids) != len(set(ids)):
+            raise ValueError("角色素材分类 id 不能重复")
+        if len(names) != len(set(names)):
+            raise ValueError("角色素材分类名称不能重复")
+        return normalized
+
+    def _normalize_asset_category_bindings(
+        self,
+        role: RoleRecord,
+        bindings: dict[str, str],
+        *,
+        categories: list[RoleAssetCategory] | None = None,
+    ) -> dict[str, str]:
+        available_categories = categories or role.asset_categories
+        category_ids = {category.id for category in available_categories}
+        illustration_paths = set(role.illustrations)
+        normalized: dict[str, str] = {}
+        for raw_path, raw_category_id in bindings.items():
+            path = _normalize_rel_path(str(raw_path)) or ""
+            category_id = str(raw_category_id).strip()
+            if path not in illustration_paths:
+                raise ValueError(f"角色素材不存在: {path}")
+            if category_id not in category_ids:
+                raise ValueError(f"角色素材分类不存在: {category_id}")
+            normalized[path] = category_id
+        default_category_id = available_categories[0].id
+        for path in role.illustrations:
+            normalized.setdefault(path, default_category_id)
+        return normalized
 
     def _ensure_bindings_unique(
         self,

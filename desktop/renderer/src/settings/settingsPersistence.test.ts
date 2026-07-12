@@ -83,6 +83,9 @@ function createSettingsFormData(
       novelaiUndesiredContentPreset: 0,
       novelaiAutoWritebackRoleAssets: false,
     },
+    emoji: {
+      entries: [],
+    },
     advanced: {
       systemPrompt: "",
       maxTokens: 4000,
@@ -121,6 +124,8 @@ function createRole(): RoleRecord {
     chat_background_abs: null,
     illustrations: [],
     illustrations_abs: [],
+    asset_categories: [{ id: "default", name: "默认", allow_role_send: false }],
+    asset_category_bindings: {},
     created_at: "2026-07-07T00:00:00+08:00",
     updated_at: "2026-07-07T00:00:00+08:00",
   };

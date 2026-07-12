@@ -20,6 +20,8 @@ function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
     chat_background_abs: overrides.chat_background_abs ?? null,
     illustrations: overrides.illustrations ?? [],
     illustrations_abs: overrides.illustrations_abs ?? [],
+    asset_categories: [{ id: "default", name: "默认", allow_role_send: false }],
+    asset_category_bindings: {},
     created_at: overrides.created_at ?? "2026-07-03T12:00:00+08:00",
     updated_at: overrides.updated_at ?? "2026-07-03T12:00:00+08:00",
   };
@@ -117,6 +119,22 @@ describe("ChatSurface", () => {
 
     assert.match(markup, />yinfeng-chat-history\.md</);
     assert.doesNotMatch(markup, />附件</);
+  });
+
+  it("renders assistant media after and outside the text message bubble", () => {
+    const session = createSession();
+    session.messages = [
+      {
+        role: "assistant",
+        content: "先看文字",
+        media: ["D:\\files\\reaction.png"],
+      },
+    ];
+
+    const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
+
+    assert.match(markup, /先看文字[\s\S]*data-message-media="separate"/);
+    assert.doesNotMatch(markup, /data-message-media="separate"[\s\S]*先看文字/);
   });
 
   it("renders persisted reply previews inside message bubbles", () => {

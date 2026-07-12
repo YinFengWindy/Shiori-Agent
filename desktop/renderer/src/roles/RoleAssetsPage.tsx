@@ -2,10 +2,11 @@ import { useState } from "react";
 import { toFileUrl } from "../shared/format";
 import { UploadIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
-import type { RoleFormState, RoleRecord } from "../shared/types";
+import type { RoleAssetCategory, RoleFormState, RoleRecord } from "../shared/types";
 import { getNextRoleAssetSelection, getSelectedRoleAssetPath } from "./roleAssetSelection";
 import { applyMoodToIllustration, getMoodForIllustration } from "./roleMoodBindingSelection";
 import { RoleMoodBindingsPanel } from "./RoleMoodBindingsPanel";
+import { RoleAssetCategoryGroups } from "./RoleAssetCategoryGroups";
 
 type RoleAssetsPageProps = {
   activeRole: RoleRecord | null;
@@ -15,11 +16,15 @@ type RoleAssetsPageProps = {
   selectedAvatarAsset: string;
   selectedChatBackground: string;
   onBackToDetail: () => void;
-  onPickAssets: () => void;
+  onPickAssets: (categoryId: string) => void;
   onRemoveAsset: (path: string) => void;
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;
   onUpdateRoleForm: React.Dispatch<React.SetStateAction<RoleFormState>>;
+  onUpdateAssetOrganization: (
+    categories: RoleAssetCategory[],
+    bindings: Record<string, string>,
+  ) => void;
   onSaveSelections: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
 };
 
@@ -36,6 +41,7 @@ export function RoleAssetsPage({
   onSelectAvatarAsset,
   onSelectChatBackground,
   onUpdateRoleForm,
+  onUpdateAssetOrganization,
   onSaveSelections,
 }: RoleAssetsPageProps) {
   const backIcon = (
@@ -99,7 +105,7 @@ export function RoleAssetsPage({
     >
       <div className="mx-auto flex min-h-full w-full max-w-[1280px] flex-col gap-5 px-8 pb-10 pt-6">
         <div className="grid min-h-[680px] grid-cols-[428px_minmax(0,1fr)] overflow-hidden rounded-[18px] bg-white/92 shadow-[0_18px_48px_rgba(31,41,55,0.08)]">
-          <div className="bg-[#FBFCFE] p-4">
+          <div className="flex min-h-0 flex-col bg-[#FBFCFE] p-4">
             <button
               className="mb-2 grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)]"
               type="button"
@@ -108,7 +114,7 @@ export function RoleAssetsPage({
             >
               {backIcon}
             </button>
-            <div className="mt-5 grid grid-cols-4 content-start gap-2.5">
+            <div className="hidden mt-5 grid grid-cols-4 content-start gap-2.5">
               {assetPairs.map(({ relPath, absPath }, index) => {
                 const isSelected = selectionMode === "mood-binding"
                   ? selectedMoodAssetPath === relPath
@@ -152,11 +158,23 @@ export function RoleAssetsPage({
                 className="grid h-[90px] w-[90px] place-items-center overflow-hidden rounded-[18px] border border-[#D8DFE7] bg-white text-[#272536] transition hover:border-[#9AA3B2] hover:bg-[#F5F7FA] disabled:cursor-default disabled:border-black/6 disabled:bg-white/60 disabled:text-[#b8b8b8]"
                 type="button"
                 disabled={!bridgeReady}
-                onClick={onPickAssets}
+                onClick={() => onPickAssets("default")}
                 aria-label="上传素材"
               >
                 <UploadIcon className="h-8 w-8 fill-current" />
               </button>
+            </div>
+            <div className="mt-5 min-h-0 flex-1">
+              <RoleAssetCategoryGroups
+                role={activeRole}
+                bridgeReady={bridgeReady}
+                saving={savingSelection}
+                selectedAssetPath={selectionMode === "mood-binding" ? selectedMoodAssetPath : selectedAsset?.relPath ?? ""}
+                onPickAssets={onPickAssets}
+                onRemoveAsset={onRemoveAsset}
+                onSelectAsset={(relPath) => void applyAsset(relPath)}
+                onUpdateOrganization={onUpdateAssetOrganization}
+              />
             </div>
           </div>
           <div className="grid min-h-0 grid-rows-[minmax(0,1fr)] bg-white p-6">

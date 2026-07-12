@@ -18,6 +18,8 @@ function createRole(overrides: Partial<RoleRecord> & Pick<RoleRecord, "id" | "na
     chat_background_abs: overrides.chat_background_abs ?? null,
     illustrations: overrides.illustrations ?? [],
     illustrations_abs: overrides.illustrations_abs ?? [],
+    asset_categories: [{ id: "default", name: "默认", allow_role_send: false }],
+    asset_category_bindings: {},
     created_at: overrides.created_at ?? "2026-06-29T12:00:00+08:00",
     updated_at: overrides.updated_at ?? "2026-06-29T12:00:00+08:00",
   };

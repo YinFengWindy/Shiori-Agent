@@ -63,6 +63,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     agent_context = _as_dict(agent_cfg.get("context"))
     agent_tools = _as_dict(agent_cfg.get("tools"))
     agent_maintenance = _as_dict(agent_cfg.get("maintenance"))
+    agent_emoji = _as_dict(agent_cfg.get("emoji"))
     provider = str(llm.get("provider") or data["provider"])
     channels = _load_channels_config(data)
     proactive = _load_proactive_config(data)
@@ -139,7 +140,31 @@ def load_config(path: str | Path = "config.toml") -> Config:
         novelai=novelai,
         wiring=wiring,
         plugins=plugins,
+        role_emojis=_load_role_emojis(agent_emoji),
     )
+
+
+def _load_role_emojis(raw: dict[str, Any]) -> dict[str, str]:
+    """Loads the global role emoji allowlist from stable name/value entries."""
+    raw_entries = raw.get("entries", [])
+    if not isinstance(raw_entries, list):
+        raise ValueError("agent.emoji.entries 必须是数组")
+    entries: dict[str, str] = {}
+    for raw_entry in raw_entries:
+        entry = str(raw_entry or "").strip()
+        if not entry:
+            continue
+        name, separator, value = entry.partition("=")
+        clean_name = name.strip().lower()
+        clean_value = value.strip()
+        if not separator or not clean_name or not clean_value:
+            raise ValueError("emoji 条目必须使用 name=emoji 格式")
+        if not re.fullmatch(r"[a-z0-9_-]+", clean_name):
+            raise ValueError(f"emoji 名称无效: {clean_name}")
+        if clean_name in entries:
+            raise ValueError(f"emoji 名称重复: {clean_name}")
+        entries[clean_name] = clean_value
+    return entries
 
 
 def _load_channels_config(data: dict) -> ChannelsConfig:

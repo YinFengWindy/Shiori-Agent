@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
+from core.roles import RoleStore
+
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
 
@@ -146,3 +148,122 @@ class MemeDecorator:
         image = self._catalog.pick_image(tag)
         media = [image] if image else []
         return DecorateResult(content=cleaned, media=media, tag=tag)
+
+
+class RoleReactionCatalog:
+    """Resolves role-owned sendable assets while retaining the legacy meme catalog."""
+
+    def __init__(self, workspace: Path, legacy_catalog: MemeCatalog) -> None:
+        self._roles = RoleStore(workspace)
+        self._legacy = legacy_catalog
+
+    def build_prompt_block(
+        self,
+        *,
+        role_id: str,
+        emojis: dict[str, str],
+    ) -> str | None:
+        role_categories = self._sendable_categories(role_id)
+        if not role_categories and not emojis:
+            return self._legacy.build_prompt_block()
+
+        lines = [
+            "【角色表情协议】以下协议是系统内部输出格式，不是工具调用。",
+            "普通聊天中可以根据场景自主使用；严肃任务、代码解释和工具结果中不要主动使用。",
+        ]
+        if role_categories:
+            lines.extend(
+                [
+                    "",
+                    "当前角色可发送的图片分类：",
+                    *[
+                        f"- {category_id}: {category_name}"
+                        for category_id, category_name in role_categories
+                    ],
+                    "需要发送图片时，在回复最末尾添加 `<meme:分类ID>`。每次回复最多一个图片协议。",
+                    "图片会在文字消息之后单独发送，不要描述发送过程。",
+                ]
+            )
+        if emojis:
+            lines.extend(
+                [
+                    "",
+                    "全局允许的 emoji：",
+                    *[f"- {name}: {value}" for name, value in emojis.items()],
+                    "需要使用 emoji 时输出 `<emoji:名称>`，系统会替换成对应字符。",
+                    "这里只允许使用上方协议列出的 emoji；该内部协议优先于其他禁止 Unicode emoji 的规则。",
+                ]
+            )
+        lines.extend(
+            [
+                "",
+                '用户明确要求表情、表情包或用表情表达心情时，优先选择合适的已有协议。',
+                "历史回复没有使用表情不代表本轮不能使用。",
+            ]
+        )
+        return "\n".join(lines)
+
+    def pick_image(self, *, role_id: str, tag: str) -> str | None:
+        role = self._roles.get_role(role_id) if role_id else None
+        if role is not None:
+            category = next(
+                (
+                    item
+                    for item in role.asset_categories
+                    if item.id.lower() == tag.lower()
+                ),
+                None,
+            )
+            if category is not None and not category.allow_role_send:
+                return None
+            if category is not None:
+                candidates = [
+                    self._roles.roles_dir / path
+                    for path in role.illustrations
+                    if role.asset_category_bindings.get(path) == category.id
+                    and (self._roles.roles_dir / path).is_file()
+                    and (self._roles.roles_dir / path).suffix.lower() in _IMAGE_SUFFIXES
+                ]
+                return str(random.choice(candidates)) if candidates else None
+        return self._legacy.pick_image(tag)
+
+    def _sendable_categories(self, role_id: str) -> list[tuple[str, str]]:
+        role = self._roles.get_role(role_id) if role_id else None
+        if role is None:
+            return []
+        available_category_ids = {
+            role.asset_category_bindings.get(path)
+            for path in role.illustrations
+            if (self._roles.roles_dir / path).is_file()
+        }
+        return [
+            (category.id, category.name)
+            for category in role.asset_categories
+            if category.allow_role_send and category.id in available_category_ids
+        ]
+
+
+class RoleReactionDecorator:
+    """Decorates one role reply with validated emoji and at most one image."""
+
+    def __init__(self, catalog: RoleReactionCatalog, emojis: dict[str, str]) -> None:
+        self._catalog = catalog
+        self._emojis = dict(emojis)
+
+    def decorate(
+        self,
+        content: str,
+        *,
+        role_id: str,
+        meme_tag: str | None,
+    ) -> DecorateResult:
+        tag = meme_tag.lower() if meme_tag else None
+        image = self._catalog.pick_image(role_id=role_id, tag=tag) if tag else None
+        return DecorateResult(
+            content=content.strip(),
+            media=[image] if image else [],
+            tag=tag,
+        )
+
+    def resolve_emoji(self, name: str) -> str:
+        return self._emojis.get(name.lower(), "")

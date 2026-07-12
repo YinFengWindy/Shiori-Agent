@@ -17,6 +17,7 @@ from agent.plugins.context import PluginContext, PluginKVStore
 from agent.plugins.manager import PluginManager
 from agent.plugins.registry import plugin_registry
 from bus.event_bus import EventBus
+from core.roles import RoleStore
 
 
 def _load_meme_plugin_module() -> Any:
@@ -65,7 +66,12 @@ def _write_meme_workspace(workspace: Path) -> Path:
     return image
 
 
-async def _make_plugin(tmp_path: Path) -> MemePlugin:
+async def _make_plugin(
+    tmp_path: Path,
+    *,
+    app_config: object | None = None,
+    session_manager: object | None = None,
+) -> MemePlugin:
     plugin_dir = tmp_path / "plugins" / "meme"
     plugin_dir.mkdir(parents=True)
     plugin = MemePlugin()
@@ -76,6 +82,8 @@ async def _make_plugin(tmp_path: Path) -> MemePlugin:
         plugin_dir=plugin_dir,
         kv_store=PluginKVStore(plugin_dir / ".kv.json"),
         workspace=tmp_path,
+        app_config=app_config,
+        session_manager=session_manager,
     )
     await plugin.initialize()
     return plugin
@@ -172,3 +180,109 @@ async def test_meme_plugin_strips_empty_protocol_tag(tmp_path: Path) -> None:
     assert out.reply == "好的"
     assert out.media == []
     assert out.meme_tag is None
+
+
+@pytest.mark.asyncio
+async def test_role_reactions_use_sendable_assets_and_global_emoji(tmp_path: Path) -> None:
+    image = tmp_path / "reaction.png"
+    image.write_bytes(b"reaction")
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    role = role_store.update_role(
+        "mira",
+        asset_categories=[
+            {"id": "default", "name": "默认"},
+            {"id": "reactions", "name": "表情包", "allow_role_send": True},
+        ],
+        illustration_sources=[image],
+        illustration_category_id="reactions",
+    )
+    session_manager = SimpleNamespace(
+        get_or_create=lambda _key: SimpleNamespace(metadata={"role_id": "mira"})
+    )
+    plugin = await _make_plugin(
+        tmp_path,
+        app_config=SimpleNamespace(role_emojis={"heart": "❤️"}),
+        session_manager=session_manager,
+    )
+    prompt_ctx = PromptRenderCtx(
+        session_key="role:mira",
+        channel="desktop",
+        chat_id="role:mira",
+        content="你好",
+        media=None,
+        timestamp=datetime.now(timezone.utc),
+        history=[],
+        skill_names=[],
+        retrieved_memory_block="",
+        disabled_sections=set(),
+        turn_injection_prompt="",
+        session_metadata={"role_id": "mira"},
+    )
+
+    await plugin.prompt_render_modules()[0].run(
+        SimpleNamespace(slots={"prompt:ctx": prompt_ctx})
+    )
+    prompt = prompt_ctx.system_sections_bottom[0].content
+    assert "<meme:分类ID>" in prompt
+    assert "reactions: 表情包" in prompt
+    assert "heart: ❤️" in prompt
+
+    ctx = AfterReasoningCtx(
+        session_key="role:mira",
+        channel="desktop",
+        chat_id="role:mira",
+        tools_used=(),
+        thinking=None,
+        response_metadata=ResponseMetadata(raw_text="喜欢 <emoji:heart> <meme:reactions>"),
+        streamed=False,
+        tool_chain=(),
+        context_retry={},
+        reply="喜欢 <emoji:heart> <meme:reactions>",
+    )
+    out = await plugin.decorate_meme(ctx)
+
+    assert out.reply == "喜欢 ❤️"
+    assert out.media == [str(tmp_path / "roles" / role.illustrations[0])]
+    assert out.meme_tag == "reactions"
+
+
+@pytest.mark.asyncio
+async def test_role_reactions_reject_disabled_category_and_unknown_emoji(tmp_path: Path) -> None:
+    image = tmp_path / "reaction.png"
+    image.write_bytes(b"reaction")
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    store.update_role(
+        "mira",
+        asset_categories=[
+            {"id": "default", "name": "默认"},
+            {"id": "private", "name": "私有", "allow_role_send": False},
+        ],
+        illustration_sources=[image],
+        illustration_category_id="private",
+    )
+    plugin = await _make_plugin(
+        tmp_path,
+        app_config=SimpleNamespace(role_emojis={"heart": "❤️"}),
+        session_manager=SimpleNamespace(
+            get_or_create=lambda _key: SimpleNamespace(metadata={"role_id": "mira"})
+        ),
+    )
+    ctx = AfterReasoningCtx(
+        session_key="role:mira",
+        channel="desktop",
+        chat_id="role:mira",
+        tools_used=(),
+        thinking=None,
+        response_metadata=ResponseMetadata(raw_text="好 <emoji:unknown> <meme:private>"),
+        streamed=False,
+        tool_chain=(),
+        context_retry={},
+        reply="好 <emoji:unknown> <meme:private>",
+    )
+
+    out = await plugin.decorate_meme(ctx)
+
+    assert out.reply == "好"
+    assert out.media == []

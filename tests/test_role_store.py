@@ -88,6 +88,117 @@ def test_role_store_migrates_featured_image_to_chat_background(tmp_path: Path):
     assert "featured_image" not in payload["roles"][0]
 
 
+def test_role_store_migrates_existing_assets_into_default_category(tmp_path: Path):
+    roles_dir = tmp_path / "roles"
+    asset_dir = roles_dir / "assets" / "mira"
+    asset_dir.mkdir(parents=True)
+    asset_rel = "assets/mira/illustration-1.png"
+    (roles_dir / asset_rel).write_bytes(b"ill")
+    (roles_dir / "roles.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "roles": [
+                    {
+                        "id": "mira",
+                        "name": "Mira",
+                        "system_prompt": "you are mira",
+                        "illustrations": [asset_rel],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    role = RoleStore(tmp_path).get_role("mira")
+
+    assert role is not None
+    assert role.asset_categories[0].id == "default"
+    assert role.asset_category_bindings == {asset_rel: "default"}
+    payload = json.loads((roles_dir / "roles.json").read_text(encoding="utf-8"))
+    assert payload["version"] == 2
+
+
+def test_role_store_assigns_uploaded_assets_and_moves_between_categories(tmp_path: Path):
+    image = tmp_path / "reaction.png"
+    image.write_bytes(b"reaction")
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    categories = [
+        {"id": "default", "name": "默认", "allow_role_send": False},
+        {"id": "reactions", "name": "表情包", "allow_role_send": True},
+    ]
+
+    uploaded = store.update_role(
+        "mira",
+        asset_categories=categories,
+        illustration_sources=[image],
+        illustration_category_id="reactions",
+    )
+    asset_path = uploaded.illustrations[0]
+    assert uploaded.asset_category_bindings[asset_path] == "reactions"
+
+    moved = store.update_role(
+        "mira",
+        asset_category_bindings={asset_path: "default"},
+    )
+    assert moved.asset_category_bindings[asset_path] == "default"
+
+
+def test_role_store_rejects_removing_category_still_used_by_assets(tmp_path: Path):
+    image = tmp_path / "reaction.png"
+    image.write_bytes(b"reaction")
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    role = store.update_role(
+        "mira",
+        asset_categories=[
+            {"id": "default", "name": "默认"},
+            {"id": "reactions", "name": "表情包", "allow_role_send": True},
+        ],
+        illustration_sources=[image],
+        illustration_category_id="reactions",
+    )
+
+    try:
+        store.update_role(
+            role.id,
+            asset_categories=[{"id": "default", "name": "默认"}],
+        )
+    except ValueError as exc:
+        assert "仍被图片使用" in str(exc)
+    else:
+        raise AssertionError("仍被图片使用的分类不能删除")
+
+
+def test_role_store_accepts_category_removal_with_reassigned_bindings(tmp_path: Path):
+    image = tmp_path / "reaction.png"
+    image.write_bytes(b"reaction")
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    role = store.update_role(
+        "mira",
+        asset_categories=[
+            {"id": "default", "name": "默认"},
+            {"id": "reactions", "name": "表情包", "allow_role_send": True},
+        ],
+        illustration_sources=[image],
+        illustration_category_id="reactions",
+    )
+    asset_path = role.illustrations[0]
+
+    updated = store.update_role(
+        "mira",
+        asset_categories=[{"id": "default", "name": "默认"}],
+        asset_category_bindings={asset_path: "default"},
+    )
+
+    assert [category.id for category in updated.asset_categories] == ["default"]
+    assert updated.asset_category_bindings[asset_path] == "default"
+
+
 def test_role_store_updates_and_deletes_role(tmp_path: Path):
     store = RoleStore(tmp_path)
     role = store.create_role(

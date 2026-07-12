@@ -498,6 +498,7 @@ function App(): React.ReactElement {
     confirmDeleteRole,
     pickRoleAssets,
     removeRoleAsset,
+    updateRoleAssetOrganization,
   } = useRoleManagement({
     activeRoleId,
     detailRoleId,
@@ -694,7 +695,8 @@ function App(): React.ReactElement {
       selectedAvatarAsset={selectedAvatarAsset}
       selectedChatBackground={selectedChatBackground}
       onBackToRoleDetail={() => openRoleWorkspace({ kind: "role-detail", roleId: detailRoleId })}
-      onPickRoleAssets={() => void pickRoleAssets()}
+      onPickRoleAssets={(categoryId) => void pickRoleAssets(categoryId)}
+      onUpdateRoleAssetOrganization={(categories, bindings) => void updateRoleAssetOrganization(categories, bindings)}
       onRemoveRoleAsset={(path) => void removeRoleAsset(path)}
       onSelectAvatarAsset={setSelectedAvatarAsset}
       onSelectChatBackground={setSelectedChatBackground}

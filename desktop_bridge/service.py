@@ -261,6 +261,21 @@ class DesktopBridgeService:
                 chat_background = (
                     str(payload.get("chat_background") or "").strip() or None
                 )
+                raw_asset_categories = payload.get("asset_categories")
+                asset_categories = (
+                    [dict(item) for item in raw_asset_categories if isinstance(item, dict)]
+                    if isinstance(raw_asset_categories, list)
+                    else None
+                )
+                raw_asset_category_bindings = payload.get("asset_category_bindings")
+                asset_category_bindings = (
+                    {
+                        str(path): str(category_id)
+                        for path, category_id in raw_asset_category_bindings.items()
+                    }
+                    if isinstance(raw_asset_category_bindings, dict)
+                    else None
+                )
                 aggregate = await self.role_service.update_role_async(
                     str(payload.get("role_id") or ""),
                     name=payload.get("name"),
@@ -288,8 +303,14 @@ class DesktopBridgeService:
                     clear_chat_background=bool(payload.get("clear_chat_background")),
                     clear_avatar=bool(payload.get("clear_avatar")),
                     illustration_sources=illustration_sources,
+                    illustration_category_id=(
+                        str(payload.get("illustration_category_id") or "").strip()
+                        or None
+                    ),
                     removed_illustrations=removed_illustrations,
                     clear_illustrations=bool(payload.get("clear_illustrations")),
+                    asset_categories=asset_categories,
+                    asset_category_bindings=asset_category_bindings,
                 )
                 return self._ok(
                     request_id, method, {"role": self.role_presenter.serialize(aggregate.role)}

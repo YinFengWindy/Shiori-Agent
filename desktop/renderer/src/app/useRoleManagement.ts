@@ -1,6 +1,6 @@
 import type React from "react";
 import { createEmptyNewRoleForm, createPendingRoleRecord, minRoleCardBusyMs } from "./appState";
-import type { RoleRecord, RoleFormState, NewRoleFormState, PendingRoleCardAction, SessionPayload } from "../shared/types";
+import type { RoleAssetCategory, RoleRecord, RoleFormState, NewRoleFormState, PendingRoleCardAction, SessionPayload } from "../shared/types";
 import type { AppMainView } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import { writeRoleMoodConfigToRuntimeConfig } from "../roles/roleMoodConfig";
@@ -341,7 +341,7 @@ export function useRoleManagement({
     await deleteRole(targetRoleId);
   }
 
-  async function pickRoleAssets(): Promise<void> {
+  async function pickRoleAssets(categoryId: string): Promise<void> {
     const files = await window.miraDesktop.pickImages({ multiple: true });
     if (!files.length || !detailRoleId) return;
     setSavingRoleAssets(true);
@@ -351,6 +351,7 @@ export function useRoleManagement({
       payload: {
         role_id: detailRoleId,
         illustration_sources: files,
+        illustration_category_id: categoryId,
       },
     });
     setSavingRoleAssets(false);
@@ -361,6 +362,33 @@ export function useRoleManagement({
     const updated = res.payload.role as RoleRecord;
     const { resolvedRole } = await refreshRolesAndResolveRole(updated);
     syncRoleAssetSelections(resolvedRole);
+    openRoleWorkspace({ kind: "role-assets", roleId: resolvedRole.id }, { recordHistory: false });
+  }
+
+  async function updateRoleAssetOrganization(
+    assetCategories: RoleAssetCategory[],
+    assetCategoryBindings: Record<string, string>,
+  ): Promise<void> {
+    if (!detailRoleId) return;
+    setSavingRoleAssets(true);
+    setError("");
+    const res = await window.miraDesktop.invoke({
+      method: "roles.update",
+      payload: {
+        role_id: detailRoleId,
+        asset_categories: assetCategories,
+        asset_category_bindings: assetCategoryBindings,
+      },
+    });
+    setSavingRoleAssets(false);
+    if (res.error) {
+      setError(res.error.message);
+      return;
+    }
+    const updated = res.payload.role as RoleRecord;
+    const { resolvedRole } = await refreshRolesAndResolveRole(updated);
+    syncRoleAssetSelections(resolvedRole);
+    setNotice("素材分类已更新。");
     openRoleWorkspace({ kind: "role-assets", roleId: resolvedRole.id }, { recordHistory: false });
   }
 
@@ -402,5 +430,6 @@ export function useRoleManagement({
     confirmDeleteRole,
     pickRoleAssets,
     removeRoleAsset,
+    updateRoleAssetOrganization,
   };
 }

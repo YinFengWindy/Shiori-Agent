@@ -604,7 +604,11 @@ export function ChatSurface({
                           {authorLabel}
                         </div>
                       ) : null}
-                      <div className={cx(bubbleClass, isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10")}>
+                      <div className={cx(
+                        bubbleClass,
+                        !message.content && !storedReplyPreview && "hidden",
+                        isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10",
+                      )}>
                         {storedReplyPreview ? (
                           storedReplyPreview.messageId ? (
                             <button
@@ -630,8 +634,9 @@ export function ChatSurface({
                           )
                         ) : null}
                         <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
+                      </div>
                         {media.length ? (
-                          <div className="mt-3 grid gap-2">
+                          <div className="mt-2 grid gap-2" data-message-media="separate">
                             {media.map((item, mediaIndex) => (
                               isChatImageAsset(item) ? (
                                 <button
@@ -663,7 +668,6 @@ export function ChatSurface({
                             ))}
                           </div>
                         ) : null}
-                      </div>
                       {message.timestamp || sourceLabel ? (
                         <div className={cx("message-time mt-1 flex items-center gap-2 text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100", chatMinorTextClass)}>
                           {message.timestamp ? <span>{formatTimestamp(message.timestamp)}</span> : null}

@@ -15,7 +15,7 @@ from .relationship_runtime import (
     RelationshipSnapshotOptimizer,
     RoleRelationshipRuntimeService,
 )
-from .store import RoleRecord, RoleStore
+from .store import RoleAssetCategory, RoleRecord, RoleStore
 from .store import RoleChannelBindingConfig, RoleProactiveConfig
 from .config_migration import RoleConfigMigrationSummary, RoleConfigMigrator
 from .world import RoleExecutionContext, RoleWorld, RoleWorldRegistry
@@ -25,6 +25,7 @@ __all__ = [
     "LonelinessHeartbeatLoop",
     "RoleAggregate",
     "RoleAggregateService",
+    "RoleAssetCategory",
     "RoleBindingService",
     "RoleChannelBinding",
     "RoleChannelBindingConfig",

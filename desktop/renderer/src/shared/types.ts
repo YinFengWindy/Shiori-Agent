@@ -3,6 +3,7 @@ import type {
   SettingsChannelGroup,
   SettingsChannelRoleBinding,
   SettingsFormData,
+  SettingsRoleEmoji,
   SettingsSnapshot,
 } from "../../../src/shared.js";
 
@@ -47,10 +48,19 @@ export type RoleRecord = {
   chat_background_abs: string | null;
   illustrations: string[];
   illustrations_abs: string[];
+  asset_categories: RoleAssetCategory[];
+  asset_category_bindings: Record<string, string>;
   relationship_snapshot?: RelationshipSnapshot | null;
   loneliness_runtime?: LonelinessRuntime | null;
   created_at: string;
   updated_at: string;
+};
+
+/** User-defined single-owner category for one role's asset library. */
+export type RoleAssetCategory = {
+  id: string;
+  name: string;
+  allow_role_send: boolean;
 };
 
 export type RoleChannelBinding = {
@@ -185,5 +195,6 @@ export type {
   SettingsChannelGroup,
   SettingsChannelRoleBinding,
   SettingsFormData,
+  SettingsRoleEmoji,
   SettingsSnapshot,
 };
