@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PromptTagEntryEditor, type PromptTagDraft } from "./PromptTagEntryEditor";
 import type { PromptTagEntry } from "./types";
-import { DeleteIcon, PlusIcon } from "../shared/icons";
+import { BackIcon, DeleteIcon, PlusIcon } from "../shared/icons";
 
 type PromptTagLibraryPanelProps = {
   bridgeReady: boolean;
+  onBackToImageStudio: () => void;
 };
 
 const emptyDraft: PromptTagDraft = {
@@ -19,7 +20,7 @@ const emptyDraft: PromptTagDraft = {
 };
 
 /** Manages the editable prompt-tag catalog on its dedicated page. */
-export function PromptTagLibraryPanel({ bridgeReady }: PromptTagLibraryPanelProps) {
+export function PromptTagLibraryPanel({ bridgeReady, onBackToImageStudio }: PromptTagLibraryPanelProps) {
   const [entries, setEntries] = useState<PromptTagEntry[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,8 +107,9 @@ export function PromptTagLibraryPanel({ bridgeReady }: PromptTagLibraryPanelProp
   }
 
   return (
-    <section className="grid min-h-[680px] grid-cols-[320px_minmax(0,1fr)] overflow-hidden rounded-[18px] bg-white/92 shadow-[0_18px_48px_rgba(31,41,55,0.08)]" data-testid="prompt-tag-library">
+    <section className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)] bg-white" data-testid="prompt-tag-library">
         <aside className="flex min-h-0 flex-col border-r border-[#E5EAF0] bg-[#FBFCFE] p-4">
+          <button className="mb-5 grid h-10 w-10 place-items-center self-start rounded-full border border-black/8 bg-white text-[#111111] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] focus:outline-none" type="button" aria-label="返回生图工作台" title="返回生图工作台" onClick={onBackToImageStudio}><BackIcon className="h-5 w-5 fill-current" /></button>
           <div className="mb-4 flex items-center justify-between"><div><h1 className="text-lg font-semibold text-[#263241]">提示词库</h1><p className="mt-1 text-xs text-[#7B8490]">{entries.length} 个条目</p></div></div>
           <div className="grid gap-2">
             <input className="rounded-md border border-[#D8DFE7] bg-white px-3 py-2 text-xs outline-none transition focus:border-[#2F6FED]" placeholder="搜索名称或 ID" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
