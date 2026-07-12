@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { DeleteIcon, PlusIcon, SendIcon, UploadIcon } from "../shared/icons";
+import { BackIcon, DeleteIcon, PlusIcon, SendIcon, UploadIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 import type { RoleAssetCategory, RoleRecord } from "../shared/types";
 import { toFileUrl } from "../shared/format";
@@ -16,6 +16,7 @@ type RoleAssetCategoryGroupsProps = {
   bridgeReady: boolean;
   saving: boolean;
   selectedAssetPath: string;
+  onBackToDetail: () => void;
   onPickAssets: (categoryId: string) => void;
   onRemoveAsset: (path: string) => void;
   onSelectAsset: (path: string) => void;
@@ -31,6 +32,7 @@ export function RoleAssetCategoryGroups({
   bridgeReady,
   saving,
   selectedAssetPath,
+  onBackToDetail,
   onPickAssets,
   onRemoveAsset,
   onSelectAsset,
@@ -125,9 +127,18 @@ export function RoleAssetCategoryGroups({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-end px-2 pb-3">
+      <div className="flex items-center justify-between px-2 pb-3">
         <button
-          className="grid h-9 w-9 place-items-center rounded-md border border-black/8 bg-white text-[#272536] transition hover:bg-[#F5F7FA] focus:outline-none"
+          className="grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white text-[#111111] shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)] focus:outline-none"
+          type="button"
+          aria-label="返回角色详情"
+          title="返回角色详情"
+          onClick={onBackToDetail}
+        >
+          <BackIcon className="h-5 w-5 fill-current" />
+        </button>
+        <button
+          className="grid h-10 w-10 place-items-center rounded-md border border-black/8 bg-white text-[#272536] transition hover:bg-[#F5F7FA] focus:outline-none"
           type="button"
           aria-label="新建分类"
           title="新建分类"

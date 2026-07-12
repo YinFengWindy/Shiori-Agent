@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toFileUrl } from "../shared/format";
-import { UploadIcon } from "../shared/icons";
+import { CloseIcon, UploadIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 import type { RoleAssetCategory, RoleFormState, RoleRecord } from "../shared/types";
 import { getNextRoleAssetSelection, getSelectedRoleAssetPath } from "./roleAssetSelection";
@@ -44,11 +44,6 @@ export function RoleAssetsPage({
   onUpdateAssetOrganization,
   onSaveSelections,
 }: RoleAssetsPageProps) {
-  const backIcon = (
-    <svg viewBox="0 0 1024 1024" className="h-5 w-5 fill-[#111111]" aria-hidden="true">
-      <path d="M631.04 161.941333a42.666667 42.666667 0 0 1 63.061333 57.386667l-2.474666 2.730667-289.962667 292.245333 289.706667 287.402667a42.666667 42.666667 0 0 1 2.730666 57.6l-2.474666 2.752a42.666667 42.666667 0 0 1-57.6 2.709333l-2.752-2.474667-320-317.44a42.666667 42.666667 0 0 1-2.709334-57.6l2.474667-2.752 320-322.56z" />
-    </svg>
-  );
   const assetPairs = (activeRole?.illustrations ?? []).map((relPath, index) => ({
     relPath,
     absPath: activeRole?.illustrations_abs[index] ?? "",
@@ -106,14 +101,6 @@ export function RoleAssetsPage({
       <div className="mx-auto flex min-h-full w-full max-w-[1280px] flex-col gap-5 px-8 pb-10 pt-6">
         <div className="grid min-h-[680px] grid-cols-[428px_minmax(0,1fr)] overflow-hidden rounded-[18px] bg-white/92 shadow-[0_18px_48px_rgba(31,41,55,0.08)]">
           <div className="flex min-h-0 flex-col bg-[#FBFCFE] p-4">
-            <button
-              className="mb-2 grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)]"
-              type="button"
-              onClick={onBackToDetail}
-              aria-label="返回角色详情"
-            >
-              {backIcon}
-            </button>
             <div className="hidden mt-5 grid grid-cols-4 content-start gap-2.5">
               {assetPairs.map(({ relPath, absPath }, index) => {
                 const isSelected = selectionMode === "mood-binding"
@@ -170,6 +157,7 @@ export function RoleAssetsPage({
                 bridgeReady={bridgeReady}
                 saving={savingSelection}
                 selectedAssetPath={selectionMode === "mood-binding" ? selectedMoodAssetPath : selectedAsset?.relPath ?? ""}
+                onBackToDetail={onBackToDetail}
                 onPickAssets={onPickAssets}
                 onRemoveAsset={onRemoveAsset}
                 onSelectAsset={(relPath) => void applyAsset(relPath)}
@@ -232,24 +220,24 @@ export function RoleAssetsPage({
                   selectionMode === "avatar" ? (
                     <div className="relative grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-white p-8">
                       <button
-                        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none"
+                        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-md border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none"
                         type="button"
                         onClick={() => saveSingleSelection("avatar", "")}
                         aria-label="取消选中头像"
                       >
-                        ×
+                        <CloseIcon className="h-4 w-4 stroke-current" />
                       </button>
                       <img className="h-[140px] w-[140px] rounded-[32px] object-cover shadow-[0_10px_24px_rgba(15,23,42,0.08)]" src={toFileUrl(selectedAsset.absPath)} alt="avatar preview" />
                     </div>
                   ) : (
                     <div className="relative flex min-h-[360px] flex-1 items-center justify-center overflow-hidden rounded-[20px] bg-white p-6">
                       <button
-                        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none"
+                        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-md border border-black/10 bg-white/92 text-[#5B6472] shadow-[0_4px_12px_rgba(15,23,42,0.12)] transition hover:border-[#9AA3B2] hover:bg-white hover:text-[#272536] focus:outline-none"
                         type="button"
                         onClick={() => saveSingleSelection("chat-background", "")}
                         aria-label="取消选中立绘"
                       >
-                        ×
+                        <CloseIcon className="h-4 w-4 stroke-current" />
                       </button>
                       <img
                         className="max-h-full w-full object-contain"

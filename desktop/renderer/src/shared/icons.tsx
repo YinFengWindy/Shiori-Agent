@@ -78,6 +78,24 @@ export function PlusIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProp
   );
 }
 
+/** Renders the shared desktop back-navigation glyph. */
+export function BackIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 1024 1024" className={className} aria-hidden="true">
+      <path d="M631.04 161.941333a42.666667 42.666667 0 0 1 63.061333 57.386667l-2.474666 2.730667-289.962667 292.245333 289.706667 287.402667a42.666667 42.666667 0 0 1 2.730666 57.6l-2.474666 2.752a42.666667 42.666667 0 0 1-57.6 2.709333l-2.752-2.474667-320-317.44a42.666667 42.666667 0 0 1-2.709334-57.6l2.474667-2.752 320-322.56z" />
+    </svg>
+  );
+}
+
+/** Renders the shared desktop close glyph. */
+export function CloseIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
+      <path d="m7 7 10 10M17 7 7 17" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 /** Renders the shared desktop smiley glyph used by chat emoji actions. */
 export function SmileyIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
   return (
