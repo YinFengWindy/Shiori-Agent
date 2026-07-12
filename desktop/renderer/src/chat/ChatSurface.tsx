@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { buildChatImageHistoryKey } from "./chatImageHistory";
 import { isChatImageAsset } from "./chatImageHistory";
+import { ChatMessageImage } from "./ChatMessageImage";
 import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
 import {
   getExpandedVisibleChatMessageCountForKey,
@@ -692,7 +693,7 @@ export function ChatSurface({
                                   onDragStart={(event) => handleAttachmentDragStart(event, item)}
                                   onClick={() => handleOpenChatImagePreview(buildChatImageHistoryKey(messageDomKey, mediaIndex))}
                                 >
-                                  <img className="block h-auto max-h-[280px] max-w-[420px] object-contain" src={toFileUrl(item)} alt="message attachment" />
+                                  <ChatMessageImage imagePath={item} />
                                 </button>
                               ) : (
                                 <a

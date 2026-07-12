@@ -149,8 +149,8 @@ describe("ChatSurface", () => {
 
     const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
 
-    assert.match(markup, /max-w-\[420px\][\s\S]*max-h-\[280px\] max-w-\[420px\] object-contain/);
-    assert.doesNotMatch(markup, /max-h-\[280px\] w-full object-cover/);
+    assert.match(markup, /alt="message attachment"/);
+    assert.doesNotMatch(markup, /object-cover/);
   });
 
   it("renders persisted reply previews inside message bubbles", () => {
