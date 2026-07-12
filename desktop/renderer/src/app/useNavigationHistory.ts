@@ -145,7 +145,8 @@ export function useNavigationHistory({
 
   function openPromptTagLibrary(options?: { recordHistory?: boolean }): void {
     const nextView: AppMainView = { kind: "image-prompt-tags" };
-    setSidebarCollapsed(true);
+    setSidebarCollapsed(false);
+    setSidebarWidth((current) => Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, current)));
     setMainView(nextView);
     if (options?.recordHistory !== false) {
       pushNavigationEntry(buildNavigationEntry(nextView));
