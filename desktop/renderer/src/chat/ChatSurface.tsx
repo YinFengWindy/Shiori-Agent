@@ -380,6 +380,11 @@ export function ChatSurface({
     }, 320);
   };
 
+  const handleOpenChatImagePreview = (historyKey: string) => {
+    setSidebarMode("images");
+    onOpenChatImagePreview({ historyKey });
+  };
+
   const handleOpenRoleDetail = () => {
     if (!canOpenRoleDetail) return;
     onOpenRoleDetail();
@@ -685,7 +690,7 @@ export function ChatSurface({
                                   type="button"
                                   draggable
                                   onDragStart={(event) => handleAttachmentDragStart(event, item)}
-                                  onClick={() => onOpenChatImagePreview({ historyKey: buildChatImageHistoryKey(messageDomKey, mediaIndex) })}
+                                  onClick={() => handleOpenChatImagePreview(buildChatImageHistoryKey(messageDomKey, mediaIndex))}
                                 >
                                   <img className="max-h-[280px] w-full object-cover" src={toFileUrl(item)} alt="message attachment" />
                                 </button>
