@@ -24,6 +24,20 @@ const emptyDraft: PromptTagDraft = {
   image_path: "",
 };
 
+function draftSignature(draft: PromptTagDraft): string {
+  return JSON.stringify({
+    id: draft.id.trim(),
+    name: draft.name.trim(),
+    enabled: draft.enabled,
+    category: draft.category.trim(),
+    match_terms: draft.match_terms,
+    positive_tags: draft.positive_tags,
+    negative_tags: draft.negative_tags,
+    rating: draft.rating,
+    image_path: draft.image_path,
+  });
+}
+
 /** Manages the editable prompt-tag catalog on its dedicated page. */
 export function PromptTagLibraryPanel({ bridgeReady, section, onOpenSection }: PromptTagLibraryPanelProps) {
   const [entries, setEntries] = useState<PromptTagEntry[]>([]);
@@ -63,6 +77,9 @@ export function PromptTagLibraryPanel({ bridgeReady, section, onOpenSection }: P
     setIsCreating(true);
     setError("");
   }, [section]);
+
+  const originalDraft = selectedId ? entries.find((entry) => entry.id === selectedId) ?? emptyDraft : emptyDraft;
+  const dirty = draftSignature(draft) !== draftSignature(originalDraft);
 
   async function saveEntry(): Promise<void> {
     const payload = {
@@ -115,7 +132,7 @@ export function PromptTagLibraryPanel({ bridgeReady, section, onOpenSection }: P
 
   return (
     <section className="scrollbar-soft h-full overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,250,253,0.98)_100%)] p-8" data-testid="prompt-tag-library">
-      {section === "list" ? <div className="mx-auto w-full max-w-[1120px]"><div className="grid grid-cols-3 gap-5">{entries.map((entry) => <div className="group relative h-[420px] overflow-hidden rounded-[22px] border border-[#D9E0E8] bg-[#EEF1F5] shadow-[0_14px_40px_rgba(31,41,55,0.06)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(31,41,55,0.1)]" key={entry.id}><button className="h-full w-full" type="button" title={entry.name} onClick={() => { setDraft(entry); setSelectedId(entry.id); setIsCreating(false); setError(""); onOpenSection("detail"); }}>{entry.image_path ? <img className="h-full w-full object-cover" src={toFileUrl(entry.image_path)} alt={entry.name} /> : <span className="grid h-full place-items-center text-[#9AA3B2]"><PromptLibraryIcon className="h-12 w-12 fill-current" /></span>}</button><button className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-white/24 bg-[rgba(15,23,42,0.62)] text-white opacity-0 transition hover:bg-[rgba(143,43,24,0.88)] group-hover:opacity-100" type="button" aria-label={`删除 ${entry.name}`} onClick={() => void deleteEntry(entry.id)}><DeleteIcon className="h-[15px] w-[15px] fill-current" /></button></div>)}</div></div> : <div className="mx-auto w-full max-w-[1120px]"><PromptTagEntryEditor draft={draft} error={error} saving={saving} bridgeReady={bridgeReady} isCreating={section === "create" || isCreating} onChange={setDraft} onSave={() => void saveEntry()} onBack={() => onOpenSection("list")} onReset={() => setDraft(selectedId ? entries.find((entry) => entry.id === selectedId) ?? emptyDraft : emptyDraft)} /></div>}
+      {section === "list" ? <div className="mx-auto w-full max-w-[1120px]"><div className="grid grid-cols-3 gap-5">{entries.map((entry) => <div className="group relative h-[420px] overflow-hidden rounded-[22px] border border-[#D9E0E8] bg-[#EEF1F5] shadow-[0_14px_40px_rgba(31,41,55,0.06)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(31,41,55,0.1)]" key={entry.id}><button className="h-full w-full" type="button" title={entry.name} onClick={() => { setDraft(entry); setSelectedId(entry.id); setIsCreating(false); setError(""); onOpenSection("detail"); }}>{entry.image_path ? <img className="h-full w-full object-cover" src={toFileUrl(entry.image_path)} alt={entry.name} /> : <span className="grid h-full place-items-center text-[#9AA3B2]"><PromptLibraryIcon className="h-12 w-12 fill-current" /></span>}</button><button className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-white/24 bg-[rgba(15,23,42,0.62)] text-white opacity-0 transition hover:bg-[rgba(143,43,24,0.88)] group-hover:opacity-100" type="button" aria-label={`删除 ${entry.name}`} onClick={() => void deleteEntry(entry.id)}><DeleteIcon className="h-[15px] w-[15px] fill-current" /></button></div>)}</div></div> : <div className="mx-auto w-full max-w-[1120px]"><PromptTagEntryEditor draft={draft} error={error} saving={saving} bridgeReady={bridgeReady} dirty={dirty} isCreating={section === "create" || isCreating} onChange={setDraft} onSave={() => void saveEntry()} onBack={() => onOpenSection("list")} onReset={() => setDraft(selectedId ? entries.find((entry) => entry.id === selectedId) ?? emptyDraft : emptyDraft)} /></div>}
     </section>
   );
 }
