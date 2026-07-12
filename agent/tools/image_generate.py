@@ -80,6 +80,15 @@ class GenerateImageTool(Tool):
                 "type": "string",
                 "description": "模型名，默认使用全局配置。",
             },
+            "intent": {
+                "type": "string",
+                "enum": ["user_requested", "scene_cg"],
+                "description": "调用意图：用户主动要求生图，或角色为关键场景生成 CG。",
+            },
+            "scene_key": {
+                "type": "string",
+                "description": "自动场景 CG 的简短场景标识；intent=scene_cg 时必填。",
+            },
         },
         "required": ["prompt", "mode"],
     }
@@ -88,6 +97,12 @@ class GenerateImageTool(Tool):
         self._service = service
 
     async def execute(self, **kwargs: Any) -> str:
+        intent = str(kwargs.get("intent") or "user_requested").strip()
+        if intent not in {"user_requested", "scene_cg"}:
+            raise ValueError("intent 必须是 user_requested 或 scene_cg")
+        scene_key = str(kwargs.get("scene_key") or "").strip()
+        if intent == "scene_cg" and not scene_key:
+            raise ValueError("scene_cg 请求必须提供 scene_key")
         request = GenerateImageRequest(
             prompt=str(kwargs.get("prompt") or ""),
             mode=str(kwargs.get("mode") or "txt2img"),  # type: ignore[arg-type]
@@ -98,11 +113,7 @@ class GenerateImageTool(Tool):
                 if kwargs.get("strength") is not None
                 else None
             ),
-            noise=(
-                float(kwargs["noise"])
-                if kwargs.get("noise") is not None
-                else None
-            ),
+            noise=(float(kwargs["noise"]) if kwargs.get("noise") is not None else None),
             size_preset=str(kwargs.get("size_preset") or "square"),  # type: ignore[arg-type]
             custom_width=(
                 int(kwargs["custom_width"])
@@ -123,6 +134,8 @@ class GenerateImageTool(Tool):
         )
         result = await self._service.generate(request)
         payload = result.to_public_payload()
+        payload["intent"] = intent
+        payload["scene_key"] = scene_key
         payload["message"] = (
             f"已生成 {len(result.output_paths)} 张图片，"
             f"模型 {result.model}，seed={result.seed}。"

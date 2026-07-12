@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
-from agent.lifecycle.types import AfterReasoningCtx, AfterToolResultCtx
+from agent.lifecycle.types import (
+    AfterReasoningCtx,
+    AfterToolResultCtx,
+    PromptRenderCtx,
+)
 from agent.plugins.context import PluginContext, PluginKVStore
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
@@ -133,4 +138,113 @@ async def test_plugin_does_not_attach_media_already_sent_by_message_push(
     updated = await plugin.attach_generated_media(ctx)
 
     assert updated.media == []
+    await plugin.terminate()
+
+
+def _plugin_context(tmp_path: Path) -> PluginContext:
+    return PluginContext(
+        event_bus=EventBus(),
+        tool_registry=ToolRegistry(),
+        plugin_id="novelai",
+        plugin_dir=tmp_path,
+        kv_store=PluginKVStore(tmp_path / ".kv.json"),
+        app_config=SimpleNamespace(
+            novelai=NovelAISettings(enabled=True, token="novel-token")
+        ),
+        workspace=tmp_path,
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_injects_auto_cg_protocol_only_for_active_role(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "plugins.novelai.plugin.get_default_http_requester",
+        lambda profile: SimpleNamespace(),
+    )
+    plugin = NovelAIPlugin()
+    plugin.context = _plugin_context(tmp_path)
+    await plugin.initialize()
+
+    empty = await plugin.inject_auto_cg_protocol(
+        PromptRenderCtx(
+            session_key="session",
+            channel="desktop",
+            chat_id="desktop",
+            content="你好",
+            media=None,
+            timestamp=datetime.now(),
+            history=[],
+            skill_names=None,
+            retrieved_memory_block="",
+            disabled_sections=set(),
+            turn_injection_prompt="",
+            session_metadata={},
+        )
+    )
+    assert empty.system_sections_top == []
+
+    active = await plugin.inject_auto_cg_protocol(
+        PromptRenderCtx(
+            session_key="session",
+            channel="desktop",
+            chat_id="desktop",
+            content="你好",
+            media=None,
+            timestamp=datetime.now(),
+            history=[],
+            skill_names=None,
+            retrieved_memory_block="",
+            disabled_sections=set(),
+            turn_injection_prompt="",
+            session_metadata={"role_id": "mira"},
+        )
+    )
+    assert len(active.system_sections_top) == 1
+    assert "scene_cg" in active.system_sections_top[0].content
+    await plugin.terminate()
+
+
+@pytest.mark.asyncio
+async def test_plugin_records_auto_cg_state_only_after_successful_media(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "plugins.novelai.plugin.get_default_http_requester",
+        lambda profile: SimpleNamespace(),
+    )
+    plugin = NovelAIPlugin()
+    plugin.context = _plugin_context(tmp_path)
+    await plugin.initialize()
+    arguments = {"intent": "scene_cg", "scene_key": "rain"}
+
+    await plugin.collect_generated_media(
+        AfterToolResultCtx(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="desktop",
+            tool_name="generate_image",
+            arguments=arguments,
+            result="upstream error",
+            status="error",
+        )
+    )
+    assert plugin.context.kv_store.get("auto_cg_sessions") is None
+
+    await plugin.collect_generated_media(
+        AfterToolResultCtx(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="desktop",
+            tool_name="generate_image",
+            arguments=arguments,
+            result=json.dumps({"output_paths": [str(tmp_path / "cg.png")]}),
+            status="success",
+        )
+    )
+    sessions = plugin.context.kv_store.get("auto_cg_sessions")
+    assert sessions["role:mira"]["last_scene_key"] == "rain"
     await plugin.terminate()
