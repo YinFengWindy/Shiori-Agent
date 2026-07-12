@@ -111,6 +111,7 @@ export function ChatSurface({
   const messageContextMenuRef = useRef<HTMLDivElement | null>(null);
   const previousMessageCountRef = useRef(0);
   const previousLastMessageContentRef = useRef("");
+  const previousChatImageCountRef = useRef(0);
   const autoScrollingRef = useRef(false);
   const stickToBottomRef = useRef(true);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
@@ -259,11 +260,28 @@ export function ChatSurface({
   useEffect(() => {
     previousMessageCountRef.current = activeSession?.messages.length ?? 0;
     previousLastMessageContentRef.current = activeSession?.messages.at(-1)?.content ?? "";
+    previousChatImageCountRef.current = chatLatestImageSidebarCount;
     const container = conversationListRef.current;
     if (!container) return;
     stickToBottomRef.current = true;
     scrollConversationToBottom("auto");
   }, [activeSession?.key]);
+
+  useEffect(() => {
+    const previousCount = previousChatImageCountRef.current;
+    previousChatImageCountRef.current = chatLatestImageSidebarCount;
+    if (chatLatestImageSidebarCount <= previousCount) {
+      return;
+    }
+    setSidebarMode("images");
+    if (chatLatestImageSidebarCollapsed) {
+      onToggleChatLatestImageSidebar();
+    }
+  }, [
+    chatLatestImageSidebarCollapsed,
+    chatLatestImageSidebarCount,
+    onToggleChatLatestImageSidebar,
+  ]);
 
   useEffect(() => {
     setComposerReplyTarget(null);
