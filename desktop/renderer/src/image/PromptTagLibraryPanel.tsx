@@ -114,7 +114,7 @@ export function PromptTagLibraryPanel({ bridgeReady }: PromptTagLibraryPanelProp
       <div className="grid min-h-[520px] grid-cols-[280px_minmax(0,1fr)] overflow-hidden rounded-lg border border-[#DDE4EC] bg-white shadow-[0_12px_32px_rgba(31,41,55,0.06)]">
         <aside className="border-r border-[#E5EAF0] bg-[#F8FAFC] p-3">
           <div className="grid gap-2">
-            <input className="rounded-md border border-[#D8DFE7] bg-white px-3 py-2 text-xs outline-none transition focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/20" placeholder="搜索名称或 ID" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
+            <input className="rounded-md border border-[#D8DFE7] bg-white px-3 py-2 text-xs outline-none transition focus:border-[#2F6FED]" placeholder="搜索名称或 ID" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
             <select className="rounded-md border border-[#D8DFE7] bg-white px-2 py-2 text-xs outline-none" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">全部分类</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select>
           </div>
           <div className="mt-3 grid gap-1.5">
