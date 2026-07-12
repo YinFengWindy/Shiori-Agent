@@ -42,6 +42,15 @@ type SettingsPageProps = {
   onMetaChange?: (meta: { configPath: string; dirty: boolean }) => void;
 };
 
+/** Shared surface style for every settings page state. */
+export const settingsPageSurfaceClass = "settings-page bg-white";
+
+/** Responsive spacing for the settings toolbar. */
+export const settingsToolbarClass = "border-b border-[#E8EBF0] bg-white px-3 py-3 sm:px-5 lg:px-7";
+
+/** Responsive spacing for the scrollable settings content. */
+export const settingsContentClass = "relative scrollbar-soft overflow-y-auto bg-white px-3 py-5 sm:px-5 lg:px-7 lg:py-7";
+
 function joinLines(values: string[]): string {
   return values.join("\n");
 }
@@ -396,7 +405,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
 
   if (loadError) {
     return (
-      <section className="settings-page grid h-full place-items-center bg-[#F7F8FB]" data-testid="settings-page">
+      <section className={cx(settingsPageSurfaceClass, "grid h-full place-items-center")} data-testid="settings-page">
         <div className={cx(cardClass, "mx-8 max-w-[680px] p-6 text-sm leading-6 text-[#8f2d2d]")}>
           设置加载失败：{loadError}
         </div>
@@ -406,7 +415,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
 
   if (!draft) {
     return (
-      <section className="settings-page grid h-full place-items-center bg-[#F7F8FB]" data-testid="settings-page">
+      <section className={cx(settingsPageSurfaceClass, "grid h-full place-items-center")} data-testid="settings-page">
         <div className="text-sm text-[#737781]">正在加载设置...</div>
       </section>
     );
@@ -666,7 +675,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   }
 
   return (
-    <section className="settings-page relative grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[#F7F8FB]" data-testid="settings-page">
+    <section className={cx(settingsPageSurfaceClass, "relative grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden")} data-testid="settings-page">
       {(savePhase === "saved" || savePhase === "restart-failed" || savePhase === "error") && statusMessage ? (
         <div
           className={cx(
@@ -682,7 +691,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
         </div>
       ) : null}
       <div className="settings-content grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-        <div className="border-b border-[#E8EBF0] bg-[#F7F8FB] px-4 py-4 sm:px-6 lg:px-8">
+        <div className={settingsToolbarClass}>
           <div className="mx-auto flex w-full flex-col gap-4 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
               {visibleSubsections.length ? (
@@ -726,7 +735,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             </div>
           </div>
         </div>
-        <div className="relative scrollbar-soft overflow-y-auto bg-white px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <div className={settingsContentClass}>
           <div className="mx-auto w-full max-w-none">
             {!currentSection ? (
               <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-[#7f8490]")}>
