@@ -26,6 +26,8 @@ describe("RoleMoodBindingsPanel", () => {
     assert.match(markup, /w-\[240px\]/);
     assert.match(markup, /h-10/);
     assert.match(markup, /aria-label="取消选中差分图"/);
+    const closeButtonClass = markup.match(/<button class="([^"]+)" type="button" aria-label="取消选中差分图"/)?.[1] ?? "";
+    assert.doesNotMatch(closeButtonClass, /shadow/);
     assert.match(markup, /min-h-\[360px\]/);
     assert.doesNotMatch(markup, /min-h-\[420px\]/);
     assert.doesNotMatch(markup, /rounded-\[24px\]/);

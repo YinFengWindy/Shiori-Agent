@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { BackIcon, DeleteIcon, PlusIcon, SendIcon, UploadIcon } from "../shared/icons";
+import { BackIcon, CaretRightIcon, DeleteIcon, PlusIcon, SendIcon, UploadIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 import type { RoleAssetCategory, RoleRecord } from "../shared/types";
 import { toFileUrl } from "../shared/format";
@@ -160,7 +160,7 @@ export function RoleAssetCategoryGroups({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between px-2 pb-3">
         <button
-          className="grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white text-[#111111] shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)] focus:outline-none"
+          className="grid h-10 w-10 place-items-center rounded-full border border-black/8 bg-white text-[#111111] transition duration-200 hover:-translate-y-0.5 hover:border-black/14 hover:bg-[#F5F7FA] focus:outline-none"
           type="button"
           aria-label="返回角色详情"
           title="返回角色详情"
@@ -227,7 +227,7 @@ export function RoleAssetCategoryGroups({
                   aria-label={expanded ? `收起${category.name}` : `展开${category.name}`}
                   onClick={() => toggleCategory(category.id)}
                 >
-                  <span className={cx("text-lg transition-transform", expanded && "rotate-90")}>›</span>
+                  <CaretRightIcon className={cx("h-4 w-4 shrink-0 transition-transform", expanded && "rotate-90")} />
                 </button>
                 <input
             className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium transition focus:border-[#B8BEC7] focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300/70"

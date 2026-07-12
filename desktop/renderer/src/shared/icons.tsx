@@ -87,6 +87,15 @@ export function BackIcon({ className = "h-4 w-4 fill-current" }: DesktopIconProp
   );
 }
 
+/** Renders the shared desktop right-facing caret glyph. */
+export function CaretRightIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
+      <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
 /** Renders the shared desktop close glyph. */
 export function CloseIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
   return (
