@@ -6,6 +6,17 @@ from agent.plugins.context import PluginKVStore
 from agent.prompting import PromptSectionRender
 from agent.tool_hooks.types import HookOutcome
 
+_THIRD_PERSON_PROMPT_TERMS = (
+    "third-person view",
+    "cinematic composition",
+    "character visible in frame",
+)
+_FIRST_PERSON_NEGATIVE_TERMS = (
+    "first-person view",
+    "pov",
+    "selfie",
+)
+
 
 class AutoCgPolicy:
     """Own automatic scene-CG prompting, cooldown, and deduplication state."""
@@ -47,9 +58,11 @@ class AutoCgPolicy:
                 "关系或情绪高潮、剧情转折或具有明确构图的关键动作结果，才调用 "
                 "`generate_image`。普通闲聊、连续小动作和与上一张画面相近的场景不要调用。\n"
                 "自动生成时必须传 `intent=scene_cg`、稳定且简短的 `scene_key`，并让 prompt "
-                "只描述可见角色、动作、环境、构图、光线和氛围。单人主体优先 portrait，"
-                "环境或双人场景优先 landscape。用户明确要求生图时传 `intent=user_requested`，"
-                "不受自动 CG 限制。\n"
+                "使用动画 CG 式第三人称镜头：摄影机必须位于角色之外，角色本人必须清晰入镜，"
+                "并用角色名或明确外貌描述角色。禁止第一人称 POV、自拍构图，以及只画角色眼中"
+                "所见而不让角色入镜。prompt 只描述可见角色、动作、环境、构图、光线和氛围。"
+                "单人主体优先 portrait，环境或双人场景优先 landscape。用户明确要求生图时传 "
+                "`intent=user_requested`，不受自动 CG 限制。\n"
                 f"当前策略状态：{cooldown_text}"
             ),
             is_static=False,
@@ -87,7 +100,18 @@ class AutoCgPolicy:
                 reason="scene_cg_duplicate_scene",
                 extra_message="该场景已经生成过 CG，请继续文字回复，不要重复生成。",
             )
-        return {**arguments, "scene_key": scene_key}
+        return {
+            **arguments,
+            "scene_key": scene_key,
+            "prompt": _append_prompt_terms(
+                arguments.get("prompt"),
+                _THIRD_PERSON_PROMPT_TERMS,
+            ),
+            "negative_prompt": _append_prompt_terms(
+                arguments.get("negative_prompt"),
+                _FIRST_PERSON_NEGATIVE_TERMS,
+            ),
+        }
 
     def record_success(self, session_key: str, scene_key: object) -> None:
         """Persist cooldown and deduplication state after successful generation."""
@@ -120,3 +144,12 @@ def normalize_scene_key(value: object) -> str:
     """Normalize a model-provided scene identifier for stable comparison."""
 
     return " ".join(str(value or "").strip().casefold().split())
+
+
+def _append_prompt_terms(value: object, terms: tuple[str, ...]) -> str:
+    clean_value = str(value or "").strip().strip(",")
+    existing = {
+        part.strip().casefold() for part in clean_value.split(",") if part.strip()
+    }
+    missing = [term for term in terms if term.casefold() not in existing]
+    return ", ".join(part for part in (clean_value, *missing) if part)
