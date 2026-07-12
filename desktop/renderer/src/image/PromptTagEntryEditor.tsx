@@ -11,6 +11,7 @@ type PromptTagEntryEditorProps = {
   bridgeReady: boolean;
   onChange: (draft: PromptTagDraft) => void;
   onSave: () => void;
+  isCreating: boolean;
 };
 
 function splitTags(value: string): string[] {
@@ -25,17 +26,15 @@ export function PromptTagEntryEditor({
   bridgeReady,
   onChange,
   onSave,
+  isCreating,
 }: PromptTagEntryEditorProps) {
+  const field = (label: string, value: string, onChange: (value: string) => void, placeholder: string) => <label className="grid gap-1.5 text-xs text-[#4B5563]"><span className="font-medium">{label}</span><textarea className={cx(inputClass, "min-h-[72px] resize-y border-[#D8DFE7] bg-white")} placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
   return (
-    <div className="grid gap-2">
-      <label className="grid gap-1 text-xs text-[#374151]"><span>ID / 名称</span><div className="grid grid-cols-2 gap-2"><input className={cx(inputClass, "border-[#D8DFE7] bg-white")} value={draft.id} onChange={(event) => onChange({ ...draft, id: event.target.value })} /><input className={cx(inputClass, "border-[#D8DFE7] bg-white")} value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} /></div></label>
-      <input className={cx(inputClass, "border-[#D8DFE7] bg-white")} placeholder="分类" value={draft.category} onChange={(event) => onChange({ ...draft, category: event.target.value })} />
-      <input className={cx(inputClass, "border-[#D8DFE7] bg-white")} placeholder="匹配词（逗号分隔）" value={draft.match_terms.join(", ")} onChange={(event) => onChange({ ...draft, match_terms: splitTags(event.target.value) })} />
-      <input className={cx(inputClass, "border-[#D8DFE7] bg-white")} placeholder="正向 tag（逗号分隔）" value={draft.positive_tags.join(", ")} onChange={(event) => onChange({ ...draft, positive_tags: splitTags(event.target.value) })} />
-      <input className={cx(inputClass, "border-[#D8DFE7] bg-white")} placeholder="负向 tag（逗号分隔）" value={draft.negative_tags.join(", ")} onChange={(event) => onChange({ ...draft, negative_tags: splitTags(event.target.value) })} />
-      <div className="flex items-center justify-between gap-2 text-xs text-[#374151]"><select className={cx(inputClass, "border-[#D8DFE7] bg-white")} value={draft.rating} onChange={(event) => onChange({ ...draft, rating: event.target.value as PromptTagEntry["rating"] })}><option value="general">general</option><option value="sensitive">sensitive</option><option value="adult">adult</option></select><label className="flex items-center gap-2"><span>启用</span><SettingsToggleCard checked={draft.enabled} ariaLabel="启用提示词条目" onChange={(checked) => onChange({ ...draft, enabled: checked })} /></label></div>
+    <div className="flex h-full flex-col gap-5">
+      <div><h2 className="text-base font-semibold text-[#263241]">{isCreating ? "新建条目" : draft.name || "编辑条目"}</h2><p className="mt-1 text-xs text-[#8A94A1]">基础信息与匹配规则</p></div>
+      <div className="grid gap-4"><div className="grid gap-3 rounded-md border border-[#E5EAF0] p-4"><div className="text-xs font-semibold text-[#263241]">基础信息</div><div className="grid grid-cols-2 gap-3"><label className="grid gap-1.5 text-xs text-[#4B5563]"><span>ID</span><input className={cx(inputClass, "border-[#D8DFE7] bg-white")} value={draft.id} onChange={(event) => onChange({ ...draft, id: event.target.value })} /></label><label className="grid gap-1.5 text-xs text-[#4B5563]"><span>名称</span><input className={cx(inputClass, "border-[#D8DFE7] bg-white")} value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} /></label></div><div className="grid grid-cols-2 gap-3"><label className="grid gap-1.5 text-xs text-[#4B5563]"><span>分类</span><input className={cx(inputClass, "border-[#D8DFE7] bg-white")} value={draft.category} onChange={(event) => onChange({ ...draft, category: event.target.value })} /></label><label className="grid gap-1.5 text-xs text-[#4B5563]"><span>使用限制</span><select className={cx(inputClass, "border-[#D8DFE7] bg-white")} value={draft.rating} onChange={(event) => onChange({ ...draft, rating: event.target.value as PromptTagEntry["rating"] })}><option value="general">通用</option><option value="sensitive">敏感</option><option value="adult">成人</option></select></label></div><label className="flex items-center justify-between text-xs text-[#4B5563]"><span>启用此条目</span><SettingsToggleCard checked={draft.enabled} ariaLabel="启用提示词条目" onChange={(checked) => onChange({ ...draft, enabled: checked })} /></label></div><div className="grid gap-3 rounded-md border border-[#E5EAF0] p-4"><div className="text-xs font-semibold text-[#263241]">匹配与 Tag</div>{field("匹配条件", draft.match_terms.join(", "), (value) => onChange({ ...draft, match_terms: splitTags(value) }), "输入触发词，用逗号分隔")}{field("正向 Tag", draft.positive_tags.join(", "), (value) => onChange({ ...draft, positive_tags: splitTags(value) }), "输入要自动加入的 tag，用逗号分隔")}{field("负向 Tag", draft.negative_tags.join(", "), (value) => onChange({ ...draft, negative_tags: splitTags(value) }), "可选，用逗号分隔")}</div></div>
       {error ? <div className="text-xs text-[#A33]">{error}</div> : null}
-      <button className="rounded-md bg-[#2F6FED] px-3 py-2 text-xs text-white disabled:opacity-50" type="button" disabled={!bridgeReady || saving} onClick={onSave}>{saving ? "保存中" : "保存条目"}</button>
+      <div className="mt-auto flex justify-end border-t border-[#E5EAF0] pt-4"><button className="rounded-md bg-[#2F6FED] px-4 py-2 text-xs font-medium text-white disabled:opacity-50" type="button" disabled={!bridgeReady || saving} onClick={onSave}>{saving ? "保存中" : "保存条目"}</button></div>
     </div>
   );
 }

@@ -15,10 +15,7 @@ export function PromptTagLibraryPage({ bridgeReady, onBackToImageStudio }: Promp
           <BackIcon className="h-4 w-4 fill-current" />
           <span>返回生图工作台</span>
         </button>
-        <div className="rounded-lg border border-[#D9E0E8] bg-white/92 p-6 shadow-[0_18px_48px_rgba(31,41,55,0.08)]">
-          <h1 className="mb-5 text-lg font-semibold text-[#263241]">提示词库</h1>
-          <PromptTagLibraryPanel bridgeReady={bridgeReady} />
-        </div>
+        <PromptTagLibraryPanel bridgeReady={bridgeReady} />
       </div>
     </section>
   );
