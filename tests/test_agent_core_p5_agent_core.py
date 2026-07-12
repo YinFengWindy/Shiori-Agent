@@ -66,13 +66,14 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
             )
         )
     )
+
+    def _render(request, *, session_metadata=None):
+        _ = request, session_metadata
+        order.append("render")
+        return SimpleNamespace(system_prompt="system prompt", messages=[])
+
     context = SimpleNamespace(
-        render=MagicMock(
-            side_effect=lambda request: order.append("render") or SimpleNamespace(
-                system_prompt="system prompt",
-                messages=[],
-            )
-        )
+        render=MagicMock(side_effect=_render)
     )
     tools = SimpleNamespace(
         set_context=MagicMock(side_effect=lambda **kwargs: order.append("tool_context"))
@@ -125,9 +126,15 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
     assert render_request.current_message == ""
     assert render_request.skill_names == ["refactor"]
     assert render_request.retrieved_memory_block == "remembered"
+    assert context.render.call_args.kwargs["session_metadata"] == {}
     tools.set_context.assert_called_once_with(
         channel="telegram",
         chat_id="123",
+        session_key="telegram:123",
+        role_id="",
+        role_config_version="",
+        thread_id="",
+        delivery_key="",
         current_user_source_ref="telegram:123:0",
         current_timestamp="2026-04-04T22:00:00",
     )
