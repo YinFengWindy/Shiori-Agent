@@ -4,6 +4,7 @@ import { ChatSurface } from "../chat/ChatSurface";
 import { ImageStudioPage } from "../image/ImageStudioPage";
 import { ImageStudioSidebar } from "../image/ImageStudioSidebar";
 import { PromptTagLibraryPage } from "../image/PromptTagLibraryPage";
+import { PromptTagWorkspaceSidebar, type PromptTagWorkspaceSectionId } from "../image/PromptTagWorkspaceSidebar";
 import { useImageStudioState } from "../image/useImageStudioState";
 import { ConfirmDialog } from "../roles/ConfirmDialog";
 import { RoleAssetsPage } from "../roles/RoleAssetsPage";
@@ -75,6 +76,8 @@ type DesktopAppFrameProps = {
   onOpenSettingsSection: (section: SettingsSectionId) => void;
   imageStudioViewActive: boolean;
   imagePromptTagsViewActive: boolean;
+  promptTagWorkspaceSection: PromptTagWorkspaceSectionId;
+  onOpenPromptTagWorkspaceSection: (section: PromptTagWorkspaceSectionId) => void;
   roleWorkspaceViewActive: boolean;
   roleWorkspaceSection: RoleWorkspaceSectionId;
   onOpenRoleWorkspaceSection: (section: RoleWorkspaceSectionId) => void;
@@ -201,6 +204,8 @@ export function DesktopAppFrame({
   onOpenSettingsSection,
   imageStudioViewActive,
   imagePromptTagsViewActive,
+  promptTagWorkspaceSection,
+  onOpenPromptTagWorkspaceSection,
   roleWorkspaceViewActive,
   roleWorkspaceSection,
   onOpenRoleWorkspaceSection,
@@ -331,7 +336,7 @@ export function DesktopAppFrame({
             "sidebar-track relative min-h-0 overflow-hidden",
             sidebarState.animating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           )}
-          style={{ width: imagePromptTagsViewActive || sidebarState.collapsed ? 0 : sidebarState.width }}
+          style={{ width: sidebarState.collapsed ? 0 : sidebarState.width }}
         >
           {mainView.kind === "settings" ? (
             <SettingsSidebar
@@ -346,6 +351,8 @@ export function DesktopAppFrame({
               onBeginResize={sidebarState.onBeginResize}
               search={settingsSearch}
             />
+          ) : imagePromptTagsViewActive ? (
+            <PromptTagWorkspaceSidebar activeSection={promptTagWorkspaceSection} animating={sidebarState.animating && !sidebarState.resizing} collapsed={sidebarState.collapsed} width={sidebarState.width} onBackToChat={onBackToChat} onOpenSection={onOpenPromptTagWorkspaceSection} onBeginResize={sidebarState.onBeginResize} />
           ) : imageStudioViewActive ? (
             <ImageStudioSidebar
               bridgeReady={bridgeReady}
@@ -470,7 +477,8 @@ export function DesktopAppFrame({
           {mainView.kind === "image-prompt-tags" ? (
             <PromptTagLibraryPage
               bridgeReady={bridgeReady}
-              onBackToApp={onBackToChat}
+              section={promptTagWorkspaceSection}
+              onOpenSection={onOpenPromptTagWorkspaceSection}
             />
           ) : null}
           {mainView.kind === "roles-list" ? (

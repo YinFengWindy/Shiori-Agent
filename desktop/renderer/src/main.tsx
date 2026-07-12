@@ -33,6 +33,7 @@ import { buildDesktopViewModel } from "./app/desktopSelectors";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { useImageStudioState } from "./image/useImageStudioState";
+import { type PromptTagWorkspaceSectionId } from "./image/PromptTagWorkspaceSidebar";
 import { createRoleFormFromRole, isRoleFormDirty } from "./roles/roleFormState";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
@@ -91,6 +92,7 @@ function registerRendererGlobalDiagnostics(): void {
 
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
+  const [promptTagWorkspaceSection, setPromptTagWorkspaceSection] = useState<PromptTagWorkspaceSectionId>("list");
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [activeRoleId, setActiveRoleId] = useState("");
   const [activeSession, setActiveSession] = useState<SessionPayload | null>(null);
@@ -623,6 +625,8 @@ function App(): React.ReactElement {
       onOpenSettingsSection={(section) => openSettingsWorkspace(section)}
       imageStudioViewActive={imageStudioViewActive}
       imagePromptTagsViewActive={mainView.kind === "image-prompt-tags"}
+      promptTagWorkspaceSection={promptTagWorkspaceSection}
+      onOpenPromptTagWorkspaceSection={setPromptTagWorkspaceSection}
       roleWorkspaceViewActive={roleWorkspaceViewActive}
       roleWorkspaceSection={roleWorkspaceSection}
       onOpenRoleWorkspaceSection={(section) => {
@@ -640,7 +644,7 @@ function App(): React.ReactElement {
       onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
       onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
       onOpenImageStudio={() => openImageStudio()}
-      onOpenPromptTagLibrary={() => openPromptTagLibrary()}
+      onOpenPromptTagLibrary={() => { setPromptTagWorkspaceSection("list"); openPromptTagLibrary(); }}
       imageStudioState={imageStudioState}
       workspaceFeedback={workspaceFeedback}
       activeRole={activeRole}

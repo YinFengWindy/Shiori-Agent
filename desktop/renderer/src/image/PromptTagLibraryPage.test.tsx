@@ -9,12 +9,13 @@ describe("PromptTagLibraryPage", () => {
     const markup = renderToStaticMarkup(
       <PromptTagLibraryPage
         bridgeReady={false}
-        onBackToApp={() => undefined}
+        section="list"
+        onOpenSection={() => undefined}
       />,
     );
 
     assert.match(markup, /data-testid="prompt-tag-library-page"/);
-    assert.match(markup, /返回应用/);
+    assert.match(markup, /素材列表/);
     assert.match(markup, /data-testid="prompt-tag-library"/);
   });
 });
