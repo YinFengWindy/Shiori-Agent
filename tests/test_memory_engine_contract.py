@@ -473,6 +473,83 @@ def test_markdown_maintenance_respects_skip_post_memory_event_flag():
     maintenance._enqueue_maintenance.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_markdown_maintenance_records_background_consolidation_failure(tmp_path: Path):
+    session = SimpleNamespace(
+        key="role:mira",
+        metadata={"role_id": "mira"},
+        messages=[{"role": "user", "content": f"u{i}"} for i in range(30)],
+        last_consolidated=0,
+    )
+    maintenance = MarkdownMemoryMaintenance(
+        store=MarkdownMemoryStore(tmp_path),
+        provider=cast(Any, SimpleNamespace()),
+        model="lm",
+        keep_count=20,
+    )
+    maintenance._worker.prepare_consolidation = AsyncMock(
+        return_value=_ConsolidationFailure(
+            step="event",
+            error="provider timeout",
+            elapsed_ms=100,
+        )
+    )
+    maintenance.bind_lifecycle(
+        MemoryLifecycleBindRequest(
+            get_session=lambda _key: session,
+            save_session=AsyncMock(),
+        )
+    )
+
+    maintenance.request_background_consolidation(session.key)
+    await _drain_maintenance(maintenance)
+
+    assert maintenance.get_consolidation_failure(session.key) == "provider timeout"
+
+    maintenance._worker.prepare_consolidation = AsyncMock(return_value=None)
+    await maintenance.consolidate(ConsolidateRequest(session=session))
+
+    assert maintenance.get_consolidation_failure(session.key) is None
+
+
+@pytest.mark.asyncio
+async def test_markdown_maintenance_background_request_does_not_wait(tmp_path: Path):
+    started = asyncio.Event()
+    release = asyncio.Event()
+    session = SimpleNamespace(
+        key="role:mira",
+        metadata={"role_id": "mira"},
+        messages=[{"role": "user", "content": f"u{i}"} for i in range(30)],
+        last_consolidated=0,
+    )
+    maintenance = MarkdownMemoryMaintenance(
+        store=MarkdownMemoryStore(tmp_path),
+        provider=cast(Any, SimpleNamespace()),
+        model="lm",
+        keep_count=20,
+    )
+
+    async def _slow_prepare(*args, **kwargs):
+        started.set()
+        await release.wait()
+        return None
+
+    maintenance._worker.prepare_consolidation = _slow_prepare
+    maintenance.bind_lifecycle(
+        MemoryLifecycleBindRequest(
+            get_session=lambda _key: session,
+            save_session=AsyncMock(),
+        )
+    )
+
+    maintenance.request_background_consolidation(session.key)
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    assert session.key in maintenance._maintenance_tasks
+    release.set()
+    await _drain_maintenance(maintenance)
+
+
 async def test_default_memory_engine_refreshes_recent_context_from_lifecycle_role_only():
     event_bus = EventBus()
     session = SimpleNamespace(

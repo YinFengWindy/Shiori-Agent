@@ -59,6 +59,7 @@ from agent.lifecycle.phases.before_step import (
 )
 from agent.lifecycle.phases.before_turn import (
     BeforeTurnFrame,
+    MemoryConsolidationFailedError,
     default_before_turn_modules,
 )
 from agent.lifecycle.phases.prompt_render import (
@@ -515,7 +516,7 @@ async def test_before_turn_memory_context_guard_blocks_unconsolidated_tail():
 
 
 @pytest.mark.asyncio
-async def test_before_turn_memory_context_guard_consolidates_before_blocking():
+async def test_before_turn_memory_context_guard_schedules_consolidation_without_blocking():
     bus = EventBus()
     session = _DummySession("telegram:123")
     session.messages = [
@@ -529,18 +530,18 @@ async def test_before_turn_memory_context_guard_consolidates_before_blocking():
     )
 
     class _Consolidator:
-        async def trigger_memory_consolidation(
-            self,
-            session_key: str,
-            *,
-            archive_all: bool = False,
-            force: bool = False,
-        ) -> bool:
+        def __init__(self) -> None:
+            self.requested: list[str] = []
+
+        def request_memory_consolidation(self, session_key: str) -> None:
             assert session_key == "telegram:123"
-            assert archive_all is False
-            assert force is False
-            session.last_consolidated = len(session.messages) - 20
-            return True
+            self.requested.append(session_key)
+
+        def get_memory_consolidation_failure(self, session_key: str) -> str | None:
+            assert session_key == "telegram:123"
+            return None
+
+    consolidator = _Consolidator()
 
     phase = Phase(
         default_before_turn_modules(
@@ -548,7 +549,7 @@ async def test_before_turn_memory_context_guard_consolidates_before_blocking():
             cast(SessionManager, session_mgr),
             cast(ContextStore, ctx_store),
             keep_count=20,
-            consolidator=_Consolidator(),
+            consolidator=consolidator,
         ),
         frame_factory=BeforeTurnFrame,
     )
@@ -558,7 +559,8 @@ async def test_before_turn_memory_context_guard_consolidates_before_blocking():
     ctx = await phase.run(state)
 
     assert ctx.abort is False
-    assert session.last_consolidated == 10
+    assert session.last_consolidated == 0
+    assert consolidator.requested == ["telegram:123"]
     ctx_store.prepare.assert_awaited_once()
 
 
@@ -575,14 +577,11 @@ async def test_before_turn_memory_context_guard_blocks_after_consolidation_failu
     ctx_store = SimpleNamespace(prepare=AsyncMock())
 
     class _Consolidator:
-        async def trigger_memory_consolidation(
-            self,
-            session_key: str,
-            *,
-            archive_all: bool = False,
-            force: bool = False,
-        ) -> bool:
-            return False
+        def request_memory_consolidation(self, session_key: str) -> None:
+            raise AssertionError("failed consolidation must not be rescheduled")
+
+        def get_memory_consolidation_failure(self, session_key: str) -> str | None:
+            return "provider timeout"
 
     phase = Phase(
         default_before_turn_modules(
@@ -597,15 +596,16 @@ async def test_before_turn_memory_context_guard_blocks_after_consolidation_failu
     msg = _inbound()
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
 
-    ctx = await phase.run(state)
-
-    assert ctx.abort is True
-    assert "记忆归档现在处于异常积压状态" in ctx.abort_reply
+    with pytest.raises(
+        MemoryConsolidationFailedError,
+        match="记忆整理失败.*provider timeout",
+    ):
+        await phase.run(state)
     ctx_store.prepare.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_before_turn_memory_context_guard_allows_nsfw_role_after_consolidation_failure():
+async def test_before_turn_memory_context_guard_reports_failure_for_nsfw_role():
     bus = EventBus()
     session = _DummySession("telegram:123")
     session.messages = [
@@ -620,14 +620,11 @@ async def test_before_turn_memory_context_guard_allows_nsfw_role_after_consolida
     )
 
     class _Consolidator:
-        async def trigger_memory_consolidation(
-            self,
-            session_key: str,
-            *,
-            archive_all: bool = False,
-            force: bool = False,
-        ) -> bool:
-            return False
+        def request_memory_consolidation(self, session_key: str) -> None:
+            raise AssertionError("failed consolidation must not be rescheduled")
+
+        def get_memory_consolidation_failure(self, session_key: str) -> str | None:
+            return "invalid response"
 
     phase = Phase(
         default_before_turn_modules(
@@ -642,10 +639,9 @@ async def test_before_turn_memory_context_guard_allows_nsfw_role_after_consolida
     msg = _inbound()
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
 
-    ctx = await phase.run(state)
-
-    assert ctx.abort is False
-    ctx_store.prepare.assert_awaited_once()
+    with pytest.raises(MemoryConsolidationFailedError, match="invalid response"):
+        await phase.run(state)
+    ctx_store.prepare.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -48,6 +48,7 @@ from agent.lifecycle.phases.before_reasoning import (
 from agent.lifecycle.phases.before_step import BeforeStepFrame, default_before_step_modules
 from agent.lifecycle.phases.before_turn import (
     BeforeTurnFrame,
+    MemoryConsolidationFailedError,
     MemoryConsolidator,
     default_before_turn_modules,
 )
@@ -494,6 +495,8 @@ class PassiveTurnPipeline:
                         duration_ms=int((time.perf_counter() - started) * 1000),
                     )
                 )
+            except MemoryConsolidationFailedError:
+                raise
             except Exception as exc:
                 logger.exception(
                     diagnostic_line(

@@ -865,6 +865,18 @@ class AgentLoop:
             return True
         return False
 
+    def request_memory_consolidation(self, session_key: str) -> None:
+        """非阻塞请求指定会话执行后台记忆整理。"""
+        if self._markdown_memory is None:
+            return
+        self._markdown_memory.maintenance.request_background_consolidation(session_key)
+
+    def get_memory_consolidation_failure(self, session_key: str) -> str | None:
+        """返回指定会话最近一次后台记忆整理的明确失败原因。"""
+        if self._markdown_memory is None:
+            return "markdown memory runtime unavailable"
+        return self._markdown_memory.maintenance.get_consolidation_failure(session_key)
+
 
 # ── 模块级辅助 ────────────────────────────────────────────────────
 

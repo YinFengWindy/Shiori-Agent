@@ -1287,6 +1287,7 @@ class MarkdownMemoryMaintenance:
         self._maintenance_queues: dict[str, deque[str]] = {}
         self._maintenance_tasks: dict[str, asyncio.Task[None]] = {}
         self._maintenance_locks: dict[str, asyncio.Lock] = {}
+        self._maintenance_failures: dict[str, str] = {}
         if event_bus is not None:
             event_bus.on(TurnCommitted, self.on_turn_committed)
 
@@ -1306,6 +1307,19 @@ class MarkdownMemoryMaintenance:
         if bool((event.extra or {}).get("skip_post_memory")):
             return
         self._enqueue_maintenance(event.session_key)
+
+    def request_background_consolidation(self, session_key: str) -> None:
+        """非阻塞请求指定会话执行后台记忆整理。"""
+        if self.get_consolidation_failure(session_key) is not None:
+            return
+        task = self._maintenance_tasks.get(session_key)
+        if task is not None and not task.done():
+            return
+        self._enqueue_maintenance(session_key)
+
+    def get_consolidation_failure(self, session_key: str) -> str | None:
+        """返回指定会话最近一次后台记忆整理的明确失败原因。"""
+        return self._maintenance_failures.get(session_key)
 
     def _enqueue_maintenance(self, session_key: str) -> None:
         if self._get_session is None or self._save_session is None:
@@ -1333,11 +1347,21 @@ class MarkdownMemoryMaintenance:
                 if session is None:
                     return
                 if self._should_consolidate_session(session):
-                    result = await self._consolidate_unlocked(
-                        ConsolidateRequest(session=session)
-                    )
-                    if result.trace.get("mode") == "markdown" and self._save_session:
-                        await self._save_session(session)
+                    try:
+                        result = await self._consolidate_unlocked(
+                            ConsolidateRequest(session=session)
+                        )
+                        if result.trace.get("mode") == "markdown" and self._save_session:
+                            await self._save_session(session)
+                    except Exception as exc:
+                        self._maintenance_failures[session_key] = (
+                            _format_consolidation_error(exc)
+                        )
+                        queue.clear()
+                        raise
+                    if result.trace.get("mode") == "failed":
+                        queue.clear()
+                        return
                 else:
                     await self.refresh_recent_turns(
                         RefreshRecentTurnsRequest(session=session)
@@ -1350,6 +1374,18 @@ class MarkdownMemoryMaintenance:
     ) -> None:
         if self._maintenance_tasks.get(session_key) is task:
             _ = self._maintenance_tasks.pop(session_key, None)
+        if task.cancelled():
+            logger.info("markdown memory maintenance cancelled: %s", session_key)
+            return
+        try:
+            exc = task.exception()
+        except Exception as e:
+            logger.warning("markdown memory maintenance inspect failed: session=%s err=%s", session_key, e)
+            return
+        if exc is not None:
+            _ = self._maintenance_queues.pop(session_key, None)
+            logger.warning("markdown memory maintenance failed: session=%s err=%s", session_key, exc)
+            return
         queue = self._maintenance_queues.get(session_key)
         if queue:
             next_task = asyncio.create_task(
@@ -1360,16 +1396,6 @@ class MarkdownMemoryMaintenance:
             next_task.add_done_callback(lambda t: self._on_maintenance_done(t, session_key))
         else:
             _ = self._maintenance_queues.pop(session_key, None)
-        if task.cancelled():
-            logger.info("markdown memory maintenance cancelled: %s", session_key)
-            return
-        try:
-            exc = task.exception()
-        except Exception as e:
-            logger.warning("markdown memory maintenance inspect failed: session=%s err=%s", session_key, e)
-            return
-        if exc is not None:
-            logger.warning("markdown memory maintenance failed: session=%s err=%s", session_key, exc)
 
     def _should_consolidate_session(self, session: object) -> bool:
         return (
@@ -1392,14 +1418,19 @@ class MarkdownMemoryMaintenance:
             return await self._consolidate_unlocked(request)
 
     async def _consolidate_unlocked(self, request: ConsolidateRequest) -> ConsolidateResult:
+        session_key = str(getattr(request.session, "key", "") or "")
         draft = await self._worker.prepare_consolidation(
             request.session,
             archive_all=request.archive_all,
             force=request.force,
         )
         if draft is None:
+            if session_key:
+                _ = self._maintenance_failures.pop(session_key, None)
             return ConsolidateResult(trace={"mode": "skipped"})
         if isinstance(draft, _ConsolidationFailure):
+            if session_key:
+                self._maintenance_failures[session_key] = draft.error
             return ConsolidateResult(
                 trace={
                     "mode": "failed",
@@ -1410,6 +1441,8 @@ class MarkdownMemoryMaintenance:
             )
         await self._commit_markdown_draft(request.session, draft)
         await self._run_after_consolidation(request.session)
+        if session_key:
+            _ = self._maintenance_failures.pop(session_key, None)
         return ConsolidateResult(
             consolidated_count=len(draft.window.old_messages),
             trace={"mode": "markdown", "source_ref": draft.source_ref},

@@ -19,6 +19,7 @@ from agent.turns.outbound import OutboundPort
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
 from agent.lifecycle.types import BeforeReasoningCtx, BeforeTurnCtx
+from agent.lifecycle.phases.before_turn import MemoryConsolidationFailedError
 from session.manager import SessionManager
 
 
@@ -454,6 +455,56 @@ async def test_reasoner_exception_turn_returns_control_outbound():
     dispatch_port.dispatch.assert_awaited_once()
     dispatched = dispatch_port.dispatch.await_args.args[0]
     assert dispatched.content == "处理消息时出错，请稍后再试。"
+
+
+@pytest.mark.asyncio
+async def test_memory_consolidation_failure_propagates_to_transport_error():
+    session = _DummySession("role:mira")
+    session.messages = [
+        {"role": "user", "content": f"u{i}"}
+        for i in range(30)
+    ]
+    context_store = SimpleNamespace(prepare=AsyncMock())
+    reasoner = SimpleNamespace(run_turn=AsyncMock())
+
+    class _FailedConsolidator:
+        def request_memory_consolidation(self, session_key: str) -> None:
+            raise AssertionError("failed consolidation must not be rescheduled")
+
+        def get_memory_consolidation_failure(self, session_key: str) -> str | None:
+            return "provider timeout"
+
+    agent_core = AgentCore(
+        AgentCoreDeps(
+            session=cast(
+                SessionServices,
+                SimpleNamespace(
+                    session_manager=SimpleNamespace(
+                        get_or_create=MagicMock(return_value=session),
+                        peek_next_message_id=MagicMock(return_value="role:mira:30"),
+                        append_messages=AsyncMock(),
+                    ),
+                    presence=None,
+                ),
+            ),
+            context_store=cast(ContextStore, context_store),
+            context=cast(ContextBuilder, SimpleNamespace()),
+            tools=cast(ToolRegistry, SimpleNamespace()),
+            reasoner=cast(Reasoner, reasoner),
+            history_window=20,
+            memory_consolidator=_FailedConsolidator(),
+        )
+    )
+    msg = InboundMessage(channel="desktop", sender="user", chat_id="role:mira", content="hi")
+
+    with pytest.raises(
+        MemoryConsolidationFailedError,
+        match="记忆整理失败.*provider timeout",
+    ):
+        await agent_core.process(msg, "role:mira", dispatch_outbound=False)
+
+    context_store.prepare.assert_not_awaited()
+    reasoner.run_turn.assert_not_awaited()
 
 
 @pytest.mark.asyncio
