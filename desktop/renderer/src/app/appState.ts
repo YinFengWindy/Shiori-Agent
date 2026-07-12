@@ -85,6 +85,7 @@ export function createEmptyRoleForm(): RoleFormState {
     description: "",
     systemPrompt: "",
     nsfwMemoryEnabled: false,
+    autoSceneCgEnabled: false,
     channelBindings: [],
     proactiveEnabled: false,
     proactiveTargetChannel: "",

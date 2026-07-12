@@ -181,7 +181,7 @@ async def test_plugin_injects_auto_cg_protocol_only_for_active_role(
             retrieved_memory_block="",
             disabled_sections=set(),
             turn_injection_prompt="",
-            session_metadata={},
+            session_metadata={"role_id": "mira"},
         )
     )
     assert empty.system_sections_top == []
@@ -199,7 +199,10 @@ async def test_plugin_injects_auto_cg_protocol_only_for_active_role(
             retrieved_memory_block="",
             disabled_sections=set(),
             turn_injection_prompt="",
-            session_metadata={"role_id": "mira"},
+            session_metadata={
+                "role_id": "mira",
+                "role_runtime_config": {"auto_scene_cg_enabled": True},
+            },
         )
     )
     assert len(active.system_sections_top) == 1

@@ -142,6 +142,7 @@ export type RoleFormState = {
   description: string;
   systemPrompt: string;
   nsfwMemoryEnabled: boolean;
+  autoSceneCgEnabled: boolean;
   channelBindings?: RoleChannelBinding[];
   proactiveEnabled?: boolean;
   proactiveTargetChannel?: string;

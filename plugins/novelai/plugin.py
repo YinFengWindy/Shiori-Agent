@@ -81,6 +81,12 @@ class NovelAIPlugin(Plugin):
         role_id = str(ctx.session_metadata.get("role_id") or "").strip()
         if not role_id:
             return ctx
+        runtime_config = ctx.session_metadata.get("role_runtime_config")
+        if (
+            not isinstance(runtime_config, dict)
+            or not bool(runtime_config.get("auto_scene_cg_enabled"))
+        ):
+            return ctx
         ctx.system_sections_top.append(
             self._auto_cg.build_prompt_section(ctx.session_key)
         )

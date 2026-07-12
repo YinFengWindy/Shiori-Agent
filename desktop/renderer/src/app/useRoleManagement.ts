@@ -203,6 +203,7 @@ export function useRoleManagement({
           {
             ...(detailRole?.runtime_config ?? {}),
             nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
+            auto_scene_cg_enabled: nextRoleForm.autoSceneCgEnabled,
           },
           nextRoleForm,
         ),
@@ -267,6 +268,7 @@ export function useRoleManagement({
             {
               ...(detailRole?.runtime_config ?? {}),
               nsfw_memory_enabled: roleFormRef.current.nsfwMemoryEnabled,
+              auto_scene_cg_enabled: roleFormRef.current.autoSceneCgEnabled,
             },
             {
               ...roleFormRef.current,
