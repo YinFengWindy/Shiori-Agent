@@ -16,7 +16,7 @@ describe("RoleAssetCategoryGroups", () => {
         onPickAssets={() => undefined}
         onRemoveAsset={() => undefined}
         onSelectAsset={() => undefined}
-        onUpdateOrganization={() => undefined}
+        onUpdateOrganization={async () => true}
       />,
     );
 

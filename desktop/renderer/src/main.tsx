@@ -696,7 +696,7 @@ function App(): React.ReactElement {
       selectedChatBackground={selectedChatBackground}
       onBackToRoleDetail={() => openRoleWorkspace({ kind: "role-detail", roleId: detailRoleId })}
       onPickRoleAssets={(categoryId) => void pickRoleAssets(categoryId)}
-      onUpdateRoleAssetOrganization={(categories, bindings) => void updateRoleAssetOrganization(categories, bindings)}
+      onUpdateRoleAssetOrganization={(categories, bindings) => updateRoleAssetOrganization(categories, bindings)}
       onRemoveRoleAsset={(path) => void removeRoleAsset(path)}
       onSelectAvatarAsset={setSelectedAvatarAsset}
       onSelectChatBackground={setSelectedChatBackground}

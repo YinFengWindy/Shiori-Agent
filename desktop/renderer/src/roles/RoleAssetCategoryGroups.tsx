@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { BackIcon, DeleteIcon, PlusIcon, SendIcon, UploadIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
@@ -23,7 +23,7 @@ type RoleAssetCategoryGroupsProps = {
   onUpdateOrganization: (
     categories: RoleAssetCategory[],
     bindings: Record<string, string>,
-  ) => void;
+  ) => Promise<boolean>;
 };
 
 /** Renders grouped role assets with category-local upload and drag-to-move controls. */
@@ -39,12 +39,39 @@ export function RoleAssetCategoryGroups({
   onUpdateOrganization,
 }: RoleAssetCategoryGroupsProps) {
   const categories = getRoleAssetCategories(role);
-  const groupedAssets = groupRoleAssetsByCategory(role);
+  const [organizationDraft, setOrganizationDraft] = useState<{
+    categories: RoleAssetCategory[];
+    bindings: Record<string, string>;
+  } | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [draggedAssetPath, setDraggedAssetPath] = useState("");
   const [dropCategoryId, setDropCategoryId] = useState("");
+  const visibleCategories = organizationDraft?.categories ?? categories;
+  const visibleBindings = organizationDraft?.bindings ?? role?.asset_category_bindings ?? {};
+  const groupedAssets = groupRoleAssetsByCategory(
+    role ? {
+      ...role,
+      asset_categories: visibleCategories,
+      asset_category_bindings: visibleBindings,
+    } : null,
+  );
+
+  useEffect(() => {
+    setOrganizationDraft(null);
+  }, [role?.id, role?.updated_at]);
+
+  async function persistOrganization(
+    nextCategories: RoleAssetCategory[],
+    nextBindings: Record<string, string>,
+  ): Promise<void> {
+    setOrganizationDraft({ categories: nextCategories, bindings: nextBindings });
+    const persisted = await onUpdateOrganization(nextCategories, nextBindings);
+    if (!persisted) {
+      setOrganizationDraft(null);
+    }
+  }
 
   function toggleCategory(categoryId: string): void {
     setExpandedIds((current) => {
@@ -57,13 +84,16 @@ export function RoleAssetCategoryGroups({
 
   function createCategory(): void {
     const name = newCategoryName.trim();
-    if (!name || categories.some((category) => category.name.toLowerCase() === name.toLowerCase())) {
+    if (!name || visibleCategories.some((category) => category.name.toLowerCase() === name.toLowerCase())) {
       return;
     }
-    const id = `category-${crypto.randomUUID().replaceAll("-", "")}`;
-    onUpdateOrganization(
-      [...categories, { id, name, allow_role_send: false }],
-      role?.asset_category_bindings ?? {},
+    const randomId = typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID().replaceAll("-", "")
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const id = `category-${randomId}`;
+    void persistOrganization(
+      [...visibleCategories, { id, name, allow_role_send: false }],
+      visibleBindings,
     );
     setExpandedIds((current) => new Set(current).add(id));
     setCreating(false);
@@ -73,26 +103,26 @@ export function RoleAssetCategoryGroups({
   function renameCategory(category: RoleAssetCategory, name: string): void {
     const normalized = name.trim();
     if (!normalized || normalized === category.name) return;
-    if (categories.some((item) => item.id !== category.id && item.name.toLowerCase() === normalized.toLowerCase())) {
+    if (visibleCategories.some((item) => item.id !== category.id && item.name.toLowerCase() === normalized.toLowerCase())) {
       return;
     }
-    onUpdateOrganization(
-      categories.map((item) => item.id === category.id ? { ...item, name: normalized } : item),
-      role?.asset_category_bindings ?? {},
+    void persistOrganization(
+      visibleCategories.map((item) => item.id === category.id ? { ...item, name: normalized } : item),
+      visibleBindings,
     );
   }
 
   function toggleRoleSend(category: RoleAssetCategory): void {
-    onUpdateOrganization(
-      categories.map((item) => item.id === category.id
+    void persistOrganization(
+      visibleCategories.map((item) => item.id === category.id
         ? { ...item, allow_role_send: !item.allow_role_send }
         : item),
-      role?.asset_category_bindings ?? {},
+      visibleBindings,
     );
   }
 
   function deleteCategory(category: RoleAssetCategory): void {
-    const destination = categories.find((item) => item.id !== category.id);
+    const destination = visibleCategories.find((item) => item.id !== category.id);
     if (!destination) return;
     const assetCount = groupedAssets.get(category.id)?.length ?? 0;
     const confirmed = window.confirm(
@@ -102,24 +132,24 @@ export function RoleAssetCategoryGroups({
     );
     if (!confirmed) return;
     const result = removeRoleAssetCategory(
-      categories,
-      role?.asset_category_bindings ?? {},
+      visibleCategories,
+      visibleBindings,
       category.id,
       destination.id,
     );
-    onUpdateOrganization(result.categories, result.bindings);
+    void persistOrganization(result.categories, result.bindings);
   }
 
   function dropAsset(categoryId: string): void {
     if (!draggedAssetPath) return;
-    const currentBindings = role?.asset_category_bindings ?? {};
+    const currentBindings = visibleBindings;
     const nextBindings = moveRoleAssetToCategory(
       currentBindings,
       draggedAssetPath,
       categoryId,
     );
     if (nextBindings !== currentBindings) {
-      onUpdateOrganization(categories, nextBindings);
+      void persistOrganization(visibleCategories, nextBindings);
     }
     setDraggedAssetPath("");
     setDropCategoryId("");
@@ -152,7 +182,7 @@ export function RoleAssetCategoryGroups({
         <div className="mb-2 flex items-center gap-2 px-2">
           <input
             autoFocus
-            className="h-10 min-w-0 flex-1 rounded-md border border-[#D8DFE7] bg-white px-3 text-sm transition focus:border-primary focus:outline-none focus:ring-0"
+            className="h-10 min-w-0 flex-1 rounded-md border border-[#D8DFE7] bg-white px-3 text-sm transition focus:border-[#B8BEC7] focus:outline-none focus:ring-2 focus:ring-gray-300/70"
             value={newCategoryName}
             placeholder="分类名称"
             onChange={(event) => setNewCategoryName(event.target.value)}
@@ -168,7 +198,7 @@ export function RoleAssetCategoryGroups({
         </div>
       ) : null}
       <div className="scrollbar-soft min-h-0 flex-1 overflow-y-auto px-2">
-        {categories.map((category) => {
+        {visibleCategories.map((category) => {
           const assets = groupedAssets.get(category.id) ?? [];
           const expanded = expandedIds.has(category.id);
           const dropping = dropCategoryId === category.id;
@@ -199,7 +229,7 @@ export function RoleAssetCategoryGroups({
                   <span className={cx("text-lg transition-transform", expanded && "rotate-90")}>›</span>
                 </button>
                 <input
-                  className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium transition focus:border-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium transition focus:border-[#B8BEC7] focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-300/70"
                   defaultValue={category.name}
                   aria-label={`${category.name}分类名称`}
                   onBlur={(event) => renameCategory(category, event.target.value)}
@@ -227,7 +257,7 @@ export function RoleAssetCategoryGroups({
                   className="grid h-8 w-8 place-items-center rounded-md text-[#8A94A2] transition hover:bg-[#F2F4F7] hover:text-[#C16E4E] focus:outline-none"
                   type="button"
                   aria-label={`删除分类${category.name}`}
-                  disabled={!bridgeReady || saving || categories.length === 1}
+                  disabled={!bridgeReady || saving || visibleCategories.length === 1}
                   onClick={() => deleteCategory(category)}
                 >
                   <DeleteIcon className="h-3.5 w-3.5 fill-current" />

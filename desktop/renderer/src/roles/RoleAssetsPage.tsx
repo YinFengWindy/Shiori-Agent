@@ -24,7 +24,7 @@ type RoleAssetsPageProps = {
   onUpdateAssetOrganization: (
     categories: RoleAssetCategory[],
     bindings: Record<string, string>,
-  ) => void;
+  ) => Promise<boolean>;
   onSaveSelections: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
 };
 

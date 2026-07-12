@@ -368,8 +368,8 @@ export function useRoleManagement({
   async function updateRoleAssetOrganization(
     assetCategories: RoleAssetCategory[],
     assetCategoryBindings: Record<string, string>,
-  ): Promise<void> {
-    if (!detailRoleId) return;
+  ): Promise<boolean> {
+    if (!detailRoleId) return false;
     setSavingRoleAssets(true);
     setError("");
     const res = await window.miraDesktop.invoke({
@@ -383,7 +383,7 @@ export function useRoleManagement({
     setSavingRoleAssets(false);
     if (res.error) {
       setError(res.error.message);
-      return;
+      return false;
     }
     const updated = res.payload.role as RoleRecord;
     setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
@@ -391,6 +391,7 @@ export function useRoleManagement({
     syncRoleAssetSelections(updated);
     setNotice("素材分类已更新。");
     openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
+    return true;
   }
 
   async function removeRoleAsset(relPath: string): Promise<void> {

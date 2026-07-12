@@ -79,11 +79,11 @@ export function ImageFormPanel({
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectClass = cx(
     inputClass,
-    "h-11 appearance-none py-0 pr-10 text-sm leading-5 focus:border-[#D8DCE2] focus:ring-0 focus-visible:border-[#D8DCE2] focus-visible:ring-0",
+    "h-11 appearance-none py-0 pr-10 text-sm leading-5 focus:border-[#D8DCE2] focus:ring-2 focus:ring-gray-300/70 focus-visible:border-[#D8DCE2] focus-visible:ring-2 focus-visible:ring-gray-300/70",
   );
   const promptTextareaClass = cx(
     inputClass,
-    "min-h-[96px] resize-none overflow-hidden rounded-md border-[#D6DCE3] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus:ring-0 focus-visible:border-[#D6DCE3] focus-visible:ring-0",
+    "min-h-[96px] resize-none overflow-hidden rounded-md border-[#D6DCE3] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus:ring-2 focus:ring-gray-300/70 focus-visible:border-[#D6DCE3] focus-visible:ring-2 focus-visible:ring-gray-300/70",
   );
   const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-md bg-[#F3F5F7] p-1";
   const segmentedButtonBaseClassName = "min-w-0 rounded-md px-3 py-1.5 text-[13px] font-semibold transition";

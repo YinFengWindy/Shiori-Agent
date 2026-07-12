@@ -1155,6 +1155,45 @@ async def test_desktop_bridge_role_create_and_update_copy_assets(tmp_path: Path)
 
 
 @pytest.mark.asyncio
+async def test_desktop_bridge_updates_role_asset_categories_and_send_permission(tmp_path: Path):
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=EventBus(),
+    )
+    created = await service.handle(
+        {
+            "id": "1",
+            "method": "roles.create",
+            "payload": {"name": "Mira", "system_prompt": "mira"},
+        },
+        emit_event=lambda payload: None,
+    )
+    role = created.payload["role"]
+
+    updated = await service.handle(
+        {
+            "id": "2",
+            "method": "roles.update",
+            "payload": {
+                "role_id": role["id"],
+                "asset_categories": [
+                    {"id": "default", "name": "默认", "allow_role_send": False},
+                    {"id": "reaction", "name": "表情包", "allow_role_send": True},
+                ],
+                "asset_category_bindings": {},
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+
+    assert updated.error is None
+    assert updated.payload["role"]["asset_categories"][1]["allow_role_send"] is True
+
+
+@pytest.mark.asyncio
 async def test_desktop_bridge_role_update_removes_selected_illustration(tmp_path: Path):
     ill1 = tmp_path / "ill-1.png"
     ill1.write_bytes(b"ill-1")
