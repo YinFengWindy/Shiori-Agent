@@ -386,10 +386,11 @@ export function useRoleManagement({
       return;
     }
     const updated = res.payload.role as RoleRecord;
-    const { resolvedRole } = await refreshRolesAndResolveRole(updated);
-    syncRoleAssetSelections(resolvedRole);
+    setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
+    applyRoleSnapshot(updated);
+    syncRoleAssetSelections(updated);
     setNotice("素材分类已更新。");
-    openRoleWorkspace({ kind: "role-assets", roleId: resolvedRole.id }, { recordHistory: false });
+    openRoleWorkspace({ kind: "role-assets", roleId: updated.id }, { recordHistory: false });
   }
 
   async function removeRoleAsset(relPath: string): Promise<void> {

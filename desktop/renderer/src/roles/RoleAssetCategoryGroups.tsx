@@ -152,7 +152,7 @@ export function RoleAssetCategoryGroups({
         <div className="mb-2 flex items-center gap-2 px-2">
           <input
             autoFocus
-            className="h-10 min-w-0 flex-1 rounded-md border border-[#D8DFE7] bg-white px-3 text-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="h-10 min-w-0 flex-1 rounded-md border border-[#D8DFE7] bg-white px-3 text-sm transition focus:border-primary focus:outline-none focus:ring-0"
             value={newCategoryName}
             placeholder="分类名称"
             onChange={(event) => setNewCategoryName(event.target.value)}
