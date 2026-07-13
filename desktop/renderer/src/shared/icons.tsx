@@ -96,6 +96,24 @@ export function CaretRightIcon({ className = "h-4 w-4 stroke-current" }: Desktop
   );
 }
 
+/** Renders the shared desktop upward movement glyph. */
+export function ArrowUpIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
+      <path d="m6 14 6-6 6 6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
+/** Renders the shared desktop downward movement glyph. */
+export function ArrowDownIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
+      <path d="m6 10 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
 /** Renders the shared desktop close glyph. */
 export function CloseIcon({ className = "h-4 w-4 stroke-current" }: DesktopIconProps) {
   return (

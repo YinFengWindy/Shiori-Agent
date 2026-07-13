@@ -1,14 +1,17 @@
 import { toFileUrl } from "../shared/format";
 import { useLayoutEffect, useRef } from "react";
-import { ResetIcon, SaveIcon } from "../shared/icons";
+import { ArrowDownIcon, ArrowUpIcon, DeleteIcon, ResetIcon, SaveIcon } from "../shared/icons";
 import { cx, focusResetClass, inputClass } from "../shared/styles";
-import type { RoleFormState, RoleRecord } from "../shared/types";
+import type { RoleChannelBinding, RoleFormState, RoleRecord } from "../shared/types";
 import { SettingsToggleCard } from "../settings/SettingsToggleCard";
 import {
   changeRoleBindingChannel,
   createRoleChannelBinding,
+  buildProactiveTransportSequence,
   isDesktopRoleBinding,
+  moveRoleChannelBinding,
   roleBindingAllowFromLabel,
+  roleBindingChannelLabel,
 } from "./roleChannelBindings";
 import { captureRoleDetailScrollTop, restoreRoleDetailScrollTop } from "./roleDetailScrollState";
 
@@ -73,6 +76,39 @@ export function RoleDetailPage({
     pendingScrollTopRef.current = captureRoleDetailScrollTop(pageRef.current);
     onUpdateRoleForm(next);
   }
+
+  function updateChannelBindings(
+    update: (bindings: RoleChannelBinding[]) => RoleChannelBinding[],
+  ): void {
+    preserveScrollDuringFormUpdate((current) => {
+      const channelBindings = update(current.channelBindings ?? []);
+      const targetChannel = current.proactiveTargetChannel ?? "";
+      const targetChatId = current.proactiveTargetChatId ?? "";
+      const targetStillBound = Boolean(targetChannel && targetChatId)
+        && channelBindings.some(
+          (binding) => binding.channel === targetChannel && binding.chat_id === targetChatId,
+        );
+      return {
+        ...current,
+        channelBindings,
+        proactiveTargetChannel: targetStillBound ? targetChannel : "",
+        proactiveTargetChatId: targetStillBound ? targetChatId : "",
+      };
+    });
+  }
+
+  const channelBindings = roleForm.channelBindings ?? [];
+  const selectedProactiveBinding = channelBindings.find(
+    (binding) => binding.channel === (roleForm.proactiveTargetChannel ?? "")
+      && binding.chat_id === (roleForm.proactiveTargetChatId ?? ""),
+  );
+  const proactiveTransportSequence = selectedProactiveBinding
+    ? buildProactiveTransportSequence(
+      channelBindings,
+      roleForm.proactiveTargetChannel ?? "",
+      roleForm.proactiveTargetChatId ?? "",
+    )
+    : [];
 
   return (
     <section
@@ -199,21 +235,18 @@ export function RoleDetailPage({
                   <button
                     className="rounded-md border border-[#D8DFE7] px-2 py-1 transition hover:border-primary"
                     type="button"
-                    onClick={() => preserveScrollDuringFormUpdate((current) => ({
-                      ...current,
-                      channelBindings: [...(current.channelBindings ?? []), createRoleChannelBinding(activeRoleId)],
-                    }))}
+                    onClick={() => updateChannelBindings((bindings) => [...bindings, createRoleChannelBinding(activeRoleId)])}
                   >
                     添加
                   </button>
                 </div>
-                {(roleForm.channelBindings ?? []).map((binding, index) => (
+                {channelBindings.map((binding, index) => (
                   <div className="grid gap-2 rounded-md border border-[#E4EAF0] p-3" key={`${binding.channel}:${binding.chat_id}:${index}`}>
-                    <div className="grid gap-2 md:grid-cols-[120px_minmax(0,1fr)_auto]">
+                    <div className="grid gap-2 md:grid-cols-[120px_minmax(0,1fr)_auto_auto]">
                       <select
                         className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
                         value={binding.channel}
-                        onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? changeRoleBindingChannel(item, event.target.value, activeRoleId) : item) }))}
+                        onChange={(event) => updateChannelBindings((bindings) => bindings.map((item, itemIndex) => itemIndex === index ? changeRoleBindingChannel(item, event.target.value, activeRoleId) : item))}
                       >
                         <option value="telegram">Telegram</option>
                         <option value="qq">QQ</option>
@@ -224,9 +257,39 @@ export function RoleDetailPage({
                         value={binding.chat_id}
                         placeholder="会话 / 群组 ID"
                         readOnly={isDesktopRoleBinding(binding)}
-                        onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, chat_id: event.target.value } : item) }))}
+                        onChange={(event) => updateChannelBindings((bindings) => bindings.map((item, itemIndex) => itemIndex === index ? { ...item, chat_id: event.target.value } : item))}
                       />
-                      <button className="text-[#a33] transition hover:text-[#711]" type="button" onClick={() => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).filter((_, itemIndex) => itemIndex !== index) }))}>移除</button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          className="grid h-8 w-8 place-items-center rounded-md border border-[#D8DFE7] text-[#667085] transition hover:border-primary hover:text-primary disabled:cursor-default disabled:opacity-35"
+                          type="button"
+                          onClick={() => updateChannelBindings((bindings) => moveRoleChannelBinding(bindings, index, "up"))}
+                          disabled={index === 0}
+                          aria-label={`上移${roleBindingChannelLabel(binding.channel)}绑定`}
+                          title="上移"
+                        >
+                          <ArrowUpIcon className="h-4 w-4 stroke-current" />
+                        </button>
+                        <button
+                          className="grid h-8 w-8 place-items-center rounded-md border border-[#D8DFE7] text-[#667085] transition hover:border-primary hover:text-primary disabled:cursor-default disabled:opacity-35"
+                          type="button"
+                          onClick={() => updateChannelBindings((bindings) => moveRoleChannelBinding(bindings, index, "down"))}
+                          disabled={index === channelBindings.length - 1}
+                          aria-label={`下移${roleBindingChannelLabel(binding.channel)}绑定`}
+                          title="下移"
+                        >
+                          <ArrowDownIcon className="h-4 w-4 stroke-current" />
+                        </button>
+                      </div>
+                      <button
+                        className="grid h-8 w-8 place-items-center rounded-md border border-transparent text-[#a33] transition hover:border-[#eccaca] hover:text-[#711]"
+                        type="button"
+                        onClick={() => updateChannelBindings((bindings) => bindings.filter((_, itemIndex) => itemIndex !== index))}
+                        aria-label={`移除${roleBindingChannelLabel(binding.channel)}绑定`}
+                        title="移除"
+                      >
+                        <DeleteIcon className="h-4 w-4 fill-current" />
+                      </button>
                     </div>
                     {!isDesktopRoleBinding(binding) ? (
                       <label className="grid gap-1.5">
@@ -234,7 +297,7 @@ export function RoleDetailPage({
                         <input
                           className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
                           value={binding.allow_from.join(", ")}
-                          onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, channelBindings: (current.channelBindings ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, allow_from: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) } : item) }))}
+                          onChange={(event) => updateChannelBindings((bindings) => bindings.map((item, itemIndex) => itemIndex === index ? { ...item, allow_from: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) } : item))}
                         />
                       </label>
                     ) : null}
@@ -246,17 +309,31 @@ export function RoleDetailPage({
                   <input className={cx("h-4 w-4 rounded border-[#D8DFE7] text-[#111827]", focusResetClass)} type="checkbox" checked={Boolean(roleForm.proactiveEnabled)} onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveEnabled: event.target.checked }))} />
                   <span>主动推送</span>
                 </label>
-                <select
-                  className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
-                  value={`${roleForm.proactiveTargetChannel ?? ""}:${roleForm.proactiveTargetChatId ?? ""}`}
-                  onChange={(event) => {
-                    const selected = (roleForm.channelBindings ?? []).find((binding) => `${binding.channel}:${binding.chat_id}` === event.target.value);
-                    preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveTargetChannel: selected?.channel ?? "", proactiveTargetChatId: selected?.chat_id ?? "" }));
-                  }}
-                >
-                  <option value=":">不主动推送</option>
-                  {(roleForm.channelBindings ?? []).filter((binding) => binding.chat_id.trim()).map((binding) => <option key={`${binding.channel}:${binding.chat_id}`} value={`${binding.channel}:${binding.chat_id}`}>{binding.channel}: {binding.chat_id}</option>)}
-                </select>
+                <label className="grid gap-1.5">
+                  <span>首选渠道</span>
+                  <select
+                    className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                    value={`${roleForm.proactiveTargetChannel ?? ""}:${roleForm.proactiveTargetChatId ?? ""}`}
+                    onChange={(event) => {
+                      const selected = channelBindings.find((binding) => `${binding.channel}:${binding.chat_id}` === event.target.value);
+                      preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveTargetChannel: selected?.channel ?? "", proactiveTargetChatId: selected?.chat_id ?? "" }));
+                    }}
+                  >
+                    <option value=":">未选择</option>
+                    {channelBindings.filter((binding) => binding.chat_id.trim()).map((binding) => <option key={`${binding.channel}:${binding.chat_id}`} value={`${binding.channel}:${binding.chat_id}`}>{roleBindingChannelLabel(binding.channel)} · {binding.chat_id}</option>)}
+                  </select>
+                </label>
+                {selectedProactiveBinding ? (
+                  <ol className="grid gap-1.5" data-testid="role-proactive-sequence">
+                    {proactiveTransportSequence.map((binding, index) => (
+                      <li className="flex min-w-0 items-center gap-2" key={`${binding.channel}:${binding.chat_id}`}>
+                        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#EEF2F6] text-[11px] text-[#667085]">{index + 1}</span>
+                        <span className="min-w-0 truncate text-[#374151]">{roleBindingChannelLabel(binding.channel)} · {binding.chat_id}</span>
+                        <span className="ml-auto shrink-0 text-[11px] text-[#98A2B3]">{index === 0 ? "首选" : "无回复后尝试 · 5 分钟"}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
               </div>
             </div>
           </div>
