@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from core.common.workspace import resolve_default_workspace, resolve_ncatbot_dir
+from core.common.workspace import (
+    resolve_default_workspace,
+    resolve_legacy_workspace_file,
+    resolve_ncatbot_dir,
+)
 
 
 def test_resolve_default_workspace_uses_shiori_directory(tmp_path: Path) -> None:
@@ -45,3 +49,24 @@ def test_resolve_ncatbot_dir_migrates_legacy_directory(tmp_path: Path) -> None:
     assert ncatbot_dir == tmp_path / ".shiori" / "ncatbot"
     assert (ncatbot_dir / "plugins").is_dir()
     assert not legacy_dir.exists()
+
+
+def test_resolve_legacy_workspace_file_returns_existing_shiori_file(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / ".shiori" / "workspace"
+    current_file = workspace / "private_runtime" / "image.png"
+    current_file.parent.mkdir(parents=True)
+    current_file.write_bytes(b"png")
+    legacy_file = (
+        tmp_path / ".akashic" / "workspace" / "private_runtime" / "image.png"
+    )
+
+    assert resolve_legacy_workspace_file(workspace, legacy_file) == str(current_file)
+
+
+def test_resolve_legacy_workspace_file_preserves_missing_path(tmp_path: Path) -> None:
+    workspace = tmp_path / ".shiori" / "workspace"
+    legacy_file = tmp_path / ".akashic" / "workspace" / "missing.png"
+
+    assert resolve_legacy_workspace_file(workspace, legacy_file) == str(legacy_file)

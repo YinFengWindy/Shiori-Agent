@@ -35,3 +35,23 @@ def resolve_ncatbot_dir(home: Path | None = None) -> Path:
         home_dir / ".akashic" / "ncatbot",
         "NcatBot 目录",
     )
+
+
+def resolve_legacy_workspace_file(workspace: Path, value: object) -> str:
+    """Resolve an existing file moved from the legacy workspace into Shiori."""
+
+    raw_path = str(value or "").strip()
+    current_workspace = workspace.expanduser().resolve()
+    if not raw_path or current_workspace.parent.name.casefold() != ".shiori":
+        return raw_path
+
+    legacy_workspace = (
+        current_workspace.parent.parent / ".akashic" / current_workspace.name
+    )
+    try:
+        relative_path = Path(raw_path).relative_to(legacy_workspace)
+    except ValueError:
+        return raw_path
+
+    current_path = current_workspace / relative_path
+    return str(current_path) if current_path.is_file() else raw_path

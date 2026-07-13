@@ -116,6 +116,40 @@ def test_session_store_message_roundtrip_preserves_conversation_fields(
     assert messages[0]["delivery_status"] == "received"
 
 
+def test_conversation_store_resolves_legacy_thread_media_path(tmp_path: Path) -> None:
+    workspace = tmp_path / ".shiori" / "workspace"
+    db_path = workspace / "sessions.db"
+    current_image = workspace / "private_runtime" / "novelai" / "output.png"
+    current_image.parent.mkdir(parents=True)
+    current_image.write_bytes(b"png")
+    legacy_image = (
+        tmp_path
+        / ".akashic"
+        / "workspace"
+        / "private_runtime"
+        / "novelai"
+        / "output.png"
+    )
+    legacy = SessionStore(db_path)
+    legacy.create_session(key="role:mira", metadata={})
+    legacy.insert_message(
+        "role:mira",
+        role="assistant",
+        content="image",
+        ts="2026-07-13T12:00:00+08:00",
+        seq=0,
+        thread_id="thread:mira:desktop",
+        media=[str(legacy_image)],
+    )
+    legacy.close()
+
+    store = ConversationStore(db_path)
+    messages = store.list_thread_messages("thread:mira:desktop")
+
+    assert messages[0]["media"] == [str(current_image)]
+    store.close()
+
+
 def test_session_store_updates_latest_assistant_delivery_by_thread(
     tmp_path: Path,
 ) -> None:

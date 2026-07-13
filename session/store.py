@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from conversation.store import ensure_conversation_schema
+from core.common.workspace import resolve_legacy_workspace_file
 
 _MESSAGE_SELECT_COLUMNS = (
     "id, session_key, seq, role, content, tool_chain, extra, ts, "
@@ -20,6 +21,7 @@ class SessionStore:
 
     def __init__(self, db_path: str | Path):
         self.db_path = str(db_path)
+        self._workspace = Path(db_path).expanduser().resolve().parent
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
@@ -1214,7 +1216,12 @@ class SessionStore:
         if "sender_role" in row_keys and str(row["sender_role"] or "").strip():
             message["sender_role"] = str(row["sender_role"]).strip()
         if "media" in row_keys and row["media"]:
-            message["media"] = json.loads(row["media"] or "[]")
+            raw_media = json.loads(row["media"] or "[]")
+            if isinstance(raw_media, list):
+                message["media"] = [
+                    resolve_legacy_workspace_file(self._workspace, item)
+                    for item in raw_media
+                ]
         if (
             "external_message_id" in row_keys
             and str(row["external_message_id"] or "").strip()

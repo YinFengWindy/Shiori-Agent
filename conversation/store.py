@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from conversation.models import ContactRecord, StateRecord, ThreadRecord
+from core.common.workspace import resolve_legacy_workspace_file
 
 
 def ensure_conversation_schema(connection: sqlite3.Connection) -> None:
@@ -156,6 +157,7 @@ class ConversationStore:
         lock: threading.Lock | None = None,
     ) -> None:
         self.db_path = str(db_path)
+        self._workspace = Path(db_path).expanduser().resolve().parent
         self._conn = connection or sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = lock or threading.Lock()
@@ -586,7 +588,10 @@ class ConversationStore:
                 "id": str(row["id"]),
                 "sender_role": str(row["sender_role"] or ""),
                 "content": str(row["content"] or ""),
-                "media": json.loads(row["media"] or "[]"),
+                "media": [
+                    resolve_legacy_workspace_file(self._workspace, item)
+                    for item in json.loads(row["media"] or "[]")
+                ],
                 "external_message_id": str(row["external_message_id"] or ""),
                 "delivery_status": str(row["delivery_status"] or ""),
                 "ts": str(row["ts"]),
