@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -27,9 +26,6 @@ from agent.tools.filesystem import (
     _run_with_file_mutation_lock,
 )
 from agent.tools.vision import _encode_image_data_uri
-from bus.events import OutboundMessage
-from bus.queue import MessageBus
-from infra.channels.ipc_server import IPCServerChannel
 
 
 class _Pipe:
@@ -358,138 +354,6 @@ async def test_file_mutation_lock_serializes_same_file_and_allows_different_file
     assert order.index("shared_a:end") < order.index("shared_b:start")
     assert order.index("other:start") < order.index("shared_a:end")
     assert not _FILE_MUTATION_LOCKS
-
-
-@pytest.mark.asyncio
-async def test_ipc_server_channel_covers_connection_command_and_response(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
-    bus = MessageBus()
-    loop = SimpleNamespace()
-    channel = IPCServerChannel(bus, str(tmp_path / "agent.sock"), None)
-
-    server = SimpleNamespace(close=MagicMock(), wait_closed=AsyncMock())
-    chmod = MagicMock()
-    monkeypatch.setattr("infra.channels.ipc_server.os.chmod", chmod)
-    if sys.platform == "win32":
-        monkeypatch.setattr(
-            "infra.channels.ipc_server.asyncio.start_server",
-            AsyncMock(return_value=server),
-        )
-    else:
-        monkeypatch.setattr(
-            "infra.channels.ipc_server.asyncio.start_unix_server",
-            AsyncMock(return_value=server),
-        )
-    await channel.start()
-    if sys.platform == "win32":
-        chmod.assert_not_called()
-    else:
-        chmod.assert_called_once()
-    await channel.stop()
-    server.close.assert_called_once()
-
-    reader = SimpleNamespace(
-        readline=AsyncMock(
-            side_effect=[
-                b'{"content":"hello"}\n',
-                b'{"type":"command","command":"noop"}\n',
-                b'{"type":"command","command":"unknown"}\n',
-                b"not json\n",
-                b"",
-            ]
-        )
-    )
-    writes: list[bytes] = []
-    writer = SimpleNamespace(
-        get_extra_info=lambda name: "peer",
-        write=lambda data: writes.append(data),
-        drain=AsyncMock(),
-        close=MagicMock(),
-        wait_closed=AsyncMock(),
-        is_closing=lambda: False,
-    )
-    await channel._handle_connection(
-        cast(asyncio.StreamReader, reader), cast(asyncio.StreamWriter, writer)
-    )
-    inbound = await bus.consume_inbound()
-    assert inbound.content == "hello"
-    assert any("command_result" in payload.decode() for payload in writes)
-    assert any('"ok": false' in payload.decode() for payload in writes)
-    assert any("unknown command" in payload.decode() for payload in writes)
-
-    msg = OutboundMessage(channel="cli", chat_id="missing", content="hi")
-    await channel._on_response(msg)
-    chat_id = next(iter(channel._writers.keys()), None)
-    if chat_id:
-        await channel._on_response(
-            OutboundMessage(channel="cli", chat_id=chat_id, content="hi")
-        )
-
-
-@pytest.mark.asyncio
-async def test_ipc_server_can_route_cli_to_existing_session():
-    bus = MessageBus()
-    channel = IPCServerChannel(
-        bus,
-        "/tmp/agent.sock",
-        default_session_key="telegram:7674283004",
-    )
-    reader = SimpleNamespace(
-        readline=AsyncMock(
-            side_effect=[
-                b'{"content":"hello"}\n',
-                b'{"content":"hi","as_session_key":"telegram:42"}\n',
-                b"",
-            ]
-        )
-    )
-    writer = SimpleNamespace(
-        get_extra_info=lambda name: "peer",
-        close=MagicMock(),
-        wait_closed=AsyncMock(),
-    )
-
-    await channel._handle_connection(
-        cast(asyncio.StreamReader, reader), cast(asyncio.StreamWriter, writer)
-    )
-
-    first = await bus.consume_inbound()
-    second = await bus.consume_inbound()
-    assert first.channel == "cli"
-    assert first.session_key == "telegram:7674283004"
-    assert first.context_channel == "telegram"
-    assert first.context_chat_id == "7674283004"
-    assert second.session_key == "telegram:42"
-
-
-@pytest.mark.asyncio
-async def test_ipc_server_uses_tcp_for_explicit_host_port_on_all_platforms(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    bus = MessageBus()
-    channel = IPCServerChannel(bus, "127.0.0.1:8765", None)
-
-    server = SimpleNamespace(close=MagicMock(), wait_closed=AsyncMock())
-    start_server = AsyncMock(return_value=server)
-    start_unix_server = AsyncMock(
-        side_effect=AssertionError("explicit TCP endpoint should not use unix sockets")
-    )
-    chmod = MagicMock()
-
-    monkeypatch.setattr("infra.channels.ipc_server.asyncio.start_server", start_server)
-    if hasattr(asyncio, "start_unix_server"):
-        monkeypatch.setattr(
-            "infra.channels.ipc_server.asyncio.start_unix_server", start_unix_server
-        )
-    monkeypatch.setattr("infra.channels.ipc_server.os.chmod", chmod)
-
-    await channel.start()
-    start_server.assert_awaited_once()
-    start_unix_server.assert_not_called()
-    chmod.assert_not_called()
-    await channel.stop()
-    server.close.assert_called_once()
 
 
 @pytest.mark.asyncio

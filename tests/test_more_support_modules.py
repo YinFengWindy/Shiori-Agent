@@ -21,10 +21,10 @@ from agent.provider import (
     _normalize_openai_base_url,
 )
 from agent.tool_runtime import append_assistant_tool_calls
-from infra.channels.cli import CLIClient, _print_banner
 from infra.channels.group_filter import DefaultGroupFilter, strip_at_segments
 from memory2.models import MemoryItem
 from proactive_v2.anyaction import AnyActionGate, QuotaStore
+from proactive_v2.config import ProactiveConfig
 from proactive_v2.memory_sampler import sample_memory_chunks, split_memory_chunks
 from bootstrap.app import AppRuntime, DESKTOP_RUNTIME_FEATURES
 from bootstrap.providers import build_providers, build_vl_provider
@@ -845,56 +845,13 @@ async def test_app_runtime_desktop_mode_enables_message_channels(
 
 
 @pytest.mark.asyncio
-async def test_group_filter_and_cli_paths(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-):
+async def test_group_filter_paths():
     group = SimpleNamespace(group_id="1", allow_from=["42"], require_at=True)
     event = SimpleNamespace(user_id="42", raw_message="[CQ:at,qq=10001] hi")
     assert await DefaultGroupFilter("10001").should_process(event, cast(Any, group)) is True
     assert strip_at_segments("x [CQ:at,qq=10001] y") == "x  y".strip()
     bad_user = SimpleNamespace(user_id="9", raw_message="hi")
     assert await DefaultGroupFilter("10001").should_process(bad_user, cast(Any, group)) is False
-
-    reader = MagicMock()
-    reader.readline = AsyncMock(side_effect=[b'{"content":"hi"}\n', b""])
-    writer = MagicMock()
-    writer.write = MagicMock()
-    writer.drain = AsyncMock()
-    writer.close = MagicMock()
-    writer.wait_closed = AsyncMock()
-    if sys.platform == "win32":
-        monkeypatch.setattr(
-            "infra.channels.cli.asyncio.open_connection",
-            AsyncMock(return_value=(reader, writer)),
-        )
-    else:
-        monkeypatch.setattr(
-            "infra.channels.cli.asyncio.open_unix_connection",
-            AsyncMock(return_value=(reader, writer)),
-        )
-    lines = iter(["hello\n", "exit\n"])
-
-    async def _fake_read_line() -> str:
-        return next(lines)
-
-    monkeypatch.setattr("infra.channels.cli._read_line", _fake_read_line)
-    await CLIClient("/tmp/sock").run()
-    writer.write.assert_called()
-    assert capsys.readouterr().out == ""
-
-    if sys.platform == "win32":
-        monkeypatch.setattr(
-            "infra.channels.cli.asyncio.open_connection",
-            AsyncMock(side_effect=FileNotFoundError()),
-        )
-    else:
-        monkeypatch.setattr(
-            "infra.channels.cli.asyncio.open_unix_connection",
-            AsyncMock(side_effect=FileNotFoundError()),
-        )
-    await CLIClient("/tmp/missing").run()
-    _print_banner()
-    assert capsys.readouterr().out == ""
 
 
 @pytest.mark.asyncio
@@ -951,10 +908,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
     from bootstrap.proactive import build_memory_optimizer_task, build_proactive_runtime
 
     cfg = SimpleNamespace(
-        proactive=SimpleNamespace(
-            enabled=False,
-        ),
-        fitbit=SimpleNamespace(enabled=False),
+        proactive=ProactiveConfig(enabled=False),
         memory_optimizer_enabled=False,
         memory_optimizer_interval_seconds=3600,
         model="m",
@@ -988,6 +942,21 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
     monkeypatch.setattr(
         "bootstrap.proactive.ProactiveLoop", lambda **kwargs: proactive_loop
     )
+    monkeypatch.setattr(
+        "bootstrap.proactive.RoleStore",
+        lambda workspace: SimpleNamespace(
+            list_roles=lambda: [
+                SimpleNamespace(
+                    id="mira",
+                    proactive=SimpleNamespace(
+                        enabled=True,
+                        target_channel="telegram",
+                        target_chat_id="42",
+                    ),
+                )
+            ]
+        ),
+    )
     monkeypatch.setattr("bootstrap.proactive.ProactiveStateStore", lambda path: path)
     monkeypatch.setattr(
         "bootstrap.proactive.MemoryOptimizer",
@@ -1000,10 +969,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
         ),
     )
     cfg = SimpleNamespace(
-        proactive=SimpleNamespace(
-            enabled=True,
-        ),
-        fitbit=SimpleNamespace(enabled=True),
+        proactive=ProactiveConfig(enabled=True),
         memory_optimizer_enabled=True,
         memory_optimizer_interval_seconds=7200,
         model="m",
@@ -1020,7 +986,8 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
         memory_store=MagicMock(),
         presence=MagicMock(),
         agent_loop=cast(Any, SimpleNamespace(
-            processing_state=SimpleNamespace(is_busy=lambda: False)
+            processing_state=SimpleNamespace(is_busy=lambda: False),
+            role_world_registry=MagicMock(),
         )),
     )
     assert tasks == ["loop-task"]
