@@ -34,6 +34,8 @@ function createSettingsFormData(
     channels: {
       telegramToken: "",
       qqBotUin: "",
+      qqBotAppId: "",
+      qqBotClientSecret: "",
     },
     memory: {
       enabled: true,

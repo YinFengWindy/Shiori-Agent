@@ -139,6 +139,7 @@ const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: 
   channels: [
     { id: "telegram", label: "Telegram" },
     { id: "qq", label: "QQ" },
+    { id: "qqbot", label: "QQBot" },
   ],
   memory: [
     { id: "general", label: "基础" },
@@ -401,6 +402,30 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
               <SectionCard>
                 <Field label="Bot QQ号" hint="填入Bot 的QQ号；留空则不启用 QQ 渠道。">
                   <input className={cx(inputClass, "bg-white")} value={draft.channels.qqBotUin} onChange={(event) => updateDraft((current) => ({ ...current, channels: { ...current.channels, qqBotUin: event.target.value } }))} />
+                </Field>
+              </SectionCard>
+            );
+          case "qqbot":
+            return (
+              <SectionCard>
+                <Field label="App ID">
+                  <input
+                    className={cx(inputClass, "bg-white")}
+                    value={draft.channels.qqBotAppId}
+                    onChange={(event) => updateDraft((current) => ({
+                      ...current,
+                      channels: { ...current.channels, qqBotAppId: event.target.value },
+                    }))}
+                  />
+                </Field>
+                <Field label="Client Secret">
+                  <SecretInput
+                    value={draft.channels.qqBotClientSecret}
+                    onChange={(value) => updateDraft((current) => ({
+                      ...current,
+                      channels: { ...current.channels, qqBotClientSecret: value },
+                    }))}
+                  />
                 </Field>
               </SectionCard>
             );

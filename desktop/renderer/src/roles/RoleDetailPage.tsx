@@ -250,6 +250,7 @@ export function RoleDetailPage({
                       >
                         <option value="telegram">Telegram</option>
                         <option value="qq">QQ</option>
+                        <option value="qqbot">QQBot</option>
                         <option value="desktop">桌面端</option>
                       </select>
                       <input

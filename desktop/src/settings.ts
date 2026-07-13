@@ -148,6 +148,7 @@ export function loadSettingsData(): SettingsSnapshot {
   const agentTools = asRecord(agent.tools);
   const agentMaintenance = asRecord(agent.maintenance);
   const plugins = asRecord(parsed.plugins);
+  const qqbot = asRecord(plugins.qqbot);
   return {
     configPath,
     formData: {
@@ -172,6 +173,8 @@ export function loadSettingsData(): SettingsSnapshot {
       channels: {
         telegramToken: String(telegram.token ?? ""),
         qqBotUin: String(qq.bot_uin ?? ""),
+        qqBotAppId: String(qqbot.app_id ?? qqbot.appId ?? ""),
+        qqBotClientSecret: String(qqbot.client_secret ?? qqbot.clientSecret ?? ""),
       },
       memory: {
         enabled: Boolean(memory.enabled),
@@ -296,6 +299,10 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "[channels.qq]",
     `bot_uin = ${quote(formData.channels.qqBotUin)}`,
     "websocket_open_timeout_seconds = 5",
+    "",
+    "[plugins.qqbot]",
+    `app_id = ${quote(formData.channels.qqBotAppId)}`,
+    `client_secret = ${quote(formData.channels.qqBotClientSecret)}`,
     "",
     "[memory]",
     `enabled = ${formData.memory.enabled ? "true" : "false"}`,

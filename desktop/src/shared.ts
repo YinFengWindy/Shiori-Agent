@@ -45,6 +45,8 @@ export type SettingsFormData = {
   channels: {
     telegramToken: string;
     qqBotUin: string;
+    qqBotAppId: string;
+    qqBotClientSecret: string;
   };
   memory: {
     enabled: boolean;
