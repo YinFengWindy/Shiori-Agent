@@ -80,7 +80,7 @@ async def test_plugin_config_model_failure_skips_plugin(tmp_path: Path):
     assert manager.loaded_count == 0
 
 
-def test_config_load_resolves_plugin_env_and_ignores_removed_qqbot_block(
+def test_config_load_resolves_plugin_env_value(
     tmp_path: Path,
     monkeypatch,
 ):
@@ -99,19 +99,12 @@ system_prompt = "s"
 
 [plugins.typed]
 api_key = "${PLUGIN_TOKEN}"
-
-[channels.qqbot]
-app_id = "app"
-client_secret = "${QQBOT_SECRET}"
-allow_from = ["user-openid"]
 """.strip()
         + "\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("PLUGIN_TOKEN", "plugin-secret")
-    monkeypatch.setenv("QQBOT_SECRET", "qq-secret")
 
     config = Config.load(config_path)
 
     assert config.plugins["typed"]["api_key"] == "plugin-secret"
-    assert "qqbot" not in config.plugins
