@@ -135,3 +135,21 @@ async def test_message_push_sends_text_when_channel_only_registers_stream_sender
 
     assert result == "文本已发送"
     assert sent == [("c2c:user-1", "主动推送")]
+
+
+@pytest.mark.asyncio
+async def test_message_push_surfaces_actionable_role_target_error() -> None:
+    tool = MessagePushTool()
+    tool.set_role_target_validator(
+        lambda _role_id, _channel, _chat_id: (
+            "角色未绑定 qq；该会话已绑定渠道 qqbot，请使用 channel=qqbot"
+        )
+    )
+
+    with pytest.raises(PermissionError, match="请使用 channel=qqbot"):
+        await tool.execute(
+            channel="qq",
+            chat_id="c2c:user-1",
+            message="hello",
+            role_id="yinfeng",
+        )

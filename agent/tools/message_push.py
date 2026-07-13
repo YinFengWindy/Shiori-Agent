@@ -54,13 +54,18 @@ class MessagePushTool(Tool):
         # channel -> {type: sender_fn}
         self._senders: dict[str, dict[str, Callable[..., Awaitable[None]]]] = {}
         self._target_resolvers: dict[str, Callable[[str], str]] = {}
-        self._role_target_validator: Callable[[str, str, str], bool] | None = None
+        self._role_target_validator: Callable[[str, str, str], bool | str] | None = None
 
     def set_role_target_validator(
         self,
-        validator: Callable[[str, str, str], bool],
+        validator: Callable[[str, str, str], bool | str],
     ) -> None:
-        """Registers the authoritative binding check for role-scoped sends."""
+        """Registers the authoritative binding check for role-scoped sends.
+
+        A string result is treated as an actionable validation error and is
+        surfaced unchanged, allowing callers to distinguish a wrong channel
+        from a genuinely unbound target without silently rewriting it.
+        """
 
         self._role_target_validator = validator
 
@@ -116,9 +121,13 @@ class MessagePushTool(Tool):
             return f"发送失败：{e}"
 
         if role_id and self._role_target_validator is not None:
-            if not self._role_target_validator(role_id, channel, chat_id):
-                raise PermissionError(
+            validation = self._role_target_validator(role_id, channel, chat_id)
+            if validation is not True:
+                detail = validation if isinstance(validation, str) else (
                     f"角色 {role_id} 未绑定目标渠道: {channel}:{requested_chat_id}"
+                )
+                raise PermissionError(
+                    detail
                 )
 
         senders = self._senders.get(channel)

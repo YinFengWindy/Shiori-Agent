@@ -487,7 +487,7 @@ def build_core_runtime(
     processing_state = ProcessingState()
     role_world_registry = RoleWorldRegistry(role_repository)
     push_tool.set_role_target_validator(
-        lambda role_id, channel, chat_id: _role_owns_channel_target(
+        lambda role_id, channel, chat_id: _validate_role_target(
             role_repository,
             role_id=role_id,
             channel=channel,
@@ -586,3 +586,37 @@ def _role_owns_channel_target(
         and chat_ids_equal(clean_channel, binding.chat_id, clean_chat_id)
         for binding in role.channel_bindings
     )
+
+
+def _validate_role_target(
+    repository: RoleRepository,
+    *,
+    role_id: str,
+    channel: str,
+    chat_id: str,
+) -> bool | str:
+    """Validates a role-scoped push and explains channel mismatches."""
+
+    if _role_owns_channel_target(
+        repository,
+        role_id=role_id,
+        channel=channel,
+        chat_id=chat_id,
+    ):
+        return True
+
+    role = repository.get_required(role_id)
+    matching_binding = next(
+        (
+            binding
+            for binding in role.channel_bindings
+            if chat_ids_equal(binding.channel, binding.chat_id, chat_id)
+        ),
+        None,
+    )
+    if matching_binding is not None:
+        return (
+            f"角色 {role_id} 未绑定目标渠道: {channel}:{chat_id}；"
+            f"该会话已绑定渠道 {matching_binding.channel}，请使用 channel={matching_binding.channel}"
+        )
+    return False
