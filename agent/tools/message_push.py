@@ -15,7 +15,9 @@ class MessagePushTool(Tool):
     name = "message_push"
     description = (
         "向指定渠道的用户主动发送消息、文件或图片。"
-        "需要提供渠道名（如 telegram、qq）和目标 chat_id。"
+        "需要提供当前会话对应的渠道名和目标 chat_id。"
+        "渠道名必须使用渠道原名：telegram、qq（NapCat QQ）或 qqbot（官方 QQBot）；"
+        "官方 QQBot 不能写成 qq。QQBot 私聊 chat_id 格式为 c2c:<user_openid>。"
         "message/file/image 三者至少提供一个。"
     )
     parameters = {
@@ -23,11 +25,14 @@ class MessagePushTool(Tool):
         "properties": {
             "channel": {
                 "type": "string",
-                "description": "目标渠道名，如 telegram、qq",
+                "description": (
+                    "目标渠道原名：telegram、qq（NapCat QQ）或 qqbot（官方 QQBot）。"
+                    "官方 QQBot 必须填写 qqbot，不能填写 qq。"
+                ),
             },
             "chat_id": {
                 "type": "string",
-                "description": "目标会话 ID",
+                "description": "目标会话 ID；官方 QQBot 私聊使用 c2c:<user_openid>",
             },
             "message": {
                 "type": "string",
