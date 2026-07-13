@@ -908,7 +908,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
     from bootstrap.proactive import build_memory_optimizer_task, build_proactive_runtime
 
     cfg = SimpleNamespace(
-        proactive=ProactiveConfig(enabled=False),
+        proactive=ProactiveConfig(enabled=True),
         memory_optimizer_enabled=False,
         memory_optimizer_interval_seconds=3600,
         model="m",

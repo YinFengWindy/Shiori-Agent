@@ -53,7 +53,7 @@ default_samples = 1
     assert config.novelai.max_steps == 20
 
 
-def test_load_config_disables_proactive_when_role_id_missing(tmp_path: Path) -> None:
+def test_load_config_preserves_proactive_base_config_without_role_target(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
@@ -79,7 +79,8 @@ role_id = ""
 
     config = load_config(config_path)
 
-    assert config.proactive.enabled is False
+    assert config.proactive.enabled is True
+    assert config.proactive.default_role_id == ""
 
 
 def test_load_config_keeps_channel_permissions_in_role_bindings(tmp_path: Path) -> None:
