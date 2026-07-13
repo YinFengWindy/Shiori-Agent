@@ -16,6 +16,16 @@ def test_attachment_store_writes_under_configured_root(tmp_path: Path):
     assert path.read_bytes() == b"hello"
 
 
+def test_attachment_store_uses_default_workspace(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / ".shiori" / "workspace"
+    monkeypatch.setattr(
+        "infra.channels.base.resolve_default_workspace",
+        lambda: workspace,
+    )
+
+    assert AttachmentStore().root == workspace / "uploads"
+
+
 def test_message_deduper_evicts_oldest_keys():
     deduper = MessageDeduper(max_size=2)
 

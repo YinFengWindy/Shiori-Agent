@@ -22,6 +22,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from agent.config_models import Config
+from core.common.workspace import resolve_default_workspace
 from plugins.akasha.config import (
     AkashaConfig,
     load_akasha_config,
@@ -62,8 +63,8 @@ def _parse_args() -> argparse.Namespace:
     _ = parser.add_argument("--config", default="config.toml", help="主配置文件路径")
     _ = parser.add_argument(
         "--workspace",
-        default=str(Path.home() / ".akashic" / "workspace"),
-        help="Akashic workspace 路径",
+        default=str(resolve_default_workspace()),
+        help="Shiori workspace 路径",
     )
     _ = parser.add_argument("--sessions-db", default="", help="原始 sessions.db 路径")
     _ = parser.add_argument("--db-path", default="", help="输出 akasha.db 路径")

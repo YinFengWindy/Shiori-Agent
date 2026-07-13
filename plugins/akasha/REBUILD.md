@@ -28,11 +28,11 @@
 ```bash
 python scripts/build_akasha_db.py \
   --config config.toml \
-  --sessions-db ~/.akashic/workspace/sessions.db \
-  --db-path    ~/.akashic/workspace/memory/akasha.db
+  --sessions-db ~/.shiori/workspace/sessions.db \
+  --db-path    ~/.shiori/workspace/memory/akasha.db
 ```
 
-（不带参数时用默认路径：`~/.akashic/workspace/{sessions.db, memory/akasha.db}`、`config.toml`。）
+（不带参数时用默认路径：`~/.shiori/workspace/{sessions.db, memory/akasha.db}`、`config.toml`。）
 
 做了什么：
 1. 自动备份旧 `akasha.db`（`*.bak-时间戳`）。
@@ -69,9 +69,9 @@ from plugins.akasha.store import AkashaStore
 cfg = Config.load("config.toml")
 emb_cfg = cfg.memory.embedding          # base_url / api_key / model
 embedder = Embedder(emb_cfg.base_url, emb_cfg.api_key, model=emb_cfg.model)
-store = AkashaStore("~/.akashic/workspace/memory/akasha.db")
+store = AkashaStore("~/.shiori/workspace/memory/akasha.db")
 
-src = sqlite3.connect("~/.akashic/workspace/sessions.db"); src.row_factory = sqlite3.Row
+src = sqlite3.connect("~/.shiori/workspace/sessions.db"); src.row_factory = sqlite3.Row
 rows = src.execute(
     "SELECT id, session_key, seq, role, content, ts FROM messages "
     "WHERE role IN ('user','assistant')"

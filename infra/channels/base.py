@@ -6,16 +6,15 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
+from core.common.workspace import resolve_default_workspace
 from session.manager import SessionManager
-
-_DEFAULT_UPLOAD_DIR = Path.home() / ".akashic" / "workspace" / "uploads"
 
 
 class AttachmentStore:
     """为 channel 媒体文件提供统一的持久化落盘目录。"""
 
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or _DEFAULT_UPLOAD_DIR
+        self.root = root or resolve_default_workspace() / "uploads"
 
     def _resolve_root(self) -> Path:
         try:

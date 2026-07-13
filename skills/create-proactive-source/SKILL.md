@@ -106,7 +106,7 @@ context 无需 ACK，无需 `event_id`/`kind`。
 
 ## 配置注册
 
-### 1. MCP Server 注册（`$HOME/.akashic/workspace/mcp_servers.json`）
+### 1. MCP Server 注册（`$HOME/.shiori/workspace/mcp_servers.json`）
 
 ```json
 {
@@ -119,7 +119,7 @@ context 无需 ACK，无需 `event_id`/`kind`。
 }
 ```
 
-### 2. Proactive Source 注册（`$HOME/.akashic/workspace/proactive_sources.json`）
+### 2. Proactive Source 注册（`$HOME/.shiori/workspace/proactive_sources.json`）
 
 每条通道一个条目：
 
@@ -138,9 +138,9 @@ context 无需 ACK，无需 `event_id`/`kind`。
 
 ### 0. 盘点现有 server
 
-- 读取 `$HOME/.akashic/workspace/mcp_servers.json`，列出所有已注册的 server 名称
-- 读取 `$HOME/.akashic/workspace/proactive_sources.json`，列出已接入的 source 条目
-- 浏览 `$HOME/.akashic/workspace/mcp/` 目录，了解每个 server 的用途
+- 读取 `$HOME/.shiori/workspace/mcp_servers.json`，列出所有已注册的 server 名称
+- 读取 `$HOME/.shiori/workspace/proactive_sources.json`，列出已接入的 source 条目
+- 浏览 `$HOME/.shiori/workspace/mcp/` 目录，了解每个 server 的用途
 - 判断目标数据源能否复用或扩展现有 server（如给已有 server 加一条新通道），而不是从零新建
 
 ### 1. 确认数据源和通道类型
@@ -150,7 +150,7 @@ context 无需 ACK，无需 `event_id`/`kind`。
 ### 2. 创建或扩展 MCP server
 
 - 如果复用现有 server：直接在其代码中添加新工具，在 `proactive_sources.json` 中增加新通道条目
-- 如果新建 server：在 `$HOME/.akashic/workspace/mcp/` 下创建目录，用 FastMCP 实现标准协议工具，创建 `run_mcp.py` 入口和虚拟环境
+- 如果新建 server：在 `$HOME/.shiori/workspace/mcp/` 下创建目录，用 FastMCP 实现标准协议工具，创建 `run_mcp.py` 入口和虚拟环境
 
 ### 3. 注册配置
 
@@ -347,7 +347,7 @@ if __name__ == "__main__":
 
 ## 约束
 
-- MCP server 文件放在 `$HOME/.akashic/workspace/mcp/<server-name>/`，不要放到仓库内
+- MCP server 文件放在 `$HOME/.shiori/workspace/mcp/<server-name>/`，不要放到仓库内
 - 一个 server 可以服务多条通道，每条通道在 `proactive_sources.json` 中独立注册
 - `event_id` 必须在同一 server 内全局唯一且稳定（相同事件每次返回相同 id）
 - ACK 状态必须持久化到文件（MCP server 是 stdio 模式，按需启停）

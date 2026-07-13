@@ -25,6 +25,7 @@ from agent.config_models import (
     TelegramChannelConfig,
     WiringConfig,
 )
+from core.common.workspace import resolve_default_workspace
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
 
@@ -331,7 +332,7 @@ def _resolve(value: str) -> str:
     # 若仍是未展开的占位符，尝试从 workspace/memory/<VAR_NAME> 文件读取
     m = re.fullmatch(r"\$\{(\w+)\}", resolved)
     if m:
-        key_file = Path.home() / ".akashic" / "workspace" / "memory" / m.group(1)
+        key_file = resolve_default_workspace() / "memory" / m.group(1)
         if key_file.exists():
             resolved = key_file.read_text(encoding="utf-8").strip()
     return resolved

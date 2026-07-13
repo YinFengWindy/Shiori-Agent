@@ -1,7 +1,7 @@
 """
 proactive/mcp_sources.py — 从 MCP server 拉取 ProactiveEvent 的通用客户端。
 
-读取 ~/.akashic/workspace/proactive_sources.json 中的配置，
+读取 ~/.shiori/workspace/proactive_sources.json 中的配置，
 动态调用各 MCP server 的 get_tool / ack_tool。
 
 使用项目自带的 agent.mcp.client.McpClient，无需额外依赖。
@@ -15,12 +15,13 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.common.workspace import resolve_default_workspace
+
 if TYPE_CHECKING:
     from proactive_v2.event import AlertEvent
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_WORKSPACE = Path.home() / ".akashic" / "workspace"
 _POLL_TOOL_TIMEOUT = 180.0
 
 
@@ -96,7 +97,7 @@ class McpClientPool:
     """
 
     def __init__(self, workspace: Path | None = None) -> None:
-        self._workspace = workspace or _DEFAULT_WORKSPACE
+        self._workspace = workspace or resolve_default_workspace()
         self._clients: dict[str, Any] = {}               # server -> McpClient
         self._configs: dict[str, tuple[list, dict]] = {}  # server -> (command, env)
         self._locks: dict[str, asyncio.Lock] = {}         # server -> per-server lock（MCP stdio 不支持并发调用）
@@ -290,8 +291,8 @@ async def _fetch_by_channel_async(pool: McpClientPool, *, channel: str) -> list[
     return result
 
 
-def _iter_sources_by_channel(channel: str, workspace: Path = _DEFAULT_WORKSPACE) -> list[dict]:
-    sources = _load_sources(workspace)
+def _iter_sources_by_channel(channel: str, workspace: Path | None = None) -> list[dict]:
+    sources = _load_sources(workspace or resolve_default_workspace())
     result: list[dict] = []
     # 根据 channel 做一层静态路由：
     # - context 只取 channel=context 的源

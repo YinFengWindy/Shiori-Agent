@@ -12,8 +12,11 @@ from pathlib import Path
 
 import jieba
 
-AKASHA_DB = Path.home() / ".akashic" / "workspace" / "memory" / "akasha.db"
-SESSIONS_DB = Path.home() / ".akashic" / "workspace" / "sessions.db"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from core.common.workspace import resolve_default_workspace
 
 
 def tokenize(text: str) -> set[str]:
@@ -29,12 +32,15 @@ def tokenize(text: str) -> set[str]:
 
 
 def main() -> None:
-    if not AKASHA_DB.exists():
-        print(f"❌ {AKASHA_DB} 不存在"); sys.exit(1)
-    if not SESSIONS_DB.exists():
-        print(f"❌ {SESSIONS_DB} 不存在"); sys.exit(1)
+    workspace = resolve_default_workspace()
+    akasha_db = workspace / "memory" / "akasha.db"
+    sessions_db = workspace / "sessions.db"
+    if not akasha_db.exists():
+        print(f"❌ {akasha_db} 不存在"); sys.exit(1)
+    if not sessions_db.exists():
+        print(f"❌ {sessions_db} 不存在"); sys.exit(1)
 
-    sconn = sqlite3.connect(SESSIONS_DB)
+    sconn = sqlite3.connect(sessions_db)
     cur = sconn.cursor()
     print("[scan] messages ...")
     df: dict[str, int] = defaultdict(int)
@@ -53,7 +59,7 @@ def main() -> None:
         idf[tok] = math.log((n_docs + 1) / (freq + 1)) + 1
 
     # 写入 akasha.db
-    aconn = sqlite3.connect(AKASHA_DB)
+    aconn = sqlite3.connect(akasha_db)
     aconn.execute("""
         CREATE TABLE IF NOT EXISTS fts_token_idf (
             token TEXT PRIMARY KEY,

@@ -15,6 +15,7 @@ from bootstrap.proactive import build_memory_optimizer_task, build_proactive_run
 from bootstrap.providers import build_providers
 from bootstrap.tools import CoreRuntime, build_core_runtime
 from bus.event_bus import EventBus
+from core.common.workspace import resolve_default_workspace
 from core.roles import (
     LonelinessHeartbeatLoop,
 )
@@ -262,6 +263,6 @@ def build_app_runtime(
 ) -> AppRuntime:
     return AppRuntime(
         config,
-        workspace or (Path.home() / ".akashic" / "workspace"),
+        workspace or resolve_default_workspace(),
         features=features,
     )

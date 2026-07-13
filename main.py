@@ -20,12 +20,11 @@ from bootstrap.app import (
     configure_logging_stream,
 )
 from bootstrap.init_workspace import InitSummary, init_workspace
+from core.common.workspace import resolve_default_workspace
 from core.net.http import SharedHttpResources
 from desktop_bridge import DesktopBridgeServer
 
 logger = logging.getLogger(__name__)
-def _default_workspace() -> Path:
-    return Path.home() / ".akashic" / "workspace"
 
 
 def _get_flag_value(args: list[str], flag: str) -> str | None:
@@ -70,7 +69,7 @@ async def inspect_modules(
     http_resources = SharedHttpResources()
     runtime = build_core_runtime(
         config,
-        workspace or _default_workspace(),
+        workspace or resolve_default_workspace(),
         http_resources,
     )
     try:
@@ -87,7 +86,7 @@ async def serve_bridge(
     configure_logging_stream(sys.stderr)
     runtime = build_app_runtime(
         Config.load(config_path),
-        workspace=workspace or _default_workspace(),
+        workspace=workspace or resolve_default_workspace(),
         features=DESKTOP_RUNTIME_FEATURES,
     )
     try:
@@ -124,14 +123,14 @@ if __name__ == "__main__":
         from bootstrap.setup_wizard import run_setup_wizard
         run_setup_wizard(
             config_path=Path(config_path),
-            workspace=workspace or _default_workspace(),
+            workspace=workspace or resolve_default_workspace(),
         )
         sys.exit(0)
 
     if args and args[0] == "init":
         summary = init_workspace(
             config_path=config_path,
-            workspace=workspace or _default_workspace(),
+            workspace=workspace or resolve_default_workspace(),
             force=force,
         )
         _log_init_summary(summary)

@@ -63,11 +63,11 @@ uv run python main.py init
 初始化后，默认会准备这些内容：
 
 - `config.toml`
-- `~/.akashic/workspace/memory/*`
-- `~/.akashic/workspace/roles/roles.json`
-- `~/.akashic/workspace/roles/assets`
-- `~/.akashic/workspace/proactive_sources.json`
-- `~/.akashic/workspace/mcp_servers.json`
+- `~/.shiori/workspace/memory/*`
+- `~/.shiori/workspace/roles/roles.json`
+- `~/.shiori/workspace/roles/assets`
+- `~/.shiori/workspace/proactive_sources.json`
+- `~/.shiori/workspace/mcp_servers.json`
 
 ### 2. 填写 `config.toml`
 
@@ -287,7 +287,7 @@ npm run desktop:smoke
 默认运行时工作区位于：
 
 ```text
-~/.akashic/workspace/
+~/.shiori/workspace/
 ```
 
 其中常见内容包括：
