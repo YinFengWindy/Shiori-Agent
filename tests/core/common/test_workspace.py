@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from core.common.workspace import resolve_default_workspace
+from core.common.workspace import resolve_default_workspace, resolve_ncatbot_dir
 
 
 def test_resolve_default_workspace_uses_shiori_directory(tmp_path: Path) -> None:
@@ -33,3 +33,15 @@ def test_resolve_default_workspace_preserves_legacy_when_target_exists(
     assert resolve_default_workspace(tmp_path) == workspace
     assert workspace.exists()
     assert legacy_workspace.exists()
+
+
+def test_resolve_ncatbot_dir_migrates_legacy_directory(tmp_path: Path) -> None:
+    legacy_dir = tmp_path / ".akashic" / "ncatbot"
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / "plugins").mkdir()
+
+    ncatbot_dir = resolve_ncatbot_dir(tmp_path)
+
+    assert ncatbot_dir == tmp_path / ".shiori" / "ncatbot"
+    assert (ncatbot_dir / "plugins").is_dir()
+    assert not legacy_dir.exists()

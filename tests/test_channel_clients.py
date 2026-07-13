@@ -798,6 +798,8 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
 @pytest.mark.asyncio
 async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     mod = _import_qq_channel(monkeypatch)
+    ncatbot_dir = tmp_path / ".shiori" / "ncatbot"
+    monkeypatch.setattr(mod, "resolve_ncatbot_dir", lambda: ncatbot_dir)
     bus = _Bus()
     session_manager = _SessionManager(tmp_path)
     role_store = RoleStore(tmp_path)
@@ -849,6 +851,9 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     adapter_mod.websockets.connect("ws://example.invalid", open_timeout=1)
     assert adapter_mod._captured_connect_calls[-1]["open_timeout"] == 7.5
     assert sys.modules["ncatbot.utils"].ncatbot_config.root == "1"
+    assert sys.modules["ncatbot.utils"].ncatbot_config.plugin.plugins_dir == str(
+        ncatbot_dir / "plugins"
+    )
     assert channel._is_allowed("1") is True
     assert channel._is_allowed("2") is False
     assert mod._extract_cq_images("hello [CQ:image,url=http://x/a.jpg]") == ("hello", ["http://x/a.jpg"])

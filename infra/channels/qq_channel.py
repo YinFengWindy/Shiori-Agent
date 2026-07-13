@@ -36,6 +36,7 @@ from bus.events_lifecycle import (
 )
 from bus.queue import MessageBus
 from core.channels import ChannelHub
+from core.common.workspace import resolve_ncatbot_dir
 from infra.channels.base import AttachmentStore, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
 from infra.channels.group_filter import (
@@ -49,9 +50,6 @@ from session.manager import SessionManager
 
 if TYPE_CHECKING:
     from core.channels import ChannelHub
-
-# NcatBot 运行时产物（plugins、logs）放到用户目录，不污染项目目录
-_NCATBOT_DIR = Path.home() / ".akashic" / "ncatbot"
 
 logger = logging.getLogger(__name__)
 
@@ -370,10 +368,11 @@ class QQChannel:
         # Akashic 只需要 NapCat 的 OneBot WebSocket，禁用 WebUI 避免启动时卡交互 token。
         ncatbot_config.napcat.enable_webui = False
         ncatbot_config.enable_webui_interaction = False
-        # 运行时产物重定向到 ~/.akashic/ncatbot/，不污染项目目录
-        _NCATBOT_DIR.mkdir(parents=True, exist_ok=True)
-        (_NCATBOT_DIR / "plugins").mkdir(exist_ok=True)
-        ncatbot_config.plugin.plugins_dir = str(_NCATBOT_DIR / "plugins")
+        # 运行时产物重定向到用户目录，不污染项目目录。
+        ncatbot_dir = resolve_ncatbot_dir()
+        ncatbot_dir.mkdir(parents=True, exist_ok=True)
+        (ncatbot_dir / "plugins").mkdir(exist_ok=True)
+        ncatbot_config.plugin.plugins_dir = str(ncatbot_dir / "plugins")
 
         # username（QQ 号字符串）→ chat_id 映射，供主动推送工具使用
         self.user_map = self._identity_index.mapping
