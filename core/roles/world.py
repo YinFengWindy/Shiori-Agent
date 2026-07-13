@@ -94,8 +94,9 @@ class RoleWorld:
 
     def __init__(self, role: RoleRecord) -> None:
         self._role = role
-        self._thread_locks: dict[str, asyncio.Lock] = {}
-        self._state_lock = asyncio.Lock()
+        # A role session is shared by every transport, so all mutable role work
+        # must enter one role-wide turn gate regardless of its source thread.
+        self._turn_lock = asyncio.Lock()
         self._active_work = 0
         self._tasks: set[asyncio.Task[object]] = set()
         self._closing = False
@@ -141,11 +142,10 @@ class RoleWorld:
         context: RoleExecutionContext,
         operation: Callable[[], Awaitable[T]],
     ) -> T:
-        """Runs a turn serially within its thread and never across world versions."""
+        """Runs role work serially across all transport threads."""
 
         self._validate_context(context)
-        lock = self._thread_locks.setdefault(context.thread_id, asyncio.Lock())
-        async with lock:
+        async with self._turn_lock:
             self._validate_context(context)
             self._active_work += 1
             task = asyncio.current_task()
@@ -185,7 +185,7 @@ class RoleWorld:
         """Serializes mutations to role-wide state such as relationship data."""
 
         self._validate_context(context)
-        async with self._state_lock:
+        async with self._turn_lock:
             self._validate_context(context)
             self._active_work += 1
             task = asyncio.current_task()

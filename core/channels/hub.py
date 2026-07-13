@@ -33,20 +33,21 @@ class ChannelHub:
         )
 
     def route_inbound(self, message: InboundMessage) -> InboundMessage:
-        """Maps a bound channel message onto its formal network thread session."""
+        """Maps a bound channel message onto the role session and source thread."""
         metadata = dict(message.metadata or {})
         if message.channel == "desktop":
             return message
+        if not str(message.sender or "").strip():
+            raise ValueError("渠道消息缺少 sender_id")
 
+        resolved_role_id = self._service.bindings.resolve_role_id(
+            message.channel,
+            message.chat_id,
+        )
         role_id = str(metadata.get("role_id") or "").strip()
-        if not role_id:
-            try:
-                role_id = self._service.bindings.resolve_role_id(
-                    message.channel,
-                    message.chat_id,
-                )
-            except KeyError:
-                return message
+        if role_id and role_id != resolved_role_id:
+            raise ValueError("渠道消息角色与绑定角色不匹配")
+        role_id = resolved_role_id
         role = self._service.repository.get_required(role_id)
         thread = self._conversation.ensure_thread_for_session(
             LegacySessionDescriptor(
@@ -57,6 +58,8 @@ class ChannelHub:
                 metadata=metadata,
             )
         )
+        session_key = self._service.sessions.derive_session_key(role.id)
+        self._service.sessions.open_by_role(role)
         external_message_id = str(
             metadata.get("external_message_id") or metadata.get("message_id") or ""
         ).strip()
@@ -64,25 +67,18 @@ class ChannelHub:
             metadata["external_message_id"] = external_message_id
             if self._conversation.has_external_message(thread.id, external_message_id):
                 metadata["conversation_duplicate"] = True
-        session = self._service.sessions._session_manager.sync_thread_session_metadata(
-            thread.id,
-            role_id=role.id,
-            role_name=role.name,
-            role_prompt=role.system_prompt,
-            thread_id=thread.id,
-            role_runtime_config=role.runtime_config,
-            context_channel=message.channel,
-            context_chat_id=message.chat_id,
-            transport_channel=message.channel,
-            transport_chat_id=message.chat_id,
-        )
         metadata["role_id"] = role_id
         metadata["thread_id"] = thread.id
-        metadata["session_key_override"] = session.key
+        metadata["session_key_override"] = session_key
         metadata.setdefault("context_channel", message.channel)
         metadata.setdefault("context_chat_id", message.chat_id)
         metadata.setdefault("transport_channel", message.channel)
         metadata.setdefault("transport_chat_id", message.chat_id)
+        metadata.setdefault("sender_id", message.sender)
+        metadata.setdefault(
+            "chat_type",
+            "private" if message.channel == "telegram" else "unknown",
+        )
         metadata.setdefault("source", "role_channel_binding")
         context = RoleExecutionContext.create(
             role=role,
@@ -131,14 +127,10 @@ class ChannelHub:
         return self._service.bindings.get_binding(channel, chat_id) is not None
 
     def resolve_runtime_session_key(self, channel: str, chat_id: str) -> str:
-        """Resolves a channel control action to its bound role's formal thread."""
+        """Resolves a channel control action to its bound role session."""
 
-        legacy_session_key = f"{channel}:{chat_id}"
-        thread = self._conversation.get_thread_by_session_key(legacy_session_key)
-        if thread is not None:
-            return thread.id
         role_id = self._service.bindings.resolve_role_id(channel, chat_id)
-        return f"thread:{role_id}:{channel}:{chat_id}"
+        return self._service.sessions.derive_session_key(role_id)
 
     def mark_delivery(
         self,
@@ -148,14 +140,29 @@ class ChannelHub:
         delivery_status: str,
         external_message_id: str = "",
     ) -> dict[str, Any] | None:
-        """Writes the latest assistant delivery state back to the owning session."""
+        """Writes delivery state to the role session after validating its source thread."""
         metadata = message.metadata if isinstance(message.metadata, dict) else {}
-        session_key = str(
-            metadata.get("session_key_override")
-            or metadata.get("session_key")
-            or f"{default_channel}:{message.chat_id}"
-        ).strip()
+        role_id = str(metadata.get("role_id") or "").strip()
+        if not role_id:
+            try:
+                role_id = self._service.bindings.resolve_role_id(
+                    default_channel,
+                    message.chat_id,
+                )
+            except KeyError:
+                return None
+        session_key = self._service.sessions.derive_session_key(role_id)
+        override = str(metadata.get("session_key_override") or "").strip()
+        if override and override != session_key:
+            raise ValueError("出站消息不能使用渠道独立运行时会话")
         thread_id = str(metadata.get("thread_id") or "").strip()
+        if not thread_id:
+            raise ValueError("出站消息缺少 thread_id")
+        thread = self._conversation.get_thread(thread_id)
+        if thread is None or thread.role_id != role_id:
+            raise ValueError("出站消息 thread_id 不属于当前角色")
+        if thread.channel != message.channel or thread.external_thread_id != message.chat_id:
+            raise ValueError("出站消息 transport target 与 thread_id 不匹配")
         marker = getattr(
             self._service.sessions._session_manager,
             "mark_latest_assistant_delivery",

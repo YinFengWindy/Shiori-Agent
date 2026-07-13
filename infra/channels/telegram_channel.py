@@ -335,6 +335,7 @@ class TelegramChannel:
                 media=reply_media,
                 metadata={
                     "username": user.username or "",
+                    "chat_type": str(getattr(chat, "type", "private") or "private"),
                     "external_message_id": str(msg.message_id),
                     **reply_meta,
                 },
@@ -442,7 +443,10 @@ class TelegramChannel:
             sender=str(user.id),
             chat_id=str(chat.id),
             content=str(getattr(msg, "text", "") or ""),
-            metadata={"username": user.username or ""},
+            metadata={
+                "username": user.username or "",
+                "chat_type": str(getattr(chat, "type", "private") or "private"),
+            },
         )
 
     async def _on_photo(
@@ -508,6 +512,7 @@ class TelegramChannel:
             media=media,
             metadata={
                 "username": user.username or "",
+                "chat_type": str(getattr(chat, "type", "private") or "private"),
                 **reply_meta,
             },
         )
@@ -558,6 +563,7 @@ class TelegramChannel:
             media=[str(tmp)],
             metadata={
                 "username": user.username or "",
+                "chat_type": str(getattr(chat, "type", "private") or "private"),
                 "document_filename": doc.file_name or "",
                 "document_mime_type": doc.mime_type or "",
                 **reply_meta,

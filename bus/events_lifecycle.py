@@ -85,6 +85,8 @@ class TurnCommitted:
     react_stats: dict[str, int] = field(default_factory=_empty_int_metadata)
     extra: dict[str, Any] = field(default_factory=_empty_metadata)
     role_id: str = ""
+    request_id: str = ""
+    thread_id: str = ""
 
 
 @dataclass(frozen=True)

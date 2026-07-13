@@ -38,6 +38,7 @@ class ConversationMigrator:
             session_manager=session_manager,
             binding_resolver=binding_resolver,
         )
+        self._binding_resolver = binding_resolver
         self._store = self._service._store
 
     def close(self) -> None:
@@ -50,57 +51,117 @@ class ConversationMigrator:
             session_key = str(row.get("key") or "").strip()
             if not session_key or session_key.startswith("thread:"):
                 continue
+            metadata = dict(row.get("metadata") or {})
+            role_id = self._role_id_hint(session_key)
+            if not role_id and not session_key.startswith("role:"):
+                role_id = self._resolve_bound_role(
+                    self._channel(session_key),
+                    self._chat_id(session_key),
+                )
             existing_thread = self._store.get_thread_by_legacy_session_key(session_key)
-            if existing_thread is not None and existing_thread.thread_kind != "legacy/unresolved":
-                self._sync_runtime_session(session_key, existing_thread, dict(row.get("metadata") or {}))
+
+            if session_key.startswith("role:"):
+                thread = self._service.sync_session_messages_to_thread(
+                    session_key,
+                    role_id=role_id,
+                    channel="desktop",
+                    chat_id="self",
+                    created_at=str(row.get("created_at") or ""),
+                    updated_at=str(row.get("updated_at") or ""),
+                    metadata=metadata,
+                )
+                if existing_thread is None or existing_thread.thread_kind == "legacy/unresolved":
+                    summary.migrated_session_keys.append(session_key)
+                    summary.migrated_thread_ids.append(thread.id)
+                self._service.project_thread(thread)
                 continue
 
-            thread = self._service.sync_session_messages_to_thread(
-                session_key,
-                role_id=self._role_id_hint(session_key, dict(row.get("metadata") or {})),
-                channel=self._channel(session_key),
-                chat_id=self._chat_id(session_key),
-                created_at=str(row.get("created_at") or ""),
-                updated_at=str(row.get("updated_at") or ""),
-                metadata=dict(row.get("metadata") or {}),
+            if not role_id:
+                thread = self._service.sync_session_messages_to_thread(
+                    session_key,
+                    role_id="",
+                    channel=self._channel(session_key),
+                    chat_id=self._chat_id(session_key),
+                    created_at=str(row.get("created_at") or ""),
+                    updated_at=str(row.get("updated_at") or ""),
+                    metadata=metadata,
+                )
+                if existing_thread is None or existing_thread.thread_kind == "legacy/unresolved":
+                    summary.unresolved_session_keys.append(session_key)
+                    summary.migrated_thread_ids.append(thread.id)
+                continue
+
+            thread = self._service.ensure_thread_for_session(
+                LegacySessionDescriptor(
+                    session_key=session_key,
+                    role_id=role_id,
+                    channel=self._channel(session_key),
+                    chat_id=self._chat_id(session_key),
+                    created_at=str(row.get("created_at") or ""),
+                    updated_at=str(row.get("updated_at") or ""),
+                    metadata=metadata,
+                )
             )
+            target = self._session_manager.get_or_create(
+                self._session_manager.role_session_key(role_id)
+            )
+            self._sync_role_metadata(target, role_id, metadata)
+            desktop_thread = self._service.ensure_desktop_thread(role_id)
+            self._service.project_thread(desktop_thread)
+            self._store.assign_legacy_messages_to_thread(session_key, thread.id)
+            cleared_at = str(target.metadata.get("cleared_at") or "").strip()
+            deleted_at = self._role_deleted_at(role_id)
+            cutoff = max(cleared_at, deleted_at)
+            self._session_manager.merge_legacy_messages_into_role_session(
+                session_key,
+                target,
+                thread_id=thread.id,
+                cleared_at=cutoff,
+            )
+            self._service.project_thread(thread)
             if thread.thread_kind == "legacy/unresolved":
                 summary.unresolved_session_keys.append(session_key)
             else:
-                self._sync_runtime_session(session_key, thread, dict(row.get("metadata") or {}))
-                summary.migrated_session_keys.append(session_key)
-            summary.migrated_thread_ids.append(thread.id)
+                if existing_thread is None or existing_thread.thread_kind == "legacy/unresolved":
+                    summary.migrated_session_keys.append(session_key)
+                    summary.migrated_thread_ids.append(thread.id)
         return summary
 
-    def _sync_runtime_session(
+    def _sync_role_metadata(
         self,
-        source_session_key: str,
-        thread,
+        target,
+        role_id: str,
         metadata: dict[str, Any],
     ) -> None:
-        if thread.thread_kind != "network":
-            return
-        target = self._session_manager.sync_thread_session_metadata(
-            thread.id,
-            role_id=thread.role_id,
-            role_name=str(metadata.get("role_name") or thread.role_id),
-            role_prompt=str(metadata.get("role_prompt") or ""),
-            role_runtime_config=(
-                dict(metadata["role_runtime_config"])
-                if isinstance(metadata.get("role_runtime_config"), dict)
-                else None
-            ),
-            thread_id=thread.id,
-            context_channel=thread.channel,
-            context_chat_id=thread.external_thread_id,
-            transport_channel=thread.channel,
-            transport_chat_id=thread.external_thread_id,
-        )
-        self._session_manager.copy_legacy_messages_to_thread_session(
-            source_session_key,
-            target,
-            thread_id=thread.id,
-        )
+        target.metadata.setdefault("role_id", role_id)
+        for key in (
+            "thread_id",
+            "context_channel",
+            "context_chat_id",
+            "transport_channel",
+            "transport_chat_id",
+            "session_key_override",
+        ):
+            target.metadata.pop(key, None)
+        for key in ("role_name", "role_prompt", "role_runtime_config"):
+            value = metadata.get(key)
+            if value and key not in target.metadata:
+                target.metadata[key] = dict(value) if isinstance(value, dict) else value
+        self._session_manager.save(target)
+
+    def _role_deleted_at(self, role_id: str) -> str:
+        state = self._store.get_role_state(role_id)
+        if state is None:
+            return ""
+        return str(state.metadata.get("deleted_at") or "").strip()
+
+    def _resolve_bound_role(self, channel: str, chat_id: str) -> str:
+        if self._binding_resolver is None:
+            return ""
+        try:
+            return str(self._binding_resolver(channel, chat_id) or "").strip()
+        except KeyError:
+            return ""
 
     @staticmethod
     def _channel(session_key: str) -> str:
@@ -113,7 +174,7 @@ class ConversationMigrator:
         return chat_id.strip()
 
     @staticmethod
-    def _role_id_hint(session_key: str, metadata: dict[str, Any]) -> str:
+    def _role_id_hint(session_key: str) -> str:
         if str(session_key or "").startswith("role:"):
             return str(session_key).removeprefix("role:").strip()
-        return str(metadata.get("role_id") or "").strip()
+        return ""

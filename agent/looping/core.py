@@ -388,11 +388,13 @@ class AgentLoop:
                 logger.info(f"Turn cancelled for {key}")
             except Exception as e:
                 logger.error(f"处理消息出错: {e}", exc_info=True)
+                error_metadata = dict(getattr(item, "metadata", {}) or {})
                 await self.bus.publish_outbound(
                     OutboundMessage(
                         channel=item.channel,
                         chat_id=item.chat_id,
                         content=f"出错：{e}",
+                        metadata=error_metadata,
                     )
                 )
             finally:
@@ -637,6 +639,8 @@ class AgentLoop:
             )
         context = registry.context_from_metadata(metadata)
         if context is None:
+            if str(metadata.get("role_id") or "").strip() or session_key.startswith("role:"):
+                raise ValueError("角色回合缺少完整 RoleExecutionContext")
             return await self._process(
                 item,
                 session_key=session_key,
@@ -666,6 +670,10 @@ class AgentLoop:
         metadata: dict[str, object] | None = None,
     ) -> str:
         merged_metadata: dict[str, object] = dict(metadata or {})
+        role_id = str(merged_metadata.get("role_id") or "").strip()
+        if role_id and hasattr(self, "session_manager"):
+            session_key = self.session_manager.role_session_key(role_id)
+            merged_metadata["session_key_override"] = session_key
         self._ensure_direct_role_context(
             merged_metadata,
             session_key=session_key,
@@ -725,18 +733,18 @@ class AgentLoop:
         session = self.session_manager.get_or_create(session_key)
         session_metadata = session.metadata if isinstance(session.metadata, dict) else {}
         role_id = str(metadata.get("role_id") or session_metadata.get("role_id") or "").strip()
-        thread_id = str(metadata.get("thread_id") or session_metadata.get("thread_id") or "").strip()
-        if not role_id or not thread_id:
+        thread_id = str(metadata.get("thread_id") or "").strip()
+        transport_channel = str(metadata.get("transport_channel") or "").strip()
+        transport_chat_id = str(metadata.get("transport_chat_id") or "").strip()
+        if not role_id:
             return
+        if not all((thread_id, transport_channel, transport_chat_id)):
+            raise ValueError("角色直连回合缺少完整 RoleExecutionContext")
         context = registry.create_context(
             role_id=role_id,
             thread_id=thread_id,
-            transport_channel=str(
-                metadata.get("transport_channel") or session_metadata.get("transport_channel") or channel
-            ),
-            transport_chat_id=str(
-                metadata.get("transport_chat_id") or session_metadata.get("transport_chat_id") or chat_id
-            ),
+            transport_channel=transport_channel,
+            transport_chat_id=transport_chat_id,
             source=str(
                 metadata.get("role_source")
                 or metadata.get("source")

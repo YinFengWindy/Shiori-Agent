@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from proactive_v2.presence import PresenceStore
     from core.roles.relationship_runtime import RoleRelationshipRuntimeService
     from core.roles.world import RoleWorldRegistry
+    from conversation.service import ConversationService
     from session.manager import SessionManager
 
 
@@ -69,6 +70,7 @@ class SessionServices:
     session_manager: SessionManager
     presence: PresenceStore | None = None
     relationship_runtime: "RoleRelationshipRuntimeService | None" = None
+    conversation_service: "ConversationService | None" = None
 
 
 @dataclass

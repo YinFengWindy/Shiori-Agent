@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from conversation.service import ConversationService
 from session.manager import Session
 
 
@@ -11,29 +10,20 @@ class DesktopSessionPresenter:
 
     def __init__(
         self,
-        conversation_service: ConversationService,
+        conversation_service,
         relationship_runtime: Any | None = None,
     ) -> None:
         self._conversation_service = conversation_service
         self._relationship_runtime = relationship_runtime
 
     def serialize(self, session: Session) -> dict[str, Any]:
-        """Returns the desktop-compatible view of a thread runtime adapter."""
-        thread = self._conversation_service.get_thread_for_runtime(
-            session.key,
-            thread_id=str(session.metadata.get("thread_id") or ""),
-        )
+        """Returns the desktop-compatible role session snapshot."""
         return {
             "key": session.key,
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
             "last_consolidated": session.last_consolidated,
             "metadata": self._enrich_metadata(dict(session.metadata)),
-            "thread": (
-                self._conversation_service.serialize_thread(thread)
-                if thread is not None
-                else None
-            ),
             "messages": [self._serialize_message(message) for message in session.messages],
         }
 

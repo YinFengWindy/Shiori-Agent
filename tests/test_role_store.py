@@ -5,6 +5,8 @@ from pathlib import Path
 
 from datetime import datetime
 
+import pytest
+
 from bus.events import InboundMessage
 from core.roles import (
     RoleAggregateService,
@@ -823,7 +825,7 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
         ),
     )
 
-    assert routed.session_key == "thread:mira:telegram:chat-1"
+    assert routed.session_key == "role:mira"
     assert routed.metadata["role_id"] == "mira"
     assert routed.metadata["thread_id"] == "thread:mira:telegram:chat-1"
     assert routed.metadata["context_channel"] == "telegram"
@@ -835,12 +837,13 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
     )
     assert thread is not None
     assert thread.thread_kind == "network"
-    routed_session = session_manager.get_or_create("thread:mira:telegram:chat-1")
+    routed_session = session_manager.get_or_create("role:mira")
     assert routed_session.metadata["role_name"] == "Mira"
-    assert routed_session.metadata["thread_id"] == "thread:mira:telegram:chat-1"
+    assert "thread_id" not in routed_session.metadata
+    assert session_manager._store.get_session_meta("thread:mira:telegram:chat-1") is None
 
 
-def test_route_inbound_by_role_leaves_unbound_legacy_channel_untouched(tmp_path: Path):
+def test_route_inbound_by_role_rejects_unbound_channel(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
@@ -855,8 +858,5 @@ def test_route_inbound_by_role_leaves_unbound_legacy_channel_untouched(tmp_path:
         timestamp=datetime.now(),
     )
 
-    routed = route_inbound_by_role(service, original)
-
-    assert routed is original
-    assert "role_id" not in routed.metadata
-    assert "session_key_override" not in routed.metadata
+    with pytest.raises(KeyError, match="渠道未绑定角色"):
+        route_inbound_by_role(service, original)

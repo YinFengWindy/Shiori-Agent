@@ -159,13 +159,25 @@ class RoleSessionService:
         return self._session_manager.role_session_key(_clean_role_id(role_id))
 
     def open_by_role(self, role: RoleRecord) -> Session:
-        return self._session_manager.sync_role_session_metadata(
-            role.id,
-            role_name=role.name,
-            role_prompt=role.system_prompt,
-            role_runtime_config=role.runtime_config,
-            valid_illustrations=list(role.illustrations),
+        sync = getattr(self._session_manager, "sync_role_session_metadata", None)
+        if callable(sync):
+            return sync(
+                role.id,
+                role_name=role.name,
+                role_prompt=role.system_prompt,
+                role_runtime_config=role.runtime_config,
+                valid_illustrations=list(role.illustrations),
+            )
+        session = self._session_manager.get_or_create(self.derive_session_key(role.id))
+        session.metadata.update(
+            {
+                "role_id": role.id,
+                "role_name": role.name,
+                "role_prompt": role.system_prompt,
+                "role_runtime_config": dict(role.runtime_config),
+            }
         )
+        return session
 
     def load_history(self, role_id: str) -> list[dict[str, Any]]:
         session = self._session_manager.get_or_create(self.derive_session_key(role_id))
@@ -174,6 +186,7 @@ class RoleSessionService:
     def clear(self, role_id: str) -> Session:
         session = self._session_manager.get_or_create(self.derive_session_key(role_id))
         session.clear()
+        session.metadata["cleared_at"] = datetime.now().astimezone().isoformat()
         self._session_manager.save(session)
         return session
 
@@ -190,7 +203,9 @@ class RoleSessionService:
         return self.open_by_role(role) if session.metadata.get("role_name") != role.name else session
 
     def delete(self, role_id: str) -> bool:
-        return self._session_manager.delete_role_session(_clean_role_id(role_id))
+        clean_role_id = _clean_role_id(role_id)
+        self._session_manager.record_role_deleted(clean_role_id)
+        return self._session_manager.delete_role_session(clean_role_id)
 
 
 class RoleMemoryService:

@@ -22,6 +22,7 @@ from bus.events_lifecycle import (
     TurnStarted,
 )
 from core.roles import RoleStore
+from conversation.service import LegacySessionDescriptor
 from infra.channels.base import AttachmentStore
 from infra.channels.contract import ChannelContext
 
@@ -56,37 +57,6 @@ class _SessionManager:
 
     def role_session_key(self, role_id: str) -> str:
         return f"role:{role_id}"
-
-    def sync_thread_session_metadata(
-        self,
-        session_key: str,
-        *,
-        role_id: str,
-        role_name: str,
-        role_prompt: str,
-        thread_id: str,
-        role_runtime_config=None,
-        context_channel: str = "",
-        context_chat_id: str = "",
-        transport_channel: str = "",
-        transport_chat_id: str = "",
-    ):
-        session = self.get_or_create(session_key)
-        session.metadata.update(
-            {
-                "role_id": role_id,
-                "role_name": role_name,
-                "role_prompt": role_prompt,
-                "thread_id": thread_id,
-                "context_channel": context_channel,
-                "context_chat_id": context_chat_id,
-                "transport_channel": transport_channel,
-                "transport_chat_id": transport_chat_id,
-            }
-        )
-        if role_runtime_config is not None:
-            session.metadata["role_runtime_config"] = dict(role_runtime_config)
-        return session
 
     def mark_latest_assistant_delivery(
         self,
@@ -495,7 +465,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     )
     await channel._on_stop_command(stop_update, context)
     interrupt_controller.request_interrupt.assert_called_once_with(
-        session_key="thread:mira:telegram:123",
+        session_key="role:mira",
         sender="1",
         command="/stop",
     )
@@ -571,7 +541,8 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
             chat_id="123",
             content="pong",
             metadata={
-                "session_key_override": "thread:mira:telegram:123",
+                "session_key_override": "role:mira",
+                "role_id": "mira",
                 "thread_id": "thread:mira:telegram:123",
             },
         )
@@ -716,7 +687,12 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
             channel="telegram",
             chat_id="123",
             content="final",
-            metadata={"streamed_reply": True},
+            metadata={
+                "streamed_reply": True,
+                "role_id": "mira",
+                "session_key_override": "role:mira",
+                "thread_id": "thread:mira:telegram:123",
+            },
         )
     )
     assert channel._app.bot.edit_message_text.await_count >= 1
@@ -752,7 +728,12 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
             chat_id="123",
             content="final",
             thinking="分析中",
-            metadata={"streamed_reply": True},
+            metadata={
+                "streamed_reply": True,
+                "role_id": "mira",
+                "session_key_override": "role:mira",
+                "thread_id": "thread:mira:telegram:123",
+            },
         )
     )
     mod.send_thinking_block.assert_awaited_once()
@@ -780,7 +761,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     channel._on_polling_error(mod.TelegramError("warn"))
     await channel.stop()
     assert {
-        "session_key": "thread:mira:telegram:123",
+        "session_key": "role:mira",
         "thread_id": "thread:mira:telegram:123",
         "delivery_status": "sent",
         "external_message_id": "",
@@ -868,6 +849,14 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     monkeypatch.setattr(mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
     await channel.start()
     assert bus.outbound[0][0] == "qq"
+    channel._channel_hub._conversation.ensure_thread_for_session(
+        LegacySessionDescriptor(
+            session_key="qq:gqq:100",
+            role_id="mira",
+            channel="qq",
+            chat_id="gqq:100",
+        )
+    )
 
     async def _drain(coro):
         return await coro
@@ -884,16 +873,16 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert len(bus.inbound) == 2
     assert bus.inbound[0].metadata["chat_type"] == "private"
     assert bus.inbound[1].metadata["chat_type"] == "group"
-    assert bus.inbound[0].session_key == "thread:mira:qq:1"
+    assert bus.inbound[0].session_key == "role:mira"
     assert bus.inbound[0].metadata["role_id"] == "mira"
     assert bus.inbound[0].metadata["thread_id"] == "thread:mira:qq:1"
-    assert bus.inbound[1].session_key == "thread:mira:qq:gqq:100"
+    assert bus.inbound[1].session_key == "role:mira"
     assert bus.inbound[1].metadata["thread_id"] == "thread:mira:qq:gqq:100"
     assert channel._interrupt_controller.request_interrupt.call_count == 2
     assert [
         call.kwargs["session_key"]
         for call in channel._interrupt_controller.request_interrupt.call_args_list
-    ] == ["thread:mira:qq:1", "thread:mira:qq:gqq:100"]
+    ] == ["role:mira", "role:mira"]
 
     channel._run_on_bot_loop = AsyncMock(side_effect=_drain)
     sample = tmp_path / "image.bin"
@@ -908,7 +897,8 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
             chat_id="gqq:100",
             content="reply",
             metadata={
-                "session_key_override": "thread:mira:qq:gqq:100",
+                "session_key_override": "role:mira",
+                "role_id": "mira",
                 "thread_id": "thread:mira:qq:gqq:100",
             },
         )
@@ -933,7 +923,7 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     pending.close()
     await channel.stop()
     assert {
-        "session_key": "thread:mira:qq:gqq:100",
+        "session_key": "role:mira",
         "thread_id": "thread:mira:qq:gqq:100",
         "delivery_status": "sent",
         "external_message_id": "",
@@ -992,7 +982,7 @@ async def test_telegram_channel_routes_bound_inbound_to_role_session(
     await channel._on_message(update, context)
 
     assert len(bus.inbound) == 1
-    assert bus.inbound[0].session_key == "thread:mira:telegram:123"
+    assert bus.inbound[0].session_key == "role:mira"
     assert bus.inbound[0].metadata["role_id"] == "mira"
     assert bus.inbound[0].metadata["thread_id"] == "thread:mira:telegram:123"
     assert bus.inbound[0].metadata["transport_channel"] == "telegram"
@@ -1175,6 +1165,14 @@ async def test_qq_channel_records_failed_delivery_status(
         http_requester=SimpleNamespace(get=AsyncMock()),
     )
     await channel.start()
+    channel._channel_hub._conversation.ensure_thread_for_session(
+        LegacySessionDescriptor(
+            session_key="qq:1",
+            role_id="mira",
+            channel="qq",
+            chat_id="1",
+        )
+    )
 
     async def _drain(coro):
         return await coro
@@ -1192,14 +1190,15 @@ async def test_qq_channel_records_failed_delivery_status(
                 chat_id="1",
                 content="reply",
                 metadata={
-                    "session_key_override": "thread:mira:qq:1",
+                    "session_key_override": "role:mira",
+                    "role_id": "mira",
                     "thread_id": "thread:mira:qq:1",
                 },
             )
         )
 
     assert session_manager.delivery_updates[-1] == {
-        "session_key": "thread:mira:qq:1",
+        "session_key": "role:mira",
         "thread_id": "thread:mira:qq:1",
         "delivery_status": "failed",
         "external_message_id": "",

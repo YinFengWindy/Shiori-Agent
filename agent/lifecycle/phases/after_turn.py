@@ -141,6 +141,8 @@ class _BuildTurnCommittedModule:
             react_stats=dict(cast(dict[str, int], frame.slots[_REACT_STATS_SLOT])),
             extra=dict(cast(dict[str, object], frame.slots[_EXTRA_SLOT])),
             role_id=role_id,
+            request_id=str((msg.metadata or {}).get("request_id") or "").strip(),
+            thread_id=str((msg.metadata or {}).get("thread_id") or "").strip(),
         )
         return frame
 

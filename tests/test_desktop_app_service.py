@@ -9,7 +9,7 @@ from session.manager import SessionManager
 
 
 @pytest.mark.asyncio
-async def test_desktop_app_service_open_role_session_syncs_thread(
+async def test_desktop_app_service_open_role_session_ensures_formal_thread(
     tmp_path,
 ):
     role_store = RoleStore(tmp_path)
@@ -34,7 +34,7 @@ async def test_desktop_app_service_open_role_session_syncs_thread(
     opened = await service.open_role_session(aggregate.role.id)
 
     assert opened.session.key == "role:mira"
-    assert opened.session.metadata["thread_id"] == "thread:mira:desktop"
+    assert "thread_id" not in opened.session.metadata
     thread = session_manager.conversation_store.get_thread_by_legacy_session_key(
         "role:mira"
     )

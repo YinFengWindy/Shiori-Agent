@@ -64,12 +64,18 @@ class DesktopAppService:
             return session
         original_length = len(session.messages)
         original_updated_at = session.updated_at
+        message_metadata = self.build_desktop_user_message_metadata(
+            None,
+            role_id=role_id,
+            chat_id=session.key,
+        )
         session.add_message(
             "assistant",
             normalized_message,
             media=normalized_media or None,
             proactive=True,
             tools_used=["message_push"],
+            metadata=message_metadata,
         )
         try:
             await self.session_manager.save_async(session)
@@ -107,7 +113,11 @@ class DesktopAppService:
             "user",
             content,
             media=media or None,
-            metadata=self.build_desktop_user_message_metadata(metadata),
+            metadata=self.build_desktop_user_message_metadata(
+                metadata,
+                role_id=role_id,
+                chat_id=session.key,
+            ),
         )
         try:
             await self.session_manager.append_messages(session, session.messages[-1:])
@@ -131,10 +141,23 @@ class DesktopAppService:
     def build_desktop_user_message_metadata(
         self,
         metadata: dict[str, object] | None,
+        *,
+        role_id: str = "",
+        chat_id: str = "",
     ) -> dict[str, object]:
         next_metadata = dict(metadata or {})
         next_metadata.pop("persisted_user_content", None)
         next_metadata.setdefault("source", "desktop")
+        next_metadata.setdefault("sender_id", "desktop")
+        next_metadata.setdefault("chat_type", "desktop")
+        if role_id:
+            thread = self.conversation_service.ensure_desktop_thread(role_id)
+            next_metadata["role_id"] = role_id
+            next_metadata["thread_id"] = thread.id
+            next_metadata.setdefault("context_channel", "desktop")
+            next_metadata.setdefault("context_chat_id", chat_id or f"role:{role_id}")
+            next_metadata.setdefault("transport_channel", "desktop")
+            next_metadata.setdefault("transport_chat_id", chat_id or f"role:{role_id}")
         return next_metadata
 
     def normalize_desktop_session_key(self, chat_id: str) -> str:
@@ -152,19 +175,8 @@ class DesktopAppService:
         return clean_key.removeprefix("role:").strip()
 
     def sync_desktop_session_thread(self, session: Session, *, role_id: str) -> None:
-        thread = self.conversation_service.sync_session_messages_to_thread(
-            session.key,
-            role_id=role_id,
-            channel="desktop",
-            chat_id="self",
-            created_at=session.created_at.isoformat(),
-            updated_at=session.updated_at.isoformat(),
-            metadata=dict(session.metadata),
-        )
-        session.metadata.setdefault("thread_id", thread.id)
-        for message in session.messages:
-            if not str(message.get("thread_id") or "").strip():
-                message["thread_id"] = thread.id
+        thread = self.conversation_service.ensure_desktop_thread(role_id)
+        self.conversation_service.project_thread(thread)
 
     async def _apply_post_persist_runtime_effects(
         self,

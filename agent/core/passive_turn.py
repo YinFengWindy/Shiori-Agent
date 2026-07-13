@@ -632,13 +632,15 @@ class PassiveTurnPipeline:
         outbound: OutboundMessage,
     ) -> OutboundMessage:
         if state.dispatch_outbound:
+            metadata = dict(state.msg.metadata or {})
+            metadata.update(outbound.metadata or {})
             _ = await self._outbound_port.dispatch(
                 OutboundDispatch(
                     channel=outbound.channel,
                     chat_id=outbound.chat_id,
                     content=outbound.content,
                     thinking=outbound.thinking,
-                    metadata=outbound.metadata,
+                    metadata=metadata,
                     media=outbound.media,
                 )
             )

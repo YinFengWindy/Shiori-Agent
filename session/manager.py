@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from conversation.projector import ConversationStateProjector
 from conversation.store import ConversationStore
 from agent.prompting import (
     PromptSectionRender,
@@ -23,6 +24,15 @@ _TOOL_RESULT_CHAR_BUDGET = 10000
 _PROACTIVE_HISTORY_CHAR_BUDGET = 360
 _PROACTIVE_META_HISTORY_CHAR_BUDGET = 1200
 _ROLE_SESSION_PREFIX = "role:"
+
+
+def _timestamp_at_or_before(value: str, cutoff: str) -> bool:
+    """Compares migration timestamps while tolerating legacy malformed values."""
+
+    try:
+        return datetime.fromisoformat(value) <= datetime.fromisoformat(cutoff)
+    except (TypeError, ValueError):
+        return bool(value and value <= cutoff)
 
 
 def _truncate_tool_result(content: object) -> str:
@@ -310,6 +320,7 @@ class SessionManager:
             connection=self._store._conn,
             lock=self._store._lock,
         )
+        self._conversation_projector = ConversationStateProjector(self.conversation_store)
         self._cache: dict[str, Session] = {}
         self._write_locks: dict[str, asyncio.Lock] = {}
 
@@ -339,6 +350,21 @@ class SessionManager:
             raise ValueError("role_id 不能为空")
         return f"{_ROLE_SESSION_PREFIX}{clean_role_id}"
 
+    def record_role_deleted(self, role_id: str) -> None:
+        """Records a role tombstone so legacy transport history cannot resurrect it."""
+
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id 不能为空")
+        state = self.conversation_store.get_role_state(clean_role_id)
+        metadata = dict(state.metadata) if state is not None else {}
+        metadata["deleted_at"] = datetime.now().astimezone().isoformat()
+        self.conversation_store.upsert_role_state(
+            clean_role_id,
+            summary=state.summary if state is not None else "",
+            metadata=metadata,
+        )
+
     def open_role_session(
         self,
         role_id: str,
@@ -348,6 +374,7 @@ class SessionManager:
     ) -> Session:
         session_key = self.role_session_key(role_id)
         session = self.get_or_create(session_key)
+        self._clear_shared_session_transport_metadata(session)
         if session.metadata.get("role_id") != role_id:
             session.metadata["role_id"] = role_id
         if role_name:
@@ -386,6 +413,7 @@ class SessionManager:
         valid_illustrations: list[str] | None = None,
     ) -> Session:
         session = self.get_or_create(self.role_session_key(role_id))
+        self._clear_shared_session_transport_metadata(session)
         session.metadata["role_id"] = role_id
         session.metadata["role_name"] = role_name
         session.metadata["role_prompt"] = role_prompt
@@ -398,53 +426,36 @@ class SessionManager:
         self.save(session)
         return session
 
-    def sync_thread_session_metadata(
-        self,
-        session_key: str,
-        *,
-        role_id: str,
-        role_name: str,
-        role_prompt: str,
-        thread_id: str,
-        role_runtime_config: dict[str, Any] | None = None,
-        context_channel: str = "",
-        context_chat_id: str = "",
-        transport_channel: str = "",
-        transport_chat_id: str = "",
-    ) -> Session:
-        clean_session_key = str(session_key).strip()
-        if not clean_session_key:
-            raise ValueError("session_key 不能为空")
-        session = self.get_or_create(clean_session_key)
-        session.metadata["role_id"] = role_id
-        session.metadata["role_name"] = role_name
-        session.metadata["role_prompt"] = role_prompt
-        session.metadata["thread_id"] = thread_id
-        if role_runtime_config is not None:
-            session.metadata["role_runtime_config"] = dict(role_runtime_config)
-        if context_channel:
-            session.metadata["context_channel"] = context_channel
-        if context_chat_id:
-            session.metadata["context_chat_id"] = context_chat_id
-        if transport_channel:
-            session.metadata["transport_channel"] = transport_channel
-        if transport_chat_id:
-            session.metadata["transport_chat_id"] = transport_chat_id
-        self.save(session)
-        return session
+    @staticmethod
+    def _clear_shared_session_transport_metadata(session: Session) -> None:
+        """Keeps mutable channel targets out of the shared role Session metadata."""
 
-    def copy_legacy_messages_to_thread_session(
+        for key in (
+            "thread_id",
+            "context_channel",
+            "context_chat_id",
+            "transport_channel",
+            "transport_chat_id",
+            "session_key_override",
+        ):
+            session.metadata.pop(key, None)
+
+    def merge_legacy_messages_into_role_session(
         self,
         source_session_key: str,
         target_session: Session,
         *,
         thread_id: str,
+        cleared_at: str = "",
     ) -> int:
-        """Copies legacy history into a network thread runtime session once."""
+        """Merges one legacy transport history into the authoritative role session."""
+
         clean_source_key = str(source_session_key or "").strip()
         clean_thread_id = str(thread_id or "").strip()
         if not clean_source_key or not clean_thread_id:
             raise ValueError("legacy session key 和 thread_id 不能为空")
+        if not target_session.key.startswith(_ROLE_SESSION_PREFIX):
+            raise ValueError("legacy transport history 只能合并到 role session")
 
         copied_source_ids = {
             str(message.get("migration_source_message_id") or "").strip()
@@ -454,6 +465,9 @@ class SessionManager:
         for source in self._store.fetch_session_messages(clean_source_key):
             source_id = str(source.get("id") or "").strip()
             if not source_id or source_id in copied_source_ids:
+                continue
+            timestamp = str(source.get("timestamp") or "").strip()
+            if cleared_at and _timestamp_at_or_before(timestamp, cleared_at):
                 continue
             copied = {
                 key: value
@@ -469,8 +483,53 @@ class SessionManager:
 
         if not copies:
             return 0
-        target_session.messages[0:0] = copies
-        self.save(target_session)
+
+        messages = list(target_session.messages) + copies
+        messages.sort(key=lambda message: str(message.get("timestamp") or ""))
+        rows: list[dict[str, Any]] = []
+        for seq, message in enumerate(messages):
+            timestamp = str(
+                message.get("timestamp") or datetime.now().astimezone().isoformat()
+            )
+            message_id = f"{target_session.key}:{seq}"
+            message.update(
+                {
+                    "id": message_id,
+                    "session_key": target_session.key,
+                    "seq": seq,
+                    "timestamp": timestamp,
+                }
+            )
+            rows.append(
+                {
+                    "id": message_id,
+                    "seq": seq,
+                    "role": str(message.get("role") or "assistant"),
+                    "content": message.get("content", ""),
+                    "timestamp": timestamp,
+                    "tool_chain": message.get("tool_chain"),
+                    "extra": self._extract_extra(message),
+                    "thread_id": str(message.get("thread_id") or ""),
+                    "sender_role": str(message.get("sender_role") or ""),
+                    "media": list(message.get("media") or []),
+                    "external_message_id": str(
+                        message.get("external_message_id") or ""
+                    ),
+                    "delivery_status": str(message.get("delivery_status") or ""),
+                }
+            )
+
+        target_session.messages = messages
+        target_session.last_consolidated = 0
+        target_session.updated_at = datetime.now()
+        self._store.replace_session_messages(
+            target_session.key,
+            rows=rows,
+            updated_at=target_session.updated_at.isoformat(),
+            last_consolidated=target_session.last_consolidated,
+            next_seq=len(rows),
+        )
+        self._cache[target_session.key] = target_session
         return len(copies)
 
     def normalize_role_session_display_state(
@@ -727,6 +786,7 @@ class SessionManager:
             last_consolidated=session.last_consolidated,
             metadata=session.metadata,
         )
+        self._project_session_threads(session)
         self._cache[session.key] = session
 
     async def save_async(self, session: Session) -> None:
@@ -750,7 +810,21 @@ class SessionManager:
                 last_consolidated=session.last_consolidated,
                 metadata=session.metadata,
             )
+            self._project_session_threads(session)
             self._cache[session.key] = session
+
+    def _project_session_threads(self, session: Session) -> None:
+        """Refreshes formal thread projections from immutable message source fields."""
+
+        thread_ids = {
+            str(message.get("thread_id") or "").strip()
+            for message in session.messages
+            if str(message.get("thread_id") or "").strip()
+        }
+        for thread_id in thread_ids:
+            thread = self.conversation_store.get_thread(thread_id)
+            if thread is not None:
+                self._conversation_projector.project_thread(thread)
 
     def mark_latest_assistant_delivery(
         self,

@@ -60,6 +60,47 @@ async def test_registry_serializes_work_in_the_same_thread(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_registry_serializes_different_transport_threads_for_one_role(tmp_path):
+    repository = RoleRepository(RoleStore(tmp_path))
+    role = repository.create_role(role_id="mira", name="Mira", system_prompt="test")
+    registry = RoleWorldRegistry(repository)
+    events: list[str] = []
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+
+    async def first() -> str:
+        events.append("first:start")
+        first_started.set()
+        await release_first.wait()
+        events.append("first:end")
+        return "first"
+
+    async def second() -> str:
+        events.append("second")
+        return "second"
+
+    first_task = asyncio.create_task(
+        registry.dispatch_thread(
+            _context(role, thread_id="thread:mira:telegram:1"),
+            first,
+        )
+    )
+    await first_started.wait()
+    second_task = asyncio.create_task(
+        registry.dispatch_thread(
+            _context(role, thread_id="thread:mira:qq:2"),
+            second,
+        )
+    )
+    await asyncio.sleep(0)
+    assert events == ["first:start"]
+
+    release_first.set()
+    await asyncio.gather(first_task, second_task)
+    assert events == ["first:start", "first:end", "second"]
+
+
+@pytest.mark.asyncio
 async def test_registry_allows_different_roles_to_execute_independently(tmp_path):
     repository = RoleRepository(RoleStore(tmp_path))
     mira = repository.create_role(role_id="mira", name="Mira", system_prompt="test")

@@ -59,6 +59,7 @@ class DesktopBridgeService:
         self.session_manager = session_manager
         self.agent_loop = agent_loop
         self.event_bus = event_bus
+        self.event_bus.on(TurnCommitted, self._on_turn_committed)
         self.config = config
         self._event_listeners: set[
             Callable[[dict[str, Any]], Awaitable[None] | None]
@@ -115,6 +116,22 @@ class DesktopBridgeService:
         )
         if push_tool is not None:
             self.register_desktop_push_channel(push_tool)
+
+    async def _on_turn_committed(self, event: TurnCommitted) -> None:
+        """Broadcasts external role turns after their shared session is committed."""
+
+        role_id = str(event.role_id or "").strip()
+        if not role_id or event.channel == "desktop":
+            return
+        session_key = self.role_service.sessions.derive_session_key(role_id)
+        session = self.session_manager.get_or_create(session_key)
+        request_id = str(event.request_id or "").strip()
+        if not request_id:
+            request_id = f"turn:{role_id}:{event.thread_id}:{event.timestamp or ''}"
+        await self._broadcast_session_updated(
+            request_id=request_id,
+            session=session,
+        )
 
     def add_event_listener(
         self,
@@ -419,6 +436,8 @@ class DesktopBridgeService:
                 inbound_content = content
                 persisted_user_content = content
                 metadata: dict[str, object] = {}
+                metadata["request_id"] = request_id
+                metadata["delivery_key"] = request_id
                 if client_message_id:
                     metadata["client_message_id"] = client_message_id
                 if reply_to_message_id:
@@ -433,6 +452,11 @@ class DesktopBridgeService:
                         reply_text=reply_to_content,
                         reply_sender=reply_to_sender,
                     )
+                metadata = self.app_service.build_desktop_user_message_metadata(
+                    metadata,
+                    role_id=aggregate.role.id,
+                    chat_id=session.key,
+                )
                 await self._persist_desktop_user_message(
                     session=session,
                     role_id=aggregate.role.id,

@@ -58,7 +58,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
         assert stream_events is True
         assert media == ["D:\\files\\scene.png"]
         session = session_manager.get_or_create(session_key)
-        session.add_message("assistant", "hello")
+        session.add_message("assistant", "hello", metadata=dict(kwargs["metadata"]))
         await session_manager.save_async(session)
         await event_bus.observe(
             StreamDeltaReady(
@@ -114,8 +114,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
         emit_event=emitted.append,
     )
     assert opened.payload["session"]["key"] == f"role:{role_id}"
-    assert opened.payload["session"]["thread"]["id"] == f"thread:{role_id}:desktop"
-    assert opened.payload["session"]["thread"]["kind"] == "desktop"
+    assert "thread" not in opened.payload["session"]
     assert opened.payload["session"]["created_at"]
     assert opened.payload["session"]["updated_at"]
     assert opened.payload["session"]["last_consolidated"] == 0
@@ -137,7 +136,7 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
 
     assert response.error is None
     assert response.payload["session"]["key"] == f"role:{role_id}"
-    assert response.payload["session"]["thread"]["id"] == f"thread:{role_id}:desktop"
+    assert "thread" not in response.payload["session"]
     assert [item["role"] for item in response.payload["session"]["messages"]] == [
         "user"
     ]
@@ -234,10 +233,20 @@ async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path:
         "再展开一点"
     )
     assert seen["metadata"] == {
+        "request_id": "1",
+        "delivery_key": "1",
         "reply_to_message_id": "message-1",
         "reply_to_sender": "Mira",
         "reply_to_content": "她沉默了很久。",
-        "persisted_user_content": "再展开一点",
+        "source": "desktop",
+        "sender_id": "desktop",
+        "chat_type": "desktop",
+        "role_id": "mira",
+        "thread_id": "thread:mira:desktop",
+        "context_channel": "desktop",
+        "context_chat_id": "role:mira",
+        "transport_channel": "desktop",
+        "transport_chat_id": "role:mira",
     }
     assert seen["omit_user_turn"] is True
     session = session_manager.get_or_create("role:mira")
@@ -399,7 +408,7 @@ async def test_desktop_bridge_chat_listeners_are_removed_after_send(tmp_path: Pa
     session_manager = SessionManager(tmp_path)
     event_bus = EventBus()
 
-    async def _process_direct(**kwargs) -> str:
+    async def _process_direct(content: str, **kwargs) -> str:
         session = session_manager.get_or_create("role:mira")
         session.add_message("user", "hi")
         session.add_message("assistant", "hello")
@@ -437,10 +446,10 @@ async def test_desktop_bridge_chat_listeners_are_removed_after_send(tmp_path: Pa
 
     await _wait_until(
         lambda: event_bus._handlers.get(StreamDeltaReady, []) == []
-        and event_bus._handlers.get(TurnCommitted, []) == []
+        and len(event_bus._handlers.get(TurnCommitted, [])) == 1
     )
     assert event_bus._handlers.get(StreamDeltaReady, []) == []
-    assert event_bus._handlers.get(TurnCommitted, []) == []
+    assert len(event_bus._handlers.get(TurnCommitted, [])) == 1
 
 
 @pytest.mark.asyncio
@@ -728,7 +737,7 @@ async def test_desktop_bridge_emits_session_updated_for_background_desktop_push(
     assert "已发送" in result
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
-    assert emitted[0]["payload"]["session"]["thread"]["id"] == "thread:mira:desktop"
+    assert "thread" not in emitted[0]["payload"]["session"]
     messages = emitted[0]["payload"]["session"]["messages"]
     assert messages[-1]["content"] == "主动消息"
     assert messages[-1]["metadata"]["proactive"] is True

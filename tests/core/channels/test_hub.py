@@ -11,7 +11,7 @@ from core.roles import RoleAggregateService, RoleStore
 from session.manager import SessionManager
 
 
-def test_channel_hub_routes_bound_inbound_to_thread_session(tmp_path: Path) -> None:
+def test_channel_hub_routes_bound_inbound_to_role_session(tmp_path: Path) -> None:
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
@@ -37,13 +37,23 @@ def test_channel_hub_routes_bound_inbound_to_thread_session(tmp_path: Path) -> N
         )
     )
 
-    assert routed.session_key == "thread:mira:telegram:123"
+    assert routed.session_key == "role:mira"
     assert routed.metadata["thread_id"] == "thread:mira:telegram:123"
-    thread_session = session_manager.get_or_create("thread:mira:telegram:123")
-    assert thread_session.metadata["role_name"] == "Mira"
+    assert routed.metadata["sender_id"] == "u1"
+    assert routed.metadata["chat_type"] == "private"
+    role_session = session_manager.get_or_create("role:mira")
+    assert role_session.metadata["role_name"] == "Mira"
+    assert not {
+        "thread_id",
+        "context_channel",
+        "context_chat_id",
+        "transport_channel",
+        "transport_chat_id",
+    } & role_session.metadata.keys()
+    assert session_manager._store.get_session_meta("thread:mira:telegram:123") is None
 
 
-def test_channel_hub_marks_delivery_by_thread_session(tmp_path: Path) -> None:
+def test_channel_hub_marks_delivery_by_role_session(tmp_path: Path) -> None:
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
@@ -56,18 +66,16 @@ def test_channel_hub_marks_delivery_by_thread_session(tmp_path: Path) -> None:
         description="bound role",
         system_prompt="you are mira",
     ).role
-    session = session_manager.sync_thread_session_metadata(
-        "thread:mira:telegram:123",
-        role_id=role.id,
-        role_name=role.name,
-        role_prompt=role.system_prompt,
-        thread_id="thread:mira:telegram:123",
-        role_runtime_config=role.runtime_config,
-        context_channel="telegram",
-        context_chat_id="123",
-        transport_channel="telegram",
-        transport_chat_id="123",
+    _ = service.bindings.bind("telegram", "123", role.id)
+    routed = ChannelHub(service).route_inbound(
+        InboundMessage(
+            channel="telegram",
+            sender="u1",
+            chat_id="123",
+            content="hello",
+        )
     )
+    session = session_manager.get_or_create(routed.session_key)
     session.add_message(
         "assistant",
         "reply",
@@ -82,8 +90,9 @@ def test_channel_hub_marks_delivery_by_thread_session(tmp_path: Path) -> None:
             chat_id="123",
             content="reply",
             metadata={
-                "session_key_override": "thread:mira:telegram:123",
-                "thread_id": "thread:mira:telegram:123",
+                "role_id": "mira",
+                "session_key_override": "role:mira",
+                "thread_id": str(routed.metadata["thread_id"]),
             },
         ),
         default_channel="telegram",
@@ -144,7 +153,7 @@ def test_channel_hub_marks_archived_external_messages_as_duplicates(
     assert duplicate.metadata["conversation_duplicate"] is True
 
 
-def test_channel_hub_resolves_control_actions_to_thread_session(tmp_path: Path) -> None:
+def test_channel_hub_resolves_control_actions_to_role_session(tmp_path: Path) -> None:
     session_manager = SessionManager(tmp_path)
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
@@ -168,7 +177,7 @@ def test_channel_hub_resolves_control_actions_to_thread_session(tmp_path: Path) 
         )
     )
 
-    assert hub.resolve_runtime_session_key("telegram", "123") == "thread:mira:telegram:123"
+    assert hub.resolve_runtime_session_key("telegram", "123") == "role:mira"
 
 
 def test_channel_hub_rejects_unbound_control_actions(tmp_path: Path) -> None:
@@ -209,6 +218,7 @@ def test_channel_hub_attaches_complete_role_execution_context(tmp_path: Path) ->
     )
 
     assert routed.metadata["role_id"] == "mira"
+    assert routed.session_key == "role:mira"
     assert routed.metadata["thread_id"] == "thread:mira:telegram:123"
     assert routed.metadata["role_config_version"]
     assert routed.metadata["request_id"] == "message-1"

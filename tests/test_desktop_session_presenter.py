@@ -20,5 +20,6 @@ def test_session_presenter_serializes_formal_thread(tmp_path) -> None:
 
     payload = DesktopSessionPresenter(conversation).serialize(session)
 
-    assert payload["thread"]["id"] == thread.id
+    assert "thread" not in payload
+    assert thread.id == "thread:mira:desktop"
     assert payload["messages"][0]["content"] == "hello"

@@ -31,6 +31,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.turns.outbound import PushToolOutboundPort
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
+from conversation.service import ConversationService
 from core.common.strategy_trace import build_strategy_trace_envelope
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from core.roles import RoleAggregateService, RoleStore
@@ -129,6 +130,7 @@ class ProactiveLoop:
                     session_manager=self._sessions,
                     presence=self._presence,
                     relationship_runtime=self._relationship_runtime,
+                    conversation_service=ConversationService(self._sessions),
                 ),
                 outbound=PushToolOutboundPort(
                     self._push,

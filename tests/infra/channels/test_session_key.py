@@ -2,7 +2,23 @@ from bus.events import OutboundMessage
 from infra.channels.session_key import resolve_outbound_session_key
 
 
-def test_resolve_outbound_session_key_prefers_thread_runtime_key() -> None:
+def test_resolve_outbound_session_key_prefers_role_runtime_key() -> None:
+    message = OutboundMessage(
+        channel="telegram",
+        chat_id="42",
+        content="reply",
+        metadata={
+            "session_key_override": "role:mira",
+            "role_id": "mira",
+        },
+    )
+
+    assert resolve_outbound_session_key(message, default_channel="telegram") == (
+        "role:mira"
+    )
+
+
+def test_resolve_outbound_session_key_does_not_use_thread_runtime_key() -> None:
     message = OutboundMessage(
         channel="telegram",
         chat_id="42",
@@ -11,7 +27,7 @@ def test_resolve_outbound_session_key_prefers_thread_runtime_key() -> None:
     )
 
     assert resolve_outbound_session_key(message, default_channel="telegram") == (
-        "thread:mira:telegram:42"
+        "telegram:42"
     )
 
 

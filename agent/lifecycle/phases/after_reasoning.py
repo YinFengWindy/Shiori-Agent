@@ -82,10 +82,6 @@ def _copy_conversation_message_fields(
     session: "Session",
 ) -> dict[str, Any]:
     source = dict(metadata or {})
-    session_metadata = getattr(session, "metadata", None)
-    if isinstance(session_metadata, dict):
-        for field in _CONVERSATION_MESSAGE_FIELDS:
-            source.setdefault(field, session_metadata.get(field))
     copied: dict[str, Any] = {}
     for field in _CONVERSATION_MESSAGE_FIELDS:
         value = source.get(field)
