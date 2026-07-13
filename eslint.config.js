@@ -8,7 +8,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["plugins/**/*.ts", "plugins/**/*.tsx", "types/**/*.d.ts"],
+    files: ["desktop/src/**/*.ts", "desktop/src/**/*.tsx"],
     languageOptions: {
       ecmaVersion: 2021,
       globals: globals.browser,

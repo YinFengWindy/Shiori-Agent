@@ -132,7 +132,7 @@ export class DesktopBridgeClient extends EventEmitter {
         let parsed: BridgeResponse | BridgeEvent;
         try {
           parsed = JSON.parse(line) as BridgeResponse | BridgeEvent;
-        } catch (error) {
+        } catch {
           const message = `bridge emitted invalid JSON: ${line}`;
           this.lastError = message;
           this.stderrChunks.push(message);

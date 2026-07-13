@@ -102,14 +102,14 @@ declare module "electron" {
       channel: string,
       listener: (
         event: IpcMainInvokeEvent,
-        ...args: any[]
+        ...args: unknown[]
       ) => Promise<unknown> | unknown,
     ): void;
     on(
       channel: string,
       listener: (
         event: IpcMainInvokeEvent & { sender: BrowserWindowInstance["webContents"] },
-        ...args: any[]
+        ...args: unknown[]
       ) => void,
     ): void;
   };

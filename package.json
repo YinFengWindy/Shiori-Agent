@@ -17,8 +17,8 @@
     "desktop:start": "npm --prefix desktop run start:built",
     "desktop:typecheck": "npm --prefix desktop run typecheck",
     "dev": "npm run desktop:dev",
-    "lint": "eslint \"plugins/**/*.ts\" \"types/**/*.d.ts\"",
-    "typecheck": "tsc --noEmit"
+    "lint": "eslint desktop/src",
+    "typecheck": "npm --prefix desktop run typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
