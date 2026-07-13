@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import logging
+import base64
 import json
+import logging
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
@@ -90,7 +92,9 @@ async def test_qqbot_channel_registers_and_stops_cleanly(monkeypatch: pytest.Mon
     await channel.stop()
 
     assert bus.outbound[0][0] == "qqbot"
-    assert push_tool.registrations == [("qqbot", ["stream_text", "text"])]
+    assert push_tool.registrations == [
+        ("qqbot", ["image", "stream_text", "text"])
+    ]
 
 
 @pytest.mark.asyncio
@@ -195,6 +199,91 @@ async def test_qqbot_send_uses_official_markdown_api() -> None:
         {"markdown": {"content": "回复"}, "msg_type": 2, "msg_seq": call.args[2]["msg_seq"]},
     )
     assert call.args[3] == "access-token"
+
+
+@pytest.mark.asyncio
+async def test_qqbot_send_image_uploads_public_url_then_sends_media() -> None:
+    channel = QQBotChannel("app", "secret")
+    channel._get_access_token = AsyncMock(return_value="access-token")
+    channel._api_request = AsyncMock(
+        side_effect=[{"file_info": "uploaded-file"}, {}]
+    )
+
+    await channel.send_image("c2c:user-1", "https://example.com/sticker.gif")
+
+    upload_call, send_call = channel._api_request.await_args_list
+    assert upload_call.args == (
+        "POST",
+        "/v2/users/user-1/files",
+        {
+            "file_type": 1,
+            "url": "https://example.com/sticker.gif",
+            "srv_send_msg": False,
+        },
+        "access-token",
+    )
+    assert send_call.args[:3] == (
+        "POST",
+        "/v2/users/user-1/messages",
+        {
+            "msg_type": 7,
+            "media": {"file_info": "uploaded-file"},
+            "msg_seq": send_call.args[2]["msg_seq"],
+        },
+    )
+    assert send_call.args[3] == "access-token"
+
+
+@pytest.mark.asyncio
+async def test_qqbot_send_image_uploads_local_gif_without_converting(
+    tmp_path: Path,
+) -> None:
+    raw = b"GIF89a" + b"animated-sticker-data"
+    image = tmp_path / "sticker.gif"
+    image.write_bytes(raw)
+    channel = QQBotChannel("app", "secret")
+    channel._get_access_token = AsyncMock(return_value="access-token")
+    channel._api_request = AsyncMock(
+        side_effect=[{"file_info": "gif-file"}, {}]
+    )
+
+    await channel.send_image("c2c:user-1", str(image))
+
+    upload_body = channel._api_request.await_args_list[0].args[2]
+    assert upload_body == {
+        "file_type": 1,
+        "file_data": base64.b64encode(raw).decode("ascii"),
+        "srv_send_msg": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_qqbot_send_image_rejects_unsupported_local_file(
+    tmp_path: Path,
+) -> None:
+    image = tmp_path / "not-an-image.txt"
+    image.write_text("not an image", encoding="utf-8")
+    channel = QQBotChannel("app", "secret")
+    channel._get_access_token = AsyncMock(return_value="access-token")
+    channel._api_request = AsyncMock()
+
+    with pytest.raises(ValueError, match="仅支持 PNG、JPEG、WebP 和 GIF"):
+        await channel.send_image("c2c:user-1", str(image))
+
+    channel._get_access_token.assert_not_awaited()
+    channel._api_request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_qqbot_send_image_requires_file_info_from_upload() -> None:
+    channel = QQBotChannel("app", "secret")
+    channel._get_access_token = AsyncMock(return_value="access-token")
+    channel._api_request = AsyncMock(return_value={})
+
+    with pytest.raises(RuntimeError, match="缺少 file_info"):
+        await channel.send_image("c2c:user-1", "https://example.com/image.png")
+
+    channel._api_request.assert_awaited_once()
 
 
 @pytest.mark.asyncio

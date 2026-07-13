@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
@@ -18,6 +20,7 @@ from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import StreamDeltaReady, TurnStarted
 from bus.queue import MessageBus
 from core.channels import ChannelHub
+from core.common.media import detect_image_mime_from_header
 from infra.channels.contract import ChannelContext
 from infra.channels.session_key import resolve_outbound_session_key
 
@@ -33,6 +36,12 @@ _LIVE_STREAM_MIN_CHARS = 120
 _LIVE_STREAM_MIN_INTERVAL_S = 1.5
 _LIVE_MAX_FAILURES = 3
 _REPLY_LIVE_TAIL = 900
+_SUPPORTED_IMAGE_MIME_TYPES = {
+    "image/gif",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
 
 
 @dataclass
@@ -104,6 +113,7 @@ class QQBotChannel:
             self.name,
             text=self.send_proactive,
             stream_text=self.send_stream,
+            image=self.send_image,
         )
         self._stopped.clear()
         self._task = asyncio.create_task(self._gateway_loop(), name="qqbot_gateway")
@@ -312,6 +322,54 @@ class QQBotChannel:
             self._build_message_body(message),
             token,
         )
+
+    async def send_image(self, chat_id: str, image: str) -> None:
+        """Uploads and sends a PNG, JPEG, WebP, or animated GIF to C2C."""
+
+        kind, target = self._parse_chat_id(chat_id)
+        if kind != "c2c":
+            raise ValueError("当前 QQBotChannel 仅支持私聊 c2c")
+        upload_body = self._build_image_upload_body(image)
+        token = await self._get_access_token()
+        upload = await self._api_request(
+            "POST",
+            f"/v2/users/{target}/files",
+            upload_body,
+            token,
+        )
+        file_info = str(upload.get("file_info") or "").strip()
+        if not file_info:
+            raise RuntimeError("QQBot 图片上传响应缺少 file_info")
+        await self._api_request(
+            "POST",
+            f"/v2/users/{target}/messages",
+            {
+                "msg_type": 7,
+                "media": {"file_info": file_info},
+                "msg_seq": self._next_msg_seq(),
+            },
+            token,
+        )
+
+    def _build_image_upload_body(self, image: str) -> dict[str, Any]:
+        source = str(image or "").strip()
+        if not source:
+            raise ValueError("QQBot 图片来源不能为空")
+        if source.startswith(("http://", "https://")):
+            return {"file_type": 1, "url": source, "srv_send_msg": False}
+
+        path = Path(source).expanduser()
+        if not path.is_file():
+            raise FileNotFoundError(f"QQBot 图片文件不存在: {path}")
+        raw = path.read_bytes()
+        mime = detect_image_mime_from_header(raw[:4096])
+        if mime not in _SUPPORTED_IMAGE_MIME_TYPES:
+            raise ValueError("QQBot 图片仅支持 PNG、JPEG、WebP 和 GIF")
+        return {
+            "file_type": 1,
+            "file_data": base64.b64encode(raw).decode("ascii"),
+            "srv_send_msg": False,
+        }
 
     async def send_stream(self, chat_id: str, message: str) -> None:
         """Sends a complete proactive response using the official stream API."""

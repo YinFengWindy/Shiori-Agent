@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.tools.base import Tool, ToolResult
+from core.common.media import detect_image_mime_from_header
 
 logger = logging.getLogger(__name__)
 _FILE_MUTATION_LOCKS: dict[str, asyncio.Lock] = {}
@@ -171,17 +172,7 @@ def _detect_image_mime_from_header(head: bytes) -> str | None:
 
 
 def _detect_supported_image_mime_from_header(head: bytes) -> str | None:
-    if head.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if head.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if head.startswith((b"GIF87a", b"GIF89a")):
-        return "image/gif"
-    if head.startswith(b"BM"):
-        return "image/bmp"
-    if head.startswith(b"RIFF") and head[8:12] == b"WEBP":
-        return "image/webp"
-    return None
+    return detect_image_mime_from_header(head)
 
 
 def _looks_binary(head: bytes) -> bool:

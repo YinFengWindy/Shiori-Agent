@@ -8,10 +8,8 @@ from typing import Any
 
 from agent.provider import LLMProvider
 from agent.tools.base import Tool
-from agent.tools.filesystem import (
-    _detect_supported_image_mime_from_header,
-    _resolve_path,
-)
+from agent.tools.filesystem import _resolve_path
+from core.common.media import detect_image_mime_from_header
 
 _VL_MAX_FILE_BYTES = 20 * 1024 * 1024  # 20MB 原始文件上限
 _VL_MAX_DATA_URI_BYTES = 8 * 1024 * 1024  # 8MB data URI 上限（base64 编码后）
@@ -32,7 +30,7 @@ def _encode_image_data_uri(file_path: Path) -> str:
         )
 
     raw = file_path.read_bytes()
-    mime = _detect_supported_image_mime_from_header(raw[:4096])
+    mime = detect_image_mime_from_header(raw[:4096])
     if mime is None:
         raise ValueError("不支持的图片格式。仅支持 PNG、JPEG、GIF、BMP、WebP。")
 

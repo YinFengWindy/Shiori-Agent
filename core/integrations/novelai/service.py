@@ -10,10 +10,8 @@ from typing import Any
 
 import httpx
 
-from agent.tools.filesystem import (
-    _detect_supported_image_mime_from_header,
-    _resolve_path,
-)
+from agent.tools.filesystem import _resolve_path
+from core.common.media import detect_image_mime_from_header
 from core.integrations.novelai.client import NovelAIClient
 from core.integrations.novelai.models import (
     GenerateImageRequest,
@@ -328,7 +326,7 @@ class NovelAIService:
         if not file_path.exists() or not file_path.is_file():
             raise FileNotFoundError(f"输入图片不存在: {clean_path}")
         raw = file_path.read_bytes()
-        mime = _detect_supported_image_mime_from_header(raw[:4096])
+        mime = detect_image_mime_from_header(raw[:4096])
         if mime is None:
             raise ValueError("输入图片格式非法，仅支持 PNG、JPEG、GIF、BMP、WebP")
         return str(file_path), base64.b64encode(raw).decode("utf-8")
@@ -365,7 +363,7 @@ class NovelAIService:
         raise ValueError("上游未返回可用图片")
 
     def _detect_output_suffix(self, body: bytes) -> str:
-        mime = _detect_supported_image_mime_from_header(body[:4096])
+        mime = detect_image_mime_from_header(body[:4096])
         if mime is None:
             raise ValueError("上游响应不是支持的图片格式")
         suffix = _SUPPORTED_OUTPUT_SUFFIX.get(mime)
