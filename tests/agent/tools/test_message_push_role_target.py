@@ -115,3 +115,23 @@ async def test_message_push_does_not_treat_qq_as_qqbot() -> None:
     )
     assert result == "文本已发送"
     assert sent == [("c2c:user-1", "hello")]
+
+
+@pytest.mark.asyncio
+async def test_message_push_sends_text_when_channel_only_registers_stream_sender() -> None:
+    sent: list[tuple[str, str]] = []
+    tool = MessagePushTool()
+
+    async def send_stream(chat_id: str, message: str) -> None:
+        sent.append((chat_id, message))
+
+    tool.register_channel("qqbot", stream_text=send_stream)
+
+    result = await tool.execute(
+        channel="qqbot",
+        chat_id="c2c:user-1",
+        message="主动推送",
+    )
+
+    assert result == "文本已发送"
+    assert sent == [("c2c:user-1", "主动推送")]

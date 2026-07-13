@@ -127,7 +127,7 @@ class MessagePushTool(Tool):
 
         results = []
         try:
-            if message and "text" in senders:
+            if message and ("text" in senders or "stream_text" in senders):
                 sender_name = "stream_text" if "stream_text" in senders else "text"
                 await senders[sender_name](chat_id, message)
                 preview = message[:60] + "..." if len(message) > 60 else message
