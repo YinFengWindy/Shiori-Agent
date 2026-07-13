@@ -12,7 +12,6 @@ def test_render_channels_omits_removed_qqbot_section() -> None:
     rendered = _render_channels(
         WizardAnswers(
             tg_token="telegram-token",
-            tg_allow_from=["alice"],
             proactive_enabled=True,
             proactive_channel="telegram",
             proactive_chat_id="123",
@@ -38,7 +37,6 @@ def test_render_config_omits_removed_proactive_agent_keys() -> None:
             api_key="key",
             base_url="https://example.invalid/v1",
             tg_token="telegram-token",
-            tg_allow_from=["alice"],
             proactive_enabled=True,
             proactive_channel="telegram",
             proactive_chat_id="123",

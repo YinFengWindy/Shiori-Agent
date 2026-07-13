@@ -341,41 +341,6 @@ class DesktopBridgeService:
                         "session_deleted": session_deleted,
                     },
                 )
-            if method == "roles.bindings.list":
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "bindings": [
-                            binding.to_dict()
-                            for binding in self.role_service.bindings.list_bindings()
-                        ],
-                    },
-                )
-            if method == "roles.bindings.replace":
-                raw_bindings = payload.get("bindings")
-                if not isinstance(raw_bindings, list):
-                    return self._error(
-                        request_id, method, "invalid_request", "bindings 必须是数组"
-                    )
-                bindings = self.role_service.bindings.replace_bindings(
-                    [
-                        {
-                            "channel": str(item.get("channel") or ""),
-                            "chat_id": str(item.get("chat_id") or ""),
-                            "role_id": str(item.get("role_id") or ""),
-                        }
-                        for item in raw_bindings
-                        if isinstance(item, dict)
-                    ]
-                )
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "bindings": [binding.to_dict() for binding in bindings],
-                    },
-                )
             if method == "session.openByRole":
                 role_id = str(payload.get("role_id") or "").strip()
                 aggregate = await self.app_service.open_role_session(role_id)

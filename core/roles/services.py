@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from core.common.channel_identifiers import chat_ids_equal, normalize_chat_id
 from session.manager import Session, SessionManager
 
 from .store import RoleRecord, RoleStore
@@ -25,7 +26,7 @@ def _clean_role_id(role_id: str) -> str:
 
 def _binding_key(channel: str, chat_id: str) -> str:
     clean_channel = str(channel).strip()
-    clean_chat_id = str(chat_id).strip()
+    clean_chat_id = normalize_chat_id(clean_channel, chat_id)
     if not clean_channel:
         raise ValueError("channel 不能为空")
     if not clean_chat_id:
@@ -418,7 +419,7 @@ class RoleBindingService:
             for role in self._repository.list_roles():
                 if any(
                     binding.channel == str(channel).strip()
-                    and binding.chat_id == str(chat_id).strip()
+                    and chat_ids_equal(binding.channel, binding.chat_id, chat_id)
                     for binding in role.channel_bindings
                 ):
                     return RoleChannelBinding(
@@ -437,19 +438,24 @@ class RoleBindingService:
 
     def bind(self, channel: str, chat_id: str, role_id: str) -> RoleChannelBinding:
         role = self._repository.get_required(role_id)
-        clean_channel, clean_chat_id = str(channel).strip(), str(chat_id).strip()
+        clean_channel = str(channel).strip()
+        clean_chat_id = normalize_chat_id(clean_channel, chat_id)
         _ = _binding_key(clean_channel, clean_chat_id)
         next_bindings = [
             binding.to_dict()
             for binding in role.channel_bindings
-            if (binding.channel, binding.chat_id) != (clean_channel, clean_chat_id)
+            if not (
+                binding.channel == clean_channel
+                and chat_ids_equal(clean_channel, binding.chat_id, clean_chat_id)
+            )
         ]
         next_bindings.append({"channel": clean_channel, "chat_id": clean_chat_id, "allow_from": []})
         updated = self._repository.update_role(role.id, channel_bindings=next_bindings)
         return RoleChannelBinding(clean_channel, clean_chat_id, updated.id, updated.created_at, updated.updated_at)
 
     def unbind(self, channel: str, chat_id: str) -> bool:
-        clean_channel, clean_chat_id = str(channel).strip(), str(chat_id).strip()
+        clean_channel = str(channel).strip()
+        clean_chat_id = normalize_chat_id(clean_channel, chat_id)
         _ = _binding_key(clean_channel, clean_chat_id)
         binding = self.get_binding(clean_channel, clean_chat_id)
         if binding is None:
@@ -459,7 +465,10 @@ class RoleBindingService:
             role.id,
             channel_bindings=[
                 item.to_dict() for item in role.channel_bindings
-                if (item.channel, item.chat_id) != (clean_channel, clean_chat_id)
+                if not (
+                    item.channel == clean_channel
+                    and chat_ids_equal(clean_channel, item.chat_id, clean_chat_id)
+                )
             ],
         )
         return True
@@ -473,19 +482,6 @@ class RoleBindingService:
             for role in self._repository.list_roles()
             for binding in role.channel_bindings
         ]
-
-    def replace_bindings(
-        self,
-        bindings: list[RoleChannelBinding | dict[str, Any]],
-    ) -> list[RoleChannelBinding]:
-        grouped: dict[str, list[dict[str, Any]]] = {}
-        for item in bindings:
-            binding = item if isinstance(item, RoleChannelBinding) else RoleChannelBinding.from_dict(item)
-            grouped.setdefault(binding.role_id, []).append({"channel": binding.channel, "chat_id": binding.chat_id, "allow_from": []})
-        for role in self._repository.list_roles():
-            self._repository.update_role(role.id, channel_bindings=grouped.get(role.id, []))
-        return self.list_bindings()
-
 
 class RoleAggregateService:
     """角色聚合业务入口，供桌面、旧渠道和主动能力统一调用。"""

@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core.common.channel_identifiers import chat_ids_equal
 from infra.persistence.json_store import atomic_save_json, load_json
 
 _MANIFEST_VERSION = 2
@@ -430,7 +431,7 @@ class RoleStore:
                     self._ensure_bindings_unique(roles, role.id, role.channel_bindings)
                     if role.proactive.enabled and not any(
                         binding.channel == role.proactive.target_channel
-                        and binding.chat_id == role.proactive.target_chat_id
+                        and chat_ids_equal(binding.channel, binding.chat_id, role.proactive.target_chat_id)
                         for binding in role.channel_bindings
                     ):
                         role.proactive = RoleProactiveConfig()
@@ -446,7 +447,7 @@ class RoleStore:
                         raise ValueError("启用主动推送时必须显式选择一个目标渠道")
                     if next_proactive.target_channel and next_proactive.target_chat_id and not any(
                         binding.channel == next_proactive.target_channel
-                        and binding.chat_id == next_proactive.target_chat_id
+                        and chat_ids_equal(binding.channel, binding.chat_id, next_proactive.target_chat_id)
                         for binding in role.channel_bindings
                     ):
                         raise ValueError("主动推送目标必须是当前角色已绑定的渠道")
@@ -604,9 +605,13 @@ class RoleStore:
             item if isinstance(item, RoleChannelBindingConfig) else RoleChannelBindingConfig.from_dict(item)
             for item in bindings
         ]
-        keys = [(item.channel, item.chat_id) for item in next_bindings]
-        if len(keys) != len(set(keys)):
-            raise ValueError("同一角色不能重复绑定相同渠道会话")
+        for index, item in enumerate(next_bindings):
+            if any(
+                other.channel == item.channel
+                and chat_ids_equal(item.channel, other.chat_id, item.chat_id)
+                for other in next_bindings[:index]
+            ):
+                raise ValueError("同一角色不能重复绑定相同渠道会话")
         return next_bindings
 
     def _normalize_asset_categories(
@@ -664,7 +669,15 @@ class RoleStore:
             for binding in other.channel_bindings
         }
         conflict = next(
-            ((binding.channel, binding.chat_id) for binding in bindings if (binding.channel, binding.chat_id) in assigned),
+            (
+                (binding.channel, binding.chat_id)
+                for binding in bindings
+                if any(
+                    item_channel == binding.channel
+                    and chat_ids_equal(binding.channel, item_chat_id, binding.chat_id)
+                    for item_channel, item_chat_id in assigned
+                )
+            ),
             None,
         )
         if conflict is not None:

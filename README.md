@@ -112,7 +112,6 @@ base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 [channels.telegram]
 token = ""
-allow_from = ["your_username"]
 ```
 
 补充说明：
@@ -158,6 +157,7 @@ uv run python main.py bridge
 - 创建、编辑、删除角色
 - 为角色维护系统提示词、头像、立绘和描述
 - 为不同聊天渠道绑定默认角色
+- 渠道会话和允许对象在角色详情中配置，运行时按角色绑定路由
 - 让角色拥有各自隔离的记忆目录
 
 ### 桌面端设置面

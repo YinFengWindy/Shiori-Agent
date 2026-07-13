@@ -279,7 +279,7 @@ def test_role_store_keeps_channel_access_and_proactive_target_on_the_role(tmp_pa
         "mira",
         channel_bindings=[
             {"channel": "telegram", "chat_id": "42", "allow_from": ["alice", "42"]},
-            {"channel": "qq", "chat_id": "gqq:7", "allow_from": []},
+            {"channel": "qq", "chat_id": "7", "allow_from": []},
         ],
         proactive={"enabled": True, "target_channel": "qq", "target_chat_id": "gqq:7"},
     )
@@ -289,6 +289,24 @@ def test_role_store_keeps_channel_access_and_proactive_target_on_the_role(tmp_pa
     luna = store.get_role("luna")
     assert luna is not None
     assert luna.channel_bindings == []
+
+
+def test_role_store_rejects_duplicate_qq_group_binding_formats(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+
+    try:
+        store.update_role(
+            "mira",
+            channel_bindings=[
+                {"channel": "qq", "chat_id": "7", "allow_from": []},
+                {"channel": "qq", "chat_id": "gqq:7", "allow_from": []},
+            ],
+        )
+    except ValueError as exc:
+        assert "重复绑定" in str(exc)
+    else:
+        raise AssertionError("QQ 裸群号和 gqq: 前缀不应重复绑定")
 
 
 def test_role_store_rejects_proactive_target_outside_its_bindings(tmp_path: Path):

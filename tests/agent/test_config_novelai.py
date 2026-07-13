@@ -80,3 +80,39 @@ role_id = ""
     config = load_config(config_path)
 
     assert config.proactive.enabled is False
+
+
+def test_load_config_keeps_channel_permissions_in_role_bindings(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+[llm]
+provider = "openai"
+
+[llm.main]
+model = "gpt-4.1"
+api_key = "sk-test"
+base_url = "https://api.openai.com/v1"
+
+[channels.telegram]
+token = "telegram-token"
+allow_from = ["legacy-user"]
+
+[channels.qq]
+bot_uin = "10001"
+allow_from = ["legacy-user"]
+
+[[channels.qq.groups]]
+group_id = "123"
+allow_from = ["legacy-user"]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.channels.telegram is not None
+    assert config.channels.qq is not None
+    assert not hasattr(config.channels.telegram, "allow_from")
+    assert not hasattr(config.channels.qq, "allow_from")
+    assert not hasattr(config.channels.qq, "groups")

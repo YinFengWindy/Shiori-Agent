@@ -1,7 +1,4 @@
 import type {
-  SettingsBindingsSnapshot,
-  SettingsChannelGroup,
-  SettingsChannelRoleBinding,
   SettingsFormData,
   SettingsSnapshot,
 } from "../../../src/shared.js";
@@ -192,9 +189,6 @@ export type AppMainView =
   | { kind: "settings" };
 
 export type {
-  SettingsBindingsSnapshot,
-  SettingsChannelGroup,
-  SettingsChannelRoleBinding,
   SettingsFormData,
   SettingsSnapshot,
 };

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from bus.events import InboundMessage, OutboundMessage
+from core.common.channel_identifiers import chat_ids_equal
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
@@ -118,7 +119,7 @@ class ChannelHub:
         role = self._service.repository.get_required(binding.role_id)
         config = next(
             item for item in role.channel_bindings
-            if item.channel == channel and item.chat_id == chat_id
+            if item.channel == channel and chat_ids_equal(channel, item.chat_id, chat_id)
         )
         if not config.allow_from:
             return True

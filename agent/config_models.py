@@ -11,22 +11,12 @@ from proactive_v2.config import ProactiveConfig
 @dataclass
 class TelegramChannelConfig:
     token: str
-    allow_from: list[str] = field(default_factory=list)
     channel_name: str = "telegram"
-
-
-@dataclass
-class QQGroupConfig:
-    group_id: str
-    allow_from: list[str] = field(default_factory=list)
-    require_at: bool = True
 
 
 @dataclass
 class QQChannelConfig:
     bot_uin: str
-    allow_from: list[str] = field(default_factory=list)
-    groups: list[QQGroupConfig] = field(default_factory=list)
     websocket_open_timeout_seconds: float = 5.0
 
 
@@ -112,7 +102,6 @@ __all__ = [
     "MemoryEmbeddingConfig",
     "NovelAISettings",
     "QQChannelConfig",
-    "QQGroupConfig",
     "TelegramChannelConfig",
     "WiringConfig",
 ]

@@ -18,10 +18,16 @@ from __future__ import annotations
 
 import re
 import logging
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from dataclasses import dataclass, field
+from typing import Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    from agent.config_models import QQGroupConfig
+@dataclass(frozen=True)
+class QQGroupFilterConfig:
+    """Runtime-only QQ group filter settings owned by the channel layer."""
+
+    group_id: str
+    allow_from: list[str] = field(default_factory=list)
+    require_at: bool = True
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +39,7 @@ _CQ_AT_RE = re.compile(r"\[CQ:at,qq=(\d+)[^\]]*\]")
 class GroupMessageFilter(Protocol):
     """群消息过滤协议，返回 True 表示将消息传给 agent。"""
 
-    async def should_process(self, event, group_cfg: QQGroupConfig) -> bool: ...
+    async def should_process(self, event, group_cfg: QQGroupFilterConfig) -> bool: ...
 
 
 class DefaultGroupFilter:
@@ -46,7 +52,7 @@ class DefaultGroupFilter:
     def __init__(self, bot_uin: str) -> None:
         self._bot_uin = bot_uin
 
-    async def should_process(self, event, group_cfg: QQGroupConfig) -> bool:
+    async def should_process(self, event, group_cfg: QQGroupFilterConfig) -> bool:
         user_id = str(event.user_id)
 
         if group_cfg.allow_from and user_id not in group_cfg.allow_from:

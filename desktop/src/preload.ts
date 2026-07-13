@@ -34,12 +34,6 @@ const api: DesktopApi = {
   saveSettings(formData) {
     return ipcRenderer.invoke("desktop:settings-save", formData) as Promise<import("./shared.js").SaveSettingsResult>;
   },
-  readChannelRoleBindings() {
-    return ipcRenderer.invoke("desktop:channel-role-bindings-read") as Promise<import("./shared.js").SettingsBindingsSnapshot>;
-  },
-  saveChannelRoleBindings(bindings) {
-    return ipcRenderer.invoke("desktop:channel-role-bindings-save", bindings) as Promise<import("./shared.js").SettingsBindingsSnapshot>;
-  },
   windowControl(action: WindowControlAction) {
     return ipcRenderer.invoke("desktop:window-control", action) as Promise<void>;
   },

@@ -23,18 +23,6 @@ export type BridgeEvent = {
   payload: Record<string, unknown>;
 };
 
-export type SettingsChannelGroup = {
-  groupId: string;
-  allowFrom: string[];
-  requireAt: boolean;
-};
-
-export type SettingsChannelRoleBinding = {
-  channel: string;
-  chatId: string;
-  roleId: string;
-};
-
 export type SettingsFormData = {
   models: {
     provider: string;
@@ -56,11 +44,7 @@ export type SettingsFormData = {
   };
   channels: {
     telegramToken: string;
-    telegramAllowFrom: string[];
     qqBotUin: string;
-    qqAllowFrom: string[];
-    qqGroups: SettingsChannelGroup[];
-    roleBindings: SettingsChannelRoleBinding[];
   };
   memory: {
     enabled: boolean;
@@ -105,10 +89,6 @@ export type SettingsFormData = {
 export type SettingsSnapshot = {
   configPath: string;
   formData: SettingsFormData;
-};
-
-export type SettingsBindingsSnapshot = {
-  bindings: SettingsChannelRoleBinding[];
 };
 
 export type SaveSettingsResult = {
@@ -162,10 +142,6 @@ export type DesktopApi = {
   }>;
   readSettings(): Promise<SettingsSnapshot>;
   saveSettings(formData: SettingsFormData): Promise<SaveSettingsResult>;
-  readChannelRoleBindings(): Promise<SettingsBindingsSnapshot>;
-  saveChannelRoleBindings(
-    bindings: SettingsChannelRoleBinding[],
-  ): Promise<SettingsBindingsSnapshot>;
   /** Controls the custom frameless Electron window chrome. */
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */

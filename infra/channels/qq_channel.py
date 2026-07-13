@@ -25,7 +25,6 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from agent.config_models import QQGroupConfig
 from agent.looping.interrupt import InterruptController
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
@@ -36,12 +35,14 @@ from bus.events_lifecycle import (
 )
 from bus.queue import MessageBus
 from core.channels import ChannelHub
+from core.common.channel_identifiers import normalize_qq_group_chat_id
 from core.common.workspace import resolve_ncatbot_dir
 from infra.channels.base import AttachmentStore, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
 from infra.channels.group_filter import (
     DefaultGroupFilter,
     GroupMessageFilter,
+    QQGroupFilterConfig,
     strip_at_segments,
 )
 from infra.channels.session_key import resolve_outbound_session_key
@@ -304,7 +305,7 @@ class QQChannel:
         bus: MessageBus,
         session_manager: SessionManager,
         allow_from: list[str] | None = None,
-        groups: list[QQGroupConfig] | None = None,
+        groups: list[QQGroupFilterConfig] | None = None,
         websocket_open_timeout_seconds: float = 5.0,
         group_filter: GroupMessageFilter | None = None,
         http_requester: HttpRequester | None = None,
@@ -338,8 +339,8 @@ class QQChannel:
             metadata_key="user_id",
         )
 
-        # group_id → QQGroupConfig
-        self._groups: dict[str, QQGroupConfig] = {g.group_id: g for g in (groups or [])}
+        # group_id → QQGroupFilterConfig
+        self._groups: dict[str, QQGroupFilterConfig] = {g.group_id: g for g in (groups or [])}
 
         # 消息过滤器，默认使用 DefaultGroupFilter
         self._group_filter: GroupMessageFilter = group_filter or DefaultGroupFilter(
@@ -431,11 +432,11 @@ class QQChannel:
 
             group_cfg = self._groups.get(group_id)
             if group_cfg is None:
-                chat_id = f"{_GROUP_PREFIX}{group_id}"
+                chat_id = normalize_qq_group_chat_id(group_id)
                 if self._channel_hub is None or not self._channel_hub.has_binding(_CHANNEL, chat_id):
                     logger.debug(f"[qq] 忽略未绑定群  group_id={group_id}")
                     return
-                group_cfg = QQGroupConfig(group_id=group_id, require_at=True)
+                group_cfg = QQGroupFilterConfig(group_id=group_id, require_at=True)
 
             # 过滤判断（同步包装异步 filter，在 bot loop 里执行）
             future = asyncio.run_coroutine_threadsafe(
@@ -575,7 +576,7 @@ class QQChannel:
         img_urls: list[str] | None = None,
     ) -> None:
         """群聊入站：chat_id = gqq:{group_id}，session 按群共享"""
-        chat_id = f"{_GROUP_PREFIX}{group_id}"
+        chat_id = normalize_qq_group_chat_id(group_id)
         session = self._session_manager.get_or_create(f"{_CHANNEL}:{chat_id}")
         if "group_id" not in session.metadata:
             session.metadata["group_id"] = group_id
@@ -615,7 +616,7 @@ class QQChannel:
         await self._bus.publish_inbound(message)
 
     async def _handle_stop_group(self, group_id: str, user_id: str) -> None:
-        chat_id = f"{_GROUP_PREFIX}{group_id}"
+        chat_id = normalize_qq_group_chat_id(group_id)
         if self._interrupt_controller is None:
             await self.send(chat_id, "当前未启用中断功能。")
             return

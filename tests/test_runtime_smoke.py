@@ -16,7 +16,6 @@ from agent.config import (
     ChannelsConfig,
     Config,
     QQChannelConfig,
-    QQGroupConfig,
     TelegramChannelConfig,
     load_config,
 )
@@ -309,12 +308,8 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
         api_key="k",
         system_prompt="s",
         channels=ChannelsConfig(
-            telegram=TelegramChannelConfig(token="tg-token", allow_from=["1"]),
-            qq=QQChannelConfig(
-                bot_uin="10001",
-                allow_from=["2"],
-                groups=[QQGroupConfig(group_id="3")],
-            ),
+            telegram=TelegramChannelConfig(token="tg-token"),
+            qq=QQChannelConfig(bot_uin="10001"),
         ),
     )
     resources = SharedHttpResources()
@@ -480,12 +475,8 @@ async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
         api_key="k",
         system_prompt="s",
         channels=ChannelsConfig(
-            telegram=TelegramChannelConfig(token="tg-token", allow_from=["1"]),
-            qq=QQChannelConfig(
-                bot_uin="10001",
-                allow_from=["2"],
-                groups=[QQGroupConfig(group_id="3")],
-            ),
+            telegram=TelegramChannelConfig(token="tg-token"),
+            qq=QQChannelConfig(bot_uin="10001"),
         ),
     )
     resources = SharedHttpResources()

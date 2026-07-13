@@ -3,9 +3,6 @@ import { resolve } from "node:path";
 
 import type {
   SaveSettingsResult,
-  SettingsBindingsSnapshot,
-  SettingsChannelGroup,
-  SettingsChannelRoleBinding,
   SettingsFormData,
   SettingsSnapshot,
 } from "./shared.js";
@@ -23,27 +20,10 @@ type BridgeHealthChecker = () => Promise<{
 
 const configPath = resolve(import.meta.dirname, "..", "..", "config.toml");
 
-function splitList(value: string | string[] | undefined): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => String(item).trim())
-      .filter(Boolean);
-  }
-  if (!value) return [];
-  return String(value)
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function asArray<T>(value: unknown, mapper: (item: unknown) => T): T[] {
-  return Array.isArray(value) ? value.map(mapper) : [];
 }
 
 function parseTomlValue(raw: string): unknown {
@@ -145,18 +125,6 @@ function renderPluginSection(name: string, value: Record<string, unknown>): stri
   return lines.join("\n");
 }
 
-function sanitizeChannelRoleBindings(
-  bindings: SettingsChannelRoleBinding[],
-): SettingsChannelRoleBinding[] {
-  return bindings
-    .map((binding) => ({
-      channel: String(binding.channel ?? "").trim(),
-      chatId: String(binding.chatId ?? "").trim(),
-      roleId: String(binding.roleId ?? "").trim(),
-    }))
-    .filter((binding) => binding.channel && binding.chatId && binding.roleId);
-}
-
 export function loadSettingsData(): SettingsSnapshot {
   const content = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
   const parsed = parseToml(content);
@@ -203,20 +171,7 @@ export function loadSettingsData(): SettingsSnapshot {
       },
       channels: {
         telegramToken: String(telegram.token ?? ""),
-        telegramAllowFrom: splitList(
-          telegram.allow_from as string[] | undefined,
-        ),
         qqBotUin: String(qq.bot_uin ?? ""),
-        qqAllowFrom: splitList(qq.allow_from as string[] | undefined),
-        qqGroups: asArray(qq.groups, (item) => {
-          const group = asRecord(item);
-          return {
-            groupId: String(group.group_id ?? ""),
-            allowFrom: splitList(group.allow_from as string[] | undefined),
-            requireAt: Boolean(group.require_at ?? true),
-          } satisfies SettingsChannelGroup;
-        }),
-        roleBindings: [],
       },
       memory: {
         enabled: Boolean(memory.enabled),
@@ -279,19 +234,6 @@ export function loadSettingsData(): SettingsSnapshot {
 }
 
 function renderSettingsToml(formData: SettingsFormData): string {
-  const qqGroupBlocks = formData.channels.qqGroups
-    .filter((group) => group.groupId.trim())
-    .map((group) =>
-      [
-        "[[channels.qq.groups]]",
-        `group_id = ${quote(group.groupId.trim())}`,
-        `allow_from = ${renderStringArray(group.allowFrom)}`,
-        `require_at = ${group.requireAt ? "true" : "false"}`,
-        "",
-      ].join("\n"),
-    )
-    .join("\n");
-
   const outputDimensionality = formData.memory.outputDimensionality.trim();
 
   return [
@@ -349,15 +291,12 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "",
     "[channels.telegram]",
     `token = ${quote(formData.channels.telegramToken)}`,
-    `allow_from = ${renderStringArray(formData.channels.telegramAllowFrom)}`,
     'channel_name = "telegram"',
     "",
     "[channels.qq]",
     `bot_uin = ${quote(formData.channels.qqBotUin)}`,
-    `allow_from = ${renderStringArray(formData.channels.qqAllowFrom)}`,
     "websocket_open_timeout_seconds = 5",
     "",
-    qqGroupBlocks,
     "[memory]",
     `enabled = ${formData.memory.enabled ? "true" : "false"}`,
     `engine = ${quote(formData.memory.engine)}`,
@@ -460,13 +399,5 @@ export async function saveSettings(
     ok: restart.ok && health.ok,
     restart,
     health,
-  };
-}
-
-export function loadChannelRoleBindings(
-  bindings: SettingsChannelRoleBinding[],
-): SettingsBindingsSnapshot {
-  return {
-    bindings: sanitizeChannelRoleBindings(bindings),
   };
 }

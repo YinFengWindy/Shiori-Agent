@@ -21,7 +21,6 @@ from agent.config_models import (
     MemoryEmbeddingConfig,
     NovelAISettings,
     QQChannelConfig,
-    QQGroupConfig,
     TelegramChannelConfig,
     WiringConfig,
 )
@@ -152,9 +151,6 @@ def _load_channels_config(data: dict) -> ChannelsConfig:
         if bool(tg.get("enabled", True)) and token:
             telegram = TelegramChannelConfig(
                 token=token,
-                allow_from=[
-                    str(u) for u in tg.get("allow_from", tg.get("allowFrom", []))
-                ],
                 channel_name=str(tg.get("channel_name", "telegram")),
             )
 
@@ -162,26 +158,8 @@ def _load_channels_config(data: dict) -> ChannelsConfig:
     if qq_data := channels_data.get("qq"):
         bot_uin = _normalize_optional_config_text(str(qq_data.get("bot_uin", "")))
         if bool(qq_data.get("enabled", True)) and bot_uin:
-            groups = [
-                QQGroupConfig(
-                    group_id=str(
-                        g["group_id"] if "group_id" in g else g["groupId"]
-                    ),
-                    allow_from=[
-                        str(u)
-                        for u in g.get("allow_from", g.get("allowFrom", []))
-                    ],
-                    require_at=g.get("require_at", g.get("requireAt", True)),
-                )
-                for g in qq_data.get("groups", [])
-            ]
             qq = QQChannelConfig(
                 bot_uin=bot_uin,
-                allow_from=[
-                    str(u)
-                    for u in qq_data.get("allow_from", qq_data.get("allowFrom", []))
-                ],
-                groups=groups,
                 websocket_open_timeout_seconds=float(
                     qq_data.get("websocket_open_timeout_seconds", 5.0)
                 ),
@@ -360,7 +338,6 @@ __all__ = [
     "MemoryConfig",
     "MemoryEmbeddingConfig",
     "QQChannelConfig",
-    "QQGroupConfig",
     "TelegramChannelConfig",
     "_validated_timezone",
     "load_config",

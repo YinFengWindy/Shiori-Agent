@@ -10,11 +10,8 @@ import {
   inputClass,
   textareaClass,
 } from "../shared/styles";
-import { DeleteIcon, PlusIcon, ResetIcon, SaveIcon } from "../shared/icons";
+import { ResetIcon, SaveIcon } from "../shared/icons";
 import type {
-  RoleRecord,
-  SettingsChannelGroup,
-  SettingsChannelRoleBinding,
   SettingsFormData,
   SettingsSnapshot,
 } from "../shared/types";
@@ -51,49 +48,9 @@ export const settingsToolbarClass = "border-b border-[#E8EBF0] bg-white px-3 py-
 /** Responsive spacing for the scrollable settings content. */
 export const settingsContentClass = "relative scrollbar-soft overflow-y-auto bg-white px-3 py-5 sm:px-5 lg:px-7 lg:py-7";
 
-function joinLines(values: string[]): string {
-  return values.join("\n");
-}
-
-function splitLines(value: string): string[] {
-  return value
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function parseNumber(value: string, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function getBindingChatIdMeta(channel: string): { label: string; placeholder: string; hint: string } {
-  switch (channel) {
-    case "desktop":
-      return {
-        label: "Desktop Session",
-        placeholder: "自动使用 role:<role_id>",
-        hint: "桌面端会把主动消息直接写入该角色会话，不需要手填 chat_id。",
-      };
-    case "telegram":
-      return {
-        label: "Telegram Chat ID",
-        placeholder: "例如 123456789", 
-        hint: "",
-      };
-    case "qq":
-      return {
-        label: "QQ Chat ID",
-        placeholder: "例如好友 QQ 号或群号",
-        hint: "",
-      };
-    default:
-      return {
-        label: "Chat ID",
-        placeholder: "输入 transport chat_id",
-        hint: "填入该渠道实际使用的 chat_id。",
-      };
-  }
 }
 
 const proactiveProfileOptions: Array<{ value: string; label: string }> = [
@@ -138,23 +95,6 @@ function ToggleField({
   );
 }
 
-function CompactToggleField({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-[#E6E9EE] bg-white px-3.5 py-3">
-      <span className="text-sm font-medium text-[#20242A]">{label}</span>
-      <SettingsToggleCard compact checked={checked} ariaLabel={label} onChange={onChange} />
-    </div>
-  );
-}
-
 function SecretInput({
   value,
   onChange,
@@ -188,55 +128,6 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return <section className="grid">{children}</section>;
-}
-
-function EditorCard({
-  title,
-  onRemove,
-  children,
-}: {
-  title: string;
-  onRemove: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-3 rounded-[22px] bg-[#FBFBFC] px-2 py-1">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-medium text-[#20242A]">{title}</div>
-        <button
-          className="grid h-8 w-8 place-items-center rounded-full border border-transparent text-[#C16E4E] transition hover:bg-white focus:outline-none"
-          type="button"
-          aria-label={`删除${title}`}
-          onClick={onRemove}
-        >
-          <DeleteIcon className="h-[14px] w-[14px] fill-current" />
-        </button>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function AddListAction({
-  label,
-  onAdd,
-}: {
-  label: string;
-  onAdd: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-md bg-[#F3F5F7] px-5 py-3">
-      <span className="text-sm text-[#5B616A]">{label}</span>
-      <button
-        className="grid h-11 w-11 place-items-center rounded-md border border-[#D6DCE3] bg-white text-[#5B616A] transition hover:bg-[#EEF2F6] focus:outline-none"
-        type="button"
-        aria-label={label}
-        onClick={onAdd}
-      >
-        <PlusIcon className="h-[18px] w-[18px] fill-current" />
-      </button>
-    </div>
-  );
 }
 
 const settingsSubsections: Record<SettingsSectionId, Array<{ id: string; label: string }>> = {
@@ -280,7 +171,6 @@ function createInitialSubsectionState(): Record<SettingsSectionId, string> {
 export function SettingsPage({ bridgeReady, search, section, onMetaChange }: SettingsPageProps) {
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
   const [draft, setDraft] = useState<SettingsFormData | null>(null);
-  const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [loadError, setLoadError] = useState("");
   const [savePhase, setSavePhase] = useState<Exclude<SavePhase, "dirty">>("idle");
   const [statusMessage, setStatusMessage] = useState("");
@@ -302,7 +192,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
       }
       setSnapshot(loaded.snapshot);
       setDraft(cloneSettings(loaded.snapshot.formData));
-      setRoles(loaded.roles);
       setLoadError("");
       setSavePhase("idle");
       setStatusMessage("");
@@ -366,21 +255,14 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     setSavePhase("saving");
     setStatusMessage("正在写入 config.toml...");
     try {
-      const result = await saveSettingsPageData(window.miraDesktop, draft, snapshot);
+      const result = await saveSettingsPageData(window.miraDesktop, draft);
       setSnapshot(result.snapshot);
       setDraft(result.nextDraft);
       if (!result.saveResult.restart.ok) {
         setSavePhase("restart-failed");
         setStatusMessage(
-          result.bindingsError
-            ? `配置已保存，但 Bridge 重启失败：${result.saveResult.restart.lastError || "unknown error"}；${result.bindingsError}`
-            : `配置已保存，但 Bridge 重启失败：${result.saveResult.restart.lastError || "unknown error"}`,
+          `配置已保存，但 Bridge 重启失败：${result.saveResult.restart.lastError || "unknown error"}`,
         );
-        return;
-      }
-      if (result.bindingsError) {
-        setSavePhase("error");
-        setStatusMessage(`配置已保存，但频道角色绑定保存失败：${result.bindingsError}`);
         return;
       }
       if (result.saveResult.health.ok) {
@@ -751,64 +633,5 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
         </div>
       </div>
     </section>
-  );
-}
-
-function GroupEditor({
-  group,
-  onChange,
-  onRemove,
-}: {
-  group: SettingsChannelGroup;
-  onChange: (next: SettingsChannelGroup) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <EditorCard title="QQ 群组" onRemove={onRemove}>
-      <div className="grid gap-3">
-        <input className={cx(inputClass, "bg-white")} value={group.groupId} onChange={(event) => onChange({ ...group, groupId: event.target.value })} placeholder="群组 ID" />
-        <textarea className={cx(textareaClass, "min-h-16 bg-white")} value={joinLines(group.allowFrom)} onChange={(event) => onChange({ ...group, allowFrom: splitLines(event.target.value) })} placeholder="每行一个允许来源" />
-        <div className="grid gap-3">
-          <CompactToggleField label="require_at" checked={group.requireAt} onChange={(checked) => onChange({ ...group, requireAt: checked })} />
-        </div>
-      </div>
-    </EditorCard>
-  );
-}
-
-function ChannelRoleBindingEditor({
-  channel,
-  binding,
-  roles,
-  onChange,
-  onRemove,
-}: {
-  channel: SettingsChannelRoleBinding["channel"];
-  binding: SettingsChannelRoleBinding;
-  roles: RoleRecord[];
-  onChange: (next: SettingsChannelRoleBinding) => void;
-  onRemove: () => void;
-}) {
-  const chatIdMeta = getBindingChatIdMeta(channel);
-
-  return (
-    <EditorCard title="渠道角色绑定" onRemove={onRemove}>
-      <div className="grid gap-3">
-        <div className="grid gap-1.5">
-          <div className="text-xs font-medium text-[#4A4F57]">{chatIdMeta.label}</div>
-          <input className={cx(inputClass, "bg-white")} value={binding.chatId} onChange={(event) => onChange({ ...binding, channel, chatId: event.target.value })} placeholder={chatIdMeta.placeholder} />
-          <div className="text-[12px] leading-5 text-[#7B7F87]">{chatIdMeta.hint}</div>
-        </div>
-        <div className="grid gap-1.5">
-          <div className="text-xs font-medium text-[#4A4F57]">角色</div>
-          <select className={cx(inputClass, "bg-white")} value={binding.roleId} onChange={(event) => onChange({ ...binding, channel, roleId: event.target.value })}>
-            <option value="">选择角色</option>
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>{role.name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-    </EditorCard>
   );
 }

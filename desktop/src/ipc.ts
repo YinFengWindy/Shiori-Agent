@@ -5,8 +5,8 @@ import type { IpcMainInvokeEvent } from "electron";
 import { logDesktopDiagnostic } from "./diagnostics.js";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
 import { runBridgeSmoke } from "./smoke.js";
-import { loadChannelRoleBindings, loadSettingsData, saveSettings } from "./settings.js";
-import type { RendererDiagnosticPayload, SettingsChannelRoleBinding, SettingsFormData } from "./shared.js";
+import { loadSettingsData, saveSettings } from "./settings.js";
+import type { RendererDiagnosticPayload, SettingsFormData } from "./shared.js";
 import type { WindowControlAction } from "./shared.js";
 
 type RegisterDesktopIpcOptions = {
@@ -104,48 +104,6 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
           message: health.error?.message ?? "ok",
         };
       },
-    );
-  });
-  ipcMain.handle("desktop:channel-role-bindings-read", async () => {
-    const response = await bridge.invoke({
-      method: "roles.bindings.list",
-      payload: {},
-    });
-    if (response.error) {
-      throw new Error(response.error.message);
-    }
-    const bindings = Array.isArray(response.payload.bindings) ? response.payload.bindings as Array<Record<string, unknown>> : [];
-    return loadChannelRoleBindings(
-      bindings.map((binding) => ({
-        channel: String(binding.channel ?? ""),
-        chatId: String(binding.chat_id ?? binding.chatId ?? ""),
-        roleId: String(binding.role_id ?? binding.roleId ?? ""),
-      })),
-    );
-  });
-  ipcMain.handle("desktop:channel-role-bindings-save", async (_event: IpcMainInvokeEvent, bindings: SettingsChannelRoleBinding[]) => {
-    const response = await bridge.invoke({
-      method: "roles.bindings.replace",
-      payload: {
-        bindings: Array.isArray(bindings)
-          ? bindings.map((binding) => ({
-            channel: String(binding.channel ?? "").trim(),
-            chat_id: String(binding.chatId ?? "").trim(),
-            role_id: String(binding.roleId ?? "").trim(),
-          }))
-          : [],
-      },
-    });
-    if (response.error) {
-      throw new Error(response.error.message);
-    }
-    const nextBindings = Array.isArray(response.payload.bindings) ? response.payload.bindings as Array<Record<string, unknown>> : [];
-    return loadChannelRoleBindings(
-      nextBindings.map((binding) => ({
-        channel: String(binding.channel ?? ""),
-        chatId: String(binding.chat_id ?? ""),
-        roleId: String(binding.role_id ?? ""),
-      })),
     );
   });
   ipcMain.handle("desktop:window-control", (_event: IpcMainInvokeEvent, action: WindowControlAction) => {

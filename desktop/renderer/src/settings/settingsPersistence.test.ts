@@ -2,32 +2,14 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type {
-  BridgeResponse,
-  DesktopApi,
-  SettingsChannelRoleBinding,
-  SettingsFormData,
-  SettingsSnapshot,
-} from "../../../src/shared.js";
-import type { RoleRecord } from "../shared/types.js";
+import type { DesktopApi, SettingsFormData, SettingsSnapshot } from "../../../src/shared.js";
 import {
   loadSettingsPageData,
   saveSettingsPageData,
   shouldRetryFailedSettingsLoad,
 } from "./settingsPersistence.js";
 
-function createBindings(chatId: string): SettingsChannelRoleBinding[] {
-  return [
-    {
-      channel: "desktop",
-      chatId,
-      roleId: "mira",
-    },
-  ];
-}
-
 function createSettingsFormData(
-  roleBindings: SettingsChannelRoleBinding[],
   overrides: Partial<SettingsFormData["models"]> = {},
 ): SettingsFormData {
   return {
@@ -51,11 +33,7 @@ function createSettingsFormData(
     },
     channels: {
       telegramToken: "",
-      telegramAllowFrom: [],
       qqBotUin: "",
-      qqAllowFrom: [],
-      qqGroups: [],
-      roleBindings,
     },
     memory: {
       enabled: true,
@@ -99,94 +77,36 @@ function createSettingsFormData(
 }
 
 function createSettingsSnapshot(
-  roleBindings: SettingsChannelRoleBinding[],
   overrides: Partial<SettingsFormData["models"]> = {},
 ): SettingsSnapshot {
   return {
     configPath: "D:\\Coding\\Shiori\\config.toml",
-    formData: createSettingsFormData(roleBindings, overrides),
-  };
-}
-
-function createRole(): RoleRecord {
-  return {
-    id: "mira",
-    name: "Mira",
-    description: "",
-    system_prompt: "",
-    runtime_config: {},
-    avatar: null,
-    avatar_abs: null,
-    chat_background: null,
-    chat_background_abs: null,
-    illustrations: [],
-    illustrations_abs: [],
-    asset_categories: [{ id: "default", name: "默认", allow_role_send: false }],
-    asset_category_bindings: {},
-    created_at: "2026-07-07T00:00:00+08:00",
-    updated_at: "2026-07-07T00:00:00+08:00",
-  };
-}
-
-function createRolesResponse(role: RoleRecord): BridgeResponse {
-  return {
-    id: "roles-list",
-    type: "response",
-    method: "roles.list",
-    payload: {
-      roles: [role],
-    },
-    error: null,
+    formData: createSettingsFormData(overrides),
   };
 }
 
 describe("shouldRetryFailedSettingsLoad", () => {
   it("retries once the bridge recovers from a failed settings load", () => {
-    assert.equal(
-      shouldRetryFailedSettingsLoad({
-        bridgeReady: true,
-        loadError: "bridge offline",
-      }),
-      true,
-    );
-    assert.equal(
-      shouldRetryFailedSettingsLoad({
-        bridgeReady: false,
-        loadError: "bridge offline",
-      }),
-      false,
-    );
+    assert.equal(shouldRetryFailedSettingsLoad({ bridgeReady: true, loadError: "bridge offline" }), true);
+    assert.equal(shouldRetryFailedSettingsLoad({ bridgeReady: false, loadError: "bridge offline" }), false);
   });
 });
 
 describe("loadSettingsPageData", () => {
-  it("hydrates bridge-backed role bindings into the loaded snapshot", async () => {
-    const snapshot = createSettingsSnapshot([]);
-    const bindings = createBindings("role:mira");
+  it("loads only persisted runtime settings", async () => {
+    const snapshot = createSettingsSnapshot();
     const loaded = await loadSettingsPageData({
       readSettings: async () => snapshot,
-      readChannelRoleBindings: async () => ({ bindings }),
-      invoke: async () => createRolesResponse(createRole()),
-    } satisfies Pick<DesktopApi, "invoke" | "readChannelRoleBindings" | "readSettings">);
+    } satisfies Pick<DesktopApi, "readSettings">);
 
-    assert.deepEqual(loaded.snapshot.formData.channels.roleBindings, bindings);
-    assert.equal(loaded.roles[0]?.id, "mira");
+    assert.deepEqual(loaded.snapshot, snapshot);
   });
 });
 
 describe("saveSettingsPageData", () => {
-  it("saves config before bindings and preserves unsaved bindings after a binding failure", async () => {
+  it("does not touch role-owned channel bindings", async () => {
     const calls: string[] = [];
-    const currentSnapshot = createSettingsSnapshot(createBindings("role:old"), {
-      mainModel: "current-model",
-    });
-    const draft = createSettingsFormData(createBindings("role:new"), {
-      mainModel: "draft-model",
-    });
-    const persistedSnapshot = createSettingsSnapshot(createBindings("role:old"), {
-      mainModel: "saved-model",
-    });
-
+    const persistedSnapshot = createSettingsSnapshot({ mainModel: "saved-model" });
     const result = await saveSettingsPageData(
       {
         saveSettings: async () => {
@@ -197,42 +117,16 @@ describe("saveSettingsPageData", () => {
             health: { ok: true, message: "ok" },
           };
         },
-        saveChannelRoleBindings: async () => {
-          calls.push("saveChannelRoleBindings");
-          throw new Error("bindings unavailable");
-        },
         readSettings: async () => {
           calls.push("readSettings");
           return persistedSnapshot;
         },
-        readChannelRoleBindings: async () => {
-          calls.push("readChannelRoleBindings");
-          return { bindings: currentSnapshot.formData.channels.roleBindings };
-        },
-      } satisfies Pick<
-        DesktopApi,
-        "readChannelRoleBindings" | "readSettings" | "saveChannelRoleBindings" | "saveSettings"
-      >,
-      draft,
-      currentSnapshot,
+      } satisfies Pick<DesktopApi, "readSettings" | "saveSettings">,
+      createSettingsFormData({ mainModel: "draft-model" }),
     );
 
-    assert.deepEqual(calls, [
-      "saveSettings",
-      "saveChannelRoleBindings",
-      "readSettings",
-      "readChannelRoleBindings",
-    ]);
+    assert.deepEqual(calls, ["saveSettings", "readSettings"]);
     assert.equal(result.snapshot.formData.models.mainModel, "saved-model");
-    assert.deepEqual(
-      result.snapshot.formData.channels.roleBindings,
-      currentSnapshot.formData.channels.roleBindings,
-    );
-    assert.deepEqual(
-      result.nextDraft.channels.roleBindings,
-      draft.channels.roleBindings,
-    );
-    assert.equal(result.nextDraft.models.mainModel, "saved-model");
-    assert.equal(result.bindingsError, "bindings unavailable");
+    assert.equal(result.nextDraft.channels.telegramToken, "");
   });
 });

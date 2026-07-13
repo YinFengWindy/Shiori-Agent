@@ -9,15 +9,11 @@ import sys
 import select
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import click
 from plugins.default_memory.config import render_default_memory_config
-
-
-def _empty_str_list() -> list[str]:
-    return []
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +35,6 @@ class WizardAnswers:
     fast_api_key: str = ""
     fast_base_url: str = ""
     tg_token: str = ""
-    tg_allow_from: list[str] = field(default_factory=_empty_str_list)
     proactive_enabled: bool = False
     proactive_chat_id: str = ""
     proactive_channel: str = ""
@@ -309,7 +304,6 @@ def _phase_telegram(a: WizardAnswers) -> None:
     click.echo()
     _hint("用户名在哪里看：Telegram → 设置 → 用户名（不带 @）")
     username = click.prompt("你的 Telegram 用户名")
-    a.tg_allow_from = [username]
 
     click.echo()
     _hint("开启后 agent 会主动向你推送订阅内容和提醒")
@@ -531,18 +525,15 @@ def _render_channels(a: WizardAnswers) -> str:
     lines: list[str] = []
 
     if a.tg_token:
-        allow = ", ".join(f'"{u}"' for u in a.tg_allow_from)
         lines += [
             "[channels.telegram]",
             f'token = "{a.tg_token}"',
-            f"allow_from = [{allow}]",
             "",
         ]
     else:
         lines += [
             "# [channels.telegram]",
             '# token = ""',
-            '# allow_from = ["your_username"]',
             "",
         ]
 
@@ -550,12 +541,6 @@ def _render_channels(a: WizardAnswers) -> str:
         "# QQ 频道（NapCat，如需启用，填写后取消注释）",
         "# [channels.qq]",
         '# bot_uin = ""',
-        '# allow_from = ["your_qq_number"]',
-        "",
-        "# [[channels.qq.groups]]",
-        '# group_id = ""',
-        '# allow_from = ["your_qq_number"]',
-        "# require_at = true",
         "",
     ]
 
