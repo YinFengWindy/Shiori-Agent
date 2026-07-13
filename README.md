@@ -201,6 +201,8 @@ uv run python main.py --help        # 查看全部命令
 桌面端相关常用命令：
 
 ```bash
+npm run lint
+npm run typecheck
 npm run desktop:typecheck
 npm run desktop:smoke
 npm run desktop:smoke:all
@@ -273,10 +275,10 @@ npm run desktop:smoke
 
 | 想看什么 | 文档 |
 |---------|------|
-| 主动推送与数据源配置 | [_handbook/proactive-guide.md](./_handbook/proactive-guide.md) |
-| Drift 空闲任务 | [_handbook/drift-guide.md](./_handbook/drift-guide.md) |
-| 记忆文件与流转机制 | [_handbook/memory-markdown.md](./_handbook/memory-markdown.md) |
-| 插件生命周期与工具注册 | [_handbook/plugins-tutorial.md](./_handbook/plugins-tutorial.md) |
+| 主动推送与数据源配置 | [docs/_handbook/proactive-guide.md](./docs/_handbook/proactive-guide.md) |
+| Drift 空闲任务 | [docs/_handbook/drift-guide.md](./docs/_handbook/drift-guide.md) |
+| 记忆文件与流转机制 | [docs/_handbook/memory-markdown.md](./docs/_handbook/memory-markdown.md) |
+| 插件生命周期与工具注册 | [docs/_handbook/plugins-tutorial.md](./docs/_handbook/plugins-tutorial.md) |
 
 ---
 
