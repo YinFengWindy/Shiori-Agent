@@ -594,6 +594,20 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     )
     assert "telegram prompt" in custom_telegram.messages[0]["content"]
 
+    qqbot = builder.render(
+        ContextRequest(
+            history=[],
+            current_message="hello",
+            channel="qqbot",
+            chat_id="c2c:user-1",
+            message_timestamp=now,
+        )
+    )
+    assert "## 官方 QQBot 渠道规则（硬性）" in qqbot.messages[0]["content"]
+    assert "必须使用 `message_push` 的 `channel=qqbot`" in qqbot.messages[0]["content"]
+    assert "不得把官方 QQBot 写成 `channel=qq`" in qqbot.messages[0]["content"]
+    assert "c2c:<user_openid>" in qqbot.messages[0]["content"]
+
     media_only_messages = builder.render(
         ContextRequest(
             history=[],
