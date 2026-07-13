@@ -48,6 +48,7 @@ class MessagePushTool(Tool):
     def __init__(self) -> None:
         # channel -> {type: sender_fn}
         self._senders: dict[str, dict[str, Callable[..., Awaitable[None]]]] = {}
+        self._target_resolvers: dict[str, Callable[[str], str]] = {}
         self._role_target_validator: Callable[[str, str, str], bool] | None = None
 
     def set_role_target_validator(
@@ -65,12 +66,14 @@ class MessagePushTool(Tool):
         stream_text: Callable[[str, str], Awaitable[None]] | None = None,
         file: Callable[[str, str, str | None], Awaitable[None]] | None = None,
         image: Callable[[str, str], Awaitable[None]] | None = None,
+        target_resolver: Callable[[str], str] | None = None,
     ) -> None:
         """注册渠道的各类 sender。
         - text(chat_id, message)
         - stream_text(chat_id, message)
         - file(chat_id, file_path, name=None)
         - image(chat_id, image_path_or_url)
+        - target_resolver(chat_id) -> canonical chat_id
         """
         self._senders[channel] = {}
         if text:
@@ -81,13 +84,17 @@ class MessagePushTool(Tool):
             self._senders[channel]["file"] = file
         if image:
             self._senders[channel]["image"] = image
+        if target_resolver is not None:
+            self._target_resolvers[channel] = target_resolver
+        else:
+            self._target_resolvers.pop(channel, None)
         logger.debug(
             f"message_push: 注册渠道 {channel!r}  支持: {list(self._senders[channel])}"
         )
 
     async def execute(self, **kwargs: Any) -> str:
         channel: str = kwargs["channel"]
-        chat_id: str = str(kwargs["chat_id"])
+        requested_chat_id = str(kwargs["chat_id"])
         message: str | None = kwargs.get("message")
         file: str | None = kwargs.get("file")
         image: str | None = kwargs.get("image")
@@ -96,10 +103,17 @@ class MessagePushTool(Tool):
         if not message and not file and not image:
             return "错误：message、file、image 至少提供一个"
 
+        try:
+            resolver = self._target_resolvers.get(channel)
+            chat_id = resolver(requested_chat_id) if resolver is not None else requested_chat_id
+        except Exception as e:
+            logger.error(f"[message_push] 目标解析失败 {channel}:{requested_chat_id}: {e}")
+            return f"发送失败：{e}"
+
         if role_id and self._role_target_validator is not None:
             if not self._role_target_validator(role_id, channel, chat_id):
                 raise PermissionError(
-                    f"角色 {role_id} 未绑定目标渠道: {channel}:{chat_id}"
+                    f"角色 {role_id} 未绑定目标渠道: {channel}:{requested_chat_id}"
                 )
 
         senders = self._senders.get(channel)

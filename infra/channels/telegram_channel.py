@@ -186,6 +186,7 @@ class TelegramChannel:
                 stream_text=self.send_stream,
                 file=self.send_file,
                 image=self.send_image,
+                target_resolver=self._resolve_chat_id,
             )
         self._bind_runtime()
         self._rebuild_user_map()

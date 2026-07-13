@@ -53,6 +53,7 @@ from bootstrap.conversation import migrate_workspace_conversations
 from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from bus.queue import MessageBus
+from core.common.channel_identifiers import chat_ids_equal
 from core.memory.markdown import MemoryLifecycleBindRequest, MarkdownMemoryMaintenance
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
@@ -577,8 +578,11 @@ def _role_owns_channel_target(
     channel: str,
     chat_id: str,
 ) -> bool:
+    clean_channel = str(channel).strip()
+    clean_chat_id = str(chat_id).strip()
     role = repository.get_required(role_id)
     return any(
-        binding.channel == channel and binding.chat_id == chat_id
+        binding.channel == clean_channel
+        and chat_ids_equal(clean_channel, binding.chat_id, clean_chat_id)
         for binding in role.channel_bindings
     )
