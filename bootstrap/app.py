@@ -53,7 +53,7 @@ class RuntimeFeatures:
 
 SERVICE_RUNTIME_FEATURES = RuntimeFeatures()
 DESKTOP_RUNTIME_FEATURES = RuntimeFeatures(
-    enable_message_channels=False,
+    enable_message_channels=True,
 )
 
 

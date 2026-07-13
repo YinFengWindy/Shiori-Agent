@@ -775,7 +775,7 @@ async def test_app_runtime_start_passes_markdown_store_to_memory_optimizer(
 
 
 @pytest.mark.asyncio
-async def test_app_runtime_desktop_mode_disables_message_channels(
+async def test_app_runtime_desktop_mode_enables_message_channels(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     memory_runtime = SimpleNamespace(
@@ -841,7 +841,7 @@ async def test_app_runtime_desktop_mode_disables_message_channels(
     )
     await app.start()
 
-    assert observed["enable_message_channels"] is False
+    assert observed["enable_message_channels"] is True
 
 
 @pytest.mark.asyncio

@@ -406,6 +406,52 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
 
 
 @pytest.mark.asyncio
+async def test_start_channels_skips_channel_constructor_failures(monkeypatch):
+    fake_telegram_channel = types.ModuleType("infra.channels.telegram_channel")
+    fake_qq_channel = types.ModuleType("infra.channels.qq_channel")
+
+    class _TelegramChannel:
+        def __init__(self, **kwargs):
+            raise ValueError("invalid telegram configuration")
+
+    class _QQChannel:
+        name = "qq"
+
+        def __init__(self, **kwargs):
+            pass
+
+    fake_telegram_channel.TelegramChannel = _TelegramChannel  # type: ignore[attr-defined]
+    fake_qq_channel.QQChannel = _QQChannel  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "infra.channels.telegram_channel", fake_telegram_channel)
+    monkeypatch.setitem(sys.modules, "infra.channels.qq_channel", fake_qq_channel)
+
+    config = Config(
+        provider="openai",
+        model="m",
+        api_key="k",
+        system_prompt="s",
+        channels=ChannelsConfig(
+            telegram=TelegramChannelConfig(token="tg-token"),
+            qq=QQChannelConfig(bot_uin="10001"),
+        ),
+    )
+    resources = SharedHttpResources()
+    try:
+        _, host = await start_channels(
+            config,
+            bus=cast(Any, object()),
+            session_manager=cast(Any, object()),
+            push_tool=cast(Any, object()),
+            http_resources=resources,
+            event_bus=EventBus(),
+        )
+    finally:
+        await resources.aclose()
+
+    assert [channel.name for channel in host.channels] == ["qq"]
+
+
+@pytest.mark.asyncio
 async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
     monkeypatch,
     tmp_path,

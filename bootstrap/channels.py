@@ -55,37 +55,43 @@ async def start_channels(
     )
 
     if config.channels.telegram and config.channels.telegram.token:
-        from infra.channels.telegram_channel import TelegramChannel
-
         tg = config.channels.telegram
-        host.add(TelegramChannel(
-            token=tg.token,
-            bus=bus,
-            session_manager=session_manager,
-            allow_from=None,
-            bot_commands=bot_commands,
-            event_bus=event_bus,
-            interrupt_controller=interrupt_controller,
-            channel_name=tg.channel_name,
-            channel_hub=channel_hub,
-        ))
+        try:
+            from infra.channels.telegram_channel import TelegramChannel
+
+            host.add(TelegramChannel(
+                token=tg.token,
+                bus=bus,
+                session_manager=session_manager,
+                allow_from=None,
+                bot_commands=bot_commands,
+                event_bus=event_bus,
+                interrupt_controller=interrupt_controller,
+                channel_name=tg.channel_name,
+                channel_hub=channel_hub,
+            ))
+        except Exception as exc:
+            logger.warning("跳过 Telegram 渠道: %s", exc)
 
     if config.channels.qq and config.channels.qq.bot_uin:
-        from infra.channels.qq_channel import QQChannel
-
         qq = config.channels.qq
-        host.add(QQChannel(
-            bot_uin=qq.bot_uin,
-            bus=bus,
-            session_manager=session_manager,
-            allow_from=None,
-            groups=[],
-            websocket_open_timeout_seconds=qq.websocket_open_timeout_seconds,
-            http_requester=http_resources.external_default,
-            event_bus=event_bus,
-            interrupt_controller=interrupt_controller,
-            channel_hub=channel_hub,
-        ))
+        try:
+            from infra.channels.qq_channel import QQChannel
+
+            host.add(QQChannel(
+                bot_uin=qq.bot_uin,
+                bus=bus,
+                session_manager=session_manager,
+                allow_from=None,
+                groups=[],
+                websocket_open_timeout_seconds=qq.websocket_open_timeout_seconds,
+                http_requester=http_resources.external_default,
+                event_bus=event_bus,
+                interrupt_controller=interrupt_controller,
+                channel_hub=channel_hub,
+            ))
+        except Exception as exc:
+            logger.warning("跳过 QQ 渠道: %s", exc)
 
     for channel in plugin_channels or []:
         host.add(channel)
