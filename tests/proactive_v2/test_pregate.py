@@ -15,6 +15,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from agent.core.proactive_turn import ResolveResult
+from agent.turns.result import TurnOutbound, TurnResult
+from proactive_v2.context import AgentTickContext
 from tests.proactive_v2.conftest import (
     FakeLLM,
     FakeRng,
@@ -76,6 +79,80 @@ async def test_target_transport_allows_role_only_desktop_target():
     )
     result = await tick.run()
     assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_multi_channel_delivery_retries_all_targets_without_reply():
+    waits: list[float] = []
+
+    async def wait(delay: float) -> None:
+        waits.append(delay)
+
+    tick = make_proactive_pipeline(
+        retry_wait_fn=wait,
+        last_user_at_fn=lambda: None,
+    )
+    orchestrator = AsyncMock()
+    orchestrator.handle_proactive_turn = AsyncMock(return_value=True)
+    tick._turn_orchestrator = orchestrator
+
+    result = TurnResult(
+        decision="reply",
+        outbound=TurnOutbound(session_key="test_session", content="hello"),
+    )
+    ctx = AgentTickContext(
+        session_key="test_session",
+        target_transports=[
+            ("desktop", "role:mira"),
+            ("telegram", "42"),
+            ("qq", "gqq:7"),
+        ],
+    )
+
+    await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
+
+    assert waits == [300.0, 300.0]
+    assert [call.kwargs["channel"] for call in orchestrator.handle_proactive_turn.call_args_list] == [
+        "desktop",
+        "telegram",
+        "qq",
+    ]
+    assert [call.kwargs["chat_id"] for call in orchestrator.handle_proactive_turn.call_args_list] == [
+        "role:mira",
+        "42",
+        "gqq:7",
+    ]
+    assert orchestrator.handle_proactive_turn.call_args_list[1].kwargs["record_proactive_state"] is False
+
+
+@pytest.mark.asyncio
+async def test_multi_channel_delivery_stops_when_user_replies():
+    reply_at = None
+
+    async def wait(_delay: float) -> None:
+        nonlocal reply_at
+        reply_at = datetime.max.replace(tzinfo=timezone.utc)
+
+    tick = make_proactive_pipeline(
+        retry_wait_fn=wait,
+        last_user_at_fn=lambda: reply_at,
+    )
+    orchestrator = AsyncMock()
+    orchestrator.handle_proactive_turn = AsyncMock(return_value=True)
+    tick._turn_orchestrator = orchestrator
+
+    result = TurnResult(
+        decision="reply",
+        outbound=TurnOutbound(session_key="test_session", content="hello"),
+    )
+    ctx = AgentTickContext(
+        session_key="test_session",
+        target_transports=[("desktop", "role:mira"), ("telegram", "42")],
+    )
+
+    await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
+
+    assert orchestrator.handle_proactive_turn.await_count == 1
 
 
 @pytest.mark.asyncio

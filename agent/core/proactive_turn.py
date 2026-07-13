@@ -19,11 +19,12 @@ ProactiveTurnPipeline — 主动回复链路顶层抽象。
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import random as _random_module
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from hashlib import sha1
 from typing import Any, Awaitable, Callable, cast
@@ -56,6 +57,7 @@ _CITED_ACK_TTL = 168
 _UNCITED_ACK_TTL = 24
 _POST_GUARD_ACK_TTL = 24
 _DISCARDED_ACK_TTL = 720
+_MULTI_CHANNEL_RETRY_WAIT_SECONDS = 5 * 60
 _RELATIONSHIP_FALLBACK_ROLE_HINTS = {
     "role-0424dd696dd6": (
         "【角色专属语气要求】当前角色是吟风。"
@@ -276,6 +278,8 @@ class ProactiveTurnPipelineDeps:
     recent_proactive_fn: Callable[[], list] | None
     drift_pipeline: DriftTurnPipeline | None
     target_transport_fn: Callable[[], tuple[str, str]] | None = None
+    target_transports_fn: Callable[[], list[tuple[str, str]]] | None = None
+    retry_wait_fn: Callable[[float], Awaitable[None]] | None = None
     tool_hooks: list[ToolHook] | None = None
     loneliness_gate_fn: Callable[[str, datetime], tuple[bool, dict[str, Any]]] | None = None
 
@@ -317,6 +321,8 @@ class ProactiveTurnPipeline:
         self._recent_proactive_fn = deps.recent_proactive_fn
         self._drift_pipeline = deps.drift_pipeline
         self._target_transport_fn = deps.target_transport_fn
+        self._target_transports_fn = deps.target_transports_fn
+        self._retry_wait_fn = deps.retry_wait_fn or asyncio.sleep
         self._loneliness_gate_fn = deps.loneliness_gate_fn
         self._tool_executor = ToolExecutor(deps.tool_hooks or [])
 
@@ -456,11 +462,12 @@ class ProactiveTurnPipeline:
         """准入检查：逐条件判断本轮是否应该启动主动处理。"""
 
         # 1.1 没有可解析的目标 transport → 跳过。
-        transport = self._resolve_target_transport()
-        if transport is None:
+        transports = self._resolve_target_transports()
+        if not transports:
             logger.debug("[proactive_v2] gate: no chat_id → blocked")
             return GateResult(blocked=True, reason="no_target", base_score=None)
-        ctx.target_channel, ctx.target_chat_id = transport
+        ctx.target_transports = transports
+        ctx.target_channel, ctx.target_chat_id = transports[0]
 
         # 1.2 被动链路忙 → 不打扰。
         if self._passive_busy_fn and self._passive_busy_fn(self._session_key):
@@ -935,21 +942,70 @@ class ProactiveTurnPipeline:
         self._record_tick_log_finish(ctx, result=decision.result)
         if self._turn_orchestrator is None:
             raise RuntimeError("proactive turn_orchestrator is required")
-        target_channel = str(ctx.target_channel or "").strip()
-        target_chat_id = str(ctx.target_chat_id or "").strip()
-        if not target_channel or not target_chat_id:
-            transport = self._resolve_target_transport()
-            if transport is None:
-                raise RuntimeError("proactive target transport unavailable at delivery time")
-            target_channel, target_chat_id = transport
-        # 5.2 再统一交给 TurnOrchestrator。
-        await self._turn_orchestrator.handle_proactive_turn(
+        transports = list(ctx.target_transports or self._resolve_target_transports())
+        if not transports:
+            raise RuntimeError("proactive target transport unavailable at delivery time")
+
+        target_channel, target_chat_id = transports[0]
+        sent_at = datetime.now(timezone.utc)
+        sent = await self._turn_orchestrator.handle_proactive_turn(
             result=decision.result,
             session_key=self._session_key,
             channel=target_channel,
             chat_id=target_chat_id,
         )
+        if not sent:
+            return 0.0
+
+        # A single proactive decision may fan out sequentially. Each retry reuses
+        # the generated content but gets its own immutable transport metadata.
+        retry_result = replace(
+            decision.result,
+            side_effects=[],
+            success_side_effects=[],
+            failure_side_effects=[],
+        )
+        for target_channel, target_chat_id in transports[1:]:
+            await self._retry_wait_fn(_MULTI_CHANNEL_RETRY_WAIT_SECONDS)
+            if self._has_user_replied_since(sent_at):
+                logger.info(
+                    "[proactive_v2] multi-channel retry stopped: user replied session=%s",
+                    self._session_key,
+                )
+                break
+            await self._turn_orchestrator.handle_proactive_turn(
+                result=retry_result,
+                session_key=self._session_key,
+                channel=target_channel,
+                chat_id=target_chat_id,
+                record_proactive_state=False,
+            )
         return 0.0
+
+    def _has_user_replied_since(self, sent_at: datetime) -> bool:
+        last_user_at = self._last_user_at_fn()
+        if last_user_at is None:
+            return False
+        if last_user_at.tzinfo is None:
+            last_user_at = last_user_at.replace(tzinfo=timezone.utc)
+        return last_user_at > sent_at
+
+    def _resolve_target_transports(self) -> list[tuple[str, str]]:
+        if self._target_transports_fn is not None:
+            try:
+                raw_transports = self._target_transports_fn()
+            except Exception as exc:
+                logger.debug("[proactive_v2] target_transports unavailable: %s", exc)
+            else:
+                transports = [
+                    (str(channel).strip(), str(chat_id).strip())
+                    for channel, chat_id in raw_transports
+                    if str(channel).strip() and str(chat_id).strip()
+                ]
+                if transports:
+                    return transports
+        transport = self._resolve_target_transport()
+        return [transport] if transport is not None else []
 
     def _resolve_target_transport(self) -> tuple[str, str] | None:
         if self._target_transport_fn is not None:

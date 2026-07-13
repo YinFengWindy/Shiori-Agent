@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from agent.prompting import is_context_frame
+from core.common.channel_identifiers import chat_ids_equal
 from core.roles.services import RoleBindingService
 from proactive_v2.energy import compute_energy, d_recent
 from proactive_v2.presence import PresenceStore
@@ -57,42 +58,82 @@ class Sensor:
         return f"{channel}:{chat_id}" if channel and chat_id else ""
 
     def target_transport(self) -> tuple[str, str]:
+        transports = self.target_transports()
+        default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
+        preferred_channel = str(getattr(self._cfg, "default_channel", "") or "").strip()
+        preferred_chat_id = str(getattr(self._cfg, "default_chat_id", "") or "").strip()
+        if default_role_id and not preferred_channel and not preferred_chat_id and len(transports) > 1:
+            raise RuntimeError(
+                f"default_role_id 存在多个 transport 绑定，必须显式配置 target.channel/chat_id: {default_role_id}"
+            )
+        if transports:
+            return transports[0]
+        return preferred_channel, preferred_chat_id
+
+    def target_transports(self) -> list[tuple[str, str]]:
+        """Returns the preferred target followed by every bound role transport."""
         default_role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
         if default_role_id:
             preferred_channel = str(getattr(self._cfg, "default_channel", "") or "").strip()
             preferred_chat_id = str(getattr(self._cfg, "default_chat_id", "") or "").strip()
-            if preferred_channel == "desktop":
-                return preferred_channel, preferred_chat_id or f"role:{default_role_id}"
+            role_bindings = (
+                [
+                    binding
+                    for binding in self._role_bindings.list_bindings()
+                    if binding.role_id == default_role_id
+                ]
+                if self._role_bindings is not None
+                else []
+            )
+            if not role_bindings and preferred_channel == "desktop":
+                return [(preferred_channel, preferred_chat_id or f"role:{default_role_id}")]
             if self._role_bindings is None:
                 raise RuntimeError(f"default_role_id 缺少 binding 服务: {default_role_id}")
-            role_bindings = [
-                binding
-                for binding in self._role_bindings.list_bindings()
-                if binding.role_id == default_role_id
-            ]
             if not role_bindings:
                 raise KeyError(f"default_role_id 未绑定 transport: {default_role_id}")
+
+            transports: list[tuple[str, str]] = []
+
+            def append_unique(channel: str, chat_id: str) -> None:
+                if not channel or not chat_id:
+                    return
+                if any(
+                    item_channel == channel
+                    and chat_ids_equal(channel, item_chat_id, chat_id)
+                    for item_channel, item_chat_id in transports
+                ):
+                    return
+                transports.append((channel, chat_id))
+
             if preferred_channel and preferred_chat_id:
                 for binding in role_bindings:
                     if (
                         binding.channel == preferred_channel
-                        and binding.chat_id == preferred_chat_id
+                        and chat_ids_equal(preferred_channel, binding.chat_id, preferred_chat_id)
                     ):
-                        return binding.channel, binding.chat_id
+                        append_unique(binding.channel, binding.chat_id)
+                        break
+                else:
+                    if preferred_channel != "desktop":
+                        raise KeyError(
+                            "default_role_id 配置的 target 未绑定到该角色: "
+                            f"{default_role_id} -> {preferred_channel}:{preferred_chat_id}"
+                        )
+                    append_unique(preferred_channel, preferred_chat_id)
+            elif preferred_channel == "desktop":
+                append_unique(preferred_channel, preferred_chat_id or f"role:{default_role_id}")
+            elif preferred_channel or preferred_chat_id:
                 raise KeyError(
                     "default_role_id 配置的 target 未绑定到该角色: "
                     f"{default_role_id} -> {preferred_channel}:{preferred_chat_id}"
                 )
-            if len(role_bindings) == 1:
-                binding = role_bindings[0]
-                return binding.channel, binding.chat_id
-            raise RuntimeError(
-                f"default_role_id 存在多个 transport 绑定，必须显式配置 target.channel/chat_id: {default_role_id}"
-            )
-        return (
-            (self._cfg.default_channel or "").strip(),
-            self._cfg.default_chat_id.strip(),
-        )
+
+            for binding in role_bindings:
+                append_unique(binding.channel, binding.chat_id)
+            return transports
+        channel = str(self._cfg.default_channel or "").strip()
+        chat_id = str(self._cfg.default_chat_id or "").strip()
+        return [(channel, chat_id)] if channel and chat_id else []
 
     def read_memory_text(self) -> str:
         if not self._memory:

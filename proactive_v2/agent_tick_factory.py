@@ -77,6 +77,7 @@ class AgentTickFactory:
         gateway_deps = self._build_gateway_deps(tool_deps)
         recent_proactive_fn = self._build_recent_proactive_fn()
         drift_pipeline = self._build_drift_pipeline(tool_deps)
+        target_transports_fn = getattr(self._deps.sense, "target_transports", None)
 
         # 3. 产出 ProactiveTurnPipeline。后续每次 proactive loop 触发时调用 pipeline.run()。
         return ProactiveTurnPipeline(
@@ -97,6 +98,7 @@ class AgentTickFactory:
                 recent_proactive_fn=recent_proactive_fn,
                 drift_pipeline=drift_pipeline,
                 target_transport_fn=self._deps.sense.target_transport,
+                target_transports_fn=target_transports_fn,
                 tool_hooks=self._deps.tool_hooks,
                 loneliness_gate_fn=self._deps.loneliness_gate_fn,
             )

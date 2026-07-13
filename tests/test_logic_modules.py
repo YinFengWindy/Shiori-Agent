@@ -199,6 +199,7 @@ def test_sensor_role_target_prefers_configured_transport_when_multiple_bindings(
     )
 
     assert sensor.target_transport() == ("qq", "group-7")
+    assert sensor.target_transports() == [("qq", "group-7"), ("telegram", "42")]
 
 
 def test_sensor_role_target_requires_bound_transport(tmp_path: Path):

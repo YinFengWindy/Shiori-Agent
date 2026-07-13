@@ -34,6 +34,7 @@ class TurnOrchestrator:
         session_key: str,
         channel: str,
         chat_id: str,
+        record_proactive_state: bool = True,
     ) -> bool:
         # 1. proactive 先处理 skip：不发消息，只跑 skip 路径副作用。
         if result.decision == "skip":
@@ -80,13 +81,13 @@ class TurnOrchestrator:
 
         # 4. 根据是否真正发送成功，分别执行 success / failure side_effects。
         if sent:
-            if self._session.presence:
+            if record_proactive_state and self._session.presence:
                 role_id = str(getattr(session, "metadata", {}).get("role_id") or "").strip()
                 if role_id:
                     self._session.presence.record_proactive_sent_by_role(role_id)
                 else:
                     self._session.presence.record_proactive_sent(session_key)
-            if self._session.relationship_runtime is not None:
+            if record_proactive_state and self._session.relationship_runtime is not None:
                 self._session.relationship_runtime.handle_proactive_sent(session_key)
             await self._run_effects(result.success_side_effects)
         else:
