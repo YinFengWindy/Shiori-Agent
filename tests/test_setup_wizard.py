@@ -8,7 +8,7 @@ from bootstrap.setup_wizard import (
 )
 
 
-def test_render_channels_omits_removed_qqbot_section() -> None:
+def test_render_channels_includes_optional_qqbot_section() -> None:
     rendered = _render_channels(
         WizardAnswers(
             tg_token="telegram-token",
@@ -19,7 +19,7 @@ def test_render_channels_omits_removed_qqbot_section() -> None:
     )
 
     assert "[channels.telegram]" in rendered
-    assert "[plugins.qqbot]" not in rendered
+    assert "# [plugins.qqbot]" in rendered
 
 
 def test_render_integrations_omits_removed_fitbit_and_peer_sections() -> None:

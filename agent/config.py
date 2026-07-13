@@ -261,7 +261,7 @@ def _reject_removed_runtime_config(data: dict) -> None:
     """Rejects configuration for product surfaces removed from the runtime."""
     sections = {
         "channels": {"cli", "qqbot", "socket"},
-        "plugins": {"feishu", "qqbot"},
+        "plugins": {"feishu"},
         "integrations": {"fitbit"},
     }
     for section, names in sections.items():

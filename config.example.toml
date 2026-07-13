@@ -55,8 +55,8 @@ search_enabled = true
 # toolsets = ["meta_common", "spawn", "schedule", "mcp"]
 
 # =============================================================================
-# 必填：至少配置一个频道（Telegram 或 QQ 选其一）
-# token / bot_uin 为空时该频道自动跳过，不会报错。
+# 必填：至少配置一个频道（Telegram、NapCat QQ 或官方 QQBot 选其一）
+# token / bot_uin / app_id / client_secret 为空时该频道自动跳过，不会报错。
 # =============================================================================
 
 [channels.telegram]
@@ -70,6 +70,12 @@ token = ""
 # 填 QQ 号启用 QQ 频道，留空跳过。
 bot_uin = ""
 websocket_open_timeout_seconds = 5.0
+
+# 可选：QQ 开放平台官方机器人，使用官方 Gateway 和 REST API。
+# [plugins.qqbot]
+# app_id = ""
+# client_secret = ""
+# allow_from = []
 
 # =============================================================================
 # 语义记忆

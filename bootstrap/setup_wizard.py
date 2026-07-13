@@ -542,6 +542,11 @@ def _render_channels(a: WizardAnswers) -> str:
         "# [channels.qq]",
         '# bot_uin = ""',
         "",
+        "# 官方 QQBot（QQ 开放平台，如需启用，填写后取消注释）",
+        "# [plugins.qqbot]",
+        '# app_id = ""',
+        '# client_secret = ""',
+        "",
     ]
 
     return "\n".join(lines)

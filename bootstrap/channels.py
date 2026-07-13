@@ -31,6 +31,7 @@ async def start_channels(
     enable_message_channels: bool = True,
 ) -> tuple[object | None, ChannelHost]:
     attachment_store = AttachmentStore()
+    channel_hub: ChannelHub | None = None
 
     def _ctx_factory(channel: Channel) -> ChannelContext:
         return ChannelContext(
@@ -43,17 +44,20 @@ async def start_channels(
             interrupt_controller=interrupt_controller,
             bot_commands=bot_commands or [],
             log=logging.getLogger(f"channels.{channel.name}"),
+            channel_hub=channel_hub,
         )
 
     host = ChannelHost(_ctx_factory)
     if not enable_message_channels:
         return None, host
     channel_hub = (
-        ChannelHub.from_workspace(session_manager.workspace, session_manager=session_manager)
+        ChannelHub.from_workspace(
+            session_manager.workspace,
+            session_manager=session_manager,
+        )
         if getattr(session_manager, "workspace", None) is not None
         else None
     )
-
     if config.channels.telegram and config.channels.telegram.token:
         tg = config.channels.telegram
         try:

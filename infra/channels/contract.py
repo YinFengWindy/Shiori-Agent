@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from agent.looping.interrupt import InterruptController
 from agent.tools.message_push import MessagePushTool
@@ -11,6 +11,9 @@ from bus.queue import MessageBus
 from core.net.http import SharedHttpResources
 from infra.channels.base import AttachmentStore
 from session.manager import SessionManager
+
+if TYPE_CHECKING:
+    from core.channels import ChannelHub
 
 
 class Channel(Protocol):
@@ -31,3 +34,4 @@ class ChannelContext:
     interrupt_controller: InterruptController | None
     bot_commands: list[tuple[str, str]]
     log: logging.Logger
+    channel_hub: "ChannelHub | None" = None

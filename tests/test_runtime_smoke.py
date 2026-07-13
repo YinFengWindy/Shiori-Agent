@@ -275,9 +275,11 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
 
         def __init__(self, **kwargs):
             self.kwargs = kwargs
+            self.context_hub = None
 
         async def start(self, ctx) -> None:
             starts.append("qqbot")
+            self.context_hub = ctx.channel_hub
             ctx.push_tool.register_channel(
                 self.name,
                 text=self.send_proactive,
@@ -346,6 +348,7 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
     assert tg.kwargs["channel_hub"] is not None
     assert qq.kwargs["interrupt_controller"] is controller
     assert qqbot.kwargs["event_bus"] is event_bus
+    assert qqbot.context_hub is tg.kwargs["channel_hub"]
 
 
 @pytest.mark.asyncio

@@ -99,12 +99,21 @@ system_prompt = "s"
 
 [plugins.typed]
 api_key = "${PLUGIN_TOKEN}"
+
+[plugins.qqbot]
+app_id = "qq-app"
+client_secret = "${QQBOT_SECRET}"
 """.strip()
         + "\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("PLUGIN_TOKEN", "plugin-secret")
+    monkeypatch.setenv("QQBOT_SECRET", "qq-secret")
 
     config = Config.load(config_path)
 
     assert config.plugins["typed"]["api_key"] == "plugin-secret"
+    assert config.plugins["qqbot"] == {
+        "app_id": "qq-app",
+        "client_secret": "qq-secret",
+    }
