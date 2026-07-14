@@ -84,6 +84,8 @@ def test_auto_cg_prompt_reports_current_cooldown(tmp_path: Path) -> None:
     assert "scene_cg" in section.content
     assert "角色本人必须清晰入镜" in section.content
     assert "禁止第一人称 POV" in section.content
+    assert "英文 NovelAI tags" in section.content
+    assert "禁止中文和自然语言句子" in section.content
     assert "还需等待至少 9 个用户回合" in section.content
 
 

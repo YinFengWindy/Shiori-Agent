@@ -19,8 +19,9 @@ from core.integrations.novelai.models import (
     GeneratedImageRecord,
     NovelAISettings,
 )
-from core.integrations.novelai.store import NovelAIStore
 from core.integrations.novelai.prompt_tags import PromptTagStore
+from core.integrations.novelai.prompt_validation import validate_novelai_prompt
+from core.integrations.novelai.store import NovelAIStore
 from core.roles.store import RoleStore
 
 _SIZE_PRESETS: dict[str, tuple[int, int]] = {
@@ -64,6 +65,11 @@ class NovelAIService:
         prompt = request.prompt.strip()
         if not prompt:
             raise ValueError("prompt 不能为空")
+        validate_novelai_prompt(prompt, field_name="prompt")
+        validate_novelai_prompt(
+            request.negative_prompt,
+            field_name="negative_prompt",
+        )
         expansion = self._prompt_tag_store.expand(
             prompt,
             request.negative_prompt,
@@ -73,6 +79,11 @@ class NovelAIService:
             request,
             prompt=expansion.prompt,
             negative_prompt=expansion.negative_prompt,
+        )
+        validate_novelai_prompt(request.prompt, field_name="prompt")
+        validate_novelai_prompt(
+            request.negative_prompt,
+            field_name="negative_prompt",
         )
         prompt = request.prompt
         width, height = self._resolve_dimensions(request)

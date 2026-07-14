@@ -61,6 +61,8 @@ class AutoCgPolicy:
                 "使用动画 CG 式第三人称镜头：摄影机必须位于角色之外，角色本人必须清晰入镜，"
                 "并用角色名或明确外貌描述角色。禁止第一人称 POV、自拍构图，以及只画角色眼中"
                 "所见而不让角色入镜。prompt 只描述可见角色、动作、环境、构图、光线和氛围。"
+                "无论当前对话使用什么语言，prompt 和 negative_prompt 都必须使用逗号分隔的"
+                "英文 NovelAI tags，禁止中文和自然语言句子；调用前先在内部完成转换。"
                 "单人主体优先 portrait，环境或双人场景优先 landscape。用户明确要求生图时传 "
                 "`intent=user_requested`，不受自动 CG 限制。\n"
                 f"当前策略状态：{cooldown_text}"

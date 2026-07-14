@@ -11,6 +11,20 @@ from agent.tools.image_generate import GenerateImageTool
 from core.integrations.novelai.models import GenerateImageResult
 
 
+def test_generate_image_tool_requires_english_novelai_tags() -> None:
+    prompt_description = GenerateImageTool.parameters["properties"]["prompt"][
+        "description"
+    ]
+    negative_description = GenerateImageTool.parameters["properties"][
+        "negative_prompt"
+    ]["description"]
+
+    assert "英文 NovelAI" in GenerateImageTool.description
+    assert "逗号分隔" in prompt_description
+    assert "禁止中文" in prompt_description
+    assert "禁止中文" in negative_description
+
+
 @pytest.mark.asyncio
 async def test_generate_image_tool_defaults_to_user_requested_intent() -> None:
     service = cast(

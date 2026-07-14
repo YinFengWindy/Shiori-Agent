@@ -100,6 +100,41 @@ async def test_service_persists_generated_image_and_metadata(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("prompt", "negative_prompt", "field_name"),
+    [
+        ("月光下的少女", "", "prompt"),
+        ("1girl, moonlight", "模糊", "negative_prompt"),
+    ],
+)
+async def test_service_rejects_non_english_tags_before_external_call(
+    tmp_path: Path,
+    prompt: str,
+    negative_prompt: str,
+    field_name: str,
+) -> None:
+    settings = NovelAISettings(enabled=True, token="novel-token")
+    client = _FakeClient(_json_response(), settings)
+    service = NovelAIService(
+        settings=settings,
+        client=client,
+        store=NovelAIStore(tmp_path),
+        role_store=RoleStore(tmp_path),
+        workspace=tmp_path,
+    )
+
+    with pytest.raises(ValueError, match=rf"{field_name} 仅支持英文 NovelAI tags"):
+        await service.generate(
+            GenerateImageRequest(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+            )
+        )
+
+    assert client.last_generate_kwargs == {}
+
+
+@pytest.mark.asyncio
 async def test_service_expands_prompts_from_tag_knowledge_base(tmp_path: Path) -> None:
     settings = NovelAISettings(enabled=True, token="novel-token")
     prompt_tags = PromptTagStore(tmp_path)

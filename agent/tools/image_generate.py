@@ -13,15 +13,19 @@ class GenerateImageTool(Tool):
 
     name = "generate_image"
     description = (
-        "使用 NovelAI 生成图片。支持 txt2img 和 img2img，"
-        "适合角色立绘、场景图和参考图生成。"
+        "使用 NovelAI 英文 tags 生成图片。支持 txt2img 和 img2img，"
+        "适合角色立绘、场景图和参考图生成。即使用户使用中文描述，"
+        "也必须先转换为逗号分隔的英文 NovelAI tags 后再调用。"
     )
     parameters = {
         "type": "object",
         "properties": {
             "prompt": {
                 "type": "string",
-                "description": "正向提示词，描述想生成的画面内容。",
+                "description": (
+                    "逗号分隔的英文 NovelAI 正向 tags。禁止中文和自然语言句子；"
+                    "用户使用中文描述时，先在内部转换为英文 tags。"
+                ),
             },
             "mode": {
                 "type": "string",
@@ -34,7 +38,7 @@ class GenerateImageTool(Tool):
             },
             "negative_prompt": {
                 "type": "string",
-                "description": "负向提示词，可选。",
+                "description": "逗号分隔的英文 NovelAI 负向 tags，可选；禁止中文。",
             },
             "strength": {
                 "type": "number",
