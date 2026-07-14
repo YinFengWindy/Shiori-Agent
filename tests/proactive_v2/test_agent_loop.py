@@ -27,6 +27,17 @@ from proactive_v2.tools import ToolDeps
 from tests.proactive_v2.conftest import FakeLLM, cfg_with, make_proactive_pipeline
 
 
+def _test_alert() -> dict[str, str]:
+    return {
+        "id": "a1",
+        "ack_server": "alert-mcp",
+        "title": "Test alert",
+        "body": "Test body",
+        "severity": "low",
+        "triggered_at": "2026-01-01T00:00:00Z",
+    }
+
+
 # ── max_steps 保护 ────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -141,6 +152,9 @@ async def test_send_message_stops_loop_immediately():
     tick = make_proactive_pipeline(
         llm_fn=llm,
         tool_deps=ToolDeps(recent_chat_fn=AsyncMock(return_value=[])),
+        gateway_deps=GatewayDeps(
+            alert_fn=AsyncMock(return_value=[_test_alert()]),
+        ),
     )
     await tick.run()
     # message_push + finish_turn 是前 2 步，之后 loop 停止
@@ -157,6 +171,9 @@ async def test_skip_stops_loop_immediately():
     tick = make_proactive_pipeline(
         llm_fn=llm,
         tool_deps=ToolDeps(recent_chat_fn=AsyncMock(return_value=[])),
+        gateway_deps=GatewayDeps(
+            alert_fn=AsyncMock(return_value=[_test_alert()]),
+        ),
     )
     await tick.run()
     assert tick.last_ctx.steps_taken == 1
@@ -487,7 +504,9 @@ async def test_llm_receives_growing_message_history():
     ])
     tick = make_proactive_pipeline(
         llm_fn=llm,
-        gateway_deps=GatewayDeps(alert_fn=AsyncMock(return_value=[])),
+        gateway_deps=GatewayDeps(
+            alert_fn=AsyncMock(return_value=[_test_alert()]),
+        ),
     )
     await tick.run()
     # 第一次调用：messages 可能只有 system prompt（无工具历史）

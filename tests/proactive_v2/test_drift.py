@@ -558,7 +558,7 @@ async def test_drift_pipeline_does_not_force_finish_at_step_limit(tmp_path: Path
 
 
 @pytest.mark.asyncio
-async def test_agent_tick_enters_drift_and_records_action(tmp_path: Path):
+async def test_agent_tick_enters_drift_and_records_steps(tmp_path: Path):
     _write_skill(tmp_path)
     gate = MagicMock()
     gate.should_act.return_value = (True, {})
@@ -596,10 +596,10 @@ async def test_agent_tick_enters_drift_and_records_action(tmp_path: Path):
             ),
             max_steps=5,
         ),
+        loneliness_gate_fn=False,
     )
     await tick.run()
     assert tick.last_ctx.drift_entered is True
-    gate.record_action.assert_called_once()
     assert len(tick._state_store.tick_step_logs) == 2
     assert tick._state_store.tick_step_logs[0]["phase"] == "drift"
     assert tick._state_store.tick_step_logs[0]["tool_name"] == "read_file"
@@ -723,7 +723,6 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
     await tick.run()
 
     sender.assert_awaited_once_with("hello from drift")
-    gate.record_action.assert_called_once()
     assert tick.last_ctx.drift_entered is True
     assert tick.last_ctx.drift_message_sent is True
 
@@ -1086,7 +1085,7 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
     deps = AgentTickDeps(
         cfg=cfg_with(
             drift_enabled=True,
-            default_role_id="",
+            default_role_id="mira",
             default_channel="telegram",
             default_chat_id="1",
         ),

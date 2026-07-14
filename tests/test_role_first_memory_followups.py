@@ -9,7 +9,7 @@ from prompts.background import (
     build_research_subagent_prompt,
 )
 from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
-from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
+from proactive_v2.config_loader import load_proactive_config
 from proactive_v2.mcp_sources import McpClientPool
 
 
@@ -25,19 +25,20 @@ def test_background_prompts_reference_role_memory(tmp_path: Path) -> None:
     assert "/memory/HISTORY.md" not in text2
 
 
-def test_load_proactive_config_requires_role_id_when_enabled() -> None:
-    with pytest.raises(ProactiveConfigError, match="proactive.target.role_id"):
-        load_proactive_config(
-            {
-                "enabled": True,
-                "profile": "daily",
-                "target": {
-                    "channel": "telegram",
-                    "chat_id": "1",
-                    "role_id": "",
-                },
-            }
-        )
+def test_load_proactive_config_allows_role_target_to_be_owned_by_role_runtime() -> None:
+    config = load_proactive_config(
+        {
+            "enabled": True,
+            "profile": "daily",
+            "target": {
+                "channel": "telegram",
+                "chat_id": "1",
+                "role_id": "",
+            },
+        }
+    )
+
+    assert config.default_role_id == ""
 
 
 def test_agent_tick_factory_requires_default_role_id() -> None:

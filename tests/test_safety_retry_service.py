@@ -42,6 +42,15 @@ def _session():
     )
 
 
+def _tools():
+    return SimpleNamespace(
+        get_always_on_names=lambda: {"always"},
+        get_schemas=lambda names=None: [],
+        get_tool=lambda name: None,
+        get_context=lambda: {},
+    )
+
+
 def _make_reasoner(*, discovery: ToolDiscoveryState, tool_search_enabled: bool):
     def _render(request: ContextRequest, **kwargs: object) -> ContextRenderResult:
         messages = list(request.history) + [{"role": "user"}]
@@ -57,7 +66,7 @@ def _make_reasoner(*, discovery: ToolDiscoveryState, tool_search_enabled: bool):
     return DefaultReasoner(
         llm=cast(Any, LLMServices(provider=SimpleNamespace(chat=AsyncMock()), light_provider=SimpleNamespace())),
         llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=256),
-        tools=cast(Any, SimpleNamespace(get_always_on_names=lambda: {"always"}, get_schemas=lambda names=None: [], get_tool=lambda name: None)),
+        tools=cast(Any, _tools()),
         discovery=discovery,
         tool_search_enabled=tool_search_enabled,
         memory_window=10,
@@ -125,7 +134,7 @@ def test_reasoner_run_turn_context_length_trims_dynamic_sections_before_history(
     reasoner = DefaultReasoner(
         llm=cast(Any, LLMServices(provider=SimpleNamespace(chat=AsyncMock()), light_provider=SimpleNamespace())),
         llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=256),
-        tools=cast(Any, SimpleNamespace(get_always_on_names=lambda: {"always"}, get_schemas=lambda names=None: [], get_tool=lambda name: None)),
+        tools=cast(Any, _tools()),
         discovery=discovery,
         tool_search_enabled=False,
         memory_window=10,

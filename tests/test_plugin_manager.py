@@ -1113,6 +1113,7 @@ async def test_core_runtime_start_wires_plugin_tool_hooks_to_loop_and_spawn():
         memory_runtime=SimpleNamespace(),  # type: ignore[arg-type]
         presence=SimpleNamespace(),  # type: ignore[arg-type]
         relationship_runtime=SimpleNamespace(),  # type: ignore[arg-type]
+        role_world_registry=SimpleNamespace(),  # type: ignore[arg-type]
         plugin_manager=plugin_manager,  # type: ignore[arg-type]
     )
 

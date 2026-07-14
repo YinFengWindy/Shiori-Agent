@@ -12,7 +12,7 @@ from proactive_v2.gateway import GatewayDeps, GatewayResult
 from proactive_v2.sensor import Sensor
 
 
-def test_build_proactive_runtime_accepts_facade_memory(tmp_path):
+def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
     proactive_cfg = ProactiveConfig()
     proactive_cfg.enabled = True
     proactive_cfg.default_channel = "telegram"
@@ -28,6 +28,21 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path):
         light_model="lm",
     )
     facade = MagicMock()
+    monkeypatch.setattr(
+        "bootstrap.proactive.RoleStore",
+        lambda workspace: SimpleNamespace(
+            list_roles=lambda: [
+                SimpleNamespace(
+                    id="mira",
+                    proactive=SimpleNamespace(
+                        enabled=True,
+                        target_channel="telegram",
+                        target_chat_id="1",
+                    ),
+                )
+            ]
+        ),
+    )
 
     tasks, loop = build_proactive_runtime(
         cast(Any, cfg),
@@ -38,7 +53,13 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path):
         push_tool=cast(Any, SimpleNamespace()),
         memory_store=facade,
         presence=cast(Any, SimpleNamespace()),
-        agent_loop=cast(Any, SimpleNamespace(processing_state=None)),
+        agent_loop=cast(
+            Any,
+            SimpleNamespace(
+                processing_state=None,
+                role_world_registry=MagicMock(),
+            ),
+        ),
     )
 
     assert loop is not None
