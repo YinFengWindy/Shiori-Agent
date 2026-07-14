@@ -33,8 +33,9 @@ def test_prompt_tag_store_upserts_and_retrieves_ranked_tags(tmp_path: Path) -> N
     )
 
     expansion = store.expand(
-        "Mira stands in the 雨 夜",
+        "1girl, standing, rainy atmosphere, night",
         "blurry",
+        match_text="Mira 站在雨夜里",
         allow_adult=False,
     )
 
@@ -59,10 +60,12 @@ def test_prompt_tag_store_filters_adult_entries_without_nsfw_mode(
         )
     )
 
-    assert store.expand("adult scene", "", allow_adult=False).matched_entry_ids == []
-    assert store.expand("adult scene", "", allow_adult=True).matched_entry_ids == [
-        "adult"
-    ]
+    assert store.expand(
+        "1girl", "", match_text="adult scene", allow_adult=False
+    ).matched_entry_ids == []
+    assert store.expand(
+        "1girl", "", match_text="adult scene", allow_adult=True
+    ).matched_entry_ids == ["adult"]
 
 
 def test_prompt_tag_store_rejects_invalid_entries(tmp_path: Path) -> None:

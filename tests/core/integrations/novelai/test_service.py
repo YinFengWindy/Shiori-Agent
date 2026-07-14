@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -144,7 +145,7 @@ async def test_service_expands_prompts_from_tag_knowledge_base(tmp_path: Path) -
             "name": "雨景",
             "enabled": True,
             "category": "atmosphere",
-            "match_terms": ["rain"],
+            "match_terms": ["雨景"],
             "positive_tags": ["rainy atmosphere"],
             "negative_tags": ["flat lighting"],
             "rating": "general",
@@ -160,12 +161,38 @@ async def test_service_expands_prompts_from_tag_knowledge_base(tmp_path: Path) -
     )
 
     result = await service.generate(
-        GenerateImageRequest(prompt="girl in rain", negative_prompt="blurry")
+        GenerateImageRequest(prompt="1girl, outdoors", negative_prompt="blurry"),
+        prompt_tag_match_text="给我画一张雨景",
     )
 
     request_payload = json.loads(Path(result.request_path).read_text(encoding="utf-8"))
-    assert request_payload["input"] == "girl in rain, rainy atmosphere"
+    assert request_payload["input"] == "1girl, outdoors, rainy atmosphere"
     assert request_payload["parameters"]["negative_prompt"] == "blurry, flat lighting"
+
+
+@pytest.mark.asyncio
+async def test_service_does_not_match_prompt_tags_without_source_text(
+    tmp_path: Path,
+) -> None:
+    settings = NovelAISettings(enabled=True, token="novel-token")
+    prompt_tags = Mock(spec=PromptTagStore)
+    service = NovelAIService(
+        settings=settings,
+        client=_FakeClient(_json_response(), settings),
+        store=NovelAIStore(tmp_path),
+        role_store=RoleStore(tmp_path),
+        workspace=tmp_path,
+        prompt_tag_store=prompt_tags,
+    )
+
+    result = await service.generate(
+        GenerateImageRequest(prompt="1girl, rain", negative_prompt="blurry")
+    )
+
+    request_payload = json.loads(Path(result.request_path).read_text(encoding="utf-8"))
+    assert request_payload["input"] == "1girl, rain"
+    assert request_payload["parameters"]["negative_prompt"] == "blurry"
+    prompt_tags.expand.assert_not_called()
 
 
 @pytest.mark.asyncio

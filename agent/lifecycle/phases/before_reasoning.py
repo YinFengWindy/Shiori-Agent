@@ -58,6 +58,7 @@ class _SyncToolContextModule:
             chat_id=before_turn.chat_id,
             session_key=before_turn.session_key,
             role_id=role_id,
+            current_user_message=before_turn.content,
             role_config_version=str(message_metadata.get("role_config_version") or ""),
             thread_id=str(
                 message_metadata.get("thread_id")

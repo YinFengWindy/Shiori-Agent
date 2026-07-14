@@ -53,7 +53,10 @@ class NovelAIPlugin(Plugin):
             role_store=RoleStore(workspace),
             workspace=workspace,
         )
-        self._tool = GenerateImageTool(service)
+        self._tool = GenerateImageTool(
+            service,
+            context_provider=self.context.tool_registry.get_context,
+        )
         self._auto_cg = AutoCgPolicy(self.context.kv_store)
         self._pending_media: dict[str, list[str]] = {}
         self.context.tool_registry.register(

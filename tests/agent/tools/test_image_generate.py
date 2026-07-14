@@ -52,6 +52,47 @@ async def test_generate_image_tool_defaults_to_user_requested_intent() -> None:
 
     assert payload["intent"] == "user_requested"
     assert payload["scene_key"] == ""
+    request = service.generate.await_args.args[0]
+    assert request.prompt == "scene"
+    assert service.generate.await_args.kwargs["prompt_tag_match_text"] == ""
+
+
+@pytest.mark.asyncio
+async def test_generate_image_tool_uses_runtime_user_message_for_tag_matching() -> None:
+    service = cast(
+        Any,
+        SimpleNamespace(
+            generate=AsyncMock(
+                return_value=GenerateImageResult(
+                    record_id="record",
+                    created_at="2026-07-12T00:00:00+00:00",
+                    mode="txt2img",
+                    model="model",
+                    seed=1,
+                    width=1024,
+                    height=1024,
+                    output_paths=["output.png"],
+                    request_path="request.json",
+                    meta_path="meta.json",
+                )
+            )
+        ),
+    )
+    tool = GenerateImageTool(
+        service,
+        context_provider=lambda: {"current_user_message": "给我画一张雨景"},
+    )
+
+    await tool.execute(
+        prompt="1girl, rainy atmosphere",
+        mode="txt2img",
+        current_user_message="模型伪造的消息",
+    )
+
+    assert (
+        service.generate.await_args.kwargs["prompt_tag_match_text"]
+        == "给我画一张雨景"
+    )
 
 
 @pytest.mark.asyncio

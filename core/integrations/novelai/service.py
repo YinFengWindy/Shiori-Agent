@@ -58,7 +58,12 @@ class NovelAIService:
         self._workspace = workspace
         self._prompt_tag_store = prompt_tag_store or PromptTagStore(workspace)
 
-    async def generate(self, request: GenerateImageRequest) -> GenerateImageResult:
+    async def generate(
+        self,
+        request: GenerateImageRequest,
+        *,
+        prompt_tag_match_text: str = "",
+    ) -> GenerateImageResult:
         """Execute a validated NovelAI generation request end-to-end."""
 
         self._validate_enabled()
@@ -70,16 +75,18 @@ class NovelAIService:
             request.negative_prompt,
             field_name="negative_prompt",
         )
-        expansion = self._prompt_tag_store.expand(
-            prompt,
-            request.negative_prompt,
-            allow_adult=self._settings.nsfw_enabled,
-        )
-        request = replace(
-            request,
-            prompt=expansion.prompt,
-            negative_prompt=expansion.negative_prompt,
-        )
+        if prompt_tag_match_text.strip():
+            expansion = self._prompt_tag_store.expand(
+                prompt,
+                request.negative_prompt,
+                match_text=prompt_tag_match_text,
+                allow_adult=self._settings.nsfw_enabled,
+            )
+            request = replace(
+                request,
+                prompt=expansion.prompt,
+                negative_prompt=expansion.negative_prompt,
+            )
         validate_novelai_prompt(request.prompt, field_name="prompt")
         validate_novelai_prompt(
             request.negative_prompt,

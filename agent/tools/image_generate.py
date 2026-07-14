@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from agent.tools.base import Tool
@@ -97,8 +98,14 @@ class GenerateImageTool(Tool):
         "required": ["prompt", "mode"],
     }
 
-    def __init__(self, service: NovelAIService) -> None:
+    def __init__(
+        self,
+        service: NovelAIService,
+        *,
+        context_provider: Callable[[], dict[str, str]] | None = None,
+    ) -> None:
         self._service = service
+        self._context_provider = context_provider or (lambda: {})
 
     async def execute(self, **kwargs: Any) -> str:
         intent = str(kwargs.get("intent") or "user_requested").strip()
@@ -136,7 +143,11 @@ class GenerateImageTool(Tool):
             role_id=str(kwargs.get("role_id") or ""),
             session_key=str(kwargs.get("session_key") or ""),
         )
-        result = await self._service.generate(request)
+        context = self._context_provider()
+        result = await self._service.generate(
+            request,
+            prompt_tag_match_text=str(context.get("current_user_message") or ""),
+        )
         payload = result.to_public_payload()
         payload["intent"] = intent
         payload["scene_key"] = scene_key

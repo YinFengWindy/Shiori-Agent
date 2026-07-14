@@ -96,11 +96,12 @@ class PromptTagStore:
         prompt: str,
         negative_prompt: str,
         *,
+        match_text: str,
         allow_adult: bool,
     ) -> PromptTagExpansion:
-        """Retrieve matching tags deterministically and merge them into prompts."""
+        """Match source text and merge resolved tags into generation prompts."""
 
-        query = prompt.casefold()
+        query = match_text.casefold()
         ranked: list[tuple[int, PromptTagEntry]] = []
         for entry in self.list_entries():
             if not entry.enabled or (entry.rating == "adult" and not allow_adult):
