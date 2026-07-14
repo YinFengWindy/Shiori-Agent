@@ -138,9 +138,6 @@ export function loadSettingsData(): SettingsSnapshot {
   const qq = asRecord(channels.qq);
   const memory = asRecord(parsed.memory);
   const embedding = asRecord(memory.embedding);
-  const proactive = asRecord(parsed.proactive);
-  const proactiveAgent = asRecord(proactive.agent);
-  const proactiveDrift = asRecord(proactive.drift);
   const integrations = asRecord(parsed.integrations);
   const novelai = asRecord(integrations.novelai);
   const agent = asRecord(parsed.agent);
@@ -186,18 +183,6 @@ export function loadSettingsData(): SettingsSnapshot {
           embedding.output_dimensionality == null
             ? ""
             : String(embedding.output_dimensionality),
-      },
-      proactive: {
-        enabled: Boolean(proactive.enabled),
-        profile: String(proactive.profile ?? ""),
-        agentMaxSteps: Number(proactiveAgent.max_steps ?? 35),
-        agentContentLimit: Number(proactiveAgent.content_limit ?? 5),
-        agentWebFetchMaxChars: Number(
-          proactiveAgent.web_fetch_max_chars ?? 8000,
-        ),
-        driftEnabled: Boolean(proactiveDrift.enabled),
-        driftMaxSteps: Number(proactiveDrift.max_steps ?? 20),
-        driftMinIntervalHours: Number(proactiveDrift.min_interval_hours ?? 3),
       },
       integrations: {
         novelaiEnabled: Boolean(novelai.enabled),
@@ -315,20 +300,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     outputDimensionality
       ? `output_dimensionality = ${Number(outputDimensionality)}`
       : "",
-    "",
-    "[proactive]",
-    `enabled = ${formData.proactive.enabled ? "true" : "false"}`,
-    `profile = ${quote(formData.proactive.profile)}`,
-    "",
-    "[proactive.agent]",
-    `max_steps = ${formData.proactive.agentMaxSteps}`,
-    `content_limit = ${formData.proactive.agentContentLimit}`,
-    `web_fetch_max_chars = ${formData.proactive.agentWebFetchMaxChars}`,
-    "",
-    "[proactive.drift]",
-    `enabled = ${formData.proactive.driftEnabled ? "true" : "false"}`,
-    `max_steps = ${formData.proactive.driftMaxSteps}`,
-    `min_interval_hours = ${formData.proactive.driftMinIntervalHours}`,
     "",
     "[integrations.novelai]",
     `enabled = ${formData.integrations.novelaiEnabled ? "true" : "false"}`,

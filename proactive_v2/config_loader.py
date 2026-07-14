@@ -316,6 +316,9 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
         default_chat_id=default_chat_id,
         default_role_id=default_role_id,
         model=model,
+        profile=str(preset_name),
+        profiles=copy.deepcopy(user_profiles),
+        overrides=copy.deepcopy(overrides),
         feed_poller_interval_seconds=feed_poller_interval_seconds,
         **final_config,
     )

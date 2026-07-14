@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import threading
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -54,27 +54,56 @@ class RoleChannelBindingConfig:
 
 @dataclass(frozen=True)
 class RoleProactiveConfig:
-    """角色自己的主动推送开关及唯一目标。"""
+    """角色自己的主动推送目标、策略与 agent 参数。"""
 
     enabled: bool = False
     target_channel: str = ""
     target_chat_id: str = ""
+    profile: str = "daily"
+    overrides: dict[str, Any] = field(default_factory=dict)
+    agent: dict[str, Any] = field(default_factory=dict)
+    drift: dict[str, Any] = field(default_factory=dict)
+    policy_configured: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "enabled": self.enabled,
             "target_channel": self.target_channel,
             "target_chat_id": self.target_chat_id,
+            "profile": self.profile,
+            "overrides": dict(self.overrides),
+            "agent": dict(self.agent),
+            "drift": dict(self.drift),
+            "policy_configured": self.policy_configured,
         }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any] | None) -> "RoleProactiveConfig":
         data = payload if isinstance(payload, dict) else {}
+        profile = str(data.get("profile") or "daily").strip()
+        if not profile:
+            raise ValueError("角色主动推送 profile 不能为空")
         return cls(
             enabled=bool(data.get("enabled", False)),
             target_channel=str(data.get("target_channel") or "").strip(),
             target_chat_id=str(data.get("target_chat_id") or "").strip(),
+            profile=profile,
+            overrides=_proactive_dict_field(data, "overrides"),
+            agent=_proactive_dict_field(data, "agent"),
+            drift=_proactive_dict_field(data, "drift"),
+            policy_configured=(
+                bool(data.get("policy_configured"))
+                if "policy_configured" in data
+                else any(key in data for key in ("profile", "overrides", "agent", "drift"))
+            ),
         )
+
+
+def _proactive_dict_field(data: dict[str, Any], field_name: str) -> dict[str, Any]:
+    value = data.get(field_name, {})
+    if not isinstance(value, dict):
+        raise ValueError(f"角色主动推送 {field_name} 必须是对象")
+    return dict(value)
 
 
 @dataclass(frozen=True)
@@ -434,7 +463,12 @@ class RoleStore:
                         and chat_ids_equal(binding.channel, binding.chat_id, role.proactive.target_chat_id)
                         for binding in role.channel_bindings
                     ):
-                        role.proactive = RoleProactiveConfig()
+                        role.proactive = replace(
+                            role.proactive,
+                            enabled=False,
+                            target_channel="",
+                            target_chat_id="",
+                        )
                 if proactive is not None:
                     next_proactive = (
                         proactive

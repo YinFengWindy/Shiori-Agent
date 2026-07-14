@@ -9,13 +9,9 @@ from agent.memory import MemoryStore
 from bootstrap.memory import ensure_memory_plugin_storage
 from infra.persistence.json_store import save_json
 from proactive_v2.anyaction import QuotaStore
-from proactive_v2.loop import ProactiveLoop
-from proactive_v2.state import ProactiveStateStore
 from session.store import SessionStore
 
-_TEXT_FILES: dict[str, str] = {
-    "PROACTIVE_CONTEXT.md": ProactiveLoop._PROACTIVE_CONTEXT_TEMPLATE,
-}
+_TEXT_FILES: dict[str, str] = {}
 
 _JSON_FILES: dict[str, object] = {
     "mcp_servers.json": {"servers": {}},
@@ -28,7 +24,6 @@ _JSON_FILES: dict[str, object] = {
 _DIRECTORIES: tuple[str, ...] = (
     "observe",
     "skills",
-    "drift/skills",
     "mcp",
     "roles/assets",
 )
@@ -140,14 +135,7 @@ def _ensure_workspace_db_assets(
     else:
         summary.skipped.append(consolidation_db)
 
-    proactive_db = workspace / "proactive.db"
     quota_path = workspace / "proactive_quota.json"
-    proactive_exists = proactive_db.exists()
-    ProactiveStateStore(proactive_db).close()
-    if not proactive_exists:
-        summary.created.append(proactive_db)
-    else:
-        summary.skipped.append(proactive_db)
     if not quota_path.exists():
         save_json(
             quota_path,

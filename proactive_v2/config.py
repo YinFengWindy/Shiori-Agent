@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -15,6 +16,9 @@ class ProactiveConfig:
     default_channel: str = "telegram"
     default_chat_id: str = ""
     model: str = ""
+    profile: str = "daily"
+    profiles: dict[str, Any] = field(default_factory=dict)
+    overrides: dict[str, Any] = field(default_factory=dict)
 
     # Feed Poller 配置
     feed_poller_interval_seconds: int = 150

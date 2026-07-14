@@ -5,7 +5,6 @@ export type SettingsSectionId =
   | "models"
   | "channels"
   | "memory"
-  | "proactive"
   | "integrations"
   | "advanced";
 
@@ -13,7 +12,6 @@ export const settingsSections: Array<{ id: SettingsSectionId; label: string }> =
   { id: "models", label: "模型" },
   { id: "channels", label: "频道" },
   { id: "memory", label: "记忆" },
-  { id: "proactive", label: "主动推送" },
   { id: "integrations", label: "集成" },
   { id: "advanced", label: "高级" },
 ];

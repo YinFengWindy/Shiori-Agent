@@ -32,6 +32,11 @@ type RoleDetailPageProps = {
   onSaveRole: () => void;
 };
 
+function parseProactiveNumber(value: string, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 /** Renders the second-level role detail page and hosts the role editor form. */
 export function RoleDetailPage({
   activeRole,
@@ -324,6 +329,84 @@ export function RoleDetailPage({
                     {channelBindings.filter((binding) => binding.chat_id.trim()).map((binding) => <option key={`${binding.channel}:${binding.chat_id}`} value={`${binding.channel}:${binding.chat_id}`}>{roleBindingChannelLabel(binding.channel)} · {binding.chat_id}</option>)}
                   </select>
                 </label>
+                <label className="grid gap-1.5">
+                  <span>策略</span>
+                  <select
+                    className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                    value={roleForm.proactiveProfile ?? "daily"}
+                    onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveProfile: event.target.value }))}
+                  >
+                    <option value="daily">日常</option>
+                    <option value="quiet">低打扰</option>
+                    <option value="dev_verify">开发验证</option>
+                  </select>
+                </label>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <label className="grid gap-1.5">
+                    <span>Agent 模型</span>
+                    <input
+                      className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                      value={roleForm.proactiveAgentModel ?? ""}
+                      placeholder="沿用全局 Agent 模型"
+                      onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveAgentModel: event.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span>Agent 最大步数</span>
+                    <input
+                      className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                      inputMode="numeric"
+                      value={String(roleForm.proactiveAgentMaxSteps ?? 35)}
+                      onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveAgentMaxSteps: parseProactiveNumber(event.target.value, current.proactiveAgentMaxSteps ?? 35) }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span>候选内容数</span>
+                    <input
+                      className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                      inputMode="numeric"
+                      value={String(roleForm.proactiveAgentContentLimit ?? 5)}
+                      onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveAgentContentLimit: parseProactiveNumber(event.target.value, current.proactiveAgentContentLimit ?? 5) }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span>网页上下文字符数</span>
+                    <input
+                      className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                      inputMode="numeric"
+                      value={String(roleForm.proactiveAgentWebFetchMaxChars ?? 8000)}
+                      onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveAgentWebFetchMaxChars: parseProactiveNumber(event.target.value, current.proactiveAgentWebFetchMaxChars ?? 8000) }))}
+                    />
+                  </label>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Drift</span>
+                  <SettingsToggleCard
+                    checked={Boolean(roleForm.proactiveDriftEnabled)}
+                    ariaLabel="Drift"
+                    onChange={(checked) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveDriftEnabled: checked }))}
+                  />
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <label className="grid gap-1.5">
+                    <span>Drift 最大步数</span>
+                    <input
+                      className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                      inputMode="numeric"
+                      value={String(roleForm.proactiveDriftMaxSteps ?? 20)}
+                      onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveDriftMaxSteps: parseProactiveNumber(event.target.value, current.proactiveDriftMaxSteps ?? 20) }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span>Drift 最小间隔（小时）</span>
+                    <input
+                      className={cx(inputClass, "border-[#D8DFE7] bg-white text-[#111827]")}
+                      inputMode="numeric"
+                      value={String(roleForm.proactiveDriftMinIntervalHours ?? 3)}
+                      onChange={(event) => preserveScrollDuringFormUpdate((current) => ({ ...current, proactiveDriftMinIntervalHours: parseProactiveNumber(event.target.value, current.proactiveDriftMinIntervalHours ?? 3) }))}
+                    />
+                  </label>
+                </div>
                 {selectedProactiveBinding ? (
                   <ol className="grid gap-1.5" data-testid="role-proactive-sequence">
                     {proactiveTransportSequence.map((binding, index) => (

@@ -56,16 +56,6 @@ export type SettingsFormData = {
     embeddingBaseUrl: string;
     outputDimensionality: string;
   };
-  proactive: {
-    enabled: boolean;
-    profile: string;
-    agentMaxSteps: number;
-    agentContentLimit: number;
-    agentWebFetchMaxChars: number;
-    driftEnabled: boolean;
-    driftMaxSteps: number;
-    driftMinIntervalHours: number;
-  };
   integrations: {
     novelaiEnabled: boolean;
     novelaiToken: string;

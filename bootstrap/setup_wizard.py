@@ -35,9 +35,6 @@ class WizardAnswers:
     fast_api_key: str = ""
     fast_base_url: str = ""
     tg_token: str = ""
-    proactive_enabled: bool = False
-    proactive_chat_id: str = ""
-    proactive_channel: str = ""
     embed_model: str = ""
     embed_api_key: str = ""
     embed_base_url: str = ""
@@ -278,11 +275,10 @@ def _phase_fast_model(a: WizardAnswers) -> None:
 
 
 def _phase_telegram(a: WizardAnswers) -> None:
-    _section_header("3/4", "Telegram 频道 + Proactive")
+    _section_header("3/4", "Telegram 频道")
 
     if not click.confirm("配置 Telegram 频道？", default=True):
-        _hint("跳过后不配置外部渠道，proactive 已关闭")
-        a.proactive_enabled = False
+        _hint("跳过后不配置 Telegram 渠道")
         return
 
     # BotFather 引导
@@ -300,36 +296,6 @@ def _phase_telegram(a: WizardAnswers) -> None:
             a.tg_token = token
             break
         _err(f"{err}，请重新输入")
-
-    click.echo()
-    _hint("用户名在哪里看：Telegram → 设置 → 用户名（不带 @）")
-    username = click.prompt("你的 Telegram 用户名")
-
-    click.echo()
-    _hint("开启后 agent 会主动向你推送订阅内容和提醒")
-    if not click.confirm("开启 proactive 主动推送？", default=True):
-        a.proactive_enabled = False
-        return
-
-    a.proactive_enabled = True
-    a.proactive_channel = "telegram"
-
-    # 获取 chat_id
-    click.echo()
-    click.echo(click.style("  需要获取你的 Telegram chat_id：", bold=True))
-    _hint("现在打开 Telegram，向你的 bot 发任意一条消息（比如「你好」）")
-    _hint("发完回来按回车，向导会自动读取")
-    click.echo()
-    click.pause(info="发完消息后按回车继续...")
-
-    chat_id = _fetch_chat_id_with_spinner(a.tg_token, username, timeout_s=60)
-    if chat_id:
-        _ok(f"chat_id 已获取：{chat_id}")
-        a.proactive_chat_id = chat_id
-    else:
-        _warn("未收到消息，chat_id 留空")
-        _hint("启动后向 bot 发 /chatid 可以随时补填")
-
 
 def _phase_memory(a: WizardAnswers) -> None:
     _section_header("4/4", "语义记忆（Embedding）")
@@ -449,7 +415,6 @@ def _render_config(a: WizardAnswers) -> str:
         _render_agent(),
         _render_channels(a),
         _render_memory(a),
-        _render_proactive(a),
         _render_integrations(),
     ])
 
@@ -574,31 +539,6 @@ def _default_memory_local_config_path() -> Path:
     return Path(__file__).resolve().parent.parent / "plugins" / "default_memory" / "config.local.toml"
 
 
-def _render_proactive(a: WizardAnswers) -> str:
-    enabled = "true" if a.proactive_enabled else "false"
-    channel = a.proactive_channel or ("telegram" if a.tg_token else "")
-    return "\n".join([
-        "[proactive]",
-        f"enabled = {enabled}",
-        'profile = "daily"',
-        "",
-        "[proactive.target]",
-        f'channel = "{channel}"',
-        f'chat_id = "{a.proactive_chat_id}"',
-        "",
-        "[proactive.agent]",
-        "max_steps = 35",
-        "content_limit = 5",
-        "web_fetch_max_chars = 8000",
-        "",
-        "[proactive.drift]",
-        "enabled = false",
-        "max_steps = 20",
-        "min_interval_hours = 3",
-        "",
-    ])
-
-
 def _render_integrations() -> str:
     return ""
 
@@ -612,13 +552,5 @@ def _print_completion(a: WizardAnswers) -> None:
     click.echo("启动 agent：")
     click.echo(click.style("  uv run python main.py", bold=True))
 
-    if a.proactive_enabled and not a.proactive_chat_id:
-        click.echo()
-        _warn("proactive 已开启，但 chat_id 未获取到")
-        _hint("启动后向 bot 发 /chatid，把返回的 id 填入 config.toml：")
-        _hint("[proactive.target]")
-        _hint('chat_id = "<你的 id>"')
-        _hint("修改后重启生效")
-    elif a.proactive_enabled and a.proactive_chat_id:
-        click.echo()
-        _ok("proactive 已配置，启动后会主动向你推送消息")
+    click.echo()
+    _hint("主动推送请在桌面端角色详情中绑定渠道并配置角色策略")

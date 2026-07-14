@@ -161,18 +161,14 @@ def test_init_workspace_creates_expected_assets(tmp_path):
     assert (workspace / "memory" / "consolidation_writes.db").exists()
     assert (workspace / "memory" / "journal").is_dir()
     assert (workspace / "memory" / "memory2.db").exists()
-    assert "Proactive Context" in (
-        workspace / "PROACTIVE_CONTEXT.md"
-    ).read_text(encoding="utf-8")
     assert json.loads(
         (workspace / "mcp_servers.json").read_text(encoding="utf-8")
     ) == {"servers": {}}
     assert json.loads(
         (workspace / "proactive_sources.json").read_text(encoding="utf-8")
     ) == {"sources": []}
-    assert (workspace / "proactive.db").exists()
     assert (workspace / "skills").is_dir()
-    assert (workspace / "drift" / "skills").is_dir()
+    assert not (workspace / "drift" / "skills").exists()
     assert (workspace / "roles" / "roles.json").exists()
     assert (workspace / "roles" / "assets").is_dir()
     assert any(path == config_path for path in summary.created)
@@ -186,23 +182,27 @@ def test_init_workspace_respects_force_for_text_assets(tmp_path):
         config_path=config_path,
         workspace=workspace,
     )
-    proactive_path = workspace / "PROACTIVE_CONTEXT.md"
-    proactive_path.write_text("custom\n", encoding="utf-8")
+    config_text = config_path.read_text(encoding="utf-8").replace(
+        'model = "deepseek-v4-flash"',
+        'model = "custom"',
+        1,
+    )
+    config_path.write_text(config_text, encoding="utf-8")
 
     summary_skip = workspace_init.init_workspace(
         config_path=config_path,
         workspace=workspace,
     )
-    assert proactive_path.read_text(encoding="utf-8") == "custom\n"
-    assert any(path == proactive_path for path in summary_skip.skipped)
+    assert 'model = "custom"' in config_path.read_text(encoding="utf-8")
+    assert any(path == config_path for path in summary_skip.skipped)
 
     summary_force = workspace_init.init_workspace(
         config_path=config_path,
         workspace=workspace,
         force=True,
     )
-    assert "Proactive Context" in proactive_path.read_text(encoding="utf-8")
-    assert any(path == proactive_path for path in summary_force.overwritten)
+    assert "[llm]" in config_path.read_text(encoding="utf-8")
+    assert any(path == config_path for path in summary_force.overwritten)
 
 
 @pytest.mark.asyncio

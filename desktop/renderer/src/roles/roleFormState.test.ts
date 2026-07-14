@@ -13,7 +13,14 @@ function createRole(runtime_config: Record<string, unknown> = {}): RoleRecord {
     system_prompt: "prompt",
     runtime_config,
     channel_bindings: [],
-    proactive: { enabled: false, target_channel: "", target_chat_id: "" },
+    proactive: {
+      enabled: false,
+      target_channel: "",
+      target_chat_id: "",
+      profile: "quiet",
+      agent: { model: "agent-model", max_steps: 12, content_limit: 3, web_fetch_max_chars: 4000 },
+      drift: { enabled: true, max_steps: 8, min_interval_hours: 6 },
+    },
     avatar: null,
     avatar_abs: null,
     chat_background: null,
@@ -47,5 +54,16 @@ describe("roleFormState", () => {
       isRoleFormDirty({ ...form, autoSceneCgEnabled: true }, role),
       true,
     );
+  });
+
+  it("reads and compares role-owned proactive settings", () => {
+    const role = createRole();
+    const form = createRoleFormFromRole(role);
+
+    assert.equal(form.proactiveProfile, "quiet");
+    assert.equal(form.proactiveAgentModel, "agent-model");
+    assert.equal(form.proactiveDriftEnabled, true);
+    assert.equal(isRoleFormDirty(form, role), false);
+    assert.equal(isRoleFormDirty({ ...form, proactiveProfile: "daily" }, role), true);
   });
 });

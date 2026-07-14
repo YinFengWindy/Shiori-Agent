@@ -753,7 +753,7 @@ async def test_app_runtime_start_passes_markdown_store_to_memory_optimizer(
             )
         ),
     )
-    build_proactive_runtime = MagicMock(return_value=([], None))
+    build_proactive_runtime = MagicMock(return_value=([], {}))
     monkeypatch.setattr(
         "bootstrap.app.build_proactive_runtime", build_proactive_runtime
     )
@@ -827,7 +827,7 @@ async def test_app_runtime_desktop_mode_enables_message_channels(
     monkeypatch.setattr("bootstrap.app.start_channels", _fake_start_channels)
     monkeypatch.setattr(
         "bootstrap.app.build_memory_optimizer_task",
-        MagicMock(return_value=([], None)),
+        MagicMock(return_value=([], {})),
     )
     monkeypatch.setattr(
         "bootstrap.app.build_proactive_runtime",
@@ -915,7 +915,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
         max_tokens=128,
         light_model="lm",
     )
-    tasks, loop = build_proactive_runtime(
+    tasks, loops = build_proactive_runtime(
         cast(Any, cfg),
         tmp_path,
         session_manager=MagicMock(),
@@ -927,7 +927,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
         agent_loop=cast(Any, SimpleNamespace(processing_state=None)),
     )
     assert tasks == []
-    assert loop is None
+    assert loops == {}
     mem_tasks, mem_optimizer = build_memory_optimizer_task(
         cast(Any, cfg),
         provider=MagicMock(),
@@ -976,7 +976,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
         max_tokens=128,
         light_model="lm",
     )
-    tasks, loop = build_proactive_runtime(
+    tasks, loops = build_proactive_runtime(
         cast(Any, cfg),
         tmp_path,
         session_manager=MagicMock(),
@@ -991,7 +991,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
         )),
     )
     assert tasks == ["loop-task"]
-    assert loop is proactive_loop
+    assert loops == {"mira": proactive_loop}
     mem_tasks, mem_optimizer = build_memory_optimizer_task(
         cast(Any, cfg),
         provider=MagicMock(),

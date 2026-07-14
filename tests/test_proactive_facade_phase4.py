@@ -44,7 +44,7 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
         ),
     )
 
-    tasks, loop = build_proactive_runtime(
+    tasks, loops = build_proactive_runtime(
         cast(Any, cfg),
         tmp_path,
         session_manager=cast(Any, SimpleNamespace(workspace=tmp_path)),
@@ -62,8 +62,7 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
         ),
     )
 
-    assert loop is not None
-    assert loop._memory is facade
+    assert loops["mira"]._memory is facade
     for task in tasks:
         close = getattr(task, "close", None)
         if callable(close):

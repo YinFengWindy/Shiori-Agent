@@ -45,16 +45,6 @@ function createSettingsFormData(
       embeddingBaseUrl: "",
       outputDimensionality: "",
     },
-    proactive: {
-      enabled: false,
-      profile: "default",
-      agentMaxSteps: 35,
-      agentContentLimit: 5,
-      agentWebFetchMaxChars: 8000,
-      driftEnabled: false,
-      driftMaxSteps: 20,
-      driftMinIntervalHours: 3,
-    },
     integrations: {
       novelaiEnabled: false,
       novelaiToken: "",

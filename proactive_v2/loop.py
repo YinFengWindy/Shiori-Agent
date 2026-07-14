@@ -226,10 +226,11 @@ class ProactiveLoop:
         self._trace_proactive_config_snapshot()
 
     def _workspace_proactive_context_path(self) -> Path | None:
+        workspace_dir = getattr(self._state, "workspace_dir", None)
+        if workspace_dir is not None:
+            return Path(workspace_dir) / self._PROACTIVE_CONTEXT_FILE
         workspace = getattr(self._sessions, "workspace", None)
-        if workspace is None:
-            return None
-        return Path(workspace) / self._PROACTIVE_CONTEXT_FILE
+        return Path(workspace) / self._PROACTIVE_CONTEXT_FILE if workspace else None
 
     def _ensure_workspace_proactive_context_file(self) -> None:
         path = self._workspace_proactive_context_path()
@@ -296,12 +297,13 @@ class ProactiveLoop:
             if "trace_type" not in payload or "payload" not in payload:
                 trace_type = "proactive_config" if "config" in filename else "proactive_rate"
                 source = "proactive.config" if trace_type == "proactive_config" else "proactive.rate"
+                role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
                 payload = {
                     **build_strategy_trace_envelope(
                         trace_type=trace_type,  # type: ignore[arg-type]
                         source=source,
-                        subject_kind="global",
-                        subject_id=filename.removesuffix(".jsonl"),
+                        subject_kind="role" if role_id else "global",
+                        subject_id=role_id or filename.removesuffix(".jsonl"),
                         payload=payload,
                         timestamp=datetime.now(timezone.utc).isoformat(),
                     ),

@@ -212,6 +212,18 @@ export function useRoleManagement({
           enabled: Boolean(nextRoleForm.proactiveEnabled),
           target_channel: nextRoleForm.proactiveTargetChannel ?? "",
           target_chat_id: nextRoleForm.proactiveTargetChatId ?? "",
+          profile: nextRoleForm.proactiveProfile ?? "daily",
+          agent: {
+            model: nextRoleForm.proactiveAgentModel ?? "",
+            max_steps: nextRoleForm.proactiveAgentMaxSteps ?? 35,
+            content_limit: nextRoleForm.proactiveAgentContentLimit ?? 5,
+            web_fetch_max_chars: nextRoleForm.proactiveAgentWebFetchMaxChars ?? 8000,
+          },
+          drift: {
+            enabled: Boolean(nextRoleForm.proactiveDriftEnabled),
+            max_steps: nextRoleForm.proactiveDriftMaxSteps ?? 20,
+            min_interval_hours: nextRoleForm.proactiveDriftMinIntervalHours ?? 3,
+          },
         },
         avatar_source: nextRoleForm.avatarSource || undefined,
         illustration_sources: nextRoleForm.illustrationSources,

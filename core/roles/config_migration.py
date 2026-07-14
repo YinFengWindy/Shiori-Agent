@@ -98,22 +98,66 @@ class RoleConfigMigrator:
         )
 
     def _migrate_proactive(self, proactive: Any | None) -> int:
+        if proactive is None:
+            return 0
+        migrated_role_ids = self._migrate_proactive_policies(proactive)
         role_id = str(getattr(proactive, "default_role_id", "") or "").strip()
         channel = str(getattr(proactive, "default_channel", "") or "").strip()
         chat_id = str(getattr(proactive, "default_chat_id", "") or "").strip()
         if not role_id or not channel or not chat_id:
-            return 0
+            return len(migrated_role_ids)
         role = self._repository.store.get_role(role_id)
         if role is None or role.proactive.enabled or role.proactive.target_channel or role.proactive.target_chat_id:
-            return 0
+            return len(migrated_role_ids)
         if not any(item.channel == channel and item.chat_id == chat_id for item in role.channel_bindings):
-            return 0
+            return len(migrated_role_ids)
         self._repository.update_role(
             role.id,
             proactive=RoleProactiveConfig(
                 enabled=bool(getattr(proactive, "enabled", False)),
                 target_channel=channel,
                 target_chat_id=chat_id,
+                profile=role.proactive.profile,
+                overrides=role.proactive.overrides,
+                agent=role.proactive.agent,
+                drift=role.proactive.drift,
+                policy_configured=role.proactive.policy_configured,
             ),
         )
-        return 1
+        migrated_role_ids.add(role.id)
+        return len(migrated_role_ids)
+
+    def _migrate_proactive_policies(self, proactive: Any) -> set[str]:
+        migrated: set[str] = set()
+        for role in self._repository.store.list_roles():
+            current = role.proactive
+            if current.policy_configured:
+                continue
+            self._repository.update_role(
+                role.id,
+                proactive=RoleProactiveConfig(
+                    enabled=current.enabled,
+                    target_channel=current.target_channel,
+                    target_chat_id=current.target_chat_id,
+                    profile=str(getattr(proactive, "profile", "daily") or "daily"),
+                    overrides=dict(getattr(proactive, "overrides", {}) or {}),
+                    agent={
+                        "model": str(getattr(proactive, "agent_tick_model", "") or ""),
+                        "max_steps": int(getattr(proactive, "agent_tick_max_steps", 35)),
+                        "content_limit": int(getattr(proactive, "agent_tick_content_limit", 5)),
+                        "web_fetch_max_chars": int(
+                            getattr(proactive, "agent_tick_web_fetch_max_chars", 8_000)
+                        ),
+                    },
+                    drift={
+                        "enabled": bool(getattr(proactive, "drift_enabled", False)),
+                        "max_steps": int(getattr(proactive, "drift_max_steps", 20)),
+                        "min_interval_hours": int(
+                            getattr(proactive, "drift_min_interval_hours", 3)
+                        ),
+                    },
+                    policy_configured=True,
+                ),
+            )
+            migrated.add(role.id)
+        return migrated

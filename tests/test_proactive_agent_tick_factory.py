@@ -146,7 +146,7 @@ def test_build_proactive_runtime_accepts_light_agent_loop_stub(tmp_path):
         max_tokens=128,
         light_model="lm",
     )
-    tasks, loop = build_proactive_runtime(
+    tasks, loops = build_proactive_runtime(
         cast(Any, cfg),
         tmp_path,
         session_manager=cast(Any, SimpleNamespace()),
@@ -158,7 +158,7 @@ def test_build_proactive_runtime_accepts_light_agent_loop_stub(tmp_path):
         agent_loop=cast(Any, SimpleNamespace(processing_state=None)),
     )
     assert tasks == []
-    assert loop is None
+    assert loops == {}
 
 
 async def test_agent_tick_factory_llm_fn_forces_disable_thinking():

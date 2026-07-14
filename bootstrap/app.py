@@ -102,7 +102,7 @@ class AppRuntime:
         self.memory_runtime = None
         self.presence = None
         self.relationship_runtime = None
-        self.proactive_loop = None
+        self.proactive_loops = {}
         self._background_tasks: list[asyncio.Task[None]] = []
         self._memory_optimizer = None
         self._shutdown = False
@@ -185,7 +185,7 @@ class AppRuntime:
                     ]
                 )
             if self.features.enable_proactive:
-                proactive_tasks, self.proactive_loop = build_proactive_runtime(
+                proactive_tasks, self.proactive_loops = build_proactive_runtime(
                     self.config,
                     self.workspace,
                     session_manager=self.session_manager,
@@ -201,9 +201,6 @@ class AppRuntime:
                     asyncio.create_task(task, name=f"proactive:{index}")
                     for index, task in enumerate(proactive_tasks)
                 )
-                if self.proactive_loop is not None and self.ipc is not None:
-                    self.ipc.set_proactive_loop(self.proactive_loop)
-
             self._started = True
         except Exception:
             await self.shutdown()

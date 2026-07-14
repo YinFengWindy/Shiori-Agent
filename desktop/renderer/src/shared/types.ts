@@ -69,6 +69,19 @@ export type RoleProactiveConfig = {
   enabled: boolean;
   target_channel: string;
   target_chat_id: string;
+  profile?: string;
+  overrides?: Record<string, Record<string, number>>;
+  agent?: {
+    model?: string;
+    max_steps?: number;
+    content_limit?: number;
+    web_fetch_max_chars?: number;
+  };
+  drift?: {
+    enabled?: boolean;
+    max_steps?: number;
+    min_interval_hours?: number;
+  };
 };
 
 export type RoleTaskKind = "schedule" | "subagent" | "memory_maintenance";
@@ -144,6 +157,14 @@ export type RoleFormState = {
   proactiveEnabled?: boolean;
   proactiveTargetChannel?: string;
   proactiveTargetChatId?: string;
+  proactiveProfile?: string;
+  proactiveAgentModel?: string;
+  proactiveAgentMaxSteps?: number;
+  proactiveAgentContentLimit?: number;
+  proactiveAgentWebFetchMaxChars?: number;
+  proactiveDriftEnabled?: boolean;
+  proactiveDriftMaxSteps?: number;
+  proactiveDriftMinIntervalHours?: number;
   avatarSource: string;
   illustrationSources: string[];
   removedIllustrations: string[];

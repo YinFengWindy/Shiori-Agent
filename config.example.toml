@@ -92,27 +92,6 @@ model = "text-embedding-v3"
 api_key = "sk-..."
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-# =============================================================================
-# 主动推送（可选）
-# 先跑通基本对话再开启这部分。
-# =============================================================================
-
-[proactive]
-# 进程级主动能力开关；具体目标在角色详情中配置。
-enabled = false
-profile = "daily"
-
-[proactive.agent]
-max_steps = 35
-content_limit = 5
-web_fetch_max_chars = 8000
-
-[proactive.drift]
-# Drift：无可推送内容时 agent 自主做任务。建议先跑通 proactive 再开启。
-enabled = false
-max_steps = 20
-min_interval_hours = 3
-
 [integrations.novelai]
 enabled = false
 token = "${NOVELAI_TOKEN}"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,7 +9,8 @@ from agent.looping.core import AgentLoop
 from agent.provider import LLMProvider
 from agent.tool_hooks import ToolHook
 from agent.tools.message_push import MessagePushTool
-from core.roles import RoleStore
+from core.roles import RoleRecord, RoleStore
+from proactive_v2.config_loader import load_proactive_config
 from proactive_v2.loop import ProactiveLoop
 from proactive_v2.memory_optimizer import MemoryOptimizer, MemoryOptimizerLoop
 from proactive_v2.presence import PresenceStore
@@ -56,25 +56,21 @@ def build_proactive_runtime(
     presence: PresenceStore,
     agent_loop: AgentLoop,
     tool_hooks: list[ToolHook] | None = None,
-) -> tuple[list, ProactiveLoop | None]:
+) -> tuple[list, dict[str, ProactiveLoop]]:
     tasks: list = []
     roles = [role for role in RoleStore(workspace).list_roles() if role.proactive.enabled]
     if not roles:
-        return tasks, None
+        return tasks, {}
 
-    # 2. 先准备 proactive 独立状态存储和配置快照。
-    proactive_state = ProactiveStateStore(workspace / "proactive.db")
+    # 2. 为每个角色创建独立配置、状态与 agent loop。
     proactive_provider = _build_proactive_provider(config, provider)
-    loops: list[ProactiveLoop] = []
+    loops: dict[str, ProactiveLoop] = {}
     role_world_registry = agent_loop.role_world_registry
     for role in roles:
         target = role.proactive
-        proactive_cfg = replace(
-            config.proactive,
-            enabled=True,
-            default_role_id=role.id,
-            default_channel=target.target_channel,
-            default_chat_id=target.target_chat_id,
+        proactive_cfg = _build_role_proactive_config(role)
+        proactive_state = ProactiveStateStore(
+            workspace / "roles" / role.id / "proactive.db"
         )
         loop = ProactiveLoop(
             session_manager=session_manager,
@@ -100,9 +96,28 @@ def build_proactive_runtime(
                 registry=role_world_registry,
             ),
         )
-        loops.append(loop)
+        loops[role.id] = loop
         tasks.append(loop.run())
-    return tasks, loops[0]
+    return tasks, loops
+
+
+def _build_role_proactive_config(role: RoleRecord):
+    """Builds the runtime proactive config from one authoritative role snapshot."""
+    target = role.proactive
+    return load_proactive_config(
+        {
+            "enabled": target.enabled,
+            "profile": str(getattr(target, "profile", "daily") or "daily"),
+            "target": {
+                "role_id": role.id,
+                "channel": target.target_channel,
+                "chat_id": target.target_chat_id,
+            },
+            "overrides": dict(getattr(target, "overrides", {}) or {}),
+            "agent": dict(getattr(target, "agent", {}) or {}),
+            "drift": dict(getattr(target, "drift", {}) or {}),
+        }
+    )
 
 
 def _build_role_tick_dispatcher(*, role_id: str, channel: str, chat_id: str, registry):
