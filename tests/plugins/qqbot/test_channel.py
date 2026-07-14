@@ -311,6 +311,51 @@ async def test_qqbot_response_records_delivery_for_role_thread() -> None:
 
 
 @pytest.mark.asyncio
+async def test_qqbot_response_sends_media_and_records_delivery_after_success() -> None:
+    hub = _Hub()
+    channel = QQBotChannel("app", "secret")
+    channel._channel_hub = hub
+    channel.send = AsyncMock()
+    channel.send_image = AsyncMock()
+
+    await channel._on_response(
+        OutboundMessage(
+            channel="qqbot",
+            chat_id="c2c:user-1",
+            content="",
+            media=["first.png", "second.png"],
+        )
+    )
+
+    channel.send.assert_not_awaited()
+    assert channel.send_image.await_args_list == [
+        (("c2c:user-1", "first.png"),),
+        (("c2c:user-1", "second.png"),),
+    ]
+    assert hub.deliveries == [("sent", "c2c:user-1")]
+
+
+@pytest.mark.asyncio
+async def test_qqbot_response_marks_media_failure_without_sent_status() -> None:
+    hub = _Hub()
+    channel = QQBotChannel("app", "secret")
+    channel._channel_hub = hub
+    channel.send_image = AsyncMock(side_effect=RuntimeError("upload failed"))
+
+    with pytest.raises(RuntimeError, match="upload failed"):
+        await channel._on_response(
+            OutboundMessage(
+                channel="qqbot",
+                chat_id="c2c:user-1",
+                content="",
+                media=["broken.png"],
+            )
+        )
+
+    assert hub.deliveries == [("failed", "c2c:user-1")]
+
+
+@pytest.mark.asyncio
 async def test_qqbot_stop_uses_bound_role_session() -> None:
     hub = _Hub()
     interrupt = SimpleNamespace(

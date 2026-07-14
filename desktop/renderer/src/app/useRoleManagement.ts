@@ -4,6 +4,7 @@ import type { RoleAssetCategory, RoleRecord, RoleFormState, NewRoleFormState, Pe
 import type { AppMainView } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import { writeRoleMoodConfigToRuntimeConfig } from "../roles/roleMoodConfig";
+import { buildRoleProactiveConfig } from "../roles/roleFormState";
 
 type UseRoleManagementArgs = {
   activeRoleId: string;
@@ -208,23 +209,7 @@ export function useRoleManagement({
           nextRoleForm,
         ),
         channel_bindings: nextRoleForm.channelBindings ?? [],
-        proactive: {
-          enabled: Boolean(nextRoleForm.proactiveEnabled),
-          target_channel: nextRoleForm.proactiveTargetChannel ?? "",
-          target_chat_id: nextRoleForm.proactiveTargetChatId ?? "",
-          profile: nextRoleForm.proactiveProfile ?? "daily",
-          agent: {
-            model: nextRoleForm.proactiveAgentModel ?? "",
-            max_steps: nextRoleForm.proactiveAgentMaxSteps ?? 35,
-            content_limit: nextRoleForm.proactiveAgentContentLimit ?? 5,
-            web_fetch_max_chars: nextRoleForm.proactiveAgentWebFetchMaxChars ?? 8000,
-          },
-          drift: {
-            enabled: Boolean(nextRoleForm.proactiveDriftEnabled),
-            max_steps: nextRoleForm.proactiveDriftMaxSteps ?? 20,
-            min_interval_hours: nextRoleForm.proactiveDriftMinIntervalHours ?? 3,
-          },
-        },
+        proactive: buildRoleProactiveConfig(detailRole, nextRoleForm),
         avatar_source: nextRoleForm.avatarSource || undefined,
         illustration_sources: nextRoleForm.illustrationSources,
         removed_illustrations: nextRoleForm.removedIllustrations,

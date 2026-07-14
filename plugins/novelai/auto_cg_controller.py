@@ -170,7 +170,6 @@ class AutoCgController:
         media = _media_paths(payload)
         if not media:
             raise RuntimeError("自动场景 CG 生图结果缺少 output_paths")
-        self._policy.record_success(ctx.session_key, prepared["scene_key"])
 
         push_tool = self._tool_registry.get_tool("message_push")
         if push_tool is None:
@@ -185,6 +184,7 @@ class AutoCgController:
             )
             if not isinstance(push_result, str) or "图片已发送" not in push_result:
                 raise RuntimeError(f"自动场景 CG 补发失败: {push_result}")
+        self._policy.record_success(ctx.session_key, prepared["scene_key"])
 
     def _finish_task(
         self,

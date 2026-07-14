@@ -1,5 +1,33 @@
-import type { RoleFormState, RoleRecord } from "../shared/types";
+import type { RoleFormState, RoleProactiveConfig, RoleRecord } from "../shared/types";
 import { readRoleMoodConfig, roleMoodConfigEqual } from "./roleMoodConfig";
+
+/** Builds a proactive update while preserving persisted fields outside the form. */
+export function buildRoleProactiveConfig(
+  role: RoleRecord | null,
+  roleForm: RoleFormState,
+): RoleProactiveConfig {
+  const persisted = role?.proactive;
+  return {
+    ...persisted,
+    enabled: Boolean(roleForm.proactiveEnabled),
+    target_channel: roleForm.proactiveTargetChannel ?? "",
+    target_chat_id: roleForm.proactiveTargetChatId ?? "",
+    profile: roleForm.proactiveProfile ?? "daily",
+    agent: {
+      ...(persisted?.agent ?? {}),
+      model: roleForm.proactiveAgentModel ?? "",
+      max_steps: roleForm.proactiveAgentMaxSteps ?? 35,
+      content_limit: roleForm.proactiveAgentContentLimit ?? 5,
+      web_fetch_max_chars: roleForm.proactiveAgentWebFetchMaxChars ?? 8000,
+    },
+    drift: {
+      ...(persisted?.drift ?? {}),
+      enabled: Boolean(roleForm.proactiveDriftEnabled),
+      max_steps: roleForm.proactiveDriftMaxSteps ?? 20,
+      min_interval_hours: roleForm.proactiveDriftMinIntervalHours ?? 3,
+    },
+  };
+}
 
 /** Builds the editable role form state from a persisted role snapshot. */
 export function createRoleFormFromRole(role: RoleRecord): RoleFormState {

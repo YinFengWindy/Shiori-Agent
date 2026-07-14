@@ -3,7 +3,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { RoleRecord } from "../shared/types";
-import { createRoleFormFromRole, isRoleFormDirty } from "./roleFormState";
+import {
+  buildRoleProactiveConfig,
+  createRoleFormFromRole,
+  isRoleFormDirty,
+} from "./roleFormState";
 
 function createRole(runtime_config: Record<string, unknown> = {}): RoleRecord {
   return {
@@ -18,6 +22,7 @@ function createRole(runtime_config: Record<string, unknown> = {}): RoleRecord {
       target_channel: "",
       target_chat_id: "",
       profile: "quiet",
+      overrides: { loneliness: { threshold: 0.7 } },
       agent: { model: "agent-model", max_steps: 12, content_limit: 3, web_fetch_max_chars: 4000 },
       drift: { enabled: true, max_steps: 8, min_interval_hours: 6 },
     },
@@ -65,5 +70,16 @@ describe("roleFormState", () => {
     assert.equal(form.proactiveDriftEnabled, true);
     assert.equal(isRoleFormDirty(form, role), false);
     assert.equal(isRoleFormDirty({ ...form, proactiveProfile: "daily" }, role), true);
+  });
+
+  it("preserves proactive overrides when building an update payload", () => {
+    const role = createRole();
+    const form = createRoleFormFromRole(role);
+
+    assert.deepEqual(buildRoleProactiveConfig(role, form), role.proactive);
+    assert.deepEqual(
+      buildRoleProactiveConfig(role, { ...form, proactiveEnabled: true }).overrides,
+      { loneliness: { threshold: 0.7 } },
+    );
   });
 });

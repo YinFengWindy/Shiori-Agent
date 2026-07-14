@@ -288,6 +288,8 @@ class QQBotChannel:
                 self._clear_live_session(session_key)
             if msg.content.strip() and not sent_as_stream:
                 await self.send(msg.chat_id, msg.content)
+            for image in msg.media:
+                await self.send_image(msg.chat_id, image)
         except Exception:
             send_failed = True
             self._record_delivery_status(msg, "failed")
