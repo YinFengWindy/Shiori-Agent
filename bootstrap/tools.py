@@ -541,6 +541,8 @@ def build_core_runtime(
         session_manager=session_manager,
         memory_engine=memory_runtime.engine,
         app_config=config,
+        light_provider=light_provider,
+        light_model=config.light_model,
         plugin_configs=config.plugins,
     )
 

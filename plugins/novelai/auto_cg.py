@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, cast
 
 from agent.plugins.context import PluginKVStore
-from agent.prompting import PromptSectionRender
 from agent.tool_hooks.types import HookOutcome
 
 _THIRD_PERSON_PROMPT_TERMS = (
@@ -19,7 +18,7 @@ _FIRST_PERSON_NEGATIVE_TERMS = (
 
 
 class AutoCgPolicy:
-    """Own automatic scene-CG prompting, cooldown, and deduplication state."""
+    """Own automatic scene-CG cooldown and deduplication state."""
 
     _COOLDOWN_TURNS = 8
     _STATE_KEY = "auto_cg_sessions"
@@ -36,39 +35,15 @@ class AutoCgPolicy:
         state["turn"] = int(state.get("turn", 0)) + 1
         self._set_session_state(session_key, state)
 
-    def build_prompt_section(self, session_key: str) -> PromptSectionRender:
-        """Build scene-aware CG guidance with current cooldown status."""
+    def cooldown_remaining(self, session_key: str) -> int:
+        """Return how many additional user turns remain in the cooldown."""
 
         state = self._get_session_state(session_key)
         turn = int(state.get("turn", 0))
         last_turn = state.get("last_success_turn")
-        remaining = 0
-        if isinstance(last_turn, int):
-            remaining = max(0, self._COOLDOWN_TURNS + 1 - (turn - last_turn))
-        cooldown_text = (
-            f"自动 CG 冷却中，还需等待至少 {remaining} 个用户回合。"
-            if remaining
-            else "当前不在自动 CG 冷却期。"
-        )
-        return PromptSectionRender(
-            name="novelai_auto_cg_protocol",
-            content=(
-                "## 自动场景 CG 协议\n"
-                "你可以在角色扮演中主动生成 CG，但必须克制。只有重要地点首次出现、"
-                "关系或情绪高潮、剧情转折或具有明确构图的关键动作结果，才调用 "
-                "`generate_image`。普通闲聊、连续小动作和与上一张画面相近的场景不要调用。\n"
-                "自动生成时必须传 `intent=scene_cg`、稳定且简短的 `scene_key`，并让 prompt "
-                "使用动画 CG 式第三人称镜头：摄影机必须位于角色之外，角色本人必须清晰入镜，"
-                "并用角色名或明确外貌描述角色。禁止第一人称 POV、自拍构图，以及只画角色眼中"
-                "所见而不让角色入镜。prompt 只描述可见角色、动作、环境、构图、光线和氛围。"
-                "无论当前对话使用什么语言，prompt 和 negative_prompt 都必须使用逗号分隔的"
-                "英文 NovelAI tags，禁止中文和自然语言句子；调用前先在内部完成转换。"
-                "单人主体优先 portrait，环境或双人场景优先 landscape。用户明确要求生图时传 "
-                "`intent=user_requested`，不受自动 CG 限制。\n"
-                f"当前策略状态：{cooldown_text}"
-            ),
-            is_static=False,
-        )
+        if not isinstance(last_turn, int):
+            return 0
+        return max(0, self._COOLDOWN_TURNS + 1 - (turn - last_turn))
 
     def guard(
         self,

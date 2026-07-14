@@ -1,0 +1,232 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
+
+from agent.lifecycle.types import AfterTurnCtx, BeforeTurnCtx
+from agent.tools.image_generate import GenerateImageTool
+from agent.tools.registry import ToolRegistry
+from core.integrations.novelai.models import NovelAISettings
+from core.roles.store import RoleStore
+from plugins.novelai.auto_cg import AutoCgPolicy
+from plugins.novelai.scene_decision import (
+    SceneCgDecision,
+    SceneCgDecisionInput,
+    decide_scene_cg,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class AutoCgController:
+    """Own asynchronous scene decisions, generation, and delayed delivery."""
+
+    def __init__(
+        self,
+        *,
+        settings: NovelAISettings,
+        role_store: RoleStore,
+        policy: AutoCgPolicy,
+        light_provider: Any,
+        light_model: str,
+        session_manager: Any,
+        generate_tool: GenerateImageTool,
+        tool_registry: ToolRegistry,
+        decision_provider: Callable[..., Awaitable[SceneCgDecision]] = decide_scene_cg,
+    ) -> None:
+        self._settings = settings
+        self._role_store = role_store
+        self._policy = policy
+        self._light_provider = light_provider
+        self._light_model = str(light_model or "").strip()
+        self._session_manager = session_manager
+        self._generate_tool = generate_tool
+        self._tool_registry = tool_registry
+        self._decision_provider = decision_provider
+        self._turn_inputs: dict[str, SceneCgDecisionInput] = {}
+        self._tasks: dict[str, asyncio.Task[None]] = {}
+
+    def capture_turn(self, ctx: BeforeTurnCtx) -> None:
+        """Capture one eligible role turn and advance its cooldown counter."""
+
+        self._policy.advance_turn(ctx.session_key)
+        decision_input = self._build_decision_input(ctx)
+        if decision_input is None:
+            self._turn_inputs.pop(ctx.session_key, None)
+            return
+        self._turn_inputs[ctx.session_key] = decision_input
+
+    @property
+    def tasks(self) -> dict[str, asyncio.Task[None]]:
+        """Return a snapshot of in-flight automatic CG tasks."""
+
+        return dict(self._tasks)
+
+    def schedule(self, ctx: AfterTurnCtx) -> None:
+        """Schedule a non-blocking scene decision after the text turn completes."""
+
+        decision_input = self._turn_inputs.pop(ctx.session_key, None)
+        if (
+            decision_input is None
+            or not ctx.will_dispatch
+            or not ctx.reply.strip()
+            or "generate_image" in ctx.tools_used
+            or self._policy.cooldown_remaining(ctx.session_key) > 0
+            or ctx.session_key in self._tasks
+        ):
+            return
+        task = asyncio.create_task(
+            self._run(ctx, decision_input),
+            name=f"novelai_auto_cg:{ctx.session_key}",
+        )
+        self._tasks[ctx.session_key] = task
+        task.add_done_callback(
+            lambda completed, session_key=ctx.session_key: self._finish_task(
+                session_key,
+                completed,
+            )
+        )
+
+    async def terminate(self) -> None:
+        """Cancel and await all in-flight automatic CG tasks."""
+
+        tasks = list(self._tasks.values())
+        for task in tasks:
+            _ = task.cancel()
+        if tasks:
+            _ = await asyncio.gather(*tasks, return_exceptions=True)
+        self._tasks.clear()
+
+    def _build_decision_input(
+        self,
+        ctx: BeforeTurnCtx,
+    ) -> SceneCgDecisionInput | None:
+        if (
+            not self._settings.enabled
+            or self._light_provider is None
+            or not self._light_model
+            or self._session_manager is None
+        ):
+            return None
+        session = self._session_manager.get_or_create(ctx.session_key)
+        role_id = str(session.metadata.get("role_id") or "").strip()
+        if not role_id:
+            return None
+        role = self._role_store.get_role(role_id)
+        if role is None or not bool(role.runtime_config.get("auto_scene_cg_enabled")):
+            return None
+        return SceneCgDecisionInput(
+            role_name=role.name,
+            role_prompt=role.system_prompt,
+            user_message=ctx.content,
+            recent_history=_compact_history(ctx.history_messages),
+        )
+
+    async def _run(
+        self,
+        ctx: AfterTurnCtx,
+        decision_input: SceneCgDecisionInput,
+    ) -> None:
+        completed_input = SceneCgDecisionInput(
+            role_name=decision_input.role_name,
+            role_prompt=decision_input.role_prompt,
+            user_message=decision_input.user_message,
+            assistant_reply=ctx.reply,
+            recent_history=decision_input.recent_history,
+        )
+        decision = await self._decision_provider(
+            self._light_provider,
+            model=self._light_model,
+            decision_input=completed_input,
+        )
+        if not decision.should_generate:
+            return
+        session = self._session_manager.get_or_create(ctx.session_key)
+        role_id = str(session.metadata.get("role_id") or "").strip()
+        prepared = self._policy.guard(
+            ctx.session_key,
+            {
+                "prompt": decision.prompt,
+                "negative_prompt": decision.negative_prompt,
+                "mode": "txt2img",
+                "size_preset": decision.size_preset,
+                "intent": "scene_cg",
+                "scene_key": decision.scene_key,
+                "role_id": role_id,
+                "session_key": ctx.session_key,
+            },
+        )
+        if not isinstance(prepared, dict):
+            logger.info(
+                "自动场景 CG 已跳过 session=%s reason=%s",
+                ctx.session_key,
+                getattr(prepared, "reason", "policy_denied"),
+            )
+            return
+        payload = _safe_json(await self._generate_tool.execute(**prepared))
+        media = _media_paths(payload)
+        if not media:
+            raise RuntimeError("自动场景 CG 生图结果缺少 output_paths")
+        self._policy.record_success(ctx.session_key, prepared["scene_key"])
+
+        push_tool = self._tool_registry.get_tool("message_push")
+        if push_tool is None:
+            raise RuntimeError("自动场景 CG 缺少 message_push 工具")
+        for image_path in media:
+            push_result = await push_tool.execute(
+                channel=ctx.channel,
+                chat_id=ctx.chat_id,
+                image=image_path,
+                role_id=role_id,
+                session_key=ctx.session_key,
+            )
+            if not isinstance(push_result, str) or "图片已发送" not in push_result:
+                raise RuntimeError(f"自动场景 CG 补发失败: {push_result}")
+
+    def _finish_task(
+        self,
+        session_key: str,
+        task: asyncio.Task[None],
+    ) -> None:
+        if self._tasks.get(session_key) is task:
+            _ = self._tasks.pop(session_key, None)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            logger.error(
+                "自动场景 CG 后台任务失败 session=%s: %s",
+                session_key,
+                error,
+                exc_info=(type(error), error, error.__traceback__),
+            )
+
+
+def _safe_json(text: str) -> dict[str, Any]:
+    try:
+        value: object = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return cast(dict[str, Any], value) if isinstance(value, dict) else {}
+
+
+def _compact_history(items: tuple[Any, ...]) -> tuple[dict[str, str], ...]:
+    history: list[dict[str, str]] = []
+    for item in items[-6:]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip()
+        content = str(item.get("content") or "").strip()
+        if role and content:
+            history.append({"role": role, "content": content[:1000]})
+    return tuple(history)
+
+
+def _media_paths(payload: dict[str, Any]) -> list[str]:
+    raw_paths = payload.get("output_paths")
+    if not isinstance(raw_paths, list):
+        return []
+    return [str(item).strip() for item in raw_paths if str(item).strip()]

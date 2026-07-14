@@ -73,20 +73,18 @@ def test_auto_cg_policy_requires_scene_key_and_isolates_sessions(
     assert missing_key.reason == "scene_cg_missing_scene_key"
 
 
-def test_auto_cg_prompt_reports_current_cooldown(tmp_path: Path) -> None:
+def test_auto_cg_policy_reports_current_cooldown(tmp_path: Path) -> None:
     policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
     session_key = "role:mira"
     policy.advance_turn(session_key)
     policy.record_success(session_key, "rain")
 
-    section = policy.build_prompt_section(session_key)
+    assert policy.cooldown_remaining(session_key) == 9
 
-    assert "scene_cg" in section.content
-    assert "角色本人必须清晰入镜" in section.content
-    assert "禁止第一人称 POV" in section.content
-    assert "英文 NovelAI tags" in section.content
-    assert "禁止中文和自然语言句子" in section.content
-    assert "还需等待至少 9 个用户回合" in section.content
+    for _ in range(9):
+        policy.advance_turn(session_key)
+
+    assert policy.cooldown_remaining(session_key) == 0
 
 
 def test_auto_cg_third_person_terms_are_idempotent(tmp_path: Path) -> None:

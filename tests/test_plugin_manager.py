@@ -359,6 +359,25 @@ async def test_no_manifest_uses_class_attributes():
         assert instance.context.plugin_id == "hello"
 
 
+@pytest.mark.asyncio
+async def test_plugin_context_receives_light_model_dependencies():
+    bus = EventBus()
+    light_provider = object()
+    with tempfile.TemporaryDirectory() as tmp:
+        shutil.copytree(FIXTURES_DIR / "hello", Path(tmp) / "hello")
+        mgr = PluginManager(
+            plugin_dirs=[Path(tmp)],
+            event_bus=bus,
+            light_provider=light_provider,
+            light_model="light-model",
+        )
+        await mgr.load_all()
+
+        context = _get_instance("hello").context
+        assert context.light_provider is light_provider
+        assert context.light_model == "light-model"
+
+
 # ── 工具注册测试 ───────────────────────────────────────────────────────────────
 
 

@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, cast
 
 from agent.lifecycle.types import (
     AfterReasoningCtx,
     AfterToolResultCtx,
+    AfterTurnCtx,
     BeforeTurnCtx,
     PreToolCtx,
-    PromptRenderCtx,
 )
 from agent.plugins import (
     Plugin,
     on_after_reasoning,
+    on_after_turn,
     on_before_turn,
-    on_prompt_render,
     on_tool_pre,
     on_tool_result,
 )
@@ -26,6 +27,10 @@ from core.integrations.novelai.store import NovelAIStore
 from core.net.http import get_default_http_requester
 from core.roles.store import RoleStore
 from plugins.novelai.auto_cg import AutoCgPolicy
+from plugins.novelai.auto_cg_controller import AutoCgController
+from plugins.novelai.scene_decision import decide_scene_cg
+
+logger = logging.getLogger(__name__)
 
 
 class NovelAIPlugin(Plugin):
@@ -43,6 +48,7 @@ class NovelAIPlugin(Plugin):
             getattr(app_config, "novelai", NovelAISettings()),
         )
         self._settings = settings
+        role_store = RoleStore(workspace)
         service = NovelAIService(
             settings=settings,
             client=NovelAIClient(
@@ -50,7 +56,7 @@ class NovelAIPlugin(Plugin):
                 settings,
             ),
             store=NovelAIStore(workspace),
-            role_store=RoleStore(workspace),
+            role_store=role_store,
             workspace=workspace,
         )
         self._tool = GenerateImageTool(
@@ -58,7 +64,22 @@ class NovelAIPlugin(Plugin):
             context_provider=self.context.tool_registry.get_context,
         )
         self._auto_cg = AutoCgPolicy(self.context.kv_store)
+        self._auto_cg_controller = AutoCgController(
+            settings=settings,
+            role_store=role_store,
+            policy=self._auto_cg,
+            light_provider=self.context.light_provider,
+            light_model=self.context.light_model,
+            session_manager=self.context.session_manager,
+            generate_tool=self._tool,
+            tool_registry=self.context.tool_registry,
+            decision_provider=decide_scene_cg,
+        )
         self._pending_media: dict[str, list[str]] = {}
+        if settings.enabled and (
+            self.context.light_provider is None or not self.context.light_model.strip()
+        ):
+            logger.warning("自动场景 CG 缺少 light_model provider，后台判定已禁用")
         self.context.tool_registry.register(
             self._tool,
             risk="external-side-effect",
@@ -68,32 +89,24 @@ class NovelAIPlugin(Plugin):
             source_name=self.name,
         )
 
+    @property
+    def _auto_cg_tasks(self) -> dict[str, Any]:
+        """Backward-compatible view of controller tasks for integrations/tests."""
+
+        return self._auto_cg_controller.tasks
+
     @on_before_turn()
     async def advance_auto_cg_turn(self, ctx: BeforeTurnCtx) -> BeforeTurnCtx:
-        """Advance the persisted user-turn counter for one conversation."""
+        """Capture one eligible role turn and advance its cooldown counter."""
 
-        self._auto_cg.advance_turn(ctx.session_key)
+        self._auto_cg_controller.capture_turn(ctx)
         return ctx
 
-    @on_prompt_render()
-    async def inject_auto_cg_protocol(self, ctx: PromptRenderCtx) -> PromptRenderCtx:
-        """Inject scene-aware CG guidance for active role conversations."""
+    @on_after_turn()
+    async def schedule_auto_cg(self, ctx: AfterTurnCtx) -> None:
+        """Schedule non-blocking scene judgment after the text turn completes."""
 
-        if not self._settings.enabled:
-            return ctx
-        role_id = str(ctx.session_metadata.get("role_id") or "").strip()
-        if not role_id:
-            return ctx
-        runtime_config = ctx.session_metadata.get("role_runtime_config")
-        if (
-            not isinstance(runtime_config, dict)
-            or not bool(runtime_config.get("auto_scene_cg_enabled"))
-        ):
-            return ctx
-        ctx.system_sections_top.append(
-            self._auto_cg.build_prompt_section(ctx.session_key)
-        )
-        return ctx
+        self._auto_cg_controller.schedule(ctx)
 
     @on_tool_pre(tool_name="generate_image")
     async def guard_auto_cg(
@@ -105,6 +118,9 @@ class NovelAIPlugin(Plugin):
         return self._auto_cg.guard(event.session_key, event.arguments)
 
     async def terminate(self) -> None:
+        controller = getattr(self, "_auto_cg_controller", None)
+        if controller is not None:
+            await controller.terminate()
         tool = getattr(self, "_tool", None)
         if tool is not None:
             self.context.tool_registry.unregister(tool.name)
