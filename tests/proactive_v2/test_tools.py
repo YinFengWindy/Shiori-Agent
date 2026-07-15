@@ -457,7 +457,10 @@ def test_finish_turn_skip_after_message_push_raises():
         _finish_turn(ctx, {"decision": "skip", "reason": "no_content"})
 
 
-@pytest.mark.parametrize("reason", ["no_content", "user_busy", "already_sent_similar", "other"])
+@pytest.mark.parametrize(
+    "reason",
+    ["no_content", "user_busy", "already_sent_similar", "scene_changed", "other"],
+)
 def test_finish_turn_skip_valid_reasons(reason):
     ctx = AgentTickContext()
     _finish_turn(ctx, {"decision": "skip", "reason": reason})

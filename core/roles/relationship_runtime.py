@@ -13,6 +13,7 @@ from infra.persistence.json_store import atomic_save_json, load_json
 from session.manager import SessionManager
 
 from .store import RoleRecord, RoleStore
+from .scene_followup_runtime import SceneFollowupRuntime
 
 _SNAPSHOT_FILE = "relationship_snapshot.json"
 _RUNTIME_FILE = "loneliness_runtime.json"
@@ -268,6 +269,7 @@ class RoleRelationshipRuntimeService:
         self._role_store = role_store
         self._session_manager = session_manager
         self._presence = presence
+        self._scene_followup = SceneFollowupRuntime(workspace)
 
     def state_root(self, role_id: str) -> Path:
         return self._workspace / "roles" / str(role_id).strip() / "state"
@@ -462,6 +464,7 @@ class RoleRelationshipRuntimeService:
             return None
         now_dt = (now or datetime.now().astimezone()).astimezone()
         current = self.recompute_loneliness(role_id, now=now_dt) or self._build_initial_runtime(role_id, now=now_dt)
+        self._scene_followup.handle_user_message(session_key, now=now_dt)
         security = float(self._relation_state(snapshot)["security"])
         if security >= 0.7:
             drop_ratio = 0.35
@@ -493,6 +496,26 @@ class RoleRelationshipRuntimeService:
         current["cooldown_until"] = _now_iso(now_dt + timedelta(minutes=cooldown_minutes))
         current["last_calculated_at"] = _now_iso(now_dt)
         return self.write_loneliness_runtime(role_id, current)
+
+    def should_trigger_scene_followup(
+        self,
+        session_key: str,
+        now: datetime | None = None,
+    ) -> tuple[bool, dict[str, Any]]:
+        """Returns whether a same-scene follow-up may bypass loneliness."""
+        return self._scene_followup.should_trigger(session_key, now)
+
+    def handle_scene_followup_sent(
+        self,
+        session_key: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any] | None:
+        """Advances same-scene scheduling after successful delivery."""
+        return self._scene_followup.handle_followup_sent(session_key, now=now)
+
+    def close_scene_followup(self, session_key: str) -> None:
+        """Closes same-scene scheduling after semantic scene change."""
+        self._scene_followup.close(session_key)
 
     def should_trigger_proactive(
         self,

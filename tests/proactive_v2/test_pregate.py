@@ -250,6 +250,90 @@ async def test_loneliness_gate_passes_when_threshold_reached():
 
 
 @pytest.mark.asyncio
+async def test_due_scene_followup_bypasses_loneliness_and_closes_on_scene_change():
+    closed_sessions: list[str] = []
+    llm = FakeLLM(
+        [("finish_turn", {"decision": "skip", "reason": "scene_changed"})]
+    )
+    tick = make_proactive_pipeline(
+        llm_fn=llm,
+        scene_followup_gate_fn=lambda _session_key, _now_utc: (
+            True,
+            {"reason": "scene_followup_due", "attempt_index": 0},
+        ),
+        scene_followup_closed_fn=closed_sessions.append,
+        loneliness_gate_fn=lambda _session_key, _now_utc: (
+            False,
+            {"reason": "below_threshold"},
+        ),
+    )
+
+    result = await tick.run()
+
+    assert result == 0.0
+    assert tick.last_ctx is not None
+    assert tick.last_ctx.scene_followup_open is True
+    assert tick.last_ctx.skip_reason == "scene_changed"
+    assert closed_sessions == ["test_session"]
+    assert "同一场景追问" in str(llm.calls[0][2]["content"])
+
+
+@pytest.mark.asyncio
+async def test_successful_scene_followup_advances_only_after_delivery():
+    sent_calls: list[tuple[str, datetime]] = []
+    llm = FakeLLM(
+        [
+            ("get_recent_chat", {"n": 20}),
+            ("message_push", {"message": "还不理我吗？", "evidence": []}),
+            ("finish_turn", {"decision": "reply"}),
+        ]
+    )
+    tick = make_proactive_pipeline(
+        llm_fn=llm,
+        scene_followup_gate_fn=lambda _session_key, _now_utc: (
+            True,
+            {"reason": "scene_followup_due", "attempt_index": 1},
+        ),
+        scene_followup_sent_fn=lambda session_key, now: sent_calls.append(
+            (session_key, now)
+        ),
+        loneliness_gate_fn=lambda _session_key, _now_utc: (
+            False,
+            {"reason": "below_threshold"},
+        ),
+    )
+
+    result = await tick.run()
+
+    assert result == 0.0
+    assert len(sent_calls) == 1
+    assert sent_calls[0][0] == "test_session"
+    assert sent_calls[0][1].tzinfo is not None
+    assert "第 2 次追问" in str(llm.calls[0][2]["content"])
+
+
+@pytest.mark.asyncio
+async def test_pending_scene_that_is_not_due_still_uses_loneliness_gate():
+    state = FakeStateStore()
+    tick = make_proactive_pipeline(
+        state_store=state,
+        scene_followup_gate_fn=lambda _session_key, _now_utc: (
+            False,
+            {"reason": "not_due"},
+        ),
+        loneliness_gate_fn=lambda _session_key, _now_utc: (
+            False,
+            {"reason": "below_threshold"},
+        ),
+    )
+
+    result = await tick.run()
+
+    assert result is None
+    assert state.tick_log_finishes[0]["gate_exit"] == "loneliness"
+
+
+@pytest.mark.asyncio
 async def test_empty_candidates_enter_relationship_fallback_when_loneliness_gate_passes():
     llm = FakeLLM([("finish_turn", {"decision": "skip", "reason": "no_content"})])
     tick = make_proactive_pipeline(

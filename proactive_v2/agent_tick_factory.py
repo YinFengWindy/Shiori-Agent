@@ -58,6 +58,9 @@ class AgentTickDeps:
     pool: McpClientPool | None = None
     tool_hooks: list[ToolHook] = field(default_factory=list)
     loneliness_gate_fn: Callable[[str, Any], tuple[bool, dict[str, Any]]] | None = None
+    scene_followup_gate_fn: Callable[[str, Any], tuple[bool, dict[str, Any]]] | None = None
+    scene_followup_sent_fn: Callable[[str, Any], Any] | None = None
+    scene_followup_closed_fn: Callable[[str], Any] | None = None
 
 
 class AgentTickFactory:
@@ -101,6 +104,9 @@ class AgentTickFactory:
                 target_transports_fn=target_transports_fn,
                 tool_hooks=self._deps.tool_hooks,
                 loneliness_gate_fn=self._deps.loneliness_gate_fn,
+                scene_followup_gate_fn=self._deps.scene_followup_gate_fn,
+                scene_followup_sent_fn=self._deps.scene_followup_sent_fn,
+                scene_followup_closed_fn=self._deps.scene_followup_closed_fn,
             )
         )
 

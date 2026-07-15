@@ -26,7 +26,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_VALID_SKIP_REASONS = frozenset(["no_content", "user_busy", "already_sent_similar", "other"])
+_VALID_SKIP_REASONS = frozenset(
+    ["no_content", "user_busy", "already_sent_similar", "scene_changed", "other"]
+)
 
 
 # ── 依赖容器 ──────────────────────────────────────────────────────────────

@@ -110,6 +110,12 @@ def test_user_message_clears_unanswered_state_and_reduces_loneliness(tmp_path: P
     assert updated["awaiting_reply_since"] == ""
     assert updated["loneliness_value"] < 80
     assert datetime.fromisoformat(updated["last_user_at"]).astimezone(timezone.utc) == now
+    scene_due, scene_meta = runtime.should_trigger_scene_followup(
+        session_manager.role_session_key("mira"),
+        now=now + timedelta(minutes=5),
+    )
+    assert scene_due is True
+    assert scene_meta["attempt_index"] == 0
 
 
 def test_snapshot_growth_profile_is_raised_to_default_floor(tmp_path: Path):

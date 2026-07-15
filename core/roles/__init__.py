@@ -15,6 +15,7 @@ from .relationship_runtime import (
     RelationshipSnapshotOptimizer,
     RoleRelationshipRuntimeService,
 )
+from .scene_followup_runtime import SceneFollowupRuntime
 from .store import RoleAssetCategory, RoleRecord, RoleStore
 from .store import RoleChannelBindingConfig, RoleProactiveConfig
 from .config_migration import RoleConfigMigrationSummary, RoleConfigMigrator
@@ -37,6 +38,7 @@ __all__ = [
     "RoleRecord",
     "RoleProactiveConfig",
     "RoleRepository",
+    "SceneFollowupRuntime",
     "RoleExecutionContext",
     "RoleRequest",
     "RelationshipSnapshotLoop",

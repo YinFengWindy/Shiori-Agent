@@ -13,6 +13,9 @@ class AgentTickContext:
     session_key: str = ""
     context_as_fallback_open: bool = False
     relationship_fallback_open: bool = False
+    scene_followup_open: bool = False
+    scene_followup_mode: bool = False
+    scene_followup_attempt: int = 0
     target_channel: str = ""
     target_chat_id: str = ""
     target_transports: list[tuple[str, str]] = field(default_factory=list)

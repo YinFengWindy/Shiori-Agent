@@ -205,6 +205,21 @@ class ProactiveLoop:
                     if self._relationship_runtime is not None
                     else None
                 ),
+                scene_followup_gate_fn=(
+                    self._relationship_runtime.should_trigger_scene_followup
+                    if self._relationship_runtime is not None
+                    else None
+                ),
+                scene_followup_sent_fn=(
+                    self._relationship_runtime.handle_scene_followup_sent
+                    if self._relationship_runtime is not None
+                    else None
+                ),
+                scene_followup_closed_fn=(
+                    self._relationship_runtime.close_scene_followup
+                    if self._relationship_runtime is not None
+                    else None
+                ),
             )
         ).build()
 

@@ -80,6 +80,7 @@ class GateResult:
     reason: str          # no_target / busy / cooldown / presence / passed
     base_score: float | None
     context_as_fallback_open: bool = False
+    scene_followup_open: bool = False
 
 
 # ── Fetch 步骤的输出 ──────────────────────────────────────────────────────
@@ -227,6 +228,36 @@ async def _mark_delivery(*, state_store: Any, session_key: str, delivery_key: st
     state_store.mark_delivery(session_key, delivery_key)
 
 
+async def _mark_scene_followup_sent(
+    callback: Callable[[str, datetime], Any] | None,
+    session_key: str,
+) -> None:
+    if callback is not None:
+        callback(session_key, datetime.now(timezone.utc))
+
+
+async def _close_scene_followup(
+    callback: Callable[[str], Any] | None,
+    session_key: str,
+) -> None:
+    if callback is not None:
+        callback(session_key)
+
+
+def _scene_followup_close_effects(
+    callback: Callable[[str], Any] | None,
+    session_key: str,
+) -> list[_CallbackSideEffect]:
+    if callback is None:
+        return []
+    return [
+        _CallbackSideEffect(
+            callback=lambda: _close_scene_followup(callback, session_key),
+            name="close_scene_followup",
+        )
+    ]
+
+
 # ── 内存辅助函数 ──────────────────────────────────────────────────────────
 
 def _read_long_term_text(memory: MemoryProfileApi | None) -> str:
@@ -284,6 +315,9 @@ class ProactiveTurnPipelineDeps:
     retry_wait_fn: Callable[[float], Awaitable[None]] | None = None
     tool_hooks: list[ToolHook] | None = None
     loneliness_gate_fn: Callable[[str, datetime], tuple[bool, dict[str, Any]]] | None = None
+    scene_followup_gate_fn: Callable[[str, datetime], tuple[bool, dict[str, Any]]] | None = None
+    scene_followup_sent_fn: Callable[[str, datetime], Any] | None = None
+    scene_followup_closed_fn: Callable[[str], Any] | None = None
 
 
 # ── 主 Pipeline ─────────────────────────────────────────────────────────
@@ -326,6 +360,9 @@ class ProactiveTurnPipeline:
         self._target_transports_fn = deps.target_transports_fn
         self._retry_wait_fn = deps.retry_wait_fn
         self._loneliness_gate_fn = deps.loneliness_gate_fn
+        self._scene_followup_gate_fn = deps.scene_followup_gate_fn
+        self._scene_followup_sent_fn = deps.scene_followup_sent_fn
+        self._scene_followup_closed_fn = deps.scene_followup_closed_fn
         self._tool_executor = ToolExecutor(deps.tool_hooks or [])
         self._retry_task: asyncio.Task[None] | None = None
         self._retry_cancel_event = asyncio.Event()
@@ -410,6 +447,7 @@ class ProactiveTurnPipeline:
             return gate.base_score
 
         ctx.context_as_fallback_open = gate.context_as_fallback_open
+        ctx.scene_followup_open = gate.scene_followup_open
         self.last_ctx = ctx
         self._record_tick_log_start(ctx)
         logger.info(
@@ -477,6 +515,20 @@ class ProactiveTurnPipeline:
         if self._passive_busy_fn and self._passive_busy_fn(self._session_key):
             logger.debug("[proactive_v2] gate: passive_busy → blocked")
             return GateResult(blocked=True, reason="busy", base_score=None)
+
+        if self._scene_followup_gate_fn is not None:
+            should_follow_up, scene_meta = self._scene_followup_gate_fn(
+                self._session_key,
+                ctx.now_utc,
+            )
+            if should_follow_up:
+                ctx.scene_followup_attempt = int(scene_meta.get("attempt_index", 0) or 0)
+                return GateResult(
+                    blocked=False,
+                    reason="scene_followup",
+                    base_score=None,
+                    scene_followup_open=True,
+                )
 
         if self._loneliness_gate_fn is not None:
             should_trigger, meta = self._loneliness_gate_fn(self._session_key, ctx.now_utc)
@@ -550,7 +602,9 @@ class ProactiveTurnPipeline:
         if not gw_result.alerts and not gw_result.content_meta and not ctx.context_as_fallback_open:
             if self._allow_relationship_only_fallback(ctx):
                 ctx.relationship_fallback_open = True
-                logger.info("[proactive_v2] fetch: no data but loneliness gate passed → relationship fallback")
+                logger.info(
+                    "[proactive_v2] fetch: no data but relationship gate passed → relationship fallback"
+                )
             elif self._drift_pipeline is not None and self._cfg.drift_enabled:
                 last_drift_at = self._state_store.get_last_drift_at(self._session_key)
                 min_interval_hours = max(0, int(getattr(self._cfg, "drift_min_interval_hours", 0) or 0))
@@ -622,7 +676,20 @@ class ProactiveTurnPipeline:
             "请基于上面的候选内容和规则，必须通过工具逐步完成分类，"
             "最后通过 message_push + finish_turn(decision=reply)，或 finish_turn(decision=skip, reason=...) 收尾。"
         )
-        if self._is_relationship_only_fallback(gw_result):
+        ctx.scene_followup_mode = (
+            ctx.scene_followup_open and self._is_relationship_only_fallback(gw_result)
+        )
+        if ctx.scene_followup_mode:
+            kickoff_content = (
+                "开始本轮同一场景追问。"
+                f"这是本场景第 {ctx.scene_followup_attempt + 1} 次追问，间隔会逐次缩短。"
+                "先用 get_recent_chat 判断最近对话是否仍属于同一个未结束场景。"
+                "如果场景仍在继续，应该直接 message_push 一条自然的承接或追问，再 finish_turn(decision=reply)。"
+                "如果已经告别、睡觉、转入新话题，必须 finish_turn(decision=skip, reason=scene_changed) 关闭本场景追问。"
+                "不要因为寂寞值不足而跳过同场景追问。"
+                + self._relationship_fallback_style_hint()
+            )
+        elif self._is_relationship_only_fallback(gw_result):
             kickoff_content = (
                 "开始本轮 proactive 处理。"
                 "本轮已通过 loneliness gate，但当前没有 alert/content/context 候选。"
@@ -693,6 +760,7 @@ class ProactiveTurnPipeline:
         # 3.2b 关系向 fallback：寂寞值已过线时，不允许轻易用 no_content 直接逃掉。
         if (
             ctx.relationship_fallback_open
+            and not ctx.scene_followup_mode
             and ctx.terminal_action == "skip"
             and ctx.skip_reason == "no_content"
             and ctx.steps_taken < self._cfg.agent_tick_max_steps
@@ -766,6 +834,22 @@ class ProactiveTurnPipeline:
                 ctx.skip_reason,
                 ctx.skip_note,
             )
+            skip_side_effects = [
+                _CallbackSideEffect(
+                    callback=lambda: ack_discarded(ctx, ack_fn),
+                    name="ack_discarded_skip",
+                )
+            ]
+            if (
+                ctx.scene_followup_mode
+                and ctx.skip_reason in {"scene_changed", "no_content"}
+            ):
+                skip_side_effects.extend(
+                    _scene_followup_close_effects(
+                        self._scene_followup_closed_fn,
+                        self._session_key,
+                    )
+                )
             skip_result = TurnResult(
                 decision="skip",
                 outbound=None,
@@ -777,12 +861,7 @@ class ProactiveTurnPipeline:
                         "skip_note": ctx.skip_note,
                     },
                 ),
-                side_effects=[
-                    _CallbackSideEffect(
-                        callback=lambda: ack_discarded(ctx, ack_fn),
-                        name="ack_discarded_skip",
-                    )
-                ],
+                side_effects=skip_side_effects,
             )
             return ResolveResult(action="skip", result=skip_result)
 
@@ -826,7 +905,15 @@ class ProactiveTurnPipeline:
                                 ctx, ack_fn, alert_ack_fn=self._tool_deps.alert_ack_fn
                             ),
                             name="ack_post_guard_delivery",
-                        )
+                        ),
+                        *(
+                            _scene_followup_close_effects(
+                                self._scene_followup_closed_fn,
+                                self._session_key,
+                            )
+                            if ctx.scene_followup_mode
+                            else []
+                        ),
                     ],
                 ),
             )
@@ -880,7 +967,15 @@ class ProactiveTurnPipeline:
                                     ctx, ack_fn, alert_ack_fn=self._tool_deps.alert_ack_fn
                                 ),
                                 name="ack_post_guard_message",
-                            )
+                            ),
+                            *(
+                                _scene_followup_close_effects(
+                                    self._scene_followup_closed_fn,
+                                    self._session_key,
+                                )
+                                if ctx.scene_followup_mode
+                                else []
+                            ),
                         ],
                     ),
                 )
@@ -899,6 +994,34 @@ class ProactiveTurnPipeline:
                 counts=f"steps:{ctx.steps_taken},interesting:{len(ctx.interesting_item_ids)},discarded:{len(ctx.discarded_item_ids)},cited:{len(ctx.cited_item_ids)}",
             )
         )
+        success_side_effects = [
+            _CallbackSideEffect(
+                callback=lambda: _mark_delivery(
+                    state_store=self._state_store,
+                    session_key=self._session_key,
+                    delivery_key=delivery_key,
+                ),
+                name="mark_delivery",
+            ),
+            _CallbackSideEffect(
+                callback=lambda: ack_on_success(
+                    ctx,
+                    ack_fn,
+                    alert_ack_fn=self._tool_deps.alert_ack_fn,
+                ),
+                name="ack_on_success",
+            ),
+        ]
+        if ctx.scene_followup_mode and self._scene_followup_sent_fn is not None:
+            success_side_effects.append(
+                _CallbackSideEffect(
+                    callback=lambda: _mark_scene_followup_sent(
+                        self._scene_followup_sent_fn,
+                        self._session_key,
+                    ),
+                    name="mark_scene_followup_sent",
+                )
+            )
         send_result = TurnResult(
             decision="reply",
             outbound=TurnOutbound(session_key=self._session_key, content=ctx.final_message),
@@ -911,24 +1034,7 @@ class ProactiveTurnPipeline:
                     "state_summary_tag": "none",
                 },
             ),
-            success_side_effects=[
-                _CallbackSideEffect(
-                    callback=lambda: _mark_delivery(
-                        state_store=self._state_store,
-                        session_key=self._session_key,
-                        delivery_key=delivery_key,
-                    ),
-                    name="mark_delivery",
-                ),
-                _CallbackSideEffect(
-                    callback=lambda: ack_on_success(
-                        ctx,
-                        ack_fn,
-                        alert_ack_fn=self._tool_deps.alert_ack_fn,
-                    ),
-                    name="ack_on_success",
-                ),
-            ],
+            success_side_effects=success_side_effects,
             failure_side_effects=[
                 _CallbackSideEffect(
                     callback=lambda: ack_discarded(ctx, ack_fn),
@@ -1362,7 +1468,7 @@ class ProactiveTurnPipeline:
             "- evidence 格式：\"{ack_server}:{event_id}\"，如 \"feed:fmcp_abc123\"\n"
             "- 当本轮 content 和 alerts 均为空时，evidence 必须为 []；任何 'feed:xxx' 格式的 id 只能来自本轮真实提供的候选列表，不能自行捏造\n"
             "- 没有实质内容时 finish_turn(decision=skip, reason=no_content) 是正确选择\n\n"
-            "【finish_turn.reason】no_content | user_busy | already_sent_similar | other"
+            "【finish_turn.reason】no_content | user_busy | already_sent_similar | scene_changed | other"
         )
 
     def _build_runtime_context_message(
@@ -1383,6 +1489,8 @@ class ProactiveTurnPipeline:
                 name="proactive_tick_state",
                 content=(
                     f"context_fallback={'允许' if ctx.context_as_fallback_open else '不允许'}\n"
+                    f"scene_followup={'是' if ctx.scene_followup_mode else '否'}\n"
+                    f"scene_followup_attempt={ctx.scene_followup_attempt + 1 if ctx.scene_followup_mode else 0}\n"
                     f"alert_count={len(gw.alerts)}\n"
                     f"content_count={len(gw.content_meta)}\n"
                     f"context_count={len(gw.context)}"
@@ -1448,7 +1556,10 @@ class ProactiveTurnPipeline:
     def _allow_relationship_only_fallback(self, ctx: AgentTickContext) -> bool:
         return (
             self._llm_fn is not None
-            and self._loneliness_gate_fn is not None
+            and (
+                self._loneliness_gate_fn is not None
+                or self._scene_followup_gate_fn is not None
+            )
             and not ctx.context_as_fallback_open
         )
 

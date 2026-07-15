@@ -221,6 +221,9 @@ def make_proactive_pipeline(
     target_transports_fn: Any = None,
     retry_wait_fn: Any = None,
     loneliness_gate_fn: Any = None,
+    scene_followup_gate_fn: Any = None,
+    scene_followup_sent_fn: Any = None,
+    scene_followup_closed_fn: Any = None,
 ):
     from agent.core.proactive_turn import (
         ProactiveTurnPipeline,
@@ -309,5 +312,8 @@ def make_proactive_pipeline(
             retry_wait_fn=retry_wait_fn,
             tool_hooks=None,
             loneliness_gate_fn=loneliness_gate_fn,
+            scene_followup_gate_fn=scene_followup_gate_fn,
+            scene_followup_sent_fn=scene_followup_sent_fn,
+            scene_followup_closed_fn=scene_followup_closed_fn,
         )
     )
