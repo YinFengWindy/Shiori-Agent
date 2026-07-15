@@ -13,7 +13,11 @@ from agent.lifecycle.facade import TurnLifecycle
 from agent.lifecycle.types import AfterStepCtx
 from agent.looping.interrupt import TurnInterruptState
 from agent.tools.registry import ToolRegistry
-from bootstrap.tools import _build_loop_deps, build_registered_tools
+from bootstrap.tools import (
+    _build_loop_deps,
+    _resolve_plugin_llm_dependencies,
+    build_registered_tools,
+)
 from bootstrap.wiring import (
     wire_turn_lifecycle,
     register_memory_plugin,
@@ -66,6 +70,25 @@ def _dump_toml(data: dict, prefix: tuple[str, ...] = ()) -> list[str]:
 
 def _write_toml(path: Path, payload: dict) -> None:
     path.write_text("\n".join(_dump_toml(payload)).strip() + "\n", encoding="utf-8")
+
+
+def test_plugin_llm_dependencies_fall_back_to_main_model() -> None:
+    config = ConfigModel(
+        provider="openai",
+        model="main-model",
+        api_key="key",
+        system_prompt="system",
+    )
+    provider = object()
+
+    resolved_provider, resolved_model = _resolve_plugin_llm_dependencies(
+        config,
+        cast(Any, provider),
+        None,
+    )
+
+    assert resolved_provider is provider
+    assert resolved_model == "main-model"
 
 
 def test_config_load_reads_wiring_block(tmp_path: Path):

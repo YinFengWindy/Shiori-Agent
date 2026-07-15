@@ -425,6 +425,15 @@ def _bind_memory_lifecycle_if_supported(
     )
 
 
+def _resolve_plugin_llm_dependencies(
+    config: Config,
+    provider: LLMProvider,
+    light_provider: LLMProvider | None,
+) -> tuple[LLMProvider, str]:
+    """Use the main LLM when no dedicated lightweight model is configured."""
+    return light_provider or provider, config.light_model or config.model
+
+
 def build_core_runtime(
     config: Config,
     workspace: Path,
@@ -533,6 +542,11 @@ def build_core_runtime(
     )
 
     from agent.plugins.manager import PluginManager as _PluginManager
+    plugin_light_provider, plugin_light_model = _resolve_plugin_llm_dependencies(
+        config,
+        provider,
+        light_provider,
+    )
     plugin_manager = _PluginManager(
         plugin_dirs=_resolve_plugin_dirs(workspace),
         event_bus=event_bus,
@@ -541,8 +555,8 @@ def build_core_runtime(
         session_manager=session_manager,
         memory_engine=memory_runtime.engine,
         app_config=config,
-        light_provider=light_provider,
-        light_model=config.light_model,
+        light_provider=plugin_light_provider,
+        light_model=plugin_light_model,
         plugin_configs=config.plugins,
     )
 
