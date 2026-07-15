@@ -77,7 +77,7 @@ async def test_session_manager_and_proactive_loop_cover_paths(tmp_path: Path):
     history = session.get_history()
     assert len(history) == 3
     assert history[0]["role"] == "user"
-    assert history[1] == {"role": "assistant", "content": "[主动推送] reply"}
+    assert history[1] == {"role": "assistant", "content": "reply"}
     assert history[2]["role"] == "user"
     assert is_context_frame(str(history[2]["content"]))
     assert _safe_filename("telegram:1") == "telegram_1"
@@ -356,7 +356,7 @@ def test_session_get_history_replays_proactive_as_short_assistant_with_meta_fram
     history = session.get_history()
 
     assert len(history) == 2
-    assert history[0] == {"role": "assistant", "content": "[主动推送] 这是一条主动消息"}
+    assert history[0] == {"role": "assistant", "content": "这是一条主动消息"}
     assert history[1]["role"] == "user"
     content = str(history[1]["content"])
     assert is_context_frame(content)
@@ -374,10 +374,13 @@ def test_session_get_history_allows_proactive_assistant_boundary():
 
     history = session.get_history(start_index=session.last_consolidated)
 
-    assert history == [
-        {"role": "assistant", "content": "[主动推送] 主动消息"},
-        {"role": "user", "content": "刚才那个"},
-    ]
+    assert len(history) == 3
+    assert history[0] == {"role": "assistant", "content": "主动消息"}
+    assert history[1]["role"] == "user"
+    context = str(history[1]["content"])
+    assert is_context_frame(context)
+    assert "上一条 assistant 消息是系统主动推送" in context
+    assert history[2] == {"role": "user", "content": "刚才那个"}
 
 
 def test_session_get_history_rewinds_consolidated_index_to_user_boundary():

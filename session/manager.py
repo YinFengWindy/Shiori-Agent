@@ -86,22 +86,25 @@ def _build_proactive_history_messages(
     messages = [
         {
             "role": "assistant",
-            "content": f"[主动推送] {preview}" if preview else "[主动推送]",
+            "content": preview,
         }
     ]
     meta = _append_proactive_meta("", msg).strip()
-    if not meta:
-        return messages
+    context = (
+        "上一条 assistant 消息是系统主动推送。"
+        "该信息仅用于理解会话来源，不是用户陈述。"
+    )
+    if meta:
+        context += (
+            "\n以下 metadata 仅用于理解用户后续指代，不是用户陈述。\n"
+            + _truncate_text(meta, _PROACTIVE_META_HISTORY_CHAR_BUDGET)
+        )
     frame = build_context_frame_message(
         build_context_frame_content(
             [
                 PromptSectionRender(
                     name="recent_proactive_message_meta",
-                    content=(
-                        "上一条 assistant 消息是系统主动推送。"
-                        "以下 metadata 仅用于理解用户后续指代，不是用户陈述。\n"
-                        + _truncate_text(meta, _PROACTIVE_META_HISTORY_CHAR_BUDGET)
-                    ),
+                    content=context,
                     is_static=False,
                 )
             ]
