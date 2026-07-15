@@ -1,296 +1,220 @@
 # Shiori
 
-Shiori 是一个基于 Akashic Agent 基座演进出来的角色扮演 Agent 助手。当前仓库的主形态已经是 **Windows 桌面端 + Python Agent Runtime**：你可以创建和维护多个角色，让不同角色承接聊天、记忆、主动推送、图片生成和外部渠道绑定。
+Shiori 是一个以角色为核心的本地 Agent 应用，当前以 **Windows 桌面端 + Python Agent Runtime** 为主要形态。
 
----
+它关注的不是一次问答，而是角色如何在长期相处中保持一致：每个角色有自己的设定、素材、会话、记忆和渠道绑定，也可以在合适的时候主动联系你、延续同一个场景，或把对话转化成图片。
 
-## 当前形态
+## 每个角色都有自己的生活
 
-- **桌面端优先**：Electron 桌面端是当前推荐入口，内置角色管理、聊天、设置、渠道绑定和基础 smoke 验证链路。
-- **角色驱动**：角色有独立名称、简介、系统提示词、头像、立绘和角色记忆空间。
-- **多渠道接入**：当前保留的外部渠道为 Telegram、QQ。
-- **主动能力保留**：支持 proactive 推送与 Drift 空闲任务。
-- **Akashic 基座仍在**：Phase、插件、记忆系统、工具编排和旧渠道兼容路径仍然保留。
+### 角色彼此独立
 
-如果你第一次接触这个仓库，建议直接把它理解成：**一个以角色为核心、桌面端优先的本地 Agent 应用**。
+你可以创建多个角色，并分别维护名称、简介、系统提示词、头像和立绘。每个角色拥有独立的记忆空间与会话，不会因为切换角色而混淆身份和经历。
 
----
+角色还可以绑定不同的聊天渠道和允许对象。同一个 Shiori 实例可以让不同角色面向不同联系人，也可以让同一个角色从桌面延伸到 Telegram 或 QQ。
 
-## Quickstart
+### 对话会留下记忆
 
-需要：
+Shiori 会把会话、近期上下文和长期记忆分开管理。角色可以在后续对话中重新取回与你有关的信息，而不是只依赖当前窗口里有限的聊天记录。
 
+记忆整理在后台完成，并保存在本地工作区。你可以直接查看和维护这些内容，不需要把角色经历锁在不可见的云端账号里。
+
+### 角色可以主动联系你
+
+主动能力会结合角色关系、距离上次互动的时间和当前场景，决定是否发起新消息或继续刚才的话题。用户回复、场景切换和会话结束都会影响后续主动行为，避免把主动消息退化成固定间隔的提醒。
+
+Drift 则用于角色空闲时的后台活动，让信息搜集、记忆整理或其他可扩展任务不必占用当前对话。
+
+### 对话可以变成画面
+
+接入 NovelAI 后，角色可以手动生成图片，也可以根据最新一轮对话判断是否需要生成场景 CG。场景判断会区分延续、切换与结束，并避免在冷却期或同一回合中重复生成。
+
+图片会作为会话内容保存并同步到桌面端。外部渠道主动推送的图片也会回到同一会话中，不会成为游离在聊天记录之外的附件。
+
+## 可以怎样使用
+
+| 场景 | 体验 |
+| --- | --- |
+| 桌面陪伴 | 在本地桌面端创建角色、聊天、管理素材与查看历史会话 |
+| 长期角色扮演 | 让角色通过独立记忆延续关系、设定和共同经历 |
+| 跨渠道联系 | 将角色绑定到 Telegram 或 QQ，在离开电脑后继续收发消息 |
+| 主动互动 | 让角色根据关系与场景主动问候、追问或分享内容 |
+| 场景视觉化 | 在对话中手动生图，或让 NovelAI 自动生成合适的场景 CG |
+| 多角色共存 | 为不同角色配置独立人设、素材、记忆和联系人 |
+
+## 产品能力
+
+### 桌面端
+
+- 角色创建、编辑、删除与切换
+- 多会话聊天、历史记录与消息上下文操作
+- 头像、立绘、聊天图片与本地素材管理
+- 图片生成、提示词标签与图片预览
+- 模型、记忆、渠道、主动能力、Drift 与 NovelAI 设置
+- 关闭窗口后驻留系统托盘，继续保持已配置渠道在线
+
+### Agent Runtime
+
+- 被动回复与流式输出
+- 近期上下文、长期记忆检索与记忆整理
+- Proactive 主动推送与同场景后续互动
+- Drift 空闲任务
+- 工具调用、插件扩展与生命周期拦截
+- 桌面端、Telegram 与 QQ 的统一会话同步
+
+### 角色与渠道
+
+- 每个角色独立保存人设、素材、记忆与会话
+- 按角色配置渠道账号、允许对象和默认路由
+- 桌面端与外部渠道共享角色状态和消息记录
+- 外部推送的文本、图片和媒体元数据同步回桌面会话
+
+## 当前边界
+
+- 桌面端目前优先支持 Windows。
+- 模型请求会发送到你配置的模型服务；角色、会话和记忆默认保存在本地。
+- Telegram 和 QQ 是当前保留的外部消息渠道，需要分别提供可用凭据。
+- 自动 CG 与图片生成需要额外配置 NovelAI。
+- `fast`、视觉和 Embedding 模型不是启动桌面端的硬性条件，但会影响改写、视觉理解和语义记忆能力。
+
+## Shiori 如何工作
+
+```text
+Windows 桌面端 ─┐
+Telegram / QQ ──┼── Agent Runtime
+                 │      ├── 角色与关系
+                 │      ├── 会话与记忆
+                 │      ├── 工具与插件
+                 │      ├── Proactive / Drift
+                 │      └── 图片生成
+                 └── 本地工作区
+```
+
+Electron 桌面端负责交互与本地资源访问，Python Runtime 负责角色推理、记忆、工具、主动任务和渠道连接。桌面桥接层连接两者，并在 Runtime 重启后恢复角色与会话状态。
+
+Shiori 仍保留 Akashic 的 Phase 生命周期、插件注册、工具拦截和多种记忆实现，但这些能力都围绕角色体验组织，而不是要求用户直接操作底层模块。
+
+## 安装与启动
+
+### 环境要求
+
+- Windows
 - Python `3.12+`
 - Node.js `20+`
 - npm
+- [uv](https://docs.astral.sh/uv/)
 
-先安装 Python 依赖：
+### 1. 安装依赖
 
 ```bash
-git clone <this-repo>
-cd Shiori
+git clone https://github.com/YinFengWindy/Shiori-Agent.git
+cd Shiori-Agent
 uv venv
 uv pip install -r requirements.txt
+npm install
+npm --prefix desktop install
 ```
 
-没有 `uv` 的话先执行：
+如果尚未安装 `uv`：
 
 ```bash
 pip install uv
 ```
 
-再安装前端与桌面端依赖：
+### 2. 初始化配置
 
-```bash
-npm install
-npm --prefix desktop install
-```
-
-### 1. 初始化配置与工作区
-
-推荐先跑交互式初始化：
+推荐使用交互式向导创建配置与本地工作区：
 
 ```bash
 uv run python main.py setup
 ```
 
-如果你只想生成默认文件，不走交互向导：
+也可以只生成默认文件，再手动编辑 `config.toml`：
 
 ```bash
 uv run python main.py init
 ```
 
-初始化后，默认会准备这些内容：
+至少需要配置一个可用的主模型。其他能力可以按需启用：
 
-- `config.toml`
-- `~/.shiori/workspace/memory/*`
-- `~/.shiori/workspace/roles/roles.json`
-- `~/.shiori/workspace/roles/assets`
-- `~/.shiori/workspace/proactive_sources.json`
-- `~/.shiori/workspace/mcp_servers.json`
+| 配置 | 用途 | 是否必需 |
+| --- | --- | --- |
+| `llm.main` | 角色主要推理与回复 | 是 |
+| `llm.fast` | 改写、门控和轻量判断 | 推荐 |
+| `llm.vl` | 图片理解 | 可选 |
+| `memory.embedding` | 语义记忆检索 | 推荐 |
+| `channels.telegram` / `channels.qq` | 外部消息渠道 | 可选 |
+| `integrations.novelai` | 图片生成与自动 CG | 可选 |
 
-### 2. 填写 `config.toml`
-
-`config.example.toml` 已经是当前仓库的最新模板。默认推荐组合仍然是：
-
-- `llm.main` 使用 DeepSeek 主模型
-- `llm.fast` 使用轻量模型做改写 / gate / HyDE
-- `llm.vl` 单独承接视觉
-- `memory.embedding` 提供向量检索
-
-一个最小可用示例：
-
-```toml
-[llm]
-provider = "deepseek"
-
-[llm.main]
-model = "deepseek-v4-flash"
-api_key = "sk-..."
-base_url = "https://api.deepseek.com/v1"
-enable_thinking = true
-multimodal = false
-
-[llm.fast]
-model = "qwen-flash"
-api_key = "sk-..."
-base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-
-[llm.vl]
-model = "qwen-vl-plus"
-api_key = "sk-..."
-base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-
-[memory]
-enabled = true
-engine = ""
-
-[memory.embedding]
-model = "text-embedding-v3"
-api_key = "sk-..."
-base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-
-[channels.telegram]
-token = ""
-```
-
-补充说明：
-
-- 至少配置一个可用渠道后，被动消息链路才有实际入口。
-- 桌面端启动后也会在后台保持已配置渠道连接；Windows 关闭窗口进入托盘后，角色仍可通过渠道收发消息。
-- `integrations.novelai` 已经进入当前配置模型。
-- 如果你主要体验桌面端，本地聊天与角色编辑本身不依赖 Telegram，但模型配置仍然是必需的。
+`config.example.toml` 提供了完整配置结构。Shiori 使用 OpenAI 兼容接口，可为不同能力分别设置模型、API Key 和 Base URL。
 
 ### 3. 启动桌面端
 
-开发态：
+开发模式：
 
 ```bash
 npm run dev
 ```
 
-生产构建后启动：
+生产构建：
 
 ```bash
 npm run build
 npm run start
 ```
 
-其中：
+桌面端会自动启动 Python bridge。关闭主窗口后，应用会进入系统托盘；如果已配置外部渠道，角色仍可继续收发消息。
 
-- `npm run dev` 会先构建桌面主进程与 preload，再启动 Electron 开发态
-- 桌面端会自动拉起 `python main.py bridge`
-- `npm run start` 实际对应 `npm run desktop:start`
+## 开发者入口
 
-如果你只想单独启动桌面桥接层：
+### 常用命令
 
 ```bash
-uv run python main.py bridge
+uv run python main.py                    # 启动完整 Runtime
+uv run python main.py bridge             # 只启动桌面桥接层
+uv run python main.py --inspect-modules  # 检查模块装配
+uv run python main.py --help             # 查看命令行帮助
+
+pytest tests/                            # Python 测试
+npm test                                # 桌面端单元测试
+npm run lint                            # ESLint
+npm run typecheck                       # TypeScript 类型检查
+npm run desktop:smoke                   # 桌面主链 smoke
 ```
 
----
+默认只需运行与当前改动范围直接相关的测试；改动影响多个边界时，再补充更大范围回归。
 
-## 主要能力
+### 主要目录
 
-### 角色工作流
+| 目录 | 职责 |
+| --- | --- |
+| `desktop/` | Electron 主进程、preload 与 React 渲染端 |
+| `desktop_bridge/` | 桌面端与 Python Runtime 的 RPC 边界 |
+| `agent/` | 回合编排、推理循环与工具执行 |
+| `core/roles/` | 角色、关系状态与角色服务 |
+| `session/` | 会话、消息、在线状态与搜索 |
+| `memory2/`、`core/memory/` | 语义记忆与 Markdown 记忆 |
+| `proactive_v2/` | 主动任务调度与执行 |
+| `plugins/` | NovelAI、渠道与其他可扩展能力 |
+| `bootstrap/` | Runtime 依赖装配与启动配置 |
 
-- 创建、编辑、删除角色
-- 为角色维护系统提示词、头像、立绘和描述
-- 为不同聊天渠道绑定默认角色
-- 渠道会话和允许对象在角色详情中配置，运行时按角色绑定路由
-- 让角色拥有各自隔离的记忆目录
+### 本地数据
 
-### 桌面端设置面
-
-当前桌面设置页已经覆盖：
-
-- 模型配置：`main` / `fast` / `vl`
-- 渠道配置：Telegram、QQ
-- Memory 与 Embedding 配置
-- Proactive 与 Drift 配置
-- NovelAI 集成配置
-- 原始插件 / wiring / TOML 片段编辑能力
-
-### Agent Runtime
-
-- 被动回复链路
-- 长短期记忆注入与 consolidation
-- proactive 主动推送
-- drift 空闲任务执行
-- 插件扩展与工具拦截
-
----
-
-## 运行入口
-
-```bash
-uv run python main.py               # 启动主 runtime
-uv run python main.py setup         # 交互式初始化
-uv run python main.py init          # 生成默认配置与工作区
-uv run python main.py bridge        # 启动桌面端 bridge
-uv run python main.py --inspect-modules  # 输出模块检查结果
-uv run python main.py --help        # 查看全部命令
-```
-
-兼容入口说明：
-
-- `uv run python main.py desktop` 仍可用，但已经进入兼容维护模式
-
----
-
-## 桌面端验证
-
-桌面端相关常用命令：
-
-```bash
-npm run lint
-npm run typecheck
-npm run desktop:typecheck
-npm run desktop:smoke
-npm run desktop:smoke:restart
-```
-
-如果你想直接看更底层的桌面脚本，也可以使用：
-
-```bash
-npm --prefix desktop run typecheck
-npm --prefix desktop run build
-npm --prefix desktop run smoke
-npm --prefix desktop run smoke:bridge
-npm --prefix desktop run smoke:host
-npm --prefix desktop run smoke:restart
-```
-
-几个 smoke 的含义：
-
-- `smoke:bridge`：验证 Python bridge 的角色 / 会话生命周期
-- `smoke:host`：验证 Electron host 到 bridge 的 RPC 主链
-- `smoke:restart`：验证 bridge 重启后的恢复路径
-
----
-
-## 测试
-
-默认只跑与你当轮修改范围直接相关的测试即可。
-
-常用命令：
-
-```bash
-pytest tests/
-npm run desktop:typecheck
-npm run desktop:smoke
-```
-
-如果你需要更大范围验证，再按需补充回归。
-
----
-
-## 系统全景
-
-```text
-桌面端 / 消息渠道
-        ↓
-   Agent Runtime
-        ├── 角色系统
-        ├── 记忆系统
-        ├── 工具与插件系统
-        ├── Proactive 主动推送
-        └── Drift 空闲任务
-```
-
-保留的 Akashic 核心能力包括：
-
-- 多 Phase 生命周期
-- 插件注册与工具拦截
-- 语义记忆与 markdown 记忆共存
-- 主动轮询与后台任务
-
----
-
-## 相关文档
-
-| 想看什么 | 文档 |
-|---------|------|
-| 主动推送与数据源配置 | [docs/_handbook/proactive-guide.md](./docs/_handbook/proactive-guide.md) |
-| Drift 空闲任务 | [docs/_handbook/drift-guide.md](./docs/_handbook/drift-guide.md) |
-| 记忆文件与流转机制 | [docs/_handbook/memory-markdown.md](./docs/_handbook/memory-markdown.md) |
-| 插件生命周期与工具注册 | [docs/_handbook/plugins-tutorial.md](./docs/_handbook/plugins-tutorial.md) |
-
----
-
-## 工作区
-
-默认运行时工作区位于：
+默认工作区位于：
 
 ```text
 ~/.shiori/workspace/
 ```
 
-其中常见内容包括：
+其中包含：
 
-- `memory/`：长期记忆与近期上下文
 - `roles/`：角色定义、素材与角色记忆
-- `sessions.db`：会话存储
+- `memory/`：长期记忆与近期上下文
+- `sessions.db`：会话与消息
 - `proactive_sources.json`：主动推送数据源
 - `mcp_servers.json`：MCP 服务定义
 
+修改或删除工作区内容前，建议先退出桌面端并备份对应文件。
+
+## License
+
+[MIT](./LICENSE)
