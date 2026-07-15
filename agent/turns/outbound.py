@@ -60,20 +60,27 @@ class PushToolOutboundPort:
             return False
         try:
             result = ""
+            execution_context = {
+                **self._execution_context,
+                "session_key": str(
+                    outbound.metadata.get("session_key_override") or ""
+                ).strip(),
+                "push_message_already_persisted": "true",
+            }
             if message or media:
                 result = await self._push.execute(
                     channel=channel,
                     chat_id=chat_id,
                     message=message,
                     image=media[0] if media else None,
-                    **self._execution_context,
+                    **execution_context,
                 )
             for image in media[1:]:
                 result = await self._push.execute(
                     channel=channel,
                     chat_id=chat_id,
                     image=image,
-                    **self._execution_context,
+                    **execution_context,
                 )
         except Exception:
             return False

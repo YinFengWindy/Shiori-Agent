@@ -1527,6 +1527,39 @@ async def test_after_reasoning_collects_persist_and_outbound_slots():
 
 
 @pytest.mark.asyncio
+async def test_after_reasoning_persists_delivered_media_without_resending_it():
+    bus = EventBus()
+
+    def attach_delivered_media(ctx: AfterReasoningCtx) -> AfterReasoningCtx:
+        ctx.persisted_media.append("/tmp/already-sent.png")
+        return ctx
+
+    bus.on(AfterReasoningCtx, attach_delivered_media)
+    session = _DummySession("role:mira")
+    msg = _inbound()
+    state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=True)
+    state.session = session
+    services = SimpleNamespace(
+        presence=Mock(),
+        session_manager=SimpleNamespace(append_messages=AsyncMock()),
+    )
+    phase = Phase(
+        default_after_reasoning_modules(bus, cast(Any, services)),
+        frame_factory=AfterReasoningFrame,
+    )
+
+    result = await phase.run(
+        AfterReasoningInput(
+            state=state,
+            turn_result=TurnRunResult(reply="已发送", tools_used=["message_push"]),
+        )
+    )
+
+    assert session.messages[-1]["media"] == ["/tmp/already-sent.png"]
+    assert result.outbound.media == []
+
+
+@pytest.mark.asyncio
 async def test_after_reasoning_persists_user_display_content_without_internal_metadata():
     session = _DummySession("desktop:role:mira")
     msg = InboundMessage(

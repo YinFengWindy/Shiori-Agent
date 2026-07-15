@@ -65,6 +65,7 @@ from core.roles import (
     RoleStore,
     RoleWorldRegistry,
 )
+from conversation.push_sync import ExternalImageSyncService
 from proactive_v2.presence import PresenceStore
 from session.manager import Session, SessionManager
 
@@ -87,6 +88,7 @@ class CoreRuntime:
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
     role_world_registry: RoleWorldRegistry
+    image_sync_service: ExternalImageSyncService | None = None
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginManager | None" = None
     memory_optimizer: Any | None = None
@@ -246,7 +248,7 @@ def build_registered_tools(
     vl_provider=None,
     session_store=None,
     tools: ToolRegistry | None = None,
-    event_publisher=None,
+    event_publisher: EventBus | None = None,
     agent_loop_provider: Callable[[], Any] | None = None,
 ) -> tuple[
     ToolRegistry,
@@ -266,7 +268,7 @@ def build_registered_tools(
         http_resources, multimodal=multimodal, vl_available=vl_available
     )
     store = session_store or SessionStore(workspace / "sessions.db")
-    push_tool = MessagePushTool()
+    push_tool = MessagePushTool(event_bus=event_publisher)
     memory_result = resolve_memory_toolset_provider(wiring.memory).register(
         tools,
         ToolsetDeps(
@@ -494,6 +496,10 @@ def build_core_runtime(
         presence=presence,
     )
     processing_state = ProcessingState()
+    image_sync_service = ExternalImageSyncService(
+        session_manager=session_manager,
+        event_bus=event_bus,
+    )
     role_world_registry = RoleWorldRegistry(role_repository)
     push_tool.set_role_target_validator(
         lambda role_id, channel, chat_id: _validate_role_target(
@@ -569,6 +575,7 @@ def build_core_runtime(
         event_bus=event_bus,
         tools=tools,
         push_tool=push_tool,
+        image_sync_service=image_sync_service,
         session_manager=session_manager,
         scheduler=scheduler,
         provider=provider,

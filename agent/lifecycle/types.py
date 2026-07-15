@@ -192,6 +192,7 @@ class AfterReasoningCtx:
     # writable
     reply: str
     media: list[str] = field(default_factory=_empty_str_list)
+    persisted_media: list[str] = field(default_factory=_empty_str_list)
     meme_tag: str | None = None
     outbound_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
 

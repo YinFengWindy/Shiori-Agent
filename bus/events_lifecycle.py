@@ -99,6 +99,19 @@ class ProactiveMessageCommitted:
 
 
 @dataclass(frozen=True)
+class ExternalImagePushed:
+    """Describes one image successfully delivered through an external channel."""
+
+    session_key: str
+    role_id: str
+    channel: str
+    chat_id: str
+    image: str
+    attach_to_turn: bool = False
+    already_persisted: bool = False
+
+
+@dataclass(frozen=True)
 class ToolCallStarted:
     session_key: str
     channel: str

@@ -84,6 +84,7 @@ async def process_spawn_completion_event(
             session_manager=session_svc.session_manager,
             session=session,
         ),
+        defer_push_session_sync="true",
     )
     tool_execution_context = tools.get_context()
     prompt_render = await prompt_render_fn(

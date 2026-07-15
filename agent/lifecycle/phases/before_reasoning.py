@@ -71,6 +71,7 @@ class _SyncToolContextModule:
                 session_manager=self._session_manager,
                 session=state.session,
             ),
+            defer_push_session_sync="true",
         )
         return frame
 

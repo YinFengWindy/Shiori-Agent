@@ -20,10 +20,12 @@ from agent.plugins.context import PluginContext, PluginKVStore
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
+from conversation.push_sync import ExternalImageSyncService
 from core.integrations.novelai.models import NovelAISettings
 from core.roles.store import RoleStore
 from plugins.novelai.plugin import NovelAIPlugin
 from plugins.novelai.scene_decision import SceneCgDecision
+from session.manager import SessionManager
 
 
 @pytest.mark.asyncio
@@ -185,12 +187,17 @@ async def test_plugin_runs_auto_cg_in_background_and_pushes_generated_image(
         system_prompt="粉色长发少女",
         runtime_config={"auto_scene_cg_enabled": True},
     )
-    session = SimpleNamespace(metadata={"role_id": "mira"})
-    session_manager = SimpleNamespace(get_or_create=lambda session_key: session)
+    session_manager = SessionManager(tmp_path)
+    session_manager.open_role_session("mira", role_name="Mira")
+    event_bus = EventBus()
+    _ = ExternalImageSyncService(
+        session_manager=session_manager,
+        event_bus=event_bus,
+    )
     registry = ToolRegistry()
     push_image = AsyncMock()
-    push_tool = MessagePushTool()
-    push_tool.register_channel("desktop", image=push_image)
+    push_tool = MessagePushTool(event_bus=event_bus)
+    push_tool.register_channel("telegram", image=push_image)
     registry.register(push_tool)
     light_provider = SimpleNamespace(chat=AsyncMock())
     decision = AsyncMock(
@@ -218,7 +225,7 @@ async def test_plugin_runs_auto_cg_in_background_and_pushes_generated_image(
     await plugin.advance_auto_cg_turn(
         BeforeTurnCtx(
             session_key="role:mira",
-            channel="desktop",
+            channel="telegram",
             chat_id="chat",
             content="我终于找到你了",
             timestamp=datetime.now(),
@@ -230,7 +237,7 @@ async def test_plugin_runs_auto_cg_in_background_and_pushes_generated_image(
     await plugin.schedule_auto_cg(
         AfterTurnCtx(
             session_key="role:mira",
-            channel="desktop",
+            channel="telegram",
             chat_id="chat",
             reply="她站在雨里，终于说出了藏了很久的话。",
             tools_used=(),
@@ -252,6 +259,9 @@ async def test_plugin_runs_auto_cg_in_background_and_pushes_generated_image(
     assert generated_arguments["scene_key"] == "rain-confession"
     assert "third-person view" in generated_arguments["prompt"]
     push_image.assert_awaited_once_with("chat", image_path)
+    assert session_manager.get_or_create("role:mira").messages[-1]["media"] == [
+        image_path
+    ]
     state = plugin.context.kv_store.get("auto_cg_sessions")
     assert state["role:mira"]["last_scene_key"] == "rain-confession"
     await plugin.terminate()

@@ -7,6 +7,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from agent.tools.base import Tool
+from bus.event_bus import EventBus
+from bus.events_lifecycle import ExternalImagePushed
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +52,12 @@ class MessagePushTool(Tool):
         "required": ["channel", "chat_id"],
     }
 
-    def __init__(self) -> None:
+    def __init__(self, event_bus: EventBus | None = None) -> None:
         # channel -> {type: sender_fn}
         self._senders: dict[str, dict[str, Callable[..., Awaitable[None]]]] = {}
         self._target_resolvers: dict[str, Callable[[str], str]] = {}
         self._role_target_validator: Callable[[str, str, str], bool | str] | None = None
+        self._event_bus = event_bus
 
     def set_role_target_validator(
         self,
@@ -109,6 +112,7 @@ class MessagePushTool(Tool):
         file: str | None = kwargs.get("file")
         image: str | None = kwargs.get("image")
         role_id = str(kwargs.get("role_id") or "").strip()
+        session_key = str(kwargs.get("session_key") or "").strip()
 
         if not message and not file and not image:
             return "错误：message、file、image 至少提供一个"
@@ -134,7 +138,8 @@ class MessagePushTool(Tool):
         if senders is None:
             return f"渠道 {channel!r} 未注册，可用渠道：{list(self._senders) or ['（无）']}"
 
-        results = []
+        results: list[str] = []
+        image_sent = False
         try:
             if message and ("text" in senders or "stream_text" in senders):
                 sender_name = "stream_text" if "stream_text" in senders else "text"
@@ -163,9 +168,36 @@ class MessagePushTool(Tool):
                         f"[message_push] {channel}:{chat_id} ← image: {image!r}"
                     )
                     results.append("图片已发送")
+                    image_sent = True
 
         except Exception as e:
             logger.error(f"[message_push] 发送失败 {channel}:{chat_id}: {e}")
             return f"发送失败：{e}"
 
+        if (
+            image_sent
+            and image
+            and channel != "desktop"
+            and role_id
+            and session_key
+            and self._event_bus is not None
+        ):
+            _ = await self._event_bus.emit(
+                ExternalImagePushed(
+                    session_key=session_key,
+                    role_id=role_id,
+                    channel=channel,
+                    chat_id=chat_id,
+                    image=image,
+                    attach_to_turn=_is_truthy(kwargs.get("defer_push_session_sync")),
+                    already_persisted=_is_truthy(
+                        kwargs.get("push_message_already_persisted")
+                    ),
+                )
+            )
+
         return "；".join(results) if results else f"渠道 {channel!r} 没有可用的 sender"
+
+
+def _is_truthy(value: object) -> bool:
+    return value is True or str(value or "").strip().lower() in {"1", "true", "yes"}

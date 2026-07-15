@@ -264,8 +264,9 @@ class _PersistAssistantMessageModule:
             assistant_kwargs["metadata"]["mood"] = ctx.response_metadata.mood
         if ctx.thinking is not None:
             assistant_kwargs["reasoning_content"] = ctx.thinking
-        if ctx.media:
-            assistant_kwargs["media"] = list(ctx.media)
+        persisted_media = list(dict.fromkeys([*ctx.media, *ctx.persisted_media]))
+        if persisted_media:
+            assistant_kwargs["media"] = persisted_media
         assistant_kwargs.update(_collect_persist_assistant_slots(frame.slots))
         assistant_kwargs.update(
             _copy_conversation_message_fields(
