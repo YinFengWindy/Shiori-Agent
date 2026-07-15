@@ -1,4 +1,4 @@
-"""Memory v2 存储层的 schema、类型与纯转换 helper。"""
+"""Memory v2 存储包共享的 schema、类型与纯转换 helper。"""
 
 from __future__ import annotations
 

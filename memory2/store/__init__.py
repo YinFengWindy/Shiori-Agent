@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from memory2.store_common import (
+from .common import (
     SCHEMA,
     VEC_DIM,
     _EmbeddingRow,
@@ -33,11 +33,11 @@ from memory2.store_common import (
     _role_json_filter,
     _time_prefilter_clauses,
 )
-from memory2.store_admin import _StoreAdminMixin
-from memory2.store_connection import _SQLITE_VEC_AVAILABLE, _StoreConnection
-from memory2.store_temporal import _StoreTemporalMixin
-from memory2.store_vector import _StoreVectorMixin
-from memory2.store_write import _StoreWriteMixin
+from .admin import _StoreAdminMixin
+from .connection import _SQLITE_VEC_AVAILABLE, _StoreConnection
+from .temporal import _StoreTemporalMixin
+from .vector import _StoreVectorMixin
+from .write import _StoreWriteMixin
 
 
 class MemoryStore2(

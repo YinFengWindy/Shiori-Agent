@@ -8,7 +8,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from memory2.store_common import SCHEMA, VEC_DIM, _emb_to_blob
+from .common import SCHEMA, VEC_DIM, _emb_to_blob
 
 try:
     import sqlite_vec

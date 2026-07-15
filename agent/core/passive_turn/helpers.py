@@ -1,3 +1,5 @@
+"""被动 turn 的历史读取与 prompt 辅助函数。"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

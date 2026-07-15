@@ -6,7 +6,7 @@ import hashlib
 import json
 import time
 
-from memory2.store_common import (
+from .common import (
     _coerce_emotional_weight,
     _content_hash,
     _now_iso,

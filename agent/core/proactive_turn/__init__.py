@@ -15,7 +15,7 @@ from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayResult
 
-from agent.core.proactive_delivery import (
+from .delivery import (
     cancel_pending_retries as _cancel_pending_retries,
     deliver_execute as _deliver_execute,
     deliver_retries as _deliver_retries,
@@ -25,17 +25,17 @@ from agent.core.proactive_delivery import (
     resolve_target_transports as _resolve_target_transports,
     wait_for_retry_or_user_reply as _wait_for_retry_or_user_reply,
 )
-from agent.core.proactive_judge import (
+from .judge import (
     append_tool_messages as _append_tool_messages,
     judge_evaluate as _judge_evaluate,
     run_tool_step as _run_tool_step,
 )
-from agent.core.proactive_phases import (
+from .phases import (
     fetch_pull as _fetch_pull,
     finalize_after_drift as _finalize_after_drift,
     gate_check as _gate_check,
 )
-from agent.core.proactive_prompt_context import (
+from .prompt_context import (
     allow_relationship_only_fallback as _allow_relationship_only_fallback,
     build_runtime_context_message as _build_runtime_context_message,
     build_system_prompt as _build_system_prompt,
@@ -46,19 +46,19 @@ from agent.core.proactive_prompt_context import (
     render_content_block as _render_content_block,
     render_context_block as _render_context_block,
 )
-from agent.core.proactive_tick_logging import (
+from .tick_logging import (
     record_tick_log_finish as _record_tick_log_finish,
     record_tick_log_start as _record_tick_log_start,
     record_tick_step as _record_tick_step,
 )
-from agent.core.proactive_resolution import (
+from .resolution import (
     ack_discarded,
     ack_on_success,
     ack_post_guard_fail,
     build_delivery_key,
     resolve_decide as _resolve_decide,
 )
-from agent.core.proactive_types import (
+from .types import (
     FeedResult,
     GateResult,
     ProactiveTurnPipelineDeps,

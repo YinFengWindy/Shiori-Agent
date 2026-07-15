@@ -14,7 +14,7 @@ from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from core.common.diagnostic_log import diagnostic_line
 from proactive_v2.context import AgentTickContext
 
-from agent.core.proactive_types import ResolveResult
+from .types import ResolveResult
 
 logger = logging.getLogger(__name__)
 

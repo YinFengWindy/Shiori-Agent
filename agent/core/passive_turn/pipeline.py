@@ -6,8 +6,8 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-from agent.core.passive_context import ContextStore
-from agent.core.passive_reasoner import Reasoner
+from .context import ContextStore
+from .reasoner import Reasoner
 from agent.lifecycle.phase import Phase
 from agent.lifecycle.phases.after_reasoning import (
     AfterReasoningFrame,

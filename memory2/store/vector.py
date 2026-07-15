@@ -9,7 +9,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from memory2.store_common import (
+from .common import (
     _EmbeddingRow,
     _MemoryHit,
     _coerce_emotional_weight,

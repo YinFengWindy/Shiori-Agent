@@ -1,3 +1,5 @@
+"""DefaultReasoner 的多轮工具调用循环实现。"""
+
 from __future__ import annotations
 
 import logging

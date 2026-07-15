@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from memory2.store_common import (
+from .common import (
     _coerce_emotional_weight,
     _domain_json_filter,
     _now_iso,

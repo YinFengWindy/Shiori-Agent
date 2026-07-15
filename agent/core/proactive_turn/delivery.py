@@ -11,7 +11,7 @@ from typing import Any, Awaitable, Callable, Protocol
 from agent.turns.result import TurnResult
 from proactive_v2.context import AgentTickContext
 
-from agent.core.proactive_types import ResolveResult
+from .types import ResolveResult
 
 logger = logging.getLogger(__name__)
 

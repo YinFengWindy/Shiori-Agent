@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import cast
 
-from memory2.store_common import (
+from .common import (
     _MemoryHit,
     _TIME_FILTER_KEYWORD_CANDIDATE_LIMIT,
     _coerce_float,

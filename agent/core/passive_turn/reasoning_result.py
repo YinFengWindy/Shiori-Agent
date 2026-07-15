@@ -1,3 +1,5 @@
+"""被动推理的工具事件观测与结果构建逻辑。"""
+
 from __future__ import annotations
 
 import logging

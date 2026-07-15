@@ -9,7 +9,7 @@ from core.common.diagnostic_log import diagnostic_line
 from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import DataGateway, GatewayDeps, GatewayResult
 
-from agent.core.proactive_types import FeedResult, GateResult
+from .types import FeedResult, GateResult
 
 logger = logging.getLogger(__name__)
 

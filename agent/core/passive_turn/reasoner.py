@@ -6,14 +6,14 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from agent.core.passive_helpers import (
+from .helpers import (
     build_turn_injection_prompt,
     extract_model_facing_turn,
     get_history_since_consolidated,
     get_session_metadata,
 )
-from agent.core.passive_reasoning_loop import _PassiveReasoningLoopMixin
-from agent.core.passive_reasoning_result import _PassiveReasoningResultMixin
+from .reasoning_loop import _PassiveReasoningLoopMixin
+from .reasoning_result import _PassiveReasoningResultMixin
 from agent.core.runtime_support import ToolDiscoveryState
 from agent.core.types import ReasonerResult
 from agent.lifecycle.phase import Phase

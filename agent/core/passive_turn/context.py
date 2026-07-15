@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 import agent.core.passive_support as support
-from agent.core.passive_helpers import get_session_metadata
+from .helpers import get_session_metadata
 from agent.core.types import ContextBundle
 from agent.retrieval.protocol import RetrievalRequest, RetrievalResult
 

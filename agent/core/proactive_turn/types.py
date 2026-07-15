@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Awaitable, Callable
 
-from agent.core.drift_turn import DriftTurnPipeline
+from ..drift_turn import DriftTurnPipeline
 from agent.tool_hooks import ToolHook
 from agent.turns.orchestrator import TurnOrchestrator
 from agent.turns.result import TurnResult
