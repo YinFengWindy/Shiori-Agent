@@ -17,10 +17,7 @@ import { getRoleIdFromSession } from "./appState";
 import { reconcileRoles } from "../roles/roleListState";
 import type {
   AppMainView,
-  ChatReplyTarget,
   ChatSendRequest,
-  NewRoleFormState,
-  RoleFormState,
   RoleRecord,
   SessionMessage,
   SessionPayload,
@@ -31,8 +28,6 @@ import type { SettingsSectionId } from "../settings/SettingsSidebar";
 type SendingSessionsMap = Record<string, string>;
 
 type UseDesktopSessionStateArgs = {
-  roles: RoleRecord[];
-  mainView: AppMainView;
   setRoles: React.Dispatch<React.SetStateAction<RoleRecord[]>>;
   setActiveRoleId: React.Dispatch<React.SetStateAction<string>>;
   setActiveSession: React.Dispatch<React.SetStateAction<SessionPayload | null>>;
@@ -106,8 +101,6 @@ export function canSendSessionState(current: SendingSessionsMap, sessionKey: str
 
 /** Owns desktop bridge/session lifecycle so the root app only composes state and actions. */
 export function useDesktopSessionState({
-  roles,
-  mainView,
   setRoles,
   setActiveRoleId,
   setActiveSession,
@@ -322,8 +315,6 @@ export function useDesktopSessionState({
       currentSession: activeSessionRef.current,
       cachedSession,
     });
-    if (switchingRole) {
-    }
     const role = roleOverride ?? rolesRef.current.find((item) => item.id === roleId) ?? null;
     if (role) {
       applyRoleSnapshotRef.current(role, cachedSession);

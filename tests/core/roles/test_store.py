@@ -1,6 +1,26 @@
 from __future__ import annotations
 
+import json
+
+import pytest
+
 from core.roles import RoleStore
+
+
+def test_role_store_raises_for_corrupted_manifest(tmp_path):
+    store = RoleStore(tmp_path)
+    store.manifest_path.write_text("{broken", encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        store.list_roles()
+
+
+def test_role_store_rejects_invalid_manifest_shape(tmp_path):
+    store = RoleStore(tmp_path)
+    store.manifest_path.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="角色清单格式无效"):
+        store.list_roles()
 
 
 def test_role_store_persists_proactive_policy_and_keeps_it_when_target_is_removed(tmp_path):

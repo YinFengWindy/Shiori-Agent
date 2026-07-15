@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
 import sys
@@ -27,13 +28,23 @@ from desktop_bridge import DesktopBridgeServer
 logger = logging.getLogger(__name__)
 
 
-def _get_flag_value(args: list[str], flag: str) -> str | None:
-    if flag not in args:
-        return None
-    idx = args.index(flag)
-    if idx + 1 >= len(args):
-        raise ValueError(f"参数 {flag} 缺少值")
-    return args[idx + 1]
+def _build_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="启动 Mira-Agent runtime")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("bridge", "desktop", "setup", "init"),
+        help="运行命令；desktop 是 bridge 的兼容别名",
+    )
+    parser.add_argument("--config", default="config.toml", help="配置文件路径")
+    parser.add_argument("--workspace", type=Path, help="工作区路径")
+    parser.add_argument("--force", action="store_true", help="初始化时覆盖现有文件")
+    parser.add_argument(
+        "--inspect-modules",
+        action="store_true",
+        help="输出模块检查结果后退出",
+    )
+    return parser
 
 
 def _log_init_summary(summary: InitSummary) -> None:
@@ -73,7 +84,7 @@ async def inspect_modules(
         http_resources,
     )
     try:
-        logger.info("%s", await runtime.inspect_modules())
+        print(await runtime.inspect_modules())
     finally:
         await runtime.stop()
         await http_resources.aclose()
@@ -100,57 +111,43 @@ async def serve_bridge(
         await runtime.shutdown()
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> int:
+    """解析命令行参数并执行对应的 runtime 入口。"""
     configure_logging_stream(sys.stderr)
-    args = sys.argv[1:]
-    config_path = "config.toml"
-    workspace: Path | None = None
-    force = "--force" in args
+    args = _build_argument_parser().parse_args(argv)
+    config_path = str(args.config)
+    workspace = args.workspace
 
-    try:
-        config_value = _get_flag_value(args, "--config")
-        workspace_value = _get_flag_value(args, "--workspace")
-    except ValueError as exc:
-        logger.error("%s", exc)
-        sys.exit(1)
-
-    if config_value is not None:
-        config_path = config_value
-    if workspace_value is not None:
-        workspace = Path(workspace_value)
-
-    if args and args[0] == "setup":
+    if args.command == "setup":
         from bootstrap.setup_wizard import run_setup_wizard
+
         run_setup_wizard(
             config_path=Path(config_path),
             workspace=workspace or resolve_default_workspace(),
         )
-        sys.exit(0)
+        return 0
 
-    if args and args[0] == "init":
+    if args.command == "init":
         summary = init_workspace(
             config_path=config_path,
             workspace=workspace or resolve_default_workspace(),
-            force=force,
+            force=args.force,
         )
         _log_init_summary(summary)
-        sys.exit(0)
-
-    if args and args[0] == "bridge":
-        asyncio.run(serve_bridge(config_path, workspace))
-        sys.exit(0)
-
-    if args and not args[0].startswith("-"):
-        logger.error("未知命令: %s", args[0])
-        sys.exit(2)
+        return 0
 
     if not Path(config_path).exists():
         logger.error(
             f"找不到配置文件 {config_path!r}，请先复制 config.example.toml 为 config.toml。"
         )
-        sys.exit(1)
+        return 1
 
-    if "--inspect-modules" in args:
+    if args.inspect_modules:
         asyncio.run(inspect_modules(config_path, workspace))
     else:
         asyncio.run(serve_bridge(config_path, workspace))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

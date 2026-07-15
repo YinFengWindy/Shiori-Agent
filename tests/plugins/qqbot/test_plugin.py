@@ -18,10 +18,12 @@ def test_qqbot_plugin_accepts_legacy_config_aliases() -> None:
     plugin.context = cast(
         object,
         SimpleNamespace(
-            config=QQBotConfigModel(
-                appId="app",
-                clientSecret="secret",
-                allow_from=["user-openid"],
+            config=QQBotConfigModel.model_validate(
+                {
+                    "appId": "app",
+                    "clientSecret": "secret",
+                    "allow_from": ["user-openid"],
+                }
             )
         ),
     )

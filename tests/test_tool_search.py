@@ -264,6 +264,8 @@ async def test_registry_execute_prefers_explicit_context_snapshot() -> None:
         ),
     )
 
+    assert isinstance(first, str)
+    assert isinstance(second, str)
     assert json.loads(first) == {
         "session_key": "session-a",
         "role_id": "role-a",

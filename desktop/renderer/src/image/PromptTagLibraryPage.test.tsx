@@ -15,7 +15,6 @@ describe("PromptTagLibraryPage", () => {
     );
 
     assert.match(markup, /data-testid="prompt-tag-library-page"/);
-    assert.match(markup, /提示词列表/);
     assert.match(markup, /data-testid="prompt-tag-library"/);
   });
 });

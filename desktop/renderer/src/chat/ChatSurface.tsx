@@ -41,9 +41,7 @@ type ChatSurfaceProps = {
   chatLatestImageSidebarCount: number;
   chatLatestImageSidebarWidth: number;
   currentMood: string;
-  moodIllustrationBindingHit: boolean;
   moodIllustrationUrl: string;
-  hasMoodIllustrationBinding: boolean;
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
@@ -80,9 +78,7 @@ export function ChatSurface({
   chatLatestImageSidebarCount,
   chatLatestImageSidebarWidth,
   currentMood,
-  moodIllustrationBindingHit,
   moodIllustrationUrl,
-  hasMoodIllustrationBinding,
   roleSelfView,
   relationshipTags,
   lonelinessValue,
@@ -354,7 +350,6 @@ export function ChatSurface({
   const chatBodyClass = "text-sm leading-6";
   const chatMinorTextClass = "text-[12px]";
   const chatContentTrackClass = "mx-auto w-full max-w-[860px] px-5 md:px-6";
-  const composerTrackClass = "mx-auto w-full max-w-[700px] px-5 md:px-6";
   const sidebarNavButtonClass =
     "pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-transparent bg-transparent text-[#4B5563] transition hover:border-black hover:bg-white/92 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40";
   const assistantMessageBubbleClass =

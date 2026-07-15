@@ -188,6 +188,7 @@ uv run python main.py               # 启动主 runtime
 uv run python main.py setup         # 交互式初始化
 uv run python main.py init          # 生成默认配置与工作区
 uv run python main.py bridge        # 启动桌面端 bridge
+uv run python main.py --inspect-modules  # 输出模块检查结果
 uv run python main.py --help        # 查看全部命令
 ```
 

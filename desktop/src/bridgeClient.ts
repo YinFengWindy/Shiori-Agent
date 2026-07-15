@@ -9,6 +9,9 @@ import type { BridgeEvent, BridgeRequest, BridgeResponse } from "./shared.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, "..");
 const repoRoot = resolve(desktopRoot, "..");
+const HEALTH_REQUEST_TIMEOUT_MS = 5_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const IMAGE_GENERATION_TIMEOUT_MS = 5 * 60_000;
 
 export class DesktopBridgeClient extends EventEmitter {
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -83,6 +86,16 @@ export class DesktopBridgeClient extends EventEmitter {
       payload: {},
       error: { code: "bridge_exit", message },
     };
+  }
+
+  private invokeTimeoutMs(method: string): number {
+    if (method === "health") {
+      return HEALTH_REQUEST_TIMEOUT_MS;
+    }
+    if (method === "novelai.generate") {
+      return IMAGE_GENERATION_TIMEOUT_MS;
+    }
+    return DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   private async waitUntilReady(): Promise<void> {
@@ -200,16 +213,34 @@ export class DesktopBridgeClient extends EventEmitter {
 
     return await new Promise<BridgeResponse>((resolvePending) => {
       let settled = false;
+      let timeout: NodeJS.Timeout | null = null;
       const resolveOnce = (value: BridgeResponse): void => {
         if (settled) {
           return;
         }
         settled = true;
+        if (timeout) {
+          clearTimeout(timeout);
+        }
         this.pending.delete(id);
         resolvePending(value);
       };
 
       this.pending.set(id, resolveOnce);
+      const timeoutMs = this.invokeTimeoutMs(request.method);
+      timeout = setTimeout(() => {
+        resolveOnce({
+          id,
+          type: "response",
+          method: request.method,
+          payload: {},
+          error: {
+            code: "bridge_timeout",
+            message: `bridge request timed out after ${timeoutMs}ms`,
+          },
+        });
+      }, timeoutMs);
+      timeout.unref();
 
       if (
         this.child !== child

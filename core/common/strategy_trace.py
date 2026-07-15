@@ -7,7 +7,7 @@ from typing import Any, Literal
 StrategyTraceType = Literal[
     "route", "proactive_stage", "proactive_config", "proactive_rate", "spawn"
 ]
-StrategyTraceSubjectKind = Literal["session", "job", "action", "global"]
+StrategyTraceSubjectKind = Literal["session", "job", "action", "role", "global"]
 
 
 @dataclass(frozen=True)

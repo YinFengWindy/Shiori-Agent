@@ -99,9 +99,7 @@ type DesktopAppFrameProps = {
   chatLatestImageSidebar: RightSidebarViewState;
   chatLatestImageSidebarCount: number;
   currentMood: string;
-  moodIllustrationBindingHit: boolean;
   moodIllustrationUrl: string;
-  hasMoodIllustrationBinding: boolean;
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
@@ -227,9 +225,7 @@ export function DesktopAppFrame({
   chatLatestImageSidebar,
   chatLatestImageSidebarCount,
   currentMood,
-  moodIllustrationBindingHit,
   moodIllustrationUrl,
-  hasMoodIllustrationBinding,
   roleSelfView,
   relationshipTags,
   lonelinessValue,
@@ -431,9 +427,7 @@ export function DesktopAppFrame({
               chatLatestImageSidebarCount={chatLatestImageSidebarCount}
               chatLatestImageSidebarWidth={chatLatestImageSidebar.width}
               currentMood={currentMood}
-              moodIllustrationBindingHit={moodIllustrationBindingHit}
               moodIllustrationUrl={moodIllustrationUrl}
-              hasMoodIllustrationBinding={hasMoodIllustrationBinding}
               roleSelfView={roleSelfView}
               relationshipTags={relationshipTags}
               lonelinessValue={lonelinessValue}
@@ -464,7 +458,6 @@ export function DesktopAppFrame({
               generating={imageStudioState.submitting}
               history={imageStudioState.history}
               latestResult={imageStudioState.latestResult}
-              requestSummary={imageStudioState.requestSummary}
               selectedRecordId={imageStudioState.selectedRecordId}
               historySidebarCollapsed={imageHistorySidebar.collapsed}
               historySidebarWidth={imageHistorySidebar.width}

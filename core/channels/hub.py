@@ -120,7 +120,10 @@ class ChannelHub:
         if not config.allow_from:
             return True
         allowed = set(config.allow_from)
-        return sender_id in allowed or (sender_alias and sender_alias.lower() in {item.lower() for item in allowed})
+        return sender_id in allowed or bool(
+            sender_alias
+            and sender_alias.lower() in {item.lower() for item in allowed}
+        )
 
     def has_binding(self, channel: str, chat_id: str) -> bool:
         """Returns whether a channel session belongs to any role."""
@@ -163,14 +166,7 @@ class ChannelHub:
             raise ValueError("出站消息 thread_id 不属于当前角色")
         if thread.channel != message.channel or thread.external_thread_id != message.chat_id:
             raise ValueError("出站消息 transport target 与 thread_id 不匹配")
-        marker = getattr(
-            self._service.sessions._session_manager,
-            "mark_latest_assistant_delivery",
-            None,
-        )
-        if not callable(marker):
-            return None
-        return marker(
+        return self._service.sessions.mark_latest_assistant_delivery(
             session_key,
             thread_id=thread_id,
             delivery_status=delivery_status,

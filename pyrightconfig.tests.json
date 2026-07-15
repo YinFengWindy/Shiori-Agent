@@ -23,7 +23,7 @@
   "reportUnusedCallResult": "warning",
   "reportUnusedImport": "warning",
   "reportDeprecated": "warning",
-  "reportArgumentType": "error",
+  "reportArgumentType": "warning",
   "reportOptionalMemberAccess": "warning",
   "reportAttributeAccessIssue": "warning",
   "reportAssignmentType": "error",

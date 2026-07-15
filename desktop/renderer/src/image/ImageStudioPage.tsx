@@ -13,12 +13,6 @@ type ImageStudioPageProps = {
   generating: boolean;
   history: ImageHistoryRecord[];
   latestResult: ImageGenerateResult | null;
-  requestSummary: {
-    mode: string;
-    width: string;
-    height: string;
-    model: string;
-  } | null;
   selectedRecordId: string;
   historySidebarCollapsed: boolean;
   historySidebarWidth: number;
@@ -35,7 +29,6 @@ export function ImageStudioPage({
   generating,
   history,
   latestResult,
-  requestSummary,
   selectedRecordId,
   historySidebarCollapsed,
   historySidebarWidth,
@@ -82,7 +75,6 @@ export function ImageStudioPage({
               activeRecord={activeRecord}
               generating={generating}
               latestResult={latestResult}
-              requestSummary={requestSummary}
               error={error}
             />
           </div>

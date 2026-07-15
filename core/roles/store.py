@@ -249,14 +249,16 @@ class RoleStore:
             domain="roles",
         )
         if not isinstance(payload, dict):
-            return {"version": _MANIFEST_VERSION, "roles": []}
+            raise ValueError("角色清单格式无效：根节点必须是对象")
         roles = payload.get("roles")
         if not isinstance(roles, list):
-            roles = []
+            raise ValueError("角色清单格式无效：roles 必须是数组")
         migrated = False
         normalized_roles: list[dict[str, Any]] = []
         for item in roles:
-            role_payload = dict(item) if isinstance(item, dict) else {}
+            if not isinstance(item, dict):
+                raise ValueError("角色清单格式无效：角色记录必须是对象")
+            role_payload = dict(item)
             if "featured_image" in role_payload:
                 if "chat_background" not in role_payload:
                     role_payload["chat_background"] = role_payload.get("featured_image")

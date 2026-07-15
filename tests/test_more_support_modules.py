@@ -899,7 +899,9 @@ async def test_bootstrap_trigger_and_entrypoints_cover_paths(
     assert exc.value.code == 2
 
     monkeypatch.setattr(sys, "argv", ["main.py"])
-    runpy.run_module("main", run_name="__main__")
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_module("main", run_name="__main__")
+    assert exc.value.code == 0
 
 
 def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(

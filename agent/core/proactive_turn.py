@@ -1132,7 +1132,7 @@ class ProactiveTurnPipeline:
         if self._retry_cancel_event.is_set():
             return False
         wait_fn = self._retry_wait_fn or asyncio.sleep
-        delay_task = asyncio.create_task(wait_fn(delay))
+        delay_task = asyncio.ensure_future(wait_fn(delay))
         reply_task = asyncio.create_task(self._retry_cancel_event.wait())
         try:
             done, _ = await asyncio.wait(

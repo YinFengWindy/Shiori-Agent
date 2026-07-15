@@ -62,9 +62,7 @@ function renderChatSurface(
       chatLatestImageSidebarCount={options.chatLatestImageSidebarCollapsed === false ? 1 : 0}
       chatLatestImageSidebarWidth={320}
       currentMood={options.currentMood ?? ""}
-      moodIllustrationBindingHit={false}
       moodIllustrationUrl={options.moodIllustrationUrl ?? ""}
-      hasMoodIllustrationBinding={false}
       roleSelfView="我最近会不自觉地想起你。"
       relationshipTags={["亲近", "等你主动"]}
       lonelinessValue={72}
@@ -149,9 +147,8 @@ describe("ChatSurface", () => {
 
     const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
 
-    assert.match(markup, /alt="message attachment"/);
+    assert.match(markup, /<img class="block object-contain"[^>]*alt="message attachment"/);
     assert.match(markup, /block w-fit max-w-full cursor-grab/);
-    assert.doesNotMatch(markup, /object-cover/);
   });
 
   it("renders persisted reply previews inside message bubbles", () => {

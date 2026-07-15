@@ -8,10 +8,18 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["desktop/src/**/*.ts", "desktop/src/**/*.tsx"],
+    files: [
+      "desktop/src/**/*.ts",
+      "desktop/src/**/*.tsx",
+      "desktop/renderer/src/**/*.ts",
+      "desktop/renderer/src/**/*.tsx",
+    ],
     languageOptions: {
       ecmaVersion: 2021,
-      globals: globals.browser,
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
     },
     plugins: {
       "react-hooks": reactHooks,

@@ -3,7 +3,7 @@ infra.persistence.json_store — 统一 JSON 文件持久化基础工具。
 
 替代散落在各模块的 _load()/_save() 重复实现，提供：
 - 原子写（tmp 文件 + rename）
-- 读取容错（坏文件不崩溃，返回 default）
+- 缺失文件返回默认值，其他读取错误失败即停
 - 统一日志格式
 """
 
@@ -31,26 +31,21 @@ def load_json(
     domain: str = "json_store",
 ) -> Any:
     """
-    从文件读取 JSON，失败时返回 default。
+    从文件读取 JSON，仅当文件不存在时返回 default。
 
     Args:
         path: JSON 文件路径。
-        default: 文件不存在或解析失败时的返回值（默认 None）。
+        default: 文件不存在时的返回值（默认 None）。
         domain: 日志标识域，格式 "[domain] ..."。
     """
-    # 1. 文件不存在直接返回默认值
-    if not path.exists():
-        return default
-
-    # 2. 读取并解析
     try:
         raw = path.read_text(encoding="utf-8")
         return json.loads(raw)
-    except Exception as e:
-        logger.warning(
-            "[%s] 读取 JSON 失败，返回默认值: path=%s err=%s", domain, path, e
-        )
+    except FileNotFoundError:
         return default
+    except Exception as e:
+        logger.error("[%s] 读取 JSON 失败: path=%s err=%s", domain, path, e)
+        raise
 
 
 def save_json(

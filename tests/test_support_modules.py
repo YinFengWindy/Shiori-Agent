@@ -23,7 +23,6 @@ from bus.events import InboundMessage, OutboundMessage
 from bus.queue import MessageBus
 from core.common import timekit
 from plugins.default_memory.engine import DefaultMemoryEngine
-from infra.persistence.json_store import atomic_save_json, load_json, save_json
 from memory2.memorizer import Memorizer
 from memory2.store import MemoryStore2
 
@@ -377,7 +376,7 @@ async def test_web_search_covers_filters(monkeypatch: pytest.MonkeyPatch):
     assert result["count"] == 0
 
 
-def test_tool_base_and_timekit_and_json_store_cover_branches(
+def test_tool_base_and_timekit_cover_branches(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     tool = _DummyTool()
@@ -416,32 +415,6 @@ def test_tool_base_and_timekit_and_json_store_cover_branches(
 
             async def execute(self, **kwargs) -> str:
                 return "ok"
-
-    path = tmp_path / "data.json"
-    assert load_json(path, default={"a": 1}) == {"a": 1}
-    save_json(path, {"x": "中"})
-    assert load_json(path)["x"] == "中"
-    path.write_text("{bad", encoding="utf-8")
-    assert load_json(path, default=[]) == []
-    atomic_save_json(path, {"y": 2})
-    assert load_json(path)["y"] == 2
-
-    class _BadPath:
-        parent = tmp_path
-        suffix = ".json"
-
-        def with_suffix(self, suffix: str):
-            return tmp_path / "bad.json.tmp"
-
-    bad = _BadPath()
-    monkeypatch.setattr(
-        "pathlib.Path.write_text",
-        lambda self, *args, **kwargs: (_ for _ in ()).throw(RuntimeError("bad")),
-    )
-    with pytest.raises(RuntimeError):
-        save_json(tmp_path / "x.json", {"x": 1})
-    with pytest.raises(RuntimeError):
-        atomic_save_json(bad, {"x": 1})  # type: ignore[arg-type]
 
     parsed = timekit.parse_iso("2025-06-01T09:00:00Z")
     assert parsed and parsed.tzinfo is not None

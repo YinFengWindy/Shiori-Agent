@@ -94,20 +94,6 @@ export function roleMoodConfigEqual(
   return leftKeys.every((key, index) => key === rightKeys[index] && leftBindings[key] === right.moodIllustrationBindings[key]);
 }
 
-function dedupeMoods(values: unknown[]): string[] {
-  const seen = new Set<string>();
-  const next: string[] = [];
-  values.forEach((value) => {
-    const normalized = String(value ?? "").trim();
-    if (!normalized || seen.has(normalized)) {
-      return;
-    }
-    seen.add(normalized);
-    next.push(normalized);
-  });
-  return next;
-}
-
 function normalizeMoodBindings(rawBindings: unknown): Record<string, string> {
   if (!rawBindings || typeof rawBindings !== "object" || Array.isArray(rawBindings)) {
     return {};

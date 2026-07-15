@@ -58,6 +58,27 @@ class _SessionManager:
     def role_session_key(self, role_id: str) -> str:
         return f"role:{role_id}"
 
+    def sync_role_session_metadata(
+        self,
+        role_id: str,
+        *,
+        role_name: str,
+        role_prompt: str,
+        role_runtime_config: dict[str, Any],
+        valid_illustrations: list[str],
+    ):
+        session = self.get_or_create(self.role_session_key(role_id))
+        session.metadata.update(
+            {
+                "role_id": role_id,
+                "role_name": role_name,
+                "role_prompt": role_prompt,
+                "role_runtime_config": role_runtime_config,
+                "valid_illustrations": valid_illustrations,
+            }
+        )
+        return session
+
     def mark_latest_assistant_delivery(
         self,
         session_key: str,

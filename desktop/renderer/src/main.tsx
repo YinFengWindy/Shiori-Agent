@@ -96,8 +96,8 @@ function App(): React.ReactElement {
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [activeRoleId, setActiveRoleId] = useState("");
   const [activeSession, setActiveSession] = useState<SessionPayload | null>(null);
-  const [events, setEvents] = useState<EventLog[]>([]);
-  const [error, setError] = useState("");
+  const [, setEvents] = useState<EventLog[]>([]);
+  const [, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
   const [savingRole, setSavingRole] = useState(false);
@@ -124,7 +124,7 @@ function App(): React.ReactElement {
   const [newRoleForm, setNewRoleForm] = useState(createEmptyNewRoleForm);
   const [settingsSearch, setSettingsSearch] = useState("");
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
-  const [settingsConfigPath, setSettingsConfigPath] = useState("");
+  const [, setSettingsConfigPath] = useState("");
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const imageHistorySidebar = useRightSidebarState({
@@ -350,8 +350,6 @@ function App(): React.ReactElement {
     commitActiveSession,
     updateCommittedActiveSession,
   } = useDesktopSessionState({
-    roles,
-    mainView,
     setRoles,
     setActiveRoleId,
     setActiveSession,
@@ -437,8 +435,6 @@ function App(): React.ReactElement {
     previewAvatar,
     previewIllustrations,
     currentMood,
-    moodIllustrationBindingHit,
-    moodIllustration,
     moodIllustrationUrl,
     roleSelfView,
     relationshipTags,
@@ -654,9 +650,7 @@ function App(): React.ReactElement {
       chatLatestImageSidebar={chatLatestImageSidebar}
       chatLatestImageSidebarCount={chatImageHistory.length}
       currentMood={currentMood}
-      moodIllustrationBindingHit={moodIllustrationBindingHit}
       moodIllustrationUrl={moodIllustrationUrl}
-      hasMoodIllustrationBinding={Boolean(currentMood && moodIllustration)}
       roleSelfView={roleSelfView}
       relationshipTags={relationshipTags}
       lonelinessValue={lonelinessValue}

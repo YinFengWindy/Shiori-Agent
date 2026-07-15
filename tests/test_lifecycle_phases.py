@@ -292,7 +292,8 @@ async def test_after_reasoning_resolves_mood_when_reply_lacks_structured_mood(mo
     result = await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
 
     assert result.ctx.response_metadata.mood == "鄙视"
-    assert session.messages[-1]["metadata"]["mood"] == "鄙视"
+    message_metadata = cast(dict[str, object], session.messages[-1]["metadata"])
+    assert message_metadata["mood"] == "鄙视"
     assert session.metadata["current_mood"] == "鄙视"
 
 
@@ -1681,7 +1682,11 @@ async def test_after_reasoning_enriches_session_metadata_with_relationship_runti
     await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
 
     relationship_runtime.enrich_session_metadata.assert_called_once()
-    assert session.metadata["relationship_snapshot"]["role_self_view"] == "我在想你。"
+    relationship_snapshot = cast(
+        dict[str, object],
+        session.metadata["relationship_snapshot"],
+    )
+    assert relationship_snapshot["role_self_view"] == "我在想你。"
 
 
 @pytest.mark.asyncio

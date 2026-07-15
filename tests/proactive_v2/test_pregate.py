@@ -154,7 +154,9 @@ async def test_multi_channel_delivery_stops_when_user_replies():
     )
 
     await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
-    await tick._retry_task
+    retry_task = tick._retry_task
+    assert retry_task is not None
+    await retry_task
 
     assert orchestrator.handle_proactive_turn.await_count == 1
 
@@ -188,7 +190,9 @@ async def test_multi_channel_delivery_returns_before_retry_wait_finishes():
     assert orchestrator.handle_proactive_turn.await_count == 1
 
     release_retry.set()
-    await tick._retry_task
+    retry_task = tick._retry_task
+    assert retry_task is not None
+    await retry_task
 
 
 @pytest.mark.asyncio

@@ -10,8 +10,6 @@ type ResolveMoodIllustrationArgs = {
   activeSession: SessionPayload | null;
   detailRole: RoleRecord | null;
   roleForm: Pick<RoleFormState, "defaultMood" | "moodIllustrationBindings">;
-  activeIllustration: string;
-  previewIllustrations: string[];
 };
 
 /** Reads the current chat mood from session metadata with role-form fallback. */
@@ -37,8 +35,6 @@ export function resolveMoodIllustration({
   activeSession,
   detailRole,
   roleForm,
-  activeIllustration,
-  previewIllustrations,
 }: ResolveMoodIllustrationArgs): string {
   const runtimeConfig = detailRole?.runtime_config ?? {};
   const currentMood = resolveCurrentMood({

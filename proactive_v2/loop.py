@@ -34,7 +34,7 @@ from agent.tools.registry import ToolRegistry
 from agent.turns.outbound import PushToolOutboundPort
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from conversation.service import ConversationService
-from core.common.strategy_trace import build_strategy_trace_envelope
+from core.common.strategy_trace import StrategyTraceType, build_strategy_trace_envelope
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from core.roles import RoleAggregateService, RoleStore
 from core.roles.relationship_runtime import RoleRelationshipRuntimeService
@@ -318,12 +318,14 @@ class ProactiveLoop:
             memory_dir.mkdir(parents=True, exist_ok=True)
             trace_file = memory_dir / filename
             if "trace_type" not in payload or "payload" not in payload:
-                trace_type = "proactive_config" if "config" in filename else "proactive_rate"
+                trace_type: StrategyTraceType = (
+                    "proactive_config" if "config" in filename else "proactive_rate"
+                )
                 source = "proactive.config" if trace_type == "proactive_config" else "proactive.rate"
                 role_id = str(getattr(self._cfg, "default_role_id", "") or "").strip()
                 payload = {
                     **build_strategy_trace_envelope(
-                        trace_type=trace_type,  # type: ignore[arg-type]
+                        trace_type=trace_type,
                         source=source,
                         subject_kind="role" if role_id else "global",
                         subject_id=role_id or filename.removesuffix(".jsonl"),

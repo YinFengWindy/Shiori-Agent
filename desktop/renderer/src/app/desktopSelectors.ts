@@ -5,7 +5,7 @@ import {
   resolveChatImageSelectionKey,
 } from "../chat/chatImageHistory";
 import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/chatHeaderState";
-import { hasMoodIllustrationBinding, resolveCurrentMood, resolveMoodIllustration } from "../roles/roleMoodSelectors";
+import { resolveCurrentMood, resolveMoodIllustration } from "../roles/roleMoodSelectors";
 import { isRoleFormDirty } from "../roles/roleFormState";
 import { toFileUrl } from "../shared/format";
 import type {
@@ -58,17 +58,10 @@ export function buildDesktopViewModel({
     detailRole,
     roleForm,
   });
-  const moodIllustrationBindingHit = hasMoodIllustrationBinding({
-    activeSession,
-    detailRole,
-    roleForm,
-  });
   const moodIllustration = resolveMoodIllustration({
     activeSession,
     detailRole,
     roleForm,
-    activeIllustration,
-    previewIllustrations,
   });
   const moodIllustrationUrl = moodIllustration ? toFileUrl(moodIllustration) : "";
   const roleChatBackground = detailRole?.chat_background_abs ?? "";
@@ -124,7 +117,6 @@ export function buildDesktopViewModel({
     previewAvatar,
     previewIllustrations,
     currentMood,
-    moodIllustrationBindingHit,
     moodIllustration,
     moodIllustrationUrl,
     roleChatBackground,

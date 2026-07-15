@@ -15,7 +15,6 @@ type PromptTagEntryEditorProps = {
   onSave: () => void;
   onBack: () => void;
   onReset: () => void;
-  isCreating: boolean;
   dirty: boolean;
 };
 
@@ -33,7 +32,6 @@ export function PromptTagEntryEditor({
   onSave,
   onBack,
   onReset,
-  isCreating,
   dirty,
 }: PromptTagEntryEditorProps) {
   async function pickReferenceImage(): Promise<void> {

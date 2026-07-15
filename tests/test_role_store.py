@@ -13,8 +13,8 @@ from core.roles import (
     RoleConfigMigrator,
     RoleRepository,
     RoleStore,
-    route_inbound_by_role,
 )
+from core.roles.inbound import route_inbound_by_role
 from session.manager import SessionManager
 
 
@@ -492,6 +492,7 @@ def test_role_store_replaces_and_clears_old_assets(tmp_path: Path):
         avatar_source=avatar1,
         illustration_sources=[ill1],
     )
+    assert role.avatar is not None
     first_avatar = tmp_path / "roles" / role.avatar
     first_illustration = tmp_path / "roles" / role.illustrations[0]
     assert first_avatar.exists()

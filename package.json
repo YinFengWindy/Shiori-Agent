@@ -15,9 +15,11 @@
     "desktop:smoke:restart": "npm --prefix desktop run smoke:restart",
     "desktop:smoke": "npm --prefix desktop run build && npm --prefix desktop run smoke:desktop",
     "desktop:start": "npm --prefix desktop run start:built",
+    "desktop:test": "node desktop/scripts/test-unit.mjs",
     "desktop:typecheck": "npm --prefix desktop run typecheck",
     "dev": "npm run desktop:dev",
-    "lint": "eslint desktop/src",
+    "lint": "eslint desktop/src desktop/renderer/src",
+    "test": "npm run desktop:test",
     "typecheck": "npm --prefix desktop run typecheck"
   },
   "devDependencies": {

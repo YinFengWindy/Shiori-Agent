@@ -5,7 +5,7 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Awaitable, Callable, Protocol, cast
 
 from core.common.channel_identifiers import chat_ids_equal, normalize_chat_id
 from session.manager import Session, SessionManager
@@ -159,25 +159,30 @@ class RoleSessionService:
         return self._session_manager.role_session_key(_clean_role_id(role_id))
 
     def open_by_role(self, role: RoleRecord) -> Session:
-        sync = getattr(self._session_manager, "sync_role_session_metadata", None)
-        if callable(sync):
-            return sync(
-                role.id,
-                role_name=role.name,
-                role_prompt=role.system_prompt,
-                role_runtime_config=role.runtime_config,
-                valid_illustrations=list(role.illustrations),
-            )
-        session = self._session_manager.get_or_create(self.derive_session_key(role.id))
-        session.metadata.update(
-            {
-                "role_id": role.id,
-                "role_name": role.name,
-                "role_prompt": role.system_prompt,
-                "role_runtime_config": dict(role.runtime_config),
-            }
+        return self._session_manager.sync_role_session_metadata(
+            role.id,
+            role_name=role.name,
+            role_prompt=role.system_prompt,
+            role_runtime_config=role.runtime_config,
+            valid_illustrations=list(role.illustrations),
         )
-        return session
+
+    def mark_latest_assistant_delivery(
+        self,
+        session_key: str,
+        *,
+        thread_id: str,
+        delivery_status: str,
+        external_message_id: str = "",
+    ) -> dict[str, Any] | None:
+        """Updates the latest assistant delivery through the owning session service."""
+
+        return self._session_manager.mark_latest_assistant_delivery(
+            session_key,
+            thread_id=thread_id,
+            delivery_status=delivery_status,
+            external_message_id=external_message_id,
+        )
 
     def load_history(self, role_id: str) -> list[dict[str, Any]]:
         session = self._session_manager.get_or_create(self.derive_session_key(role_id))
@@ -319,7 +324,11 @@ class RoleMemoryService:
             return ""
         agenerate = getattr(generator, "agenerate", None)
         if callable(agenerate):
-            return str(await agenerate(role) or "")
+            async_generate = cast(
+                Callable[[RoleRecord], Awaitable[object]],
+                agenerate,
+            )
+            return str(await async_generate(role) or "")
         return str(await asyncio.to_thread(generator.generate, role) or "")
 
     def update_relationship_baseline(

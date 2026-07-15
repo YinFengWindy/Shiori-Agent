@@ -13,7 +13,7 @@ describe("roleMoodConfig", () => {
     });
   });
 
-  it("normalizes mood config from runtime config", () => {
+  it("derives mood config from every valid illustration binding", () => {
     const config = readRoleMoodConfig({
       runtime_config: {
         default_mood: "开心",
@@ -27,11 +27,12 @@ describe("roleMoodConfig", () => {
     });
 
     assert.deepEqual(config, {
-      moodCatalog: ["开心", "平静"],
+      moodCatalog: ["开心", "平静", "警觉"],
       defaultMood: "开心",
       moodIllustrationBindings: {
         开心: "happy.png",
         平静: "calm.png",
+        警觉: "alert.png",
       },
     });
   });
@@ -116,8 +117,8 @@ describe("roleMoodConfig", () => {
           moodIllustrationBindings: { 开心: "happy.png" },
         },
         {
-          moodCatalog: ["平静", "开心"],
-          defaultMood: "平静",
+          moodCatalog: ["开心"],
+          defaultMood: "开心",
           moodIllustrationBindings: { 开心: "happy.png" },
         },
       ),

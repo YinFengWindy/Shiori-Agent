@@ -77,8 +77,6 @@ describe("roleMoodSelectors", () => {
             开心: "assets/roles/mira/happy.png",
           },
         }),
-        activeIllustration: "",
-        previewIllustrations: ["D:\\roles\\mira\\fallback.png"],
       }),
       "D:\\roles\\mira\\happy.png",
     );
@@ -94,8 +92,6 @@ describe("roleMoodSelectors", () => {
             开心: "D:\\roles\\mira\\happy.png",
           },
         }),
-        activeIllustration: "",
-        previewIllustrations: ["D:\\roles\\mira\\fallback.png"],
       }),
       "D:\\roles\\mira\\happy.png",
     );
@@ -112,8 +108,6 @@ describe("roleMoodSelectors", () => {
             平静: "D:\\roles\\mira\\calm.png",
           },
         }),
-        activeIllustration: "D:\\roles\\mira\\active.png",
-        previewIllustrations: ["D:\\roles\\mira\\fallback.png"],
       }),
       "",
     );

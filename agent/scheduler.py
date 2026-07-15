@@ -296,13 +296,15 @@ class JobStore:
     def load(self) -> list[ScheduledJob]:
         # 1. 读取原始列表
         raw = load_json(self.path, default=[], domain="job_store")
+        if not isinstance(raw, list):
+            raise ValueError("任务清单格式无效：根节点必须是数组")
 
         # 2. 反序列化
         try:
             return [self._from_dict(d) for d in raw]
         except Exception as e:
-            logger.warning("[job_store] 反序列化失败: %s", e)
-            return []
+            logger.error("[job_store] 反序列化失败: %s", e)
+            raise
 
     def save(self, jobs: dict[str, ScheduledJob]) -> None:
         data = [self._to_dict(j) for j in jobs.values()]

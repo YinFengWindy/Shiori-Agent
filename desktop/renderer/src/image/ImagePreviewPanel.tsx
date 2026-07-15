@@ -5,12 +5,6 @@ type ImagePreviewPanelProps = {
   activeRecord: ImageHistoryRecord | null;
   generating: boolean;
   latestResult: ImageGenerateResult | null;
-  requestSummary: {
-    mode: string;
-    width: string;
-    height: string;
-    model: string;
-  } | null;
   error: string;
 };
 
@@ -18,7 +12,6 @@ export function ImagePreviewPanel({
   activeRecord,
   generating,
   latestResult,
-  requestSummary: _requestSummary,
   error,
 }: ImagePreviewPanelProps) {
   const previewPath = activeRecord?.output_paths[0] ?? latestResult?.output_paths[0] ?? "";
