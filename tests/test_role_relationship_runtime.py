@@ -68,6 +68,14 @@ def _snapshot_payload(*, role_id: str = "mira") -> dict:
     }
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(12, 12), ("12", 12), (-4, 0), ("invalid", 0), ([], 0)],
+)
+def test_normalize_message_count_accepts_json_scalars(value: object, expected: int):
+    assert RoleRelationshipRuntimeService._normalize_message_count(value) == expected
+
+
 def test_snapshot_rejects_non_first_person_self_view(tmp_path: Path):
     _seed_role(tmp_path)
     runtime, _, _ = _runtime(tmp_path)
