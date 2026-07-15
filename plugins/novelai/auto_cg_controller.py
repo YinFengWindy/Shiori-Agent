@@ -21,6 +21,9 @@ from plugins.novelai.scene_decision import (
 
 logger = logging.getLogger(__name__)
 
+_MAX_GENERATION_RETRIES = 1
+_MAX_DECISION_RETRIES = 1
+
 
 @dataclass(frozen=True)
 class _SceneDecisionWork:
@@ -61,6 +64,7 @@ class AutoCgController:
     def capture_turn(self, ctx: BeforeTurnCtx) -> None:
         """Capture one eligible role turn and advance its cooldown counter."""
 
+        self._cancel_pending_task(ctx.session_key)
         self._policy.advance_turn(ctx.session_key)
         decision_work = self._build_decision_input(ctx)
         if decision_work is None:
@@ -151,6 +155,11 @@ class AutoCgController:
             auto_cg_enabled=auto_cg_enabled,
         )
 
+    def _cancel_pending_task(self, session_key: str) -> None:
+        task = self._tasks.pop(session_key, None)
+        if task is not None and not task.done():
+            task.cancel()
+
     async def _run(
         self,
         ctx: AfterTurnCtx,
@@ -165,10 +174,9 @@ class AutoCgController:
             assistant_reply=ctx.reply,
             recent_history=decision_input.recent_history,
         )
-        decision = await self._decision_provider(
-            self._light_provider,
-            model=self._light_model,
-            decision_input=completed_input,
+        decision = await self._decide_with_retry(
+            completed_input,
+            session_key=ctx.session_key,
         )
         if self._scene_transition_fn is not None:
             self._scene_transition_fn(
@@ -200,25 +208,92 @@ class AutoCgController:
                 getattr(prepared, "reason", "policy_denied"),
             )
             return
-        payload = _safe_json(await self._generate_tool.execute(**prepared))
-        media = _media_paths(payload)
+        media = await self._generate_media_with_retry(
+            prepared,
+            session_key=ctx.session_key,
+        )
         if not media:
-            raise RuntimeError("自动场景 CG 生图结果缺少 output_paths")
+            return
 
         push_tool = self._tool_registry.get_tool("message_push")
         if push_tool is None:
             raise RuntimeError("自动场景 CG 缺少 message_push 工具")
-        for image_path in media:
-            push_result = await push_tool.execute(
-                channel=ctx.channel,
-                chat_id=ctx.chat_id,
-                image=image_path,
-                role_id=role_id,
-                session_key=ctx.session_key,
-            )
-            if not isinstance(push_result, str) or "图片已发送" not in push_result:
-                raise RuntimeError(f"自动场景 CG 补发失败: {push_result}")
+        image_path = media[0]
+        push_result = await push_tool.execute(
+            channel=ctx.channel,
+            chat_id=ctx.chat_id,
+            image=image_path,
+            role_id=role_id,
+            session_key=ctx.session_key,
+        )
+        if not isinstance(push_result, str) or "图片已发送" not in push_result:
+            raise RuntimeError(f"自动场景 CG 补发失败: {push_result}")
         self._policy.record_success(ctx.session_key, prepared["scene_key"])
+
+    async def _decide_with_retry(
+        self,
+        decision_input: SceneCgDecisionInput,
+        *,
+        session_key: str,
+    ) -> SceneCgDecision:
+        for attempt in range(_MAX_DECISION_RETRIES + 1):
+            try:
+                return await self._decision_provider(
+                    self._light_provider,
+                    model=self._light_model,
+                    decision_input=decision_input,
+                )
+            except Exception as error:
+                if attempt < _MAX_DECISION_RETRIES:
+                    logger.warning(
+                        "自动场景 CG 判定失败，准备重试 session=%s attempt=%d/%d: %s",
+                        session_key,
+                        attempt + 1,
+                        _MAX_DECISION_RETRIES,
+                        error,
+                    )
+                    continue
+                logger.error(
+                    "自动场景 CG 判定失败，已重试 %d 次，放弃 session=%s: %s",
+                    _MAX_DECISION_RETRIES,
+                    session_key,
+                    error,
+                    exc_info=(type(error), error, error.__traceback__),
+                )
+                raise
+        raise RuntimeError("自动场景 CG 判定未完成")
+
+    async def _generate_media_with_retry(
+        self,
+        prepared: dict[str, Any],
+        *,
+        session_key: str,
+    ) -> list[str]:
+        for attempt in range(_MAX_GENERATION_RETRIES + 1):
+            try:
+                payload = _safe_json(await self._generate_tool.execute(**prepared))
+                media = _media_paths(payload)
+                if not media:
+                    raise RuntimeError("自动场景 CG 生图结果缺少 output_paths")
+                return media[:1]
+            except Exception as error:
+                if attempt < _MAX_GENERATION_RETRIES:
+                    logger.warning(
+                        "自动场景 CG 生图失败，准备重试 session=%s attempt=%d/%d: %s",
+                        session_key,
+                        attempt + 1,
+                        _MAX_GENERATION_RETRIES,
+                        error,
+                    )
+                    continue
+                logger.error(
+                    "自动场景 CG 生图失败，已重试 %d 次，放弃 session=%s: %s",
+                    _MAX_GENERATION_RETRIES,
+                    session_key,
+                    error,
+                    exc_info=(type(error), error, error.__traceback__),
+                )
+        return []
 
     def _finish_task(
         self,

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -48,6 +49,45 @@ def test_controller_advances_cooldown_while_decision_is_unavailable(
         controller.capture_turn(turn)
 
     assert policy.cooldown_remaining(session_key) == 0
+
+
+@pytest.mark.asyncio
+async def test_new_turn_cancels_stale_in_flight_scene_task(tmp_path: Path) -> None:
+    controller = AutoCgController(
+        settings=NovelAISettings(enabled=True, token="novel-token"),
+        role_store=cast(Any, None),
+        policy=AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json")),
+        light_provider=None,
+        light_model="",
+        session_manager=None,
+        generate_tool=cast(Any, None),
+        tool_registry=cast(Any, None),
+    )
+    started = asyncio.Event()
+
+    async def stale_work() -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(stale_work())
+    controller._tasks["role:mira"] = task
+    await started.wait()
+    controller.capture_turn(
+        BeforeTurnCtx(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
+            content="new scene",
+            timestamp=datetime.now(),
+            retrieved_memory_block="",
+            retrieval_trace_raw=None,
+            history_messages=(),
+        )
+    )
+    await asyncio.sleep(0)
+
+    assert task.cancelled()
+    assert "role:mira" not in controller.tasks
 
 
 @pytest.mark.asyncio
@@ -155,3 +195,108 @@ async def test_controller_applies_scene_transition_without_generating_cg(
     )
 
     assert transitions == [("role:mira", "closed", "")]
+
+
+@pytest.mark.asyncio
+async def test_controller_retries_generation_once_and_pushes_one_image(
+    tmp_path: Path,
+) -> None:
+    policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
+    push_tool = MessagePushTool()
+    pushed_images: list[str] = []
+
+    async def image_sender(_chat_id: str, image: str) -> None:
+        pushed_images.append(image)
+
+    push_tool.register_channel("desktop", image=image_sender)
+    registry = ToolRegistry()
+    registry.register(push_tool)
+
+    async def decide(*_args: Any, **_kwargs: Any) -> SceneCgDecision:
+        return SceneCgDecision(
+            should_generate=True,
+            scene_key="rain",
+            prompt="a rainy street",
+        )
+
+    class GenerateTool:
+        calls = 0
+
+        async def execute(self, **_kwargs: Any) -> str:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("temporary upstream failure")
+            return '{"output_paths": ["first.png", "second.png"]}'
+
+    generate_tool = GenerateTool()
+    controller = AutoCgController(
+        settings=NovelAISettings(enabled=True, token="novel-token"),
+        role_store=cast(Any, None),
+        policy=policy,
+        light_provider=cast(Any, object()),
+        light_model="light-model",
+        session_manager=cast(
+            Any,
+            SimpleNamespace(
+                get_or_create=lambda _session_key: SimpleNamespace(
+                    metadata={"role_id": "mira"}
+                )
+            ),
+        ),
+        generate_tool=cast(Any, generate_tool),
+        tool_registry=registry,
+        decision_provider=decide,
+    )
+    ctx = AfterTurnCtx(
+        session_key="role:mira",
+        channel="desktop",
+        chat_id="role:mira",
+        reply="继续下雨了。",
+        tools_used=(),
+        thinking=None,
+        will_dispatch=True,
+    )
+
+    await controller._run(
+        ctx,
+        SceneCgDecisionInput(role_name="Mira", role_prompt="role", user_message="下雨了吗？"),
+    )
+
+    assert generate_tool.calls == 2
+    assert pushed_images == ["first.png"]
+    assert policy.cooldown_remaining("role:mira") > 0
+
+
+@pytest.mark.asyncio
+async def test_controller_abandons_after_one_generation_retry(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class GenerateTool:
+        calls = 0
+
+        async def execute(self, **_kwargs: Any) -> str:
+            self.calls += 1
+            raise RuntimeError("upstream unavailable")
+
+    generate_tool = GenerateTool()
+    controller = AutoCgController(
+        settings=NovelAISettings(enabled=True, token="novel-token"),
+        role_store=cast(Any, None),
+        policy=AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json")),
+        light_provider=cast(Any, object()),
+        light_model="light-model",
+        session_manager=cast(Any, object()),
+        generate_tool=cast(Any, generate_tool),
+        tool_registry=cast(Any, None),
+    )
+
+    with caplog.at_level("ERROR"):
+        media = await controller._generate_media_with_retry(
+            {"prompt": "rain"},
+            session_key="role:mira",
+        )
+
+    assert media == []
+    assert generate_tool.calls == 2
+    assert "已重试 1 次" in caplog.text

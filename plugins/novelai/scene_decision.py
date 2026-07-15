@@ -78,14 +78,15 @@ def _build_decision_prompt(decision_input: SceneCgDecisionInput) -> str:
     }
     return (
         "你是角色扮演场景 CG 判定器。根据刚完成的一轮对话，判断是否值得主动补发一张 CG。\n"
+        "当前回合的 user_message 和 assistant_reply 是最新事实，必须优先于旧历史和角色设定；"
         "同时判断当前回合与上一段场景的关系：scene_transition 只能是 same、changed、closed。"
         "same 表示仍在同一场景，changed 表示明确转入新场景，closed 表示告别、睡觉或场景结束。\n"
         "只有以下情况返回 should_generate=true：重要地点首次清晰出现、关系或情绪高潮、"
         "剧情转折、或具有明确构图的关键动作结果。普通闲聊、轻微动作、重复场景、技术讨论、"
         "以及用户明确要求生图的回合都返回 false。\n"
         "命中时，scene_key 使用简短稳定的英文场景标识；prompt 和 negative_prompt 必须是"
-        "逗号分隔的英文 NovelAI tags，禁止中文和自然语言句子。prompt 只描述可见角色、"
-        "动作、环境、构图、光线和氛围，不要写对白、心理或不可见信息。"
+        "逗号分隔的英文 NovelAI tags，禁止中文和自然语言句子。prompt 只描述最新回合中明确可见的角色、"
+        "动作、环境、构图、光线和氛围；不要把旧历史中的动作带入新场景，不要写对白、心理或不可见信息。"
         "size_preset 只能是 square、landscape、portrait。\n"
         "只输出 JSON，不要解释。未命中格式："
         '{"should_generate":false,"scene_transition":"same"}。命中格式：'

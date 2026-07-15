@@ -387,9 +387,12 @@ async def test_plugin_allows_only_one_auto_cg_task_and_cancels_it_on_terminate(
     await plugin.advance_auto_cg_turn(before_turn)
     await plugin.schedule_auto_cg(after_turn)
 
-    assert list(plugin._auto_cg_tasks.values()) == [task]
-    await plugin.terminate()
+    await asyncio.sleep(0)
+    replacement = plugin._auto_cg_tasks["role:mira"]
+    assert replacement is not task
     assert task.cancelled()
+    await plugin.terminate()
+    assert replacement.cancelled()
 
 
 @pytest.mark.asyncio

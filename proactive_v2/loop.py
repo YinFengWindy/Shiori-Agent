@@ -375,9 +375,16 @@ class ProactiveLoop:
         try:
             await self._run_loop()
         finally:
-            await self._proactive_pipeline.cancel_pending_retries()
-            if self._event_bus is not None:
-                self._event_bus.off(TurnStarted, self._turn_started_handler)
+            cancel_retries = getattr(
+                self._proactive_pipeline,
+                "cancel_pending_retries",
+                None,
+            )
+            if cancel_retries is not None:
+                await cancel_retries()
+            event_bus = getattr(self, "_event_bus", None)
+            if event_bus is not None:
+                event_bus.off(TurnStarted, self._turn_started_handler)
             await self._mcp_pool.disconnect_all()
             logger.info("[proactive] mcp pool 已关闭")
 
