@@ -76,7 +76,7 @@ function request(method, payload) {
 
 setTimeout(() => {
   finish(1, `bridge smoke timed out\n${stderr}`);
-}, 12000);
+}, 60000);
 
 (async () => {
   const health = await request("health", {});

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,16 +10,37 @@ const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, "..");
 const repoRoot = resolve(desktopRoot, "..");
 const HEALTH_REQUEST_TIMEOUT_MS = 5_000;
+const BRIDGE_START_TIMEOUT_MS = 60_000;
+const BRIDGE_START_RETRY_DELAY_MS = 250;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const IMAGE_GENERATION_TIMEOUT_MS = 5 * 60_000;
+const GRACEFUL_STOP_TIMEOUT_MS = 5_000;
+const FORCED_STOP_TIMEOUT_MS = 2_000;
+
+type PendingRequest = {
+  id: string;
+  method: string;
+  resolve(response: BridgeResponse): void;
+};
+
+type BridgeProcessSession = {
+  child: ChildProcessWithoutNullStreams;
+  pending: Map<string, PendingRequest>;
+  stderrChunks: string[];
+  stdoutBuffer: string;
+  startPromise: Promise<void>;
+  stopPromise: Promise<void> | null;
+  writeTail: Promise<void>;
+  stopRequested: boolean;
+  exited: boolean;
+  exitEmitted: boolean;
+  exitPromise: Promise<void>;
+  resolveExit(): void;
+};
 
 export class DesktopBridgeClient extends EventEmitter {
-  private child: ChildProcessWithoutNullStreams | null = null;
-  private pending = new Map<string, (value: BridgeResponse) => void>();
-  private stderrChunks: string[] = [];
-  private stopRequested = false;
+  private session: BridgeProcessSession | null = null;
   private lastError: string | null = null;
-  private startPromise: Promise<void> | null = null;
 
   private cleanupStaleBridgeProcesses(): void {
     if (process.platform !== "win32") {
@@ -32,19 +53,16 @@ export class DesktopBridgeClient extends EventEmitter {
         "-Command",
         `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.ParentProcessId -eq ${process.pid} -and $_.CommandLine -like '*main.py bridge*' } | Select-Object -ExpandProperty ProcessId`,
       ],
-      {
-        encoding: "utf-8",
-      },
+      { encoding: "utf-8" },
     );
     if (result.status !== 0 || !result.stdout.trim()) {
       return;
     }
     for (const rawPid of result.stdout.split(/\r?\n/)) {
       const pid = Number(rawPid.trim());
-      if (!Number.isFinite(pid) || pid <= 0) {
-        continue;
+      if (Number.isFinite(pid) && pid > 0) {
+        this.killProcessTree(pid);
       }
-      this.killProcessTree(pid);
     }
   }
 
@@ -61,21 +79,8 @@ export class DesktopBridgeClient extends EventEmitter {
     try {
       process.kill(pid, "SIGKILL");
     } catch {
-      // Ignore cleanup failures for already-exited processes.
+      // The process may already have completed its graceful shutdown.
     }
-  }
-
-  private resolvePendingWithExit(message: string): void {
-    for (const [, resolvePending] of this.pending) {
-      resolvePending({
-        id: "bridge-exit",
-        type: "response",
-        method: "bridge.exit",
-        payload: {},
-        error: { code: "bridge_exit", message },
-      });
-    }
-    this.pending.clear();
   }
 
   private createBridgeExitResponse(id: string, method: string, message: string): BridgeResponse {
@@ -88,6 +93,13 @@ export class DesktopBridgeClient extends EventEmitter {
     };
   }
 
+  private resolveSessionPending(session: BridgeProcessSession, message: string): void {
+    for (const pending of session.pending.values()) {
+      pending.resolve(this.createBridgeExitResponse(pending.id, pending.method, message));
+    }
+    session.pending.clear();
+  }
+
   private invokeTimeoutMs(method: string): number {
     if (method === "health") {
       return HEALTH_REQUEST_TIMEOUT_MS;
@@ -98,123 +110,241 @@ export class DesktopBridgeClient extends EventEmitter {
     return DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
-  private async waitUntilReady(): Promise<void> {
-    const response = await this.invoke({
-      method: "health",
-      payload: {},
-    }, true);
-    if (response.error || response.payload?.ok !== true) {
-      throw new Error(response.error?.message || "bridge health check failed");
+  private gracefulStopTimeoutMs(): number {
+    return GRACEFUL_STOP_TIMEOUT_MS;
+  }
+
+  private forcedStopTimeoutMs(): number {
+    return FORCED_STOP_TIMEOUT_MS;
+  }
+
+  private reportSessionFailure(
+    session: BridgeProcessSession,
+    message: string,
+    { kill = false }: { kill?: boolean } = {},
+  ): void {
+    session.stderrChunks.push(message);
+    this.resolveSessionPending(session, message);
+    if (this.session === session) {
+      this.lastError = message;
+    }
+    if (!session.exitEmitted) {
+      session.exitEmitted = true;
+      this.emit("exit", message);
+    }
+    if (kill) {
+      const pid = session.child.pid;
+      if (pid) {
+        this.killProcessTree(pid);
+      }
     }
   }
 
+  private completeSessionExit(
+    session: BridgeProcessSession,
+    code: number | null,
+    processError?: Error,
+  ): void {
+    if (session.exited) {
+      return;
+    }
+    session.exited = true;
+    const stderr = session.stderrChunks.join("").trim();
+    const message = processError?.message
+      || stderr
+      || (session.stopRequested ? "bridge stopped" : `bridge exited with code ${code}`);
+    this.resolveSessionPending(session, message);
+    if (this.session === session) {
+      this.session = null;
+      this.lastError = message;
+    }
+    if ((!session.stopRequested || (code ?? 0) !== 0) && !session.exitEmitted) {
+      session.exitEmitted = true;
+      this.emit("exit", message);
+    }
+    session.resolveExit();
+    session.child.removeAllListeners();
+  }
+
+  private consumeStdout(session: BridgeProcessSession, chunk: Buffer): void {
+    session.stdoutBuffer += chunk.toString("utf-8");
+    while (true) {
+      const index = session.stdoutBuffer.indexOf("\n");
+      if (index < 0) {
+        return;
+      }
+      const line = session.stdoutBuffer.slice(0, index).trim();
+      session.stdoutBuffer = session.stdoutBuffer.slice(index + 1);
+      if (!line) {
+        continue;
+      }
+      let parsed: BridgeResponse | BridgeEvent;
+      try {
+        parsed = JSON.parse(line) as BridgeResponse | BridgeEvent;
+      } catch {
+        this.reportSessionFailure(session, `bridge emitted invalid JSON: ${line}`, { kill: true });
+        return;
+      }
+      if (parsed.type === "event") {
+        if (this.session === session && !session.stopRequested) {
+          this.emit("event", parsed);
+        }
+        continue;
+      }
+      session.pending.get(parsed.id)?.resolve(parsed);
+    }
+  }
+
+  private createSession(child: ChildProcessWithoutNullStreams): BridgeProcessSession {
+    let resolveExit!: () => void;
+    const exitPromise = new Promise<void>((resolvePromise) => {
+      resolveExit = resolvePromise;
+    });
+    return {
+      child,
+      pending: new Map(),
+      stderrChunks: [],
+      stdoutBuffer: "",
+      startPromise: Promise.resolve(),
+      stopPromise: null,
+      writeTail: Promise.resolve(),
+      stopRequested: false,
+      exited: false,
+      exitEmitted: false,
+      exitPromise,
+      resolveExit,
+    };
+  }
+
+  private attachSessionListeners(session: BridgeProcessSession): void {
+    session.child.stdout.on("data", (chunk: Buffer) => {
+      this.consumeStdout(session, chunk);
+    });
+    session.child.stderr.on("data", (chunk: Buffer) => {
+      session.stderrChunks.push(chunk.toString("utf-8"));
+    });
+    session.child.once("error", (error) => {
+      this.completeSessionExit(session, null, error);
+    });
+    session.child.once("exit", (code) => {
+      this.completeSessionExit(session, code);
+    });
+  }
+
+  private async waitUntilReady(session: BridgeProcessSession): Promise<void> {
+    const deadline = Date.now() + BRIDGE_START_TIMEOUT_MS;
+    let lastError = "bridge health check failed";
+    while (Date.now() < deadline) {
+      if (this.session !== session || session.exited) {
+        throw new Error(this.lastError || "bridge exited during startup");
+      }
+      const response = await this.invoke({ method: "health", payload: {} }, true);
+      if (!response.error && response.payload?.ok === true) {
+        return;
+      }
+      lastError = response.error?.message || lastError;
+      if (response.error?.code === "bridge_exit") {
+        throw new Error(lastError);
+      }
+      await new Promise<void>((resolvePromise) => {
+        setTimeout(resolvePromise, BRIDGE_START_RETRY_DELAY_MS);
+      });
+    }
+    throw new Error(lastError);
+  }
+
   start(): Promise<void> {
-    if (this.child) {
-      return this.startPromise ?? Promise.resolve();
+    const existing = this.session;
+    if (existing) {
+      if (existing.stopRequested && existing.stopPromise) {
+        return existing.stopPromise.then(() => this.start());
+      }
+      return existing.startPromise;
     }
     this.cleanupStaleBridgeProcesses();
-    this.stopRequested = false;
-    this.stderrChunks = [];
     this.lastError = null;
     const pythonExe = resolve(repoRoot, ".venv", "Scripts", "python.exe");
     if (!existsSync(pythonExe)) {
       throw new Error(`Python bridge runtime not found: ${pythonExe}`);
     }
-    this.child = spawn(
-      pythonExe,
-      ["main.py", "bridge"],
-      {
-        cwd: repoRoot,
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    );
-    this.startPromise = (async () => {
-      await new Promise<void>((resolve) => setTimeout(resolve, 200));
-      await this.waitUntilReady();
-    })();
+    const child = spawn(pythonExe, ["main.py", "bridge"], {
+      cwd: repoRoot,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const session = this.createSession(child);
+    this.session = session;
+    this.attachSessionListeners(session);
+    session.startPromise = (async () => {
+      await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 200));
+      await this.waitUntilReady(session);
+    })().catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.reportSessionFailure(session, message);
+      void this.stopSession(session);
+      throw error;
+    });
+    return session.startPromise;
+  }
 
-    let buffer = "";
-    this.child.stdout.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString("utf-8");
-      while (true) {
-        const index = buffer.indexOf("\n");
-        if (index < 0) break;
-        const line = buffer.slice(0, index).trim();
-        buffer = buffer.slice(index + 1);
-        if (!line) continue;
-        let parsed: BridgeResponse | BridgeEvent;
-        try {
-          parsed = JSON.parse(line) as BridgeResponse | BridgeEvent;
-        } catch {
-          const message = `bridge emitted invalid JSON: ${line}`;
-          this.lastError = message;
-          this.stderrChunks.push(message);
-          this.resolvePendingWithExit(message);
-          this.emit("exit", message);
-          const pid = this.child?.pid;
-          if (pid) {
-            this.killProcessTree(pid);
+  private enqueueWrite(
+    session: BridgeProcessSession,
+    id: string,
+    text: string,
+  ): Promise<void> {
+    const write = session.writeTail.then(async () => {
+      if (!session.pending.has(id)) {
+        return;
+      }
+      const child = session.child;
+      if (
+        this.session !== session
+        || session.stopRequested
+        || child.killed
+        || child.exitCode !== null
+        || child.stdin.destroyed
+        || child.stdin.writable === false
+        || child.stdin.writableEnded
+      ) {
+        throw new Error(this.lastError || "bridge stopped");
+      }
+      await new Promise<void>((resolveWrite, rejectWrite) => {
+        child.stdin.write(text, (error?: Error | null) => {
+          if (error) {
+            rejectWrite(error);
+            return;
           }
-          return;
-        }
-        if (parsed.type === "event") {
-          this.emit("event", parsed);
-          continue;
-        }
-        const resolvePending = this.pending.get(parsed.id);
-        if (resolvePending) {
-          this.pending.delete(parsed.id);
-          resolvePending(parsed);
-        }
-      }
+          resolveWrite();
+        });
+      });
     });
-
-    this.child.stderr.on("data", (chunk: Buffer) => {
-      this.stderrChunks.push(chunk.toString("utf-8"));
-    });
-
-    this.child.on("exit", (code) => {
-      const child = this.child;
-      const message = this.stderrChunks.join("").trim() || `bridge exited with code ${code}`;
-      this.lastError = message;
-      this.resolvePendingWithExit(message);
-      this.child = null;
-      if (!this.stopRequested || (code ?? 0) !== 0) {
-        this.emit("exit", message);
-      }
-      child?.removeAllListeners();
-      this.startPromise = null;
-    });
-
-    return this.startPromise;
+    session.writeTail = write.catch(() => undefined);
+    return write;
   }
 
   async invoke(request: Omit<BridgeRequest, "id">, skipReady = false): Promise<BridgeResponse> {
-    if (!this.child) {
+    if (!this.session) {
       await this.start();
-    } else if (!skipReady && this.startPromise) {
-      await this.startPromise;
     }
-    const child = this.child;
-    if (!child) {
+    let session = this.session;
+    if (session && !skipReady) {
+      await session.startPromise;
+      session = this.session;
+    }
+    if (!session || session.stopRequested) {
       return this.createBridgeExitResponse(
         "bridge-exit",
         request.method,
         this.lastError || "bridge stopped",
       );
     }
-    const id = randomUUID();
-    const payload: BridgeRequest = {
-      id,
-      method: request.method,
-      payload: request.payload,
-    };
-    const text = JSON.stringify(payload) + "\n";
 
-    return await new Promise<BridgeResponse>((resolvePending) => {
+    const id = randomUUID();
+    const payload: BridgeRequest = { id, method: request.method, payload: request.payload };
+    const text = JSON.stringify(payload) + "\n";
+    return await new Promise<BridgeResponse>((resolvePromise) => {
       let settled = false;
       let timeout: NodeJS.Timeout | null = null;
-      const resolveOnce = (value: BridgeResponse): void => {
+      const resolveOnce = (response: BridgeResponse): void => {
         if (settled) {
           return;
         }
@@ -222,11 +352,10 @@ export class DesktopBridgeClient extends EventEmitter {
         if (timeout) {
           clearTimeout(timeout);
         }
-        this.pending.delete(id);
-        resolvePending(value);
+        session.pending.delete(id);
+        resolvePromise(response);
       };
-
-      this.pending.set(id, resolveOnce);
+      session.pending.set(id, { id, method: request.method, resolve: resolveOnce });
       const timeoutMs = this.invokeTimeoutMs(request.method);
       timeout = setTimeout(() => {
         resolveOnce({
@@ -241,63 +370,90 @@ export class DesktopBridgeClient extends EventEmitter {
         });
       }, timeoutMs);
       timeout.unref();
-
-      if (
-        this.child !== child
-        || child.killed
-        || child.exitCode !== null
-        || child.stdin.destroyed
-        || child.stdin.writable === false
-        || child.stdin.writableEnded
-      ) {
-        resolveOnce(
-          this.createBridgeExitResponse(
-            id,
-            request.method,
-            this.lastError || "bridge stopped",
-          ),
-        );
-        return;
-      }
-
-      child.stdin.write(text, (error?: Error | null) => {
-        if (!error) {
-          return;
-        }
+      void this.enqueueWrite(session, id, text).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
         resolveOnce({
           id,
           type: "response",
           method: request.method,
           payload: {},
-          error: {
-            code: "bridge_write_failed",
-            message: error.message,
-          },
+          error: { code: "bridge_write_failed", message },
         });
       });
     });
   }
 
-  stop(): void {
-    this.stopRequested = true;
+  private stopSession(session: BridgeProcessSession): Promise<void> {
+    if (session.stopPromise) {
+      return session.stopPromise;
+    }
+    session.stopRequested = true;
     const message = "bridge stopped";
     this.lastError = message;
-    this.resolvePendingWithExit(message);
-    const pid = this.child?.pid;
-    if (pid) {
-      this.killProcessTree(pid);
+    this.resolveSessionPending(session, message);
+    session.stopPromise = (async () => {
+      if (!session.child.stdin.destroyed && !session.child.stdin.writableEnded) {
+        session.child.stdin.end();
+      }
+      const graceful = await this.waitForSessionExit(session, this.gracefulStopTimeoutMs());
+      if (!graceful && !session.exited) {
+        const pid = session.child.pid;
+        if (pid) {
+          this.killProcessTree(pid);
+        }
+        await this.waitForSessionExit(session, this.forcedStopTimeoutMs());
+      }
+      if (this.session === session) {
+        this.session = null;
+      }
+    })();
+    return session.stopPromise;
+  }
+
+  private async waitForSessionExit(
+    session: BridgeProcessSession,
+    timeoutMs: number,
+  ): Promise<boolean> {
+    if (session.exited) {
+      return true;
     }
-    this.child = null;
-    this.startPromise = null;
+    return await new Promise<boolean>((resolvePromise) => {
+      let settled = false;
+      const resolveOnce = (exited: boolean): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        resolvePromise(exited);
+      };
+      const timeout = setTimeout(() => resolveOnce(false), timeoutMs);
+      timeout.unref();
+      void session.exitPromise.then(() => resolveOnce(true));
+    });
+  }
+
+  stop(): Promise<void> {
+    const session = this.session;
+    if (!session) {
+      return Promise.resolve();
+    }
+    return this.stopSession(session);
   }
 
   async restart(): Promise<void> {
-    this.stop();
+    await this.stop();
     await this.start();
   }
 
   isRunning(): boolean {
-    return this.child !== null;
+    const session = this.session;
+    return Boolean(
+      session
+      && !session.stopRequested
+      && !session.child.killed
+      && session.child.exitCode === null,
+    );
   }
 
   getLastError(): string | null {

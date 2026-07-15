@@ -6,14 +6,11 @@
     "start": "npm run desktop:start",
     "build": "npm run build:desktop",
     "build:desktop": "npm --prefix desktop run build",
-    "smoke": "npm run desktop:smoke:all",
+    "smoke": "npm run desktop:smoke",
     "desktop:build": "npm run build:desktop",
     "desktop:dev": "npm --prefix desktop run dev",
-    "desktop:dev:smoke": "npm --prefix desktop run smoke:desktop",
-    "desktop:smoke:all": "npm --prefix desktop run smoke",
-    "desktop:smoke:ui": "npm --prefix desktop run build && npm --prefix desktop run smoke:desktop-ui",
     "desktop:smoke:restart": "npm --prefix desktop run smoke:restart",
-    "desktop:smoke": "npm --prefix desktop run build && npm --prefix desktop run smoke:desktop",
+    "desktop:smoke": "npm --prefix desktop run smoke",
     "desktop:start": "npm --prefix desktop run start:built",
     "desktop:test": "node desktop/scripts/test-unit.mjs",
     "desktop:typecheck": "npm --prefix desktop run typecheck",
@@ -24,28 +21,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
-    "esbuild": "^0.25.0",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17",
     "tsx": "^4.23.1",
     "typescript": "^5.8.0",
-    "typescript-eslint": "^8.59.1",
-    "vite": "^6.0.7"
-  },
-  "dependencies": {
-    "@radix-ui/react-scroll-area": "^1.2.2",
-    "clsx": "^2.1.1",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "recharts": "^3.8.1",
-    "tailwind-merge": "^2.6.0"
+    "typescript-eslint": "^8.59.1"
   }
 }

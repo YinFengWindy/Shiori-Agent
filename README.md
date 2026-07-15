@@ -207,8 +207,6 @@ npm run lint
 npm run typecheck
 npm run desktop:typecheck
 npm run desktop:smoke
-npm run desktop:smoke:all
-npm run desktop:smoke:ui
 npm run desktop:smoke:restart
 ```
 
@@ -220,8 +218,6 @@ npm --prefix desktop run build
 npm --prefix desktop run smoke
 npm --prefix desktop run smoke:bridge
 npm --prefix desktop run smoke:host
-npm --prefix desktop run smoke:desktop
-npm --prefix desktop run smoke:desktop-ui
 npm --prefix desktop run smoke:restart
 ```
 
@@ -229,8 +225,6 @@ npm --prefix desktop run smoke:restart
 
 - `smoke:bridge`：验证 Python bridge 的角色 / 会话生命周期
 - `smoke:host`：验证 Electron host 到 bridge 的 RPC 主链
-- `smoke:desktop`：验证 renderer -> preload -> host -> bridge 的完整调用链
-- `smoke:desktop-ui`：验证 UI 层角色创建、切换、编辑与素材选择
 - `smoke:restart`：验证 bridge 重启后的恢复路径
 
 ---

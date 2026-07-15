@@ -1,53 +1,121 @@
 /// <reference types="node" />
 
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { describe, it } from "node:test";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import type { BridgeResponse } from "./shared.js";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 
-type PendingResolver = (response: BridgeResponse) => void;
-
-type MutableBridgeClient = {
-  child: {
-    stdin: {
-      destroyed?: boolean;
-      writable?: boolean;
-      writableEnded?: boolean;
-      write(chunk: string, callback?: (error?: Error | null) => void): boolean;
-    };
-    killed?: boolean;
-    exitCode?: number | null;
-  } | null;
-  startPromise: Promise<void> | null;
-  pending: Map<string, PendingResolver>;
-  invokeTimeoutMs(method: string): number;
+type PendingRequest = {
+  id: string;
+  method: string;
+  resolve(response: BridgeResponse): void;
 };
 
-type BridgeResponse = Awaited<ReturnType<DesktopBridgeClient["invoke"]>>;
+type TestSession = {
+  child: FakeChild;
+  pending: Map<string, PendingRequest>;
+  stderrChunks: string[];
+  stdoutBuffer: string;
+  startPromise: Promise<void>;
+  stopPromise: Promise<void> | null;
+  writeTail: Promise<void>;
+  stopRequested: boolean;
+  exited: boolean;
+  exitEmitted: boolean;
+  exitPromise: Promise<void>;
+  resolveExit(): void;
+};
 
-function createReadyClient(
-  onWrite: (request: { id: string; method: string }) => void,
-  timeoutMs = 20,
-): { client: DesktopBridgeClient; mutableClient: MutableBridgeClient } {
-  const client = new DesktopBridgeClient();
-  const mutableClient = client as unknown as MutableBridgeClient;
-  mutableClient.child = {
-    stdin: {
-      writable: true,
-      writableEnded: false,
-      write(chunk) {
-        onWrite(JSON.parse(chunk) as { id: string; method: string });
-        return true;
-      },
-    },
-    killed: false,
-    exitCode: null,
-  };
-  mutableClient.startPromise = Promise.resolve();
-  mutableClient.invokeTimeoutMs = () => timeoutMs;
-  return { client, mutableClient };
+type MutableBridgeClient = {
+  session: TestSession | null;
+  createSession(child: ChildProcessWithoutNullStreams): TestSession;
+  attachSessionListeners(session: TestSession): void;
+  invokeTimeoutMs(method: string): number;
+  gracefulStopTimeoutMs(): number;
+  forcedStopTimeoutMs(): number;
+  killProcessTree(pid: number): void;
+};
+
+class FakeStdin extends EventEmitter {
+  destroyed = false;
+  writable = true;
+  writableEnded = false;
+  readonly writes: string[] = [];
+  onWrite: (chunk: string, callback: (error?: Error | null) => void) => void = (
+    _chunk,
+    callback,
+  ) => callback();
+  onEnd: () => void = () => undefined;
+
+  write(chunk: string, callback: (error?: Error | null) => void): boolean {
+    this.writes.push(chunk);
+    this.onWrite(chunk, callback);
+    return true;
+  }
+
+  end(): void {
+    this.writableEnded = true;
+    this.onEnd();
+  }
 }
 
-describe("DesktopBridgeClient.invoke", () => {
+class FakeChild extends EventEmitter {
+  readonly stdin = new FakeStdin();
+  readonly stdout = new EventEmitter();
+  readonly stderr = new EventEmitter();
+  pid = 1234;
+  killed = false;
+  exitCode: number | null = null;
+
+  emitExit(code: number | null): void {
+    this.exitCode = code;
+    this.emit("exit", code);
+  }
+}
+
+function parseRequest(chunk: string): { id: string; method: string } {
+  return JSON.parse(chunk) as { id: string; method: string };
+}
+
+function emitResponse(child: FakeChild, response: BridgeResponse): void {
+  child.stdout.emit("data", Buffer.from(`${JSON.stringify(response)}\n`, "utf-8"));
+}
+
+async function withTestDeadline<T>(promise: Promise<T>, timeoutMs = 500): Promise<T> {
+  let timeout!: NodeJS.Timeout;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => reject(new Error("test deadline exceeded")), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, deadline]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function createReadyClient(timeoutMs = 20): {
+  client: DesktopBridgeClient;
+  mutableClient: MutableBridgeClient;
+  child: FakeChild;
+  session: TestSession;
+} {
+  const client = new DesktopBridgeClient();
+  const mutableClient = client as unknown as MutableBridgeClient;
+  const child = new FakeChild();
+  const session = mutableClient.createSession(
+    child as unknown as ChildProcessWithoutNullStreams,
+  );
+  session.child = child;
+  session.startPromise = Promise.resolve();
+  mutableClient.session = session;
+  mutableClient.invokeTimeoutMs = () => timeoutMs;
+  mutableClient.attachSessionListeners(session);
+  return { client, mutableClient, child, session };
+}
+
+describe("DesktopBridgeClient", () => {
   it("uses short health, default, and extended image generation timeouts", () => {
     const client = new DesktopBridgeClient() as unknown as MutableBridgeClient;
 
@@ -56,109 +124,152 @@ describe("DesktopBridgeClient.invoke", () => {
     assert.equal(client.invokeTimeoutMs("novelai.generate"), 5 * 60_000);
   });
 
-  it("resolves with a bridge-exit error when the bridge disappears before stdin write", async () => {
-    const client = new DesktopBridgeClient();
-    const mutableClient = client as unknown as MutableBridgeClient;
-    let writeCalled = false;
-
-    mutableClient.child = {
-      stdin: {
-        writable: true,
-        writableEnded: false,
-        write() {
-          writeCalled = true;
-          return true;
-        },
-      },
-      killed: false,
-      exitCode: null,
+  it("resolves a response and removes its generation-local pending entry", async () => {
+    const { client, child, session } = createReadyClient();
+    child.stdin.onWrite = (chunk, callback) => {
+      callback();
+      const request = parseRequest(chunk);
+      queueMicrotask(() => emitResponse(child, {
+        id: request.id,
+        type: "response",
+        method: request.method,
+        payload: { ok: true },
+        error: null,
+      }));
     };
-    mutableClient.startPromise = Promise.resolve();
 
-    queueMicrotask(() => {
-      mutableClient.child = null;
-    });
-
-    const response = await Promise.race([
-      client.invoke({
-        method: "health",
-        payload: {},
-      }),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("invoke timed out")), 250);
-      }),
-    ]);
-
-    assert.equal(writeCalled, false);
-    assert.equal(response.error?.code, "bridge_exit");
-    assert.match(response.error?.message ?? "", /bridge/i);
-  });
-
-  it("clears the timeout and pending entry when the bridge responds", async () => {
-    const { client, mutableClient } = createReadyClient((request) => {
-      queueMicrotask(() => {
-        mutableClient.pending.get(request.id)?.({
-          id: request.id,
-          type: "response",
-          method: request.method,
-          payload: { ok: true },
-          error: undefined,
-        });
-      });
-    });
-
-    const response = await client.invoke({ method: "roles.list", payload: {} });
+    const response = await withTestDeadline(
+      client.invoke({ method: "roles.list", payload: {} }),
+    );
 
     assert.deepEqual(response.payload, { ok: true });
-    assert.equal(response.error, undefined);
-    assert.equal(mutableClient.pending.size, 0);
+    assert.equal(session.pending.size, 0);
   });
 
-  it("returns a structured error and clears pending when the bridge never responds", async () => {
-    let requestId = "";
-    const { client, mutableClient } = createReadyClient((request) => {
-      requestId = request.id;
-    });
+  it("returns a structured timeout without stopping the live generation", async () => {
+    const { client, child, session } = createReadyClient();
 
-    const response = await client.invoke({ method: "roles.list", payload: {} });
+    const response = await withTestDeadline(
+      client.invoke({ method: "roles.list", payload: {} }),
+    );
 
-    assert.equal(response.id, requestId);
-    assert.equal(response.method, "roles.list");
     assert.equal(response.error?.code, "bridge_timeout");
-    assert.match(response.error?.message ?? "", /20ms/);
-    assert.equal(mutableClient.pending.has(requestId), false);
+    assert.equal(session.pending.size, 0);
     assert.equal(client.isRunning(), true);
+    assert.equal(child.killed, false);
   });
 
-  it("ignores a late response after timeout without affecting the next request", async () => {
+  it("ignores a late response without affecting the next request", async () => {
+    const { client, child, session } = createReadyClient();
     const requestIds: string[] = [];
-    const { client, mutableClient } = createReadyClient((request) => {
+    child.stdin.onWrite = (chunk, callback) => {
+      callback();
+      const request = parseRequest(chunk);
       requestIds.push(request.id);
       if (requestIds.length === 2) {
         queueMicrotask(() => {
-          mutableClient.pending.get(requestIds[0])?.({
+          emitResponse(child, {
             id: requestIds[0],
             type: "response",
             method: "roles.list",
             payload: { stale: true },
-            error: undefined,
+            error: null,
           });
-          mutableClient.pending.get(request.id)?.({
+          emitResponse(child, {
             id: request.id,
             type: "response",
             method: request.method,
             payload: { current: true },
-            error: undefined,
+            error: null,
           });
         });
       }
-    });
+    };
 
-    const timedOut = await client.invoke({ method: "roles.list", payload: {} });
+    const timedOut = await withTestDeadline(
+      client.invoke({ method: "roles.list", payload: {} }),
+    );
     const current = await client.invoke({ method: "roles.list", payload: {} });
 
     assert.equal(timedOut.error?.code, "bridge_timeout");
     assert.deepEqual(current.payload, { current: true });
-    assert.equal(mutableClient.pending.size, 0);
+    assert.equal(session.pending.size, 0);
+  });
+
+  it("serializes stdin writes until each write callback completes", async () => {
+    const { client, child } = createReadyClient(100);
+    const callbacks: Array<(error?: Error | null) => void> = [];
+    child.stdin.onWrite = (chunk, callback) => {
+      callbacks.push(callback);
+      const request = parseRequest(chunk);
+      emitResponse(child, {
+        id: request.id,
+        type: "response",
+        method: request.method,
+        payload: {},
+        error: null,
+      });
+    };
+
+    const first = client.invoke({ method: "roles.list", payload: {} });
+    const second = client.invoke({ method: "health", payload: {} });
+    await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+    assert.equal(child.stdin.writes.length, 1);
+
+    callbacks.shift()?.();
+    await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+    assert.equal(child.stdin.writes.length, 2);
+    callbacks.shift()?.();
+    await Promise.all([first, second]);
+  });
+
+  it("keeps a new generation intact when an old exit arrives late", async () => {
+    const old = createReadyClient(100);
+    const newChild = new FakeChild();
+    const newSession = old.mutableClient.createSession(
+      newChild as unknown as ChildProcessWithoutNullStreams,
+    );
+    newSession.child = newChild;
+    newSession.startPromise = Promise.resolve();
+    old.mutableClient.attachSessionListeners(newSession);
+    old.mutableClient.session = newSession;
+
+    old.child.emitExit(0);
+
+    assert.equal(old.mutableClient.session, newSession);
+    assert.equal(old.client.isRunning(), true);
+  });
+
+  it("ends stdin and waits for a graceful process exit", async () => {
+    const { client, mutableClient, child } = createReadyClient(100);
+    let killCalled = false;
+    mutableClient.gracefulStopTimeoutMs = () => 10;
+    mutableClient.killProcessTree = () => {
+      killCalled = true;
+    };
+    child.stdin.onEnd = () => queueMicrotask(() => child.emitExit(0));
+
+    await withTestDeadline(client.stop());
+
+    assert.equal(child.stdin.writableEnded, true);
+    assert.equal(killCalled, false);
+    assert.equal(client.isRunning(), false);
+  });
+
+  it("force-kills a process that ignores graceful EOF", async () => {
+    const { client, mutableClient, child } = createReadyClient(100);
+    let killedPid: number | null = null;
+    mutableClient.gracefulStopTimeoutMs = () => 5;
+    mutableClient.forcedStopTimeoutMs = () => 20;
+    mutableClient.killProcessTree = (pid) => {
+      killedPid = pid;
+      child.killed = true;
+      child.emitExit(-1);
+    };
+
+    await withTestDeadline(client.stop());
+
+    assert.equal(killedPid, child.pid);
+    assert.equal(client.isRunning(), false);
   });
 });

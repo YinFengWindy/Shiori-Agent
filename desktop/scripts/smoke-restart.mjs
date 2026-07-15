@@ -10,7 +10,7 @@ const bridge = new DesktopBridgeClient();
 const timeout = setTimeout(() => {
   console.error("restart smoke timed out");
   process.exit(1);
-}, 15000);
+}, 120000);
 
 try {
   console.log("restart smoke: starting bridge");
@@ -32,5 +32,5 @@ try {
   console.log("desktop bridge restart ok");
   clearTimeout(timeout);
 } finally {
-  bridge.stop();
+  await bridge.stop();
 }

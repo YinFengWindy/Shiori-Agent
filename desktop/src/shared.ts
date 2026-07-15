@@ -108,6 +108,24 @@ export type StartAttachmentDragRequest = {
   path: string;
 };
 
+/** Opaque renderer reference to a main-process-authorized local file. */
+export type LocalAssetReference = {
+  path: string;
+  url: string;
+  kind: "image" | "document";
+};
+
+/** Requests opening an already authorized attachment with the operating system. */
+export type LocalAssetOpenRequest = {
+  path?: string;
+  url?: string;
+};
+
+export type LocalAssetOpenResult = {
+  ok: boolean;
+  error: string | null;
+};
+
 export type RendererDiagnosticPayload = {
   kind: "error" | "unhandledrejection" | "error-boundary";
   message: string;
@@ -125,6 +143,7 @@ export type DesktopApi = {
   pickImages(options?: { multiple?: boolean }): Promise<string[]>;
   pickChatAttachments(options?: { multiple?: boolean }): Promise<string[]>;
   startAttachmentDrag(request: StartAttachmentDragRequest): void;
+  openAttachment(request: LocalAssetOpenRequest): Promise<LocalAssetOpenResult>;
   reportRendererDiagnostic(payload: RendererDiagnosticPayload): void;
   bridgeStatus(): Promise<{ running: boolean; lastError: string | null }>;
   restartBridge(): Promise<{
@@ -138,14 +157,4 @@ export type DesktopApi = {
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */
   windowState(): Promise<WindowState>;
-  smoke(): Promise<{
-    status: { running: boolean; lastError: string | null };
-    health: BridgeResponse;
-    roles: BridgeResponse;
-    restarted: { ok: boolean; running: boolean; lastError: string | null };
-    healthAfterRestart: BridgeResponse;
-    createdRole: BridgeResponse;
-    openedSession: BridgeResponse;
-    deletedRole: BridgeResponse;
-  }>;
 };

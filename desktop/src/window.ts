@@ -1,6 +1,11 @@
 import { BrowserWindow } from "electron";
 import { logDesktopDiagnostic } from "./diagnostics.js";
 import { desktopWindowIcon, preloadScript, rendererDevServerUrl, rendererDist } from "./paths.js";
+import {
+  attachDesktopWindowSecurity,
+  resolveRendererEntryUrl,
+  validateRendererDevServerUrl,
+} from "./windowSecurity.js";
 
 type AttachDesktopWindowLifecycleOptions = {
   shouldHideOnClose: () => boolean;
@@ -10,9 +15,14 @@ type ReloadDesktopRendererOptions = {
   revealAfterReload: boolean;
 };
 
+type CreateDesktopWindowOptions = {
+  openLocalAttachment: (url: string) => Promise<unknown> | unknown;
+};
+
 function loadDesktopRenderer(window: BrowserWindow): Promise<void> {
-  if (rendererDevServerUrl) {
-    return window.loadURL(rendererDevServerUrl);
+  const trustedDevServerUrl = validateRendererDevServerUrl(rendererDevServerUrl);
+  if (trustedDevServerUrl) {
+    return window.loadURL(trustedDevServerUrl);
   }
   return window.loadFile(rendererDist);
 }
@@ -40,7 +50,7 @@ function emitWindowState(window: BrowserWindow): void {
 }
 
 /** Creates the desktop shell window. */
-export function createDesktopWindow(): BrowserWindow {
+export function createDesktopWindow({ openLocalAttachment }: CreateDesktopWindowOptions): BrowserWindow {
   const rendererRecoveryTimestamps: number[] = [];
 
   function canRecoverRenderer(now: number): boolean {
@@ -66,10 +76,9 @@ export function createDesktopWindow(): BrowserWindow {
       spellcheck: false,
     },
   });
-  win.webContents.on("console-message", (details: { message: string }) => {
-    if (process.env.MIRA_DESKTOP_UI_SMOKE === "1") {
-      console.log(`[desktop-ui-console] ${details.message}`);
-    }
+  attachDesktopWindowSecurity(win.webContents, {
+    rendererEntryUrl: resolveRendererEntryUrl(rendererDist, rendererDevServerUrl),
+    openLocalAttachment,
   });
   win.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
     logDesktopDiagnostic({
@@ -80,9 +89,6 @@ export function createDesktopWindow(): BrowserWindow {
         errorDescription,
       },
     });
-    if (process.env.MIRA_DESKTOP_UI_SMOKE === "1") {
-      console.error(`[desktop-ui-load-fail] ${errorCode} ${errorDescription}`);
-    }
   });
   win.on("unresponsive", () => {
     logDesktopDiagnostic({

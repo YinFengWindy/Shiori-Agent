@@ -17,7 +17,6 @@ __pycache__/
 
 # Node.js
 node_modules/
-package-lock.json
 frontend/dashboard/static/
 desktop/node_modules/
 desktop/.dev-user-data/

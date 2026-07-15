@@ -1,6 +1,19 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { BridgeEvent, DesktopApi, RendererDiagnosticPayload, WindowControlAction, WindowState } from "./shared.js";
 
+window.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const anchor = target.closest("a");
+  if (!anchor?.href.startsWith("mira-asset:")) {
+    return;
+  }
+  event.preventDefault();
+  void ipcRenderer.invoke("desktop:open-attachment", { url: anchor.href });
+});
+
 const api: DesktopApi = {
   invoke(request) {
     return ipcRenderer.invoke("desktop:invoke", request) as Promise<import("./shared.js").BridgeResponse>;
@@ -18,6 +31,9 @@ const api: DesktopApi = {
   },
   startAttachmentDrag(request) {
     ipcRenderer.send("desktop:start-attachment-drag", request);
+  },
+  openAttachment(request) {
+    return ipcRenderer.invoke("desktop:open-attachment", request) as Promise<import("./shared.js").LocalAssetOpenResult>;
   },
   reportRendererDiagnostic(payload: RendererDiagnosticPayload) {
     ipcRenderer.send("desktop:renderer-diagnostic", payload);
@@ -39,18 +55,6 @@ const api: DesktopApi = {
   },
   windowState() {
     return ipcRenderer.invoke("desktop:window-state") as Promise<WindowState>;
-  },
-  smoke() {
-    return ipcRenderer.invoke("desktop:smoke") as Promise<{
-      status: { running: boolean; lastError: string | null };
-      health: import("./shared.js").BridgeResponse;
-      roles: import("./shared.js").BridgeResponse;
-      restarted: { ok: boolean; running: boolean; lastError: string | null };
-      healthAfterRestart: import("./shared.js").BridgeResponse;
-      createdRole: import("./shared.js").BridgeResponse;
-      openedSession: import("./shared.js").BridgeResponse;
-      deletedRole: import("./shared.js").BridgeResponse;
-    }>;
   },
 };
 

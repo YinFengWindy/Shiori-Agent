@@ -26,7 +26,7 @@ from core.net.http import get_default_http_requester
 from core.roles import RoleAggregateService, RoleRelationshipRuntimeService, RoleStore
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.app_service import DesktopAppService
-from desktop_bridge.chat_service import DesktopChatService
+from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.image_service import DesktopImageService
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from desktop_bridge.role_presenter import DesktopRolePresenter
@@ -63,10 +63,12 @@ class DesktopBridgeService:
         self.session_manager = session_manager
         self.agent_loop = agent_loop
         self.event_bus = event_bus
-        self.event_bus.on(TurnCommitted, self._on_turn_committed)
+        self._turn_committed_listener = self._on_turn_committed
+        self._proactive_message_listener = self._on_proactive_message_committed
+        self.event_bus.on(TurnCommitted, self._turn_committed_listener)
         self.event_bus.on(
             ProactiveMessageCommitted,
-            self._on_proactive_message_committed,
+            self._proactive_message_listener,
         )
         self.config = config
         self._event_listeners: set[
@@ -170,6 +172,17 @@ class DesktopBridgeService:
         listener: Callable[[dict[str, Any]], Awaitable[None] | None],
     ) -> None:
         self._event_listeners.discard(listener)
+
+    async def aclose(self) -> None:
+        """Releases bridge event subscriptions and desktop chat tasks."""
+
+        self.event_bus.off(TurnCommitted, self._turn_committed_listener)
+        self.event_bus.off(
+            ProactiveMessageCommitted,
+            self._proactive_message_listener,
+        )
+        self._event_listeners.clear()
+        await self.chat_service.aclose()
 
     def register_desktop_push_channel(self, push_tool: MessagePushTool) -> None:
         """Registers the desktop proactive transport against the bridge event stream."""
@@ -459,6 +472,13 @@ class DesktopBridgeService:
                     )
                 aggregate = await self.role_service.open_role_async(role_id)
                 session = aggregate.session
+                if self.chat_service.is_busy(session.key):
+                    return self._error(
+                        request_id,
+                        method,
+                        "chat_busy",
+                        "当前会话已有正在执行的聊天任务",
+                    )
                 inbound_content = content
                 persisted_user_content = content
                 metadata: dict[str, object] = {}
@@ -557,6 +577,8 @@ class DesktopBridgeService:
             return self._error(request_id, method, "role_not_found", str(exc))
         except ValueError as exc:
             return self._error(request_id, method, "invalid_request", str(exc))
+        except ChatTurnBusyError as exc:
+            return self._error(request_id, method, "chat_busy", str(exc))
         except Exception as exc:
             return self._error(request_id, method, "internal_error", str(exc))
 

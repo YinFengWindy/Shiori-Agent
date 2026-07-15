@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Protocol
 
 from agent.looping.core import AgentLoop
 from bus.event_bus import EventBus
@@ -12,6 +12,30 @@ from desktop_bridge.models import BridgeEvent
 from session.manager import Session, SessionManager
 
 logger = logging.getLogger("desktop.bridge.chat")
+
+EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
+
+
+class SyncDesktopSessionThread(Protocol):
+    """Synchronizes a desktop session with its role-owned thread."""
+
+    def __call__(self, session: Session, *, role_id: str) -> None: ...
+
+
+class EmitSessionUpdated(Protocol):
+    """Emits a serialized session update through one bridge connection."""
+
+    async def __call__(
+        self,
+        *,
+        request_id: str,
+        session: Session,
+        emit_event: EventEmitter,
+    ) -> None: ...
+
+
+class ChatTurnBusyError(RuntimeError):
+    """Raised when a desktop session already owns an active chat turn."""
 
 
 class DesktopChatService:
@@ -24,15 +48,12 @@ class DesktopChatService:
         event_bus: EventBus,
         session_manager: SessionManager,
         role_id_from_session_key: Callable[[str], str],
-        sync_desktop_session_thread: Callable[[Session, str], None],
+        sync_desktop_session_thread: SyncDesktopSessionThread,
         emit_payload: Callable[
-            [Callable[[dict[str, Any]], Awaitable[None] | None], dict[str, Any]],
+            [EventEmitter, dict[str, Any]],
             Awaitable[None],
         ],
-        emit_session_updated: Callable[
-            [str, Session, Callable[[dict[str, Any]], Awaitable[None] | None]],
-            Awaitable[None],
-        ],
+        emit_session_updated: EmitSessionUpdated,
     ) -> None:
         self._agent_loop = agent_loop
         self._event_bus = event_bus
@@ -41,7 +62,13 @@ class DesktopChatService:
         self._sync_desktop_session_thread = sync_desktop_session_thread
         self._emit_payload = emit_payload
         self._emit_session_updated = emit_session_updated
-        self._tasks: set[asyncio.Task[None]] = set()
+        self._tasks_by_session: dict[str, asyncio.Task[None]] = {}
+
+    def is_busy(self, session_key: str) -> bool:
+        """Returns whether the session already has an active desktop turn."""
+
+        task = self._tasks_by_session.get(session_key)
+        return task is not None and not task.done()
 
     async def run_chat_turn(
         self,
@@ -52,7 +79,7 @@ class DesktopChatService:
         media: list[str],
         metadata: dict[str, object] | None,
         omit_user_turn: bool,
-        emit_event,
+        emit_event: EventEmitter,
     ) -> tuple[Session, list[BridgeEvent]]:
         collected: list[BridgeEvent] = []
 
@@ -92,7 +119,7 @@ class DesktopChatService:
         self._event_bus.on(StreamDeltaReady, _on_delta)
         self._event_bus.on(TurnCommitted, _on_done)
         try:
-            await self._agent_loop.process_direct(
+            _ = await self._agent_loop.process_direct(
                 content,
                 session_key=session_key,
                 channel="desktop",
@@ -139,11 +166,14 @@ class DesktopChatService:
         media: list[str],
         metadata: dict[str, object] | None,
         omit_user_turn: bool,
-        emit_event,
+        emit_event: EventEmitter,
     ) -> None:
+        if self.is_busy(session_key):
+            raise ChatTurnBusyError(f"会话 {session_key} 已有正在执行的聊天任务")
+
         async def _runner() -> None:
             try:
-                await self.run_chat_turn(
+                _ = await self.run_chat_turn(
                     request_id=request_id,
                     session_key=session_key,
                     content=content,
@@ -156,5 +186,22 @@ class DesktopChatService:
                 logger.exception("desktop chat turn failed: %s", session_key)
 
         task = asyncio.create_task(_runner(), name=f"desktop-chat:{session_key}")
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._tasks_by_session[session_key] = task
+        task.add_done_callback(
+            lambda completed, key=session_key: self._discard_task(key, completed)
+        )
+
+    async def aclose(self) -> None:
+        """Cancels and awaits every desktop-owned chat turn."""
+
+        tasks = list(self._tasks_by_session.values())
+        for task in tasks:
+            if not task.done():
+                _ = task.cancel()
+        if tasks:
+            _ = await asyncio.gather(*tasks, return_exceptions=True)
+        self._tasks_by_session.clear()
+
+    def _discard_task(self, session_key: str, task: asyncio.Task[None]) -> None:
+        if self._tasks_by_session.get(session_key) is task:
+            _ = self._tasks_by_session.pop(session_key, None)

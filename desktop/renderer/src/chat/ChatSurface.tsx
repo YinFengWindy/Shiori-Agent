@@ -1,9 +1,14 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
-import { buildChatImageHistoryKey } from "./chatImageHistory";
-import { isChatImageAsset } from "./chatImageHistory";
-import { ChatMessageImage } from "./ChatMessageImage";
-import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
+import { ChatHeader } from "./ChatHeader";
+import { ChatMessageContextMenu } from "./ChatMessageContextMenu";
+import { ChatMessageList } from "./ChatMessageList";
+import {
+  getChatMessageCopyText,
+  getChatMessageReplyContent,
+  type MessageContextMenuState,
+} from "./chatMessageActions";
+import { ChatRightSidebar, type ChatSidebarMode } from "./ChatRightSidebar";
 import {
   getExpandedVisibleChatMessageCountForKey,
   getVisibleChatMessages,
@@ -12,22 +17,9 @@ import {
 } from "./chatMessageWindow";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { summarizeChatReplyContent } from "./chatComposerState";
-import { normalizeSessionMediaPaths } from "./chatMedia";
-import { ChatStatusSidebar } from "./ChatStatusSidebar";
-import { RoleTasksPanel } from "./RoleTasksPanel";
 import { useRoleTasks } from "./useRoleTasks";
-import { formatTimestamp, toFileUrl } from "../shared/format";
-import { CopyIcon, DocumentIcon, QuoteIcon } from "../shared/icons";
-import { cx, focusResetClass } from "../shared/styles";
+import { cx } from "../shared/styles";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
-
-type MessageContextMenuState = {
-  x: number;
-  y: number;
-  message: SessionMessage;
-  messageKey: string;
-  sender: string;
-};
 
 type ChatSurfaceProps = {
   activeRole: RoleRecord | null;
@@ -120,7 +112,7 @@ export function ChatSurface({
   const [visibleMessageCount, setVisibleMessageCount] = useState(initialVisibleChatMessageCount);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const hasStatusContent = hasStatusIllustration || Boolean(roleSelfView);
-  const [sidebarMode, setSidebarMode] = useState<"status" | "images" | "tasks">(
+  const [sidebarMode, setSidebarMode] = useState<ChatSidebarMode>(
     hasStatusContent ? "status" : "images",
   );
   const roleTasks = useRoleTasks({
@@ -343,19 +335,6 @@ export function ChatSurface({
     scrollConversationToBottom("auto");
   }, [activeSession?.messages.length, currentLastMessageContent, conversationEndRef, highlightedMessageKey, sending]);
 
-  const headerAvatarClass =
-    "chat-header-avatar grid h-[34px] w-[34px] flex-none place-items-center rounded-full border border-black/10 object-cover";
-  const agentAvatarClass =
-    "message-avatar grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full border border-black/10 bg-[#f6f6f6] object-cover";
-  const chatBodyClass = "text-sm leading-6";
-  const chatMinorTextClass = "text-[12px]";
-  const chatContentTrackClass = "mx-auto w-full max-w-[860px] px-5 md:px-6";
-  const sidebarNavButtonClass =
-    "pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-transparent bg-transparent text-[#4B5563] transition hover:border-black hover:bg-white/92 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40";
-  const assistantMessageBubbleClass =
-    "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(228,228,228,0.66)] bg-[rgba(255,255,255,0.48)] px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-[10px] transition-colors duration-150 group-hover:bg-[rgba(255,255,255,0.72)]";
-  const userMessageBubbleClass =
-    "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
   const renderHeavyVisuals = visualsActive && windowVisible;
   const hasIllustration = Boolean(visibleIllustrationUrl) && renderHeavyVisuals;
   const showScrollToBottom = scrollState.isScrollable && !scrollState.isAtBottom;
@@ -386,55 +365,6 @@ export function ChatSurface({
     onOpenRoleDetail();
   };
 
-  function getAttachmentName(path: string): string {
-    return path.split(/[\\/]/).pop() || path;
-  }
-
-  function getMessageSourceLabel(message: SessionPayload["messages"][number]): string | null {
-    const metadata = message.metadata ?? {};
-    const transportChannel = String(metadata.transport_channel ?? metadata.context_channel ?? metadata.source_channel ?? "").trim();
-    if (transportChannel) {
-      return transportChannel.toUpperCase();
-    }
-    if (String(metadata.source ?? "").trim() === "desktop") {
-      return "DESKTOP";
-    }
-    return null;
-  }
-
-  function getMessageCopyText(message: SessionMessage): string {
-    return message.content.trim();
-  }
-
-  function getMessageReplyContent(message: SessionMessage): string {
-    const content = message.content.trim();
-    if (content) return content;
-    const media = normalizeSessionMediaPaths(message.media);
-    if (!media.length) return "";
-    return media.some((item) => isChatImageAsset(item)) ? "[图片]" : "[附件]";
-  }
-
-  function getStoredReplyPreview(message: SessionMessage): ChatReplyTarget | null {
-    const metadata = message.metadata ?? {};
-    const replyContent = String(metadata.reply_to_content ?? "").trim();
-    if (!replyContent) return null;
-    const messageId = String(metadata.reply_to_message_id ?? "").trim();
-    const sender = String(metadata.reply_to_sender ?? "").trim();
-    return {
-      messageId,
-      content: replyContent,
-      sender,
-      preview: summarizeChatReplyContent(replyContent),
-    };
-  }
-
-  function handleAttachmentDragStart(event: React.DragEvent<HTMLElement>, path: string): void {
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.effectAllowed = "copy";
-    onBeginAttachmentDrag(path);
-  }
-
   function openMessageContextMenu(
     event: React.MouseEvent<HTMLElement>,
     message: SessionMessage,
@@ -454,13 +384,13 @@ export function ChatSurface({
 
   function copyContextMessage(): void {
     if (!messageContextMenu) return;
-    onCopyMessage(getMessageCopyText(messageContextMenu.message));
+    onCopyMessage(getChatMessageCopyText(messageContextMenu.message));
     setMessageContextMenu(null);
   }
 
   function quoteContextMessage(): void {
     if (!messageContextMenu) return;
-    const content = getMessageReplyContent(messageContextMenu.message);
+    const content = getChatMessageReplyContent(messageContextMenu.message);
     if (!content) return;
     setComposerReplyTarget({
       messageId: messageContextMenu.messageKey,
@@ -490,41 +420,13 @@ export function ChatSurface({
         />
       </button>
       {messageContextMenu ? (
-        <div
-          ref={messageContextMenuRef}
-          data-testid="message-context-menu"
-          className="fixed z-50 min-w-[132px] overflow-hidden rounded-md border border-[#E4E7EC] bg-white py-1 text-sm text-[#1F2937] shadow-[0_16px_40px_rgba(15,23,42,0.16)]"
-          style={{ left: messageContextMenu.x, top: messageContextMenu.y }}
-          role="menu"
-          onClick={(event) => event.stopPropagation()}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-        >
-          <button
-            data-testid="message-context-menu-copy"
-            className="flex h-8 w-full items-center gap-2 px-3 text-left transition hover:bg-[#F5F7FA] focus:bg-[#F5F7FA] focus:outline-none disabled:cursor-default disabled:opacity-45"
-            type="button"
-            role="menuitem"
-            onClick={copyContextMessage}
-            disabled={!getMessageCopyText(messageContextMenu.message)}
-          >
-            <CopyIcon className="h-[14px] w-[14px] fill-current" />
-            <span>复制</span>
-          </button>
-          <button
-            data-testid="message-context-menu-quote"
-            className="flex h-8 w-full items-center gap-2 px-3 text-left transition hover:bg-[#F5F7FA] focus:bg-[#F5F7FA] focus:outline-none disabled:cursor-default disabled:opacity-45"
-            type="button"
-            role="menuitem"
-            onClick={quoteContextMessage}
-            disabled={!getMessageReplyContent(messageContextMenu.message) || sending}
-          >
-            <QuoteIcon className="h-[14px] w-[14px] fill-current" />
-            <span>引用</span>
-          </button>
-        </div>
+        <ChatMessageContextMenu
+          menu={messageContextMenu}
+          menuRef={messageContextMenuRef}
+          sending={sending}
+          onCopy={copyContextMessage}
+          onQuote={quoteContextMessage}
+        />
       ) : null}
       <div className="relative grid h-full min-h-0 grid-rows-chat overflow-hidden">
       {hasIllustration ? (
@@ -539,190 +441,28 @@ export function ChatSurface({
           <div className="conversation-illustration-fade absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.78)_0%,rgba(255,255,255,0.64)_24%,rgba(255,255,255,0.4)_48%,rgba(255,255,255,0.14)_72%,rgba(255,255,255,0.03)_100%)]" />
         </div>
       ) : null}
-      <header className="chat-header relative z-[1] flex min-w-0 items-center gap-3 border-b border-[#E4E4E4] bg-[rgba(255,255,255,0.55)] pl-[23px] pr-6 backdrop-blur-[3px]" data-testid="session-hero">
-        {detailRole ? (
-          <button
-            className="rounded-full transition hover:opacity-90 focus:outline-none"
-            type="button"
-            aria-label={`查看角色 ${detailRole.name} 详情`}
-            data-testid="chat-header-avatar-button"
-            onClick={handleOpenRoleDetail}
-          >
-            {detailRole.avatar_abs ? (
-              <img
-                className={headerAvatarClass}
-                src={toFileUrl(detailRole.avatar_abs)}
-                alt={`${detailRole.name} avatar`}
-              />
-            ) : (
-              <span className={cx(headerAvatarClass, "chat-header-avatar-fallback bg-[#f6f6f6] text-sm font-bold text-[#333333]")}>
-                {detailRole.name.slice(0, 1).toUpperCase()}
-              </span>
-            )}
-          </button>
-        ) : activeRole?.avatar_abs ? (
-          <img
-            className={headerAvatarClass}
-            src={toFileUrl(activeRole.avatar_abs)}
-            alt={`${activeRole.name} avatar`}
-          />
-        ) : (
-          <span className={cx(headerAvatarClass, "chat-header-avatar-fallback bg-[#f6f6f6] text-sm font-bold text-[#333333]")}>
-            {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "M"}
-          </span>
-        )}
-        <div className="chat-header-title min-w-0 flex-1 truncate text-sm font-semibold text-[#1f1f1f]">{headerTitle}</div>
-      </header>
+      <ChatHeader
+        activeRole={activeRole}
+        detailRole={detailRole}
+        title={headerTitle}
+        onOpenRoleDetail={handleOpenRoleDetail}
+      />
       <section className="conversation-panel relative z-[1] h-full min-h-0 overflow-hidden bg-transparent">
         {notice ? <div className="notice-chip absolute left-1/2 top-4 z-[2] -translate-x-1/2 rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[#edf8f0] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
-        <div
-          ref={conversationListRef}
-          className={cx(
-            "conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] h-full min-h-0 overflow-auto pb-5 pt-7",
-            chatBodyClass,
+        <ChatMessageList
+          activeRole={activeRole}
+          conversationEndRef={conversationEndRef}
+          conversationListRef={conversationListRef}
+          highlightedMessageKey={highlightedMessageKey}
+          visibleMessageWindow={visibleMessageWindow}
+          onBeginAttachmentDrag={onBeginAttachmentDrag}
+          onExpandOlderMessages={() => (
+            setVisibleMessageCount((current) => current + visibleChatMessageCountStep)
           )}
-        >
-          <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
-            {visibleMessageWindow.hiddenMessageCount > 0 ? (
-              <div className="flex justify-center">
-                <button
-                  className={cx(
-                    "rounded-md border border-[#D8DEE8] bg-white/85 px-3 py-1.5 text-[12px] text-[#5B6472] transition hover:border-[#C6CEDA] hover:bg-white",
-                    focusResetClass,
-                  )}
-                  type="button"
-                  onClick={() => setVisibleMessageCount((current) => current + visibleChatMessageCountStep)}
-                >
-                  {`更早消息 ${visibleMessageWindow.hiddenMessageCount} 条`}
-                </button>
-              </div>
-            ) : null}
-            {visibleMessageWindow.messages.map((message, visibleIndex) => {
-              const index = visibleMessageWindow.startIndex + visibleIndex;
-              const isUser = message.role === "user";
-              const isError = message.role === "error";
-              const authorLabel = isError ? "系统提示" : (isUser ? "你" : (activeRole?.name || "Agent"));
-              const messageReactKey = getChatMessageReactKey(message, index);
-              const messageDomKey = getChatMessageDomKey(message, index);
-              const isHighlighted = highlightedMessageKey === messageDomKey;
-              const sourceLabel = getMessageSourceLabel(message);
-              const media = normalizeSessionMediaPaths(message.media);
-              const storedReplyPreview = getStoredReplyPreview(message);
-              const bubbleClass = isError
-                ? "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(176,58,58,0.22)] bg-[rgba(255,244,244,0.96)] px-3.5 py-2.5 text-left text-[#8f2d2d] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                : isUser
-                  ? userMessageBubbleClass
-                  : assistantMessageBubbleClass;
-
-              return (
-                <article
-                  key={messageReactKey}
-                  data-message-key={messageDomKey}
-                  className={cx(
-                    "group w-full",
-                    isHighlighted && "message-hit-anchor",
-                    isUser && "text-right",
-                  )}
-                  onContextMenu={(event) => openMessageContextMenu(event, message, messageDomKey, authorLabel)}
-                >
-                  <div className={cx("message-row flex w-full items-start gap-3", isUser && "flex-row-reverse justify-start")}>
-                    {!isUser ? (
-                      activeRole?.avatar_abs ? (
-                        <img
-                          className={agentAvatarClass}
-                          src={toFileUrl(activeRole.avatar_abs)}
-                          alt={`${activeRole.name} avatar`}
-                        />
-                      ) : (
-                        <span className={cx(agentAvatarClass, "text-xs font-bold text-accent-deep")}>
-                          {activeRole ? activeRole.name.slice(0, 1).toUpperCase() : "A"}
-                        </span>
-                      )
-                    ) : null}
-                    <div className={cx("message-body flex min-w-0 w-full max-w-[82%] flex-col text-sm leading-6 text-[#1f1f1f]", isUser && "ml-auto items-end")}>
-                      {!isUser ? (
-                        <div className={cx("message-author mb-1 font-medium leading-none text-[#b9b9b9]", chatMinorTextClass)}>
-                          {authorLabel}
-                        </div>
-                      ) : null}
-                      <div className={cx(
-                        bubbleClass,
-                        !message.content && !storedReplyPreview && "hidden",
-                        isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10",
-                      )}>
-                        {storedReplyPreview ? (
-                          storedReplyPreview.messageId ? (
-                            <button
-                              className="mb-2 block max-w-[420px] border-0 bg-transparent p-0 text-left transition hover:opacity-85 focus:outline-none"
-                              type="button"
-                              aria-label="跳转到被引用消息"
-                              onClick={() => onJumpToMessage(storedReplyPreview.messageId)}
-                            >
-                              <div className="border-l-2 border-[#AEB7C5] pl-2.5">
-                                {storedReplyPreview.sender ? (
-                                  <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{storedReplyPreview.sender}</div>
-                                ) : null}
-                                <div className="line-clamp-2 text-[12px] leading-5 text-[#7B8190]">{storedReplyPreview.preview}</div>
-                              </div>
-                            </button>
-                          ) : (
-                            <div className="mb-2 max-w-[420px] border-l-2 border-[#AEB7C5] pl-2.5 text-left">
-                              {storedReplyPreview.sender ? (
-                                <div className="truncate text-[11px] font-medium leading-4 text-[#6B7280]">{storedReplyPreview.sender}</div>
-                              ) : null}
-                              <div className="line-clamp-2 text-[12px] leading-5 text-[#7B8190]">{storedReplyPreview.preview}</div>
-                            </div>
-                          )
-                        ) : null}
-                        <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
-                      </div>
-                        {media.length ? (
-                          <div className="mt-2 grid gap-2" data-message-media="separate">
-                            {media.map((item, mediaIndex) => (
-                              isChatImageAsset(item) ? (
-                                <button
-                                  key={`${messageDomKey}:${mediaIndex}:${item}`}
-                                  className="block w-fit max-w-full cursor-grab overflow-hidden rounded-[12px] border border-black/8 bg-white/70 p-0 text-left transition hover:bg-white active:cursor-grabbing focus:outline-none"
-                                  type="button"
-                                  draggable
-                                  onDragStart={(event) => handleAttachmentDragStart(event, item)}
-                                  onClick={() => handleOpenChatImagePreview(buildChatImageHistoryKey(messageDomKey, mediaIndex))}
-                                >
-                                  <ChatMessageImage imagePath={item} />
-                                </button>
-                              ) : (
-                                <a
-                                  key={`${messageDomKey}:${mediaIndex}:${item}`}
-                                  href={toFileUrl(item)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex max-w-[280px] cursor-grab items-center gap-2.5 rounded-full border border-black/8 bg-[#F7F7F8] px-3 py-2 text-[12px] text-[#1F2937] transition hover:bg-white active:cursor-grabbing focus:outline-none"
-                                  draggable
-                                  onDragStart={(event) => handleAttachmentDragStart(event, item)}
-                                >
-                                  <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-transparent text-[#8B95A7]">
-                                    <DocumentIcon className="h-[13px] w-[13px] stroke-current" />
-                                  </span>
-                                  <span className="truncate font-medium">{getAttachmentName(item)}</span>
-                                </a>
-                              )
-                            ))}
-                          </div>
-                        ) : null}
-                      {message.timestamp || sourceLabel ? (
-                        <div className={cx("message-time mt-1 flex items-center gap-2 text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100", chatMinorTextClass)}>
-                          {message.timestamp ? <span>{formatTimestamp(message.timestamp)}</span> : null}
-                          {sourceLabel ? <span>{`from ${sourceLabel.toLowerCase()}`}</span> : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-            <div ref={conversationEndRef} className="h-40" />
-          </div>
-        </div>
+          onJumpToMessage={onJumpToMessage}
+          onOpenContextMenu={openMessageContextMenu}
+          onOpenImagePreview={handleOpenChatImagePreview}
+        />
         {showScrollToBottom ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-[132px] z-[2] flex justify-center">
             <button
@@ -771,73 +511,24 @@ export function ChatSurface({
             )}
           >
             <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
-              {sidebarMode === "status" ? (
-                <ChatStatusSidebar
-                  currentMood={currentMood}
-                  moodIllustrationUrl={moodIllustrationUrl}
-                  roleSelfView={roleSelfView}
-                  relationshipTags={relationshipTags}
-                  lonelinessValue={lonelinessValue}
-                  visualsActive={renderHeavyVisuals}
-                />
-              ) : sidebarMode === "tasks" ? (
-                <RoleTasksPanel
-                  tasks={roleTasks.tasks}
-                  cancellingTaskId={roleTasks.cancellingTaskId}
-                  onCancel={(taskId) => void roleTasks.cancel(taskId).catch(() => undefined)}
-                />
-              ) : (
-                <div className="grid h-full min-h-0 rounded-[20px] bg-[#F1F5F9] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-                  <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-[16px] bg-[#F1F5F9]">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 z-[2] flex items-center pl-3">
-                      <button
-                        className={sidebarNavButtonClass}
-                        type="button"
-                        aria-label="查看上一张聊天图片"
-                        onClick={onGoToPreviousChatImage}
-                        disabled={!canGoToPreviousChatImage}
-                      >
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="m15 18-6-6 6-6" />
-                        </svg>
-                      </button>
-                    </div>
-                    {chatLatestImagePath && renderHeavyVisuals ? (
-                      <button
-                        className="grid h-full w-full place-items-center border-0 bg-transparent p-0"
-                        type="button"
-                        aria-label="放大查看当前聊天图片"
-                        onClick={onOpenChatImageLightbox}
-                      >
-                        <img
-                          className="max-h-full max-w-full object-contain"
-                          src={toFileUrl(chatLatestImagePath)}
-                          alt="selected message image"
-                          decoding="async"
-                        />
-                      </button>
-                    ) : (
-                      <div className="grid gap-2 px-6 text-center">
-                        <div className="mx-auto h-10 w-10 rounded-[14px] border border-[#D6DCE5] bg-white/70" />
-                        <div className="text-[12px] text-[#6B7280]">当前聊天里出现的图片会显示在这里</div>
-                      </div>
-                    )}
-                    <div className="pointer-events-none absolute inset-y-0 right-0 z-[2] flex items-center pr-3">
-                      <button
-                        className={sidebarNavButtonClass}
-                        type="button"
-                        aria-label="查看下一张聊天图片"
-                        onClick={onGoToNextChatImage}
-                        disabled={!canGoToNextChatImage}
-                      >
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="m9 18 6-6-6-6" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <ChatRightSidebar
+                canGoToNextImage={canGoToNextChatImage}
+                canGoToPreviousImage={canGoToPreviousChatImage}
+                cancellingTaskId={roleTasks.cancellingTaskId}
+                currentMood={currentMood}
+                imagePath={chatLatestImagePath}
+                lonelinessValue={lonelinessValue}
+                mode={sidebarMode}
+                moodIllustrationUrl={moodIllustrationUrl}
+                relationshipTags={relationshipTags}
+                renderHeavyVisuals={renderHeavyVisuals}
+                roleSelfView={roleSelfView}
+                tasks={roleTasks.tasks}
+                onCancelTask={roleTasks.cancel}
+                onGoToNextImage={onGoToNextChatImage}
+                onGoToPreviousImage={onGoToPreviousChatImage}
+                onOpenImageLightbox={onOpenChatImageLightbox}
+              />
               <div className="justify-self-center inline-flex w-fit rounded-full border border-[#D8DFE7] bg-[#F6F8FB] p-1">
                 <button
                   className={cx(

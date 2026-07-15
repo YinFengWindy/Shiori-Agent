@@ -1,7 +1,6 @@
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { flushSync } from "react-dom";
 import { DesktopAppFrame } from "./app/DesktopAppFrame";
 import {
   chatLatestImageSidebarDefaultWidth,
@@ -22,6 +21,7 @@ import {
   type WorkspaceFeedback,
 } from "./app/appState";
 import { useDesktopSessionState } from "./app/useDesktopSessionState";
+import { useDesktopViewSynchronization } from "./app/useDesktopViewSynchronization";
 import { useDesktopBridgeLifecycle } from "./app/useDesktopBridgeLifecycle";
 import { useDesktopUiEffects } from "./app/useDesktopUiEffects";
 import { useChatImageState } from "./app/useChatImageState";
@@ -30,65 +30,27 @@ import { useNavigationHistory } from "./app/useNavigationHistory";
 import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleSearch } from "./app/roleSearch";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
+import { useRolePresentation } from "./app/useRolePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
+import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalDiagnostics";
 import { useImageStudioState } from "./image/useImageStudioState";
 import { type PromptTagWorkspaceSectionId } from "./image/PromptTagWorkspaceSidebar";
-import { createRoleFormFromRole, isRoleFormDirty } from "./roles/roleFormState";
+import { createRoleFormFromRole } from "./roles/roleFormState";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
+import { useRoleFormAdapters } from "./roles/useRoleFormAdapters";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
 import { useLatestRef } from "./shared/useLatestRef";
+import { useLeftSidebarState } from "./shared/useLeftSidebarState";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
 import type {
   AppMainView,
   EventLog,
-  NewRoleFormState,
   PendingRoleCardAction,
-  RoleFormState,
   RoleRecord,
   SessionPayload,
 } from "./shared/types";
 import "./styles.css";
-
-function reportRendererGlobalError(payload: {
-  kind: "error" | "unhandledrejection";
-  message: string;
-  stack?: string;
-  filename?: string;
-  lineno?: number;
-  colno?: number;
-  details?: Record<string, unknown>;
-}): void {
-  window.miraDesktop.reportRendererDiagnostic(payload);
-}
-
-function registerRendererGlobalDiagnostics(): void {
-  window.addEventListener("error", (event) => {
-    reportRendererGlobalError({
-      kind: "error",
-      message: event.message || "renderer error",
-      stack: event.error instanceof Error ? event.error.stack : undefined,
-      filename: event.filename,
-      lineno: event.lineno,
-      colno: event.colno,
-    });
-  });
-  window.addEventListener("unhandledrejection", (event) => {
-    const reason = event.reason;
-    reportRendererGlobalError({
-      kind: "unhandledrejection",
-      message: reason instanceof Error
-        ? reason.message
-        : String(reason ?? "renderer unhandled rejection"),
-      stack: reason instanceof Error ? reason.stack : undefined,
-      details: reason instanceof Error
-        ? {}
-        : {
-            reason,
-          },
-    });
-  });
-}
 
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
@@ -113,10 +75,12 @@ function App(): React.ReactElement {
   const [pendingMessageNavigation, setPendingMessageNavigation] = useState<PendingMessageNavigation | null>(null);
   const [highlightedMessageKey, setHighlightedMessageKey] = useState("");
   const [mainView, setMainView] = useState<AppMainView>({ kind: "chat" });
-  const [sidebarWidth, setSidebarWidth] = useState(sidebarDefaultWidth);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [resizingSidebar, setResizingSidebar] = useState(false);
-  const [sidebarAnimating, setSidebarAnimating] = useState(false);
+  const leftSidebar = useLeftSidebarState({
+    minWidth: sidebarMinWidth,
+    maxWidth: sidebarMaxWidth,
+    defaultWidth: sidebarDefaultWidth,
+    collapseThreshold: sidebarCollapseThreshold,
+  });
   const [activeIllustration, setActiveIllustration] = useState("");
   const [selectedAvatarAsset, setSelectedAvatarAsset] = useState("");
   const [selectedChatBackground, setSelectedChatBackground] = useState("");
@@ -157,27 +121,11 @@ function App(): React.ReactElement {
   const unreadCountsRef = useLatestRef(unreadCounts);
   const roleFormRef = useLatestRef(roleForm);
   const newRoleFormRef = useLatestRef(newRoleForm);
-  const lastNonSettingsViewRef = useRef<AppMainView>({ kind: "chat" });
-
-  useEffect(() => {
-    if (mainView.kind !== "settings") {
-      lastNonSettingsViewRef.current = mainView;
-    }
-  }, [mainView]);
-
-  useEffect(() => {
-    if (mainView.kind !== "chat" || !activeRoleId) {
-      return;
-    }
-    setUnreadCounts((current) => {
-      if (!current[activeRoleId]) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[activeRoleId];
-      return next;
-    });
-  }, [mainView.kind, activeRoleId]);
+  const lastNonSettingsViewRef = useDesktopViewSynchronization({
+    mainView,
+    activeRoleId,
+    setUnreadCounts,
+  });
 
   const roleWorkspaceViewActive =
     mainView.kind === "roles-list"
@@ -199,21 +147,12 @@ function App(): React.ReactElement {
     roles,
   });
 
-  function updateRoleForm(next: React.SetStateAction<RoleFormState>): void {
-    const resolved = typeof next === "function"
-      ? next(roleFormRef.current)
-      : next;
-    roleFormRef.current = resolved;
-    setRoleForm(resolved);
-  }
-
-  function updateNewRoleForm(next: React.SetStateAction<NewRoleFormState>): void {
-    const resolved = typeof next === "function"
-      ? next(newRoleFormRef.current)
-      : next;
-    newRoleFormRef.current = resolved;
-    setNewRoleForm(resolved);
-  }
+  const { updateRoleForm, updateNewRoleForm } = useRoleFormAdapters({
+    roleFormRef,
+    newRoleFormRef,
+    setRoleForm,
+    setNewRoleForm,
+  });
 
   function queueMessageNavigation(roleId: string, messageKey: string): void {
     const nextMessageKey = messageKey.trim();
@@ -223,88 +162,16 @@ function App(): React.ReactElement {
     setPendingMessageNavigation({ roleId, messageKey: nextMessageKey });
   }
 
-  function toggleSidebar(): void {
-    setSidebarAnimating(true);
-    if (sidebarCollapsed) {
-      setSidebarWidth((current) => Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, current)));
-      setSidebarCollapsed(false);
-      return;
-    }
-    setSidebarCollapsed(true);
-  }
-
-  function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>): void {
-    event.preventDefault();
-    flushSync(() => {
-      setSidebarAnimating(false);
-      setResizingSidebar(true);
-    });
-    let dragCollapsed = sidebarCollapsed;
-
-    function stopResize(): void {
-      setResizingSidebar(false);
-      window.removeEventListener("pointermove", resize);
-      window.removeEventListener("pointerup", stopResize);
-      window.removeEventListener("pointercancel", stopResize);
-    }
-
-    function resize(moveEvent: PointerEvent): void {
-      if (moveEvent.clientX <= sidebarCollapseThreshold) {
-        if (!dragCollapsed) {
-          setSidebarAnimating(true);
-          dragCollapsed = true;
-        }
-        setSidebarCollapsed(true);
-        return;
-      }
-      if (dragCollapsed) {
-        setSidebarAnimating(true);
-        dragCollapsed = false;
-      }
-      setSidebarCollapsed(false);
-      setSidebarWidth(Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, moveEvent.clientX)));
-    }
-
-    window.addEventListener("pointermove", resize);
-    window.addEventListener("pointerup", stopResize);
-    window.addEventListener("pointercancel", stopResize);
-  }
-
-  function chooseIllustration(
-    role: RoleRecord | null,
-    session: SessionPayload | null,
-    fallbackIllustration: string,
-  ): string {
-    if (!role) return "";
-    const sessionIllustration = String(session?.metadata.active_illustration ?? "");
-    if (role.illustrations_abs.includes(sessionIllustration)) {
-      return sessionIllustration;
-    }
-    if (role.illustrations_abs.includes(fallbackIllustration)) {
-      return fallbackIllustration;
-    }
-    const roleChatBackground = String(role.chat_background_abs ?? "");
-    if (role.illustrations_abs.includes(roleChatBackground)) {
-      return roleChatBackground;
-    }
-    return "";
-  }
-
-  function applyRoleSnapshot(role: RoleRecord, sessionOverride: SessionPayload | null = null): void {
-    setActiveRoleId(role.id);
-    activeRoleIdRef.current = role.id;
-    const currentView = mainViewRef.current;
-    const sameRoleWorkspace =
-      (currentView.kind === "role-detail" || currentView.kind === "role-assets")
-      && currentView.roleId === role.id;
-    if (!sameRoleWorkspace || !isRoleFormDirty(roleFormRef.current, role)) {
-      updateRoleForm(createRoleFormFromRole(role));
-    }
-    setSelectedAvatarAsset(role.avatar ?? "");
-    setSelectedChatBackground(role.chat_background ?? "");
-    const savedIllustration = window.localStorage.getItem("miraDesktop.activeIllustration") ?? "";
-    setActiveIllustration(chooseIllustration(role, sessionOverride, savedIllustration));
-  }
+  const { chooseIllustration, applyRoleSnapshot, rememberIllustration } = useRolePresentation({
+    activeRoleIdRef,
+    mainViewRef,
+    roleFormRef,
+    setActiveRoleId,
+    setActiveIllustration,
+    setSelectedAvatarAsset,
+    setSelectedChatBackground,
+    updateRoleForm,
+  });
 
   const {
     canGoBack,
@@ -328,9 +195,9 @@ function App(): React.ReactElement {
     setNotice,
     setSettingsSearch,
     setSettingsSection,
-    setSidebarAnimating,
-    setSidebarCollapsed,
-    setSidebarWidth,
+    setSidebarAnimating: leftSidebar.setAnimating,
+    setSidebarCollapsed: leftSidebar.setCollapsed,
+    setSidebarWidth: leftSidebar.setWidth,
     setMainView,
     imageHistorySidebarOpen: imageHistorySidebar.open,
     applyRoleSnapshot,
@@ -413,16 +280,6 @@ function App(): React.ReactElement {
     fetchRoleSession,
     cacheRoleSession,
   });
-
-  async function rememberIllustration(roleId: string, illustration: string): Promise<void> {
-    await window.miraDesktop.invoke({
-      method: "session.updateDisplayState",
-      payload: {
-        role_id: roleId,
-        active_illustration: illustration,
-      },
-    });
-  }
 
   const pendingDeleteRole = roles.find((role) => role.id === pendingDeleteRoleId) ?? null;
 
@@ -555,8 +412,8 @@ function App(): React.ReactElement {
   });
 
   useDesktopUiEffects({
-    sidebarAnimating,
-    setSidebarAnimating,
+    sidebarAnimating: leftSidebar.animating,
+    setSidebarAnimating: leftSidebar.setAnimating,
     activeSessionKey,
     pendingMessageNavigation,
     activeRoleId,
@@ -573,7 +430,7 @@ function App(): React.ReactElement {
     setActiveIllustration,
     sidebarAnimationDurationMs,
     sidebarAutoCollapseWindowWidth,
-    setSidebarCollapsed,
+    setSidebarCollapsed: leftSidebar.setCollapsed,
   });
 
   function resetRoleForm(): void {
@@ -589,13 +446,13 @@ function App(): React.ReactElement {
 
   return (
     <DesktopAppFrame
-      sidebarCollapsed={sidebarCollapsed}
+      sidebarCollapsed={leftSidebar.collapsed}
       windowMaximized={windowMaximized}
       canGoBack={canGoBack}
       canGoForward={canGoForward}
       canRefreshSession={Boolean(activeRoleId)}
       canEditRole={Boolean(activeRoleId)}
-      onToggleSidebar={toggleSidebar}
+      onToggleSidebar={leftSidebar.toggle}
       onGoBack={() => void navigateHistory("back", openRole)}
       onGoForward={() => void navigateHistory("forward", openRole)}
       onRefreshSession={() => void refreshSession()}
@@ -604,13 +461,13 @@ function App(): React.ReactElement {
       onOpenSettings={() => openSettingsWorkspace()}
       onRefreshBridge={() => void refreshBridge()}
       onRestartBridge={() => void restartBridge()}
-      shellResizing={resizingSidebar || imageHistorySidebar.resizing || chatLatestImageSidebar.resizing}
+      shellResizing={leftSidebar.resizing || imageHistorySidebar.resizing || chatLatestImageSidebar.resizing}
       sidebarState={{
-        collapsed: sidebarCollapsed,
-        width: sidebarWidth,
-        animating: sidebarAnimating,
-        resizing: resizingSidebar,
-        onBeginResize: beginSidebarResize,
+        collapsed: leftSidebar.collapsed,
+        width: leftSidebar.width,
+        animating: leftSidebar.animating,
+        resizing: leftSidebar.resizing,
+        onBeginResize: leftSidebar.beginResize,
       }}
       mainView={mainView}
       settingsSection={settingsSection}

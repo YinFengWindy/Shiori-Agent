@@ -1,25 +1,26 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { isAbsolute, resolve } from "node:path";
-import { app, protocol, type BrowserWindow } from "electron";
-import { getLocalAssetMimeType } from "./assetMime.js";
+import { resolve } from "node:path";
+import { app, protocol, session, shell, type BrowserWindow } from "electron";
+import { localAssetSchemePrivileges, registerLocalAssetProtocol } from "./assetProtocol.js";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 import { startBridge, wireBridgeEvents } from "./bridgeLifecycle.js";
 import { logDesktopDiagnostic } from "./diagnostics.js";
 import { registerDesktopIpc } from "./ipc.js";
+import { openGrantedLocalAsset } from "./localAssetOpen.js";
+import { LocalAssetRegistry, localAssetScheme } from "./localAssetRegistry.js";
 import { desktopRoot } from "./paths.js";
-import { attachWindowSmokeHandlers } from "./smoke.js";
 import { createDesktopTray } from "./tray.js";
 import { attachDesktopWindowLifecycle, createDesktopWindow, showDesktopWindow } from "./window.js";
+import { registerDesktopContentSecurityPolicy } from "./windowSecurity.js";
 
 const bridge = new DesktopBridgeClient();
-const assetScheme = "mira-asset";
+const localAssets = new LocalAssetRegistry();
 const trayLifecycleEnabled = process.platform === "win32";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 let desktopWindow: BrowserWindow | null = null;
 let desktopTray: ReturnType<typeof createDesktopTray> | null = null;
 let isQuitting = false;
+let bridgeShutdownStarted = false;
 
 if (!hasSingleInstanceLock) {
   app.quit();
@@ -27,27 +28,17 @@ if (!hasSingleInstanceLock) {
 
 protocol.registerSchemesAsPrivileged([
   {
-    scheme: assetScheme,
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      corsEnabled: true,
-    },
+    scheme: localAssetScheme,
+    privileges: localAssetSchemePrivileges,
   },
 ]);
 
 function configureUserDataPath(): void {
   const requestedUserDataDir = process.env.MIRA_DESKTOP_USER_DATA_DIR;
-  const needsIsolatedSmokeData =
-    process.env.MIRA_DESKTOP_SMOKE === "1" || process.env.MIRA_DESKTOP_UI_SMOKE === "1";
-  if (!requestedUserDataDir && !needsIsolatedSmokeData) {
+  if (!requestedUserDataDir) {
     return;
   }
-  const userDataDir =
-    requestedUserDataDir
-      ? resolve(requestedUserDataDir)
-      : resolve(tmpdir(), "shiori-desktop-smoke", String(process.pid));
+  const userDataDir = resolve(requestedUserDataDir);
   mkdirSync(userDataDir, { recursive: true });
   app.setPath("userData", userDataDir);
 }
@@ -106,31 +97,16 @@ function ensureDesktopConfig(): void {
   copyFileSync(templatePath, configPath);
 }
 
-async function loadLocalAsset(assetPath: string): Promise<Response> {
-  if (!isAbsolute(assetPath)) {
-    return new Response("asset path must be absolute", { status: 400 });
+async function openLocalAttachment(value: string) {
+  const result = await openGrantedLocalAsset(localAssets, value, (path) => shell.openPath(path));
+  if (result.error) {
+    logDesktopDiagnostic({
+      scope: "main",
+      event: "asset.open.failed",
+      payload: { error: result.error },
+    });
   }
-  const mimeType = getLocalAssetMimeType(assetPath);
-  if (!mimeType) {
-    return new Response("unsupported asset type", { status: 415 });
-  }
-  const data = await readFile(assetPath);
-  return new Response(data, {
-    headers: {
-      "Content-Type": mimeType,
-    },
-  });
-}
-
-function registerAssetProtocol(): void {
-  protocol.handle(assetScheme, async (request) => {
-    const requestedUrl = new URL(request.url);
-    const assetPath = requestedUrl.searchParams.get("path");
-    if (!assetPath) {
-      return new Response("missing asset path", { status: 400 });
-    }
-    return await loadLocalAsset(assetPath);
-  });
+  return result;
 }
 
 function requestAppQuit(): void {
@@ -146,11 +122,6 @@ function wireDesktopWindow(window: BrowserWindow): BrowserWindow {
   attachDesktopWindowLifecycle(window, {
     shouldHideOnClose: shouldHideDesktopWindowOnClose,
   });
-  attachWindowSmokeHandlers(window, {
-    hideToTrayEnabled: trayLifecycleEnabled,
-    restoreWindow: showDesktopWindow,
-    requestExplicitQuit: requestAppQuit,
-  });
   window.on("closed", () => {
     if (desktopWindow === window) {
       desktopWindow = null;
@@ -163,7 +134,9 @@ function getOrCreateDesktopWindow(): BrowserWindow {
   if (desktopWindow) {
     return desktopWindow;
   }
-  desktopWindow = wireDesktopWindow(createDesktopWindow());
+  desktopWindow = wireDesktopWindow(createDesktopWindow({
+    openLocalAttachment,
+  }));
   return desktopWindow;
 }
 
@@ -175,10 +148,21 @@ function showOrCreateDesktopWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   ensureDesktopConfig();
-  registerAssetProtocol();
+  localAssets.addTrustedRoot(resolve(app.getPath("home"), ".shiori", "workspace"));
+  registerDesktopContentSecurityPolicy(
+    session.defaultSession.webRequest,
+    process.env.MIRA_RENDERER_DEV_SERVER_URL,
+  );
+  registerLocalAssetProtocol(protocol, localAssets);
+  bridge.on("event", (event) => localAssets.grantTrustedPayload(event.payload));
   void startBridge(bridge);
   wireBridgeEvents(bridge);
-  registerDesktopIpc({ bridge, desktopRoot });
+  registerDesktopIpc({
+    bridge,
+    desktopRoot,
+    localAssets,
+    openLocalAttachment,
+  });
   getOrCreateDesktopWindow();
   if (trayLifecycleEnabled) {
     desktopTray = createDesktopTray({
@@ -211,10 +195,15 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   isQuitting = true;
   desktopTray?.destroy();
-  bridge.stop();
+  if (bridgeShutdownStarted || !bridge.isRunning()) {
+    return;
+  }
+  event.preventDefault();
+  bridgeShutdownStarted = true;
+  void bridge.stop().finally(() => app.quit());
 });
 
 export { bridge };

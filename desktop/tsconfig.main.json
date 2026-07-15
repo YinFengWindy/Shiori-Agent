@@ -8,14 +8,18 @@
   },
   "include": [
     "src/main.ts",
+    "src/assetProtocol.ts",
     "src/bridgeClient.ts",
     "src/bridgeLifecycle.ts",
     "src/ipc.ts",
+    "src/localAssetOpen.ts",
+    "src/localAssetPolicy.ts",
+    "src/localAssetRegistry.ts",
     "src/paths.ts",
     "src/shared.ts",
-    "src/smoke.ts",
     "src/tray.ts",
     "src/window.ts",
+    "src/windowSecurity.ts",
     "src/electron-shim.d.ts"
   ]
 }

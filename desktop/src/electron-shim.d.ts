@@ -52,6 +52,9 @@ declare module "electron" {
     webContents: {
       send(channel: string, payload: unknown): void;
       on(event: string, handler: (...args: unknown[]) => void): void;
+      setWindowOpenHandler(
+        handler: (details: { url: string }) => { action: "deny" },
+      ): void;
       executeJavaScript(code: string): Promise<unknown>;
       startDrag(item: { file: string; icon: NativeImage | string }): void;
     };
@@ -75,6 +78,28 @@ declare module "electron" {
   export const protocol: {
     registerSchemesAsPrivileged(customSchemes: Array<{ scheme: string; privileges?: Privileges }>): void;
     handle(scheme: string, handler: (request: { url: string }) => Promise<Response> | Response): void;
+  };
+
+  export const session: {
+    defaultSession: {
+      webRequest: {
+        onHeadersReceived(
+          handler: (
+            details: {
+              resourceType?: string;
+              responseHeaders?: Record<string, string[]>;
+            },
+            callback: (response: {
+              responseHeaders?: Record<string, string[]>;
+            }) => void,
+          ) => void,
+        ): void;
+      };
+    };
+  };
+
+  export const shell: {
+    openPath(path: string): Promise<string>;
   };
 
   export const dialog: {

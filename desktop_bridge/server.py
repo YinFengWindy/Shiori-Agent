@@ -4,18 +4,26 @@ import asyncio
 import json
 import logging
 import sys
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 from bootstrap.tools import CoreRuntime
 from core.integrations.novelai.store import NovelAIStore
 from core.roles import RoleStore
 from desktop_bridge.models import BridgeError, BridgeResponse
+from desktop_bridge.request_dispatcher import BridgeRequestDispatcher
 from desktop_bridge.service import DesktopBridgeService
+from desktop_bridge.stream_writer import BridgeStreamWriter
 
 logger = logging.getLogger("desktop.bridge")
 
+ReadLine = Callable[[], Awaitable[str | None]]
+WritePayload = Callable[[dict[str, Any]], Awaitable[None]]
+
 
 class DesktopBridgeServer:
+    """Serves the desktop JSON-lines bridge for one application runtime."""
+
     def __init__(self, runtime: CoreRuntime) -> None:
         self.runtime = runtime
         self.role_store = RoleStore(runtime.session_manager.workspace)
@@ -36,12 +44,37 @@ class DesktopBridgeServer:
             memory_optimizer=getattr(runtime, "memory_optimizer", None),
         )
 
-    async def serve_streams(self, *, read_line, write_payload) -> None:
-        write_lock = asyncio.Lock()
+    async def serve_streams(
+        self,
+        *,
+        read_line: ReadLine,
+        write_payload: WritePayload,
+    ) -> None:
+        """Dispatches stream requests concurrently and serializes all output frames."""
+
+        writer = BridgeStreamWriter(write_payload)
+        dispatcher = BridgeRequestDispatcher()
 
         async def _emit_event(payload: dict[str, Any]) -> None:
-            async with write_lock:
-                await write_payload(payload)
+            await writer.write(payload)
+
+        async def _handle_request(request: dict[str, Any]) -> None:
+            try:
+                response = await self.service.handle(
+                    request,
+                    emit_event=_emit_event,
+                )
+            except Exception as exc:
+                request_id = str(request.get("id") or "").strip() or "bridge-request"
+                method = str(request.get("method") or "").strip() or "bridge.internal"
+                logger.exception("desktop bridge request failed: %s", method)
+                response = BridgeResponse(
+                    id=request_id,
+                    type="response",
+                    method=method,
+                    error=BridgeError(code="internal_error", message=str(exc)),
+                )
+            await writer.write(response.to_dict())
 
         self.service.add_event_listener(_emit_event)
 
@@ -77,37 +110,23 @@ class DesktopBridgeServer:
                             ),
                         )
                     else:
-                        try:
-                            response = await self.service.handle(
-                                request,
-                                emit_event=_emit_event,
-                            )
-                        except Exception as exc:
-                            request_id = (
-                                str(request.get("id") or "").strip() or "bridge-request"
-                            )
-                            method = (
-                                str(request.get("method") or "").strip()
-                                or "bridge.internal"
-                            )
-                            logger.exception(
-                                "desktop bridge request failed: %s", method
-                            )
-                            response = BridgeResponse(
-                                id=request_id,
-                                type="response",
-                                method=method,
-                                error=BridgeError(
-                                    code="internal_error",
-                                    message=str(exc),
-                                ),
-                            )
-                async with write_lock:
-                    await write_payload(response.to_dict())
+                        request = cast(dict[str, Any], request)
+                        dispatcher.submit(
+                            request,
+                            lambda request=request: _handle_request(request),
+                        )
+                        await asyncio.sleep(0)
+                        continue
+                await writer.write(response.to_dict())
         finally:
             self.service.remove_event_listener(_emit_event)
+            await dispatcher.aclose(cancel=True)
+            await self.service.aclose()
+            await writer.aclose()
 
     async def serve_stdio(self) -> None:
+        """Runs the bridge against process stdin and stdout."""
+
         async def _read_line() -> str | None:
             line = await asyncio.to_thread(sys.stdin.readline)
             if not line:
@@ -116,8 +135,8 @@ class DesktopBridgeServer:
 
         async def _write_payload(payload: dict[str, Any]) -> None:
             text = json.dumps(payload, ensure_ascii=False) + "\n"
-            await asyncio.to_thread(sys.stdout.write, text)
-            await asyncio.to_thread(sys.stdout.flush)
+            _ = await asyncio.to_thread(sys.stdout.write, text)
+            _ = await asyncio.to_thread(sys.stdout.flush)
 
         await self.serve_streams(
             read_line=_read_line,

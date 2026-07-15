@@ -1,33 +1,47 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { IpcMainInvokeEvent } from "electron";
 import { logDesktopDiagnostic } from "./diagnostics.js";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
-import { runBridgeSmoke } from "./smoke.js";
+import type { LocalAssetRegistry } from "./localAssetRegistry.js";
 import { loadSettingsData, saveSettings } from "./settings.js";
-import type { RendererDiagnosticPayload, SettingsFormData } from "./shared.js";
+import type {
+  LocalAssetOpenRequest,
+  LocalAssetOpenResult,
+  RendererDiagnosticPayload,
+  SettingsFormData,
+} from "./shared.js";
 import type { WindowControlAction } from "./shared.js";
 
 type RegisterDesktopIpcOptions = {
   bridge: DesktopBridgeClient;
   desktopRoot: string;
+  localAssets: LocalAssetRegistry;
+  openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
 };
 
 /** Registers all IPC handlers exposed through the desktop preload bridge. */
-export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOptions): void {
+export function registerDesktopIpc({
+  bridge,
+  desktopRoot,
+  localAssets,
+  openLocalAttachment,
+}: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
 
   ipcMain.handle("desktop:invoke", async (_event: IpcMainInvokeEvent, request: { method: string; payload: Record<string, unknown> }) => {
-    return await bridge.invoke(request);
+    const response = await bridge.invoke(request);
+    localAssets.grantTrustedPayload(response.payload);
+    return response;
   });
   ipcMain.on("desktop:start-attachment-drag", (event: IpcMainInvokeEvent, request?: { path?: unknown }) => {
     const filePath = String(request?.path ?? "").trim();
-    if (!filePath || !isAbsolute(filePath) || !existsSync(filePath)) {
+    const grant = localAssets.resolveReference(filePath);
+    if (!grant) {
       return;
     }
     event.sender.startDrag({
-      file: filePath,
+      file: grant.canonicalPath,
       icon: dragPreviewIconPath,
     });
   });
@@ -135,16 +149,6 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     };
   });
   ipcMain.handle("desktop:pick-images", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
-    if (process.env.MIRA_DESKTOP_PICK_IMAGES_FIXTURE === "1") {
-      const fixtureDir = resolve(desktopRoot, ".smoke-fixtures");
-      mkdirSync(fixtureDir, { recursive: true });
-      const sourceImagePath = resolve(desktopRoot, "..", "assets", "akashic-qq.jpg");
-      const avatarPath = resolve(fixtureDir, "avatar-smoke.jpg");
-      const illustrationPath = resolve(fixtureDir, "illustration-smoke.jpg");
-      copyFileSync(sourceImagePath, avatarPath);
-      copyFileSync(sourceImagePath, illustrationPath);
-      return options?.multiple ? [avatarPath, illustrationPath] : [avatarPath];
-    }
     const result = await dialog.showOpenDialog({
       properties: options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],
       filters: [
@@ -157,19 +161,9 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     if (result.canceled) {
       return [];
     }
-    return result.filePaths;
+    return result.filePaths.filter((path) => localAssets.grantPath(path));
   });
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
-    if (process.env.MIRA_DESKTOP_PICK_IMAGES_FIXTURE === "1") {
-      const fixtureDir = resolve(desktopRoot, ".smoke-fixtures");
-      mkdirSync(fixtureDir, { recursive: true });
-      const sourceImagePath = resolve(desktopRoot, "..", "assets", "akashic-qq.jpg");
-      const imagePath = resolve(fixtureDir, "chat-image-smoke.jpg");
-      const textPath = resolve(fixtureDir, "chat-note-smoke.md");
-      copyFileSync(sourceImagePath, imagePath);
-      writeFileSync(textPath, "# smoke attachment\n\nfixture note\n", { encoding: "utf-8" });
-      return options?.multiple ? [imagePath, textPath] : [imagePath];
-    }
     const result = await dialog.showOpenDialog({
       properties: options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],
       filters: [
@@ -182,9 +176,10 @@ export function registerDesktopIpc({ bridge, desktopRoot }: RegisterDesktopIpcOp
     if (result.canceled) {
       return [];
     }
-    return result.filePaths;
+    return result.filePaths.filter((path) => localAssets.grantPath(path));
   });
-  ipcMain.handle("desktop:smoke", async () => {
-    return await runBridgeSmoke(bridge);
+  ipcMain.handle("desktop:open-attachment", async (_event: IpcMainInvokeEvent, request: LocalAssetOpenRequest) => {
+    const value = String(request?.url || request?.path || "").trim();
+    return await openLocalAttachment(value);
   });
 }

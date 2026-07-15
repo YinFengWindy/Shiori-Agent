@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -11,6 +12,39 @@ from conversation.push_sync import ExternalImageSyncService
 from core.roles import RoleStore
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
+
+
+@pytest.mark.asyncio
+async def test_chat_send_returns_busy_before_persisting_second_message(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="You are Mira.",
+    )
+    session_manager = SessionManager(tmp_path)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    service.chat_service.is_busy = Mock(return_value=True)
+
+    response = await service.handle(
+        {
+            "id": "request-2",
+            "method": "chat.send",
+            "payload": {"role_id": "mira", "content": "second"},
+        },
+        emit_event=Mock(),
+    )
+
+    assert response.error is not None
+    assert response.error.code == "chat_busy"
+    session = session_manager.get_or_create("role:mira")
+    assert session.messages == []
 
 
 @pytest.mark.asyncio
