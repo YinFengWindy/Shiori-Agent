@@ -1,6 +1,20 @@
-/** Converts an absolute Windows or POSIX path into a renderer-safe asset URL. */
-export function toFileUrl(path: string): string {
-  return `mira-asset://local?path=${encodeURIComponent(path)}`;
+import { unavailableLocalAssetUrl } from "../../../src/shared";
+
+type LocalAssetUrlResolver = (path: string) => string;
+
+function resolveDesktopLocalAssetUrl(path: string): string {
+  if (typeof window === "undefined") {
+    return unavailableLocalAssetUrl;
+  }
+  return window.miraDesktop.localAssetUrl(path);
+}
+
+/** Resolves a local path to an opaque renderer-safe asset URL through the desktop bridge. */
+export function toFileUrl(
+  path: string,
+  resolveLocalAssetUrl: LocalAssetUrlResolver = resolveDesktopLocalAssetUrl,
+): string {
+  return resolveLocalAssetUrl(path);
 }
 
 /** Formats bridge timestamps for compact display in chat bubbles. */

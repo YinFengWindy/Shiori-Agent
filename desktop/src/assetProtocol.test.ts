@@ -30,6 +30,7 @@ describe("local asset protocol", () => {
     const imagePath = join(directory, "avatar.PNG");
     await writeFile(imagePath, Buffer.from("image-bytes"));
     const registry = new LocalAssetRegistry();
+    registry.addTrustedRoot(directory);
     const reference = registry.grantPath(imagePath);
     assert.ok(reference);
 
@@ -38,9 +39,14 @@ describe("local asset protocol", () => {
       registry,
       `mira-asset://local?path=${encodeURIComponent(imagePath)}`,
     );
+    const tokenWithLegacyQuery = await loadGrantedLocalAsset(
+      registry,
+      `${reference.url}?path=${encodeURIComponent(imagePath)}`,
+    );
 
     assert.equal(response.status, 200);
-    assert.equal(legacyResponse.status, 200);
+    assert.equal(legacyResponse.status, 403);
+    assert.equal(tokenWithLegacyQuery.status, 403);
     assert.equal(response.headers.get("Content-Type"), "image/png");
     assert.equal(response.headers.get("Cache-Control"), "no-store");
     assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
@@ -54,6 +60,7 @@ describe("local asset protocol", () => {
     await writeFile(imagePath, Buffer.from("private"));
     await writeFile(documentPath, "note", "utf-8");
     const registry = new LocalAssetRegistry();
+    registry.addTrustedRoot(directory);
     const documentReference = registry.grantPath(documentPath);
     assert.ok(documentReference);
 
@@ -73,6 +80,7 @@ describe("local asset protocol", () => {
     await writeFile(imagePath, "", "utf-8");
     await truncate(imagePath, maxLocalAssetBytes + 1);
     const registry = new LocalAssetRegistry();
+    registry.addTrustedRoot(directory);
     const reference = registry.grantPath(imagePath);
     assert.ok(reference);
 
@@ -86,6 +94,7 @@ describe("local asset protocol", () => {
     const imagePath = join(directory, "missing.png");
     await writeFile(imagePath, Buffer.from("image"));
     const registry = new LocalAssetRegistry();
+    registry.addTrustedRoot(directory);
     const reference = registry.grantPath(imagePath);
     assert.ok(reference);
     await unlink(imagePath);
@@ -112,6 +121,7 @@ describe("local asset protocol", () => {
       throw error;
     }
     const registry = new LocalAssetRegistry();
+    registry.addTrustedRoot(directory);
     const reference = registry.grantPath(linkPath);
     assert.ok(reference);
     await unlink(linkPath);

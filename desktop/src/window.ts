@@ -1,6 +1,7 @@
 import { BrowserWindow } from "electron";
 import { logDesktopDiagnostic } from "./diagnostics.js";
 import { desktopWindowIcon, preloadScript, rendererDevServerUrl, rendererDist } from "./paths.js";
+import type { BridgeEvent, LocalAssetTransport } from "./shared.js";
 import {
   attachDesktopWindowSecurity,
   resolveRendererEntryUrl,
@@ -38,15 +39,19 @@ async function reloadDesktopRenderer(
 }
 
 function emitWindowState(window: BrowserWindow): void {
-  window.webContents.send("desktop:event", {
-    id: `window-state-${Date.now()}`,
-    type: "event",
-    method: "window.state",
-    payload: {
-      isMaximized: window.isMaximized(),
-      isVisible: window.isVisible(),
+  const transport: LocalAssetTransport<BridgeEvent> = {
+    value: {
+      id: `window-state-${Date.now()}`,
+      type: "event",
+      method: "window.state",
+      payload: {
+        isMaximized: window.isMaximized(),
+        isVisible: window.isVisible(),
+      },
     },
-  });
+    assets: [],
+  };
+  window.webContents.send("desktop:event", transport);
 }
 
 /** Creates the desktop shell window. */

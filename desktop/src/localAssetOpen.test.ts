@@ -21,6 +21,7 @@ describe("openGrantedLocalAsset", () => {
     const documentPath = join(directory, "note.md");
     await writeFile(documentPath, "note", "utf-8");
     const registry = new LocalAssetRegistry();
+    registry.addTrustedRoot(directory);
     const reference = registry.grantPath(documentPath);
     assert.ok(reference);
     const opened: string[] = [];

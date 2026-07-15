@@ -10,7 +10,7 @@ function renderRoleMoodBindingsPanel(): string {
   return renderToStaticMarkup(
     <RoleMoodBindingsPanel
       selectedAssetPath="illustrations/mira-smile.png"
-      selectedAssetAbsPath="mira-asset://local?path=D%3A%5Cillustrations%5Cmira-smile.png"
+      selectedAssetAbsPath="mira-asset://local/mira-smile-token"
       selectedMood="calm"
       onSaveMoodBinding={() => undefined}
       onClearSelectedAsset={() => undefined}

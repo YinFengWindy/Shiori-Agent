@@ -27,6 +27,7 @@ describe("LocalAssetRegistry", () => {
     await writeFile(grantedPath, Buffer.from("granted"));
     await writeFile(deniedPath, Buffer.from("denied"));
     const registry = new LocalAssetRegistry();
+    registry.addTrustedRoot(directory);
 
     const reference = registry.grantPath(grantedPath);
 
@@ -59,27 +60,29 @@ describe("LocalAssetRegistry", () => {
     const registry = new LocalAssetRegistry();
     registry.addTrustedRoot(managedDirectory);
 
-    registry.grantTrustedPayload({
+    const references = registry.grantTrustedPayload({
       role: { avatar_abs: avatarPath, arbitrary: arbitraryPath },
       session: { media: [documentPath, launderedPath] },
     });
 
+    assert.deepEqual(references.map((reference) => reference.path).sort(), [avatarPath, documentPath].sort());
     assert.equal(registry.resolveReference(avatarPath)?.kind, "image");
     assert.equal(registry.resolveReference(documentPath)?.kind, "document");
     assert.equal(registry.resolveReference(arbitraryPath), null);
     assert.equal(registry.resolveReference(launderedPath), null);
   });
 
-  it("keeps picker-granted external paths authorized when bridge echoes them", async () => {
+  it("does not authorize external paths echoed by a bridge payload", async () => {
     const directory = await createTemporaryDirectory();
     const externalPath = join(directory, "picked.txt");
     await writeFile(externalPath, "picked", "utf-8");
     const registry = new LocalAssetRegistry();
 
-    registry.grantPath(externalPath);
-    registry.grantTrustedPayload({ session: { media: [externalPath] } });
+    assert.equal(registry.grantPath(externalPath), null);
+    const references = registry.grantTrustedPayload({ session: { media: [externalPath] } });
 
-    assert.equal(registry.resolveReference(externalPath)?.kind, "document");
+    assert.deepEqual(references, []);
+    assert.equal(registry.resolveReference(externalPath), null);
   });
 
   it("rejects relative, unsupported, missing, and non-file paths", async () => {
@@ -89,6 +92,7 @@ describe("LocalAssetRegistry", () => {
     await writeFile(unsupportedPath, "{}", "utf-8");
     await mkdir(imageDirectory);
     const registry = new LocalAssetRegistry();
+    registry.addTrustedRoot(directory);
 
     assert.equal(registry.grantPath("relative.png"), null);
     assert.equal(registry.grantPath(unsupportedPath), null);

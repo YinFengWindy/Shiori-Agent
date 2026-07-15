@@ -35,8 +35,7 @@ export class LocalAssetRegistry {
   }
 
   grantPath(path: string): LocalAssetReference | null {
-    const candidate = resolveLocalAssetCandidate(path);
-    return candidate ? this.grantCandidate(candidate) : null;
+    return this.grantManagedPath(path);
   }
 
   private grantCandidate(candidate: LocalAssetCandidate): LocalAssetReference {
@@ -61,10 +60,15 @@ export class LocalAssetRegistry {
     return this.toReference(grant);
   }
 
-  grantTrustedPayload(payload: unknown): void {
+  grantTrustedPayload(payload: unknown): LocalAssetReference[] {
+    const references = new Map<string, LocalAssetReference>();
     for (const path of collectTrustedLocalAssetPaths(payload)) {
-      this.grantManagedPath(path);
+      const reference = this.grantManagedPath(path);
+      if (reference) {
+        references.set(reference.url, reference);
+      }
     }
+    return [...references.values()];
   }
 
   resolveReference(value: string): ResolvedLocalAsset | null {
@@ -92,14 +96,14 @@ export class LocalAssetRegistry {
     if (requestedUrl.protocol !== `${localAssetScheme}:` || requestedUrl.hostname !== "local") {
       return null;
     }
-
-    const token = requestedUrl.pathname.replace(/^\/+/, "");
-    if (token) {
-      return this.grantsByToken.get(token) ?? null;
+    if (requestedUrl.search || requestedUrl.hash) {
+      return null;
     }
-
-    const legacyPath = requestedUrl.searchParams.get("path");
-    return legacyPath ? this.resolveReference(legacyPath) : null;
+    const token = requestedUrl.pathname.replace(/^\/+/, "");
+    if (!token || token.includes("/")) {
+      return null;
+    }
+    return this.grantsByToken.get(token) ?? null;
   }
 
   pathsEqual(left: string, right: string): boolean {

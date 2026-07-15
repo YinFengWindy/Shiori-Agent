@@ -147,7 +147,7 @@ describe("desktopSelectors", () => {
 
     assert.equal(viewModel.currentMood, "开心");
     assert.equal(viewModel.moodIllustration, "D:\\roles\\mira\\happy.png");
-    assert.match(viewModel.moodIllustrationUrl, /happy\.png/);
+    assert.equal(viewModel.moodIllustrationUrl, "mira-asset://local/unavailable");
   });
 
   it("resolves mood illustration bindings saved as relative role asset paths", () => {
@@ -176,7 +176,7 @@ describe("desktopSelectors", () => {
     });
 
     assert.equal(viewModel.moodIllustration, "D:\\roles\\mira\\happy.png");
-    assert.match(viewModel.moodIllustrationUrl, /happy\.png/);
+    assert.equal(viewModel.moodIllustrationUrl, "mira-asset://local/unavailable");
   });
 
   it("derives relationship summary, tags, and loneliness value from session metadata first", () => {

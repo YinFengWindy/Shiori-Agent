@@ -1,5 +1,7 @@
 import { BrowserWindow } from "electron";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
+import type { LocalAssetRegistry } from "./localAssetRegistry.js";
+import type { BridgeEvent, LocalAssetTransport } from "./shared.js";
 
 /** Starts the Python bridge process and logs startup failures at the app boundary. */
 export async function startBridge(bridge: DesktopBridgeClient): Promise<void> {
@@ -11,20 +13,31 @@ export async function startBridge(bridge: DesktopBridgeClient): Promise<void> {
 }
 
 /** Forwards bridge events to every open renderer window. */
-export function wireBridgeEvents(bridge: DesktopBridgeClient): void {
+export function wireBridgeEvents(
+  bridge: DesktopBridgeClient,
+  localAssets: LocalAssetRegistry,
+): void {
   bridge.on("event", (payload) => {
+    const transport: LocalAssetTransport<BridgeEvent> = {
+      value: payload,
+      assets: localAssets.grantTrustedPayload(payload.payload),
+    };
     for (const window of BrowserWindow.getAllWindows()) {
-      window.webContents.send("desktop:event", payload);
+      window.webContents.send("desktop:event", transport);
     }
   });
   bridge.on("exit", (message) => {
-    for (const window of BrowserWindow.getAllWindows()) {
-      window.webContents.send("desktop:event", {
+    const transport: LocalAssetTransport<BridgeEvent> = {
+      value: {
         id: "bridge-exit",
         type: "event",
         method: "bridge.exit",
         payload: { message },
-      });
+      },
+      assets: [],
+    };
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send("desktop:event", transport);
     }
   });
 }

@@ -1,5 +1,16 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { BridgeEvent, DesktopApi, RendererDiagnosticPayload, WindowControlAction, WindowState } from "./shared.js";
+import { PreloadLocalAssetCache } from "./preloadLocalAssetCache.js";
+import type {
+  BridgeEvent,
+  BridgeResponse,
+  DesktopApi,
+  LocalAssetTransport,
+  RendererDiagnosticPayload,
+  WindowControlAction,
+  WindowState,
+} from "./shared.js";
+
+const localAssets = new PreloadLocalAssetCache();
 
 window.addEventListener("click", (event) => {
   const target = event.target;
@@ -16,18 +27,26 @@ window.addEventListener("click", (event) => {
 
 const api: DesktopApi = {
   invoke(request) {
-    return ipcRenderer.invoke("desktop:invoke", request) as Promise<import("./shared.js").BridgeResponse>;
+    return (ipcRenderer.invoke("desktop:invoke", request) as Promise<LocalAssetTransport<BridgeResponse>>)
+      .then((transport) => localAssets.consume(transport));
   },
   onEvent(listener) {
-    const wrapped = (_event: unknown, payload: unknown) => listener(payload as BridgeEvent);
+    const wrapped = (_event: unknown, payload: unknown) => {
+      listener(localAssets.consume(payload as LocalAssetTransport<BridgeEvent>));
+    };
     ipcRenderer.on("desktop:event", wrapped);
     return () => ipcRenderer.off("desktop:event", wrapped);
   },
   pickImages(options) {
-    return ipcRenderer.invoke("desktop:pick-images", options) as Promise<string[]>;
+    return (ipcRenderer.invoke("desktop:pick-images", options) as Promise<LocalAssetTransport<string[]>>)
+      .then((transport) => localAssets.consume(transport));
   },
   pickChatAttachments(options) {
-    return ipcRenderer.invoke("desktop:pick-chat-attachments", options) as Promise<string[]>;
+    return (ipcRenderer.invoke("desktop:pick-chat-attachments", options) as Promise<LocalAssetTransport<string[]>>)
+      .then((transport) => localAssets.consume(transport));
+  },
+  localAssetUrl(path) {
+    return localAssets.resolve(path);
   },
   startAttachmentDrag(request) {
     ipcRenderer.send("desktop:start-attachment-drag", request);

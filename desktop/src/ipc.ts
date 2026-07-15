@@ -3,11 +3,14 @@ import { resolve } from "node:path";
 import type { IpcMainInvokeEvent } from "electron";
 import { logDesktopDiagnostic } from "./diagnostics.js";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
+import { importLocalAssets } from "./localAssetImport.js";
 import type { LocalAssetRegistry } from "./localAssetRegistry.js";
 import { loadSettingsData, saveSettings } from "./settings.js";
 import type {
   LocalAssetOpenRequest,
   LocalAssetOpenResult,
+  LocalAssetReference,
+  LocalAssetTransport,
   RendererDiagnosticPayload,
   SettingsFormData,
 } from "./shared.js";
@@ -17,22 +20,44 @@ type RegisterDesktopIpcOptions = {
   bridge: DesktopBridgeClient;
   desktopRoot: string;
   localAssets: LocalAssetRegistry;
+  localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
 };
+
+function assetTransport<T>(value: T, assets: LocalAssetReference[]): LocalAssetTransport<T> {
+  return { value, assets };
+}
+
+async function importPickerSelection(
+  paths: string[],
+  importsRoot: string,
+  localAssets: LocalAssetRegistry,
+): Promise<LocalAssetTransport<string[]>> {
+  const importedPaths = await importLocalAssets(paths, importsRoot);
+  const assets: LocalAssetReference[] = [];
+  for (const path of importedPaths) {
+    const reference = localAssets.grantPath(path);
+    if (!reference) {
+      throw new Error("imported local asset is outside the trusted workspace");
+    }
+    assets.push(reference);
+  }
+  return assetTransport(importedPaths, assets);
+}
 
 /** Registers all IPC handlers exposed through the desktop preload bridge. */
 export function registerDesktopIpc({
   bridge,
   desktopRoot,
   localAssets,
+  localAssetImportsRoot,
   openLocalAttachment,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
 
   ipcMain.handle("desktop:invoke", async (_event: IpcMainInvokeEvent, request: { method: string; payload: Record<string, unknown> }) => {
     const response = await bridge.invoke(request);
-    localAssets.grantTrustedPayload(response.payload);
-    return response;
+    return assetTransport(response, localAssets.grantTrustedPayload(response.payload));
   });
   ipcMain.on("desktop:start-attachment-drag", (event: IpcMainInvokeEvent, request?: { path?: unknown }) => {
     const filePath = String(request?.path ?? "").trim();
@@ -159,9 +184,9 @@ export function registerDesktopIpc({
       ],
     });
     if (result.canceled) {
-      return [];
+      return assetTransport([], []);
     }
-    return result.filePaths.filter((path) => localAssets.grantPath(path));
+    return await importPickerSelection(result.filePaths, localAssetImportsRoot, localAssets);
   });
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
     const result = await dialog.showOpenDialog({
@@ -174,9 +199,9 @@ export function registerDesktopIpc({
       ],
     });
     if (result.canceled) {
-      return [];
+      return assetTransport([], []);
     }
-    return result.filePaths.filter((path) => localAssets.grantPath(path));
+    return await importPickerSelection(result.filePaths, localAssetImportsRoot, localAssets);
   });
   ipcMain.handle("desktop:open-attachment", async (_event: IpcMainInvokeEvent, request: LocalAssetOpenRequest) => {
     const value = String(request?.url || request?.path || "").trim();

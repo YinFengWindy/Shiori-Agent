@@ -148,19 +148,21 @@ function showOrCreateDesktopWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   ensureDesktopConfig();
-  localAssets.addTrustedRoot(resolve(app.getPath("home"), ".shiori", "workspace"));
+  const privateWorkspaceRoot = resolve(app.getPath("home"), ".shiori", "workspace");
+  const localAssetImportsRoot = resolve(privateWorkspaceRoot, "private_runtime", "imports");
+  localAssets.addTrustedRoot(privateWorkspaceRoot);
   registerDesktopContentSecurityPolicy(
     session.defaultSession.webRequest,
     process.env.MIRA_RENDERER_DEV_SERVER_URL,
   );
   registerLocalAssetProtocol(protocol, localAssets);
-  bridge.on("event", (event) => localAssets.grantTrustedPayload(event.payload));
   void startBridge(bridge);
-  wireBridgeEvents(bridge);
+  wireBridgeEvents(bridge, localAssets);
   registerDesktopIpc({
     bridge,
     desktopRoot,
     localAssets,
+    localAssetImportsRoot,
     openLocalAttachment,
   });
   getOrCreateDesktopWindow();

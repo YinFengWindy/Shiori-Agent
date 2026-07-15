@@ -115,6 +115,15 @@ export type LocalAssetReference = {
   kind: "image" | "document";
 };
 
+/** Fixed non-sensitive URL used when no local asset capability is available. */
+export const unavailableLocalAssetUrl = "mira-asset://local/unavailable";
+
+/** Carries renderer-facing data alongside authorized local asset references. */
+export type LocalAssetTransport<T> = {
+  value: T;
+  assets: LocalAssetReference[];
+};
+
 /** Requests opening an already authorized attachment with the operating system. */
 export type LocalAssetOpenRequest = {
   path?: string;
@@ -142,6 +151,8 @@ export type DesktopApi = {
   onEvent(listener: (event: BridgeEvent) => void): () => void;
   pickImages(options?: { multiple?: boolean }): Promise<string[]>;
   pickChatAttachments(options?: { multiple?: boolean }): Promise<string[]>;
+  /** Resolves a previously transported local path to its opaque asset URL. */
+  localAssetUrl(path: string): string;
   startAttachmentDrag(request: StartAttachmentDragRequest): void;
   openAttachment(request: LocalAssetOpenRequest): Promise<LocalAssetOpenResult>;
   reportRendererDiagnostic(payload: RendererDiagnosticPayload): void;
