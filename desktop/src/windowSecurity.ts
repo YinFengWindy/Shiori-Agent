@@ -62,14 +62,16 @@ export function resolveRendererEntryUrl(
 /** Builds the CSP applied to the privileged renderer main frame. */
 export function buildDesktopContentSecurityPolicy(devServerUrl: string | undefined): string {
   const trustedDevUrl = validateRendererDevServerUrl(devServerUrl);
+  const scriptSources = ["'self'"];
   const connectSources = ["'self'"];
   if (trustedDevUrl) {
     const url = new URL(trustedDevUrl);
+    scriptSources.push("'unsafe-inline'");
     connectSources.push(`ws://${url.host}`);
   }
   return [
     "default-src 'self'",
-    "script-src 'self'",
+    `script-src ${scriptSources.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: ${localAssetScheme}:`,
     `connect-src ${connectSources.join(" ")}`,

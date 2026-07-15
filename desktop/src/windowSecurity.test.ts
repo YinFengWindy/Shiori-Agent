@@ -30,13 +30,15 @@ describe("desktop CSP", () => {
     const policy = buildDesktopContentSecurityPolicy(undefined);
 
     assert.match(policy, /img-src[^;]*mira-asset:/);
+    assert.doesNotMatch(policy, /script-src[^;]*'unsafe-inline'/);
     assert.match(policy, /connect-src 'self'/);
     assert.doesNotMatch(policy, /connect-src[^;]*mira-asset:/);
     assert.match(policy, /object-src 'none'/);
   });
 
-  it("adds the exact Vite websocket origin only in development", () => {
+  it("allows the Vite preamble and exact websocket origin only in development", () => {
     const policy = buildDesktopContentSecurityPolicy("http://127.0.0.1:5178/");
+    assert.match(policy, /script-src 'self' 'unsafe-inline'/);
     assert.match(policy, /connect-src 'self' ws:\/\/127\.0\.0\.1:5178/);
   });
 
