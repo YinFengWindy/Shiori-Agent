@@ -196,6 +196,7 @@ class AppRuntime:
                     presence=self.presence,
                     agent_loop=self.agent_loop,
                     tool_hooks=list(plugin_manager.tool_hooks) if plugin_manager else None,
+                    event_bus=event_bus,
                 )
                 self._background_tasks.extend(
                     asyncio.create_task(task, name=f"proactive:{index}")

@@ -18,6 +18,7 @@ from proactive_v2.state import ProactiveStateStore
 from session.manager import SessionManager
 
 if TYPE_CHECKING:
+    from bus.event_bus import EventBus
     from core.memory.engine import MemoryEngine
     from core.memory.markdown import MarkdownMemoryStore
     from core.memory.runtime import MemoryRuntime
@@ -56,6 +57,7 @@ def build_proactive_runtime(
     presence: PresenceStore,
     agent_loop: AgentLoop,
     tool_hooks: list[ToolHook] | None = None,
+    event_bus: "EventBus | None" = None,
 ) -> tuple[list, dict[str, ProactiveLoop]]:
     tasks: list = []
     roles = [role for role in RoleStore(workspace).list_roles() if role.proactive.enabled]
@@ -89,6 +91,7 @@ def build_proactive_runtime(
             ),
             shared_tools=getattr(agent_loop, "tools", None),
             tool_hooks=tool_hooks,
+            event_bus=event_bus,
             tick_dispatcher=_build_role_tick_dispatcher(
                 role_id=role.id,
                 channel=target.target_channel,

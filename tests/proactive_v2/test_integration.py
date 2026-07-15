@@ -6,9 +6,12 @@ tests/proactive_v2/test_integration.py — P7 集成测试
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+from bus.events_lifecycle import TurnStarted
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.loop import ProactiveLoop
 
@@ -109,3 +112,30 @@ async def test_v2_route_stable_across_multiple_ticks():
     await loop._tick()
 
     assert pipeline.run.call_count == 3
+
+
+def test_turn_started_cancels_matching_session_retries():
+    pipeline = MagicMock()
+    loop = make_loop(cfg=cfg_with(), pipeline_mock=pipeline)
+    loop._target_session_key = MagicMock(return_value="role:mira")
+
+    loop._handle_turn_started(
+        TurnStarted(
+            session_key="role:mira",
+            channel="qq",
+            chat_id="gqq:7",
+            content="hello",
+            timestamp=datetime.now(timezone.utc),
+        )
+    )
+    loop._handle_turn_started(
+        TurnStarted(
+            session_key="role:luna",
+            channel="qq",
+            chat_id="gqq:8",
+            content="hello",
+            timestamp=datetime.now(timezone.utc),
+        )
+    )
+
+    pipeline.notify_user_reply.assert_called_once_with()

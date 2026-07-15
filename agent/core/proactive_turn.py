@@ -322,9 +322,11 @@ class ProactiveTurnPipeline:
         self._drift_pipeline = deps.drift_pipeline
         self._target_transport_fn = deps.target_transport_fn
         self._target_transports_fn = deps.target_transports_fn
-        self._retry_wait_fn = deps.retry_wait_fn or asyncio.sleep
+        self._retry_wait_fn = deps.retry_wait_fn
         self._loneliness_gate_fn = deps.loneliness_gate_fn
         self._tool_executor = ToolExecutor(deps.tool_hooks or [])
+        self._retry_task: asyncio.Task[None] | None = None
+        self._retry_cancel_event = asyncio.Event()
 
         # 1. drift_pipeline 的 step_recorder 指向本 pipeline 的记录方法。
         if self._drift_pipeline is not None and getattr(self._drift_pipeline, "step_recorder", None) is None:
@@ -946,6 +948,8 @@ class ProactiveTurnPipeline:
         if not transports:
             raise RuntimeError("proactive target transport unavailable at delivery time")
 
+        await self.cancel_pending_retries()
+        self._retry_cancel_event = asyncio.Event()
         target_channel, target_chat_id = transports[0]
         sent_at = datetime.now(timezone.utc)
         sent = await self._turn_orchestrator.handle_proactive_turn(
@@ -965,22 +969,100 @@ class ProactiveTurnPipeline:
             success_side_effects=[],
             failure_side_effects=[],
         )
-        for target_channel, target_chat_id in transports[1:]:
-            await self._retry_wait_fn(_MULTI_CHANNEL_RETRY_WAIT_SECONDS)
-            if self._has_user_replied_since(sent_at):
-                logger.info(
-                    "[proactive_v2] multi-channel retry stopped: user replied session=%s",
-                    self._session_key,
-                )
-                break
-            await self._turn_orchestrator.handle_proactive_turn(
-                result=retry_result,
-                session_key=self._session_key,
-                channel=target_channel,
-                chat_id=target_chat_id,
-                record_proactive_state=False,
+        if transports[1:]:
+            self._retry_task = asyncio.create_task(
+                self._deliver_retries(
+                    transports=transports[1:],
+                    result=retry_result,
+                    sent_at=sent_at,
+                ),
+                name=f"proactive-retries:{self._session_key}",
             )
         return 0.0
+
+    async def _deliver_retries(
+        self,
+        *,
+        transports: list[tuple[str, str]],
+        result: TurnResult,
+        sent_at: datetime,
+    ) -> None:
+        """在首个渠道完成后，独立执行其余渠道的延迟发送。"""
+        try:
+            for target_channel, target_chat_id in transports:
+                if not await self._wait_for_retry_or_user_reply(
+                    _MULTI_CHANNEL_RETRY_WAIT_SECONDS
+                ):
+                    logger.info(
+                        "[proactive_v2] multi-channel retry stopped: user replied session=%s",
+                        self._session_key,
+                    )
+                    return
+                if self._has_user_replied_since(sent_at):
+                    logger.info(
+                        "[proactive_v2] multi-channel retry stopped: user replied session=%s",
+                        self._session_key,
+                    )
+                    return
+                await self._turn_orchestrator.handle_proactive_turn(
+                    result=result,
+                    session_key=self._session_key,
+                    channel=target_channel,
+                    chat_id=target_chat_id,
+                    record_proactive_state=False,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "[proactive_v2] multi-channel retry failed session=%s",
+                self._session_key,
+            )
+
+    async def _wait_for_retry_or_user_reply(self, delay: float) -> bool:
+        """等待重试间隔或用户回复，并返回是否应继续发送。"""
+        if self._retry_cancel_event.is_set():
+            return False
+        wait_fn = self._retry_wait_fn or asyncio.sleep
+        delay_task = asyncio.create_task(wait_fn(delay))
+        reply_task = asyncio.create_task(self._retry_cancel_event.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {delay_task, reply_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if delay_task not in done:
+                return False
+            await delay_task
+            return not self._retry_cancel_event.is_set()
+        finally:
+            for task in (delay_task, reply_task):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(delay_task, reply_task, return_exceptions=True)
+
+    def notify_user_reply(self) -> None:
+        """取消当前 session 的多渠道后台重试。"""
+        self._retry_cancel_event.set()
+        task = self._retry_task
+        if task is not None and not task.done() and task is not asyncio.current_task():
+            task.cancel()
+
+    async def cancel_pending_retries(self) -> None:
+        """等待并清理当前 session 的多渠道后台重试任务。"""
+        self._retry_cancel_event.set()
+        task = self._retry_task
+        if task is None or task is asyncio.current_task():
+            return
+        if not task.done():
+            task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if self._retry_task is task:
+                self._retry_task = None
 
     def _has_user_replied_since(self, sent_at: datetime) -> bool:
         last_user_at = self._last_user_at_fn()

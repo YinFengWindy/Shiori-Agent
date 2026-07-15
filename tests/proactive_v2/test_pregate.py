@@ -10,6 +10,7 @@ TDD — ProactiveTurnPipeline pre-gate
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
@@ -110,6 +111,8 @@ async def test_multi_channel_delivery_retries_all_targets_without_reply():
     )
 
     await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
+    assert tick._retry_task is not None
+    await tick._retry_task
 
     assert waits == [300.0, 300.0]
     assert [call.kwargs["channel"] for call in orchestrator.handle_proactive_turn.call_args_list] == [
@@ -151,6 +154,70 @@ async def test_multi_channel_delivery_stops_when_user_replies():
     )
 
     await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
+    await tick._retry_task
+
+    assert orchestrator.handle_proactive_turn.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_multi_channel_delivery_returns_before_retry_wait_finishes():
+    retry_started = asyncio.Event()
+    release_retry = asyncio.Event()
+
+    async def wait(_delay: float) -> None:
+        retry_started.set()
+        await release_retry.wait()
+
+    tick = make_proactive_pipeline(retry_wait_fn=wait)
+    orchestrator = AsyncMock()
+    orchestrator.handle_proactive_turn = AsyncMock(return_value=True)
+    tick._turn_orchestrator = orchestrator
+
+    result = TurnResult(
+        decision="reply",
+        outbound=TurnOutbound(session_key="test_session", content="hello"),
+    )
+    ctx = AgentTickContext(
+        session_key="test_session",
+        target_transports=[("desktop", "role:mira"), ("qq", "gqq:7")],
+    )
+
+    await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
+    await retry_started.wait()
+
+    assert orchestrator.handle_proactive_turn.await_count == 1
+
+    release_retry.set()
+    await tick._retry_task
+
+
+@pytest.mark.asyncio
+async def test_multi_channel_delivery_cancels_retry_when_user_replies():
+    retry_started = asyncio.Event()
+    release_retry = asyncio.Event()
+
+    async def wait(_delay: float) -> None:
+        retry_started.set()
+        await release_retry.wait()
+
+    tick = make_proactive_pipeline(retry_wait_fn=wait)
+    orchestrator = AsyncMock()
+    orchestrator.handle_proactive_turn = AsyncMock(return_value=True)
+    tick._turn_orchestrator = orchestrator
+
+    result = TurnResult(
+        decision="reply",
+        outbound=TurnOutbound(session_key="test_session", content="hello"),
+    )
+    ctx = AgentTickContext(
+        session_key="test_session",
+        target_transports=[("desktop", "role:mira"), ("qq", "gqq:7")],
+    )
+
+    await tick._deliver_execute(ctx, ResolveResult(action="send", result=result))
+    await retry_started.wait()
+    tick.notify_user_reply()
+    await tick.cancel_pending_retries()
 
     assert orchestrator.handle_proactive_turn.await_count == 1
 

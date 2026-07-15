@@ -62,6 +62,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
         light_model="light-model",
         api_key="",
     )
+    event_bus = object()
 
     tasks, loops = build_proactive_runtime(
         cast(Any, config),
@@ -79,6 +80,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
                 role_world_registry=MagicMock(),
             ),
         ),
+        event_bus=event_bus,
     )
 
     assert tasks == ["run:mira", "run:luna"]
@@ -91,4 +93,6 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
     assert loops["luna"].config.drift_min_interval_hours == 7
     assert created[0]["state_store"].db_path == tmp_path / "roles" / "mira" / "proactive.db"
     assert created[1]["state_store"].db_path == tmp_path / "roles" / "luna" / "proactive.db"
+    assert created[0]["event_bus"] is event_bus
+    assert created[1]["event_bus"] is event_bus
 

@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from core.memory.engine import MemoryRetrievalApi
     from core.memory.markdown import MemoryProfileApi
 
+from bus.event_bus import EventBus
+from bus.events_lifecycle import TurnStarted
 from core.error_context import current_session_key
 from agent.looping.ports import SessionServices
 from agent.provider import LLMProvider
@@ -84,6 +86,7 @@ class ProactiveLoop:
         shared_tools: ToolRegistry | None = None,
         tool_hooks: list[ToolHook] | None = None,
         tick_dispatcher: Callable[[Callable[[], Any]], Any] | None = None,
+        event_bus: EventBus | None = None,
     ) -> None:
         self._sessions = session_manager
         self._provider = provider
@@ -101,6 +104,8 @@ class ProactiveLoop:
         self._shared_tools = shared_tools
         self._tool_hooks = tool_hooks or []
         self._tick_dispatcher = tick_dispatcher
+        self._event_bus = event_bus
+        self._turn_started_handler = self._handle_turn_started
         self._workspace_context_mtime_ns: int | None = None
         self._workspace_context_text: str = ""
         self._relationship_runtime = self._build_relationship_runtime()
@@ -222,6 +227,8 @@ class ProactiveLoop:
         self._sense = self._build_sense()
         self._message_deduper = self._build_message_deduper()
         self._proactive_pipeline = self._build_agent_tick()
+        if self._event_bus is not None:
+            self._event_bus.on(TurnStarted, self._turn_started_handler)
         # 4. 启动时把当前 proactive 配置落一份 trace，方便回看。
         self._trace_proactive_config_snapshot()
 
@@ -352,8 +359,16 @@ class ProactiveLoop:
         try:
             await self._run_loop()
         finally:
+            await self._proactive_pipeline.cancel_pending_retries()
+            if self._event_bus is not None:
+                self._event_bus.off(TurnStarted, self._turn_started_handler)
             await self._mcp_pool.disconnect_all()
             logger.info("[proactive] mcp pool 已关闭")
+
+    def _handle_turn_started(self, event: TurnStarted) -> None:
+        """用户开始新回合时，取消当前角色的多渠道重试。"""
+        if event.session_key == self._target_session_key():
+            self._proactive_pipeline.notify_user_reply()
 
     async def _run_loop(self) -> None:
         # 启动时先同步完成首次 feed 轮询,保证首次 tick 能拿到新鲜数据
