@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 from agent.turns.outbound import OutboundDispatch, OutboundPort
 from agent.turns.result import TurnResult
+from bus.event_bus import EventBus
+from bus.events_lifecycle import ProactiveMessageCommitted
 from conversation.service import LegacySessionDescriptor
 
 if TYPE_CHECKING:
@@ -20,12 +22,14 @@ logger = logging.getLogger("agent.turn_orchestrator")
 class TurnOrchestratorDeps:
     session: SessionServices
     outbound: OutboundPort
+    event_bus: EventBus | None = None
 
 
 class TurnOrchestrator:
     def __init__(self, deps: TurnOrchestratorDeps) -> None:
         self._session = deps.session
         self._outbound = deps.outbound
+        self._event_bus = deps.event_bus
 
     async def handle_proactive_turn(
         self,
@@ -90,6 +94,16 @@ class TurnOrchestrator:
             if record_proactive_state and self._session.relationship_runtime is not None:
                 self._session.relationship_runtime.handle_proactive_sent(session_key)
             await self._run_effects(result.success_side_effects)
+            if self._event_bus is not None:
+                await self._event_bus.fanout(
+                    ProactiveMessageCommitted(
+                        session_key=session_key,
+                        channel=channel,
+                        role_id=str(
+                            getattr(session, "metadata", {}).get("role_id") or ""
+                        ).strip(),
+                    )
+                )
         else:
             await self._run_effects(result.failure_side_effects)
 

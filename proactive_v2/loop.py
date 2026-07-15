@@ -143,6 +143,7 @@ class ProactiveLoop:
                         "role_id": str(self._cfg.default_role_id or "").strip(),
                     },
                 ),
+                event_bus=self._event_bus,
             )
         )
 

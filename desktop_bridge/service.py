@@ -9,7 +9,11 @@ from typing import Any, cast
 from agent.looping.core import AgentLoop
 from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
-from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
+from bus.events_lifecycle import (
+    ProactiveMessageCommitted,
+    StreamDeltaReady,
+    TurnCommitted,
+)
 from conversation.service import ConversationService
 from core.integrations.novelai import (
     NovelAIClient,
@@ -60,6 +64,10 @@ class DesktopBridgeService:
         self.agent_loop = agent_loop
         self.event_bus = event_bus
         self.event_bus.on(TurnCommitted, self._on_turn_committed)
+        self.event_bus.on(
+            ProactiveMessageCommitted,
+            self._on_proactive_message_committed,
+        )
         self.config = config
         self._event_listeners: set[
             Callable[[dict[str, Any]], Awaitable[None] | None]
@@ -130,6 +138,24 @@ class DesktopBridgeService:
             request_id = f"turn:{role_id}:{event.thread_id}:{event.timestamp or ''}"
         await self._broadcast_session_updated(
             request_id=request_id,
+            session=session,
+        )
+
+    async def _on_proactive_message_committed(
+        self,
+        event: ProactiveMessageCommitted,
+    ) -> None:
+        """Broadcasts proactive messages delivered through external channels."""
+
+        role_id = str(event.role_id or "").strip()
+        if not role_id or event.channel == "desktop":
+            return
+        session_key = self.role_service.sessions.derive_session_key(role_id)
+        if event.session_key != session_key:
+            return
+        session = self.session_manager.get_or_create(session_key)
+        await self._broadcast_session_updated(
+            request_id=f"proactive:{role_id}",
             session=session,
         )
 

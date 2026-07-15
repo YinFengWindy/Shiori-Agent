@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from bus.event_bus import EventBus
-from bus.events_lifecycle import TurnCommitted
+from bus.events_lifecycle import ProactiveMessageCommitted, TurnCommitted
 from core.roles import RoleStore
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
@@ -59,6 +59,15 @@ async def test_external_turn_committed_broadcasts_role_session_once(tmp_path) ->
         )
     )
     assert len(emitted) == 1
+
+    await event_bus.fanout(
+        ProactiveMessageCommitted(
+            session_key="role:other",
+            channel="telegram",
+            role_id="mira",
+        )
+    )
+    assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
     assert emitted[0]["payload"]["session"]["key"] == "role:mira"
 
@@ -74,6 +83,65 @@ async def test_external_turn_committed_broadcasts_role_session_once(tmp_path) ->
             role_id="mira",
             request_id="desktop-message-1",
             thread_id="thread:mira:desktop",
+        )
+    )
+    assert len(emitted) == 1
+
+
+@pytest.mark.asyncio
+async def test_external_proactive_media_commit_broadcasts_role_session(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="You are Mira.",
+    )
+    session_manager = SessionManager(tmp_path)
+    event_bus = EventBus()
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(),
+        event_bus=event_bus,
+    )
+    emitted: list[dict] = []
+    service.add_event_listener(emitted.append)
+
+    session = session_manager.get_or_create("role:mira")
+    session.add_message(
+        "assistant",
+        "给你看张图",
+        media=["D:\\media\\scene.png"],
+        proactive=True,
+        metadata={
+            "role_id": "mira",
+            "thread_id": "thread:mira:telegram:123",
+            "transport_channel": "telegram",
+            "transport_chat_id": "123",
+        },
+    )
+    session_manager.save(session)
+
+    await event_bus.fanout(
+        ProactiveMessageCommitted(
+            session_key="role:mira",
+            channel="telegram",
+            role_id="mira",
+        )
+    )
+
+    assert len(emitted) == 1
+    assert emitted[0]["method"] == "session.updated"
+    assert emitted[0]["payload"]["session"]["messages"][-1]["media"] == [
+        "D:\\media\\scene.png"
+    ]
+
+    await event_bus.fanout(
+        ProactiveMessageCommitted(
+            session_key="role:mira",
+            channel="desktop",
+            role_id="mira",
         )
     )
     assert len(emitted) == 1

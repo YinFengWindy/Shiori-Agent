@@ -90,6 +90,15 @@ class TurnCommitted:
 
 
 @dataclass(frozen=True)
+class ProactiveMessageCommitted:
+    """Signals that a proactive role message is available in its shared session."""
+
+    session_key: str
+    channel: str
+    role_id: str
+
+
+@dataclass(frozen=True)
 class ToolCallStarted:
     session_key: str
     channel: str
