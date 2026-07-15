@@ -16,13 +16,15 @@ TDD — Phase 5: proactive_v2/ProactiveTurnPipeline — Agent Loop
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 from agent.prompting import is_context_frame
-from proactive_v2.gateway import GatewayDeps
+from proactive_v2.context import AgentTickContext
+from proactive_v2.gateway import GatewayDeps, GatewayResult
 from proactive_v2.tools import ToolDeps
 from tests.proactive_v2.conftest import FakeLLM, cfg_with, make_proactive_pipeline
 
@@ -36,6 +38,20 @@ def _test_alert() -> dict[str, str]:
         "severity": "low",
         "triggered_at": "2026-01-01T00:00:00Z",
     }
+
+
+def test_runtime_context_includes_current_beijing_time_anchor():
+    tick = make_proactive_pipeline(llm_fn=None)
+    ctx = AgentTickContext(
+        now_utc=datetime(2026, 7, 15, 1, 47, tzinfo=timezone.utc),
+    )
+
+    content = str(tick._build_runtime_context_message(ctx, GatewayResult())["content"])
+
+    assert "当前消息时间: 2026-07-15 09:47:00" in content
+    assert "今天=2026-07-15（周三）" in content
+    assert "昨天=2026-07-14（周二）" in content
+    assert "相对时间以此为准" in content
 
 
 # ── max_steps 保护 ────────────────────────────────────────────────────────

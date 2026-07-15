@@ -39,6 +39,7 @@ from agent.turns.orchestrator import TurnOrchestrator
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from core.common.diagnostic_log import diagnostic_context, diagnostic_line
 from core.memory.markdown import MemoryProfileApi
+from prompts.agent import build_current_message_time_envelope
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.context import AgentTickContext
 from proactive_v2.contracts import (
@@ -49,6 +50,7 @@ from proactive_v2.contracts import (
 from agent.core.drift_turn import DriftTurnPipeline
 from proactive_v2.gateway import DataGateway, GatewayDeps, GatewayResult
 from proactive_v2.tools import TOOL_SCHEMAS, ToolDeps, dispatch
+from proactive_v2.time import to_beijing_time
 
 logger = logging.getLogger(__name__)
 
@@ -1370,6 +1372,13 @@ class ProactiveTurnPipeline:
     ) -> dict[str, str]:
         """构建 context frame，包含本轮所有预取数据和用户记忆。"""
         sections: list[PromptSectionRender] = [
+            PromptSectionRender(
+                name="current_time",
+                content=build_current_message_time_envelope(
+                    message_timestamp=to_beijing_time(ctx.now_utc)
+                ),
+                is_static=False,
+            ),
             PromptSectionRender(
                 name="proactive_tick_state",
                 content=(

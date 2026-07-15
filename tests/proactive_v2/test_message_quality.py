@@ -110,6 +110,24 @@ async def test_get_recent_chat_all_user_messages_pass_through():
 
 
 @pytest.mark.asyncio
+async def test_get_recent_chat_adds_beijing_timestamp_for_prompt_context():
+    fake_chat_fn = AsyncMock(return_value=[
+        {
+            "role": "user",
+            "content": "刚跑完步",
+            "timestamp": "2026-07-14T21:28:54+08:00",
+        }
+    ])
+    ctx = AgentTickContext()
+
+    raw = await _get_recent_chat(ctx, {}, recent_chat_fn=fake_chat_fn)
+    result = json.loads(raw)
+
+    assert result[0]["timestamp"] == "2026-07-14T21:28:54+08:00"
+    assert result[0]["timestamp_local"] == "2026-07-14 21:28:54 +0800"
+
+
+@pytest.mark.asyncio
 async def test_get_recent_chat_mixed_passive_and_proactive():
     """被动回复和主动推送混合时，只过滤主动推送，被动回复完整保留。"""
     mixed = [

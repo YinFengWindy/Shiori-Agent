@@ -18,6 +18,7 @@ from core.memory.engine import MemoryQuery, MemoryScope
 from agent.prompting import is_context_frame
 from proactive_v2.context import AgentTickContext
 from proactive_v2.outbound_text import normalize_outbound_text
+from proactive_v2.time import format_beijing_timestamp
 
 if TYPE_CHECKING:
     from core.memory.engine import MemoryRetrievalApi
@@ -339,7 +340,11 @@ async def _get_recent_chat(ctx: AgentTickContext, args: dict, *, recent_chat_fn)
         if m.get("role") == "user" or (
             m.get("role") == "assistant" and not m.get("proactive")
         ):
-            filtered.append(m)
+            enriched = dict(m)
+            timestamp_local = format_beijing_timestamp(m.get("timestamp"))
+            if timestamp_local:
+                enriched["timestamp_local"] = timestamp_local
+            filtered.append(enriched)
     return json.dumps(filtered, ensure_ascii=False)
 
 
