@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from agent.llm_json import load_json_object_loose
 from agent.provider import LLMProvider
@@ -13,7 +13,7 @@ from infra.persistence.json_store import atomic_save_json, load_json
 from session.manager import SessionManager
 
 from .store import RoleRecord, RoleStore
-from .scene_followup_runtime import SceneFollowupRuntime
+from .scene_followup_runtime import SceneFollowupRuntime, SceneTransition
 
 _SNAPSHOT_FILE = "relationship_snapshot.json"
 _RUNTIME_FILE = "loneliness_runtime.json"
@@ -516,6 +516,23 @@ class RoleRelationshipRuntimeService:
     def close_scene_followup(self, session_key: str) -> None:
         """Closes same-scene scheduling after semantic scene change."""
         self._scene_followup.close(session_key)
+
+    def apply_scene_decision(
+        self,
+        session_key: str,
+        scene_transition: str,
+        scene_key: str = "",
+        now: datetime | None = None,
+    ) -> dict[str, Any] | None:
+        """Applies a shared scene decision to the active follow-up state."""
+        if scene_transition not in {"same", "changed", "closed"}:
+            raise ValueError(f"unsupported scene transition: {scene_transition}")
+        return self._scene_followup.apply_scene_decision(
+            session_key,
+            cast(SceneTransition, scene_transition),
+            scene_key,
+            now=now,
+        )
 
     def should_trigger_proactive(
         self,

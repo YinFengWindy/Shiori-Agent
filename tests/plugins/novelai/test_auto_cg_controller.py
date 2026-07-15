@@ -112,3 +112,46 @@ async def test_controller_records_cooldown_only_after_all_media_pushes_succeed(
         await controller._run(ctx, decision_input)
 
     assert policy.cooldown_remaining("role:mira") == 0
+
+
+@pytest.mark.asyncio
+async def test_controller_applies_scene_transition_without_generating_cg(
+    tmp_path: Path,
+) -> None:
+    policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
+    transitions: list[tuple[str, str, str]] = []
+
+    async def decide(*_args: Any, **_kwargs: Any) -> SceneCgDecision:
+        return SceneCgDecision(should_generate=False, scene_transition="closed")
+
+    controller = AutoCgController(
+        settings=NovelAISettings(enabled=True, token="novel-token"),
+        role_store=cast(Any, None),
+        policy=policy,
+        light_provider=cast(Any, object()),
+        light_model="light-model",
+        session_manager=cast(Any, object()),
+        generate_tool=cast(Any, None),
+        tool_registry=cast(Any, None),
+        decision_provider=decide,
+        scene_transition_fn=lambda session_key, transition, scene_key: transitions.append(
+            (session_key, transition, scene_key)
+        ),
+    )
+    ctx = AfterTurnCtx(
+        session_key="role:mira",
+        channel="desktop",
+        chat_id="role:mira",
+        reply="晚安。",
+        tools_used=(),
+        thinking=None,
+        will_dispatch=True,
+    )
+
+    await controller._run(
+        ctx,
+        SceneCgDecisionInput(role_name="Mira", role_prompt="role", user_message="睡觉了"),
+        auto_cg_allowed=False,
+    )
+
+    assert transitions == [("role:mira", "closed", "")]

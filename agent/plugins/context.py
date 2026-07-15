@@ -24,6 +24,7 @@ class PluginContext:
     workspace: Path | None = None
     session_manager: Any = None
     memory_engine: Any = None
+    relationship_runtime: Any = None
 
 
 class PluginKVStore:

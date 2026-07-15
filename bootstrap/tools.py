@@ -558,6 +558,7 @@ def build_core_runtime(
         light_provider=plugin_light_provider,
         light_model=plugin_light_model,
         plugin_configs=config.plugins,
+        relationship_runtime=relationship_runtime,
     )
 
     return CoreRuntime(

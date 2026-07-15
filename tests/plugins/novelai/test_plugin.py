@@ -274,7 +274,7 @@ async def test_plugin_skips_auto_cg_after_manual_generation_and_during_cooldown(
     )
     session = SimpleNamespace(metadata={"role_id": "mira"})
     light_provider = SimpleNamespace(chat=AsyncMock())
-    decision = AsyncMock()
+    decision = AsyncMock(return_value=SceneCgDecision(should_generate=False))
     monkeypatch.setattr("plugins.novelai.plugin.decide_scene_cg", decision)
     plugin = NovelAIPlugin()
     plugin.context = _plugin_context(
@@ -306,6 +306,7 @@ async def test_plugin_skips_auto_cg_after_manual_generation_and_during_cooldown(
             will_dispatch=True,
         )
     )
+    await asyncio.gather(*plugin._auto_cg_tasks.values())
     assert plugin._auto_cg_tasks == {}
 
     await plugin.advance_auto_cg_turn(before_turn)
@@ -321,8 +322,9 @@ async def test_plugin_skips_auto_cg_after_manual_generation_and_during_cooldown(
             will_dispatch=True,
         )
     )
+    await asyncio.gather(*plugin._auto_cg_tasks.values())
     assert plugin._auto_cg_tasks == {}
-    decision.assert_not_awaited()
+    assert decision.await_count == 2
     await plugin.terminate()
 
 

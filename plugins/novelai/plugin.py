@@ -74,6 +74,11 @@ class NovelAIPlugin(Plugin):
             generate_tool=self._tool,
             tool_registry=self.context.tool_registry,
             decision_provider=decide_scene_cg,
+            scene_transition_fn=(
+                self.context.relationship_runtime.apply_scene_decision
+                if self.context.relationship_runtime is not None
+                else None
+            ),
         )
         self._pending_media: dict[str, list[str]] = {}
         if settings.enabled and (

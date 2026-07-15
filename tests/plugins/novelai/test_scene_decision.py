@@ -50,7 +50,9 @@ async def test_decide_scene_cg_allows_non_generation_decision() -> None:
         Any,
         SimpleNamespace(
             chat=AsyncMock(
-                return_value=SimpleNamespace(content='{"should_generate":false}')
+                return_value=SimpleNamespace(
+                    content='{"should_generate":false,"scene_transition":"closed"}'
+                )
             )
         ),
     )
@@ -66,6 +68,32 @@ async def test_decide_scene_cg_allows_non_generation_decision() -> None:
     )
 
     assert decision.should_generate is False
+    assert decision.scene_transition == "closed"
+
+
+@pytest.mark.asyncio
+async def test_decide_scene_cg_rejects_unknown_scene_transition() -> None:
+    provider = cast(
+        Any,
+        SimpleNamespace(
+            chat=AsyncMock(
+                return_value=SimpleNamespace(
+                    content='{"should_generate":false,"scene_transition":"other"}'
+                )
+            )
+        ),
+    )
+
+    with pytest.raises(ValueError, match="scene_transition"):
+        await decide_scene_cg(
+            provider,
+            model="qwen-flash",
+            decision_input=SceneCgDecisionInput(
+                role_name="Mira",
+                role_prompt="role",
+                user_message="message",
+            ),
+        )
 
 
 @pytest.mark.asyncio

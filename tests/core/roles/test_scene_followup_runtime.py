@@ -85,3 +85,23 @@ def test_scene_change_closes_pending_followups(tmp_path: Path):
         False,
         {"reason": "no_scene"},
     )
+
+
+def test_shared_scene_decision_updates_key_and_closes_on_transition(
+    tmp_path: Path,
+):
+    runtime = SceneFollowupRuntime(tmp_path)
+    session_key = "role:mira"
+    runtime.handle_user_message(session_key, now=_utc(13, 39))
+
+    state = runtime.apply_scene_decision(
+        session_key,
+        "same",
+        "night-run",
+        now=_utc(13, 40),
+    )
+
+    assert state is not None
+    assert state["scene_key"] == "night-run"
+    runtime.apply_scene_decision(session_key, "closed", now=_utc(13, 41))
+    assert runtime.read(session_key) is None

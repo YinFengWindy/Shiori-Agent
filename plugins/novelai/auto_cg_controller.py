@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any, cast
 
 from agent.lifecycle.types import AfterTurnCtx, BeforeTurnCtx
@@ -21,6 +22,12 @@ from plugins.novelai.scene_decision import (
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class _SceneDecisionWork:
+    decision_input: SceneCgDecisionInput
+    auto_cg_enabled: bool
+
+
 class AutoCgController:
     """Own asynchronous scene decisions, generation, and delayed delivery."""
 
@@ -36,6 +43,7 @@ class AutoCgController:
         generate_tool: GenerateImageTool,
         tool_registry: ToolRegistry,
         decision_provider: Callable[..., Awaitable[SceneCgDecision]] = decide_scene_cg,
+        scene_transition_fn: Callable[[str, str, str], Any] | None = None,
     ) -> None:
         self._settings = settings
         self._role_store = role_store
@@ -46,18 +54,19 @@ class AutoCgController:
         self._generate_tool = generate_tool
         self._tool_registry = tool_registry
         self._decision_provider = decision_provider
-        self._turn_inputs: dict[str, SceneCgDecisionInput] = {}
+        self._scene_transition_fn = scene_transition_fn
+        self._turn_inputs: dict[str, _SceneDecisionWork] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     def capture_turn(self, ctx: BeforeTurnCtx) -> None:
         """Capture one eligible role turn and advance its cooldown counter."""
 
         self._policy.advance_turn(ctx.session_key)
-        decision_input = self._build_decision_input(ctx)
-        if decision_input is None:
+        decision_work = self._build_decision_input(ctx)
+        if decision_work is None:
             self._turn_inputs.pop(ctx.session_key, None)
             return
-        self._turn_inputs[ctx.session_key] = decision_input
+        self._turn_inputs[ctx.session_key] = decision_work
 
     @property
     def tasks(self) -> dict[str, asyncio.Task[None]]:
@@ -68,18 +77,25 @@ class AutoCgController:
     def schedule(self, ctx: AfterTurnCtx) -> None:
         """Schedule a non-blocking scene decision after the text turn completes."""
 
-        decision_input = self._turn_inputs.pop(ctx.session_key, None)
+        decision_work = self._turn_inputs.pop(ctx.session_key, None)
         if (
-            decision_input is None
+            decision_work is None
             or not ctx.will_dispatch
             or not ctx.reply.strip()
-            or "generate_image" in ctx.tools_used
-            or self._policy.cooldown_remaining(ctx.session_key) > 0
             or ctx.session_key in self._tasks
         ):
             return
+        auto_cg_allowed = (
+            decision_work.auto_cg_enabled
+            and "generate_image" not in ctx.tools_used
+            and self._policy.cooldown_remaining(ctx.session_key) == 0
+        )
         task = asyncio.create_task(
-            self._run(ctx, decision_input),
+            self._run(
+                ctx,
+                decision_work.decision_input,
+                auto_cg_allowed=auto_cg_allowed,
+            ),
             name=f"novelai_auto_cg:{ctx.session_key}",
         )
         self._tasks[ctx.session_key] = task
@@ -103,10 +119,9 @@ class AutoCgController:
     def _build_decision_input(
         self,
         ctx: BeforeTurnCtx,
-    ) -> SceneCgDecisionInput | None:
+    ) -> _SceneDecisionWork | None:
         if (
-            not self._settings.enabled
-            or self._light_provider is None
+            self._light_provider is None
             or not self._light_model
             or self._session_manager is None
         ):
@@ -116,19 +131,32 @@ class AutoCgController:
         if not role_id:
             return None
         role = self._role_store.get_role(role_id)
-        if role is None or not bool(role.runtime_config.get("auto_scene_cg_enabled")):
+        if role is None:
             return None
-        return SceneCgDecisionInput(
-            role_name=role.name,
-            role_prompt=role.system_prompt,
-            user_message=ctx.content,
-            recent_history=_compact_history(ctx.history_messages),
+        auto_cg_enabled = self._settings.enabled and bool(
+            role.runtime_config.get("auto_scene_cg_enabled")
+        )
+        scene_followup_enabled = (
+            self._scene_transition_fn is not None and role.proactive.enabled
+        )
+        if not auto_cg_enabled and not scene_followup_enabled:
+            return None
+        return _SceneDecisionWork(
+            decision_input=SceneCgDecisionInput(
+                role_name=role.name,
+                role_prompt=role.system_prompt,
+                user_message=ctx.content,
+                recent_history=_compact_history(ctx.history_messages),
+            ),
+            auto_cg_enabled=auto_cg_enabled,
         )
 
     async def _run(
         self,
         ctx: AfterTurnCtx,
         decision_input: SceneCgDecisionInput,
+        *,
+        auto_cg_allowed: bool = True,
     ) -> None:
         completed_input = SceneCgDecisionInput(
             role_name=decision_input.role_name,
@@ -142,7 +170,13 @@ class AutoCgController:
             model=self._light_model,
             decision_input=completed_input,
         )
-        if not decision.should_generate:
+        if self._scene_transition_fn is not None:
+            self._scene_transition_fn(
+                ctx.session_key,
+                decision.scene_transition,
+                decision.scene_key,
+            )
+        if not decision.should_generate or not auto_cg_allowed:
             return
         session = self._session_manager.get_or_create(ctx.session_key)
         role_id = str(session.metadata.get("role_id") or "").strip()
