@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { ChatEmojiPicker } from "./ChatEmojiPicker";
 import { canSubmitChatMessage, normalizeChatAttachmentPaths } from "./chatComposerState";
 import { insertEmojiIntoChatDraft } from "./chatEmojiState";
@@ -49,6 +49,7 @@ export function ChatComposer({
   const [pendingAttachments, setPendingAttachments] = useState<string[]>([]);
   const canSubmit = canSubmitChatMessage(draft, pendingAttachments);
   const composerInputDisabled = !activeRoleId || sending || !bridgeReady;
+  const clearReplyTargetForSessionChange = useEffectEvent(onClearReplyTarget);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -68,7 +69,7 @@ export function ChatComposer({
     setEmojiPickerOpen(false);
     pendingSelectionRef.current = null;
     setPendingAttachments([]);
-    onClearReplyTarget();
+    clearReplyTargetForSessionChange();
   }, [activeRoleId, sessionKey]);
 
   useEffect(() => {

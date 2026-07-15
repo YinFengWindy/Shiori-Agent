@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import type { RoleRecord } from "../shared/types";
 import type { SettingsFormData } from "../shared/types";
 import type {
@@ -74,7 +74,7 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
 
   const nsfwEnabled = Boolean(settingsFormData?.integrations.novelaiNsfwEnabled);
 
-  async function loadHistory(): Promise<void> {
+  const loadHistory = useCallback(async (): Promise<void> => {
     const response = await window.miraDesktop.invoke({
       method: "novelai.history",
       payload: {
@@ -95,7 +95,7 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
         ? current
         : (records[0]?.id ?? "")
     ));
-  }
+  }, [form.roleId]);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -120,7 +120,7 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
     return () => {
       cancelled = true;
     };
-  }, [active, activeRole?.id, form.roleId]);
+  }, [active, activeRole?.id, loadHistory]);
 
   useEffect(() => {
     setForm((current) => {
@@ -151,7 +151,7 @@ export function useImageStudioState({ active, activeRole, roles }: UseImageStudi
       if (width * height > 1024 * 1024) return "自定义尺寸总像素不能超过 1024 × 1024";
     }
     return "";
-  }, [form]);
+  }, [form.baseImagePath, form.customHeight, form.customWidth, form.sizePreset, resolvedMode]);
 
   const activeRecord = history.find((item) => item.id === selectedRecordId) ?? history[0] ?? null;
   const requestSummary = useMemo(() => {

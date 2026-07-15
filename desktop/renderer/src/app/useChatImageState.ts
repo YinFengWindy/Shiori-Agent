@@ -132,7 +132,7 @@ export function useChatImageState({
     if (chatImageLightboxOpen) {
       setChatImageLightboxOpen(false);
     }
-  }, [chatImageLightboxOpen, resolvedChatImagePath]);
+  }, [chatImageLightboxOpen, resolvedChatImagePath, setChatImageLightboxOpen]);
 
   return {
     openChatImagePreview,

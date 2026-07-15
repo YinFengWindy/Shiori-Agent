@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessageContextMenu } from "./ChatMessageContextMenu";
@@ -56,6 +56,8 @@ type ChatSurfaceProps = {
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
   onToggleChatLatestImageSidebar: () => void;
 };
+
+const emptySessionMessages: SessionMessage[] = [];
 
 /** Renders the active role chat header, conversation messages, and composer. */
 export function ChatSurface({
@@ -120,7 +122,7 @@ export function ChatSurface({
     bridgeReady,
     enabled: sidebarMode === "tasks" && !chatLatestImageSidebarCollapsed,
   });
-  const sessionMessages = activeSession?.messages ?? [];
+  const sessionMessages = activeSession?.messages ?? emptySessionMessages;
   const currentUserMessageCount = sessionMessages.reduce(
     (count, message) => count + (message.role === "user" ? 1 : 0),
     0,
@@ -129,14 +131,26 @@ export function ChatSurface({
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 
-  const scrollConversationToBottom = (behavior: ScrollBehavior): void => {
+  const scrollConversationToBottom = useEffectEvent((behavior: ScrollBehavior): void => {
     autoScrollingRef.current = true;
     stickToBottomRef.current = true;
     conversationEndRef.current?.scrollIntoView({ behavior, block: "end" });
     window.setTimeout(() => {
       autoScrollingRef.current = false;
     }, behavior === "smooth" ? 320 : 0);
-  };
+  });
+
+  const resetConversationForSession = useEffectEvent(() => {
+    previousMessageCountRef.current = activeSession?.messages.length ?? 0;
+    previousLastMessageContentRef.current = activeSession?.messages.at(-1)?.content ?? "";
+    previousChatImageCountRef.current = chatLatestImageSidebarCount;
+    previousRoleSelfViewRef.current = roleSelfView;
+    imagePriorityUserMessageCountRef.current = -1;
+    const container = conversationListRef.current;
+    if (!container) return;
+    stickToBottomRef.current = true;
+    scrollConversationToBottom("auto");
+  });
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -254,15 +268,7 @@ export function ChatSurface({
   }, [messageContextMenu]);
 
   useEffect(() => {
-    previousMessageCountRef.current = activeSession?.messages.length ?? 0;
-    previousLastMessageContentRef.current = activeSession?.messages.at(-1)?.content ?? "";
-    previousChatImageCountRef.current = chatLatestImageSidebarCount;
-    previousRoleSelfViewRef.current = roleSelfView;
-    imagePriorityUserMessageCountRef.current = -1;
-    const container = conversationListRef.current;
-    if (!container) return;
-    stickToBottomRef.current = true;
-    scrollConversationToBottom("auto");
+    resetConversationForSession();
   }, [activeSession?.key]);
 
   useEffect(() => {
