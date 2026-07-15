@@ -42,6 +42,8 @@ async def test_decide_scene_cg_returns_validated_generation_request() -> None:
     assert call["model"] == "qwen-flash"
     assert call["disable_thinking"] is True
     assert "粉发少女" in call["messages"][0]["content"]
+    assert "清晰、值得定格的可见画面" in call["messages"][0]["content"]
+    assert "普通闲聊" in call["messages"][0]["content"]
 
 
 @pytest.mark.asyncio
