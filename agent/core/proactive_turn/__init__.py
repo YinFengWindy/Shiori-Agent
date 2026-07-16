@@ -315,6 +315,7 @@ class ProactiveTurnPipeline:
         loop_tag: str,
         tool_choice: str | dict = "auto",
         schemas: list[dict] | None = None,
+        retry_on_no_tool_call: bool = False,
     ) -> bool:
         return await _run_tool_step(
             self,
@@ -323,6 +324,7 @@ class ProactiveTurnPipeline:
             loop_tag=loop_tag,
             tool_choice=tool_choice,
             schemas=schemas,
+            retry_on_no_tool_call=retry_on_no_tool_call,
         )
 
     @staticmethod

@@ -14,6 +14,14 @@ from proactive_v2.tools import TOOL_SCHEMAS, dispatch
 
 logger = logging.getLogger(__name__)
 
+_SCENE_TOOL_PROTOCOL_RETRY_PROMPT = (
+    "【工具协议纠错】上一轮返回了普通文本，未产生任何工具调用，因此内容不会被发送。"
+    "本轮必须返回一个工具调用：继续场景时调用 message_push；"
+    "场景已变化时调用 finish_turn(decision=skip, reason=scene_changed)。"
+    "不要直接输出回复正文。"
+)
+_TOOL_PROTOCOL_ERROR_NOTE = "model returned no tool call after one required retry"
+
 
 class ProactiveJudgeHost(Protocol):
     """Judge 阶段访问 pipeline 状态所需的最小宿主契约。"""
@@ -36,6 +44,7 @@ class ProactiveJudgeHost(Protocol):
         loop_tag: str,
         tool_choice: str | dict = "auto",
         schemas: list[dict] | None = None,
+        retry_on_no_tool_call: bool = False,
     ) -> bool: ...
 
     def _record_tick_step(
@@ -75,7 +84,8 @@ async def judge_evaluate(
             messages,
             ctx,
             loop_tag="loop",
-            tool_choice="auto",
+            tool_choice="required" if ctx.scene_followup_mode else "auto",
+            retry_on_no_tool_call=ctx.scene_followup_mode,
         )
         if not ok or ctx.terminal_action is not None:
             break
@@ -201,14 +211,42 @@ async def run_tool_step(
     loop_tag: str,
     tool_choice: str | dict = "auto",
     schemas: list[dict] | None = None,
+    retry_on_no_tool_call: bool = False,
 ) -> bool:
-    """调用一次模型并执行返回的工具调用。"""
+    """调用模型并执行工具；同场景模式可纠正一次纯文本响应。"""
 
     active_schemas = schemas or TOOL_SCHEMAS
     llm_fn = pipeline._llm_fn
     if llm_fn is None:
         return False
     tool_call = await llm_fn(messages, active_schemas, tool_choice)
+    if tool_call is None and retry_on_no_tool_call:
+        logger.warning(
+            "[proactive_v2] %s: missing required tool call, retrying once",
+            loop_tag,
+        )
+        messages.append(
+            {"role": "user", "content": _SCENE_TOOL_PROTOCOL_RETRY_PROMPT}
+        )
+        tool_call = await llm_fn(messages, active_schemas, "required")
+        if tool_call is None:
+            ctx.skip_reason = "tool_protocol_error"
+            ctx.skip_note = _TOOL_PROTOCOL_ERROR_NOTE
+            logger.warning(
+                diagnostic_line(
+                    "ProactiveTurnPipeline._run_tool_step",
+                    event="protocol_error",
+                    flow="proactive",
+                    phase="agent_loop",
+                    session=pipeline._session_key,
+                    tick=ctx.tick_id,
+                    action="skip",
+                    reason="tool_protocol_error",
+                    counts=f"step:{ctx.steps_taken}",
+                    note=_TOOL_PROTOCOL_ERROR_NOTE,
+                )
+            )
+            return False
     if tool_call is None:
         logger.warning(
             "[proactive_v2] %s: llm_fn returned None at step %d, stopping",
