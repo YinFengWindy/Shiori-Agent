@@ -41,6 +41,43 @@ class MemoryConfig:
     embedding: MemoryEmbeddingConfig = field(default_factory=MemoryEmbeddingConfig)
 
 
+@dataclass(frozen=True)
+class CodingAgentProfileConfig:
+    """Validated CLI model and execution limits exposed as one named profile."""
+
+    provider: str
+    model: str
+    effort: str = "medium"
+    timeout_seconds: int = 1800
+    max_parallel_runs: int = 1
+    max_permission_level: str = "workspace-write"
+    max_budget_usd: float | None = None
+    command: str = ""
+
+
+@dataclass(frozen=True)
+class CodingAgentProjectConfig:
+    """A statically trusted Git repository available to Coding Agent runs."""
+
+    repo_path: str
+    base_ref: str = "HEAD"
+    retention: str = "keep"
+    max_parallel_runs: int = 1
+
+
+@dataclass(frozen=True)
+class CodingAgentsConfig:
+    """Configuration boundary for persisted Coding Agent orchestration."""
+
+    enabled: bool = False
+    worktree_root: str = ""
+    default_project: str = ""
+    default_profile: str = ""
+    max_parallel_runs: int = 3
+    profiles: dict[str, CodingAgentProfileConfig] = field(default_factory=dict)
+    projects: dict[str, CodingAgentProjectConfig] = field(default_factory=dict)
+
+
 @dataclass
 class WiringConfig:
     context: str = "default"
@@ -49,6 +86,7 @@ class WiringConfig:
         default_factory=lambda: [
             "meta_common",
             "spawn",
+            "coding_agent",
             "schedule",
             "mcp",
         ]
@@ -77,6 +115,7 @@ class Config:
     agent_api_key: str = ""
     agent_base_url: str = ""
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    coding_agents: CodingAgentsConfig = field(default_factory=CodingAgentsConfig)
     multimodal: bool = True
     vl_model: str = ""
     vl_api_key: str = ""
@@ -97,6 +136,9 @@ class Config:
 
 __all__ = [
     "ChannelsConfig",
+    "CodingAgentProfileConfig",
+    "CodingAgentProjectConfig",
+    "CodingAgentsConfig",
     "Config",
     "MemoryConfig",
     "MemoryEmbeddingConfig",

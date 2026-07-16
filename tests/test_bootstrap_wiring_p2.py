@@ -145,7 +145,13 @@ def test_config_load_defaults_empty_toolsets_to_full_wiring(tmp_path: Path):
 
     cfg = Config.load(cfg_path)
 
-    assert cfg.wiring.toolsets == ["meta_common", "spawn", "schedule", "mcp"]
+    assert cfg.wiring.toolsets == [
+        "meta_common",
+        "spawn",
+        "coding_agent",
+        "schedule",
+        "mcp",
+    ]
 
 
 def test_config_load_reads_memory_engine_selector(tmp_path: Path):

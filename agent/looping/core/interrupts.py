@@ -9,6 +9,7 @@ from ..interrupt import (
     TurnInterruptState,
 )
 from bus.events import (
+    CodingAgentCompletionItem,
     InboundItem,
     InboundMessage,
     SpawnCompletionItem,
@@ -92,6 +93,12 @@ class _InterruptMixin:
                     session_key=key,
                     original_user_message=_item_content(item),
                     original_metadata={},
+                )
+            case CodingAgentCompletionItem():
+                return TurnInterruptState(
+                    session_key=key,
+                    original_user_message=_item_content(item),
+                    original_metadata=dict(item.metadata or {}),
                 )
         raise TypeError(f"unsupported inbound item: {type(item).__name__}")
 

@@ -21,8 +21,9 @@ from agent.retrieval.protocol import (
 from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
+from bus.events import CodingAgentCompletionItem, InboundMessage, OutboundMessage
 from bus.events_lifecycle import TurnCommitted
+from bus.internal_events import CodingAgentCompletionEvent
 from core.memory.engine import MemoryQueryResult
 from core.roles import RoleRepository, RoleStore, RoleWorldRegistry
 from bootstrap.wiring import wire_turn_lifecycle
@@ -261,6 +262,71 @@ async def test_role_scoped_scheduled_turn_uses_background_capability(tmp_path: P
 
     assert result.content == "done"
     loop._process.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_coding_completion_preserves_role_context_through_registry(
+    tmp_path: Path,
+):
+    repository = RoleRepository(RoleStore(tmp_path))
+    repository.create_role(role_id="mira", name="Mira", system_prompt="test")
+    registry = RoleWorldRegistry(repository)
+    context = registry.create_context(
+        role_id="mira",
+        thread_id="thread:mira:coding:run-1",
+        transport_channel="desktop",
+        transport_chat_id="role:mira",
+        source="coding_agent",
+        work_kind="scheduled_job",
+        request_id="request-1",
+        delivery_key="delivery-1",
+    )
+    metadata = {**context.to_metadata(), "custom_metadata": "preserved"}
+    original_metadata = dict(metadata)
+    item = CodingAgentCompletionItem(
+        channel="desktop",
+        chat_id="role:mira",
+        event=CodingAgentCompletionEvent(
+            task_id="task-1",
+            run_id="run-1",
+            label="修复登录",
+            task="修复登录白屏",
+            mode="execute",
+            status="succeeded",
+            provider="codex",
+            profile_id="codex_deep",
+            result="完成",
+            thread_id=context.thread_id,
+            manager_role_id=context.role_id,
+            request_id=context.request_id,
+            delivery_key=context.delivery_key,
+        ),
+        metadata=metadata,
+    )
+    loop = object.__new__(AgentLoop)
+    loop._role_world_registry = registry
+    loop._process = AsyncMock(
+        return_value=OutboundMessage(
+            channel="desktop",
+            chat_id="role:mira",
+            content="done",
+        )
+    )
+
+    result = await loop._process_role_scoped(
+        item,
+        item.session_key,
+        dispatch_outbound=False,
+    )
+
+    assert result.content == "done"
+    assert item.metadata == original_metadata
+    assert registry.context_from_metadata(item.metadata) == context
+    loop._process.assert_awaited_once_with(
+        item,
+        session_key=context.thread_id,
+        dispatch_outbound=False,
+    )
 
 
 def _make_loop(

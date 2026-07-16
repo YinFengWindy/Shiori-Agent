@@ -4,8 +4,8 @@ import pytest
 
 from agent.policies.delegation import SpawnDecision, SpawnDecisionMeta
 from bus.event_bus import EventBus
-from bus.events import SpawnCompletionItem
-from bus.internal_events import SpawnCompletionEvent
+from bus.events import CodingAgentCompletionItem, SpawnCompletionItem
+from bus.internal_events import CodingAgentCompletionEvent, SpawnCompletionEvent
 
 
 @dataclass
@@ -48,6 +48,41 @@ def test_spawn_completion_item_carries_typed_payload():
     assert item.session_key == "telegram:123"
     assert item.event == event
     assert item.decision == decision
+
+
+def test_coding_agent_completion_item_keeps_thread_and_metadata():
+    event = CodingAgentCompletionEvent(
+        task_id="task-1",
+        run_id="run-1",
+        label="修复登录",
+        task="修复登录白屏",
+        mode="execute",
+        status="succeeded",
+        provider="codex",
+        profile_id="codex_deep",
+        result="修改完成，相关测试通过",
+        thread_id="thread:mira:telegram:123",
+        manager_role_id="mira",
+        request_id="request-1",
+        delivery_key="delivery-1",
+        artifacts=("D:/worktrees/repo/run-1",),
+    )
+    metadata = {
+        "source_channel": "telegram",
+        "source_chat_id": "123",
+        "request_id": "request-1",
+    }
+
+    item = CodingAgentCompletionItem(
+        channel="telegram",
+        chat_id="123",
+        event=event,
+        metadata=metadata,
+    )
+
+    assert item.session_key == "thread:mira:telegram:123"
+    assert item.event == event
+    assert item.metadata == metadata
 
 
 @pytest.mark.asyncio

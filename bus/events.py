@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent.policies.delegation import SpawnDecision
-    from bus.internal_events import SpawnCompletionEvent
+    from bus.internal_events import CodingAgentCompletionEvent, SpawnCompletionEvent
 
 
 def _empty_media() -> list[str]:
@@ -74,4 +74,19 @@ class SpawnCompletionItem:
         return f"{self.channel}:{self.chat_id}"
 
 
-InboundItem = InboundMessage | SpawnCompletionItem
+@dataclass
+class CodingAgentCompletionItem:
+    """Typed Coding Agent result retaining its role execution context."""
+
+    channel: str
+    chat_id: str
+    event: "CodingAgentCompletionEvent"
+    metadata: dict[str, Any] = field(default_factory=_empty_metadata)
+    timestamp: datetime = field(default_factory=datetime.now)
+
+    @property
+    def session_key(self) -> str:
+        return self.event.thread_id
+
+
+InboundItem = InboundMessage | SpawnCompletionItem | CodingAgentCompletionItem

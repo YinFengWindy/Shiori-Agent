@@ -16,6 +16,9 @@ from zoneinfo import ZoneInfo
 
 from agent.config_models import (
     ChannelsConfig,
+    CodingAgentProfileConfig,
+    CodingAgentProjectConfig,
+    CodingAgentsConfig,
     Config,
     MemoryConfig,
     MemoryEmbeddingConfig,
@@ -69,6 +72,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     memory = _load_memory_config(data)
     novelai = _load_novelai_config(data)
     wiring = _load_wiring_config(data)
+    coding_agents = _load_coding_agents_config(data)
     plugins = _load_plugins_config(data)
 
     return Config(
@@ -117,6 +121,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
             llm_agent.get("base_url") or data.get("agent_base_url", "")
         ),
         memory=memory,
+        coding_agents=coding_agents,
         tool_search_enabled=bool(
             agent_tools.get("search_enabled", data.get("tool_search_enabled", False))
         ),
@@ -205,6 +210,104 @@ def _load_memory_config(data: dict) -> MemoryConfig:
     )
 
 
+def _load_coding_agents_config(data: dict) -> CodingAgentsConfig:
+    raw = _as_dict(data.get("coding_agents"))
+    enabled = bool(raw.get("enabled", False))
+    worktree_root = str(raw.get("worktree_root") or "").strip()
+    max_parallel_runs = int(raw.get("max_parallel_runs", 3))
+    if max_parallel_runs <= 0:
+        raise ValueError("coding_agents.max_parallel_runs 必须大于 0")
+
+    profiles: dict[str, CodingAgentProfileConfig] = {}
+    for profile_id, raw_profile in _as_dict(raw.get("profiles")).items():
+        if not isinstance(profile_id, str) or not profile_id.strip():
+            raise ValueError("coding_agents profile id 不能为空")
+        profile = _as_dict(raw_profile)
+        provider = str(profile.get("provider") or "").strip().lower()
+        if provider not in {"codex", "claude"}:
+            raise ValueError(f"Coding Agent Provider 不支持: {provider or profile_id}")
+        model = str(profile.get("model") or "").strip()
+        if not model:
+            raise ValueError(f"Coding Agent Profile 缺少 model: {profile_id}")
+        effort = str(profile.get("effort") or "medium").strip().lower()
+        if effort not in {"low", "medium", "high", "xhigh", "max"}:
+            raise ValueError(f"Coding Agent effort 不支持: {effort}")
+        if provider == "codex" and effort == "max":
+            raise ValueError("Codex Coding Agent 不支持 effort=max")
+        if provider == "claude" and effort == "xhigh":
+            raise ValueError("Claude Coding Agent 不支持 effort=xhigh")
+        timeout_seconds = int(profile.get("timeout_seconds", 1800))
+        profile_parallel_runs = int(profile.get("max_parallel_runs", 1))
+        if timeout_seconds <= 0 or profile_parallel_runs <= 0:
+            raise ValueError(f"Coding Agent Profile 限制必须大于 0: {profile_id}")
+        permission = str(
+            profile.get("max_permission_level") or "workspace-write"
+        ).strip()
+        if permission not in {"read-only", "workspace-write", "full-access"}:
+            raise ValueError(f"Coding Agent 权限档位不支持: {permission}")
+        raw_budget = profile.get("max_budget_usd")
+        budget = float(raw_budget) if raw_budget not in (None, "") else None
+        if budget is not None and budget <= 0:
+            raise ValueError(f"Coding Agent 预算必须大于 0: {profile_id}")
+        command = str(profile.get("command") or provider).strip()
+        if command != provider:
+            raise ValueError(
+                f"Coding Agent Profile command 必须等于 provider: {profile_id}"
+            )
+        profiles[profile_id.strip()] = CodingAgentProfileConfig(
+            provider=provider,
+            model=model,
+            effort=effort,
+            timeout_seconds=timeout_seconds,
+            max_parallel_runs=profile_parallel_runs,
+            max_permission_level=permission,
+            max_budget_usd=budget,
+            command=command,
+        )
+
+    projects: dict[str, CodingAgentProjectConfig] = {}
+    for project_id, raw_project in _as_dict(raw.get("projects")).items():
+        if not isinstance(project_id, str) or not project_id.strip():
+            raise ValueError("coding_agents project id 不能为空")
+        project = _as_dict(raw_project)
+        repo_path = str(project.get("repo_path") or "").strip()
+        if not repo_path or not Path(repo_path).is_absolute():
+            raise ValueError(f"Coding Agent 仓库必须使用绝对路径: {project_id}")
+        base_ref = str(project.get("base_ref") or "HEAD").strip()
+        retention = str(project.get("retention") or "keep").strip()
+        project_parallel_runs = int(project.get("max_parallel_runs", 1))
+        if not base_ref or retention != "keep" or project_parallel_runs <= 0:
+            raise ValueError(f"Coding Agent 项目配置无效: {project_id}")
+        projects[project_id.strip()] = CodingAgentProjectConfig(
+            repo_path=repo_path,
+            base_ref=base_ref,
+            retention=retention,
+            max_parallel_runs=project_parallel_runs,
+        )
+
+    default_profile = str(raw.get("default_profile") or "").strip()
+    default_project = str(raw.get("default_project") or "").strip()
+    if enabled:
+        if not worktree_root or not Path(worktree_root).is_absolute():
+            raise ValueError("启用 Coding Agent 时 worktree_root 必须是绝对路径")
+        if not profiles:
+            raise ValueError("启用 Coding Agent 时至少需要一个 Profile")
+        if not default_profile or default_profile not in profiles:
+            raise ValueError("启用 Coding Agent 时 default_profile 必须引用有效 Profile")
+        if default_project and default_project not in projects:
+            raise ValueError("coding_agents.default_project 必须引用已注册项目")
+
+    return CodingAgentsConfig(
+        enabled=enabled,
+        worktree_root=worktree_root,
+        default_project=default_project,
+        default_profile=default_profile,
+        max_parallel_runs=max_parallel_runs,
+        profiles=profiles,
+        projects=projects,
+    )
+
+
 def _load_novelai_config(data: dict) -> NovelAISettings:
     integrations = _as_dict(data.get("integrations"))
     raw = _as_dict(integrations.get("novelai"))
@@ -237,10 +340,10 @@ def _load_wiring_config(data: dict) -> WiringConfig:
     raw = _as_dict(agent_cfg.get("wiring")) or data.get("wiring", {}) or {}
     toolsets = raw.get(
         "toolsets",
-        ["meta_common", "spawn", "schedule", "mcp"],
+        ["meta_common", "spawn", "coding_agent", "schedule", "mcp"],
     )
     if not isinstance(toolsets, list) or not toolsets:
-        toolsets = ["meta_common", "spawn", "schedule", "mcp"]
+        toolsets = ["meta_common", "spawn", "coding_agent", "schedule", "mcp"]
     return WiringConfig(
         context=str(raw.get("context", "default") or "default"),
         memory=str(raw.get("memory", "default") or "default"),

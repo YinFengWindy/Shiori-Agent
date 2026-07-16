@@ -1,0 +1,4 @@
+interface:
+  display_name: "Coding Agent Orchestrator"
+  short_description: "通过 Shiori 主角色调度 Codex 与 Claude Code"
+  default_prompt: "在指定仓库中讨论或执行 Coding 任务，并汇总运行结果。"

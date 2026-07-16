@@ -6,7 +6,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TypeAlias, cast
 
-from bus.events import InboundItem, InboundMessage
+from bus.events import CodingAgentCompletionItem, InboundItem, InboundMessage
 
 from ..interrupt import TurnInterruptState
 
@@ -47,6 +47,8 @@ def _suppresses_stream_events(msg: object) -> bool:
 def _item_content(item: InboundItem) -> str:
     if isinstance(item, InboundMessage):
         return item.content
+    if isinstance(item, CodingAgentCompletionItem):
+        return f"[Coding Agent 运行更新] {item.event.label or item.event.status}"
     return (
         f"[后台任务完成] {item.event.label or item.event.status or item.event.job_id}"
     )

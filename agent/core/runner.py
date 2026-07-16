@@ -3,8 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent.looping.handlers import process_spawn_completion_event
+from agent.looping.handlers import (
+    process_coding_agent_completion_event,
+    process_spawn_completion_event,
+)
 from bus.events import (
+    CodingAgentCompletionItem,
     InboundItem,
     InboundMessage,
     OutboundMessage,
@@ -59,6 +63,26 @@ class CoreRunner:
     ) -> OutboundMessage:
         # 1. 先处理 typed 内部工作项，统一走默认 helper 链。
         match msg:
+            case CodingAgentCompletionItem():
+                if (
+                    self._session is not None
+                    and self._tools is not None
+                    and self._memory_window is not None
+                    and self._run_agent_loop_fn is not None
+                    and self._prompt_render_fn is not None
+                ):
+                    return await process_coding_agent_completion_event(
+                        item=msg,
+                        key=key,
+                        session_svc=self._session,
+                        pipeline=self._agent_core.pipeline,
+                        tools=self._tools,
+                        memory_window=self._memory_window,
+                        run_agent_loop_fn=self._run_agent_loop_fn,
+                        prompt_render_fn=self._prompt_render_fn,
+                        dispatch_outbound=dispatch_outbound,
+                    )
+                raise RuntimeError("coding agent completion 缺少处理依赖")
             case SpawnCompletionItem():
                 if (
                     self._session is not None

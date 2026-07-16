@@ -66,6 +66,20 @@ class _SyncToolContextModule:
                 or ""
             ),
             delivery_key=str(message_metadata.get("delivery_key") or ""),
+            request_id=str(message_metadata.get("request_id") or ""),
+            transport_channel=str(
+                message_metadata.get("transport_channel") or before_turn.channel
+            ),
+            transport_chat_id=str(
+                message_metadata.get("transport_chat_id") or before_turn.chat_id
+            ),
+            role_source=str(message_metadata.get("role_source") or "passive_turn"),
+            role_work_kind=str(
+                message_metadata.get("role_work_kind") or "passive_turn"
+            ),
+            role_context_created_at=str(
+                message_metadata.get("role_context_created_at") or ""
+            ),
             current_timestamp=before_turn.timestamp.isoformat(),
             current_user_source_ref=predict_current_user_source_ref(
                 session_manager=self._session_manager,

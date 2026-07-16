@@ -9,6 +9,7 @@ from agent.context import ContextBuilder
 from agent.lifecycle.facade import TurnLifecycle
 from agent.tools.base import Tool
 from bootstrap.toolsets.mcp import McpToolsetProvider
+from bootstrap.toolsets.coding_agent import CodingAgentToolsetProvider
 from bootstrap.toolsets.memory import MemoryToolsetProvider
 from bootstrap.toolsets.meta import CommonMetaToolsetProvider, SpawnToolsetProvider
 from bootstrap.toolsets.protocol import ToolsetProvider
@@ -43,6 +44,7 @@ _CONTEXT_WIRING: dict[str, ContextFactory] = {
 }
 _TOOLSET_WIRING: dict[str, ToolsetProviderFactory] = {
     "spawn": SpawnToolsetProvider,
+    "coding_agent": CodingAgentToolsetProvider,
     "schedule": SchedulerToolsetProvider,
     "mcp": McpToolsetProvider,
 }

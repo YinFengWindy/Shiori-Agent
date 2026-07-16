@@ -52,7 +52,38 @@ search_enabled = true
 
 # 可选：控制加载哪些工具集（默认值适合大多数场景）
 # [agent.wiring]
-# toolsets = ["meta_common", "spawn", "schedule", "mcp"]
+# toolsets = ["meta_common", "spawn", "coding_agent", "schedule", "mcp"]
+
+# 可选：由当前角色调度本机 Codex / Claude Code。默认关闭。
+[coding_agents]
+enabled = false
+worktree_root = "D:/Coding/.shiori-worktrees"
+default_project = ""
+default_profile = "codex_default"
+max_parallel_runs = 3
+
+[coding_agents.profiles.codex_default]
+provider = "codex"
+model = "gpt-5.6"
+effort = "high"
+timeout_seconds = 3600
+max_parallel_runs = 2
+max_permission_level = "workspace-write"
+
+[coding_agents.profiles.claude_default]
+provider = "claude"
+model = "sonnet"
+effort = "high"
+timeout_seconds = 3600
+max_parallel_runs = 1
+max_permission_level = "workspace-write"
+max_budget_usd = 20
+
+# [coding_agents.projects.shiori]
+# repo_path = "D:/Coding/Shiori"
+# base_ref = "HEAD"
+# retention = "keep"
+# max_parallel_runs = 2
 
 # =============================================================================
 # 必填：至少配置一个频道（Telegram、NapCat QQ 或官方 QQBot 选其一）

@@ -256,6 +256,8 @@ class ToolRegistry:
                 **(context or self.get_context()),
                 **arguments,
             }
+            if name == "coding_agent":
+                merged["_trusted_context"] = dict(context or self.get_context())
             if not _tool_defines_parameter(tool, _PROGRESS_DESCRIPTION_FIELD):
                 merged.pop(_PROGRESS_DESCRIPTION_FIELD, None)
             return await tool.execute(**merged)

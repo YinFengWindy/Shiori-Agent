@@ -8,6 +8,7 @@
     "agent",
     "bootstrap",
     "bus",
+    "coding_agents",
     "core",
     "infra",
     "memory2",

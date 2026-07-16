@@ -88,6 +88,7 @@ class CoreRuntime:
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
     role_world_registry: RoleWorldRegistry
+    coding_orchestrator: Any | None = None
     image_sync_service: ExternalImageSyncService | None = None
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginManager | None" = None
@@ -95,6 +96,8 @@ class CoreRuntime:
 
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
+        if self.coding_orchestrator is not None:
+            await self.coding_orchestrator.start()
         if self.plugin_manager is not None:
             await self.plugin_manager.load_all()
             logger.info("插件加载完成: %d 个", self.plugin_manager.loaded_count)
@@ -233,6 +236,8 @@ class CoreRuntime:
     async def stop(self) -> None:
         if self.plugin_manager is not None:
             await self.plugin_manager.terminate_all()
+        if self.coding_orchestrator is not None:
+            await self.coding_orchestrator.close()
         await self.mcp_registry.shutdown()
         await self.event_bus.aclose()
 
@@ -250,6 +255,7 @@ def build_registered_tools(
     tools: ToolRegistry | None = None,
     event_publisher: EventBus | None = None,
     agent_loop_provider: Callable[[], Any] | None = None,
+    coding_orchestrator: Any | None = None,
 ) -> tuple[
     ToolRegistry,
     MessagePushTool,
@@ -278,6 +284,7 @@ def build_registered_tools(
             light_provider=light_provider,
             http_resources=http_resources,
             event_publisher=event_publisher,
+            coding_orchestrator=coding_orchestrator,
         ),
     )
     memory_runtime = memory_result.extras["memory_runtime"]
@@ -290,6 +297,10 @@ def build_registered_tools(
     # ── 第二阶段：注册工具（所有服务已就绪）──────────────────────────────────
     mcp_registry = None
     for name in wiring.toolsets:
+        if name == "coding_agent" and not getattr(
+            getattr(config, "coding_agents", None), "enabled", False
+        ):
+            continue
         provider_obj = resolve_toolset_provider(
             name,
             readonly_tools=readonly_tools if name == "meta_common" else None,
@@ -310,6 +321,7 @@ def build_registered_tools(
                 memory_engine=memory_runtime.engine,
                 scheduler=scheduler,
                 event_publisher=event_publisher,
+                coding_orchestrator=coding_orchestrator,
             ),
         )
         maybe_mcp = result.extras.get("mcp_registry")
@@ -474,6 +486,17 @@ def build_core_runtime(
         len(migration_summary.unresolved_session_keys),
     )
     loop_ref: dict[str, AgentLoop] = {}
+    coding_orchestrator = None
+    if config.coding_agents.enabled:
+        from coding_agents.execution import AdapterExecutor, AdapterRegistry
+        from coding_agents.orchestrator import CodingAgentOrchestrator
+
+        coding_orchestrator = CodingAgentOrchestrator(
+            config=config,
+            workspace=workspace,
+            bus=bus,
+            executor=AdapterExecutor(AdapterRegistry.with_defaults()),
+        )
     tools, push_tool, scheduler, mcp_registry, memory_runtime = (
         build_registered_tools(
             config,
@@ -486,6 +509,7 @@ def build_core_runtime(
             session_store=session_manager._store,
             event_publisher=event_bus,
             agent_loop_provider=lambda: loop_ref.get("loop"),
+            coding_orchestrator=coding_orchestrator,
         )
     )
     presence = PresenceStore(session_manager._store)
@@ -586,6 +610,7 @@ def build_core_runtime(
         presence=presence,
         relationship_runtime=relationship_runtime,
         role_world_registry=role_world_registry,
+        coding_orchestrator=coding_orchestrator,
         plugin_manager=plugin_manager,
     )
 
