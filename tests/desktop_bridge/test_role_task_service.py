@@ -13,6 +13,8 @@ class _Scheduler:
     def __init__(self, jobs, *, active_ids=()) -> None:
         self._jobs = list(jobs)
         self._active_ids = set(active_ids)
+        self.last_create = None
+        self.last_update = None
 
     def list_jobs(self):
         return list(self._jobs)
@@ -25,6 +27,31 @@ class _Scheduler:
         self._jobs = [job for job in self._jobs if job.id != job_id]
         return len(self._jobs) != before
 
+    def create_job(self, **kwargs):
+        self.last_create = kwargs
+        job = _scheduled_job("created", kwargs["role_id"])
+        job.name = kwargs["name"]
+        job.tier = kwargs["tier"]
+        job.trigger = kwargs["trigger"]
+        job.when = kwargs["when"]
+        job.message = kwargs["content"] if kwargs["tier"] == "instant" else None
+        job.prompt = kwargs["content"] if kwargs["tier"] == "soft" else None
+        job.timezone = kwargs["timezone_name"]
+        self._jobs.append(job)
+        return job
+
+    def update_job(self, task_id: str, **kwargs):
+        self.last_update = {"task_id": task_id, **kwargs}
+        job = next(job for job in self._jobs if job.id == task_id)
+        job.name = kwargs["name"]
+        job.tier = kwargs["tier"]
+        job.trigger = kwargs["trigger"]
+        job.when = kwargs["when"]
+        job.message = kwargs["content"] if kwargs["tier"] == "instant" else None
+        job.prompt = kwargs["content"] if kwargs["tier"] == "soft" else None
+        job.timezone = kwargs["timezone_name"]
+        return job
+
 
 def _scheduled_job(job_id: str, role_id: str):
     now = datetime(2026, 7, 11, 10, tzinfo=timezone.utc)
@@ -34,6 +61,12 @@ def _scheduled_job(job_id: str, role_id: str):
         name=f"job-{job_id}",
         message="提醒内容",
         prompt="",
+        tier="instant",
+        trigger="at",
+        when="2026-07-11T18:00",
+        timezone="Asia/Shanghai",
+        interval_seconds=None,
+        cron_expr=None,
         created_at=now,
         fire_at=now,
     )
@@ -88,7 +121,46 @@ def test_role_task_service_lists_only_tasks_owned_by_role():
         "memory_maintenance",
     }
     assert next(task for task in tasks if task["id"] == "schedule-a")["status"] == "running"
+    assert next(task for task in tasks if task["id"] == "schedule-a")["editable"] is False
+    assert next(task for task in tasks if task["id"] == "schedule-a")["schedule"]["tier"] == "instant"
     assert next(task for task in tasks if task["kind"] == "memory_maintenance")["cancellable"] is False
+
+
+def test_role_task_service_creates_and_updates_desktop_schedule_binding():
+    scheduler = _Scheduler([])
+    service = RoleTaskService(
+        scheduler=scheduler,
+        subagent_manager=None,
+        memory_optimizer=None,
+        session_key_for_role=lambda role_id: f"role:{role_id}",
+    )
+
+    created = service.create_schedule_task(
+        "mira",
+        name="提醒",
+        tier="instant",
+        trigger="after",
+        when="30m",
+        content="喝水",
+        timezone="Asia/Shanghai",
+    )
+    updated = service.update_schedule_task(
+        "mira",
+        "created",
+        name="天气",
+        tier="soft",
+        trigger="every",
+        when="0 9 * * *",
+        content="查看天气",
+        timezone="Asia/Shanghai",
+    )
+
+    assert scheduler.last_create["channel"] == "desktop"
+    assert scheduler.last_create["chat_id"] == "role:mira"
+    assert scheduler.last_create["role_id"] == "mira"
+    assert scheduler.last_update["role_id"] == "mira"
+    assert created["schedule"]["content"] == "喝水"
+    assert updated["schedule"]["tier"] == "soft"
 
 
 @pytest.mark.asyncio

@@ -440,6 +440,36 @@ class DesktopBridgeService:
                     method,
                     {"tasks": self.role_tasks.list_tasks(role_id)},
                 )
+            if method == "roles.tasks.create":
+                role_id = str(payload.get("role_id") or "").strip()
+                self.role_service.repository.get_required(role_id)
+                task = self.role_tasks.create_schedule_task(
+                    role_id,
+                    **self._schedule_task_fields(payload),
+                )
+                await self._emit_role_tasks_updated(
+                    request_id=request_id,
+                    role_id=role_id,
+                    emit_event=emit_event,
+                )
+                return self._ok(request_id, method, {"task": task})
+            if method == "roles.tasks.update":
+                role_id = str(payload.get("role_id") or "").strip()
+                task_id = str(payload.get("task_id") or "").strip()
+                self.role_service.repository.get_required(role_id)
+                if not task_id:
+                    raise ValueError("task_id 不能为空")
+                task = self.role_tasks.update_schedule_task(
+                    role_id,
+                    task_id,
+                    **self._schedule_task_fields(payload),
+                )
+                await self._emit_role_tasks_updated(
+                    request_id=request_id,
+                    role_id=role_id,
+                    emit_event=emit_event,
+                )
+                return self._ok(request_id, method, {"task": task})
             if method == "roles.tasks.cancel":
                 role_id = str(payload.get("role_id") or "").strip()
                 task_id = str(payload.get("task_id") or "").strip()
@@ -447,6 +477,11 @@ class DesktopBridgeService:
                 if not task_id:
                     raise ValueError("task_id 不能为空")
                 tasks = await self.role_tasks.cancel_task(role_id, task_id)
+                await self._emit_role_tasks_updated(
+                    request_id=request_id,
+                    role_id=role_id,
+                    emit_event=emit_event,
+                )
                 return self._ok(request_id, method, {"tasks": tasks})
             if method == "chat.send":
                 role_id = str(payload.get("role_id") or "").strip()
@@ -676,6 +711,32 @@ class DesktopBridgeService:
             payload={"session": self.session_presenter.serialize(session)},
         )
         await self._emit_event(emit_event, event.to_dict())
+
+    async def _emit_role_tasks_updated(
+        self,
+        *,
+        request_id: str,
+        role_id: str,
+        emit_event,
+    ) -> None:
+        event = BridgeEvent(
+            id=request_id,
+            type="event",
+            method="roles.tasks.updated",
+            payload={"role_id": role_id},
+        )
+        await self._emit_event(emit_event, event.to_dict())
+
+    @staticmethod
+    def _schedule_task_fields(payload: dict[str, Any]) -> dict[str, str]:
+        return {
+            "name": str(payload.get("name") or ""),
+            "tier": str(payload.get("tier") or ""),
+            "trigger": str(payload.get("trigger") or ""),
+            "when": str(payload.get("when") or ""),
+            "content": str(payload.get("content") or ""),
+            "timezone": str(payload.get("timezone") or ""),
+        }
 
     async def _broadcast_session_updated(
         self,

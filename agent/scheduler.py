@@ -26,10 +26,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from core.common.timekit import parse_iso as _parse_iso
-from infra.persistence.json_store import load_json, save_json
+from infra.persistence.json_store import atomic_save_json, load_json
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +276,7 @@ class ScheduledJob:
 
     name: str | None = None
     timezone: str = "UTC"
+    when: str = ""
 
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     run_count: int = 0
@@ -308,7 +309,7 @@ class JobStore:
 
     def save(self, jobs: dict[str, ScheduledJob]) -> None:
         data = [self._to_dict(j) for j in jobs.values()]
-        save_json(self.path, data, domain="job_store")
+        atomic_save_json(self.path, data, domain="job_store")
 
     # ── private ──
 
@@ -392,21 +393,102 @@ class SchedulerService:
         # Ensure fire_at is UTC-aware
         if job.fire_at.tzinfo is None:
             job.fire_at = job.fire_at.replace(tzinfo=timezone.utc)
-        self._jobs[job.id] = job
-        self.store.save(self._jobs)
+        next_jobs = {**self._jobs, job.id: job}
+        self._replace_jobs(next_jobs)
         logger.info(
             f"Job added: {job.id[:8]} tier={job.tier} trigger={job.trigger} "
             f"fire_at={job.fire_at.isoformat()}"
         )
 
+    def create_job(
+        self,
+        *,
+        name: str,
+        tier: str,
+        trigger: str,
+        when: str,
+        content: str,
+        timezone_name: str,
+        channel: str,
+        chat_id: str,
+        role_id: str = "",
+        role_config_version: str = "",
+        thread_id: str = "",
+        delivery_key: str = "",
+        request_time: str | None = None,
+    ) -> ScheduledJob:
+        """Validates, persists, and registers one new scheduled job atomically."""
+        job = self._build_job(
+            name=name,
+            tier=tier,
+            trigger=trigger,
+            when=when,
+            content=content,
+            timezone_name=timezone_name,
+            channel=channel,
+            chat_id=chat_id,
+            role_id=role_id,
+            role_config_version=role_config_version,
+            thread_id=thread_id,
+            delivery_key=delivery_key,
+            request_time=request_time,
+        )
+        self.add_job(job)
+        return job
+
+    def update_job(
+        self,
+        job_id: str,
+        *,
+        role_id: str,
+        name: str,
+        tier: str,
+        trigger: str,
+        when: str,
+        content: str,
+        timezone_name: str,
+    ) -> ScheduledJob:
+        """Replaces an idle role-owned job after validating the complete update."""
+        current = self._jobs.get(job_id)
+        if current is None or current.role_id != role_id:
+            raise KeyError("角色任务不存在")
+        if self.is_job_active(job_id) or job_id in self._in_flight:
+            raise RuntimeError("正在运行的计划任务不能编辑")
+
+        updated = self._build_job(
+            name=name,
+            tier=tier,
+            trigger=trigger,
+            when=when,
+            content=content,
+            timezone_name=timezone_name,
+            channel=current.channel,
+            chat_id=current.chat_id,
+            role_id=current.role_id,
+            role_config_version=current.role_config_version,
+            thread_id=current.thread_id,
+            delivery_key=current.delivery_key,
+            existing=current,
+        )
+        next_jobs = {**self._jobs, job_id: updated}
+        self._replace_jobs(next_jobs)
+        logger.info(
+            "Job updated: %s tier=%s trigger=%s fire_at=%s",
+            job_id[:8],
+            updated.tier,
+            updated.trigger,
+            updated.fire_at.isoformat(),
+        )
+        return updated
+
     def cancel_job(self, job_id: str) -> bool:
         if job_id not in self._jobs:
             return False
-        del self._jobs[job_id]
+        next_jobs = {key: job for key, job in self._jobs.items() if key != job_id}
+        self._replace_jobs(next_jobs)
         active_task = self._active_tasks.pop(job_id, None)
         if active_task is not None:
             active_task.cancel()
-        self.store.save(self._jobs)
         return True
 
     def is_job_active(self, job_id: str) -> bool:
@@ -416,10 +498,15 @@ class SchedulerService:
 
     def cancel_job_by_name(self, name: str) -> list[str]:
         cancelled = [jid for jid, j in self._jobs.items() if j.name == name]
-        for jid in cancelled:
-            del self._jobs[jid]
         if cancelled:
-            self.store.save(self._jobs)
+            cancelled_ids = set(cancelled)
+            self._replace_jobs(
+                {
+                    job_id: job
+                    for job_id, job in self._jobs.items()
+                    if job_id not in cancelled_ids
+                }
+            )
         return cancelled
 
     def list_jobs(self) -> list[ScheduledJob]:
@@ -459,6 +546,87 @@ class SchedulerService:
                 count_loaded += 1
 
         logger.info(f"SchedulerService recovered {count_loaded} jobs")
+
+    def _build_job(
+        self,
+        *,
+        name: str,
+        tier: str,
+        trigger: str,
+        when: str,
+        content: str,
+        timezone_name: str,
+        channel: str,
+        chat_id: str,
+        role_id: str,
+        role_config_version: str,
+        thread_id: str,
+        delivery_key: str,
+        request_time: str | None = None,
+        existing: ScheduledJob | None = None,
+    ) -> ScheduledJob:
+        normalized_name = name.strip()
+        normalized_when = when.strip()
+        normalized_content = content.strip()
+        normalized_timezone = timezone_name.strip()
+        if not normalized_name:
+            raise ValueError("任务名称不能为空")
+        if tier not in ("instant", "soft"):
+            raise ValueError("执行模式须为 instant 或 soft")
+        if trigger not in ("at", "after", "every"):
+            raise ValueError("触发方式须为 at、after 或 every")
+        if not normalized_when:
+            raise ValueError("执行时间不能为空")
+        if not normalized_content:
+            raise ValueError("执行内容不能为空")
+        if not channel.strip() or not chat_id.strip():
+            raise ValueError("channel 和 chat_id 不能为空")
+        try:
+            tzinfo = ZoneInfo(normalized_timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(f"无效的时区 {normalized_timezone!r}") from exc
+
+        fire_at = compute_fire_at(
+            trigger,
+            normalized_when,
+            normalized_timezone,
+            request_time,
+            _now_fn=lambda: self._now().astimezone(tzinfo),
+        )
+        interval_seconds = None
+        cron_expr = None
+        if trigger == "every":
+            if is_cron_expr(normalized_when):
+                cron_expr = normalized_when
+            else:
+                interval_seconds = int(parse_duration(normalized_when).total_seconds())
+
+        return ScheduledJob(
+            trigger=trigger,
+            tier=tier,
+            fire_at=fire_at,
+            channel=channel.strip(),
+            chat_id=chat_id.strip(),
+            role_id=role_id.strip(),
+            role_config_version=role_config_version.strip(),
+            thread_id=thread_id.strip(),
+            delivery_key=delivery_key.strip(),
+            interval_seconds=interval_seconds,
+            cron_expr=cron_expr,
+            message=normalized_content if tier == "instant" else None,
+            prompt=normalized_content if tier == "soft" else None,
+            name=normalized_name,
+            timezone=normalized_timezone,
+            when=normalized_when,
+            created_at=existing.created_at if existing else self._now(),
+            run_count=existing.run_count if existing else 0,
+            enabled=existing.enabled if existing else True,
+            id=existing.id if existing else str(uuid.uuid4()),
+        )
+
+    def _replace_jobs(self, jobs: dict[str, ScheduledJob]) -> None:
+        self.store.save(jobs)
+        self._jobs = jobs
 
     # ── Internal ────────────────────────────────────────────────
 

@@ -520,7 +520,6 @@ export function ChatSurface({
               <ChatRightSidebar
                 canGoToNextImage={canGoToNextChatImage}
                 canGoToPreviousImage={canGoToPreviousChatImage}
-                cancellingTaskId={roleTasks.cancellingTaskId}
                 currentMood={currentMood}
                 imagePath={chatLatestImagePath}
                 lonelinessValue={lonelinessValue}
@@ -530,6 +529,11 @@ export function ChatSurface({
                 renderHeavyVisuals={renderHeavyVisuals}
                 roleSelfView={roleSelfView}
                 tasks={roleTasks.tasks}
+                taskError={roleTasks.error}
+                taskOperation={roleTasks.operation}
+                onClearTaskError={roleTasks.clearError}
+                onCreateTask={roleTasks.create}
+                onUpdateTask={roleTasks.update}
                 onCancelTask={roleTasks.cancel}
                 onGoToNextImage={onGoToNextChatImage}
                 onGoToPreviousImage={onGoToPreviousChatImage}

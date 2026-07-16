@@ -19,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p renderer/tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },
