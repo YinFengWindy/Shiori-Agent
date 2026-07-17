@@ -97,7 +97,6 @@ export type ScheduleTaskFormData = {
   trigger: ScheduleTaskTrigger;
   when: string;
   content: string;
-  timezone: string;
 };
 
 /** Scheduler fields exposed for one editable role task. */

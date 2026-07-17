@@ -17,7 +17,7 @@ const task: RoleTask = {
   next_run_at: "2026-07-11T11:00:00+00:00",
   cancellable: true,
   editable: true,
-  schedule: { tier: "instant", trigger: "every", when: "1h", content: "喝水", timezone: "Asia/Shanghai" },
+  schedule: { tier: "instant", trigger: "every", when: "1h", content: "喝水" },
 };
 
 describe("RoleTasksPanel", () => {

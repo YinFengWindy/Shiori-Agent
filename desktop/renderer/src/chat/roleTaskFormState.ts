@@ -3,14 +3,13 @@ import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 export type ScheduleTaskFormErrors = Partial<Record<keyof ScheduleTaskFormData, string>>;
 
 /** Creates the initial values for a new desktop scheduled task. */
-export function createScheduleTaskFormData(timezone?: string): ScheduleTaskFormData {
+export function createScheduleTaskFormData(): ScheduleTaskFormData {
   return {
     name: "",
     tier: "instant",
     trigger: "at",
     when: "",
     content: "",
-    timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   };
 }
 
@@ -28,6 +27,5 @@ export function validateScheduleTaskForm(data: ScheduleTaskFormData): ScheduleTa
   if (!data.name.trim()) errors.name = "请输入任务名称";
   if (!data.when.trim()) errors.when = "请输入执行时间";
   if (!data.content.trim()) errors.content = "请输入执行内容";
-  if (!data.timezone.trim()) errors.timezone = "请输入时区";
   return errors;
 }

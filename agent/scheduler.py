@@ -107,6 +107,17 @@ def is_cron_expr(s: str) -> bool:
     return len(parts) in (5, 6)
 
 
+def get_system_timezone_name() -> str:
+    """Returns the host system timezone as an IANA name for scheduler inputs."""
+    from tzlocal import get_localzone_name
+
+    timezone_name = str(get_localzone_name()).strip()
+    if not timezone_name:
+        raise RuntimeError("无法读取系统时区")
+    ZoneInfo(timezone_name)
+    return timezone_name
+
+
 def _parse_cron_field(field: str, minimum: int, maximum: int) -> set[int]:
     values: set[int] = set()
     for part in field.split(","):

@@ -102,7 +102,6 @@ async def test_desktop_bridge_creates_updates_and_emits_role_task_events(tmp_pat
                 "trigger": "after",
                 "when": "30m",
                 "content": "记得喝水",
-                "timezone": "Asia/Shanghai",
             },
         },
         emit_event=events.append,
@@ -120,7 +119,6 @@ async def test_desktop_bridge_creates_updates_and_emits_role_task_events(tmp_pat
                 "trigger": "every",
                 "when": "0 9 * * *",
                 "content": "查询天气",
-                "timezone": "Asia/Shanghai",
             },
         },
         emit_event=events.append,
@@ -179,7 +177,6 @@ async def test_desktop_bridge_rejects_cross_role_and_running_schedule_updates(tm
         "trigger": "after",
         "when": "1h",
         "content": "新内容",
-        "timezone": "UTC",
     }
 
     cross_role = await service.handle(

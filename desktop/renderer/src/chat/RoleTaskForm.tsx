@@ -75,11 +75,6 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
           <textarea className={`${fieldClass} min-h-24 resize-y`} value={data.content} disabled={saving} onChange={(event) => setData({ ...data, content: event.target.value })} />
           <FieldError message={errors.content} />
         </label>
-        <label className="grid gap-1 text-xs">
-          <span>时区</span>
-          <input className={fieldClass} value={data.timezone} disabled={saving} onChange={(event) => setData({ ...data, timezone: event.target.value })} />
-          <FieldError message={errors.timezone} />
-        </label>
         {error ? <div className="text-xs text-[#B42318]">{error}</div> : null}
       </div>
       <div className="flex justify-end pt-3">

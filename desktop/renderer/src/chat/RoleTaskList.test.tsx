@@ -19,7 +19,7 @@ describe("RoleTaskList", () => {
       next_run_at: "2026-07-11T11:00:00+00:00",
       cancellable: true,
       editable: true,
-      schedule: { tier: "instant", trigger: "after", when: "1h", content: "喝水", timezone: "UTC" },
+      schedule: { tier: "instant", trigger: "after", when: "1h", content: "喝水" },
     };
 
     const markup = renderToStaticMarkup(<RoleTaskList tasks={[task]} onCreate={() => undefined} onSelect={() => undefined} />);

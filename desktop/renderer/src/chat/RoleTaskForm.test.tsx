@@ -27,7 +27,6 @@ describe("RoleTaskForm", () => {
       trigger: "at",
       when: "2026-07-18T09:30",
       content: "喝水",
-      timezone: "Asia/Shanghai",
     });
 
     assert.match(markup, /type="datetime-local"/);
@@ -41,7 +40,6 @@ describe("RoleTaskForm", () => {
       trigger: "every",
       when: "1h",
       content: "喝水",
-      timezone: "UTC",
     }, true, "保存失败");
 
     assert.match(markup, /type="text"/);

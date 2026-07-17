@@ -44,7 +44,6 @@ export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onB
         {schedule ? <DetailRow label="执行模式" value={scheduleTierLabels[schedule.tier]} /> : null}
         {schedule ? <DetailRow label="触发方式" value={scheduleTriggerLabels[schedule.trigger]} /> : null}
         {schedule ? <DetailRow label="执行设置" value={schedule.when} /> : null}
-        {schedule ? <DetailRow label="时区" value={schedule.timezone} /> : null}
         <DetailRow label="完整内容" value={task.detail} />
         <DetailRow label="创建时间" value={formatTimestamp(task.created_at)} />
         {task.next_run_at ? <DetailRow label="下次运行" value={formatTimestamp(task.next_run_at)} /> : null}

@@ -735,7 +735,6 @@ class DesktopBridgeService:
             "trigger": str(payload.get("trigger") or ""),
             "when": str(payload.get("when") or ""),
             "content": str(payload.get("content") or ""),
-            "timezone": str(payload.get("timezone") or ""),
         }
 
     async def _broadcast_session_updated(

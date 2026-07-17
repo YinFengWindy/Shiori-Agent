@@ -35,7 +35,7 @@ describe("RoleTaskDetails", () => {
       next_run_at: "2026-07-12T01:00:00+00:00",
       cancellable: true,
       editable: true,
-      schedule: { tier: "soft", trigger: "every", when: "0 9 * * *", content: "查询今天的天气", timezone: "Asia/Shanghai" },
+      schedule: { tier: "soft", trigger: "every", when: "0 9 * * *", content: "查询今天的天气" },
     });
 
     assert.match(markup, />AI 生成</);
@@ -57,7 +57,7 @@ describe("RoleTaskDetails", () => {
       next_run_at: "",
       cancellable: true,
       editable: false,
-      schedule: { tier: "soft", trigger: "after", when: "1h", content: "查询天气", timezone: "UTC" },
+      schedule: { tier: "soft", trigger: "after", when: "1h", content: "查询天气" },
     }, true);
 
     assert.match(markup, />任务运行期间不可编辑</);

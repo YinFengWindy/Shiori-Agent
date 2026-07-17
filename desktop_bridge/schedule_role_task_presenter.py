@@ -23,7 +23,6 @@ def serialize_schedule_role_task(job: Any, *, running: bool) -> dict[str, object
             "trigger": job.trigger,
             "when": _schedule_when(job),
             "content": content,
-            "timezone": job.timezone,
         },
     }
 

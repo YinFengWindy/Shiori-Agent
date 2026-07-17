@@ -17,7 +17,7 @@ function createTask(id: string, kind: RoleTask["kind"], editable = false): RoleT
     next_run_at: "",
     cancellable: kind !== "memory_maintenance",
     editable,
-    schedule: kind === "schedule" ? { tier: "instant", trigger: "after", when: "1h", content: id, timezone: "UTC" } : null,
+    schedule: kind === "schedule" ? { tier: "instant", trigger: "after", when: "1h", content: id } : null,
   };
 }
 
