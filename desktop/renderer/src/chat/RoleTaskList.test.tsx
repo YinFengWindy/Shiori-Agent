@@ -29,6 +29,6 @@ describe("RoleTaskList", () => {
     assert.match(markup, />这是一段很长的任务说明</);
     assert.doesNotMatch(markup, /2026-07-11/);
     assert.doesNotMatch(markup, />取消</);
-    assert.doesNotMatch(markup, /focus:ring/);
+    assert.doesNotMatch(markup, /focus:/);
   });
 });

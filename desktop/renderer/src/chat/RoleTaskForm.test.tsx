@@ -31,7 +31,7 @@ describe("RoleTaskForm", () => {
 
     assert.match(markup, /type="datetime-local"/);
     assert.match(markup, /value="2026-07-18T09:30"/);
-    assert.doesNotMatch(markup, /focus:ring/);
+    assert.doesNotMatch(markup, /focus:/);
   });
 
   it("keeps interval syntax as text and exposes pending errors", () => {

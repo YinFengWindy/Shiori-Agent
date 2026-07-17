@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import type { ScheduleTaskFormData, ScheduleTaskTier, ScheduleTaskTrigger } from "../shared/types";
 import { validateScheduleTaskForm, type ScheduleTaskFormErrors } from "./roleTaskFormState";
 
-const fieldClass = "w-full rounded-md border border-[#D8DFE7] bg-white px-3 py-2 text-sm transition focus:border-primary disabled:opacity-60";
+const fieldClass = "w-full rounded-md border border-[#D8DFE7] bg-white px-3 py-2 text-sm transition disabled:opacity-60";
 
 function FieldError({ message }: { message?: string }) {
   return message ? <span className="text-[11px] text-[#B42318]">{message}</span> : null;
