@@ -2,7 +2,13 @@ import { ArrowLeft } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
 import type { ScheduleTaskFormData, ScheduleTaskTier, ScheduleTaskTrigger } from "../shared/types";
 import { cx, focusResetClass } from "../shared/styles";
-import { validateScheduleTaskForm, type ScheduleTaskFormErrors } from "./roleTaskFormState";
+import {
+  customScheduleRuleValue,
+  getRecurringSchedulePreset,
+  recurringScheduleOptions,
+  validateScheduleTaskForm,
+  type ScheduleTaskFormErrors,
+} from "./roleTaskFormState";
 
 const fieldClass = cx("w-full rounded-md border border-[#D8DFE7] bg-white px-3 py-2 text-sm transition disabled:opacity-60", focusResetClass);
 
@@ -36,6 +42,7 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
 
   const whenLabel = data.trigger === "at" ? "执行时间" : data.trigger === "after" ? "延迟时长" : "循环规则";
   const whenPlaceholder = data.trigger === "after" ? "例如 30m、2h" : "例如 1h 或 0 9 * * *";
+  const recurringPreset = data.trigger === "every" ? getRecurringSchedulePreset(data.when) : customScheduleRuleValue;
 
   return (
     <form className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] rounded-[20px] bg-[#F1F5F9] p-4 text-sm text-[#334155]" onSubmit={(event) => void submit(event)}>
@@ -66,11 +73,35 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
             <option value="every">循环执行</option>
           </select>
         </label>
-        <label className="grid gap-1 text-xs">
-          <span>{whenLabel}</span>
-          <input className={fieldClass} type={data.trigger === "at" ? "datetime-local" : "text"} placeholder={data.trigger === "at" ? undefined : whenPlaceholder} value={data.when} disabled={saving} onChange={(event) => setData({ ...data, when: event.target.value })} />
-          <FieldError message={errors.when} />
-        </label>
+        {data.trigger === "every" ? (
+          <label className="grid gap-1 text-xs">
+            <span>{whenLabel}</span>
+            <select
+              className={fieldClass}
+              value={recurringPreset}
+              disabled={saving}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setData({ ...data, when: nextValue === customScheduleRuleValue ? (recurringPreset === customScheduleRuleValue ? data.when : "") : nextValue });
+              }}
+            >
+              {recurringScheduleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              <option value={customScheduleRuleValue}>自定义</option>
+            </select>
+            {recurringPreset === customScheduleRuleValue ? (
+              <>
+                <input className={fieldClass} type="text" placeholder={whenPlaceholder} value={data.when} disabled={saving} onChange={(event) => setData({ ...data, when: event.target.value })} />
+                <FieldError message={errors.when} />
+              </>
+            ) : null}
+          </label>
+        ) : (
+          <label className="grid gap-1 text-xs">
+            <span>{whenLabel}</span>
+            <input className={fieldClass} type={data.trigger === "at" ? "datetime-local" : "text"} placeholder={data.trigger === "at" ? undefined : whenPlaceholder} value={data.when} disabled={saving} onChange={(event) => setData({ ...data, when: event.target.value })} />
+            <FieldError message={errors.when} />
+          </label>
+        )}
         <label className="grid gap-1 text-xs">
           <span>执行内容</span>
           <textarea className={`${fieldClass} min-h-24 resize-y`} value={data.content} disabled={saving} onChange={(event) => setData({ ...data, content: event.target.value })} />

@@ -35,16 +35,32 @@ describe("RoleTaskForm", () => {
     assert.doesNotMatch(markup, /focus:ring/);
   });
 
-  it("keeps interval syntax as text and exposes pending errors", () => {
+  it("uses a preset dropdown for recurring schedules", () => {
     const markup = renderForm({
       name: "提醒",
       tier: "instant",
       trigger: "every",
       when: "1h",
       content: "喝水",
+    });
+
+    assert.match(markup, /<select/);
+    assert.match(markup, /每小时/);
+    assert.doesNotMatch(markup, /placeholder="例如 1h 或 0 9 \* \* \*"/);
+  });
+
+  it("keeps custom recurring rules editable", () => {
+    const markup = renderForm({
+      name: "提醒",
+      tier: "instant",
+      trigger: "every",
+      when: "*/5 * * * *",
+      content: "喝水",
     }, true, "保存失败");
 
+    assert.match(markup, /<option value="__custom__" selected="">自定义<\/option>/);
     assert.match(markup, /type="text"/);
+    assert.match(markup, /value="\*\/5 \* \* \* \*"/);
     assert.match(markup, />保存中…</);
     assert.match(markup, />保存失败</);
     assert.match(markup, /disabled=""/);

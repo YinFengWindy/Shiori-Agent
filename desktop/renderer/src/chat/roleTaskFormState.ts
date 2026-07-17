@@ -2,6 +2,22 @@ import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 
 export type ScheduleTaskFormErrors = Partial<Record<keyof ScheduleTaskFormData, string>>;
 
+export const customScheduleRuleValue = "__custom__";
+
+export const recurringScheduleOptions = [
+  { value: "15m", label: "每 15 分钟" },
+  { value: "30m", label: "每 30 分钟" },
+  { value: "1h", label: "每小时" },
+  { value: "2h", label: "每 2 小时" },
+  { value: "0 9 * * *", label: "每天 09:00" },
+  { value: "0 9 * * 1", label: "每周一 09:00" },
+] as const;
+
+/** Returns the matching preset value or the custom sentinel for one recurring rule. */
+export function getRecurringSchedulePreset(when: string): string {
+  return recurringScheduleOptions.some((option) => option.value === when) ? when : customScheduleRuleValue;
+}
+
 /** Creates the initial values for a new desktop scheduled task. */
 export function createScheduleTaskFormData(): ScheduleTaskFormData {
   return {
