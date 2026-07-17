@@ -14,6 +14,30 @@ function clampSidebarWidth(nextWidth: number, minWidth: number, maxWidth: number
   return Math.min(maxWidth, Math.max(minWidth, nextWidth));
 }
 
+/** Resolves one right-sidebar drag sample without scheduling a React update. */
+export function resolveRightSidebarDragUpdate(
+  clientX: number,
+  viewportWidth: number,
+  minWidth: number,
+  maxWidth: number,
+  collapseThreshold: number,
+) {
+  const requestedWidth = viewportWidth - clientX;
+  if (requestedWidth <= collapseThreshold) {
+    return {
+      collapsed: true,
+      previewWidth: 0,
+      expandedWidth: null,
+    };
+  }
+  const expandedWidth = clampSidebarWidth(requestedWidth, minWidth, maxWidth);
+  return {
+    collapsed: false,
+    previewWidth: expandedWidth,
+    expandedWidth,
+  };
+}
+
 /** Manages a resizable right sidebar with persisted width, collapse state, and drag interactions. */
 export function useRightSidebarState({
   minWidth,
@@ -48,13 +72,17 @@ export function useRightSidebarState({
 
   const beginResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
+    const sidebarElement = event.currentTarget.parentElement;
+    if (!sidebarElement) return;
+    const resizeTarget = sidebarElement;
     flushSync(() => {
       setAnimating(false);
       setResizing(true);
     });
     let dragCollapsed = collapsed;
+    let committedWidth = width;
 
-    function flushPendingWidth(): void {
+    function flushPendingPreviewWidth(): void {
       if (resizeFrameRef.current !== null) {
         window.cancelAnimationFrame(resizeFrameRef.current);
         resizeFrameRef.current = null;
@@ -62,11 +90,11 @@ export function useRightSidebarState({
       if (pendingWidthRef.current === null) {
         return;
       }
-      setWidth(pendingWidthRef.current);
+      resizeTarget.style.width = `${pendingWidthRef.current}px`;
       pendingWidthRef.current = null;
     }
 
-    function scheduleWidth(nextWidth: number): void {
+    function schedulePreviewWidth(nextWidth: number): void {
       pendingWidthRef.current = nextWidth;
       if (resizeFrameRef.current !== null) {
         return;
@@ -76,13 +104,15 @@ export function useRightSidebarState({
         if (pendingWidthRef.current === null) {
           return;
         }
-        setWidth(pendingWidthRef.current);
+        resizeTarget.style.width = `${pendingWidthRef.current}px`;
         pendingWidthRef.current = null;
       });
     }
 
     function stopResize(): void {
-      flushPendingWidth();
+      flushPendingPreviewWidth();
+      setWidth(committedWidth);
+      setCollapsed(dragCollapsed);
       setResizing(false);
       window.removeEventListener("pointermove", resize);
       window.removeEventListener("pointerup", stopResize);
@@ -90,26 +120,24 @@ export function useRightSidebarState({
     }
 
     function resize(moveEvent: PointerEvent): void {
-      const nextWidth = window.innerWidth - moveEvent.clientX;
-      if (nextWidth <= collapseThreshold) {
-        if (!dragCollapsed) {
-          setAnimating(true);
-          dragCollapsed = true;
-        }
-        setCollapsed(true);
-        return;
+      const update = resolveRightSidebarDragUpdate(
+        moveEvent.clientX,
+        window.innerWidth,
+        minWidth,
+        maxWidth,
+        collapseThreshold,
+      );
+      dragCollapsed = update.collapsed;
+      if (update.expandedWidth !== null) {
+        committedWidth = update.expandedWidth;
       }
-      if (dragCollapsed) {
-        setAnimating(true);
-        dragCollapsed = false;
-      }
-      scheduleWidth(clampSidebarWidth(nextWidth, minWidth, maxWidth));
+      schedulePreviewWidth(update.previewWidth);
     }
 
     window.addEventListener("pointermove", resize);
     window.addEventListener("pointerup", stopResize);
     window.addEventListener("pointercancel", stopResize);
-  }, [collapsed, collapseThreshold, maxWidth, minWidth]);
+  }, [collapsed, collapseThreshold, maxWidth, minWidth, width]);
 
   useEffect(() => {
     if (!animating) return undefined;
