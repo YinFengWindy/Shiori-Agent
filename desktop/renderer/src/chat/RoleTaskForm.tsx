@@ -1,9 +1,10 @@
 import { ArrowLeft } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
 import type { ScheduleTaskFormData, ScheduleTaskTier, ScheduleTaskTrigger } from "../shared/types";
+import { cx, focusResetClass } from "../shared/styles";
 import { validateScheduleTaskForm, type ScheduleTaskFormErrors } from "./roleTaskFormState";
 
-const fieldClass = "w-full rounded-md border border-[#D8DFE7] bg-white px-3 py-2 text-sm transition disabled:opacity-60";
+const fieldClass = cx("w-full rounded-md border border-[#D8DFE7] bg-white px-3 py-2 text-sm transition disabled:opacity-60", focusResetClass);
 
 function FieldError({ message }: { message?: string }) {
   return message ? <span className="text-[11px] text-[#B42318]">{message}</span> : null;
@@ -39,7 +40,7 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
   return (
     <form className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] rounded-[20px] bg-[#F1F5F9] p-4 text-sm text-[#334155]" onSubmit={(event) => void submit(event)}>
       <div className="flex items-center gap-2 pb-3">
-        <button className="grid h-8 w-8 place-items-center rounded-md transition hover:bg-white" type="button" aria-label="返回" disabled={saving} onClick={onBack}>
+        <button className={cx("grid h-8 w-8 place-items-center rounded-md transition hover:bg-white", focusResetClass)} type="button" aria-label="返回" disabled={saving} onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </button>
         <span className="font-semibold text-[#272536]">{title}</span>
@@ -78,7 +79,7 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
         {error ? <div className="text-xs text-[#B42318]">{error}</div> : null}
       </div>
       <div className="flex justify-end pt-3">
-        <button className="rounded-md bg-[#272536] px-4 py-2 text-xs text-white transition hover:bg-[#3B394D] disabled:opacity-50" type="submit" disabled={saving}>{saving ? "保存中…" : "保存"}</button>
+        <button className={cx("rounded-md bg-[#272536] px-4 py-2 text-xs text-white transition hover:bg-[#3B394D] disabled:opacity-50", focusResetClass)} type="submit" disabled={saving}>{saving ? "保存中…" : "保存"}</button>
       </div>
     </form>
   );

@@ -1,5 +1,6 @@
 import { Plus } from "@phosphor-icons/react";
 import type { RoleTask } from "../shared/types";
+import { cx, focusResetClass } from "../shared/styles";
 import { groupRoleTasks, taskKindLabels } from "./roleTaskPanelState";
 
 /** Renders the compact role-task directory. */
@@ -14,7 +15,7 @@ export function RoleTaskList({ tasks, onCreate, onSelect }: {
       <div className="flex items-center justify-between px-1 pb-3">
         <span className="font-semibold text-[#272536]">任务</span>
         <button
-          className="grid h-8 w-8 place-items-center rounded-md text-[#5B6472] transition hover:bg-white hover:text-[#272536]"
+          className={cx("grid h-8 w-8 place-items-center rounded-md text-[#5B6472] transition hover:bg-white hover:text-[#272536]", focusResetClass)}
           type="button"
           aria-label="新增计划任务"
           onClick={onCreate}
@@ -29,7 +30,7 @@ export function RoleTaskList({ tasks, onCreate, onSelect }: {
             {group.tasks.length ? group.tasks.map((task) => (
               <button
                 key={`${task.kind}:${task.id}`}
-                className="block w-full border-b border-[#E6EBF2] px-1 py-3 text-left transition last:border-b-0 hover:bg-[#F8FAFC]"
+                className={cx("block w-full border-b border-[#E6EBF2] px-1 py-3 text-left transition last:border-b-0 hover:bg-[#F8FAFC]", focusResetClass)}
                 type="button"
                 onClick={() => onSelect(task.id)}
               >
