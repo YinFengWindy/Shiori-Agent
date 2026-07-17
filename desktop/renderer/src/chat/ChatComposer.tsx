@@ -54,6 +54,8 @@ export const ChatComposer = React.memo(function ChatComposer({
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
     if (!pendingSelectionRef.current) {
       return;
     }
@@ -221,7 +223,7 @@ export const ChatComposer = React.memo(function ChatComposer({
           ) : null}
           <textarea
             ref={textareaRef}
-            className="chat-composer-input min-h-[24px] w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 text-[#1f1f1f] outline-none"
+            className="min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-6 text-[#1f1f1f] outline-none"
             rows={1}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}

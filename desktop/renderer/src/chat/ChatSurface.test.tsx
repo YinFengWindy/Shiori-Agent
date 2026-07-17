@@ -148,8 +148,6 @@ describe("ChatSurface", () => {
     const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
 
     assert.match(markup, /<img class="block object-contain"[^>]*alt="message attachment"/);
-    assert.match(markup, /loading="lazy"/);
-    assert.match(markup, /decoding="async"/);
     assert.match(markup, /block w-fit max-w-full cursor-grab/);
   });
 
@@ -206,7 +204,7 @@ describe("ChatSurface", () => {
 
     const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
 
-    assert.match(markup, /class="message-render-boundary group w-full"/);
+    assert.match(markup, /class="group w-full"/);
     assert.match(markup, /message-row flex w-full items-start gap-3/);
     assert.match(markup, /message-body flex min-w-0 w-full max-w-\[82%\] flex-col text-sm leading-6 text-\[#1f1f1f\]/);
     assert.match(markup, /ml-auto items-end/);
@@ -222,7 +220,7 @@ describe("ChatSurface", () => {
 
     const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
 
-    assert.match(markup, />更早消息 160 条</);
+    assert.match(markup, />更早消息 60 条</);
     assert.doesNotMatch(markup, /data-message-key="message-1"/);
     assert.match(markup, /data-message-key="message-220"/);
   });

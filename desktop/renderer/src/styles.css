@@ -49,17 +49,6 @@
 }
 
 @layer utilities {
-  .chat-composer-input {
-    field-sizing: content;
-    max-height: 168px;
-    overflow-y: auto;
-  }
-
-  .message-render-boundary {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 120px;
-  }
-
   .scrollbar-soft {
     scrollbar-color: #DEE1E6 transparent;
     scrollbar-gutter: stable;

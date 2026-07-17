@@ -19,7 +19,7 @@ function createMessages(count: number): SessionMessage[] {
 
 describe("getVisibleChatMessageStartIndex", () => {
   it("pins the default render window to the newest chat messages", () => {
-    assert.equal(getVisibleChatMessageStartIndex(240, 60), 180);
+    assert.equal(getVisibleChatMessageStartIndex(240, 160), 80);
   });
 });
 
@@ -37,7 +37,7 @@ describe("getExpandedVisibleChatMessageCountForKey", () => {
   it("expands the render window when a highlighted message lives above the current slice", () => {
     const messages = createMessages(300);
 
-    const nextVisibleCount = getExpandedVisibleChatMessageCountForKey(messages, 60, "message-40");
+    const nextVisibleCount = getExpandedVisibleChatMessageCountForKey(messages, 160, "message-40");
 
     assert.equal(nextVisibleCount, 285);
   });
@@ -45,8 +45,8 @@ describe("getExpandedVisibleChatMessageCountForKey", () => {
   it("keeps the current render window when the highlighted message is already visible", () => {
     const messages = createMessages(300);
 
-    const nextVisibleCount = getExpandedVisibleChatMessageCountForKey(messages, 60, "message-280");
+    const nextVisibleCount = getExpandedVisibleChatMessageCountForKey(messages, 160, "message-280");
 
-    assert.equal(nextVisibleCount, 60);
+    assert.equal(nextVisibleCount, 160);
   });
 });

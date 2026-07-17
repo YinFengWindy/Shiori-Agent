@@ -1,5 +1,5 @@
 import type React from "react";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { DesktopAppFrame } from "./app/DesktopAppFrame";
 import {
@@ -307,30 +307,17 @@ function App(): React.ReactElement {
     selectedChatImageEntry,
     latestChatGeneratedImageKey,
     selectedChatImagePosition,
-  } = useMemo(
-    () => buildDesktopViewModel({
-      roles,
-      activeRoleId,
-      mainView,
-      roleForm,
-      activeIllustration,
-      activeSession,
-      selectedChatImageKey,
-      health,
-      sendingSessions,
-    }),
-    [
-      activeIllustration,
-      activeRoleId,
-      activeSession,
-      health,
-      mainView,
-      roleForm,
-      roles,
-      selectedChatImageKey,
-      sendingSessions,
-    ],
-  );
+  } = buildDesktopViewModel({
+    roles,
+    activeRoleId,
+    mainView,
+    roleForm,
+    activeIllustration,
+    activeSession,
+    selectedChatImageKey,
+    health,
+    sendingSessions,
+  });
 
   const {
     openChatImagePreview,

@@ -15,8 +15,6 @@ export function ChatMessageImage({ imagePath }: ChatMessageImageProps) {
       className="block object-contain"
       src={toFileUrl(imagePath)}
       alt="message attachment"
-      loading="lazy"
-      decoding="async"
       style={displaySize ? { width: displaySize.width, height: displaySize.height } : { width: 1, height: 1, visibility: "hidden" }}
       onLoad={(event) => {
         const nextSize = fitChatMessageImage({
