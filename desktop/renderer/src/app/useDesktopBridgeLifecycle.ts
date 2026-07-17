@@ -1,5 +1,6 @@
-import { startTransition, useEffect } from "react";
+import { startTransition, useCallback, useEffect } from "react";
 import { ensureChatMessageRenderId } from "../chat/chatMessageIdentity";
+import { useLatestRef } from "../shared/useLatestRef";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
 import type { EventLog, RoleRecord, SessionPayload, AppMainView } from "../shared/types";
@@ -62,7 +63,21 @@ export function useDesktopBridgeLifecycle({
   buildNavigationEntry,
   pushNavigationEntry,
 }: UseDesktopBridgeLifecycleArgs) {
-  async function refreshBridge(): Promise<void> {
+  const callbacksRef = useLatestRef({
+    appendSessionErrorMessage,
+    buildNavigationEntry,
+    cacheRoleSession,
+    chooseIllustration,
+    clearAllSendingSessions,
+    clearSessionSending,
+    commitActiveSession,
+    loadRolesFromBridge,
+    openRole,
+    pushNavigationEntry,
+    updateCommittedActiveSession,
+  });
+
+  const refreshBridge = useCallback(async (): Promise<void> => {
     setError("");
     setHealth("connecting");
     const res = await window.miraDesktop.invoke({
@@ -75,7 +90,7 @@ export function useDesktopBridgeLifecycle({
       return;
     }
     setHealth("online");
-    const nextRoles = await loadRolesFromBridge();
+    const nextRoles = await callbacksRef.current.loadRolesFromBridge();
     if (!nextRoles) {
       return;
     }
@@ -83,21 +98,21 @@ export function useDesktopBridgeLifecycle({
     if (currentRoleId) {
       const activeRole = nextRoles.find((item) => item.id === currentRoleId) ?? null;
       if (activeRole) {
-        await openRole(activeRole.id, activeRole, { recordHistory: false });
+        await callbacksRef.current.openRole(activeRole.id, activeRole, { recordHistory: false });
       } else if (nextRoles[0]) {
-        await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
+        await callbacksRef.current.openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
       } else {
         setActiveRoleId("");
-        commitActiveSession(null);
+        callbacksRef.current.commitActiveSession(null);
         setActiveIllustration("");
       }
     } else if (nextRoles[0]) {
-      await openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
+      await callbacksRef.current.openRole(nextRoles[0].id, nextRoles[0], { recordHistory: false });
     }
     setNotice("连接桥已刷新。");
-  }
+  }, [activeRoleIdRef, callbacksRef, setActiveIllustration, setActiveRoleId, setError, setHealth, setNotice]);
 
-  async function restartBridge(): Promise<void> {
+  const restartBridge = useCallback(async (): Promise<void> => {
     setError("");
     setHealth("connecting");
     const result = await window.miraDesktop.restartBridge();
@@ -108,7 +123,7 @@ export function useDesktopBridgeLifecycle({
     }
     setNotice("连接桥已重启。");
     await refreshBridge();
-  }
+  }, [refreshBridge, setError, setHealth, setNotice]);
 
   useEffect(() => {
     const savedRoleId = window.localStorage.getItem("miraDesktop.activeRoleId") ?? "";
@@ -139,6 +154,7 @@ export function useDesktopBridgeLifecycle({
 
   useEffect(() => {
     const off = window.miraDesktop.onEvent((event) => {
+      const callbacks = callbacksRef.current;
       if (event.method !== "chat.delta") {
         startTransition(() => {
           setEvents((items) => [...items, { method: event.method, payload: event.payload }].slice(-12));
@@ -153,7 +169,7 @@ export function useDesktopBridgeLifecycle({
         }
 
         if (event.method === "bridge.exit") {
-          clearAllSendingSessions();
+          callbacks.clearAllSendingSessions();
           setHealth("offline");
           setError(String(event.payload.message ?? "bridge exited"));
           setNotice("连接桥已停止。你可以刷新或重启它。");
@@ -169,12 +185,12 @@ export function useDesktopBridgeLifecycle({
           const isActiveSession = currentSession?.key === session.key;
           const isVisibleChat = isActiveSession && currentView.kind === "chat";
           if (roleId) {
-            cacheRoleSession(roleId, session);
+            callbacks.cacheRoleSession(roleId, session);
           }
           if (isActiveSession) {
-            commitActiveSession(session);
+            callbacks.commitActiveSession(session);
             const currentRole = rolesRef.current.find((item) => item.id === activeRoleIdRef.current) ?? null;
-            setActiveIllustration((current) => chooseIllustration(currentRole, session, current));
+            setActiveIllustration((current) => callbacks.chooseIllustration(currentRole, session, current));
           }
           if (event.id === "proactive" && roleId && isProactiveAssistantMessage(session) && !isVisibleChat) {
             setUnreadCounts((current) => ({
@@ -191,7 +207,7 @@ export function useDesktopBridgeLifecycle({
           if (!currentSession || eventSessionKey !== currentSession.key) return;
           const delta = String(event.payload.content_delta ?? "");
           if (!delta) return;
-          updateCommittedActiveSession((current) => {
+          callbacks.updateCommittedActiveSession((current) => {
             if (!current) return current;
             const messages = [...current.messages];
             const last = messages[messages.length - 1];
@@ -206,17 +222,17 @@ export function useDesktopBridgeLifecycle({
         }
 
         if (event.method === "chat.done") {
-          clearSessionSending(eventSessionKey);
+          callbacks.clearSessionSending(eventSessionKey);
           return;
         }
 
         if (event.method === "chat.error") {
-          clearSessionSending(eventSessionKey);
+          callbacks.clearSessionSending(eventSessionKey);
           const currentSession = activeSessionRef.current;
           if (!currentSession || eventSessionKey !== currentSession.key) return;
           const message = String(event.payload.message ?? "对话失败");
           setError(message);
-          appendSessionErrorMessage(currentSession.key, message);
+          callbacks.appendSessionErrorMessage(currentSession.key, message);
         }
       };
 
@@ -230,12 +246,7 @@ export function useDesktopBridgeLifecycle({
   }, [
     activeRoleIdRef,
     activeSessionRef,
-    appendSessionErrorMessage,
-    cacheRoleSession,
-    chooseIllustration,
-    clearAllSendingSessions,
-    clearSessionSending,
-    commitActiveSession,
+    callbacksRef,
     mainViewRef,
     rolesRef,
     setActiveIllustration,
@@ -246,7 +257,6 @@ export function useDesktopBridgeLifecycle({
     setUnreadCounts,
     setWindowMaximized,
     setWindowVisible,
-    updateCommittedActiveSession,
   ]);
 
   useEffect(() => {
@@ -278,7 +288,7 @@ export function useDesktopBridgeLifecycle({
       setHealth("online");
       setError("");
 
-      const nextRoles = await loadRolesFromBridge();
+      const nextRoles = await callbacksRef.current.loadRolesFromBridge();
       if (cancelled || !nextRoles) {
         return;
       }
@@ -288,9 +298,11 @@ export function useDesktopBridgeLifecycle({
         ?? nextRoles[0]?.id;
       if (preferredRoleId) {
         const preferredRole = nextRoles.find((item) => item.id === preferredRoleId) ?? null;
-        void openRole(preferredRoleId, preferredRole, { recordHistory: false });
+        void callbacksRef.current.openRole(preferredRoleId, preferredRole, { recordHistory: false });
       }
-      pushNavigationEntry(buildNavigationEntry({ kind: "chat" }, preferredRoleId ?? ""));
+      callbacksRef.current.pushNavigationEntry(
+        callbacksRef.current.buildNavigationEntry({ kind: "chat" }, preferredRoleId ?? ""),
+      );
     }
 
     void load();
@@ -299,10 +311,7 @@ export function useDesktopBridgeLifecycle({
     };
   }, [
     activeRoleIdRef,
-    buildNavigationEntry,
-    loadRolesFromBridge,
-    openRole,
-    pushNavigationEntry,
+    callbacksRef,
     setError,
     setHealth,
     setWindowMaximized,
