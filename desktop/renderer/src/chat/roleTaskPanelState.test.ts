@@ -32,6 +32,16 @@ describe("roleTaskPanelState", () => {
     assert.deepEqual(groups.map((group) => group.kind), ["schedule", "subagent", "memory_maintenance"]);
   });
 
+  it("keeps empty task categories in the grouped snapshot", () => {
+    const groups = groupRoleTasks([]);
+
+    assert.deepEqual(groups.map((group) => [group.kind, group.tasks.length]), [
+      ["schedule", 0],
+      ["subagent", 0],
+      ["memory_maintenance", 0],
+    ]);
+  });
+
   it("switches between list, detail, create, and edit views", () => {
     let view = reduceRoleTaskPanelView({ kind: "list" }, { type: "show-detail", taskId: "schedule" });
     assert.deepEqual(view, { kind: "detail", taskId: "schedule" });

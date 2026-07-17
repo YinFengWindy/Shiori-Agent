@@ -37,8 +37,7 @@ export const scheduleTriggerLabels = {
 /** Groups role tasks in the stable order used by the task sidebar. */
 export function groupRoleTasks(tasks: RoleTask[]): Array<{ kind: RoleTaskKind; tasks: RoleTask[] }> {
   return (["schedule", "subagent", "memory_maintenance"] as const)
-    .map((kind) => ({ kind, tasks: tasks.filter((task) => task.kind === kind) }))
-    .filter((group) => group.tasks.length > 0);
+    .map((kind) => ({ kind, tasks: tasks.filter((task) => task.kind === kind) }));
 }
 
 /** Applies one explicit navigation action within the task panel. */
