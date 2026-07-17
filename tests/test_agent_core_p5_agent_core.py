@@ -135,11 +135,17 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
         current_user_message="你好",
         role_config_version="",
         thread_id="",
-            delivery_key="",
-            current_user_source_ref="telegram:123:0",
-            current_timestamp="2026-04-04T22:00:00",
-            defer_push_session_sync="true",
-        )
+        delivery_key="",
+        request_id="",
+        transport_channel="telegram",
+        transport_chat_id="123",
+        role_source="passive_turn",
+        role_work_kind="passive_turn",
+        role_context_created_at="",
+        current_user_source_ref="telegram:123:0",
+        current_timestamp="2026-04-04T22:00:00",
+        defer_push_session_sync="true",
+    )
     assert reasoner.run_turn.await_args.kwargs["skill_names"] == ["refactor"]
     assert reasoner.run_turn.await_args.kwargs["retrieved_memory_block"] == "remembered"
     # AfterReasoning persists user+assistant messages to session
