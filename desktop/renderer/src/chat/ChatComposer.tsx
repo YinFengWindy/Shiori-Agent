@@ -1,4 +1,4 @@
-import React, { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { ChatEmojiPicker } from "./ChatEmojiPicker";
 import { canSubmitChatMessage, normalizeChatAttachmentPaths } from "./chatComposerState";
 import { insertEmojiIntoChatDraft } from "./chatEmojiState";
@@ -32,7 +32,7 @@ function getAttachmentExtensionLabel(path: string): string {
 }
 
 /** Owns draft, pending attachments, and reply target rendering for the desktop chat composer. */
-export function ChatComposer({
+export const ChatComposer = React.memo(function ChatComposer({
   activeRoleId,
   sessionKey,
   bridgeReady,
@@ -51,14 +51,9 @@ export function ChatComposer({
   const composerInputDisabled = !activeRoleId || sending || !bridgeReady;
   const clearReplyTargetForSessionChange = useEffectEvent(onClearReplyTarget);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-    if (!pendingSelectionRef.current) {
-      return;
-    }
+    if (!textarea || !pendingSelectionRef.current) return;
     textarea.focus();
     textarea.setSelectionRange(pendingSelectionRef.current.start, pendingSelectionRef.current.end);
     pendingSelectionRef.current = null;
@@ -221,15 +216,24 @@ export function ChatComposer({
               ))}
             </div>
           ) : null}
-          <textarea
-            ref={textareaRef}
-            className="min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-6 text-[#1f1f1f] outline-none"
-            rows={1}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={handleComposerKeyDown}
-            placeholder="给当前角色发送消息..."
-          />
+          <div className="grid min-h-[24px] min-w-0" style={{ contain: "layout" }}>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none invisible col-start-1 row-start-1 min-h-[24px] whitespace-pre-wrap break-words text-sm leading-6"
+              data-chat-composer-mirror=""
+            >
+              {`${draft} `}
+            </div>
+            <textarea
+              ref={textareaRef}
+              className="col-start-1 row-start-1 h-full min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-6 text-[#1f1f1f] outline-none"
+              rows={1}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              placeholder="给当前角色发送消息..."
+            />
+          </div>
           <div className="composer-actions flex items-center gap-2">
             <button
               className="grid h-[30px] w-[30px] place-items-center rounded-full border-0 bg-transparent p-0 text-[#4B5563] transition focus:outline-none disabled:cursor-default disabled:opacity-40"
@@ -256,4 +260,4 @@ export function ChatComposer({
       </div>
     </div>
   );
-}
+});

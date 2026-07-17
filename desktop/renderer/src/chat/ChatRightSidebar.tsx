@@ -1,14 +1,14 @@
+import React from "react";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
 import { RoleTasksPanel } from "./RoleTasksPanel";
 import { toFileUrl } from "../shared/format";
-import type { RoleTask } from "../shared/types";
+import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 
 export type ChatSidebarMode = "status" | "images" | "tasks";
 
 type ChatRightSidebarProps = {
   canGoToNextImage: boolean;
   canGoToPreviousImage: boolean;
-  cancellingTaskId: string;
   currentMood: string;
   imagePath: string;
   lonelinessValue: number;
@@ -18,6 +18,11 @@ type ChatRightSidebarProps = {
   renderHeavyVisuals: boolean;
   roleSelfView: string;
   tasks: RoleTask[];
+  taskError: string;
+  taskOperation: { kind: "create" | "update" | "cancel"; taskId: string } | null;
+  onClearTaskError: () => void;
+  onCreateTask: (data: ScheduleTaskFormData) => Promise<RoleTask>;
+  onUpdateTask: (taskId: string, data: ScheduleTaskFormData) => Promise<RoleTask>;
   onCancelTask: (taskId: string) => Promise<void>;
   onGoToNextImage: () => void;
   onGoToPreviousImage: () => void;
@@ -25,10 +30,9 @@ type ChatRightSidebarProps = {
 };
 
 /** Renders the active status, task, or image panel in the chat right sidebar. */
-export function ChatRightSidebar({
+export const ChatRightSidebar = React.memo(function ChatRightSidebar({
   canGoToNextImage,
   canGoToPreviousImage,
-  cancellingTaskId,
   currentMood,
   imagePath,
   lonelinessValue,
@@ -38,6 +42,11 @@ export function ChatRightSidebar({
   renderHeavyVisuals,
   roleSelfView,
   tasks,
+  taskError,
+  taskOperation,
+  onClearTaskError,
+  onCreateTask,
+  onUpdateTask,
   onCancelTask,
   onGoToNextImage,
   onGoToPreviousImage,
@@ -61,8 +70,12 @@ export function ChatRightSidebar({
     return (
       <RoleTasksPanel
         tasks={tasks}
-        cancellingTaskId={cancellingTaskId}
-        onCancel={(taskId) => void onCancelTask(taskId).catch(() => undefined)}
+        operation={taskOperation}
+        error={taskError}
+        onClearError={onClearTaskError}
+        onCreate={onCreateTask}
+        onUpdate={onUpdateTask}
+        onCancel={onCancelTask}
       />
     );
   }
@@ -96,4 +109,4 @@ export function ChatRightSidebar({
       </div>
     </div>
   );
-}
+});

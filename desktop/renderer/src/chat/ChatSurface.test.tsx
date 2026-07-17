@@ -135,6 +135,18 @@ describe("ChatSurface", () => {
     assert.doesNotMatch(markup, /data-message-media="separate"[\s\S]*先看文字/);
   });
 
+  it("renders assistant bubbles without per-message backdrop filters", () => {
+    const session = createSession();
+    session.messages = [{ role: "assistant", content: "保持半透明观感" }];
+
+    const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
+    const bubbleClass = markup.match(/class="([^"]*message-bubble[^"]*)"/)?.[1];
+
+    assert.ok(bubbleClass);
+    assert.match(bubbleClass, /bg-\[rgba\(255,255,255,0\.78\)\]/);
+    assert.doesNotMatch(bubbleClass, /backdrop-blur/);
+  });
+
   it("preserves the full image inside the message attachment frame", () => {
     const session = createSession();
     session.messages = [

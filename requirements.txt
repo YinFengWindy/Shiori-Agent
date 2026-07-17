@@ -10,6 +10,7 @@ lxml>=6.0.0
 ncatbot>=4.4.0
 numpy>=2.4.0
 sqlite-vec>=0.1.6
+tzlocal>=5.0
 openai>=2.0.0
 Pillow>=11.0.0
 pydantic>=2.12.0
