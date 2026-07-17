@@ -33,7 +33,7 @@ export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onB
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] rounded-[20px] bg-[#F1F5F9] p-4 text-sm text-[#334155]">
       <div className="flex items-center gap-2 pb-3">
-        <button className="grid h-8 w-8 place-items-center rounded-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20" type="button" aria-label="返回任务列表" onClick={onBack}>
+        <button className="grid h-8 w-8 place-items-center rounded-md transition hover:bg-white" type="button" aria-label="返回任务列表" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </button>
         <span className="min-w-0 truncate font-semibold text-[#272536]">{task.label}</span>
@@ -54,18 +54,18 @@ export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onB
         {confirmingCancel ? (
           <div className="flex items-center justify-end gap-2">
             <span className="mr-auto text-xs text-[#667085]">确认取消此任务？</span>
-            <button className="rounded-md px-3 py-2 text-xs transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20" type="button" disabled={cancelling} onClick={onDismissCancel}>返回</button>
-            <button className="rounded-md bg-[#B42318] px-3 py-2 text-xs text-white transition hover:bg-[#912018] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50" type="button" disabled={cancelling} onClick={onCancel}>{cancelling ? "取消中…" : "确认取消"}</button>
+            <button className="rounded-md px-3 py-2 text-xs transition hover:bg-white" type="button" disabled={cancelling} onClick={onDismissCancel}>返回</button>
+            <button className="rounded-md bg-[#B42318] px-3 py-2 text-xs text-white transition hover:bg-[#912018] disabled:opacity-50" type="button" disabled={cancelling} onClick={onCancel}>{cancelling ? "取消中…" : "确认取消"}</button>
           </div>
         ) : (
           <div className="flex justify-end gap-2">
             {task.kind === "schedule" ? (
-              <button className="inline-flex items-center gap-1 rounded-md border border-[#D8DFE7] px-3 py-2 text-xs transition hover:border-[#B8C2CE] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50" type="button" disabled={!task.editable} onClick={onEdit}>
+              <button className="inline-flex items-center gap-1 rounded-md border border-[#D8DFE7] px-3 py-2 text-xs transition hover:border-[#B8C2CE] disabled:opacity-50" type="button" disabled={!task.editable} onClick={onEdit}>
                 <PencilSimple className="h-4 w-4" />编辑
               </button>
             ) : null}
             {task.cancellable ? (
-              <button className="inline-flex items-center gap-1 rounded-md border border-[#E6B8B3] px-3 py-2 text-xs text-[#B42318] transition hover:border-[#B42318] focus:outline-none focus:ring-2 focus:ring-primary/20" type="button" onClick={onBeginCancel}>
+              <button className="inline-flex items-center gap-1 rounded-md border border-[#E6B8B3] px-3 py-2 text-xs text-[#B42318] transition hover:border-[#B42318]" type="button" onClick={onBeginCancel}>
                 <Trash className="h-4 w-4" />取消
               </button>
             ) : null}

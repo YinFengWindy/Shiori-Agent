@@ -43,6 +43,7 @@ describe("RoleTaskDetails", () => {
     assert.match(markup, />0 9 \* \* \*</);
     assert.match(markup, />编辑</);
     assert.match(markup, />取消</);
+    assert.doesNotMatch(markup, /focus:ring/);
   });
 
   it("disables editing while running and confirms destructive actions inline", () => {

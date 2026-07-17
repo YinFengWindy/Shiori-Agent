@@ -14,7 +14,7 @@ export function RoleTaskList({ tasks, onCreate, onSelect }: {
       <div className="flex items-center justify-between px-1 pb-3">
         <span className="font-semibold text-[#272536]">任务</span>
         <button
-          className="grid h-8 w-8 place-items-center rounded-md text-[#5B6472] transition hover:bg-white hover:text-[#272536] focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="grid h-8 w-8 place-items-center rounded-md text-[#5B6472] transition hover:bg-white hover:text-[#272536]"
           type="button"
           aria-label="新增计划任务"
           onClick={onCreate}
@@ -29,7 +29,7 @@ export function RoleTaskList({ tasks, onCreate, onSelect }: {
             {group.tasks.map((task) => (
               <button
                 key={`${task.kind}:${task.id}`}
-                className="block w-full border-b border-[#E6EBF2] px-1 py-3 text-left transition last:border-b-0 hover:bg-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="block w-full border-b border-[#E6EBF2] px-1 py-3 text-left transition last:border-b-0 hover:bg-[#F8FAFC]"
                 type="button"
                 onClick={() => onSelect(task.id)}
               >
