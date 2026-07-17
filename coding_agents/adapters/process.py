@@ -5,11 +5,23 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import shutil
 import subprocess
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+
+_IS_WINDOWS = os.name == "nt"
+
+
+def _resolve_command(command: Sequence[str]) -> tuple[str, ...]:
+    if not command:
+        raise ValueError("进程命令不能为空")
+    if not _IS_WINDOWS:
+        return tuple(command)
+    executable = shutil.which(command[0])
+    return (executable or command[0], *command[1:])
 
 
 @dataclass(frozen=True)
@@ -128,9 +140,10 @@ class AsyncioProcessRunner:
         environment: Mapping[str, str],
         stdin: bytes,
     ) -> ManagedProcess:
+        resolved_command = _resolve_command(command)
         if os.name == "nt":
             process = await asyncio.create_subprocess_exec(
-                *command,
+                *resolved_command,
                 cwd=str(cwd),
                 env=dict(environment),
                 stdin=asyncio.subprocess.PIPE,
@@ -140,7 +153,7 @@ class AsyncioProcessRunner:
             )
         else:
             process = await asyncio.create_subprocess_exec(
-                *command,
+                *resolved_command,
                 cwd=str(cwd),
                 env=dict(environment),
                 stdin=asyncio.subprocess.PIPE,
@@ -160,8 +173,9 @@ class AsyncioProcessRunner:
         *,
         timeout_seconds: float,
     ) -> CapturedProcess:
+        resolved_command = _resolve_command(command)
         process = await asyncio.create_subprocess_exec(
-            *command,
+            *resolved_command,
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

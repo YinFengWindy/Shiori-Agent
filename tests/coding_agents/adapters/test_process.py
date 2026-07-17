@@ -4,7 +4,31 @@ import asyncio
 
 import pytest
 
-from coding_agents.adapters.process import AsyncioManagedProcess
+from coding_agents.adapters.process import AsyncioManagedProcess, _resolve_command
+
+
+def test_resolve_command_uses_windows_cli_shim_path(monkeypatch) -> None:
+    monkeypatch.setattr("coding_agents.adapters.process._IS_WINDOWS", True)
+    monkeypatch.setattr(
+        "coding_agents.adapters.process.shutil.which",
+        lambda executable: f"C:/npm/{executable}.cmd",
+    )
+
+    assert _resolve_command(("codex", "--version")) == (
+        "C:/npm/codex.cmd",
+        "--version",
+    )
+
+
+def test_resolve_command_preserves_non_windows_command(monkeypatch) -> None:
+    monkeypatch.setattr("coding_agents.adapters.process._IS_WINDOWS", False)
+
+    assert _resolve_command(("claude", "--version")) == ("claude", "--version")
+
+
+def test_resolve_command_rejects_empty_command() -> None:
+    with pytest.raises(ValueError, match="进程命令不能为空"):
+        _resolve_command(())
 
 
 class _HungProcess:
