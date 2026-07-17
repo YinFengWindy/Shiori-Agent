@@ -3,12 +3,12 @@ import { useState, type FormEvent } from "react";
 import type { ScheduleTaskFormData, ScheduleTaskTier, ScheduleTaskTrigger } from "../shared/types";
 import { cx, focusResetClass } from "../shared/styles";
 import {
-  combineScheduleDateTime,
-  customScheduleRuleValue,
-  getRecurringSchedulePreset,
+  buildRecurringScheduleRule,
+  parseRecurringScheduleRule,
   recurringScheduleOptions,
-  splitScheduleDateTime,
   validateScheduleTaskForm,
+  weekdayOptions,
+  type RecurringSchedulePreset,
   type ScheduleTaskFormErrors,
 } from "./roleTaskFormState";
 
@@ -28,24 +28,24 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
   onSave: (data: ScheduleTaskFormData) => Promise<void>;
 }) {
   const [data, setData] = useState(initialData);
+  const [recurringRule, setRecurringRule] = useState(() => parseRecurringScheduleRule(initialData.when));
   const [errors, setErrors] = useState<ScheduleTaskFormErrors>({});
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const nextErrors = validateScheduleTaskForm(data);
+    const submittedData = data.trigger === "every" ? { ...data, when: buildRecurringScheduleRule(recurringRule) } : data;
+    const nextErrors = validateScheduleTaskForm(submittedData);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
     try {
-      await onSave(data);
+      await onSave(submittedData);
     } catch {
       return;
     }
   };
 
-  const whenLabel = data.trigger === "after" ? "延迟时长" : "循环规则";
+  const whenLabel = data.trigger === "at" ? "执行时间" : "延迟时长";
   const whenPlaceholder = data.trigger === "after" ? "例如 30m、2h" : "例如 1h 或 0 9 * * *";
-  const recurringPreset = data.trigger === "every" ? getRecurringSchedulePreset(data.when) : customScheduleRuleValue;
-  const scheduledAt = data.trigger === "at" ? splitScheduleDateTime(data.when) : { date: "", time: "" };
 
   return (
     <form className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] rounded-[20px] bg-[#F1F5F9] p-4 text-sm text-[#334155]" onSubmit={(event) => void submit(event)}>
@@ -76,44 +76,40 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
             <option value="every">循环执行</option>
           </select>
         </label>
-        {data.trigger === "at" ? (
+        {data.trigger === "every" ? (
           <div className="grid gap-3 text-xs">
             <label className="grid gap-1">
-              <span>日期</span>
-              <input className={fieldClass} type="date" value={scheduledAt.date} disabled={saving} onChange={(event) => setData({ ...data, when: combineScheduleDateTime(event.target.value, scheduledAt.time) })} />
+              <span>周期</span>
+              <select className={fieldClass} value={recurringRule.preset} disabled={saving} onChange={(event) => setRecurringRule((current) => ({ ...current, preset: event.target.value as RecurringSchedulePreset }))}>
+                {recurringScheduleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
             </label>
-            <label className="grid gap-1">
-              <span>时间</span>
-              <input className={fieldClass} type="time" value={scheduledAt.time} disabled={saving} onChange={(event) => setData({ ...data, when: combineScheduleDateTime(scheduledAt.date, event.target.value) })} />
-            </label>
+            {recurringRule.preset === "weekly" ? (
+              <label className="grid gap-1">
+                <span>星期</span>
+                <select className={fieldClass} value={recurringRule.weekday} disabled={saving} onChange={(event) => setRecurringRule((current) => ({ ...current, weekday: event.target.value }))}>
+                  {weekdayOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+            ) : null}
+            {recurringRule.preset === "daily" || recurringRule.preset === "weekly" ? (
+              <label className="grid gap-1">
+                <span>执行时间</span>
+                <input className={fieldClass} type="time" value={recurringRule.time} disabled={saving} onChange={(event) => setRecurringRule((current) => ({ ...current, time: event.target.value }))} />
+              </label>
+            ) : null}
+            {recurringRule.preset === "custom" ? (
+              <label className="grid gap-1">
+                <span>自定义规则</span>
+                <input className={fieldClass} type="text" placeholder={whenPlaceholder} value={recurringRule.custom} disabled={saving} onChange={(event) => setRecurringRule((current) => ({ ...current, custom: event.target.value }))} />
+              </label>
+            ) : null}
             <FieldError message={errors.when} />
           </div>
-        ) : data.trigger === "every" ? (
-          <label className="grid gap-1 text-xs">
-            <span>{whenLabel}</span>
-            <select
-              className={fieldClass}
-              value={recurringPreset}
-              disabled={saving}
-              onChange={(event) => {
-                const nextValue = event.target.value;
-                setData({ ...data, when: nextValue === customScheduleRuleValue ? (recurringPreset === customScheduleRuleValue ? data.when : "") : nextValue });
-              }}
-            >
-              {recurringScheduleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              <option value={customScheduleRuleValue}>自定义</option>
-            </select>
-            {recurringPreset === customScheduleRuleValue ? (
-              <>
-                <input className={fieldClass} type="text" placeholder={whenPlaceholder} value={data.when} disabled={saving} onChange={(event) => setData({ ...data, when: event.target.value })} />
-                <FieldError message={errors.when} />
-              </>
-            ) : null}
-          </label>
         ) : (
           <label className="grid gap-1 text-xs">
             <span>{whenLabel}</span>
-            <input className={fieldClass} type="text" placeholder={whenPlaceholder} value={data.when} disabled={saving} onChange={(event) => setData({ ...data, when: event.target.value })} />
+            <input className={fieldClass} type={data.trigger === "at" ? "datetime-local" : "text"} placeholder={data.trigger === "at" ? undefined : whenPlaceholder} value={data.when} disabled={saving} onChange={(event) => setData({ ...data, when: event.target.value })} />
             <FieldError message={errors.when} />
           </label>
         )}

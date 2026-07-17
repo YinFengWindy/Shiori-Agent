@@ -20,7 +20,7 @@ function renderForm(initialData: ScheduleTaskFormData, saving = false, error = "
 }
 
 describe("RoleTaskForm", () => {
-  it("uses separate date and time controls for at schedules", () => {
+  it("uses a date-time control for at schedules", () => {
     const markup = renderForm({
       name: "提醒",
       tier: "instant",
@@ -29,9 +29,8 @@ describe("RoleTaskForm", () => {
       content: "喝水",
     });
 
-    assert.match(markup, /type="date" value="2026-07-18"/);
-    assert.match(markup, /type="time" value="09:30"/);
-    assert.doesNotMatch(markup, /datetime-local/);
+    assert.match(markup, /type="datetime-local"/);
+    assert.match(markup, /value="2026-07-18T09:30"/);
     assert.match(markup, /focus:outline-none/);
     assert.doesNotMatch(markup, /focus:ring/);
   });
@@ -50,6 +49,34 @@ describe("RoleTaskForm", () => {
     assert.doesNotMatch(markup, /placeholder="例如 1h 或 0 9 \* \* \*"/);
   });
 
+  it("separates daily recurrence from its execution time", () => {
+    const markup = renderForm({
+      name: "提醒",
+      tier: "instant",
+      trigger: "every",
+      when: "30 14 * * *",
+      content: "喝水",
+    });
+
+    assert.match(markup, /<option value="daily" selected="">每天<\/option>/);
+    assert.match(markup, />执行时间</);
+    assert.match(markup, /type="time" value="14:30"/);
+  });
+
+  it("separates weekly recurrence into weekday and execution time", () => {
+    const markup = renderForm({
+      name: "提醒",
+      tier: "instant",
+      trigger: "every",
+      when: "15 8 * * 5",
+      content: "喝水",
+    });
+
+    assert.match(markup, /<option value="weekly" selected="">每周<\/option>/);
+    assert.match(markup, /<option value="5" selected="">周五<\/option>/);
+    assert.match(markup, /type="time" value="08:15"/);
+  });
+
   it("keeps custom recurring rules editable", () => {
     const markup = renderForm({
       name: "提醒",
@@ -59,7 +86,7 @@ describe("RoleTaskForm", () => {
       content: "喝水",
     }, true, "保存失败");
 
-    assert.match(markup, /<option value="__custom__" selected="">自定义<\/option>/);
+    assert.match(markup, /<option value="custom" selected="">自定义<\/option>/);
     assert.match(markup, /type="text"/);
     assert.match(markup, /value="\*\/5 \* \* \* \*"/);
     assert.match(markup, />保存中…</);

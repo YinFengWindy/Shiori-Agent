@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { RoleTask } from "../shared/types";
 import {
-  combineScheduleDateTime,
+  buildRecurringScheduleRule,
   createScheduleTaskFormData,
+  parseRecurringScheduleRule,
   scheduleTaskFormDataFromTask,
-  splitScheduleDateTime,
   validateScheduleTaskForm,
 } from "./roleTaskFormState";
 
@@ -40,10 +40,21 @@ describe("roleTaskFormState", () => {
     assert.deepEqual(scheduleTaskFormDataFromTask(task), { name: "天气", ...task.schedule });
   });
 
-  it("splits and combines separate date and time form values", () => {
-    assert.deepEqual(splitScheduleDateTime("2026-07-18T09:30"), { date: "2026-07-18", time: "09:30" });
-    assert.equal(combineScheduleDateTime("2026-07-18", "09:30"), "2026-07-18T09:30");
-    assert.equal(combineScheduleDateTime("2026-07-18", ""), "2026-07-18T");
+  it("parses and rebuilds structured daily and weekly recurrence rules", () => {
+    const daily = parseRecurringScheduleRule("30 14 * * *");
+    const weekly = parseRecurringScheduleRule("15 8 * * 5");
+
+    assert.deepEqual(daily, { preset: "daily", time: "14:30", weekday: "1", custom: "" });
+    assert.deepEqual(weekly, { preset: "weekly", time: "08:15", weekday: "5", custom: "" });
+    assert.equal(buildRecurringScheduleRule(daily), "30 14 * * *");
+    assert.equal(buildRecurringScheduleRule(weekly), "15 8 * * 5");
+  });
+
+  it("preserves custom recurrence rules", () => {
+    const custom = parseRecurringScheduleRule("*/5 * * * *");
+
+    assert.deepEqual(custom, { preset: "custom", time: "09:00", weekday: "1", custom: "*/5 * * * *" });
+    assert.equal(buildRecurringScheduleRule(custom), "*/5 * * * *");
   });
 
   it("validates required fields but leaves schedule syntax to the backend", () => {
@@ -56,12 +67,5 @@ describe("roleTaskFormState", () => {
       when: "由后端判断",
       content: "喝水",
     }), {});
-    assert.equal(validateScheduleTaskForm({
-      name: "提醒",
-      tier: "instant",
-      trigger: "at",
-      when: "2026-07-18T",
-      content: "喝水",
-    }).when, "请选择日期和时间");
   });
 });

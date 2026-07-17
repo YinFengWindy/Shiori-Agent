@@ -2,35 +2,71 @@ import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
 
 export type ScheduleTaskFormErrors = Partial<Record<keyof ScheduleTaskFormData, string>>;
 
-export const customScheduleRuleValue = "__custom__";
+export type RecurringSchedulePreset = "15m" | "30m" | "1h" | "2h" | "daily" | "weekly" | "custom";
+
+export type RecurringScheduleRule = {
+  preset: RecurringSchedulePreset;
+  time: string;
+  weekday: string;
+  custom: string;
+};
 
 export const recurringScheduleOptions = [
   { value: "15m", label: "每 15 分钟" },
   { value: "30m", label: "每 30 分钟" },
   { value: "1h", label: "每小时" },
   { value: "2h", label: "每 2 小时" },
-  { value: "0 9 * * *", label: "每天 09:00" },
-  { value: "0 9 * * 1", label: "每周一 09:00" },
+  { value: "daily", label: "每天" },
+  { value: "weekly", label: "每周" },
+  { value: "custom", label: "自定义" },
 ] as const;
 
-/** Returns the matching preset value or the custom sentinel for one recurring rule. */
-export function getRecurringSchedulePreset(when: string): string {
-  return recurringScheduleOptions.some((option) => option.value === when) ? when : customScheduleRuleValue;
+export const weekdayOptions = [
+  { value: "1", label: "周一" },
+  { value: "2", label: "周二" },
+  { value: "3", label: "周三" },
+  { value: "4", label: "周四" },
+  { value: "5", label: "周五" },
+  { value: "6", label: "周六" },
+  { value: "0", label: "周日" },
+] as const;
+
+function formatCronTime(hour: string, minute: string): string {
+  return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
 }
 
-/** Splits one scheduler datetime into values accepted by date and time inputs. */
-export function splitScheduleDateTime(when: string): { date: string; time: string } {
-  if (!when) return { date: "", time: "" };
-  if (!when.includes("T")) {
-    return /^\d{1,2}:\d{2}/.test(when) ? { date: "", time: when.slice(0, 5) } : { date: "", time: "" };
+/** Parses one persisted interval or cron expression into recurring form fields. */
+export function parseRecurringScheduleRule(when: string): RecurringScheduleRule {
+  if (["15m", "30m", "1h", "2h"].includes(when)) {
+    return { preset: when as RecurringSchedulePreset, time: "09:00", weekday: "1", custom: "" };
   }
-  const [date = "", time = ""] = when.split("T", 2);
-  return { date, time: time.slice(0, 5) };
+  const dailyMatch = /^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*$/.exec(when);
+  if (dailyMatch) {
+    return { preset: "daily", time: formatCronTime(dailyMatch[2], dailyMatch[1]), weekday: "1", custom: "" };
+  }
+  const weeklyMatch = /^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+([0-7])$/.exec(when);
+  if (weeklyMatch) {
+    return {
+      preset: "weekly",
+      time: formatCronTime(weeklyMatch[2], weeklyMatch[1]),
+      weekday: weeklyMatch[3] === "7" ? "0" : weeklyMatch[3],
+      custom: "",
+    };
+  }
+  if (!when) {
+    return { preset: "1h", time: "09:00", weekday: "1", custom: "" };
+  }
+  return { preset: "custom", time: "09:00", weekday: "1", custom: when };
 }
 
-/** Combines date and time input values while preserving incomplete form state. */
-export function combineScheduleDateTime(date: string, time: string): string {
-  return date || time ? `${date}T${time}` : "";
+/** Serializes recurring form fields into the scheduler's existing when value. */
+export function buildRecurringScheduleRule(rule: RecurringScheduleRule): string {
+  if (["15m", "30m", "1h", "2h"].includes(rule.preset)) return rule.preset;
+  if (rule.preset === "custom") return rule.custom.trim();
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(rule.time);
+  if (!timeMatch) return "";
+  const cronTime = `${Number(timeMatch[2])} ${Number(timeMatch[1])}`;
+  return rule.preset === "daily" ? `${cronTime} * * *` : `${cronTime} * * ${rule.weekday}`;
 }
 
 /** Creates the initial values for a new desktop scheduled task. */
@@ -56,12 +92,7 @@ export function scheduleTaskFormDataFromTask(task: RoleTask): ScheduleTaskFormDa
 export function validateScheduleTaskForm(data: ScheduleTaskFormData): ScheduleTaskFormErrors {
   const errors: ScheduleTaskFormErrors = {};
   if (!data.name.trim()) errors.name = "请输入任务名称";
-  const scheduledAt = splitScheduleDateTime(data.when);
-  if (data.trigger === "at" && (!scheduledAt.date || !scheduledAt.time)) {
-    errors.when = "请选择日期和时间";
-  } else if (!data.when.trim()) {
-    errors.when = "请输入执行时间";
-  }
+  if (!data.when.trim()) errors.when = data.trigger === "every" ? "请完善循环规则" : "请输入执行时间";
   if (!data.content.trim()) errors.content = "请输入执行内容";
   return errors;
 }
