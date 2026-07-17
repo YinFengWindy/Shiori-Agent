@@ -20,7 +20,7 @@ function renderForm(initialData: ScheduleTaskFormData, saving = false, error = "
 }
 
 describe("RoleTaskForm", () => {
-  it("uses a date-time control for at schedules", () => {
+  it("uses separate date and time controls for at schedules", () => {
     const markup = renderForm({
       name: "提醒",
       tier: "instant",
@@ -29,8 +29,9 @@ describe("RoleTaskForm", () => {
       content: "喝水",
     });
 
-    assert.match(markup, /type="datetime-local"/);
-    assert.match(markup, /value="2026-07-18T09:30"/);
+    assert.match(markup, /type="date" value="2026-07-18"/);
+    assert.match(markup, /type="time" value="09:30"/);
+    assert.doesNotMatch(markup, /datetime-local/);
     assert.match(markup, /focus:outline-none/);
     assert.doesNotMatch(markup, /focus:ring/);
   });

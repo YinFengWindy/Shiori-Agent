@@ -3,9 +3,11 @@ import { useState, type FormEvent } from "react";
 import type { ScheduleTaskFormData, ScheduleTaskTier, ScheduleTaskTrigger } from "../shared/types";
 import { cx, focusResetClass } from "../shared/styles";
 import {
+  combineScheduleDateTime,
   customScheduleRuleValue,
   getRecurringSchedulePreset,
   recurringScheduleOptions,
+  splitScheduleDateTime,
   validateScheduleTaskForm,
   type ScheduleTaskFormErrors,
 } from "./roleTaskFormState";
@@ -40,9 +42,10 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
     }
   };
 
-  const whenLabel = data.trigger === "at" ? "执行时间" : data.trigger === "after" ? "延迟时长" : "循环规则";
+  const whenLabel = data.trigger === "after" ? "延迟时长" : "循环规则";
   const whenPlaceholder = data.trigger === "after" ? "例如 30m、2h" : "例如 1h 或 0 9 * * *";
   const recurringPreset = data.trigger === "every" ? getRecurringSchedulePreset(data.when) : customScheduleRuleValue;
+  const scheduledAt = data.trigger === "at" ? splitScheduleDateTime(data.when) : { date: "", time: "" };
 
   return (
     <form className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] rounded-[20px] bg-[#F1F5F9] p-4 text-sm text-[#334155]" onSubmit={(event) => void submit(event)}>
@@ -73,7 +76,19 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
             <option value="every">循环执行</option>
           </select>
         </label>
-        {data.trigger === "every" ? (
+        {data.trigger === "at" ? (
+          <div className="grid gap-3 text-xs">
+            <label className="grid gap-1">
+              <span>日期</span>
+              <input className={fieldClass} type="date" value={scheduledAt.date} disabled={saving} onChange={(event) => setData({ ...data, when: combineScheduleDateTime(event.target.value, scheduledAt.time) })} />
+            </label>
+            <label className="grid gap-1">
+              <span>时间</span>
+              <input className={fieldClass} type="time" value={scheduledAt.time} disabled={saving} onChange={(event) => setData({ ...data, when: combineScheduleDateTime(scheduledAt.date, event.target.value) })} />
+            </label>
+            <FieldError message={errors.when} />
+          </div>
+        ) : data.trigger === "every" ? (
           <label className="grid gap-1 text-xs">
             <span>{whenLabel}</span>
             <select
@@ -98,7 +113,7 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
         ) : (
           <label className="grid gap-1 text-xs">
             <span>{whenLabel}</span>
-            <input className={fieldClass} type={data.trigger === "at" ? "datetime-local" : "text"} placeholder={data.trigger === "at" ? undefined : whenPlaceholder} value={data.when} disabled={saving} onChange={(event) => setData({ ...data, when: event.target.value })} />
+            <input className={fieldClass} type="text" placeholder={whenPlaceholder} value={data.when} disabled={saving} onChange={(event) => setData({ ...data, when: event.target.value })} />
             <FieldError message={errors.when} />
           </label>
         )}

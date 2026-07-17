@@ -3,7 +3,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { RoleTask } from "../shared/types";
-import { createScheduleTaskFormData, scheduleTaskFormDataFromTask, validateScheduleTaskForm } from "./roleTaskFormState";
+import {
+  combineScheduleDateTime,
+  createScheduleTaskFormData,
+  scheduleTaskFormDataFromTask,
+  splitScheduleDateTime,
+  validateScheduleTaskForm,
+} from "./roleTaskFormState";
 
 describe("roleTaskFormState", () => {
   it("creates defaults without a timezone field", () => {
@@ -34,6 +40,12 @@ describe("roleTaskFormState", () => {
     assert.deepEqual(scheduleTaskFormDataFromTask(task), { name: "天气", ...task.schedule });
   });
 
+  it("splits and combines separate date and time form values", () => {
+    assert.deepEqual(splitScheduleDateTime("2026-07-18T09:30"), { date: "2026-07-18", time: "09:30" });
+    assert.equal(combineScheduleDateTime("2026-07-18", "09:30"), "2026-07-18T09:30");
+    assert.equal(combineScheduleDateTime("2026-07-18", ""), "2026-07-18T");
+  });
+
   it("validates required fields but leaves schedule syntax to the backend", () => {
     const missing = validateScheduleTaskForm(createScheduleTaskFormData());
     assert.deepEqual(Object.keys(missing).sort(), ["content", "name", "when"]);
@@ -44,5 +56,12 @@ describe("roleTaskFormState", () => {
       when: "由后端判断",
       content: "喝水",
     }), {});
+    assert.equal(validateScheduleTaskForm({
+      name: "提醒",
+      tier: "instant",
+      trigger: "at",
+      when: "2026-07-18T",
+      content: "喝水",
+    }).when, "请选择日期和时间");
   });
 });

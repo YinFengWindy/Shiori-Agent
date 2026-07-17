@@ -18,6 +18,21 @@ export function getRecurringSchedulePreset(when: string): string {
   return recurringScheduleOptions.some((option) => option.value === when) ? when : customScheduleRuleValue;
 }
 
+/** Splits one scheduler datetime into values accepted by date and time inputs. */
+export function splitScheduleDateTime(when: string): { date: string; time: string } {
+  if (!when) return { date: "", time: "" };
+  if (!when.includes("T")) {
+    return /^\d{1,2}:\d{2}/.test(when) ? { date: "", time: when.slice(0, 5) } : { date: "", time: "" };
+  }
+  const [date = "", time = ""] = when.split("T", 2);
+  return { date, time: time.slice(0, 5) };
+}
+
+/** Combines date and time input values while preserving incomplete form state. */
+export function combineScheduleDateTime(date: string, time: string): string {
+  return date || time ? `${date}T${time}` : "";
+}
+
 /** Creates the initial values for a new desktop scheduled task. */
 export function createScheduleTaskFormData(): ScheduleTaskFormData {
   return {
@@ -41,7 +56,12 @@ export function scheduleTaskFormDataFromTask(task: RoleTask): ScheduleTaskFormDa
 export function validateScheduleTaskForm(data: ScheduleTaskFormData): ScheduleTaskFormErrors {
   const errors: ScheduleTaskFormErrors = {};
   if (!data.name.trim()) errors.name = "请输入任务名称";
-  if (!data.when.trim()) errors.when = "请输入执行时间";
+  const scheduledAt = splitScheduleDateTime(data.when);
+  if (data.trigger === "at" && (!scheduledAt.date || !scheduledAt.time)) {
+    errors.when = "请选择日期和时间";
+  } else if (!data.when.trim()) {
+    errors.when = "请输入执行时间";
+  }
   if (!data.content.trim()) errors.content = "请输入执行内容";
   return errors;
 }
