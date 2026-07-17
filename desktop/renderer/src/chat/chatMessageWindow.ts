@@ -1,8 +1,8 @@
 import { getChatMessageDomKey } from "./chatMessageIdentity";
 import type { SessionMessage } from "../shared/types";
 
-export const initialVisibleChatMessageCount = 160;
-export const visibleChatMessageCountStep = 120;
+export const initialVisibleChatMessageCount = 60;
+export const visibleChatMessageCountStep = 60;
 const highlightedChatMessageTrailingContext = 24;
 
 /** Returns the top slice index for the currently rendered chat message window. */

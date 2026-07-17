@@ -123,9 +123,12 @@ export function ChatSurface({
     enabled: sidebarMode === "tasks" && !chatLatestImageSidebarCollapsed,
   });
   const sessionMessages = activeSession?.messages ?? emptySessionMessages;
-  const currentUserMessageCount = sessionMessages.reduce(
-    (count, message) => count + (message.role === "user" ? 1 : 0),
-    0,
+  const currentUserMessageCount = useMemo(
+    () => sessionMessages.reduce(
+      (count, message) => count + (message.role === "user" ? 1 : 0),
+      0,
+    ),
+    [sessionMessages],
   );
   const currentLastMessageContent = sessionMessages.at(-1)?.content ?? "";
   const sidebarToggleGlyphClass =
