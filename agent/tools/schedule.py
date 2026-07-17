@@ -159,6 +159,7 @@ class ScheduleTool(Tool):
             prompt=prompt,
             name=name,
             timezone=tz,
+            when=when,
         )
         self._service.add_job(job)
 

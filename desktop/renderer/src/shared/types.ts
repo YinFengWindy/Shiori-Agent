@@ -86,6 +86,22 @@ export type RoleProactiveConfig = {
 
 export type RoleTaskKind = "schedule" | "subagent" | "memory_maintenance";
 
+export type ScheduleTaskTier = "instant" | "soft";
+
+export type ScheduleTaskTrigger = "at" | "after" | "every";
+
+/** Editable fields accepted by the desktop scheduled-task API. */
+export type ScheduleTaskFormData = {
+  name: string;
+  tier: ScheduleTaskTier;
+  trigger: ScheduleTaskTrigger;
+  when: string;
+  content: string;
+};
+
+/** Scheduler fields exposed for one editable role task. */
+export type RoleTaskSchedule = Omit<ScheduleTaskFormData, "name">;
+
 /** Role-owned background work returned by the desktop bridge. */
 export type RoleTask = {
   id: string;
@@ -97,6 +113,8 @@ export type RoleTask = {
   created_at: string;
   next_run_at: string;
   cancellable: boolean;
+  editable: boolean;
+  schedule: RoleTaskSchedule | null;
 };
 
 /** Single message in a role-bound session. */

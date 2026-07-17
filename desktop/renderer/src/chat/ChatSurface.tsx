@@ -1,4 +1,4 @@
-import React, { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessageContextMenu } from "./ChatMessageContextMenu";
@@ -308,7 +308,14 @@ export function ChatSurface({
     setVisibleMessageCount(initialVisibleChatMessageCount);
   }, [activeSession?.key]);
 
-  const visibleMessageWindow = getVisibleChatMessages(sessionMessages, visibleMessageCount);
+  const visibleMessageWindow = useMemo(
+    () => getVisibleChatMessages(sessionMessages, visibleMessageCount),
+    [sessionMessages, visibleMessageCount],
+  );
+
+  const handleExpandOlderMessages = useCallback(() => {
+    setVisibleMessageCount((current) => current + visibleChatMessageCountStep);
+  }, []);
 
   useLayoutEffect(() => {
     const nextVisibleMessageCount = getExpandedVisibleChatMessageCountForKey(
@@ -361,22 +368,26 @@ export function ChatSurface({
     }, 320);
   };
 
-  const handleOpenChatImagePreview = (historyKey: string) => {
+  const handleOpenChatImagePreview = useCallback((historyKey: string) => {
     setSidebarMode("images");
     onOpenChatImagePreview({ historyKey });
-  };
+  }, [onOpenChatImagePreview]);
 
-  const handleOpenRoleDetail = () => {
+  const handleOpenRoleDetail = useCallback(() => {
     if (!canOpenRoleDetail) return;
     onOpenRoleDetail();
-  };
+  }, [canOpenRoleDetail, onOpenRoleDetail]);
 
-  function openMessageContextMenu(
+  const handleClearReplyTarget = useCallback(() => {
+    setComposerReplyTarget(null);
+  }, []);
+
+  const openMessageContextMenu = useCallback((
     event: React.MouseEvent<HTMLElement>,
     message: SessionMessage,
     messageKey: string,
     sender: string,
-  ): void {
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     setMessageContextMenu({
@@ -386,7 +397,7 @@ export function ChatSurface({
       messageKey,
       sender,
     });
-  }
+  }, []);
 
   function copyContextMessage(): void {
     if (!messageContextMenu) return;
@@ -462,9 +473,7 @@ export function ChatSurface({
           highlightedMessageKey={highlightedMessageKey}
           visibleMessageWindow={visibleMessageWindow}
           onBeginAttachmentDrag={onBeginAttachmentDrag}
-          onExpandOlderMessages={() => (
-            setVisibleMessageCount((current) => current + visibleChatMessageCountStep)
-          )}
+          onExpandOlderMessages={handleExpandOlderMessages}
           onJumpToMessage={onJumpToMessage}
           onOpenContextMenu={openMessageContextMenu}
           onOpenImagePreview={handleOpenChatImagePreview}
@@ -491,7 +500,7 @@ export function ChatSurface({
           sending={sending}
           replyTarget={composerReplyTarget}
           onSendMessage={onSendMessage}
-          onClearReplyTarget={() => setComposerReplyTarget(null)}
+          onClearReplyTarget={handleClearReplyTarget}
           onJumpToMessage={onJumpToMessage}
         />
       </section>
@@ -520,7 +529,6 @@ export function ChatSurface({
               <ChatRightSidebar
                 canGoToNextImage={canGoToNextChatImage}
                 canGoToPreviousImage={canGoToPreviousChatImage}
-                cancellingTaskId={roleTasks.cancellingTaskId}
                 currentMood={currentMood}
                 imagePath={chatLatestImagePath}
                 lonelinessValue={lonelinessValue}
@@ -530,6 +538,11 @@ export function ChatSurface({
                 renderHeavyVisuals={renderHeavyVisuals}
                 roleSelfView={roleSelfView}
                 tasks={roleTasks.tasks}
+                taskError={roleTasks.error}
+                taskOperation={roleTasks.operation}
+                onClearTaskError={roleTasks.clearError}
+                onCreateTask={roleTasks.create}
+                onUpdateTask={roleTasks.update}
                 onCancelTask={roleTasks.cancel}
                 onGoToNextImage={onGoToNextChatImage}
                 onGoToPreviousImage={onGoToPreviousChatImage}

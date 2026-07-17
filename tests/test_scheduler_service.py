@@ -3,7 +3,7 @@
 import asyncio
 import json
 from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, call
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
@@ -431,6 +431,126 @@ def test_job_store_keeps_ambiguous_legacy_transport_unowned(tmp_path):
     jobs = JobStore(path).load()
 
     assert jobs[0].role_id == ""
+
+
+def test_create_job_validates_and_persists_complete_schedule(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+
+    job = svc.create_job(
+        name="晨间提醒",
+        tier="instant",
+        trigger="at",
+        when="2026-07-18T09:30",
+        content="喝水",
+        timezone_name="Asia/Shanghai",
+        channel="desktop",
+        chat_id="role:mira",
+        role_id="mira",
+    )
+
+    assert job.when == "2026-07-18T09:30"
+    assert job.message == "喝水"
+    assert job.prompt is None
+    assert job.fire_at.isoformat() == "2026-07-18T09:30:00+08:00"
+    restored = JobStore(tmp_path / "jobs.json").load()
+    assert [item.id for item in restored] == [job.id]
+    assert restored[0].role_id == "mira"
+
+
+def test_update_job_atomically_replaces_idle_role_schedule(
+    tmp_path, mock_push, mock_loop, fixed_now
+):
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    original = svc.create_job(
+        name="提醒",
+        tier="instant",
+        trigger="after",
+        when="30m",
+        content="旧内容",
+        timezone_name="Asia/Shanghai",
+        channel="desktop",
+        chat_id="role:mira",
+        role_id="mira",
+    )
+
+    updated = svc.update_job(
+        original.id,
+        role_id="mira",
+        name="每日总结",
+        tier="soft",
+        trigger="every",
+        when="0 21 * * *",
+        content="总结今天",
+        timezone_name="Asia/Shanghai",
+    )
+
+    assert updated.id == original.id
+    assert updated.created_at == original.created_at
+    assert updated.channel == "desktop"
+    assert updated.chat_id == "role:mira"
+    assert updated.prompt == "总结今天"
+    assert updated.message is None
+    assert updated.cron_expr == "0 21 * * *"
+    assert JobStore(tmp_path / "jobs.json").load()[0].name == "每日总结"
+
+
+@pytest.mark.parametrize("role_id,active", [("other", False), ("mira", True)])
+def test_update_job_rejects_cross_role_and_running_jobs_without_changes(
+    tmp_path, mock_push, mock_loop, fixed_now, role_id, active
+):
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    original = svc.create_job(
+        name="提醒",
+        tier="instant",
+        trigger="after",
+        when="30m",
+        content="旧内容",
+        timezone_name="UTC",
+        channel="desktop",
+        chat_id="role:mira",
+        role_id="mira",
+    )
+    if active:
+        svc._in_flight.add(original.id)
+
+    with pytest.raises((KeyError, RuntimeError)):
+        svc.update_job(
+            original.id,
+            role_id=role_id,
+            name="新名称",
+            tier="instant",
+            trigger="after",
+            when="1h",
+            content="新内容",
+            timezone_name="UTC",
+        )
+
+    assert svc.list_jobs()[0].name == "提醒"
+    assert JobStore(tmp_path / "jobs.json").load()[0].name == "提醒"
+
+
+def test_create_job_keeps_memory_unchanged_when_persistence_fails(
+    tmp_path, mock_push, mock_loop, fixed_now, monkeypatch
+):
+    svc = make_service(tmp_path, mock_push, mock_loop, fixed_now)
+    monkeypatch.setattr(svc.store, "save", Mock(side_effect=OSError("disk full")))
+
+    with pytest.raises(OSError, match="disk full"):
+        svc.create_job(
+            name="提醒",
+            tier="instant",
+            trigger="after",
+            when="30m",
+            content="内容",
+            timezone_name="UTC",
+            channel="desktop",
+            chat_id="role:mira",
+            role_id="mira",
+        )
+
+    assert svc.list_jobs() == []
 
 
 def test_legacy_role_job_metadata_gets_stable_context_defaults(
