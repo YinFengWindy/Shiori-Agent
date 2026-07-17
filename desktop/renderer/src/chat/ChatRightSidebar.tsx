@@ -1,3 +1,4 @@
+import React from "react";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
 import { RoleTasksPanel } from "./RoleTasksPanel";
 import { toFileUrl } from "../shared/format";
@@ -29,7 +30,7 @@ type ChatRightSidebarProps = {
 };
 
 /** Renders the active status, task, or image panel in the chat right sidebar. */
-export function ChatRightSidebar({
+export const ChatRightSidebar = React.memo(function ChatRightSidebar({
   canGoToNextImage,
   canGoToPreviousImage,
   currentMood,
@@ -108,4 +109,4 @@ export function ChatRightSidebar({
       </div>
     </div>
   );
-}
+});

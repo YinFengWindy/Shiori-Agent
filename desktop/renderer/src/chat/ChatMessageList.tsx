@@ -43,7 +43,7 @@ const userMessageBubbleClass =
   "message-bubble w-fit max-w-full rounded-[14px] border border-[#E4E4E4] bg-white px-3.5 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]";
 
 /** Renders the current chat message window and its attachments. */
-export function ChatMessageList({
+export const ChatMessageList = React.memo(function ChatMessageList({
   activeRole,
   conversationEndRef,
   conversationListRef,
@@ -212,4 +212,4 @@ export function ChatMessageList({
       </div>
     </div>
   );
-}
+});

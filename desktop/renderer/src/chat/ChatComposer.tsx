@@ -32,7 +32,7 @@ function getAttachmentExtensionLabel(path: string): string {
 }
 
 /** Owns draft, pending attachments, and reply target rendering for the desktop chat composer. */
-export function ChatComposer({
+export const ChatComposer = React.memo(function ChatComposer({
   activeRoleId,
   sessionKey,
   bridgeReady,
@@ -256,4 +256,4 @@ export function ChatComposer({
       </div>
     </div>
   );
-}
+});
