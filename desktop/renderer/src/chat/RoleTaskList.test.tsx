@@ -27,7 +27,8 @@ describe("RoleTaskList", () => {
     assert.match(markup, /aria-label="新增计划任务"/);
     assert.match(markup, />后台任务</);
     assert.match(markup, />记忆维护</);
-    assert.equal((markup.match(/>暂无任务</g) ?? []).length, 2);
+    assert.doesNotMatch(markup, />暂无任务</);
+    assert.equal((markup.match(/mb-6/g) ?? []).length, 3);
     assert.match(markup, /class="truncate font-semibold"/);
     assert.match(markup, />这是一段很长的任务说明</);
     assert.doesNotMatch(markup, /2026-07-11/);
