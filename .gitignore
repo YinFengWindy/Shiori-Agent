@@ -52,6 +52,7 @@ plugins/**/.data/
 /config.backup.20260301-063714.json
 /docs/specs/
 /docs/plan/
+/graphify-out/
 /.pytest_artifacts/
 /rss/
 

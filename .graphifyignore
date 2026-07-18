@@ -1,0 +1,38 @@
+# 测试与评测不进入主业务图谱
+tests/
+eval/
+**/*.test.ts
+**/*.test.tsx
+**/*.test.js
+**/*.test.jsx
+**/test_*.py
+
+# 构建、依赖与运行时数据
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+renderer-dist/
+**/renderer-dist/
+static/
+docker/
+assets/
+logs/
+data/
+private_runtime/
+workspace/
+graphify-out/
+
+# 生成文件与依赖锁文件
+package-lock.json
+**/package-lock.json
+uv.lock
+
+# Agent 配置和非架构文档
+.agents/
+.claude/
+.codex/
+docs/agents/
+docs/specs/
+docs/plan/
+docs/_handbook/
