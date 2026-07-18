@@ -31,6 +31,13 @@ describe("RoleTaskForm", () => {
 
     assert.match(markup, /type="datetime-local"/);
     assert.match(markup, /value="2026-07-18T09:30"/);
+    assert.match(markup, />基础信息</);
+    assert.match(markup, />执行设置</);
+    assert.match(markup, />任务内容</);
+    assert.match(markup, /role="group" aria-label="执行模式"/);
+    assert.match(markup, /role="group" aria-label="触发方式"/);
+    assert.match(markup, /aria-pressed="true"[^>]*>直接发送</);
+    assert.match(markup, /class="[^"]*w-full[^"]*" type="submit"/);
     assert.match(markup, /focus:outline-none/);
     assert.doesNotMatch(markup, /focus:ring/);
   });
