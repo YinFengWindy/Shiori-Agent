@@ -82,7 +82,7 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
   }
   return (
     <div className={chatSidebarPanelClass}>
-      <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-md bg-white/45">
+      <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-md">
         <div className="pointer-events-none absolute inset-y-0 left-0 z-[2] flex items-center pl-3">
           <button className={navButtonClass} type="button" aria-label="查看上一张聊天图片" onClick={onGoToPreviousImage} disabled={!canGoToPreviousImage}>
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

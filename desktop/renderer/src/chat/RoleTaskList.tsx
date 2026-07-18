@@ -26,7 +26,7 @@ export function RoleTaskList({ tasks, onCreate, onSelect }: {
       </div>
       <div className={cx(chatSidebarScrollableClass, "space-y-3")}>
         {groups.length ? groups.map((group) => (
-          <section key={group.kind} data-testid="role-task-group" className="rounded-md bg-white/70 p-2">
+          <section key={group.kind} data-testid="role-task-group" className="rounded-md p-2">
             <div className="flex items-center gap-1.5 px-1 pb-2 text-[11px] font-medium tracking-wide text-[#667085]">
               {group.kind === "schedule" ? <CalendarDots className="h-3.5 w-3.5" weight="fill" /> : null}
               {group.kind === "subagent" ? <Robot className="h-3.5 w-3.5" weight="fill" /> : null}

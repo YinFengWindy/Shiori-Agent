@@ -24,7 +24,7 @@ export function ChatStatusSidebar({
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   return (
     <div className={cx(chatSidebarPanelClass, "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto] gap-3")}>
-      <div className="grid min-h-0 place-items-center overflow-hidden rounded-md bg-white/45 p-3">
+      <div className="grid min-h-0 place-items-center overflow-hidden rounded-md p-3">
         {shouldRenderIllustration ? (
           <img
             className="max-h-full max-w-full object-contain"
@@ -44,7 +44,7 @@ export function ChatStatusSidebar({
           {currentMood || "未生成"}
         </div>
       </div>
-      <div className="rounded-md bg-white/75 px-3 py-3 text-left">
+      <div className="rounded-md px-3 py-3 text-left">
         <div className="text-[11px] uppercase tracking-[0.16em] text-[#7A8593]">当下想法</div>
         <div className="mt-2 text-[13px] leading-6 text-[#334155]">
           {roleSelfView || "我还在慢慢整理自己现在对你的想法。"}
@@ -55,7 +55,7 @@ export function ChatStatusSidebar({
           {relationshipTags.map((tag) => (
             <span
               key={tag}
-              className="rounded-md bg-white/75 px-2.5 py-1 text-[11px] leading-none text-[#556070]"
+              className="rounded-md px-2.5 py-1 text-[11px] leading-none text-[#556070]"
             >
               {tag}
             </span>
@@ -64,7 +64,7 @@ export function ChatStatusSidebar({
       ) : (
         <div className="text-[11px] text-[#8A94A3]">关系标签还在生成中</div>
       )}
-      <div className="rounded-md bg-white/75 px-3 py-3">
+      <div className="rounded-md px-3 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="text-[11px] uppercase tracking-[0.16em] text-[#7A8593]">寂寞值</div>
           <div className="text-sm font-semibold text-[#1F2937]">{Math.round(normalizedLoneliness)}</div>

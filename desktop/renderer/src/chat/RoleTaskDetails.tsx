@@ -17,7 +17,7 @@ import {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid gap-1 rounded-md bg-white/75 px-3 py-2.5">
+    <div className="grid gap-1 rounded-md px-3 py-2.5">
       <span className="text-[10px] font-medium tracking-wide text-[#8A94A3]">{label}</span>
       <span className="break-words text-xs leading-5 text-[#344054]">{value || "—"}</span>
     </div>
@@ -59,7 +59,7 @@ export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onB
         {task.kind === "schedule" && !task.editable ? <div className="text-xs text-[#B45309]">任务运行期间不可编辑</div> : null}
         {error ? <div className="text-xs text-[#B42318]">{error}</div> : null}
         {confirmingCancel ? (
-          <div className="flex items-center justify-end gap-2 rounded-md bg-white/70 p-2">
+          <div className="flex items-center justify-end gap-2 rounded-md p-2">
             <span className="mr-auto text-xs text-[#667085]">确认取消此任务？</span>
             <button className={cx("rounded-md px-3 py-2 text-xs transition-colors hover:bg-[#EEF2F6]", focusResetClass)} type="button" disabled={cancelling} onClick={onDismissCancel}>返回</button>
             <button className={cx("rounded-md bg-[#B42318] px-3 py-2 text-xs text-white transition hover:bg-[#912018] disabled:opacity-50", focusResetClass)} type="button" disabled={cancelling} onClick={onCancel}>{cancelling ? "取消中…" : "确认取消"}</button>
