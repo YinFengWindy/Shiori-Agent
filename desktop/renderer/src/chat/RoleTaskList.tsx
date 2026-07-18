@@ -13,10 +13,10 @@ export function RoleTaskList({ tasks, onCreate, onSelect }: {
   const groups = groupRoleTasks(tasks);
   return (
     <div className={cx(taskPanelShellClass, "grid-rows-[auto_minmax(0,1fr)]")}>
-      <div className={cx(taskPanelHeaderClass, "justify-between")}>
+      <div className={cx(taskPanelHeaderClass, "gap-1")}>
         <span className="font-semibold text-[#272536]">任务</span>
         <button
-          className={cx("grid h-8 w-8 place-items-center rounded-md bg-[#272536] text-white shadow-[0_4px_12px_rgba(39,37,54,0.16)] transition-colors hover:bg-[#3B394D]", focusResetClass)}
+          className={cx("grid h-7 w-7 place-items-center rounded-md text-[#667085] transition-colors hover:bg-white hover:text-[#272536]", focusResetClass)}
           type="button"
           aria-label="新增计划任务"
           onClick={onCreate}
