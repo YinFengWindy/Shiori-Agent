@@ -43,7 +43,7 @@ export function RoleSidebar({
     "sidebar-entry grid grid-cols-[20px_1fr] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] text-[#3f3f3f] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-[0.45]";
   const sidebarTopEntryClass = cx(sidebarEntryClass, "min-h-[34px]");
   const roleCardClass =
-    "role-card grid min-h-[42px] grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] leading-none text-[#404040] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-60";
+    "role-card grid min-h-[42px] grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] leading-none text-[#404040] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus:outline-none focus:ring-0 focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] focus-visible:outline-none focus-visible:ring-0 disabled:cursor-default disabled:opacity-60";
   const roleAvatarClass =
     "role-avatar grid h-8 w-8 place-items-center rounded-full border border-[rgba(76,48,24,0.12)] object-cover";
 
