@@ -2,6 +2,7 @@ import { ArrowLeft } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
 import type { ScheduleTaskFormData, ScheduleTaskTier, ScheduleTaskTrigger } from "../shared/types";
 import { cx, focusResetClass } from "../shared/styles";
+import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import {
   buildRecurringScheduleRule,
   parseRecurringScheduleRule,
@@ -114,7 +115,15 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
           <h3 className={sectionHeadingClass}>任务内容</h3>
           <label className={roleTaskFieldLabelClass}>
             <span>执行内容</span>
-            <textarea className={`${roleTaskFieldClass} min-h-32 resize-y`} value={data.content} disabled={saving} onChange={(event) => setData((current) => ({ ...current, content: event.target.value }))} />
+            <AutosizeTextarea
+              className={`${roleTaskFieldClass} min-h-32`}
+              containerClassName="min-h-32"
+              mirrorClassName="min-h-32 border border-transparent px-3 py-2.5 text-sm"
+              rows={1}
+              value={data.content}
+              disabled={saving}
+              onChange={(event) => setData((current) => ({ ...current, content: event.target.value }))}
+            />
             <RoleTaskFieldError message={errors.content} />
           </label>
         </section>

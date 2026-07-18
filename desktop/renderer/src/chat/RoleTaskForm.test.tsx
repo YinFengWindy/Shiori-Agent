@@ -38,6 +38,9 @@ describe("RoleTaskForm", () => {
     assert.match(markup, /role="group" aria-label="触发方式"/);
     assert.match(markup, /aria-pressed="true"[^>]*>直接发送</);
     assert.match(markup, /class="[^"]*w-full[^"]*" type="submit"/);
+    assert.match(markup, /data-autosize-textarea-mirror=""/);
+    assert.match(markup, /class="[^"]*resize-none[^"]*overflow-hidden[^"]*"[^>]*>喝水<\/textarea>/);
+    assert.doesNotMatch(markup, /resize-y/);
     assert.match(markup, /focus:outline-none/);
     assert.doesNotMatch(markup, /focus:ring/);
   });
