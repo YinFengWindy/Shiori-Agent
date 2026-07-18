@@ -122,7 +122,7 @@ export function RoleSidebar({
       <div className="sidebar-bottom -mb-[18px] -ml-[18px] -mr-[6px] border-t border-[#E1E5EA]">
         <button
           data-testid="open-settings-button"
-          className={cx(sidebarEntryClass, "min-h-[46px] w-full rounded-none border-x-0 border-b-0 pl-[26px] pr-[14px]")}
+          className={cx(sidebarEntryClass, "min-h-[46px] w-full rounded-none border-x-0 border-b-0 pl-[22px] pr-[14px]")}
           type="button"
           onClick={onOpenSettings}
         >
