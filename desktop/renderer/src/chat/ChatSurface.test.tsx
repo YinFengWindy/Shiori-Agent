@@ -58,6 +58,7 @@ function renderChatSurface(
       chatLatestImagePath=""
       chatLatestImagePosition={0}
       chatLatestImageSidebarAnimating={false}
+      chatLatestImageSidebarResizing={false}
       chatLatestImageSidebarCollapsed={options.chatLatestImageSidebarCollapsed ?? true}
       chatLatestImageSidebarCount={options.chatLatestImageSidebarCollapsed === false ? 1 : 0}
       chatLatestImageSidebarWidth={320}

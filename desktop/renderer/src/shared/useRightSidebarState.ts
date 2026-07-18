@@ -1,6 +1,7 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { clampSidebarWidth, hasSidebarCollapseChanged } from "./sidebarResize";
 
 type UseRightSidebarStateArgs = {
   minWidth: number;
@@ -9,10 +10,6 @@ type UseRightSidebarStateArgs = {
   animationDurationMs: number;
   defaultCollapsed?: boolean;
 };
-
-function clampSidebarWidth(nextWidth: number, minWidth: number, maxWidth: number): number {
-  return Math.min(maxWidth, Math.max(minWidth, nextWidth));
-}
 
 /** Resolves one right-sidebar drag sample without scheduling a React update. */
 export function resolveRightSidebarDragUpdate(
@@ -127,7 +124,11 @@ export function useRightSidebarState({
         maxWidth,
         collapseThreshold,
       );
+      const previousCollapsed = dragCollapsed;
       dragCollapsed = update.collapsed;
+      if (hasSidebarCollapseChanged(previousCollapsed, update.collapsed)) {
+        setAnimating(true);
+      }
       if (update.expandedWidth !== null) {
         committedWidth = update.expandedWidth;
       }

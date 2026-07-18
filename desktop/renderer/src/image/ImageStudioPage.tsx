@@ -17,6 +17,7 @@ type ImageStudioPageProps = {
   historySidebarCollapsed: boolean;
   historySidebarWidth: number;
   historySidebarAnimating: boolean;
+  historySidebarResizing: boolean;
   onSelectRecord: (record: ImageHistoryRecord) => void;
   onToggleHistorySidebar: () => void;
   onBeginHistorySidebarResize: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -33,6 +34,7 @@ export function ImageStudioPage({
   historySidebarCollapsed,
   historySidebarWidth,
   historySidebarAnimating,
+  historySidebarResizing,
   onSelectRecord,
   onToggleHistorySidebar,
   onBeginHistorySidebarResize,
@@ -83,6 +85,7 @@ export function ImageStudioPage({
           className={cx(
             "relative h-full overflow-hidden border-l border-[#E0E6EE] bg-white",
             historySidebarAnimating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+            historySidebarResizing && !historySidebarAnimating && "transition-[width] duration-100 ease-out",
           )}
           style={{ width: historySidebarCollapsed ? 0 : historySidebarWidth }}
         >

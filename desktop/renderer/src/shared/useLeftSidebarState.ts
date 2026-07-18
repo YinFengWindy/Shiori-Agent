@@ -1,6 +1,7 @@
 import type React from "react";
 import { useState } from "react";
 import { flushSync } from "react-dom";
+import { clampSidebarWidth, hasSidebarCollapseChanged } from "./sidebarResize";
 
 type UseLeftSidebarStateArgs = {
   minWidth: number;
@@ -21,14 +22,10 @@ export function useLeftSidebarState({
   const [resizing, setResizing] = useState(false);
   const [animating, setAnimating] = useState(false);
 
-  function clampWidth(nextWidth: number): number {
-    return Math.min(maxWidth, Math.max(minWidth, nextWidth));
-  }
-
   function toggle(): void {
     setAnimating(true);
     if (collapsed) {
-      setWidth((current) => clampWidth(current));
+      setWidth((current) => clampSidebarWidth(current, minWidth, maxWidth));
       setCollapsed(false);
       return;
     }
@@ -52,19 +49,19 @@ export function useLeftSidebarState({
 
     function resize(moveEvent: PointerEvent): void {
       if (moveEvent.clientX <= collapseThreshold) {
-        if (!dragCollapsed) {
+        if (hasSidebarCollapseChanged(dragCollapsed, true)) {
           setAnimating(true);
           dragCollapsed = true;
         }
         setCollapsed(true);
         return;
       }
-      if (dragCollapsed) {
+      if (hasSidebarCollapseChanged(dragCollapsed, false)) {
         setAnimating(true);
         dragCollapsed = false;
       }
       setCollapsed(false);
-      setWidth(clampWidth(moveEvent.clientX));
+      setWidth(clampSidebarWidth(moveEvent.clientX, minWidth, maxWidth));
     }
 
     window.addEventListener("pointermove", resize);

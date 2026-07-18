@@ -29,6 +29,7 @@ type ChatSurfaceProps = {
   chatLatestImagePath: string;
   chatLatestImagePosition: number;
   chatLatestImageSidebarAnimating: boolean;
+  chatLatestImageSidebarResizing: boolean;
   chatLatestImageSidebarCollapsed: boolean;
   chatLatestImageSidebarCount: number;
   chatLatestImageSidebarWidth: number;
@@ -68,6 +69,7 @@ export function ChatSurface({
   chatLatestImagePath,
   chatLatestImagePosition,
   chatLatestImageSidebarAnimating,
+  chatLatestImageSidebarResizing,
   chatLatestImageSidebarCollapsed,
   chatLatestImageSidebarCount,
   chatLatestImageSidebarWidth,
@@ -509,6 +511,7 @@ export function ChatSurface({
         className={cx(
           "relative h-full overflow-hidden border-l border-[#E0E6EE] bg-[rgba(244,247,251,0.92)]",
           chatLatestImageSidebarAnimating && "transition-[width] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+          chatLatestImageSidebarResizing && !chatLatestImageSidebarAnimating && "transition-[width] duration-100 ease-out",
         )}
         style={{ width: chatLatestImageSidebarCollapsed ? 0 : chatLatestImageSidebarWidth }}
       >
