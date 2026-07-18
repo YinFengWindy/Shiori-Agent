@@ -3,6 +3,7 @@ import { ChatStatusSidebar } from "./ChatStatusSidebar";
 import { RoleTasksPanel } from "./RoleTasksPanel";
 import { toFileUrl } from "../shared/format";
 import type { RoleTask, ScheduleTaskFormData } from "../shared/types";
+import { chatSidebarPanelClass } from "./chatSidebarStyles";
 
 export type ChatSidebarMode = "status" | "images" | "tasks";
 
@@ -53,7 +54,7 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
   onOpenImageLightbox,
 }: ChatRightSidebarProps) {
   const navButtonClass =
-    "pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-transparent bg-transparent text-[#4B5563] transition hover:border-black hover:bg-white/92 hover:text-[#1F2937] focus:outline-none disabled:cursor-default disabled:opacity-40";
+    "pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-[#DCE3EC] bg-white/75 text-[#4B5563] shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-colors hover:border-[#B8C2CE] hover:bg-white hover:text-[#1F2937] focus:outline-none focus:ring-0 disabled:cursor-default disabled:opacity-40";
   if (mode === "status") {
     return (
       <ChatStatusSidebar
@@ -80,8 +81,8 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
     );
   }
   return (
-    <div className="grid h-full min-h-0 rounded-[20px] bg-[#F1F5F9] p-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-      <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-[16px] bg-[#F1F5F9]">
+    <div className={chatSidebarPanelClass}>
+      <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-md">
         <div className="pointer-events-none absolute inset-y-0 left-0 z-[2] flex items-center pl-3">
           <button className={navButtonClass} type="button" aria-label="查看上一张聊天图片" onClick={onGoToPreviousImage} disabled={!canGoToPreviousImage}>
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -95,7 +96,7 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
           </button>
         ) : (
           <div className="grid gap-2 px-6 text-center">
-            <div className="mx-auto h-10 w-10 rounded-[14px] border border-[#D6DCE5] bg-white/70" />
+            <div className="mx-auto h-10 w-10 rounded-md bg-white/70" />
             <div className="text-[12px] text-[#6B7280]">当前聊天里出现的图片会显示在这里</div>
           </div>
         )}

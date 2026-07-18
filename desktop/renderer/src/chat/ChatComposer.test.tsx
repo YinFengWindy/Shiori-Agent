@@ -33,7 +33,7 @@ describe("ChatComposer", () => {
   it("uses a contained text mirror instead of synchronous textarea measurement", () => {
     const markup = renderChatComposer();
 
-    assert.match(markup, /data-chat-composer-mirror=""/);
+    assert.match(markup, /data-autosize-textarea-mirror=""/);
     assert.match(markup, /contain:layout/);
     assert.doesNotMatch(markup, /field-sizing/);
   });

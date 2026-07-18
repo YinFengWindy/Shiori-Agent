@@ -422,7 +422,8 @@ export function DesktopAppFrame({
               bridgeReady={bridgeReady}
               chatLatestImagePath={chatLatestImagePath}
               chatLatestImagePosition={chatLatestImagePosition}
-              chatLatestImageSidebarAnimating={chatLatestImageSidebar.animating && !chatLatestImageSidebar.resizing}
+              chatLatestImageSidebarAnimating={chatLatestImageSidebar.animating}
+              chatLatestImageSidebarResizing={chatLatestImageSidebar.resizing}
               chatLatestImageSidebarCollapsed={chatLatestImageSidebar.collapsed}
               chatLatestImageSidebarCount={chatLatestImageSidebarCount}
               chatLatestImageSidebarWidth={chatLatestImageSidebar.width}
@@ -461,7 +462,8 @@ export function DesktopAppFrame({
               selectedRecordId={imageStudioState.selectedRecordId}
               historySidebarCollapsed={imageHistorySidebar.collapsed}
               historySidebarWidth={imageHistorySidebar.width}
-              historySidebarAnimating={imageHistorySidebar.animating && !imageHistorySidebar.resizing}
+              historySidebarAnimating={imageHistorySidebar.animating}
+              historySidebarResizing={imageHistorySidebar.resizing}
               onSelectRecord={imageStudioState.onSelectRecord}
               onToggleHistorySidebar={imageHistorySidebar.toggle}
               onBeginHistorySidebarResize={imageHistorySidebar.beginResize}

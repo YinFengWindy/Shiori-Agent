@@ -6,6 +6,7 @@ import { isChatImageAsset } from "./chatImageHistory";
 import { DeleteIcon, DocumentIcon, PlusIcon, SendIcon } from "../shared/icons";
 import { toFileUrl } from "../shared/format";
 import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";
+import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 
 type ChatComposerProps = {
   activeRoleId: string;
@@ -216,24 +217,17 @@ export const ChatComposer = React.memo(function ChatComposer({
               ))}
             </div>
           ) : null}
-          <div className="grid min-h-[24px] min-w-0" style={{ contain: "layout" }}>
-            <div
-              aria-hidden="true"
-              className="pointer-events-none invisible col-start-1 row-start-1 min-h-[24px] whitespace-pre-wrap break-words text-sm leading-6"
-              data-chat-composer-mirror=""
-            >
-              {`${draft} `}
-            </div>
-            <textarea
-              ref={textareaRef}
-              className="col-start-1 row-start-1 h-full min-h-[24px] w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-sm leading-6 text-[#1f1f1f] outline-none"
-              rows={1}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={handleComposerKeyDown}
-              placeholder="给当前角色发送消息..."
-            />
-          </div>
+          <AutosizeTextarea
+            ref={textareaRef}
+            className="min-h-[24px] w-full border-0 bg-transparent p-0 text-sm leading-6 text-[#1f1f1f] outline-none"
+            containerClassName="min-h-[24px]"
+            mirrorClassName="min-h-[24px] text-sm leading-6"
+            rows={1}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleComposerKeyDown}
+            placeholder="给当前角色发送消息..."
+          />
           <div className="composer-actions flex items-center gap-2">
             <button
               className="grid h-[30px] w-[30px] place-items-center rounded-full border-0 bg-transparent p-0 text-[#4B5563] transition focus:outline-none disabled:cursor-default disabled:opacity-40"

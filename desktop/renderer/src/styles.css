@@ -80,3 +80,10 @@
     background-clip: padding-box;
   }
 }
+
+*:focus,
+*:focus-visible {
+  outline: none !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
