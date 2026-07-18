@@ -57,7 +57,7 @@ export function RoleSidebar({
       aria-hidden={collapsed}
       style={{ width }}
     >
-      <div className="sidebar-top grid gap-1.5">
+      <div className="sidebar-top -ml-1 grid gap-1.5">
         <button className={sidebarTopEntryClass} type="button" onClick={onOpenSearch}>
           <span className="sidebar-entry-icon sidebar-entry-search grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
             <svg viewBox="0 0 1024 1024" className="h-4 w-4 fill-current">
