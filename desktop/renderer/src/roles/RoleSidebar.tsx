@@ -40,7 +40,8 @@ export function RoleSidebar({
   onBeginResize,
 }: RoleSidebarProps) {
   const sidebarEntryClass =
-    "sidebar-entry grid min-h-[38px] grid-cols-[20px_1fr] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] text-[#3f3f3f] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-[0.45]";
+    "sidebar-entry grid grid-cols-[20px_1fr] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] text-[#3f3f3f] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-[0.45]";
+  const sidebarTopEntryClass = cx(sidebarEntryClass, "min-h-[34px]");
   const roleCardClass =
     "role-card grid min-h-[42px] grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent px-2 py-0 text-left text-[13px] leading-none text-[#404040] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF] disabled:cursor-default disabled:opacity-60";
   const roleAvatarClass =
@@ -57,7 +58,7 @@ export function RoleSidebar({
       style={{ width }}
     >
       <div className="sidebar-top grid gap-1.5">
-        <button className={sidebarEntryClass} type="button" onClick={onOpenSearch}>
+        <button className={sidebarTopEntryClass} type="button" onClick={onOpenSearch}>
           <span className="sidebar-entry-icon sidebar-entry-search grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
             <svg viewBox="0 0 1024 1024" className="h-4 w-4 fill-current">
               <path d="M447.957333 149.333333c164.949333 0 298.666667 133.717333 298.666667 298.666667 0 64.96-20.736 125.056-55.936 173.952l177.365333 177.365333a42.666667 42.666667 0 0 1-60.330666 60.330667l-177.365334-177.365333A297.344 297.344 0 0 1 447.957333 746.666667c-164.949333 0-298.666667-133.717333-298.666666-298.666667S283.008 149.333333 447.957333 149.333333z m0 85.333334C330.154667 234.666667 234.624 330.197333 234.624 448s95.530667 213.333333 213.333333 213.333333 213.333333-95.530667 213.333334-213.333333-95.530667-213.333333-213.333334-213.333333z" />
@@ -65,7 +66,7 @@ export function RoleSidebar({
           </span>
           <span>搜索</span>
         </button>
-        <button className={sidebarEntryClass} type="button" onClick={onOpenRolesWorkspace}>
+        <button className={sidebarTopEntryClass} type="button" onClick={onOpenRolesWorkspace}>
           <span className="sidebar-entry-icon sidebar-entry-role grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
             <svg viewBox="0 0 1024 1024" className="h-4 w-4 fill-current">
               <path d="M356.774 578.668C279.812 528.088 229 440.978 229 342c0-156.297 126.703-283 283-283s283 126.703 283 283c0 98.978-50.812 186.088-127.774 236.668C808.213 638.98 907 778.953 907 942c0 24.3-19.7 44-44 44s-44-19.7-44-44c0-169.551-137.449-307-307-307S205 772.449 205 942c0 24.3-19.7 44-44 44s-44-19.7-44-44c0-163.047 98.787-303.02 239.774-363.332zM512 537c107.696 0 195-87.304 195-195s-87.304-195-195-195-195 87.304-195 195 87.304 195 195 195z" />
@@ -73,14 +74,14 @@ export function RoleSidebar({
           </span>
           <span>角色</span>
         </button>
-        <div className="grid grid-cols-[minmax(0,1fr)_38px] gap-1">
-          <button className={sidebarEntryClass} type="button" onClick={onOpenImageStudio}>
+        <div className="grid grid-cols-[minmax(0,1fr)_34px] gap-1">
+          <button className={sidebarTopEntryClass} type="button" onClick={onOpenImageStudio}>
             <span className="sidebar-entry-icon sidebar-entry-image grid h-5 w-5 place-items-center" aria-hidden="true">
               <img className="h-4 w-4" src={novelAiLogoDark} alt="" />
             </span>
             <span>生图</span>
           </button>
-          <button className="grid min-h-[38px] place-items-center rounded-[10px] border border-transparent bg-transparent text-[#3f3f3f] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF]" type="button" aria-label="打开提示词库" title="打开提示词库" onClick={onOpenPromptTagLibrary}>
+          <button className="grid min-h-[34px] place-items-center rounded-[10px] border border-transparent bg-transparent text-[#3f3f3f] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF]" type="button" aria-label="打开提示词库" title="打开提示词库" onClick={onOpenPromptTagLibrary}>
             <PromptLibraryIcon className="h-4 w-4 fill-current" />
           </button>
         </div>
