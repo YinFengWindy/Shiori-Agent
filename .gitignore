@@ -50,7 +50,8 @@ plugins/**/.data/
 /evals/
 /tests/regression/
 /config.backup.20260301-063714.json
-/docs/
+/docs/specs/
+/docs/plan/
 /.pytest_artifacts/
 /rss/
 
