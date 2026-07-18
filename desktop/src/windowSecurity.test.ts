@@ -29,10 +29,10 @@ describe("desktop CSP", () => {
   it("allows images but does not allow fetching the asset scheme", () => {
     const policy = buildDesktopContentSecurityPolicy(undefined);
 
-    assert.match(policy, /img-src[^;]*mira-asset:/);
+    assert.match(policy, /img-src[^;]*shiori-asset:/);
     assert.doesNotMatch(policy, /script-src[^;]*'unsafe-inline'/);
     assert.match(policy, /connect-src 'self'/);
-    assert.doesNotMatch(policy, /connect-src[^;]*mira-asset:/);
+    assert.doesNotMatch(policy, /connect-src[^;]*shiori-asset:/);
     assert.match(policy, /object-src 'none'/);
   });
 
@@ -86,11 +86,11 @@ describe("desktop window security", () => {
     let blocked = false;
 
     navigationHandler({ preventDefault: () => { blocked = true; } }, "https://example.com/");
-    const result = windowOpenHandler({ url: "mira-asset://local/token" });
+    const result = windowOpenHandler({ url: "shiori-asset://local/token" });
     await Promise.resolve();
 
     assert.equal(blocked, true);
     assert.deepEqual(result, { action: "deny" });
-    assert.deepEqual(opened, ["mira-asset://local/token"]);
+    assert.deepEqual(opened, ["shiori-asset://local/token"]);
   });
 });

@@ -116,7 +116,7 @@ export type LocalAssetReference = {
 };
 
 /** Fixed non-sensitive URL used when no local asset capability is available. */
-export const unavailableLocalAssetUrl = "mira-asset://local/unavailable";
+export const unavailableLocalAssetUrl = "shiori-asset://local/unavailable";
 
 /** Carries renderer-facing data alongside authorized local asset references. */
 export type LocalAssetTransport<T> = {

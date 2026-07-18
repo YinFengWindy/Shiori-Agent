@@ -10,7 +10,7 @@ import {
 } from "./localAssetPolicy.js";
 import type { LocalAssetReference } from "./shared.js";
 
-export const localAssetScheme = "mira-asset";
+export const localAssetScheme = "shiori-asset";
 export const maxLocalAssetBytes = 32 * 1024 * 1024;
 
 /** Canonical local file authorization owned by the Electron main process. */

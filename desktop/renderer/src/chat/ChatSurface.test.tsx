@@ -274,7 +274,7 @@ describe("ChatSurface", () => {
   it("keeps the image tab available when a status illustration exists", () => {
     const markup = renderChatSurface(createRole(), "mira", {
       currentMood: "开心",
-      moodIllustrationUrl: "mira-asset://local/mood-happy-token",
+      moodIllustrationUrl: "shiori-asset://local/mood-happy-token",
       chatLatestImageSidebarCollapsed: false,
     });
 
@@ -286,7 +286,7 @@ describe("ChatSurface", () => {
   it("renders relationship summary, tags, and loneliness value inside the status sidebar", () => {
     const markup = renderChatSurface(createRole(), "mira", {
       currentMood: "开心",
-      moodIllustrationUrl: "mira-asset://local/mood-happy-token",
+      moodIllustrationUrl: "shiori-asset://local/mood-happy-token",
       chatLatestImageSidebarCollapsed: false,
     });
 
@@ -301,7 +301,7 @@ describe("ChatSurface", () => {
   it("unmounts the status illustration when the desktop window is hidden", () => {
     const markup = renderChatSurface(createRole(), "mira", {
       currentMood: "开心",
-      moodIllustrationUrl: "mira-asset://local/mood-happy-token",
+      moodIllustrationUrl: "shiori-asset://local/mood-happy-token",
       chatLatestImageSidebarCollapsed: false,
       windowVisible: false,
     });

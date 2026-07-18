@@ -16,13 +16,13 @@ describe("PreloadLocalAssetCache", () => {
       value,
       assets: [{
         path: "C:\\workspace\\avatar.png",
-        url: "mira-asset://local/avatar-token",
+        url: "shiori-asset://local/avatar-token",
         kind: "image",
       }],
     });
 
     assert.equal(result, value);
-    assert.equal(cache.resolve("C:\\workspace\\avatar.png"), "mira-asset://local/avatar-token");
+    assert.equal(cache.resolve("C:\\workspace\\avatar.png"), "shiori-asset://local/avatar-token");
   });
 
   it("uses the latest transported token for an existing path", () => {
@@ -30,15 +30,15 @@ describe("PreloadLocalAssetCache", () => {
     const path = "C:\\workspace\\note.md";
     cache.consume({
       value: undefined,
-      assets: [{ path, url: "mira-asset://local/first-token", kind: "document" }],
+      assets: [{ path, url: "shiori-asset://local/first-token", kind: "document" }],
     });
 
     cache.consume({
       value: undefined,
-      assets: [{ path, url: "mira-asset://local/second-token", kind: "document" }],
+      assets: [{ path, url: "shiori-asset://local/second-token", kind: "document" }],
     });
 
-    assert.equal(cache.resolve(path), "mira-asset://local/second-token");
+    assert.equal(cache.resolve(path), "shiori-asset://local/second-token");
   });
 
   it("returns a fixed non-sensitive URL for unknown paths", () => {
@@ -46,7 +46,7 @@ describe("PreloadLocalAssetCache", () => {
     const unknownPath = "C:\\private\\secret.png";
 
     assert.equal(cache.resolve(unknownPath), unavailableLocalAssetUrl);
-    assert.equal(unavailableLocalAssetUrl, "mira-asset://local/unavailable");
+    assert.equal(unavailableLocalAssetUrl, "shiori-asset://local/unavailable");
     assert.doesNotMatch(cache.resolve(unknownPath), /private|secret/i);
   });
 
@@ -57,9 +57,20 @@ describe("PreloadLocalAssetCache", () => {
       value: undefined,
       assets: [{
         path,
-        url: `mira-asset://local?path=${encodeURIComponent(path)}`,
+        url: `shiori-asset://local?path=${encodeURIComponent(path)}`,
         kind: "image",
       }],
+    });
+
+    assert.equal(cache.resolve(path), unavailableLocalAssetUrl);
+  });
+
+  it("does not retain URLs from obsolete asset schemes", () => {
+    const cache = new PreloadLocalAssetCache();
+    const path = "C:\\workspace\\avatar.png";
+    cache.consume({
+      value: undefined,
+      assets: [{ path, url: "legacy-asset://local/avatar-token", kind: "image" }],
     });
 
     assert.equal(cache.resolve(path), unavailableLocalAssetUrl);

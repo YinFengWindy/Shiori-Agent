@@ -18,7 +18,7 @@ window.addEventListener("click", (event) => {
     return;
   }
   const anchor = target.closest("a");
-  if (!anchor?.href.startsWith("mira-asset:")) {
+  if (!anchor?.href.startsWith("shiori-asset:")) {
     return;
   }
   event.preventDefault();

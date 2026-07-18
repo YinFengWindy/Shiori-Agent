@@ -37,7 +37,7 @@ describe("local asset protocol", () => {
     const response = await loadGrantedLocalAsset(registry, reference.url);
     const legacyResponse = await loadGrantedLocalAsset(
       registry,
-      `mira-asset://local?path=${encodeURIComponent(imagePath)}`,
+      `shiori-asset://local?path=${encodeURIComponent(imagePath)}`,
     );
     const tokenWithLegacyQuery = await loadGrantedLocalAsset(
       registry,
@@ -66,7 +66,7 @@ describe("local asset protocol", () => {
 
     const denied = await loadGrantedLocalAsset(
       registry,
-      `mira-asset://local?path=${encodeURIComponent(imagePath)}`,
+      `shiori-asset://local?path=${encodeURIComponent(imagePath)}`,
     );
     const document = await loadGrantedLocalAsset(registry, documentReference.url);
 
@@ -144,7 +144,7 @@ describe("local asset protocol", () => {
       },
     }, registry);
 
-    assert.equal(scheme, "mira-asset");
+    assert.equal(scheme, "shiori-asset");
     assert.equal(typeof handler, "function");
     assert.deepEqual(localAssetSchemePrivileges, { standard: true, secure: true });
     assert.equal("supportFetchAPI" in localAssetSchemePrivileges, false);

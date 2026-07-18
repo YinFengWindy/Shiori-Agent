@@ -33,12 +33,13 @@ describe("LocalAssetRegistry", () => {
 
     assert.ok(reference);
     assert.equal(reference.kind, "image");
-    assert.match(reference.url, /^mira-asset:\/\/local\/[0-9a-f-]+$/);
+    assert.match(reference.url, /^shiori-asset:\/\/local\/[0-9a-f-]+$/);
+    assert.equal(registry.resolveUrl(reference.url.replace("shiori-asset:", "legacy-asset:")), null);
     assert.equal(registry.resolveReference(reference.url)?.canonicalPath, grantedPath);
     assert.equal(registry.resolveReference(grantedPath)?.canonicalPath, grantedPath);
     assert.equal(registry.resolveReference(deniedPath), null);
     assert.equal(
-      registry.resolveUrl(`mira-asset://local?path=${encodeURIComponent(deniedPath)}`),
+      registry.resolveUrl(`shiori-asset://local?path=${encodeURIComponent(deniedPath)}`),
       null,
     );
   });

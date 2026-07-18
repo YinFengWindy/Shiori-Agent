@@ -2,7 +2,7 @@ import { unavailableLocalAssetUrl, type LocalAssetTransport } from "./shared.js"
 
 export { unavailableLocalAssetUrl } from "./shared.js";
 
-const opaqueLocalAssetUrlPattern = /^mira-asset:\/\/local\/[^/?#]+$/;
+const opaqueLocalAssetUrlPattern = /^shiori-asset:\/\/local\/[^/?#]+$/;
 
 /** Stores opaque local asset URLs received from trusted main-process transports. */
 export class PreloadLocalAssetCache {
