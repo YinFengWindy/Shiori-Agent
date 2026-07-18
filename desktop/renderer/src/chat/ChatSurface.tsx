@@ -59,6 +59,8 @@ type ChatSurfaceProps = {
 };
 
 const emptySessionMessages: SessionMessage[] = [];
+const sidebarModeButtonClass =
+  "grid h-7 w-7 place-items-center rounded-full text-sm transition focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
 
 /** Renders the active role chat header, conversation messages, and composer. */
 export function ChatSurface({
@@ -554,7 +556,7 @@ export function ChatSurface({
               <div className="justify-self-center inline-flex w-fit rounded-full border border-[#D8DFE7] bg-[#F6F8FB] p-1">
                 <button
                   className={cx(
-                    "grid h-7 w-7 place-items-center rounded-full text-sm transition",
+                    sidebarModeButtonClass,
                     sidebarMode === "status" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
                     !hasStatusContent && "cursor-default opacity-45 hover:text-[#5B6472]",
                   )}
@@ -568,7 +570,7 @@ export function ChatSurface({
                   </svg>
                 </button>
                 <button
-                  className={cx("grid h-7 w-7 place-items-center rounded-full text-sm transition", sidebarMode === "tasks" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]")}
+                  className={cx(sidebarModeButtonClass, sidebarMode === "tasks" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]")}
                   type="button"
                   aria-label="任务侧栏"
                   onClick={() => setSidebarMode("tasks")}
@@ -577,7 +579,7 @@ export function ChatSurface({
                 </button>
                 <button
                   className={cx(
-                    "grid h-7 w-7 place-items-center rounded-full text-sm transition",
+                    sidebarModeButtonClass,
                     sidebarMode === "images" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
                   )}
                   type="button"

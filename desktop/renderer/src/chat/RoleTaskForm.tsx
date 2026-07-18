@@ -12,11 +12,11 @@ import {
   type ScheduleTaskFormErrors,
 } from "./roleTaskFormState";
 import {
-  taskPanelBackButtonClass,
-  taskPanelHeaderClass,
-  taskPanelScrollableClass,
-  taskPanelShellClass,
-} from "./roleTaskStyles";
+  chatSidebarBackButtonClass,
+  chatSidebarHeaderClass,
+  chatSidebarPanelClass,
+  chatSidebarScrollableClass,
+} from "./chatSidebarStyles";
 
 const fieldClass =
   "w-full rounded-md border border-[#D8DFE7] bg-white px-3 py-2 text-sm transition focus:border-[#B8C2CE] focus:outline-none disabled:opacity-60";
@@ -55,14 +55,14 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
   const whenPlaceholder = data.trigger === "after" ? "例如 30m、2h" : "例如 1h 或 0 9 * * *";
 
   return (
-    <form className={cx(taskPanelShellClass, "grid-rows-[auto_minmax(0,1fr)_auto]")} onSubmit={(event) => void submit(event)}>
-      <div className={cx(taskPanelHeaderClass, "gap-2")}>
-        <button className={taskPanelBackButtonClass} type="button" aria-label="返回" disabled={saving} onClick={onBack}>
+    <form className={cx(chatSidebarPanelClass, "grid-rows-[auto_minmax(0,1fr)_auto]")} onSubmit={(event) => void submit(event)}>
+      <div className={cx(chatSidebarHeaderClass, "gap-2")}>
+        <button className={chatSidebarBackButtonClass} type="button" aria-label="返回" disabled={saving} onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </button>
         <span className="font-semibold text-[#272536]">{title}</span>
       </div>
-      <div className={cx(taskPanelScrollableClass, "space-y-3 px-1")}>
+      <div className={cx(chatSidebarScrollableClass, "space-y-3 px-1")}>
         <label className="grid gap-1.5 text-xs">
           <span>任务名称</span>
           <input className={fieldClass} value={data.name} disabled={saving} onChange={(event) => setData({ ...data, name: event.target.value })} />

@@ -2,7 +2,7 @@ import { Brain, CalendarDots, CaretRight, Plus, Robot } from "@phosphor-icons/re
 import type { RoleTask } from "../shared/types";
 import { cx, focusResetClass } from "../shared/styles";
 import { groupRoleTasks, taskKindLabels } from "./roleTaskPanelState";
-import { taskPanelHeaderClass, taskPanelScrollableClass, taskPanelShellClass } from "./roleTaskStyles";
+import { chatSidebarHeaderClass, chatSidebarPanelClass, chatSidebarScrollableClass } from "./chatSidebarStyles";
 
 /** Renders the compact role-task directory. */
 export function RoleTaskList({ tasks, onCreate, onSelect }: {
@@ -12,8 +12,8 @@ export function RoleTaskList({ tasks, onCreate, onSelect }: {
 }) {
   const groups = groupRoleTasks(tasks);
   return (
-    <div className={cx(taskPanelShellClass, "grid-rows-[auto_minmax(0,1fr)]")}>
-      <div className={cx(taskPanelHeaderClass, "gap-1")}>
+    <div className={cx(chatSidebarPanelClass, "grid-rows-[auto_minmax(0,1fr)]")}>
+      <div className={cx(chatSidebarHeaderClass, "gap-1")}>
         <span className="font-semibold text-[#272536]">任务</span>
         <button
           className={cx("grid h-7 w-7 place-items-center rounded-md text-[#667085] transition-colors hover:bg-white hover:text-[#272536]", focusResetClass)}
@@ -24,7 +24,7 @@ export function RoleTaskList({ tasks, onCreate, onSelect }: {
           <Plus className="h-4 w-4" weight="bold" />
         </button>
       </div>
-      <div className={cx(taskPanelScrollableClass, "space-y-3")}>
+      <div className={cx(chatSidebarScrollableClass, "space-y-3")}>
         {groups.length ? groups.map((group) => (
           <section key={group.kind} data-testid="role-task-group" className="rounded-md border border-[#E1E7EF] bg-white/70 p-2 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
             <div className="flex items-center gap-1.5 px-1 pb-2 text-[11px] font-medium tracking-wide text-[#667085]">

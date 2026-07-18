@@ -266,6 +266,7 @@ describe("ChatSurface", () => {
     assert.match(markup, /aria-label="状态侧栏"/);
     assert.match(markup, /justify-self-center inline-flex/);
     assert.match(markup, /h-7 w-7/);
+    assert.match(markup, /class="[^"]*focus:ring-0[^"]*"[^>]*aria-label="图片侧栏"/);
     assert.match(markup, /disabled=""/);
     assert.doesNotMatch(markup, />使用回退立绘</);
   });

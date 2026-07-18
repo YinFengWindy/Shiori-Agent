@@ -9,11 +9,11 @@ import {
   taskStatusLabels,
 } from "./roleTaskPanelState";
 import {
-  taskPanelBackButtonClass,
-  taskPanelHeaderClass,
-  taskPanelScrollableClass,
-  taskPanelShellClass,
-} from "./roleTaskStyles";
+  chatSidebarBackButtonClass,
+  chatSidebarHeaderClass,
+  chatSidebarPanelClass,
+  chatSidebarScrollableClass,
+} from "./chatSidebarStyles";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -38,14 +38,14 @@ export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onB
 }) {
   const schedule = task.schedule;
   return (
-    <div className={cx(taskPanelShellClass, "grid-rows-[auto_minmax(0,1fr)_auto]")}>
-      <div className={cx(taskPanelHeaderClass, "gap-2")}>
-        <button className={taskPanelBackButtonClass} type="button" aria-label="返回任务列表" onClick={onBack}>
+    <div className={cx(chatSidebarPanelClass, "grid-rows-[auto_minmax(0,1fr)_auto]")}>
+      <div className={cx(chatSidebarHeaderClass, "gap-2")}>
+        <button className={chatSidebarBackButtonClass} type="button" aria-label="返回任务列表" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </button>
         <span className="min-w-0 truncate font-semibold text-[#272536]">{task.label}</span>
       </div>
-      <div className={cx(taskPanelScrollableClass, "grid content-start gap-2")}>
+      <div className={cx(chatSidebarScrollableClass, "grid content-start gap-2")}>
         <DetailRow label="类型" value={taskKindLabels[task.kind]} />
         <DetailRow label="状态" value={taskStatusLabels[task.status] ?? task.status} />
         {schedule ? <DetailRow label="执行模式" value={scheduleTierLabels[schedule.tier]} /> : null}
