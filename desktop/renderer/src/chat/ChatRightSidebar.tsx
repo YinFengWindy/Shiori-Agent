@@ -82,7 +82,7 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
   }
   return (
     <div className={chatSidebarPanelClass}>
-      <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-md border border-[#E1E7EF] bg-white/45">
+      <div className="relative grid h-full min-h-0 place-items-center overflow-hidden rounded-md bg-white/45">
         <div className="pointer-events-none absolute inset-y-0 left-0 z-[2] flex items-center pl-3">
           <button className={navButtonClass} type="button" aria-label="查看上一张聊天图片" onClick={onGoToPreviousImage} disabled={!canGoToPreviousImage}>
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -96,7 +96,7 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
           </button>
         ) : (
           <div className="grid gap-2 px-6 text-center">
-            <div className="mx-auto h-10 w-10 rounded-md border border-[#D6DCE5] bg-white/70" />
+            <div className="mx-auto h-10 w-10 rounded-md bg-white/70" />
             <div className="text-[12px] text-[#6B7280]">当前聊天里出现的图片会显示在这里</div>
           </div>
         )}

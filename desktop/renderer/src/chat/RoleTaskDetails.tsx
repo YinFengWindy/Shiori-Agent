@@ -17,7 +17,7 @@ import {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid gap-1 rounded-md border border-[#E1E7EF] bg-white/75 px-3 py-2.5">
+    <div className="grid gap-1 rounded-md bg-white/75 px-3 py-2.5">
       <span className="text-[10px] font-medium tracking-wide text-[#8A94A3]">{label}</span>
       <span className="break-words text-xs leading-5 text-[#344054]">{value || "—"}</span>
     </div>
@@ -55,7 +55,7 @@ export function RoleTaskDetails({ task, cancelling, error, confirmingCancel, onB
         <DetailRow label="创建时间" value={formatTimestamp(task.created_at)} />
         {task.next_run_at ? <DetailRow label="下次运行" value={formatTimestamp(task.next_run_at)} /> : null}
       </div>
-      <div className="grid gap-2 border-t border-[#E1E7EF] pt-3">
+      <div className="grid gap-2 pt-3">
         {task.kind === "schedule" && !task.editable ? <div className="text-xs text-[#B45309]">任务运行期间不可编辑</div> : null}
         {error ? <div className="text-xs text-[#B42318]">{error}</div> : null}
         {confirmingCancel ? (

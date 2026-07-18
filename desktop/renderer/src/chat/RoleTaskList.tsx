@@ -26,7 +26,7 @@ export function RoleTaskList({ tasks, onCreate, onSelect }: {
       </div>
       <div className={cx(chatSidebarScrollableClass, "space-y-3")}>
         {groups.length ? groups.map((group) => (
-          <section key={group.kind} data-testid="role-task-group" className="rounded-md border border-[#E1E7EF] bg-white/70 p-2 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+          <section key={group.kind} data-testid="role-task-group" className="rounded-md bg-white/70 p-2">
             <div className="flex items-center gap-1.5 px-1 pb-2 text-[11px] font-medium tracking-wide text-[#667085]">
               {group.kind === "schedule" ? <CalendarDots className="h-3.5 w-3.5" weight="fill" /> : null}
               {group.kind === "subagent" ? <Robot className="h-3.5 w-3.5" weight="fill" /> : null}
@@ -37,7 +37,7 @@ export function RoleTaskList({ tasks, onCreate, onSelect }: {
             {group.tasks.length ? group.tasks.map((task) => (
               <button
                 key={`${task.kind}:${task.id}`}
-                className={cx("group grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-transparent px-2.5 py-2.5 text-left transition-colors hover:border-[#DCE3EC] hover:bg-white focus-visible:border-[#DCE3EC] focus-visible:bg-white", focusResetClass)}
+                className={cx("group grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2.5 py-2.5 text-left transition-colors hover:bg-white focus-visible:bg-white", focusResetClass)}
                 type="button"
                 onClick={() => onSelect(task.id)}
               >

@@ -127,7 +127,7 @@ export function RoleTaskForm({ title, initialData, saving, error, onBack, onSave
         </label>
         {error ? <div className="text-xs text-[#B42318]">{error}</div> : null}
       </div>
-      <div className="flex justify-end border-t border-[#E1E7EF] pt-3">
+      <div className="flex justify-end pt-3">
         <button className={cx("rounded-md bg-[#272536] px-4 py-2 text-xs text-white shadow-[0_4px_12px_rgba(39,37,54,0.14)] transition-colors hover:bg-[#3B394D] disabled:opacity-50", focusResetClass)} type="submit" disabled={saving}>{saving ? "保存中…" : "保存"}</button>
       </div>
     </form>
