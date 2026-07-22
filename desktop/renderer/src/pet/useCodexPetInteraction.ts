@@ -7,8 +7,13 @@ type DragState = {
   previousScreenX: number;
 };
 
-/** Maps pointer gestures to local Codex pet states while native input moves the window. */
-export function useCodexPetInteraction() {
+type PetDragBridge = {
+  beginPetDrag(offsetX: number, offsetY: number): void;
+  endPetDrag(): void;
+};
+
+/** Maps renderer pointer gestures to pet animation and main-process cursor tracking. */
+export function useCodexPetInteraction(dragBridge: PetDragBridge) {
   const [interactionState, setInteractionState] = useState<SpriteState | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<DragState | null>(null);
@@ -26,6 +31,7 @@ export function useCodexPetInteraction() {
       previousScreenX: event.screenX,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
+    dragBridge.beginPetDrag(event.clientX, event.clientY);
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
@@ -43,6 +49,7 @@ export function useCodexPetInteraction() {
     if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
     setIsDragging(false);
+    dragBridge.endPetDrag();
     setNextInteractionState(petHoverState);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -52,7 +59,10 @@ export function useCodexPetInteraction() {
   function onPointerCancel(): void {
     const drag = dragRef.current;
     dragRef.current = null;
-    if (drag) setIsDragging(false);
+    if (drag) {
+      setIsDragging(false);
+      dragBridge.endPetDrag();
+    }
     setNextInteractionState(null);
   }
 

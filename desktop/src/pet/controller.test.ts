@@ -5,7 +5,7 @@ import type { BrowserWindow } from "electron";
 import { DesktopPetController } from "./controller.js";
 import type { DesktopPetSettings } from "./types.js";
 
-class FakePetWebContents extends EventEmitter {
+class FakePetWebContents {
   send(): void {}
 }
 
@@ -37,7 +37,7 @@ class FakePetWindow extends EventEmitter {
   }
 }
 
-test("desktop pet follows the cursor from native mouse input and persists only its final position", async () => {
+test("desktop pet follows the cursor from renderer drag commands and persists only its final position", async () => {
   let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   let saveCount = 0;
   let cursorPosition = { x: 500, y: 500 };
@@ -61,13 +61,13 @@ test("desktop pet follows the cursor from native mouse input and persists only i
   await controller.show();
   await new Promise((resolve) => setImmediate(resolve));
   saveCount = 0;
-  window.webContents.emit("before-mouse-event", {}, { type: "mouseDown", button: "left", x: 40, y: 40 });
+  controller.beginDrag(40, 40);
   assert.deepEqual(window.getPosition(), [460, 460]);
 
   cursorPosition = { x: 600, y: 600 };
   await new Promise((resolve) => setTimeout(resolve, 25));
   assert.deepEqual(window.getPosition(), [560, 560]);
-  window.webContents.emit("before-mouse-event", {}, { type: "mouseUp", button: "left", x: 40, y: 40 });
+  controller.endDrag();
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(saveCount, 1);
