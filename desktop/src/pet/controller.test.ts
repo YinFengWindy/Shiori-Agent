@@ -46,7 +46,7 @@ class FakePetWindow extends EventEmitter {
   }
 }
 
-test("desktop pet persists a position moved by Electron's native drag region", async () => {
+test("desktop pet persists only the final system-cursor position after a drag", async () => {
   let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   let saveCount = 0;
   const window = new FakePetWindow();
@@ -62,23 +62,22 @@ test("desktop pet persists a position moved by Electron's native drag region", a
     }),
     createWindow: () => window as unknown as BrowserWindow,
     displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
-    onOpenPetRole: () => undefined,
-    onShowContextMenu: () => undefined,
+    cursorScreenPoint: () => ({ x: 532, y: 564 }),
     openLocalAttachment: () => undefined,
   });
 
   await controller.show();
   await new Promise((resolve) => setImmediate(resolve));
   saveCount = 0;
-  window.setPosition(460, 460);
+  controller.beginDrag(72, 104);
   assert.deepEqual(window.getPosition(), [460, 460]);
-  await new Promise((resolve) => setImmediate(resolve));
+  controller.endDrag();
 
   assert.equal(saveCount, 1);
   assert.deepEqual(settings.positions["role-1:display-1"], { x: 460, y: 460 });
 });
 
-test("desktop pet keeps the Codex directional drag animation active until native movement settles", async () => {
+test("desktop pet ignores drag requests from a closed window", async () => {
   let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   const window = new FakePetWindow();
   const controller = new DesktopPetController({
@@ -92,19 +91,14 @@ test("desktop pet keeps the Codex directional drag animation active until native
     }),
     createWindow: () => window as unknown as BrowserWindow,
     displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
-    onOpenPetRole: () => undefined,
-    onShowContextMenu: () => undefined,
+    cursorScreenPoint: () => ({ x: 532, y: 564 }),
     openLocalAttachment: () => undefined,
   });
 
   await controller.show();
   await new Promise((resolve) => setImmediate(resolve));
-  window.webContents.states.length = 0;
-  const [x, y] = window.getPosition();
-  window.setPosition(x + 24, y);
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.deepEqual(window.webContents.states, ["running-right"]);
-  await new Promise((resolve) => setTimeout(resolve, 240));
-  assert.deepEqual(window.webContents.states, ["running-right", "idle"]);
+  assert.equal(controller.isPetWindow(window as unknown as BrowserWindow), true);
+  controller.beginDrag(72, 104);
+  window.destroy();
+  assert.equal(controller.isPetWindow(window as unknown as BrowserWindow), false);
 });

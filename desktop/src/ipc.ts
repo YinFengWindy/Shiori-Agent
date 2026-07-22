@@ -27,6 +27,8 @@ type RegisterDesktopIpcOptions = {
   localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
   desktopPet: DesktopPetController;
+  onOpenPetRole: () => void;
+  onShowPetContextMenu: (window: BrowserWindow) => void;
 };
 
 function assetTransport<T>(value: T, assets: LocalAssetReference[]): LocalAssetTransport<T> {
@@ -73,6 +75,8 @@ export function registerDesktopIpc({
   localAssetImportsRoot,
   openLocalAttachment,
   desktopPet,
+  onOpenPetRole,
+  onShowPetContextMenu,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
 
@@ -211,6 +215,24 @@ export function registerDesktopIpc({
   });
   ipcMain.handle("desktop:pet-sync", async (_event: IpcMainInvokeEvent, forceVisible?: unknown) => {
     await desktopPet.sync(typeof forceVisible === "boolean" ? forceVisible : undefined);
+  });
+  ipcMain.on("desktop:pet-drag-start", (event, payload?: { offsetX?: unknown; offsetY?: unknown }) => {
+    const petWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!desktopPet.isPetWindow(petWindow)) return;
+    desktopPet.beginDrag(Number(payload?.offsetX), Number(payload?.offsetY));
+  });
+  ipcMain.on("desktop:pet-drag-end", (event) => {
+    const petWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!desktopPet.isPetWindow(petWindow)) return;
+    desktopPet.endDrag();
+  });
+  ipcMain.on("desktop:pet-open", (event) => {
+    const petWindow = BrowserWindow.fromWebContents(event.sender);
+    if (desktopPet.isPetWindow(petWindow)) onOpenPetRole();
+  });
+  ipcMain.on("desktop:pet-context-menu", (event) => {
+    const petWindow = BrowserWindow.fromWebContents(event.sender);
+    if (petWindow && desktopPet.isPetWindow(petWindow)) onShowPetContextMenu(petWindow);
   });
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
     const result = await dialog.showOpenDialog({

@@ -1,11 +1,11 @@
 import type { BrowserWindow } from "electron";
 import { desktopPetViewport, clampDesktopPetPosition } from "./geometry.js";
-import { attachDesktopPetNativeInteractions } from "./nativeInteractions.js";
+import { desktopPetPositionFromCursor } from "./drag.js";
 import { bindDesktopPetSettings } from "./settings.js";
-import type { DesktopPetBinding, DesktopPetSettings, DesktopPetState } from "./types.js";
+import type { DesktopPetBinding, DesktopPetPosition, DesktopPetSettings, DesktopPetState } from "./types.js";
 
-/** Lets a completed native drag show at least one directional Codex animation frame before idling. */
-export const desktopPetDragIdleDelayMs = 220;
+/** Keeps the main-process cursor follower aligned with the display refresh rate. */
+export const desktopPetDragFollowIntervalMs = 1000 / 60;
 
 type DesktopPetControllerOptions = {
   getSettings: () => DesktopPetSettings;
@@ -13,8 +13,7 @@ type DesktopPetControllerOptions = {
   resolveBinding: (roleId?: string) => Promise<DesktopPetBinding | null>;
   createWindow: (options: { openLocalAttachment: (url: string) => Promise<unknown> | unknown }) => BrowserWindow;
   displayForWindow: (window: BrowserWindow | null) => { id: string | number; workArea: { x: number; y: number; width: number; height: number } };
-  onOpenPetRole: () => void;
-  onShowContextMenu: (window: BrowserWindow) => void;
+  cursorScreenPoint: () => DesktopPetPosition;
   openLocalAttachment: (url: string) => Promise<unknown> | unknown;
 };
 
@@ -25,7 +24,8 @@ export class DesktopPetController {
   private window: BrowserWindow | null = null;
   private queue = Promise.resolve();
   private activeRoleId = "";
-  private dragIdleTimer: ReturnType<typeof setTimeout> | null = null;
+  private dragPointerOffset: DesktopPetPosition | null = null;
+  private dragFollowTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly options: DesktopPetControllerOptions) {
     this.createWindow = options.createWindow;
@@ -34,6 +34,11 @@ export class DesktopPetController {
 
   get isRunning(): boolean {
     return Boolean(this.window && !this.window.isDestroyed());
+  }
+
+  /** Returns whether an IPC sender owns the currently active pet window. */
+  isPetWindow(window: BrowserWindow | null): boolean {
+    return Boolean(window && window === this.window && !window.isDestroyed());
   }
 
   show(): Promise<void> {
@@ -82,6 +87,24 @@ export class DesktopPetController {
     this.window?.webContents.send("desktop:pet-play", { state });
   }
 
+  /** Starts following the system cursor while preserving the initial pointer offset. */
+  beginDrag(pointerOffsetX: number, pointerOffsetY: number): void {
+    if (!this.isRunning || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
+    this.stopDragFollow();
+    this.dragPointerOffset = { x: pointerOffsetX, y: pointerOffsetY };
+    this.followDrag();
+    this.dragFollowTimer = setInterval(() => this.followDrag(), desktopPetDragFollowIntervalMs);
+  }
+
+  /** Stops following the system cursor and persists only the final drag location. */
+  endDrag(): void {
+    if (!this.dragPointerOffset || !this.window) return;
+    this.followDrag();
+    this.stopDragFollow();
+    this.dragPointerOffset = null;
+    this.persistPosition(this.activeRoleId, this.window);
+  }
+
   private enqueue(operation: () => Promise<void>): Promise<void> {
     const next = this.queue.then(operation, operation);
     this.queue = next.catch(() => undefined);
@@ -106,30 +129,29 @@ export class DesktopPetController {
     };
     if (created) {
       window.once("ready-to-show", sendLoad);
-      attachDesktopPetNativeInteractions({
-        window,
-        onOpenPetRole: this.options.onOpenPetRole,
-        onShowContextMenu: this.options.onShowContextMenu,
-      });
-      let previousPosition = window.getPosition();
-      window.on("move", () => {
-        const position = window.getPosition();
-        if (position[0] === previousPosition[0] && position[1] === previousPosition[1]) return;
-        this.play(position[0] < previousPosition[0] ? "running-left" : "running-right");
-        previousPosition = position;
-        this.scheduleDragIdle(window);
-      });
-      window.on("moved", () => {
-        this.scheduleDragIdle(window);
-        this.persistPosition(this.activeRoleId, window);
-      });
       window.on("closed", () => {
-        if (this.window === window) this.window = null;
+        if (this.window !== window) return;
+        this.stopDragFollow();
+        this.dragPointerOffset = null;
+        this.window = null;
       });
     } else {
       sendLoad();
     }
     this.window = window;
+  }
+
+  private followDrag(): void {
+    if (!this.dragPointerOffset) return;
+    this.moveTo(desktopPetPositionFromCursor(this.options.cursorScreenPoint(), this.dragPointerOffset));
+  }
+
+  private moveTo(position: DesktopPetPosition): void {
+    const window = this.window;
+    if (!window || window.isDestroyed()) return;
+    const display = this.displayForWindow(window);
+    const clamped = clampDesktopPetPosition(position, display.workArea);
+    window.setPosition(clamped.x, clamped.y);
   }
 
   private persistPosition(roleId: string, window: BrowserWindow): void {
@@ -142,17 +164,14 @@ export class DesktopPetController {
     });
   }
 
-  private scheduleDragIdle(window: BrowserWindow): void {
-    if (this.dragIdleTimer) clearTimeout(this.dragIdleTimer);
-    this.dragIdleTimer = setTimeout(() => {
-      this.dragIdleTimer = null;
-      if (this.window === window && !window.isDestroyed()) this.play("idle");
-    }, desktopPetDragIdleDelayMs);
+  private stopDragFollow(): void {
+    if (this.dragFollowTimer) clearInterval(this.dragFollowTimer);
+    this.dragFollowTimer = null;
   }
 
   private destroyWindow(): void {
-    if (this.dragIdleTimer) clearTimeout(this.dragIdleTimer);
-    this.dragIdleTimer = null;
+    this.stopDragFollow();
+    this.dragPointerOffset = null;
     this.window?.destroy();
     this.window = null;
   }

@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { CodexSpritePetRenderer } from "./CodexSpritePetRenderer";
 import { spriteAnimations, type SpriteState } from "./spriteContract";
+import { usePetActivityState } from "./usePetActivityState";
 import "./styles.css";
 
 type PetPackagePayload = { spritesheetUrl: string };
@@ -20,6 +21,7 @@ function isPetPayload(value: unknown): value is PetPayload {
 function DesktopPetSurface() {
   const [payload, setPayload] = useState<PetPayload | null>(null);
   const [state, setState] = useState<SpriteState>("idle");
+  const activityState = usePetActivityState(state);
 
   useEffect(() => {
     const onLoad = (_event: unknown, next: unknown) => {
@@ -40,7 +42,7 @@ function DesktopPetSurface() {
   }, []);
 
   if (!payload) return null;
-  return <CodexSpritePetRenderer spritesheetUrl={payload.package.spritesheetUrl} state={state} />;
+  return <CodexSpritePetRenderer spritesheetUrl={payload.package.spritesheetUrl} state={activityState} />;
 }
 
 createRoot(document.getElementById("root") as HTMLElement).render(<DesktopPetSurface />);

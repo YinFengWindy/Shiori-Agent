@@ -17,6 +17,10 @@ body {
 }
 
 .pet-drag-region {
-  -webkit-app-region: drag;
   cursor: grab;
+  touch-action: none;
+}
+
+.pet-drag-region:active {
+  cursor: grabbing;
 }
