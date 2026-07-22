@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { spriteCell, spriteAnimations, spriteFramePosition, type SpriteState } from "./spriteContract";
+import { useCodexPetInteraction } from "./useCodexPetInteraction";
 
 type CodexSpritePetRendererProps = {
   spritesheetUrl: string;
@@ -9,41 +10,26 @@ type CodexSpritePetRendererProps = {
 /** Renders the fixed Codex sprite atlas with its documented state rows and cadence. */
 export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePetRendererProps) {
   const [frame, setFrame] = useState(0);
-  const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
-  const animation = spriteAnimations[state];
+  const { interactionState, pointerHandlers } = useCodexPetInteraction(window.miraDesktop.movePet);
+  const activeState = interactionState ?? state;
+  const animation = spriteAnimations[activeState];
+  const activeFrame = frame % animation.frames;
 
   useEffect(() => {
     setFrame(0);
-    const timer = window.setInterval(() => {
+  }, [activeState]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
       setFrame((current) => (current + 1) % animation.frames);
-    }, animation.duration);
-    return () => window.clearInterval(timer);
-  }, [animation.duration, animation.frames, state]);
+    }, animation.frameDurations[activeFrame]);
+    return () => window.clearTimeout(timer);
+  }, [activeFrame, animation]);
 
   return (
     <div
       aria-label="桌宠"
-      onPointerDown={(event) => {
-        if (event.button !== 0) return;
-        drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
-        event.currentTarget.setPointerCapture(event.pointerId);
-      }}
-      onPointerMove={(event) => {
-        const activeDrag = drag.current;
-        if (activeDrag?.pointerId === event.pointerId) {
-          window.miraDesktop.movePet(event.screenX - activeDrag.x, event.screenY - activeDrag.y);
-        }
-      }}
-      onPointerUp={(event) => {
-        if (drag.current?.pointerId !== event.pointerId) return;
-        drag.current = null;
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          event.currentTarget.releasePointerCapture(event.pointerId);
-        }
-      }}
-      onPointerCancel={() => {
-        drag.current = null;
-      }}
+      {...pointerHandlers}
       onDoubleClick={() => window.miraDesktop.openPetRole()}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -53,7 +39,7 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePet
         width: spriteCell.width,
         height: spriteCell.height,
         backgroundImage: `url(${JSON.stringify(spritesheetUrl)})`,
-        backgroundPosition: spriteFramePosition(state, frame),
+        backgroundPosition: spriteFramePosition(activeState, activeFrame),
         backgroundRepeat: "no-repeat",
         touchAction: "none",
         cursor: "grab",
