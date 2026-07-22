@@ -4,19 +4,13 @@ import type { SpriteState } from "./spriteContract";
 
 type DragState = {
   pointerId: number;
-  offsetX: number;
-  offsetY: number;
   previousScreenX: number;
 };
 
-type PetDragBridge = {
-  beginPetDrag(offsetX: number, offsetY: number): void;
-  endPetDrag(): void;
-};
-
-/** Maps pointer gestures to local Codex pet states while the main process follows the cursor. */
-export function useCodexPetInteraction(dragBridge: PetDragBridge) {
+/** Maps pointer gestures to local Codex pet states while native input moves the window. */
+export function useCodexPetInteraction() {
   const [interactionState, setInteractionState] = useState<SpriteState | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<DragState | null>(null);
 
   function setNextInteractionState(nextState: SpriteState | null): void {
@@ -26,14 +20,12 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge) {
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     if (event.button !== 0) return;
     setNextInteractionState(null);
+    setIsDragging(true);
     dragRef.current = {
       pointerId: event.pointerId,
-      offsetX: event.clientX,
-      offsetY: event.clientY,
       previousScreenX: event.screenX,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragBridge.beginPetDrag(event.clientX, event.clientY);
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
@@ -50,7 +42,7 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
-    dragBridge.endPetDrag();
+    setIsDragging(false);
     setNextInteractionState(petHoverState);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -60,7 +52,7 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge) {
   function onPointerCancel(): void {
     const drag = dragRef.current;
     dragRef.current = null;
-    if (drag) dragBridge.endPetDrag();
+    if (drag) setIsDragging(false);
     setNextInteractionState(null);
   }
 
@@ -74,6 +66,7 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge) {
 
   return {
     interactionState,
+    cursor: isDragging ? "grabbing" : "default",
     pointerHandlers: {
       onPointerDown,
       onPointerMove,

@@ -10,7 +10,7 @@ type CodexSpritePetRendererProps = {
 /** Renders the fixed Codex sprite atlas with its documented state rows and cadence. */
 export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePetRendererProps) {
   const [frame, setFrame] = useState(0);
-  const { interactionState, pointerHandlers } = useCodexPetInteraction(window.miraDesktop);
+  const { interactionState, cursor, pointerHandlers } = useCodexPetInteraction();
   const activeState = interactionState ?? state;
   const animation = spriteAnimations[activeState];
   const activeFrame = frame % animation.frames;
@@ -42,7 +42,7 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePet
         backgroundPosition: spriteFramePosition(activeState, activeFrame),
         backgroundRepeat: "no-repeat",
         touchAction: "none",
-        cursor: "grab",
+        cursor,
       }}
     />
   );

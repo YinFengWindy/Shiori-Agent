@@ -1,4 +1,4 @@
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow, MouseInputEvent } from "electron";
 import { desktopPetViewport, clampDesktopPetPosition } from "./geometry.js";
 import { desktopPetPositionFromCursor, type DesktopPetPoint } from "./drag.js";
 import { bindDesktopPetSettings } from "./settings.js";
@@ -82,7 +82,8 @@ export class DesktopPetController {
     this.window?.webContents.send("desktop:pet-play", { state });
   }
 
-  beginDrag(pointerOffsetX: number, pointerOffsetY: number): void {
+  /** Starts movement from Electron's native input stream instead of renderer IPC. */
+  private beginDrag(pointerOffsetX: number, pointerOffsetY: number): void {
     if (!this.window || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
     this.dragPointerOffset = { x: pointerOffsetX, y: pointerOffsetY };
     this.lastDragPosition = null;
@@ -91,7 +92,7 @@ export class DesktopPetController {
     this.dragTimer = setInterval(() => this.followCursor(), desktopPetDragIntervalMilliseconds);
   }
 
-  endDrag(): void {
+  private endDrag(): void {
     if (!this.dragPointerOffset) return;
     this.followCursor();
     this.dragPointerOffset = null;
@@ -142,6 +143,14 @@ export class DesktopPetController {
     };
     if (created) {
       window.once("ready-to-show", sendLoad);
+      window.webContents.on("before-mouse-event", (_event, mouseInput: MouseInputEvent) => {
+        if (mouseInput.type === "mouseDown" && mouseInput.button === "left") {
+          this.beginDrag(mouseInput.x, mouseInput.y);
+        }
+        if (mouseInput.type === "mouseUp" && mouseInput.button === "left") {
+          this.endDrag();
+        }
+      });
       window.on("moved", () => {
         const [x, y] = window.getPosition();
         if (this.lastDragPosition?.x === x && this.lastDragPosition.y === y) return;
