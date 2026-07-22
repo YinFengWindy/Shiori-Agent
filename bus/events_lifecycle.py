@@ -101,7 +101,7 @@ class ProactiveMessageCommitted:
     tools_used: tuple[str, ...] = ()
 
 
-SceneTransition = Literal["started", "same", "changed", "closed"]
+SceneTransition = Literal["started", "same", "changed", "closed", "none"]
 SceneTurnSource = Literal["passive", "proactive"]
 
 

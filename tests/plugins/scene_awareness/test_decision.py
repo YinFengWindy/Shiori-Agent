@@ -75,6 +75,36 @@ async def test_decide_scene_allows_closed_without_generation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_decide_scene_allows_none_without_a_scene() -> None:
+    provider = cast(
+        Any,
+        SimpleNamespace(
+            chat=AsyncMock(
+                return_value=SimpleNamespace(
+                    content='{"transition":"none","should_generate":false}'
+                )
+            )
+        ),
+    )
+
+    decision = await decide_scene(
+        provider,
+        model="qwen-flash",
+        decision_input=SceneDecisionInput(
+            role_name="Mira",
+            role_prompt="role",
+            user_message="你觉得今天的系统怎么样？",
+        ),
+    )
+
+    assert decision.transition == "none"
+    assert decision.scene_key == ""
+    assert decision.should_generate is False
+    prompt = provider.chat.await_args.kwargs["messages"][0]["content"]
+    assert "没有 current_scene_key 且本轮没有形成任何明确可见场景时为 none" in prompt
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("content", "error"),
     [
@@ -82,6 +112,12 @@ async def test_decide_scene_allows_closed_without_generation() -> None:
         ('{"transition":"other","should_generate":false}', "transition"),
         ('{"transition":"started","should_generate":false}', "必须生成 CG"),
         ('{"transition":"closed","should_generate":true}', "不能生成 CG"),
+        ('{"transition":"none","should_generate":true}', "none 不能生成 CG"),
+        ('{"transition":"none","should_generate":false}', "已有场景"),
+        (
+            '{"transition":"none","should_generate":false,"scene_key":"rain"}',
+            "不能提供场景或图像参数",
+        ),
         (
             '{"transition":"changed","should_generate":true,'
             '"scene_key":"old-scene","prompt":"1girl, rain",'

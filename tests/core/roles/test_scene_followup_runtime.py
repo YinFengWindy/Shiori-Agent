@@ -121,3 +121,14 @@ def test_started_scene_keeps_pending_followup_and_records_scene_key(tmp_path: Pa
 
     assert state is not None
     assert state["scene_key"] == "rain"
+
+
+def test_none_scene_closes_pending_followups(tmp_path: Path):
+    runtime = SceneFollowupRuntime(tmp_path)
+    session_key = "role:mira"
+    runtime.handle_user_message(session_key, now=_utc(13, 39))
+
+    result = runtime.apply_scene_decision(session_key, "none", now=_utc(13, 40))
+
+    assert result is None
+    assert runtime.read(session_key) is None

@@ -75,12 +75,14 @@ def _build_decision_prompt(decision_input: SceneDecisionInput) -> str:
     }
     return (
         "你是角色扮演场景观察器。根据刚完成的一轮对话识别可见场景状态，并判断是否值得补发 CG。\n"
-        "transition 只能是 started、same、changed、closed。没有 current_scene_key 且形成了明确可见场景时为 started；"
+        "transition 只能是 started、same、changed、closed、none。没有 current_scene_key 且形成了明确可见场景时为 started；"
         "已有场景且地点、姿势、位置关系、人物关系或构图发生实质变化时为 changed；"
-        "没有实质变化时为 same；告别、睡觉、离场或场景明确结束时为 closed。\n"
+        "已有场景且没有实质变化时为 same；告别、睡觉、离场或场景明确结束时为 closed；"
+        "没有 current_scene_key 且本轮没有形成任何明确可见场景时为 none。\n"
         "started 和 changed 必须返回 should_generate=true，并提供新的稳定英文 scene_key 及完整 CG 参数。"
         "same 只有在形成清晰、值得额外定格且尚未覆盖的画面时才返回 should_generate=true；"
-        "closed 必须返回 should_generate=false。普通闲聊、重复构图、技术讨论以及用户明确要求生图的回合不额外补图。\n"
+        "closed 和 none 必须返回 should_generate=false。none 不得提供 scene_key、prompt、negative_prompt 或 size_preset。"
+        "普通闲聊、技术讨论以及用户明确要求生图但未形成可见场景的回合应返回 none，不额外补图。\n"
         "生成 CG 时，prompt 和 negative_prompt 必须是逗号分隔的英文 NovelAI tags，禁止中文和自然语言句子。"
         "prompt 只描述最新回合中明确可见的角色、动作、环境、构图、光线和氛围；"
         "size_preset 只能是 square、landscape、portrait。只输出 JSON，不要解释。\n\n"
@@ -94,7 +96,7 @@ def _parse_decision(
     current_scene_key: str,
 ) -> SceneDecision:
     transition_text = str(payload.get("transition") or "").strip()
-    if transition_text not in {"started", "same", "changed", "closed"}:
+    if transition_text not in {"started", "same", "changed", "closed", "none"}:
         raise ValueError(f"场景观察 transition 不支持: {transition_text}")
     transition = cast(SceneTransition, transition_text)
     should_generate = payload.get("should_generate")
@@ -102,10 +104,17 @@ def _parse_decision(
         raise ValueError("场景观察缺少布尔 should_generate")
     if transition in {"started", "changed"} and not should_generate:
         raise ValueError(f"场景 {transition} 必须生成 CG")
-    if transition == "closed" and should_generate:
-        raise ValueError("已关闭场景不能生成 CG")
+    if transition in {"closed", "none"} and should_generate:
+        raise ValueError(f"场景 {transition} 不能生成 CG")
 
     scene_key = str(payload.get("scene_key") or "").strip()
+    if transition == "none":
+        image_fields = ("scene_key", "prompt", "negative_prompt", "size_preset")
+        if any(str(payload.get(field) or "").strip() for field in image_fields):
+            raise ValueError("无场景结果不能提供场景或图像参数")
+        if current_scene_key:
+            raise ValueError("已有场景时不能返回 none")
+        return SceneDecision(transition=transition)
     if transition == "same" and not scene_key:
         scene_key = current_scene_key
     if transition == "closed":

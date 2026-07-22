@@ -158,6 +158,47 @@ async def test_passive_turn_observes_reply_returned_by_desktop_bridge(
 
 
 @pytest.mark.asyncio
+async def test_passive_turn_publishes_none_without_persisting_scene_key(
+    tmp_path: Path,
+) -> None:
+    bus = EventBus()
+    observations: list[SceneObservationCommitted] = []
+    bus.on(SceneObservationCommitted, observations.append)
+    decide = AsyncMock(return_value=SceneDecision(transition="none"))
+    controller = _controller(tmp_path, event_bus=bus, decision_provider=decide)
+
+    controller.capture_passive_turn(
+        BeforeTurnCtx(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
+            content="你觉得这段技术方案合理吗？",
+            timestamp=datetime.now(),
+            retrieved_memory_block="",
+            retrieval_trace_raw=None,
+            history_messages=(),
+        )
+    )
+    controller.schedule_passive_turn(
+        AfterTurnCtx(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
+            reply="我认为需要先验证边界条件。",
+            tools_used=(),
+            thinking=None,
+            will_dispatch=False,
+        )
+    )
+    await asyncio.gather(*controller.tasks.values())
+
+    assert observations[0].transition == "none"
+    assert observations[0].scene_key == ""
+    assert controller._current_scene_key("role:mira") == ""
+    await controller.terminate()
+
+
+@pytest.mark.asyncio
 async def test_proactive_message_is_observed_with_shared_scene_state(
     tmp_path: Path,
 ) -> None:

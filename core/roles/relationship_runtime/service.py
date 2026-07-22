@@ -271,7 +271,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         now: datetime | None = None,
     ) -> dict[str, Any] | None:
         """Applies a shared scene decision to the active follow-up state."""
-        if scene_transition not in {"started", "same", "changed", "closed"}:
+        if scene_transition not in {"started", "same", "changed", "closed", "none"}:
             raise ValueError(f"unsupported scene transition: {scene_transition}")
         return self._scene_followup.apply_scene_decision(
             session_key,

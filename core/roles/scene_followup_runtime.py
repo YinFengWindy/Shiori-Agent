@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
+from bus.events_lifecycle import SceneTransition
 from infra.persistence.json_store import atomic_save_json, load_json
 
 _FOLLOWUP_DELAYS_MINUTES = (5, 3, 1)
 _MAX_SCENE_LIFETIME = timedelta(hours=1)
 _STATE_FILE = "scene_followup_runtime.json"
-SceneTransition = Literal["started", "same", "changed", "closed"]
 
 
 def _now_utc(value: datetime | None = None) -> datetime:
@@ -70,7 +70,7 @@ class SceneFollowupRuntime:
         role_id = self._role_id_from_session_key(session_key)
         if not role_id:
             return None
-        if scene_transition in {"changed", "closed"}:
+        if scene_transition in {"changed", "closed", "none"}:
             self.close(session_key)
             return None
         state = self._read(role_id)
