@@ -426,6 +426,30 @@ export function useRoleManagement({
     openRoleWorkspace({ kind: "role-assets", roleId: resolvedRole.id }, { recordHistory: false });
   }
 
+  async function importRolePetPackage(): Promise<void> {
+    if (!detailRoleId) return;
+    const source = await window.miraDesktop.pickPetPackage();
+    if (!source) return;
+    setSavingRoleAssets(true);
+    const response = await window.miraDesktop.invoke({ method: "roles.pets.import", payload: { role_id: detailRoleId, source } });
+    setSavingRoleAssets(false);
+    if (response.error) { setError(response.error.message); return; }
+    const updated = response.payload.role as RoleRecord;
+    setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
+    applyRoleSnapshot(updated);
+  }
+
+  async function removeRolePetPackage(packageId: string): Promise<void> {
+    if (!detailRoleId) return;
+    setSavingRoleAssets(true);
+    const response = await window.miraDesktop.invoke({ method: "roles.pets.remove", payload: { role_id: detailRoleId, package_id: packageId } });
+    setSavingRoleAssets(false);
+    if (response.error) { setError(response.error.message); return; }
+    const updated = response.payload.role as RoleRecord;
+    setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
+    applyRoleSnapshot(updated);
+  }
+
   return {
     createRole,
     saveRole,
@@ -433,6 +457,8 @@ export function useRoleManagement({
     confirmDeleteRole,
     pickRoleAssets,
     removeRoleAsset,
+    importRolePetPackage,
+    removeRolePetPackage,
     updateRoleAssetOrganization,
   };
 }

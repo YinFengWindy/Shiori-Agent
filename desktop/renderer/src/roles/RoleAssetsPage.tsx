@@ -7,6 +7,7 @@ import { getNextRoleAssetSelection, getSelectedRoleAssetPath } from "./roleAsset
 import { applyMoodToIllustration, getMoodForIllustration } from "./roleMoodBindingSelection";
 import { RoleMoodBindingsPanel } from "./RoleMoodBindingsPanel";
 import { RoleAssetCategoryGroups } from "./RoleAssetCategoryGroups";
+import { RolePetPackagesPanel } from "./RolePetPackagesPanel";
 
 type RoleAssetsPageProps = {
   activeRole: RoleRecord | null;
@@ -18,6 +19,8 @@ type RoleAssetsPageProps = {
   onBackToDetail: () => void;
   onPickAssets: (categoryId: string) => void;
   onRemoveAsset: (path: string) => void;
+  onImportPetPackage: () => void;
+  onRemovePetPackage: (packageId: string) => void;
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;
   onUpdateRoleForm: React.Dispatch<React.SetStateAction<RoleFormState>>;
@@ -39,6 +42,8 @@ export function RoleAssetsPage({
   onBackToDetail,
   onPickAssets,
   onRemoveAsset,
+  onImportPetPackage,
+  onRemovePetPackage,
   onSelectAvatarAsset,
   onSelectChatBackground,
   onUpdateRoleForm,
@@ -165,6 +170,7 @@ export function RoleAssetsPage({
                 onUpdateOrganization={onUpdateAssetOrganization}
               />
             </div>
+            <RolePetPackagesPanel role={activeRole} disabled={!bridgeReady || savingSelection} onImport={onImportPetPackage} onRemove={onRemovePetPackage} />
           </div>
           <div className="grid min-h-0 grid-rows-[minmax(0,1fr)] bg-white p-6">
             <div className="flex min-h-0 flex-col">

@@ -44,18 +44,6 @@ export function DesktopPetSettingsSection() {
     }
   }
 
-  async function importPackage(): Promise<void> {
-    if (!roleId) return;
-    const source = await window.miraDesktop.pickPetPackage();
-    if (!source) return;
-    const response = await window.miraDesktop.invoke({ method: "roles.pets.import", payload: { role_id: roleId, source } });
-    if (response.error) {
-      setError(response.error.message);
-      return;
-    }
-    await refresh();
-  }
-
   return (
     <section>
       <SettingsToggleField label="启用桌宠" checked={settings?.enabled ?? false} disabled={!settings?.roleId || !settings?.packageId} onChange={() => void window.miraDesktop.togglePet().then(setSettings).catch((reason) => setError(String(reason)))} />
@@ -71,7 +59,6 @@ export function DesktopPetSettingsSection() {
             <option value="">选择素材包</option>
             {packages.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>)}
           </select>
-          <button className="rounded-md border border-[#D9E0E8] px-3 text-sm text-[#32363C] hover:bg-[#F5F7FA] focus:outline-none focus:ring-2 focus:ring-primary/20" type="button" disabled={!roleId} onClick={() => void importPackage()}>导入</button>
         </div>
       </SettingsField>
       {error ? <div className="py-3 text-sm text-[#A33A3A]">{error}</div> : null}
