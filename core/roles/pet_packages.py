@@ -50,6 +50,8 @@ class RolePetPackageService:
             names = self._archive_names(archive)
             manifest = self._manifest(archive)
             package_id = str(manifest["id"]).strip()
+            if PurePosixPath(package_id).name != package_id or package_id in {".", ".."}:
+                raise ValueError("桌宠包 id 不安全")
             sprite_name = _safe_relative_path(str(manifest["spritesheetPath"]))
             if sprite_name not in names:
                 raise ValueError("桌宠包缺少 spritesheet")
