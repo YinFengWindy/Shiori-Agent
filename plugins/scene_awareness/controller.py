@@ -14,15 +14,17 @@ from bus.events_lifecycle import (
     SceneTurnSource,
 )
 from core.roles.store import RoleStore
-from plugins.scene_awareness.decision import (
+from plugins.scene_awareness.contracts import (
     SceneDecision,
     SceneDecisionInput,
+    SceneDecisionProtocolError,
+)
+from plugins.scene_awareness.decision import (
     decide_scene,
 )
 
 logger = logging.getLogger(__name__)
 
-_MAX_DECISION_RETRIES = 1
 _STATE_KEY = "scene_awareness_sessions"
 
 
@@ -231,32 +233,23 @@ class SceneAwarenessController:
         *,
         session_key: str,
     ) -> SceneDecision:
-        for attempt in range(_MAX_DECISION_RETRIES + 1):
-            try:
-                return await self._decision_provider(
-                    self._light_provider,
-                    model=self._light_model,
-                    decision_input=decision_input,
-                )
-            except Exception as error:
-                if attempt < _MAX_DECISION_RETRIES:
-                    logger.warning(
-                        "场景观察判定失败，准备重试 session=%s attempt=%d/%d: %s",
-                        session_key,
-                        attempt + 1,
-                        _MAX_DECISION_RETRIES,
-                        error,
-                    )
-                    continue
-                logger.error(
-                    "场景观察判定失败，已重试 %d 次，放弃 session=%s: %s",
-                    _MAX_DECISION_RETRIES,
-                    session_key,
-                    error,
-                    exc_info=(type(error), error, error.__traceback__),
-                )
-                raise
-        raise RuntimeError("场景观察判定未完成")
+        try:
+            return await self._decision_provider(
+                self._light_provider,
+                model=self._light_model,
+                decision_input=decision_input,
+            )
+        except SceneDecisionProtocolError as error:
+            logger.error(
+                "场景观察协议失败 session=%s reason=%s tool_calls=%d tools=%s keys=%s content_chars=%d",
+                session_key,
+                error,
+                error.tool_call_count,
+                error.tool_names,
+                error.argument_keys,
+                error.content_length,
+            )
+            raise
 
     def _current_scene_key(self, session_key: str) -> str:
         sessions = self._read_sessions()

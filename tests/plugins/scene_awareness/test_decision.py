@@ -1,25 +1,37 @@
+import json
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
 
+from agent.provider import LLMResponse, ToolCall
+from plugins.scene_awareness.contracts import SCENE_DECISION_TOOL_NAME
 from plugins.scene_awareness.decision import SceneDecisionInput, decide_scene
 
 
+def _scene_tool_call(**overrides: Any) -> ToolCall:
+    arguments = {
+        "transition": "started",
+        "should_generate": True,
+        "scene_key": "rain-confession",
+        "prompt": "1girl, pink hair, standing in rain, emotional, night",
+        "negative_prompt": "blurry, text",
+        "size_preset": "portrait",
+    }
+    arguments.update(overrides)
+    return ToolCall("scene-1", SCENE_DECISION_TOOL_NAME, arguments)
+
+
 @pytest.mark.asyncio
-async def test_decide_scene_returns_validated_started_scene() -> None:
+async def test_decide_scene_forces_observer_tool_with_isolated_system_prompt() -> None:
     provider = cast(
         Any,
         SimpleNamespace(
             chat=AsyncMock(
-                return_value=SimpleNamespace(
-                    content=(
-                        '{"transition":"started","should_generate":true,'
-                        '"scene_key":"rain-confession",'
-                        '"prompt":"1girl, pink hair, standing in rain, emotional, night",'
-                        '"negative_prompt":"blurry, text","size_preset":"portrait"}'
-                    )
+                return_value=LLMResponse(
+                    content="",
+                    tool_calls=[_scene_tool_call()],
                 )
             )
         ),
@@ -39,22 +51,40 @@ async def test_decide_scene_returns_validated_started_scene() -> None:
     assert decision.transition == "started"
     assert decision.should_generate is True
     assert decision.scene_key == "rain-confession"
-    assert decision.size_preset == "portrait"
     call = provider.chat.await_args.kwargs
     assert call["model"] == "qwen-flash"
     assert call["disable_thinking"] is True
-    assert "started 和 changed 必须返回 should_generate=true" in call["messages"][0]["content"]
+    assert call["messages"][0]["role"] == "system"
+    assert "不是角色扮演者" in call["messages"][0]["content"]
+    assert call["tool_choice"] == {
+        "type": "function",
+        "function": {"name": SCENE_DECISION_TOOL_NAME},
+    }
+    assert call["tools"][0]["function"]["name"] == SCENE_DECISION_TOOL_NAME
 
 
 @pytest.mark.asyncio
-async def test_decide_scene_allows_closed_without_generation() -> None:
+async def test_decide_scene_repairs_invalid_tool_protocol_once() -> None:
     provider = cast(
         Any,
         SimpleNamespace(
             chat=AsyncMock(
-                return_value=SimpleNamespace(
-                    content='{"transition":"closed","should_generate":false}'
-                )
+                side_effect=[
+                    LLMResponse(content="我来解释一下", tool_calls=[]),
+                    LLMResponse(
+                        content="",
+                        tool_calls=[
+                            _scene_tool_call(
+                                transition="none",
+                                should_generate=False,
+                                scene_key="",
+                                prompt="",
+                                negative_prompt="",
+                                size_preset="",
+                            )
+                        ],
+                    ),
+                ]
             )
         ),
     )
@@ -65,90 +95,43 @@ async def test_decide_scene_allows_closed_without_generation() -> None:
         decision_input=SceneDecisionInput(
             role_name="Mira",
             role_prompt="role",
-            user_message="晚安",
-            current_scene_key="bedroom-night",
-        ),
-    )
-
-    assert decision.transition == "closed"
-    assert decision.should_generate is False
-
-
-@pytest.mark.asyncio
-async def test_decide_scene_allows_none_without_a_scene() -> None:
-    provider = cast(
-        Any,
-        SimpleNamespace(
-            chat=AsyncMock(
-                return_value=SimpleNamespace(
-                    content='{"transition":"none","should_generate":false}'
-                )
-            )
-        ),
-    )
-
-    decision = await decide_scene(
-        provider,
-        model="qwen-flash",
-        decision_input=SceneDecisionInput(
-            role_name="Mira",
-            role_prompt="role",
-            user_message="你觉得今天的系统怎么样？",
+            user_message="这段技术方案合理吗？",
         ),
     )
 
     assert decision.transition == "none"
-    assert decision.scene_key == ""
-    assert decision.should_generate is False
-    prompt = provider.chat.await_args.kwargs["messages"][0]["content"]
-    assert "没有 current_scene_key 且本轮没有形成任何明确可见场景时为 none" in prompt
+    assert provider.chat.await_count == 2
+    retry_messages = provider.chat.await_args_list[1].kwargs["messages"]
+    assert "上一轮提交无效" in retry_messages[1]["content"]
+    assert "必须调用一次提交工具" in retry_messages[1]["content"]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("content", "error"),
-    [
-        ("not-json", "合法 JSON"),
-        ('{"transition":"other","should_generate":false}', "transition"),
-        ('{"transition":"started","should_generate":false}', "必须生成 CG"),
-        ('{"transition":"closed","should_generate":true}', "不能生成 CG"),
-        ('{"transition":"none","should_generate":true}', "none 不能生成 CG"),
-        ('{"transition":"none","should_generate":false}', "已有场景"),
-        (
-            '{"transition":"none","should_generate":false,"scene_key":"rain"}',
-            "不能提供场景或图像参数",
-        ),
-        (
-            '{"transition":"changed","should_generate":true,'
-            '"scene_key":"old-scene","prompt":"1girl, rain",'
-            '"negative_prompt":"","size_preset":"portrait"}',
-            "新的 scene_key",
-        ),
-        (
-            '{"transition":"started","should_generate":true,'
-            '"scene_key":"rain","prompt":"雨中的少女",'
-            '"negative_prompt":"","size_preset":"portrait"}',
-            "仅支持英文 NovelAI tags",
-        ),
-    ],
-)
-async def test_decide_scene_rejects_invalid_model_output(
-    content: str,
-    error: str,
-) -> None:
+async def test_decide_scene_repairs_malformed_tool_arguments_once() -> None:
     provider = cast(
         Any,
-        SimpleNamespace(chat=AsyncMock(return_value=SimpleNamespace(content=content))),
+        SimpleNamespace(
+            chat=AsyncMock(
+                side_effect=[
+                    json.JSONDecodeError("invalid", "{", 1),
+                    LLMResponse(content="", tool_calls=[_scene_tool_call()]),
+                ]
+            )
+        ),
     )
 
-    with pytest.raises(ValueError, match=error):
-        await decide_scene(
-            provider,
-            model="qwen-flash",
-            decision_input=SceneDecisionInput(
-                role_name="Mira",
-                role_prompt="role",
-                user_message="message",
-                current_scene_key="old-scene",
-            ),
-        )
+    decision = await decide_scene(
+        provider,
+        model="qwen-flash",
+        decision_input=SceneDecisionInput(
+            role_name="Mira",
+            role_prompt="role",
+            user_message="雨突然下大了",
+            assistant_reply="她站在雨夜的车站里。",
+        ),
+    )
+
+    assert decision.transition == "started"
+    assert provider.chat.await_count == 2
+    retry_messages = provider.chat.await_args_list[1].kwargs["messages"]
+    assert "参数不是合法 JSON" in retry_messages[1]["content"]

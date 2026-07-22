@@ -16,6 +16,7 @@ from bus.events_lifecycle import (
     SceneObservationCommitted,
 )
 from core.roles.store import RoleStore
+from plugins.scene_awareness.contracts import SceneDecisionProtocolError
 from plugins.scene_awareness.controller import SceneAwarenessController
 from plugins.scene_awareness.decision import SceneDecision
 from session.manager import SessionManager
@@ -194,6 +195,53 @@ async def test_passive_turn_publishes_none_without_persisting_scene_key(
 
     assert observations[0].transition == "none"
     assert observations[0].scene_key == ""
+    assert controller._current_scene_key("role:mira") == ""
+    await controller.terminate()
+
+
+@pytest.mark.asyncio
+async def test_invalid_scene_protocol_does_not_publish_observation(
+    tmp_path: Path,
+) -> None:
+    bus = EventBus()
+    observations: list[SceneObservationCommitted] = []
+    bus.on(SceneObservationCommitted, observations.append)
+    decide = AsyncMock(
+        side_effect=SceneDecisionProtocolError(
+            "场景观察必须调用一次提交工具",
+            content_length=16,
+        )
+    )
+    controller = _controller(tmp_path, event_bus=bus, decision_provider=decide)
+
+    controller.capture_passive_turn(
+        BeforeTurnCtx(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
+            content="下雨了吗？",
+            timestamp=datetime.now(),
+            retrieved_memory_block="",
+            retrieval_trace_raw=None,
+            history_messages=(),
+        )
+    )
+    controller.schedule_passive_turn(
+        AfterTurnCtx(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
+            reply="她站在雨里。",
+            tools_used=(),
+            thinking=None,
+            will_dispatch=False,
+        )
+    )
+
+    with pytest.raises(SceneDecisionProtocolError, match="必须调用一次"):
+        await asyncio.gather(*controller.tasks.values())
+
+    assert observations == []
     assert controller._current_scene_key("role:mira") == ""
     await controller.terminate()
 
