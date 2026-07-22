@@ -60,7 +60,7 @@ declare module "electron" {
     close(): void;
     destroy(): void;
     isDestroyed(): boolean;
-    setPosition(x: number, y: number): void;
+    setPosition(x: number, y: number, animate?: boolean): void;
     getPosition(): [number, number];
     getBounds(): { x: number; y: number; width: number; height: number };
     setAlwaysOnTop(flag: boolean, level?: string): void;
@@ -101,6 +101,7 @@ declare module "electron" {
   };
 
   export const screen: {
+    getCursorScreenPoint(): { x: number; y: number };
     getPrimaryDisplay(): { id: number; workArea: { x: number; y: number; width: number; height: number } };
     getDisplayMatching(bounds: { x: number; y: number; width: number; height: number }): { id: number; workArea: { x: number; y: number; width: number; height: number } };
   };

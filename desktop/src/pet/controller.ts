@@ -1,5 +1,6 @@
 import type { BrowserWindow } from "electron";
 import { desktopPetViewport, clampDesktopPetPosition, createDesktopPetWindow, displayForDesktopPet } from "./window.js";
+import { desktopPetPositionFromCursor, type DesktopPetPoint } from "./drag.js";
 import { bindDesktopPetSettings } from "./settings.js";
 import type { DesktopPetBinding, DesktopPetSettings, DesktopPetState } from "./types.js";
 
@@ -17,6 +18,7 @@ export class DesktopPetController {
   private window: BrowserWindow | null = null;
   private queue = Promise.resolve();
   private activeRoleId = "";
+  private dragPointerOffset: DesktopPetPoint | null = null;
 
   constructor(private readonly options: DesktopPetControllerOptions) {
     this.createWindow = options.createWindow ?? createDesktopPetWindow;
@@ -72,11 +74,26 @@ export class DesktopPetController {
     this.window?.webContents.send("desktop:pet-play", { state });
   }
 
-  moveTo(x: number, y: number): void {
+  beginDrag(pointerOffsetX: number, pointerOffsetY: number): void {
+    if (!this.window || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
+    this.dragPointerOffset = { x: pointerOffsetX, y: pointerOffsetY };
+  }
+
+  moveDrag(cursor: DesktopPetPoint): void {
+    if (!this.dragPointerOffset) return;
+    this.moveTo(desktopPetPositionFromCursor(cursor, this.dragPointerOffset));
+  }
+
+  endDrag(cursor: DesktopPetPoint): void {
+    this.moveDrag(cursor);
+    this.dragPointerOffset = null;
+  }
+
+  private moveTo(position: DesktopPetPoint): void {
     if (!this.window) return;
     const display = displayForDesktopPet(this.window);
-    const position = clampDesktopPetPosition({ x, y }, display.workArea);
-    this.window.setPosition(position.x, position.y);
+    const clampedPosition = clampDesktopPetPosition(position, display.workArea);
+    this.window.setPosition(clampedPosition.x, clampedPosition.y, false);
   }
 
   private enqueue(operation: () => Promise<void>): Promise<void> {
@@ -124,6 +141,7 @@ export class DesktopPetController {
   }
 
   private destroyWindow(): void {
+    this.dragPointerOffset = null;
     this.window?.destroy();
     this.window = null;
   }

@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain, Menu } from "electron";
+import { BrowserWindow, dialog, ipcMain, Menu, screen } from "electron";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { basename, extname, join } from "node:path";
@@ -214,11 +214,11 @@ export function registerDesktopIpc({
   ipcMain.handle("desktop:pet-sync", async (_event: IpcMainInvokeEvent, forceVisible?: unknown) => {
     await desktopPet.sync(typeof forceVisible === "boolean" ? forceVisible : undefined);
   });
-  ipcMain.on("desktop:pet-drag", (_event: IpcMainInvokeEvent, payload?: { x?: unknown; y?: unknown }) => {
-    const x = Number(payload?.x);
-    const y = Number(payload?.y);
-    if (Number.isFinite(x) && Number.isFinite(y)) desktopPet.moveTo(x, y);
+  ipcMain.on("desktop:pet-drag-start", (_event: IpcMainInvokeEvent, payload?: { offsetX?: unknown; offsetY?: unknown }) => {
+    desktopPet.beginDrag(Number(payload?.offsetX), Number(payload?.offsetY));
   });
+  ipcMain.on("desktop:pet-drag-move", () => desktopPet.moveDrag(screen.getCursorScreenPoint()));
+  ipcMain.on("desktop:pet-drag-end", () => desktopPet.endDrag(screen.getCursorScreenPoint()));
   ipcMain.on("desktop:pet-open", () => onOpenDesktopPetRole());
   ipcMain.on("desktop:pet-context-menu", (event) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
