@@ -216,10 +216,23 @@ export function registerDesktopIpc({
   ipcMain.handle("desktop:pet-sync", async (_event: IpcMainInvokeEvent, forceVisible?: unknown) => {
     await desktopPet.sync(typeof forceVisible === "boolean" ? forceVisible : undefined);
   });
-  ipcMain.on("desktop:pet-drag-start", (event, payload?: { offsetX?: unknown; offsetY?: unknown }) => {
+  ipcMain.on("desktop:pet-drag-start", (event, payload?: { offsetX?: unknown; offsetY?: unknown; screenX?: unknown; screenY?: unknown }) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (!desktopPet.isPetWindow(petWindow)) return;
-    desktopPet.beginDrag(Number(payload?.offsetX), Number(payload?.offsetY));
+    desktopPet.beginDrag(
+      Number(payload?.offsetX),
+      Number(payload?.offsetY),
+      Number(payload?.screenX),
+      Number(payload?.screenY),
+    );
+  });
+  ipcMain.on("desktop:pet-drag-move", (event, payload?: { screenX?: unknown; screenY?: unknown }) => {
+    const petWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!desktopPet.isPetWindow(petWindow)) return;
+    const screenX = Number(payload?.screenX);
+    const screenY = Number(payload?.screenY);
+    if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) return;
+    desktopPet.moveDrag({ x: screenX, y: screenY });
   });
   ipcMain.on("desktop:pet-drag-end", (event) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);

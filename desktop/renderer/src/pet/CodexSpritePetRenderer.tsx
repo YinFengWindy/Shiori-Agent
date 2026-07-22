@@ -10,7 +10,7 @@ type CodexSpritePetRendererProps = {
 /** Renders the fixed Codex sprite atlas with its documented state rows and cadence. */
 export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePetRendererProps) {
   const [frame, setFrame] = useState(0);
-  const { interactionState, pointerHandlers } = useCodexPetInteraction(
+  const { interactionState, isDragging, pointerHandlers } = useCodexPetInteraction(
     typeof window === "undefined" ? null : window.miraDesktop,
   );
   const activeState = interactionState ?? state;
@@ -31,9 +31,9 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePet
   return (
     <div
       aria-label="桌宠"
-      className="pet-drag-region"
+      className={isDragging ? "pet-drag-region pet-dragging" : "pet-drag-region"}
       {...pointerHandlers}
-      onDoubleClick={() => window.miraDesktop.openPetRole()}
+      onLostPointerCapture={pointerHandlers.onPointerCancel}
       onContextMenu={(event) => {
         event.preventDefault();
         window.miraDesktop.openPetMenu();

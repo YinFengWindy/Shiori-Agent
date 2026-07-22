@@ -49,6 +49,7 @@ class FakePetWindow extends EventEmitter {
 test("desktop pet persists only the final system-cursor position after a drag", async () => {
   let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   let saveCount = 0;
+  let cursor = { x: 532, y: 564 };
   const window = new FakePetWindow();
   const controller = new DesktopPetController({
     getSettings: () => settings,
@@ -62,19 +63,27 @@ test("desktop pet persists only the final system-cursor position after a drag", 
     }),
     createWindow: () => window as unknown as BrowserWindow,
     displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
-    cursorScreenPoint: () => ({ x: 532, y: 564 }),
+    cursorScreenPoint: () => cursor,
     openLocalAttachment: () => undefined,
   });
 
   await controller.show();
   await new Promise((resolve) => setImmediate(resolve));
   saveCount = 0;
-  controller.beginDrag(72, 104);
-  assert.deepEqual(window.getPosition(), [460, 460]);
-  controller.endDrag();
+  try {
+    controller.beginDrag(72, 104);
+    assert.deepEqual(window.getPosition(), [460, 460]);
+    cursor = { x: 582, y: 564 };
+    controller.moveDrag(cursor);
+    assert.deepEqual(window.getPosition(), [510, 460]);
+    assert.equal(saveCount, 0);
+    controller.endDrag();
 
-  assert.equal(saveCount, 1);
-  assert.deepEqual(settings.positions["role-1:display-1"], { x: 460, y: 460 });
+    assert.equal(saveCount, 1);
+    assert.deepEqual(settings.positions["role-1:display-1"], { x: 510, y: 460 });
+  } finally {
+    window.destroy();
+  }
 });
 
 test("desktop pet ignores drag requests from a closed window", async () => {

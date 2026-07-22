@@ -172,8 +172,10 @@ export type DesktopApi = {
   windowState(): Promise<WindowState>;
   /** Synchronizes the desktop-pet window with the role saved by the detail form. */
   syncPet(forceVisible?: boolean): Promise<void>;
-  /** Starts following the system cursor from the given local pet offset. */
-  beginPetDrag(offsetX: number, offsetY: number): void;
+  /** Starts following the system cursor from the given local pet offset and screen sample. */
+  beginPetDrag(offsetX: number, offsetY: number, screenX?: number, screenY?: number): void;
+  /** Applies an immediate renderer cursor sample during a pet drag. */
+  movePet(screenX: number, screenY: number): void;
   /** Stops the current pet drag and persists its final location. */
   endPetDrag(): void;
   /** Restores the main Shiori window from a pet double click. */

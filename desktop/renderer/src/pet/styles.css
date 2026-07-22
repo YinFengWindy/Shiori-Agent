@@ -24,3 +24,8 @@ body {
 .pet-drag-region:active {
   cursor: grabbing;
 }
+
+.pet-dragging {
+  transform: scale(0.95);
+  transition: transform 160ms ease-out;
+}

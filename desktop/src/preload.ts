@@ -82,8 +82,11 @@ const api: DesktopApi = {
   syncPet(forceVisible) {
     return ipcRenderer.invoke("desktop:pet-sync", forceVisible) as Promise<void>;
   },
-  beginPetDrag(offsetX, offsetY) {
-    ipcRenderer.send("desktop:pet-drag-start", { offsetX, offsetY });
+  beginPetDrag(offsetX, offsetY, screenX, screenY) {
+    ipcRenderer.send("desktop:pet-drag-start", { offsetX, offsetY, screenX, screenY });
+  },
+  movePet(screenX, screenY) {
+    ipcRenderer.send("desktop:pet-drag-move", { screenX, screenY });
   },
   endPetDrag() {
     ipcRenderer.send("desktop:pet-drag-end");

@@ -88,12 +88,27 @@ export class DesktopPetController {
   }
 
   /** Starts following the system cursor while preserving the initial pointer offset. */
-  beginDrag(pointerOffsetX: number, pointerOffsetY: number): void {
+  beginDrag(pointerOffsetX: number, pointerOffsetY: number, pointerScreenX?: number, pointerScreenY?: number): void {
     if (!this.isRunning || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
     this.stopDragFollow();
     this.dragPointerOffset = { x: pointerOffsetX, y: pointerOffsetY };
-    this.followDrag();
+    if (
+      typeof pointerScreenX === "number"
+      && typeof pointerScreenY === "number"
+      && Number.isFinite(pointerScreenX)
+      && Number.isFinite(pointerScreenY)
+    ) {
+      this.moveDrag({ x: pointerScreenX, y: pointerScreenY });
+    } else {
+      this.followDrag();
+    }
     this.dragFollowTimer = setInterval(() => this.followDrag(), desktopPetDragFollowIntervalMs);
+  }
+
+  /** Applies an immediate renderer cursor sample before the next fallback poll. */
+  moveDrag(cursor: DesktopPetPosition): void {
+    if (!this.dragPointerOffset) return;
+    this.moveTo(desktopPetPositionFromCursor(cursor, this.dragPointerOffset));
   }
 
   /** Stops following the system cursor and persists only the final drag location. */
@@ -143,7 +158,7 @@ export class DesktopPetController {
 
   private followDrag(): void {
     if (!this.dragPointerOffset) return;
-    this.moveTo(desktopPetPositionFromCursor(this.options.cursorScreenPoint(), this.dragPointerOffset));
+    this.moveDrag(this.options.cursorScreenPoint());
   }
 
   private moveTo(position: DesktopPetPosition): void {
