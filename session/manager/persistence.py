@@ -276,3 +276,72 @@ class _PersistenceMixin:
             )
             self._project_session_threads(session)
             self._cache[session.key] = session
+
+    def get_message_media(
+        self,
+        *,
+        session_key: str,
+        message_id: str,
+        media_index: int,
+    ) -> str:
+        """Return one authoritative persisted media path after validating ownership."""
+
+        clean_session_key = session_key.strip()
+        clean_message_id = message_id.strip()
+        if not clean_session_key or not clean_message_id:
+            raise ValueError("session_key 和 message_id 不能为空")
+        message = self._store.get_message(clean_message_id)
+        if message is None:
+            raise ValueError(f"消息不存在: {clean_message_id}")
+        if str(message.get("session_key") or "") != clean_session_key:
+            raise ValueError("消息不属于指定会话")
+        media = message.get("media")
+        if not isinstance(media, list) or media_index < 0 or media_index >= len(media):
+            raise ValueError("media_index 超出消息媒体范围")
+        path = str(media[media_index] or "").strip()
+        if not path:
+            raise ValueError("指定媒体槽没有图片路径")
+        return path
+
+    async def replace_message_media(
+        self,
+        *,
+        session_key: str,
+        message_id: str,
+        media_index: int,
+        expected_path: str,
+        new_path: str,
+    ) -> Session:
+        """Replace one persisted media slot and synchronize the cached session."""
+
+        clean_session_key = session_key.strip()
+        clean_message_id = message_id.strip()
+        clean_new_path = new_path.strip()
+        if not clean_session_key or not clean_message_id or not clean_new_path:
+            raise ValueError("session_key、message_id 和新图片路径不能为空")
+        async with self._lock(clean_session_key):
+            updated_message = self._store.replace_message_media(
+                session_key=clean_session_key,
+                message_id=clean_message_id,
+                media_index=media_index,
+                expected_path=expected_path,
+                new_path=clean_new_path,
+            )
+            session = self._cache.get(clean_session_key)
+            if session is None:
+                loaded = self._load(clean_session_key)
+                if loaded is None:
+                    raise RuntimeError("消息已更新但会话无法重新加载")
+                self._cache[clean_session_key] = loaded
+                return loaded
+            for index, message in enumerate(session.messages):
+                if str(message.get("id") or "") == clean_message_id:
+                    session.messages[index] = updated_message
+                    session.updated_at = datetime.now()
+                    self._cache[clean_session_key] = session
+                    return session
+            loaded = self._load(clean_session_key)
+            if loaded is None:
+                raise RuntimeError("消息已更新但会话缓存无法同步")
+            self._cache[clean_session_key] = loaded
+            return loaded

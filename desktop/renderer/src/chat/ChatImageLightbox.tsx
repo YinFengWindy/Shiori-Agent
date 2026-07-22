@@ -1,5 +1,6 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { ArrowClockwise } from "@phosphor-icons/react";
 import {
   clampChatImageOffset,
   fitChatImageToStage,
@@ -14,14 +15,17 @@ type ChatImageLightboxProps = {
   canGoToNext: boolean;
   canGoToPrevious: boolean;
   canLocateMessage: boolean;
+  canRegenerate: boolean;
   imagePath: string;
   addingToAssetLibrary: boolean;
+  regenerating: boolean;
   open: boolean;
   onAddToAssetLibrary: () => void;
   onClose: () => void;
   onGoToNext: () => void;
   onGoToPrevious: () => void;
   onLocateMessage: () => void;
+  onRegenerate: () => void;
 };
 
 /** Renders the enlarged chat image preview dialog for the selected sidebar image. */
@@ -30,14 +34,17 @@ export function ChatImageLightbox({
   canGoToNext,
   canGoToPrevious,
   canLocateMessage,
+  canRegenerate,
   imagePath,
   addingToAssetLibrary,
+  regenerating,
   open,
   onAddToAssetLibrary,
   onClose,
   onGoToNext,
   onGoToPrevious,
   onLocateMessage,
+  onRegenerate,
 }: ChatImageLightboxProps) {
   const [zoom, setZoom] = useState(1);
   const [dragging, setDragging] = useState(false);
@@ -250,6 +257,16 @@ export function ChatImageLightbox({
             </button>
           </div>
           <div className="pointer-events-none absolute bottom-4 right-4 z-[2] flex items-center gap-3">
+            <button
+              className="pointer-events-auto grid h-11 w-11 place-items-center rounded-full border border-black/12 bg-white/94 text-[#272636] shadow-[0_10px_24px_rgba(15,23,42,0.12)] transition hover:border-black hover:bg-white disabled:cursor-default disabled:opacity-40"
+              type="button"
+              aria-label="重新生成图片"
+              title="重新生成图片"
+              onClick={onRegenerate}
+              disabled={!canRegenerate || regenerating}
+            >
+              <ArrowClockwise className={`h-5 w-5 ${regenerating ? "animate-spin" : ""}`} weight="bold" />
+            </button>
             <button
               className="pointer-events-auto grid h-11 w-11 place-items-center rounded-full border border-black/12 bg-white/94 text-[#272636] shadow-[0_10px_24px_rgba(15,23,42,0.12)] transition hover:border-black hover:bg-white disabled:cursor-default disabled:opacity-40"
               type="button"

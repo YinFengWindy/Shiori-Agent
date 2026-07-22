@@ -54,6 +54,32 @@ async def test_control_mutation_runs_while_novelai_lane_is_busy() -> None:
 
 
 @pytest.mark.asyncio
+async def test_regeneration_uses_the_bounded_integration_lane() -> None:
+    dispatcher = BridgeRequestDispatcher(
+        max_concurrency=2,
+        integration_concurrency=2,
+    )
+    both_started = asyncio.Event()
+    release = asyncio.Event()
+    active = 0
+
+    async def _regenerate() -> None:
+        nonlocal active
+        active += 1
+        if active == 2:
+            both_started.set()
+        await release.wait()
+        active -= 1
+
+    dispatcher.submit({"method": "novelai.regenerateMessageMedia"}, _regenerate)
+    dispatcher.submit({"method": "novelai.regenerateMessageMedia"}, _regenerate)
+
+    await asyncio.wait_for(both_started.wait(), timeout=0.2)
+    release.set()
+    await dispatcher.aclose()
+
+
+@pytest.mark.asyncio
 async def test_world_run_submission_does_not_hold_global_mutation_lane() -> None:
     dispatcher = BridgeRequestDispatcher(max_concurrency=2)
     run_started = asyncio.Event()

@@ -168,11 +168,14 @@ type DesktopAppFrameProps = {
   canGoToNextLightboxImage: boolean;
   canGoToPreviousLightboxImage: boolean;
   canLocateLightboxMessage: boolean;
+  canRegenerateLightboxImage: boolean;
   addingChatImageToAssetLibrary: boolean;
+  regeneratingSelectedChatImage: boolean;
   chatImageLightboxOpen: boolean;
   onAddSelectedChatImageToAssetLibrary: () => void;
   onCloseSelectedChatImageLightbox: () => void;
   onLocateSelectedChatImageMessage: () => void;
+  onRegenerateSelectedChatImage: () => void;
 };
 
 /** Renders the desktop shell around the already-prepared application state. */
@@ -295,11 +298,14 @@ export function DesktopAppFrame({
   canGoToNextLightboxImage,
   canGoToPreviousLightboxImage,
   canLocateLightboxMessage,
+  canRegenerateLightboxImage,
   addingChatImageToAssetLibrary,
+  regeneratingSelectedChatImage,
   chatImageLightboxOpen,
   onAddSelectedChatImageToAssetLibrary,
   onCloseSelectedChatImageLightbox,
   onLocateSelectedChatImageMessage,
+  onRegenerateSelectedChatImage,
 }: DesktopAppFrameProps) {
   return (
     <div className="app-frame grid h-screen grid-rows-app overflow-hidden bg-[var(--app-bg)]">
@@ -569,14 +575,17 @@ export function DesktopAppFrame({
         canGoToNext={canGoToNextLightboxImage}
         canGoToPrevious={canGoToPreviousLightboxImage}
         canLocateMessage={canLocateLightboxMessage}
+        canRegenerate={canRegenerateLightboxImage}
         imagePath={chatLatestImagePath}
         addingToAssetLibrary={addingChatImageToAssetLibrary}
+        regenerating={regeneratingSelectedChatImage}
         open={chatImageLightboxOpen}
         onAddToAssetLibrary={onAddSelectedChatImageToAssetLibrary}
         onClose={onCloseSelectedChatImageLightbox}
         onGoToNext={onGoToNextChatImage}
         onGoToPrevious={onGoToPreviousChatImage}
         onLocateMessage={onLocateSelectedChatImageMessage}
+        onRegenerate={onRegenerateSelectedChatImage}
       />
     </div>
   );

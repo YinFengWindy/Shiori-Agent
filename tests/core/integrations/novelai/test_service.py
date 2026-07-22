@@ -3,13 +3,18 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import httpx
 import pytest
 
 from core.integrations.novelai.client import NovelAIClient
-from core.integrations.novelai.models import GenerateImageRequest, NovelAISettings
+from core.integrations.novelai.models import (
+    GenerateImageRequest,
+    GeneratedImageRecord,
+    NovelAIGenerationSource,
+    NovelAISettings,
+)
 from core.integrations.novelai.prompt_tags import PromptTagStore
 from core.integrations.novelai.service import NovelAIService
 from core.integrations.novelai.store import NovelAIStore
@@ -18,6 +23,79 @@ from core.roles.store import RoleStore
 _TINY_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sXkD1gAAAAASUVORK5CYII="
 )
+
+
+@pytest.mark.asyncio
+async def test_regenerate_reuses_exact_request_parameters_with_fresh_seed(
+    tmp_path: Path,
+) -> None:
+    settings = NovelAISettings(enabled=True, token="novel-token")
+    client = _FakeClient(_json_response(), settings)
+    service = NovelAIService(
+        settings=settings,
+        client=client,
+        store=NovelAIStore(tmp_path),
+        role_store=RoleStore(tmp_path),
+        workspace=tmp_path,
+    )
+    source = NovelAIGenerationSource(
+        record=GeneratedImageRecord(
+            id="source-record",
+            created_at="2026-07-22T08:00:00+00:00",
+            role_id="mira",
+            session_key="role:mira",
+            mode="img2img",
+            prompt="1girl, rain",
+            negative_prompt="blurry",
+            model="nai-diffusion-4-5-curated",
+            sampler="k_euler_ancestral",
+            steps=24,
+            seed=17,
+            width=832,
+            height=1216,
+            base_image_path=str(tmp_path / "base.png"),
+            output_paths=[str(tmp_path / "old.png")],
+            wrote_back_to_role=False,
+        ),
+        output_path=str(tmp_path / "old.png"),
+        request_payload={
+            "action": "img2img",
+            "input": "1girl, rain",
+            "model": "nai-diffusion-4-5-curated",
+            "parameters": {
+                "width": 832,
+                "height": 1216,
+                "steps": 24,
+                "sampler": "k_euler_ancestral",
+                "negative_prompt": "blurry",
+                "seed": 17,
+                "image": "original-base64",
+                "strength": 0.42,
+                "noise": 0.31,
+                "reference_image_multiple": ["reference-data"],
+            },
+        },
+    )
+
+    with patch("core.integrations.novelai.service.secrets.randbelow", return_value=100):
+        result = await service.regenerate(source, session_key="role:mira")
+
+    assert result.seed == 100
+    assert client.last_generate_kwargs["action"] == "img2img"
+    assert client.last_generate_kwargs["prompt"] == "1girl, rain"
+    assert client.last_generate_kwargs["parameters"] == {
+        "width": 832,
+        "height": 1216,
+        "steps": 24,
+        "sampler": "k_euler_ancestral",
+        "negative_prompt": "blurry",
+        "seed": 100,
+        "image": "original-base64",
+        "strength": 0.42,
+        "noise": 0.31,
+        "reference_image_multiple": ["reference-data"],
+    }
+    assert source.request_payload["parameters"]["seed"] == 17
 
 
 class _FakeClient(NovelAIClient):

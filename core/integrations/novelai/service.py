@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import base64
+import copy
 import io
+import secrets
 import zipfile
 from datetime import datetime, timezone
 from dataclasses import replace
@@ -17,6 +19,8 @@ from core.integrations.novelai.models import (
     GenerateImageRequest,
     GenerateImageResult,
     GeneratedImageRecord,
+    NovelAIGenerationSource,
+    NovelAIMode,
     NovelAISettings,
 )
 from core.integrations.novelai.prompt_tags import PromptTagStore
@@ -128,6 +132,95 @@ class NovelAIService:
             output_bytes, suffix = self._extract_primary_image(response)
         except httpx.HTTPStatusError as exc:
             raise await self._rewrite_http_error(exc, model=model) from exc
+        return self._persist_generation(
+            action=action,
+            prompt=prompt,
+            model=model,
+            parameters=parameters,
+            mode=request.mode,
+            negative_prompt=request.negative_prompt,
+            role_id=request.role_id,
+            session_key=request.session_key,
+            base_image_path=base_image_path,
+            seed=request.seed,
+            width=width,
+            height=height,
+            steps=steps,
+            output_bytes=output_bytes,
+            suffix=suffix,
+            allow_role_writeback=True,
+        )
+
+    async def regenerate(
+        self,
+        source: NovelAIGenerationSource,
+        *,
+        session_key: str,
+    ) -> GenerateImageResult:
+        """Replay one persisted request exactly, changing only its random seed."""
+
+        self._validate_enabled()
+        request_payload = copy.deepcopy(source.request_payload)
+        action = str(request_payload.get("action") or "").strip()
+        prompt = str(request_payload.get("input") or "").strip()
+        model = str(request_payload.get("model") or "").strip()
+        parameters = request_payload.get("parameters")
+        if not action or not prompt or not model or not isinstance(parameters, dict):
+            raise ValueError("NovelAI 原始请求快照不完整")
+        previous_seed = parameters.get("seed", source.record.seed)
+        seed = secrets.randbelow(2**32)
+        if previous_seed is not None and seed == int(previous_seed):
+            seed = (seed + 1) % (2**32)
+        parameters["seed"] = seed
+        try:
+            response = await self._client.generate_image(
+                action=action,
+                prompt=prompt,
+                model=model,
+                parameters=parameters,
+            )
+            output_bytes, suffix = self._extract_primary_image(response)
+        except httpx.HTTPStatusError as exc:
+            raise await self._rewrite_http_error(exc, model=model) from exc
+        return self._persist_generation(
+            action=action,
+            prompt=prompt,
+            model=model,
+            parameters=parameters,
+            mode=source.record.mode,
+            negative_prompt=str(parameters.get("negative_prompt") or ""),
+            role_id=source.record.role_id,
+            session_key=session_key,
+            base_image_path=source.record.base_image_path,
+            seed=seed,
+            width=int(parameters.get("width") or source.record.width),
+            height=int(parameters.get("height") or source.record.height),
+            steps=int(parameters.get("steps") or source.record.steps),
+            output_bytes=output_bytes,
+            suffix=suffix,
+            allow_role_writeback=False,
+        )
+
+    def _persist_generation(
+        self,
+        *,
+        action: str,
+        prompt: str,
+        model: str,
+        parameters: dict[str, Any],
+        mode: NovelAIMode,
+        negative_prompt: str,
+        role_id: str,
+        session_key: str,
+        base_image_path: str,
+        seed: int | None,
+        width: int,
+        height: int,
+        steps: int,
+        output_bytes: bytes,
+        suffix: str,
+        allow_role_writeback: bool,
+    ) -> GenerateImageResult:
         created_at = datetime.now(timezone.utc)
         record_id = self._store.new_record_id()
         record_dir = self._store.build_record_dir(
@@ -150,8 +243,12 @@ class NovelAIService:
 
         wrote_back_to_role = False
         role_asset_paths: list[str] = []
-        clean_role_id = request.role_id.strip()
-        if self._settings.auto_writeback_role_assets and clean_role_id:
+        clean_role_id = role_id.strip()
+        if (
+            allow_role_writeback
+            and self._settings.auto_writeback_role_assets
+            and clean_role_id
+        ):
             role = self._role_store.get_role(clean_role_id)
             if role is None:
                 raise KeyError(f"role 不存在: {clean_role_id}")
@@ -171,14 +268,14 @@ class NovelAIService:
             id=record_id,
             created_at=created_at.isoformat(),
             role_id=clean_role_id,
-            session_key=request.session_key.strip(),
-            mode=request.mode,
+            session_key=session_key.strip(),
+            mode=mode,
             prompt=prompt,
-            negative_prompt=request.negative_prompt,
+            negative_prompt=negative_prompt,
             model=model,
-            sampler=parameters["sampler"],
+            sampler=str(parameters.get("sampler") or ""),
             steps=steps,
-            seed=request.seed,
+            seed=seed,
             width=width,
             height=height,
             base_image_path=base_image_path,
@@ -191,9 +288,9 @@ class NovelAIService:
         return GenerateImageResult(
             record_id=record_id,
             created_at=record.created_at,
-            mode=request.mode,
+            mode=record.mode,
             model=model,
-            seed=request.seed,
+            seed=seed,
             width=width,
             height=height,
             output_paths=[str(output_path)],

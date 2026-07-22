@@ -104,7 +104,7 @@ export class DesktopBridgeClient extends EventEmitter {
     if (method === "health") {
       return HEALTH_REQUEST_TIMEOUT_MS;
     }
-    if (method === "novelai.generate") {
+    if (method === "novelai.generate" || method === "novelai.regenerateMessageMedia") {
       return IMAGE_GENERATION_TIMEOUT_MS;
     }
     return DEFAULT_REQUEST_TIMEOUT_MS;

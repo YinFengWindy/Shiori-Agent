@@ -5,6 +5,7 @@ from .models import (
     GenerateImageRequest,
     GenerateImageResult,
     GeneratedImageRecord,
+    NovelAIGenerationSource,
     NovelAISettings,
 )
 from .service import NovelAIService
@@ -15,6 +16,7 @@ __all__ = [
     "GenerateImageRequest",
     "GenerateImageResult",
     "GeneratedImageRecord",
+    "NovelAIGenerationSource",
     "NovelAIClient",
     "NovelAIService",
     "NovelAISettings",

@@ -116,6 +116,20 @@ describe("collectChatImageHistory", () => {
       },
     ]);
   });
+
+  it("preserves the authoritative media slot after malformed entries", () => {
+    const session = createSession([
+      {
+        id: "message-1",
+        role: "assistant",
+        content: "first",
+        media: [null as unknown as string, "outputs/cover.png"],
+      },
+    ]);
+
+    assert.equal(collectChatImageHistory(session)[0]?.mediaIndex, 1);
+    assert.equal(collectChatImageHistory(session)[0]?.historyKey, "message-1:1");
+  });
 });
 
 describe("buildChatImageHistoryKey", () => {

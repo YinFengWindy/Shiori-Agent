@@ -25,6 +25,7 @@ _READ_ONLY_METHODS = frozenset(
 _INTEGRATION_METHODS = frozenset(
     {
         "novelai.generate",
+        "novelai.regenerateMessageMedia",
         "worlds.drafts.preview",
     }
 )

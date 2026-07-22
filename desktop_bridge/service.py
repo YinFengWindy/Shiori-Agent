@@ -121,6 +121,7 @@ class DesktopBridgeService:
         self.novelai_service = novelai_service or self._build_novelai_service()
         self.image_service = DesktopImageService(
             role_service=self.role_service,
+            session_manager=session_manager,
             novelai_service=self.novelai_service,
             novelai_store=self.novelai_store,
             prompt_tag_store=self.prompt_tag_store,
@@ -598,6 +599,23 @@ class DesktopBridgeService:
                     request_id,
                     method,
                     {"result": result},
+                )
+            if method == "novelai.regenerateMessageMedia":
+                result, session = await self.image_service.regenerate_message_media(
+                    payload
+                )
+                await self._emit_session_updated(
+                    request_id=request_id,
+                    session=session,
+                    emit_event=emit_event,
+                )
+                return self._ok(
+                    request_id,
+                    method,
+                    {
+                        "result": result,
+                        "session": self.session_presenter.serialize(session),
+                    },
                 )
             if method == "novelai.history":
                 records = self.image_service.history(payload)

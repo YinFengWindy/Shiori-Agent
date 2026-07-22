@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -12,6 +12,53 @@ from conversation.push_sync import ExternalImageSyncService
 from core.roles import RoleStore
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
+
+
+@pytest.mark.asyncio
+async def test_novelai_regenerate_message_media_returns_updated_session(
+    tmp_path,
+) -> None:
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="You are Mira.",
+    )
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.get_or_create("role:mira")
+    session.add_message("assistant", "scene", media=[str(tmp_path / "new.png")])
+    session_manager.save(session)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    service.image_service.regenerate_message_media = AsyncMock(
+        return_value=({"record_id": "new-record"}, session)
+    )
+    emitted = Mock()
+
+    response = await service.handle(
+        {
+            "id": "regenerate-1",
+            "method": "novelai.regenerateMessageMedia",
+            "payload": {
+                "session_key": "role:mira",
+                "message_id": session.messages[-1]["id"],
+                "media_index": 0,
+            },
+        },
+        emit_event=emitted,
+    )
+
+    assert response.error is None
+    assert response.payload["result"]["record_id"] == "new-record"
+    assert response.payload["session"]["messages"][-1]["media"] == [
+        str(tmp_path / "new.png")
+    ]
+    assert emitted.call_args.args[0]["method"] == "session.updated"
 
 
 @pytest.mark.asyncio

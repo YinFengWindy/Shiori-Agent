@@ -337,6 +337,8 @@ function App(): React.ReactElement {
     closeSelectedChatImageLightbox,
     locateSelectedChatImageMessage,
     addSelectedChatImageToAssetLibrary,
+    regenerateSelectedChatImage,
+    regeneratingSelectedChatImage,
     selectPreviousChatImage,
     selectNextChatImage,
   } = useChatImageState({
@@ -354,6 +356,7 @@ function App(): React.ReactElement {
     latestChatGeneratedImageKey,
     openChatLatestImageSidebar: chatLatestImageSidebar.open,
     loadRolesFromBridge,
+    updateCommittedActiveSession,
     queueMessageNavigation,
     setError,
     setNotice,
@@ -618,11 +621,14 @@ function App(): React.ReactElement {
       canGoToNextLightboxImage={selectedChatImageIndex >= 0 && selectedChatImageIndex < chatImageHistory.length - 1}
       canGoToPreviousLightboxImage={selectedChatImageIndex > 0}
       canLocateLightboxMessage={Boolean(activeRoleId && selectedChatImageEntry?.messageId)}
+      canRegenerateLightboxImage={Boolean(activeSessionKey && selectedChatImageEntry?.messageId)}
       addingChatImageToAssetLibrary={addingChatImageToAssetLibrary}
+      regeneratingSelectedChatImage={regeneratingSelectedChatImage}
       chatImageLightboxOpen={chatImageLightboxOpen}
       onAddSelectedChatImageToAssetLibrary={() => void addSelectedChatImageToAssetLibrary()}
       onCloseSelectedChatImageLightbox={closeSelectedChatImageLightbox}
       onLocateSelectedChatImageMessage={locateSelectedChatImageMessage}
+      onRegenerateSelectedChatImage={() => void regenerateSelectedChatImage()}
     />
   );
 }

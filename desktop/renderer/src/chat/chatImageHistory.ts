@@ -1,5 +1,4 @@
 import type { SessionPayload } from "../shared/types";
-import { normalizeSessionMediaPaths } from "./chatMedia";
 
 export type ChatImageHistoryEntry = {
   historyKey: string;
@@ -33,9 +32,10 @@ export function collectChatImageHistory(session: SessionPayload | null): ChatIma
   const history: ChatImageHistoryEntry[] = [];
   for (let messageIndex = 0; messageIndex < session.messages.length; messageIndex += 1) {
     const message = session.messages[messageIndex];
-    const media = normalizeSessionMediaPaths(message?.media);
+    const media = Array.isArray(message?.media) ? message.media : [];
     for (let mediaIndex = 0; mediaIndex < media.length; mediaIndex += 1) {
-      const path = String(media[mediaIndex] ?? "").trim();
+      const rawPath = media[mediaIndex];
+      const path = typeof rawPath === "string" ? rawPath.trim() : "";
       if (!path || !isChatImageAsset(path)) {
         continue;
       }

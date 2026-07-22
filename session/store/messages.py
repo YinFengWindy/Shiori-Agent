@@ -339,6 +339,53 @@ class _MessageMixin:
             return None
         return self.get_message(message_id)
 
+    def replace_message_media(
+        self,
+        *,
+        session_key: str,
+        message_id: str,
+        media_index: int,
+        expected_path: str,
+        new_path: str,
+    ) -> dict[str, Any]:
+        """Atomically replace one media slot when its authoritative path is unchanged."""
+
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._conn.execute(
+                    "SELECT session_key, media FROM messages WHERE id = ?",
+                    (message_id,),
+                ).fetchone()
+                if row is None:
+                    raise ValueError(f"消息不存在: {message_id}")
+                if str(row["session_key"]) != session_key:
+                    raise ValueError("消息不属于指定会话")
+                raw_media = row["media"]
+                media = json.loads(raw_media) if raw_media else []
+                if not isinstance(media, list) or media_index < 0 or media_index >= len(media):
+                    raise ValueError("media_index 超出消息媒体范围")
+                if str(media[media_index] or "") != expected_path:
+                    raise ValueError("消息图片已发生变化，请刷新后重试")
+                media[media_index] = new_path
+                updated_at = datetime.now().astimezone().isoformat()
+                self._conn.execute(
+                    "UPDATE messages SET media = ? WHERE id = ?",
+                    (json.dumps(media, ensure_ascii=False), message_id),
+                )
+                self._conn.execute(
+                    "UPDATE sessions SET updated_at = ? WHERE key = ?",
+                    (updated_at, session_key),
+                )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+        updated = self.get_message(message_id)
+        if updated is None:
+            raise RuntimeError("消息媒体更新后无法重新读取")
+        return updated
+
     def update_latest_assistant_delivery(
         self,
         session_key: str,

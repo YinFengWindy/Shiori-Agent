@@ -102,3 +102,12 @@ class GeneratedImageRecord:
         """Serialize the record for JSON persistence."""
 
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class NovelAIGenerationSource:
+    """Authoritative persisted inputs used to replay one NovelAI generation."""
+
+    record: GeneratedImageRecord
+    output_path: str
+    request_payload: dict[str, Any]

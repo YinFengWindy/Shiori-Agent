@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ChatImageHistoryEntry } from "../chat/chatImageHistory";
-import type { RoleRecord } from "../shared/types";
+import type { RoleRecord, SessionPayload } from "../shared/types";
+import { useChatImageRegeneration } from "./useChatImageRegeneration";
 
 type UseChatImageStateArgs = {
   activeRoleId: string;
@@ -17,6 +18,9 @@ type UseChatImageStateArgs = {
   latestChatGeneratedImageKey: string;
   openChatLatestImageSidebar: () => void;
   loadRolesFromBridge: () => Promise<unknown>;
+  updateCommittedActiveSession: (
+    updater: (current: SessionPayload | null) => SessionPayload | null,
+  ) => void;
   queueMessageNavigation: (roleId: string, messageKey: string) => void;
   setError: React.Dispatch<React.SetStateAction<string>>;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
@@ -38,11 +42,22 @@ export function useChatImageState({
   latestChatGeneratedImageKey,
   openChatLatestImageSidebar,
   loadRolesFromBridge,
+  updateCommittedActiveSession,
   queueMessageNavigation,
   setError,
   setNotice,
 }: UseChatImageStateArgs) {
   const latestChatImageRef = useRef<{ sessionKey: string; latestKey: string }>({ sessionKey: "", latestKey: "" });
+  const {
+    regenerateSelectedChatImage,
+    regeneratingSelectedChatImage,
+  } = useChatImageRegeneration({
+    activeSessionKey,
+    selectedChatImageEntry,
+    updateCommittedActiveSession,
+    setError,
+    setNotice,
+  });
 
   function openChatImagePreview(target: { historyKey: string }): void {
     const nextHistoryKey = target.historyKey.trim();
@@ -140,6 +155,8 @@ export function useChatImageState({
     closeSelectedChatImageLightbox,
     locateSelectedChatImageMessage,
     addSelectedChatImageToAssetLibrary,
+    regenerateSelectedChatImage,
+    regeneratingSelectedChatImage,
     selectPreviousChatImage,
     selectNextChatImage,
   };
