@@ -91,7 +91,6 @@ type DesktopAppFrameProps = {
   onOpenRole: (roleId: string) => void;
   onOpenImageStudio: () => void;
   onOpenPromptTagLibrary: () => void;
-  worldWorkspace: React.ReactNode;
   imageStudioState: ImageStudioStateViewModel;
   workspaceFeedback: WorkspaceFeedback | null;
   activeRole: RoleRecord | null;
@@ -219,7 +218,6 @@ export function DesktopAppFrame({
   onOpenRole,
   onOpenImageStudio,
   onOpenPromptTagLibrary,
-  worldWorkspace,
   imageStudioState,
   workspaceFeedback,
   activeRole,
@@ -457,7 +455,6 @@ export function DesktopAppFrame({
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
             />
           ) : null}
-          {mainView.kind === "world" ? worldWorkspace : null}
           {mainView.kind === "image-studio" ? (
             <ImageStudioPage
               activeRecord={imageStudioState.activeRecord}

@@ -46,6 +46,7 @@ import { useLeftSidebarState } from "./shared/useLeftSidebarState";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
 import { createWorldBridgeClient } from "./world/bridgeClient";
 import { useWorldWorkspaceController } from "./world/useWorldWorkspaceController";
+import { WorldAppSurface } from "./world/WorldAppSurface";
 import type {
   AppMainView,
   EventLog,
@@ -455,6 +456,10 @@ function App(): React.ReactElement {
     setWorkspaceFeedback({ tone: "success", message: "新建角色表单已重置。" });
   }
 
+  if (mainView.kind === "world") {
+    return <WorldAppSurface onExit={() => openChatView()}>{worldWorkspace.content}</WorldAppSurface>;
+  }
+
   return (
     <DesktopAppFrame
       sidebarCollapsed={leftSidebar.collapsed}
@@ -510,7 +515,6 @@ function App(): React.ReactElement {
       onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
       onOpenImageStudio={() => openImageStudio()}
       onOpenPromptTagLibrary={() => { setPromptTagWorkspaceSection("list"); openPromptTagLibrary(); }}
-      worldWorkspace={worldWorkspace.content}
       imageStudioState={imageStudioState}
       workspaceFeedback={workspaceFeedback}
       activeRole={activeRole}

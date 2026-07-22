@@ -1,6 +1,7 @@
 export { createWorldBridgeClient } from "./bridgeClient";
 export type { WorldBridgeClient } from "./bridgeClient";
 export { GalgameFocusMode } from "./GalgameFocusMode";
+export { WorldAppSurface } from "./WorldAppSurface";
 export { SceneShot } from "./SceneShot";
 export { useWorldWorkspaceController } from "./useWorldWorkspaceController";
 export { WorldCreateFlow } from "./WorldCreateFlow";
