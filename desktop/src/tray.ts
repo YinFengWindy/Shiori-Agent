@@ -17,9 +17,7 @@ export function createDesktopTray({ onShowWindow, onQuitRequested, getDesktopPet
       Menu.buildFromTemplate([
         { label: "显示主窗口", click: () => onShowWindow() },
         {
-          label: "桌宠模式",
-          type: "checkbox",
-          checked: state.enabled,
+          label: state.enabled ? "桌宠模式：已开启" : "桌宠模式：已关闭",
           enabled: state.available,
           click: () => onToggleDesktopPet?.(),
         },
