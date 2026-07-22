@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from bus.events_lifecycle import SceneTransition
 from core.integrations.novelai.models import NovelAISizePreset
@@ -20,6 +20,8 @@ _REQUIRED_ARGUMENTS = (
     "negative_prompt",
     "size_preset",
 )
+
+_SceneImageSizePreset = NovelAISizePreset | Literal[""]
 
 SCENE_DECISION_TOOL_SCHEMA: dict[str, Any] = {
     "type": "function",
@@ -84,7 +86,7 @@ class SceneDecision:
     should_generate: bool = False
     prompt: str = ""
     negative_prompt: str = ""
-    size_preset: NovelAISizePreset = "landscape"
+    size_preset: _SceneImageSizePreset = ""
 
 
 class SceneDecisionProtocolError(ValueError):
@@ -232,5 +234,5 @@ def parse_scene_decision_payload(
         should_generate=True,
         prompt=prompt,
         negative_prompt=negative_prompt,
-        size_preset=cast(NovelAISizePreset, size_preset),
+        size_preset=cast(_SceneImageSizePreset, size_preset),
     )

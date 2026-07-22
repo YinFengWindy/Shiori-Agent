@@ -195,6 +195,7 @@ async def test_passive_turn_publishes_none_without_persisting_scene_key(
 
     assert observations[0].transition == "none"
     assert observations[0].scene_key == ""
+    assert observations[0].size_preset == ""
     assert controller._current_scene_key("role:mira") == ""
     await controller.terminate()
 

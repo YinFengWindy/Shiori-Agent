@@ -58,6 +58,7 @@ def test_parse_tool_call_accepts_empty_terminal_decision(transition: str) -> Non
 
     assert decision.transition == transition
     assert decision.should_generate is False
+    assert decision.size_preset == ""
 
 
 @pytest.mark.parametrize(

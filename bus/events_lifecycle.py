@@ -119,7 +119,7 @@ class SceneObservationCommitted:
     should_generate: bool = False
     prompt: str = ""
     negative_prompt: str = ""
-    size_preset: str = "landscape"
+    size_preset: str = ""
     tools_used: tuple[str, ...] = ()
 
 
