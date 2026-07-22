@@ -168,8 +168,8 @@ export function registerDesktopIpc({
       },
     );
   });
-  ipcMain.handle("desktop:window-control", (_event: IpcMainInvokeEvent, action: WindowControlAction) => {
-    const [window] = BrowserWindow.getAllWindows();
+  ipcMain.handle("desktop:window-control", (event: IpcMainInvokeEvent, action: WindowControlAction) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) {
       return;
     }
@@ -189,8 +189,8 @@ export function registerDesktopIpc({
       window.close();
     }
   });
-  ipcMain.handle("desktop:window-state", () => {
-    const [window] = BrowserWindow.getAllWindows();
+  ipcMain.handle("desktop:window-state", (event: IpcMainInvokeEvent) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
     return {
       isMaximized: window?.isMaximized() ?? false,
       isVisible: window?.isVisible() ?? false,
