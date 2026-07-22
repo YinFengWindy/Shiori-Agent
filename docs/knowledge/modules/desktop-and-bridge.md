@@ -2,7 +2,7 @@
 title: 桌面端与桥接
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 773b21d3
+last_verified_commit: 9ff71701
 source_paths:
   - desktop/src/
   - desktop/renderer/src/
@@ -27,7 +27,7 @@ related:
 
 renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatcher.py`；service 调用 owning domain，presenter 将结果转换为共享类型。后端事件沿反方向更新 renderer state。图片等本地资产通过专门的 registry/transport 暴露，不直接把任意文件路径交给视图。
 
-桌宠拖拽不经过 Python bridge：桌宠 renderer 的 `pointerdown`/`pointerup` 分别经 preload 发送 `desktop:pet-drag-start`/`desktop:pet-drag-end`。`DesktopPetController` 接到开始命令后以 60Hz 读取系统光标位置并移动独立桌宠窗口；结束时停止跟随并只保存最终位置。不要依赖透明桌宠窗口的原生 `before-mouse-event` 作为拖拽唯一入口。
+桌宠拖拽不经过 Python bridge：桌宠 renderer 在 `pointermove` 经 preload 发送 `desktop:pet-drag` 坐标，`DesktopPetController` 直接移动独立桌宠窗口并保存该位置。
 
 ## 修改影响
 
@@ -35,4 +35,4 @@ renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatc
 - 修改共享类型：检查 Python models/presenter、`desktop/src/shared.ts`、renderer `shared/types.ts`。
 - 修改会话切换：检查 bridge 事件优先级、Session cache、聊天消息连续性和导航历史。
 - 修改角色 CRUD：复用统一刷新/派生状态流程，避免各页面重复“调用、刷新、同步、导航”。
-- 修改桌宠拖拽：同步检查 renderer pointer handlers、`DesktopApi`、preload、`registerDesktopIpc` 与 `DesktopPetController`，并验证拖拽后的最终位置会保存。
+- 修改桌宠拖拽：同步检查 renderer pointer handlers、`DesktopApi`、preload、`registerDesktopIpc` 与 `DesktopPetController`，并验证窗口位置会保存。
