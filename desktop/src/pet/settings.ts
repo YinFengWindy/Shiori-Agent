@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { defaultDesktopPetSettings, type DesktopPetSettings } from "./types.js";
+import { defaultDesktopPetSettings, type DesktopPetBinding, type DesktopPetSettings } from "./types.js";
 
 function asFiniteCoordinate(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -27,6 +27,19 @@ export function normalizeDesktopPetSettings(value: unknown): DesktopPetSettings 
     roleId,
     packageId,
     positions,
+  };
+}
+
+/** Replaces the single active role/package slot while retaining per-role window positions. */
+export function activateDesktopPetSettings(
+  settings: DesktopPetSettings,
+  binding: DesktopPetBinding,
+): DesktopPetSettings {
+  return {
+    ...settings,
+    enabled: true,
+    roleId: binding.roleId,
+    packageId: binding.package.id,
   };
 }
 

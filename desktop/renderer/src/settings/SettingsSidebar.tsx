@@ -6,7 +6,6 @@ export type SettingsSectionId =
   | "channels"
   | "memory"
   | "integrations"
-  | "desktop-pet"
   | "advanced";
 
 export const settingsSections: Array<{ id: SettingsSectionId; label: string }> = [
@@ -14,7 +13,6 @@ export const settingsSections: Array<{ id: SettingsSectionId; label: string }> =
   { id: "channels", label: "频道" },
   { id: "memory", label: "记忆" },
   { id: "integrations", label: "集成" },
-  { id: "desktop-pet", label: "桌宠" },
   { id: "advanced", label: "高级" },
 ];
 

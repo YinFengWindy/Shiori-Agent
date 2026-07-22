@@ -1,4 +1,6 @@
-import { UploadIcon } from "../shared/icons";
+import { toFileUrl } from "../shared/format";
+import { DeleteIcon, UploadIcon } from "../shared/icons";
+import { cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 
 type RolePetPackagesPanelProps = {
@@ -6,10 +8,11 @@ type RolePetPackagesPanelProps = {
   disabled: boolean;
   onImport: () => void;
   onRemove: (packageId: string) => void;
+  onSelect: (packageId: string) => void;
 };
 
 /** Manages desktop-pet packages inside the owning role's asset library. */
-export function RolePetPackagesPanel({ role, disabled, onImport, onRemove }: RolePetPackagesPanelProps) {
+export function RolePetPackagesPanel({ role, disabled, onImport, onRemove, onSelect }: RolePetPackagesPanelProps) {
   const packages = role?.pet_packages ?? [];
   return (
     <section className="border-t border-[#E4EAF0] px-4 py-4">
@@ -19,11 +22,41 @@ export function RolePetPackagesPanel({ role, disabled, onImport, onRemove }: Rol
           <UploadIcon className="h-4 w-4 fill-current" />
         </button>
       </div>
-      <div className="grid gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {packages.map((item) => (
-          <div className="flex items-center justify-between rounded-md border border-[#E2E6EB] bg-white px-3 py-2" key={item.id}>
-            <span className="min-w-0 truncate text-sm text-[#32363C]">{item.display_name}</span>
-            <button className="rounded-md px-2 py-1 text-xs text-[#9A4A4A] transition hover:bg-[#FFF3F3] focus:outline-none" type="button" disabled={disabled} onClick={() => onRemove(item.id)}>删除</button>
+          <div
+            className={cx(
+              "relative overflow-hidden rounded-md border bg-white",
+              role?.selected_pet_package_id === item.id ? "border-primary ring-2 ring-primary/20" : "border-[#E2E6EB]",
+            )}
+            key={item.id}
+          >
+            <button
+              className="grid w-full gap-2 p-2 text-left transition hover:bg-[#F7F9FB] focus:outline-none"
+              type="button"
+              disabled={disabled}
+              aria-pressed={role?.selected_pet_package_id === item.id}
+              onClick={() => onSelect(item.id)}
+            >
+              <span className="relative block aspect-[12/13] w-full overflow-hidden bg-[#F2F5F8]">
+                <img
+                  className="absolute left-0 top-0 max-w-none"
+                  style={{ width: "800%", height: "900%" }}
+                  src={toFileUrl(item.spritesheet_abs)}
+                  alt={item.display_name}
+                />
+              </span>
+              <span className="min-w-0 truncate text-xs text-[#32363C]">{item.display_name}</span>
+            </button>
+            <button
+              className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-md border border-black/10 bg-white/92 text-[#8B4B4B] shadow-sm transition hover:bg-[#FFF3F3] focus:outline-none"
+              type="button"
+              aria-label={`删除桌宠素材 ${item.display_name}`}
+              disabled={disabled}
+              onClick={() => onRemove(item.id)}
+            >
+              <DeleteIcon className="h-3.5 w-3.5 fill-current" />
+            </button>
           </div>
         ))}
       </div>

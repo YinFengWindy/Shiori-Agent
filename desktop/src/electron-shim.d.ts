@@ -1,7 +1,9 @@
 declare module "electron" {
   export type IpcMainInvokeEvent = unknown;
   export type NativeImage = unknown;
-  export type MenuInstance = unknown;
+  export type MenuInstance = {
+    popup(options?: { window?: BrowserWindowInstance }): void;
+  };
   export type BrowserWindowCloseEvent = {
     preventDefault(): void;
   };
@@ -80,6 +82,7 @@ declare module "electron" {
   export const BrowserWindow: {
     new (options?: BrowserWindowOptions): BrowserWindowInstance;
     getAllWindows(): BrowserWindowInstance[];
+    fromWebContents(webContents: BrowserWindowInstance["webContents"]): BrowserWindowInstance | null;
   };
 
   export const app: {

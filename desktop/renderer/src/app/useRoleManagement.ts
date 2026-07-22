@@ -450,6 +450,17 @@ export function useRoleManagement({
     applyRoleSnapshot(updated);
   }
 
+  async function selectRolePetPackage(packageId: string): Promise<void> {
+    if (!detailRoleId) return;
+    setSavingRoleAssets(true);
+    const response = await window.miraDesktop.invoke({ method: "roles.pets.select", payload: { role_id: detailRoleId, package_id: packageId } });
+    setSavingRoleAssets(false);
+    if (response.error) { setError(response.error.message); return; }
+    const updated = response.payload.role as RoleRecord;
+    setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
+    applyRoleSnapshot(updated);
+  }
+
   return {
     createRole,
     saveRole,
@@ -459,6 +470,7 @@ export function useRoleManagement({
     removeRoleAsset,
     importRolePetPackage,
     removeRolePetPackage,
+    selectRolePetPackage,
     updateRoleAssetOrganization,
   };
 }

@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { CodexSpritePetRenderer } from "./CodexSpritePetRenderer";
 import { spriteAnimations, type SpriteState } from "./spriteContract";
+import "./styles.css";
 
 type PetPackagePayload = { spritesheetUrl: string };
 type PetPayload = { package: PetPackagePayload; state: SpriteState };

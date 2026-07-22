@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 
 from PIL import Image
 
-from .store import RolePetPackage, RoleStore
+from .store import RolePetPackage, RoleRecord, RoleStore
 
 _FORMAT = "codex-sprite@1"
 _ATLAS_SIZE = (1536, 1872)
@@ -96,6 +96,10 @@ class RolePetPackageService:
             raise KeyError(f"桌宠包不存在: {package_id}")
         self._role_store.replace_pet_packages(role_id, [item for item in role.pet_packages if item.id != package_id])
         shutil.rmtree((self._role_store.roles_dir / package.manifest_path).resolve().parent, ignore_errors=True)
+
+    def select_package(self, role_id: str, package_id: str) -> RoleRecord:
+        """Selects one installed package without changing desktop-pet visibility."""
+        return self._role_store.select_pet_package(role_id, package_id)
 
     def _archive_names(self, archive: zipfile.ZipFile) -> tuple[set[str], str]:
         names: set[str] = set()

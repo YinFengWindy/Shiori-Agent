@@ -118,13 +118,14 @@ function desktopPetSettingsPath(): string {
   return resolve(app.getPath("userData"), "desktop-pet.json");
 }
 
-async function resolveDesktopPetBinding(roleId: string, packageId: string): Promise<DesktopPetBinding | null> {
+async function resolveDesktopPetBinding(roleId: string): Promise<DesktopPetBinding | null> {
   const response = await bridge.invoke({ method: "roles.list", payload: {} });
   const roles = response.payload.roles;
   if (!Array.isArray(roles)) return null;
-  const role = roles.find((item) => item && typeof item === "object" && (item as { id?: unknown }).id === roleId) as { pet_packages?: unknown } | undefined;
+  const role = roles.find((item) => item && typeof item === "object" && (item as { id?: unknown }).id === roleId) as { pet_packages?: unknown; selected_pet_package_id?: unknown } | undefined;
   const packages = role?.pet_packages;
   if (!Array.isArray(packages)) return null;
+  const packageId = typeof role?.selected_pet_package_id === "string" ? role.selected_pet_package_id : "";
   const packageValue = packages.find((item) => item && typeof item === "object" && (item as { id?: unknown }).id === packageId) as { id?: unknown; display_name?: unknown; spritesheet_abs?: unknown } | undefined;
   if (!packageValue || typeof packageValue.id !== "string" || typeof packageValue.display_name !== "string" || typeof packageValue.spritesheet_abs !== "string") return null;
   const reference = localAssets.grantPath(packageValue.spritesheet_abs);

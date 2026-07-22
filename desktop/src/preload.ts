@@ -82,17 +82,17 @@ const api: DesktopApi = {
   petSettings() {
     return ipcRenderer.invoke("desktop:pet-settings") as Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
   },
-  togglePet() {
-    return ipcRenderer.invoke("desktop:pet-toggle") as Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
-  },
-  savePetBinding(roleId, packageId) {
-    return ipcRenderer.invoke("desktop:pet-binding", { roleId, packageId }) as Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  togglePetForRole(roleId) {
+    return ipcRenderer.invoke("desktop:pet-toggle-role", roleId) as Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
   },
   movePet(x, y) {
     ipcRenderer.send("desktop:pet-drag", { x, y });
   },
   openPetRole() {
     ipcRenderer.send("desktop:pet-open");
+  },
+  openPetMenu() {
+    ipcRenderer.send("desktop:pet-context-menu");
   },
   onPetLoad(listener) {
     ipcRenderer.on("desktop:pet-load", listener);

@@ -47,6 +47,7 @@ export type RoleRecord = {
   asset_categories: RoleAssetCategory[];
   asset_category_bindings: Record<string, string>;
   pet_packages?: RolePetPackage[];
+  selected_pet_package_id?: string | null;
   relationship_snapshot?: RelationshipSnapshot | null;
   loneliness_runtime?: LonelinessRuntime | null;
   created_at: string;

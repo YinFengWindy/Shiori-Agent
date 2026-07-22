@@ -3,7 +3,6 @@ import { ChannelsSettingsSection } from "./ChannelsSettingsSection";
 import { IntegrationsSettingsSection } from "./IntegrationsSettingsSection";
 import { MemorySettingsSection } from "./MemorySettingsSection";
 import { ModelsSettingsSection } from "./ModelsSettingsSection";
-import { DesktopPetSettingsSection } from "./DesktopPetSettingsSection";
 import type { SettingsSectionId } from "./SettingsSidebar";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 
@@ -25,8 +24,6 @@ export function SettingsSectionContent({
       return <MemorySettingsSection {...editorProps} />;
     case "integrations":
       return <IntegrationsSettingsSection {...editorProps} />;
-    case "desktop-pet":
-      return <DesktopPetSettingsSection />;
     case "advanced":
       return <AdvancedSettingsSection {...editorProps} />;
   }

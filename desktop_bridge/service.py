@@ -436,6 +436,15 @@ class DesktopBridgeService:
                     method,
                     {"role": self.role_presenter.serialize(role)},
                 )
+            if method == "roles.pets.select":
+                role_id = str(payload.get("role_id") or "").strip()
+                package_id = str(payload.get("package_id") or "").strip()
+                role = self.pet_packages.select_package(role_id, package_id)
+                return self._ok(
+                    request_id,
+                    method,
+                    {"role": self.role_presenter.serialize(role)},
+                )
             if method == "session.openByRole":
                 role_id = str(payload.get("role_id") or "").strip()
                 aggregate = await self.app_service.open_role_session(role_id)

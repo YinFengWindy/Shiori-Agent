@@ -151,6 +151,7 @@ type DesktopAppFrameProps = {
   onRemoveRoleAsset: (path: string) => void;
   onImportRolePetPackage: () => void;
   onRemoveRolePetPackage: (packageId: string) => void;
+  onSelectRolePetPackage: (packageId: string) => void;
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;
   onSaveRoleAssets: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
@@ -283,6 +284,7 @@ export function DesktopAppFrame({
   onRemoveRoleAsset,
   onImportRolePetPackage,
   onRemoveRolePetPackage,
+  onSelectRolePetPackage,
   onSelectAvatarAsset,
   onSelectChatBackground,
   onSaveRoleAssets,
@@ -542,6 +544,7 @@ export function DesktopAppFrame({
               onRemoveAsset={onRemoveRoleAsset}
               onImportPetPackage={onImportRolePetPackage}
               onRemovePetPackage={onRemoveRolePetPackage}
+              onSelectPetPackage={onSelectRolePetPackage}
               onSelectAvatarAsset={onSelectAvatarAsset}
               onSelectChatBackground={onSelectChatBackground}
               onUpdateRoleForm={onUpdateRoleForm}

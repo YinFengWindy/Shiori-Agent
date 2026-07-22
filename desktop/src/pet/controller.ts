@@ -1,11 +1,12 @@
 import type { BrowserWindow } from "electron";
 import { desktopPetViewport, clampDesktopPetPosition, createDesktopPetWindow, displayForDesktopPet } from "./window.js";
-import type { DesktopPetBinding, DesktopPetPosition, DesktopPetSettings, DesktopPetState } from "./types.js";
+import { activateDesktopPetSettings } from "./settings.js";
+import type { DesktopPetBinding, DesktopPetSettings, DesktopPetState } from "./types.js";
 
 type DesktopPetControllerOptions = {
   getSettings: () => DesktopPetSettings;
   saveSettings: (settings: DesktopPetSettings) => Promise<void>;
-  resolveBinding: (roleId: string, packageId: string) => Promise<DesktopPetBinding | null>;
+  resolveBinding: (roleId: string) => Promise<DesktopPetBinding | null>;
   createWindow?: typeof createDesktopPetWindow;
   openLocalAttachment: (url: string) => Promise<unknown> | unknown;
 };
@@ -25,14 +26,14 @@ export class DesktopPetController {
     return Boolean(this.window && !this.window.isDestroyed());
   }
 
-  enable(): Promise<void> {
+  enable(roleId = this.options.getSettings().roleId): Promise<void> {
     return this.enqueue(async () => {
-      const settings = this.options.getSettings();
-      if (!settings.roleId || !settings.packageId) throw new Error("桌宠尚未绑定角色和素材包");
-      const binding = await this.options.resolveBinding(settings.roleId, settings.packageId);
-      if (!binding) throw new Error("桌宠绑定已失效");
-      await this.load(binding, settings, "idle");
-      await this.options.saveSettings({ ...settings, enabled: true });
+      if (!roleId) throw new Error("桌宠尚未选择角色");
+      const binding = await this.options.resolveBinding(roleId);
+      if (!binding) throw new Error("角色尚未选择桌宠素材");
+      const nextSettings = activateDesktopPetSettings(this.options.getSettings(), binding);
+      await this.load(binding, nextSettings, "idle");
+      await this.options.saveSettings(nextSettings);
     });
   }
 
@@ -40,17 +41,6 @@ export class DesktopPetController {
     return this.enqueue(async () => {
       this.destroyWindow();
       await this.options.saveSettings({ ...this.options.getSettings(), enabled: false });
-    });
-  }
-
-  updateBinding(roleId: string, packageId: string): Promise<void> {
-    return this.enqueue(async () => {
-      const binding = await this.options.resolveBinding(roleId, packageId);
-      if (!binding) throw new Error("桌宠绑定无效");
-      const current = this.options.getSettings();
-      const next = { ...current, roleId: binding.roleId, packageId: binding.package.id };
-      if (current.enabled) await this.load(binding, next, "idle");
-      await this.options.saveSettings(next);
     });
   }
 

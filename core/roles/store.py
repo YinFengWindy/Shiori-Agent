@@ -191,6 +191,7 @@ class RoleRecord:
     created_at: str
     updated_at: str
     pet_packages: list[RolePetPackage] = field(default_factory=list)
+    selected_pet_package_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -208,6 +209,7 @@ class RoleRecord:
             if _normalize_rel_path(path)
         }
         payload["pet_packages"] = [package.to_dict() for package in self.pet_packages]
+        payload["selected_pet_package_id"] = self.selected_pet_package_id
         return payload
 
     @classmethod
@@ -237,6 +239,16 @@ class RoleRecord:
         default_category_id = categories[0].id
         for path in illustrations:
             bindings.setdefault(path, default_category_id)
+        pet_packages = [
+            RolePetPackage.from_dict(item)
+            for item in payload.get("pet_packages", [])
+            if isinstance(item, dict)
+        ]
+        selected_pet_package_id = (
+            str(payload.get("selected_pet_package_id") or "").strip() or None
+        )
+        if selected_pet_package_id not in {package.id for package in pet_packages}:
+            selected_pet_package_id = None
         return cls(
             id=str(payload.get("id") or "").strip(),
             name=str(payload.get("name") or "").strip(),
@@ -258,11 +270,8 @@ class RoleRecord:
             memory_init_state=dict(payload.get("memory_init_state") or {}),
             created_at=str(payload.get("created_at") or _now_iso()),
             updated_at=str(payload.get("updated_at") or _now_iso()),
-            pet_packages=[
-                RolePetPackage.from_dict(item)
-                for item in payload.get("pet_packages", [])
-                if isinstance(item, dict)
-            ],
+            pet_packages=pet_packages,
+            selected_pet_package_id=selected_pet_package_id,
         )
 
 
@@ -432,6 +441,7 @@ class RoleStore:
                 created_at=now,
                 updated_at=now,
                 pet_packages=[],
+                selected_pet_package_id=None,
             )
             if avatar_source is not None:
                 record.avatar = self.import_asset(
@@ -673,6 +683,26 @@ class RoleStore:
                 if role.id != role_id:
                     continue
                 role.pet_packages = list(packages)
+                if role.selected_pet_package_id not in {package.id for package in packages}:
+                    role.selected_pet_package_id = None
+                role.updated_at = _now_iso()
+                roles[index] = role
+                self._save_roles(roles)
+                return role
+        raise KeyError(f"role 不存在: {role_id}")
+
+    def select_pet_package(self, role_id: str, package_id: str) -> RoleRecord:
+        """Persists one role-owned pet package as that role's selected desktop pet."""
+        with self._lock:
+            roles = self.list_roles()
+            for index, role in enumerate(roles):
+                if role.id != role_id:
+                    continue
+                if package_id not in {package.id for package in role.pet_packages}:
+                    raise KeyError(f"桌宠包不存在: {package_id}")
+                if role.selected_pet_package_id == package_id:
+                    return role
+                role.selected_pet_package_id = package_id
                 role.updated_at = _now_iso()
                 roles[index] = role
                 self._save_roles(roles)

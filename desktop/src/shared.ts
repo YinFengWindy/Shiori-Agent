@@ -172,14 +172,14 @@ export type DesktopApi = {
   windowState(): Promise<WindowState>;
   /** Returns the persisted desktop-pet binding and enable state. */
   petSettings(): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
-  /** Toggles the currently bound desktop pet. */
-  togglePet(): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
-  /** Saves a validated role/package binding, replacing a running pet when enabled. */
-  savePetBinding(roleId: string, packageId: string): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  /** Toggles the selected desktop-pet role, replacing any currently visible role. */
+  togglePetForRole(roleId: string): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
   /** Moves the pet during a user drag without exposing the native window. */
   movePet(x: number, y: number): void;
   /** Restores the main Shiori window from a pet double click. */
   openPetRole(): void;
+  /** Opens the native context menu for the desktop-pet window. */
+  openPetMenu(): void;
   /** Subscribes to package loads from the dedicated desktop-pet window. */
   onPetLoad(listener: (event: unknown, payload: unknown) => void): void;
   offPetLoad(listener: (event: unknown, payload: unknown) => void): void;

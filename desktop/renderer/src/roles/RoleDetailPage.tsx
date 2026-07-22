@@ -14,6 +14,7 @@ import {
   roleBindingChannelLabel,
 } from "./roleChannelBindings";
 import { captureRoleDetailScrollTop, restoreRoleDetailScrollTop } from "./roleDetailScrollState";
+import { RoleDesktopPetToggle } from "./RoleDesktopPetToggle";
 
 type RoleDetailPageProps = {
   activeIllustration: string;
@@ -234,6 +235,11 @@ export function RoleDetailPage({
                   onChange={(checked) => preserveScrollDuringFormUpdate((current) => ({ ...current, autoSceneCgEnabled: checked }))}
                 />
               </div>
+              <RoleDesktopPetToggle
+                roleId={activeRoleId}
+                available={Boolean(activeRole?.selected_pet_package_id)}
+                bridgeReady={bridgeReady}
+              />
               <div className="grid gap-3 rounded-md border border-[#D8DFE7] bg-white/82 p-4 text-xs text-[#374151]" data-testid="role-channel-config">
                 <div className="flex items-center justify-between gap-3">
                   <span>渠道绑定</span>

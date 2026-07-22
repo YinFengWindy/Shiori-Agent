@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from "electron";
+import { BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { basename, extname, join } from "node:path";
@@ -215,19 +215,14 @@ export function registerDesktopIpc({
     return await importPickerSelection(result.filePaths, localAssetImportsRoot, localAssets);
   });
   ipcMain.handle("desktop:pet-settings", () => getDesktopPetSettings());
-  ipcMain.handle("desktop:pet-toggle", async () => {
-    if (getDesktopPetSettings().enabled) {
+  ipcMain.handle("desktop:pet-toggle-role", async (_event: IpcMainInvokeEvent, roleId: unknown) => {
+    const nextRoleId = String(roleId ?? "").trim();
+    if (!nextRoleId) throw new Error("桌宠角色不能为空");
+    if (getDesktopPetSettings().enabled && getDesktopPetSettings().roleId === nextRoleId) {
       await desktopPet.disable();
     } else {
-      await desktopPet.enable();
+      await desktopPet.enable(nextRoleId);
     }
-    return getDesktopPetSettings();
-  });
-  ipcMain.handle("desktop:pet-binding", async (_event: IpcMainInvokeEvent, payload?: { roleId?: unknown; packageId?: unknown }) => {
-    const roleId = String(payload?.roleId ?? "").trim();
-    const packageId = String(payload?.packageId ?? "").trim();
-    if (!roleId || !packageId) throw new Error("桌宠绑定不完整");
-    await desktopPet.updateBinding(roleId, packageId);
     return getDesktopPetSettings();
   });
   ipcMain.on("desktop:pet-drag", (_event: IpcMainInvokeEvent, payload?: { x?: unknown; y?: unknown }) => {
@@ -236,6 +231,14 @@ export function registerDesktopIpc({
     if (Number.isFinite(x) && Number.isFinite(y)) desktopPet.moveTo(x, y);
   });
   ipcMain.on("desktop:pet-open", () => onOpenDesktopPetRole());
+  ipcMain.on("desktop:pet-context-menu", (event) => {
+    const petWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!petWindow) return;
+    Menu.buildFromTemplate([
+      { label: "显示主窗口", click: onOpenDesktopPetRole },
+      { label: "关闭桌宠", click: () => void desktopPet.disable() },
+    ]).popup({ window: petWindow });
+  });
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
     const result = await dialog.showOpenDialog({
       properties: options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],

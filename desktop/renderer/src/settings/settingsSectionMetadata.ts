@@ -25,9 +25,6 @@ export const settingsSubsections: Record<SettingsSectionId, SettingsSubsection[]
   integrations: [
     { id: "novelai", label: "NovelAI" },
   ],
-  "desktop-pet": [
-    { id: "binding", label: "绑定" },
-  ],
   advanced: [
     { id: "general", label: "基础" },
   ],
@@ -40,7 +37,6 @@ export function createInitialSettingsSubsectionState(): Record<SettingsSectionId
     channels: settingsSubsections.channels[0]?.id ?? "",
     memory: settingsSubsections.memory[0]?.id ?? "",
     integrations: settingsSubsections.integrations[0]?.id ?? "",
-    "desktop-pet": settingsSubsections["desktop-pet"][0]?.id ?? "",
     advanced: settingsSubsections.advanced[0]?.id ?? "",
   };
 }
