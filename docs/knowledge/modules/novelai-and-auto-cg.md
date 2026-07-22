@@ -2,7 +2,7 @@
 title: NovelAI 与自动 CG
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 64086699
+last_verified_commit: 0a94bd42
 source_paths:
   - core/integrations/novelai/
   - plugins/scene_awareness/
