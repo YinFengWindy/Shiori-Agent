@@ -47,8 +47,8 @@ class RolePetPackageService:
         if role is None:
             raise KeyError(f"role 不存在: {role_id}")
         with zipfile.ZipFile(source_path) as archive:
-            names = self._archive_names(archive)
-            manifest = self._manifest(archive)
+            names, root = self._archive_names(archive)
+            manifest = self._manifest(archive, root)
             package_id = str(manifest["id"]).strip()
             if PurePosixPath(package_id).name != package_id or package_id in {".", ".."}:
                 raise ValueError("桌宠包 id 不安全")
@@ -57,15 +57,15 @@ class RolePetPackageService:
                 raise ValueError("桌宠包缺少 spritesheet")
             if any(item.id == package_id for item in role.pet_packages):
                 raise ValueError(f"桌宠包已存在: {package_id}")
-            self._validate_atlas(archive.read(sprite_name))
+            self._validate_atlas(archive.read(self._archive_entry(root, sprite_name)))
             destination = self._role_store.assets_dir / role_id / "pets" / package_id
             if destination.exists():
                 raise ValueError(f"桌宠包目录已存在: {package_id}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             temporary = Path(tempfile.mkdtemp(prefix=f".{package_id}-", dir=destination.parent))
             try:
-                (temporary / "pet.json").write_bytes(archive.read("pet.json"))
-                (temporary / "spritesheet.webp").write_bytes(archive.read(sprite_name))
+                (temporary / "pet.json").write_bytes(archive.read(self._archive_entry(root, "pet.json")))
+                (temporary / "spritesheet.webp").write_bytes(archive.read(self._archive_entry(root, sprite_name)))
                 os.replace(temporary, destination)
             except Exception:
                 shutil.rmtree(temporary, ignore_errors=True)
@@ -97,7 +97,7 @@ class RolePetPackageService:
         self._role_store.replace_pet_packages(role_id, [item for item in role.pet_packages if item.id != package_id])
         shutil.rmtree((self._role_store.roles_dir / package.manifest_path).resolve().parent, ignore_errors=True)
 
-    def _archive_names(self, archive: zipfile.ZipFile) -> set[str]:
+    def _archive_names(self, archive: zipfile.ZipFile) -> tuple[set[str], str]:
         names: set[str] = set()
         for entry in archive.infolist():
             if entry.is_dir():
@@ -106,13 +106,27 @@ class RolePetPackageService:
             if name in names:
                 raise ValueError("桌宠包包含重复路径")
             names.add(name)
-        if "pet.json" not in names:
+        if "pet.json" in names:
+            return names, ""
+        roots = {PurePosixPath(name).parts[0] for name in names if len(PurePosixPath(name).parts) > 1}
+        if len(roots) != 1:
             raise ValueError("桌宠包缺少 pet.json")
-        return names
+        root = next(iter(roots))
+        logical_names = {
+            PurePosixPath(name).relative_to(root).as_posix()
+            for name in names
+            if PurePosixPath(name).parts[0] == root
+        }
+        if "pet.json" not in logical_names:
+            raise ValueError("桌宠包缺少 pet.json")
+        return logical_names, root
 
-    def _manifest(self, archive: zipfile.ZipFile) -> dict[str, object]:
+    def _archive_entry(self, root: str, name: str) -> str:
+        return f"{root}/{name}" if root else name
+
+    def _manifest(self, archive: zipfile.ZipFile, root: str) -> dict[str, object]:
         try:
-            value = json.loads(archive.read("pet.json").decode("utf-8"))
+            value = json.loads(archive.read(self._archive_entry(root, "pet.json")).decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ValueError("桌宠包 pet.json 无效") from error
         if not isinstance(value, dict):
