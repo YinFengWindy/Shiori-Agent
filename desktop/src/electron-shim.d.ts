@@ -66,6 +66,7 @@ declare module "electron" {
     setAlwaysOnTop(flag: boolean, level?: string): void;
     setVisibleOnAllWorkspaces(visible: boolean, options?: { visibleOnFullScreen?: boolean }): void;
     showInactive(): void;
+    hookWindowMessage(message: number, callback: (wParam: Buffer, lParam: Buffer) => void): void;
     once(event: string, handler: (...args: unknown[]) => void): void;
     on(event: string, handler: (...args: unknown[]) => void): void;
     webContents: {

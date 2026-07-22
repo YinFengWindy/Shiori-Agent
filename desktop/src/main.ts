@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { app, protocol, session, shell, type BrowserWindow } from "electron";
+import { app, Menu, protocol, session, shell, type BrowserWindow } from "electron";
 import { localAssetSchemePrivileges, registerLocalAssetProtocol } from "./assetProtocol.js";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 import { startBridge, wireBridgeEvents } from "./bridgeLifecycle.js";
@@ -205,6 +205,13 @@ void app.whenReady().then(() => {
     resolveBinding: resolveDesktopPetBinding,
     createWindow: createDesktopPetWindow,
     displayForWindow: displayForDesktopPet,
+    onOpenPetRole: showOrCreateDesktopWindow,
+    onShowContextMenu: (petWindow) => {
+      Menu.buildFromTemplate([
+        { label: "显示主窗口", click: showOrCreateDesktopWindow },
+        { label: "隐藏桌宠", click: () => void desktopPet?.hide() },
+      ]).popup({ window: petWindow });
+    },
     openLocalAttachment,
   });
   registerDesktopIpc({
@@ -214,7 +221,6 @@ void app.whenReady().then(() => {
     localAssetImportsRoot,
     openLocalAttachment,
     desktopPet,
-    onOpenDesktopPetRole: showOrCreateDesktopWindow,
   });
   getOrCreateDesktopWindow();
   if (trayLifecycleEnabled) {

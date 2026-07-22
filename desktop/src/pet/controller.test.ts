@@ -19,6 +19,8 @@ class FakePetWindow extends EventEmitter {
 
   showInactive(): void {}
 
+  hookWindowMessage(): void {}
+
   setPosition(x: number, y: number): void {
     this.position = [x, y];
     queueMicrotask(() => this.emit("moved"));
@@ -37,7 +39,7 @@ class FakePetWindow extends EventEmitter {
   }
 }
 
-test("desktop pet moves immediately from a renderer drag command and persists the position", async () => {
+test("desktop pet persists a position moved by Electron's native drag region", async () => {
   let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   let saveCount = 0;
   const window = new FakePetWindow();
@@ -53,13 +55,15 @@ test("desktop pet moves immediately from a renderer drag command and persists th
     }),
     createWindow: () => window as unknown as BrowserWindow,
     displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    onOpenPetRole: () => undefined,
+    onShowContextMenu: () => undefined,
     openLocalAttachment: () => undefined,
   });
 
   await controller.show();
   await new Promise((resolve) => setImmediate(resolve));
   saveCount = 0;
-  controller.moveTo(460, 460);
+  window.setPosition(460, 460);
   assert.deepEqual(window.getPosition(), [460, 460]);
   await new Promise((resolve) => setImmediate(resolve));
 

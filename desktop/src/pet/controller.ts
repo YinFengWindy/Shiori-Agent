@@ -1,5 +1,6 @@
 import type { BrowserWindow } from "electron";
 import { desktopPetViewport, clampDesktopPetPosition } from "./geometry.js";
+import { attachDesktopPetNativeInteractions } from "./nativeInteractions.js";
 import { bindDesktopPetSettings } from "./settings.js";
 import type { DesktopPetBinding, DesktopPetSettings, DesktopPetState } from "./types.js";
 
@@ -9,6 +10,8 @@ type DesktopPetControllerOptions = {
   resolveBinding: (roleId?: string) => Promise<DesktopPetBinding | null>;
   createWindow: (options: { openLocalAttachment: (url: string) => Promise<unknown> | unknown }) => BrowserWindow;
   displayForWindow: (window: BrowserWindow | null) => { id: string | number; workArea: { x: number; y: number; width: number; height: number } };
+  onOpenPetRole: () => void;
+  onShowContextMenu: (window: BrowserWindow) => void;
   openLocalAttachment: (url: string) => Promise<unknown> | unknown;
 };
 
@@ -75,14 +78,6 @@ export class DesktopPetController {
     this.window?.webContents.send("desktop:pet-play", { state });
   }
 
-  /** Moves the pet immediately in response to one renderer drag event. */
-  moveTo(x: number, y: number): void {
-    if (!this.window) return;
-    const display = this.displayForWindow(this.window);
-    const clampedPosition = clampDesktopPetPosition({ x, y }, display.workArea);
-    this.window.setPosition(clampedPosition.x, clampedPosition.y, false);
-  }
-
   private enqueue(operation: () => Promise<void>): Promise<void> {
     const next = this.queue.then(operation, operation);
     this.queue = next.catch(() => undefined);
@@ -107,6 +102,11 @@ export class DesktopPetController {
     };
     if (created) {
       window.once("ready-to-show", sendLoad);
+      attachDesktopPetNativeInteractions({
+        window,
+        onOpenPetRole: this.options.onOpenPetRole,
+        onShowContextMenu: this.options.onShowContextMenu,
+      });
       window.on("moved", () => {
         this.persistPosition(this.activeRoleId, window);
       });

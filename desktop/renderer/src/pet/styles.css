@@ -15,3 +15,8 @@ body {
 #root {
   display: block;
 }
+
+.pet-drag-region {
+  -webkit-app-region: drag;
+  cursor: grab;
+}

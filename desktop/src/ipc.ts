@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain, Menu } from "electron";
+import { BrowserWindow, dialog, ipcMain } from "electron";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { basename, extname, join } from "node:path";
@@ -27,7 +27,6 @@ type RegisterDesktopIpcOptions = {
   localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
   desktopPet: DesktopPetController;
-  onOpenDesktopPetRole: () => void;
 };
 
 function assetTransport<T>(value: T, assets: LocalAssetReference[]): LocalAssetTransport<T> {
@@ -74,7 +73,6 @@ export function registerDesktopIpc({
   localAssetImportsRoot,
   openLocalAttachment,
   desktopPet,
-  onOpenDesktopPetRole,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
 
@@ -213,20 +211,6 @@ export function registerDesktopIpc({
   });
   ipcMain.handle("desktop:pet-sync", async (_event: IpcMainInvokeEvent, forceVisible?: unknown) => {
     await desktopPet.sync(typeof forceVisible === "boolean" ? forceVisible : undefined);
-  });
-  ipcMain.on("desktop:pet-drag", (_event: IpcMainInvokeEvent, payload?: { x?: unknown; y?: unknown }) => {
-    const x = Number(payload?.x);
-    const y = Number(payload?.y);
-    if (Number.isFinite(x) && Number.isFinite(y)) desktopPet.moveTo(x, y);
-  });
-  ipcMain.on("desktop:pet-open", () => onOpenDesktopPetRole());
-  ipcMain.on("desktop:pet-context-menu", (event) => {
-    const petWindow = BrowserWindow.fromWebContents(event.sender);
-    if (!petWindow) return;
-    Menu.buildFromTemplate([
-      { label: "显示主窗口", click: onOpenDesktopPetRole },
-      { label: "隐藏桌宠", click: () => void desktopPet.hide() },
-    ]).popup({ window: petWindow });
   });
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
     const result = await dialog.showOpenDialog({
