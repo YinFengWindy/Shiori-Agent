@@ -107,7 +107,15 @@ export class DesktopPetController {
         onOpenPetRole: this.options.onOpenPetRole,
         onShowContextMenu: this.options.onShowContextMenu,
       });
+      let previousPosition = window.getPosition();
+      window.on("move", () => {
+        const position = window.getPosition();
+        if (position[0] === previousPosition[0] && position[1] === previousPosition[1]) return;
+        this.play(position[0] < previousPosition[0] ? "running-left" : "running-right");
+        previousPosition = position;
+      });
       window.on("moved", () => {
+        this.play("idle");
         this.persistPosition(this.activeRoleId, window);
       });
       window.on("closed", () => {

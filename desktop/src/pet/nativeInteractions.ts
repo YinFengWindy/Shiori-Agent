@@ -17,6 +17,12 @@ export function attachDesktopPetNativeInteractions({
   onOpenPetRole,
   onShowContextMenu,
 }: DesktopPetNativeInteractionOptions): void {
+  window.webContents.on("before-mouse-event", (_event, input) => {
+    const mouseInput = input as { type?: unknown; button?: unknown; clickCount?: unknown };
+    if (mouseInput.type === "mouseDown" && mouseInput.button === "left" && mouseInput.clickCount === 2) {
+      onOpenPetRole();
+    }
+  });
   window.on("system-context-menu", (event) => {
     (event as { preventDefault?: () => void }).preventDefault?.();
     onShowContextMenu(window);

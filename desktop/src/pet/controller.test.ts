@@ -5,8 +5,12 @@ import type { BrowserWindow } from "electron";
 import { DesktopPetController } from "./controller.js";
 import type { DesktopPetSettings } from "./types.js";
 
-class FakePetWebContents {
-  send(): void {}
+class FakePetWebContents extends EventEmitter {
+  readonly states: string[] = [];
+
+  send(_channel: string, payload: { state?: string }): void {
+    if (payload.state) this.states.push(payload.state);
+  }
 }
 
 class FakePetWindow extends EventEmitter {
@@ -23,7 +27,10 @@ class FakePetWindow extends EventEmitter {
 
   setPosition(x: number, y: number): void {
     this.position = [x, y];
-    queueMicrotask(() => this.emit("moved"));
+    queueMicrotask(() => {
+      this.emit("move");
+      this.emit("moved");
+    });
   }
 
   getPosition(): [number, number] {
@@ -69,4 +76,33 @@ test("desktop pet persists a position moved by Electron's native drag region", a
 
   assert.equal(saveCount, 1);
   assert.deepEqual(settings.positions["role-1:display-1"], { x: 460, y: 460 });
+});
+
+test("desktop pet derives drag animation from native window movement", async () => {
+  let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
+  const window = new FakePetWindow();
+  const controller = new DesktopPetController({
+    getSettings: () => settings,
+    saveSettings: async (nextSettings) => {
+      settings = nextSettings;
+    },
+    resolveBinding: async () => ({
+      roleId: "role-1",
+      package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "mira-asset://pet" },
+    }),
+    createWindow: () => window as unknown as BrowserWindow,
+    displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    onOpenPetRole: () => undefined,
+    onShowContextMenu: () => undefined,
+    openLocalAttachment: () => undefined,
+  });
+
+  await controller.show();
+  await new Promise((resolve) => setImmediate(resolve));
+  window.webContents.states.length = 0;
+  const [x, y] = window.getPosition();
+  window.setPosition(x + 24, y);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(window.webContents.states, ["running-right", "idle"]);
 });
