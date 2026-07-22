@@ -148,6 +148,7 @@ class RolePetPackage:
     manifest_path: str
     spritesheet_path: str
     imported_at: str
+    preview_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -167,6 +168,7 @@ class RolePetPackage:
             manifest_path=manifest_path,
             spritesheet_path=spritesheet_path,
             imported_at=str(payload.get("imported_at") or _now_iso()),
+            preview_path=_normalize_rel_path(payload.get("preview_path")),
         )
 
 
@@ -192,6 +194,7 @@ class RoleRecord:
     updated_at: str
     pet_packages: list[RolePetPackage] = field(default_factory=list)
     selected_pet_package_id: str | None = None
+    desktop_pet_enabled: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -210,6 +213,7 @@ class RoleRecord:
         }
         payload["pet_packages"] = [package.to_dict() for package in self.pet_packages]
         payload["selected_pet_package_id"] = self.selected_pet_package_id
+        payload["desktop_pet_enabled"] = self.desktop_pet_enabled
         return payload
 
     @classmethod
@@ -272,6 +276,7 @@ class RoleRecord:
             updated_at=str(payload.get("updated_at") or _now_iso()),
             pet_packages=pet_packages,
             selected_pet_package_id=selected_pet_package_id,
+            desktop_pet_enabled=bool(payload.get("desktop_pet_enabled", False)),
         )
 
 
@@ -442,6 +447,7 @@ class RoleStore:
                 updated_at=now,
                 pet_packages=[],
                 selected_pet_package_id=None,
+                desktop_pet_enabled=False,
             )
             if avatar_source is not None:
                 record.avatar = self.import_asset(
@@ -484,6 +490,7 @@ class RoleStore:
         clear_illustrations: bool = False,
         asset_categories: list[RoleAssetCategory | dict[str, Any]] | None = None,
         asset_category_bindings: dict[str, str] | None = None,
+        desktop_pet_enabled: bool | None = None,
     ) -> RoleRecord:
         with self._lock:
             roles = self.list_roles()
@@ -568,6 +575,15 @@ class RoleStore:
                         raise ValueError(f"素材分类仍被图片使用: {invalid_binding}")
                 role.asset_categories = next_categories
                 role.asset_category_bindings = next_bindings
+                if desktop_pet_enabled is not None:
+                    if desktop_pet_enabled and role.selected_pet_package_id is None:
+                        raise ValueError("启用桌宠前必须在素材库选择一个桌宠素材")
+                    role.desktop_pet_enabled = desktop_pet_enabled
+                    if desktop_pet_enabled:
+                        for other in roles:
+                            if other.id != role.id and other.desktop_pet_enabled:
+                                other.desktop_pet_enabled = False
+                                other.updated_at = _now_iso()
                 if clear_avatar:
                     self._remove_asset_relpath(role.avatar)
                     role.avatar = None
@@ -685,6 +701,7 @@ class RoleStore:
                 role.pet_packages = list(packages)
                 if role.selected_pet_package_id not in {package.id for package in packages}:
                     role.selected_pet_package_id = None
+                    role.desktop_pet_enabled = False
                 role.updated_at = _now_iso()
                 roles[index] = role
                 self._save_roles(roles)

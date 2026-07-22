@@ -193,6 +193,7 @@ export function useRoleManagement({
     setError("");
     setWorkspaceFeedback(null);
     const nextRoleForm = roleFormRef.current;
+    const desktopPetEnablementChanged = nextRoleForm.desktopPetEnabled !== Boolean(detailRole?.desktop_pet_enabled);
     const res = await window.miraDesktop.invoke({
       method: "roles.update",
       payload: {
@@ -210,6 +211,7 @@ export function useRoleManagement({
         ),
         channel_bindings: nextRoleForm.channelBindings ?? [],
         proactive: buildRoleProactiveConfig(detailRole, nextRoleForm),
+        desktop_pet_enabled: nextRoleForm.desktopPetEnabled,
         avatar_source: nextRoleForm.avatarSource || undefined,
         illustration_sources: nextRoleForm.illustrationSources,
         removed_illustrations: nextRoleForm.removedIllustrations,
@@ -222,6 +224,16 @@ export function useRoleManagement({
       return;
     }
     const updated = res.payload.role as RoleRecord;
+    if (desktopPetEnablementChanged) {
+      try {
+        await window.miraDesktop.syncPet(nextRoleForm.desktopPetEnabled);
+      } catch (reason) {
+        const message = String(reason);
+        setError(message);
+        setWorkspaceFeedback({ tone: "error", message: `桌宠同步失败：${message}` });
+        return;
+      }
+    }
     const { resolvedRole } = await refreshRolesAndResolveRole(updated);
     updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [], removedIllustrations: [] }));
     await openRole(updated.id, resolvedRole, { recordHistory: false });
@@ -448,6 +460,7 @@ export function useRoleManagement({
     const updated = response.payload.role as RoleRecord;
     setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
     applyRoleSnapshot(updated);
+    await window.miraDesktop.syncPet();
   }
 
   async function selectRolePetPackage(packageId: string): Promise<void> {

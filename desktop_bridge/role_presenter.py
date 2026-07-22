@@ -35,6 +35,11 @@ class DesktopRolePresenter:
             {
                 **package.to_dict(),
                 "spritesheet_abs": str((self._role_store.roles_dir / package.spritesheet_path).resolve()),
+                "preview_abs": (
+                    str((self._role_store.roles_dir / package.preview_path).resolve())
+                    if package.preview_path
+                    else None
+                ),
             }
             for package in role.pet_packages
         ]

@@ -61,6 +61,14 @@ describe("roleFormState", () => {
     );
   });
 
+  it("keeps desktop-pet enablement inside the saved role form", () => {
+    const role = createRole();
+    const form = createRoleFormFromRole(role);
+
+    assert.equal(form.desktopPetEnabled, false);
+    assert.equal(isRoleFormDirty({ ...form, desktopPetEnabled: true }, role), true);
+  });
+
   it("reads and compares role-owned proactive settings", () => {
     const role = createRole();
     const form = createRoleFormFromRole(role);

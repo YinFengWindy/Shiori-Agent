@@ -10,7 +10,6 @@ import { importLocalAssets } from "./localAssetImport.js";
 import type { LocalAssetRegistry } from "./localAssetRegistry.js";
 import { loadSettingsData, saveSettings } from "./settings.js";
 import type { DesktopPetController } from "./pet/controller.js";
-import type { DesktopPetSettings } from "./pet/types.js";
 import type {
   LocalAssetOpenRequest,
   LocalAssetOpenResult,
@@ -28,7 +27,6 @@ type RegisterDesktopIpcOptions = {
   localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
   desktopPet: DesktopPetController;
-  getDesktopPetSettings: () => DesktopPetSettings;
   onOpenDesktopPetRole: () => void;
 };
 
@@ -76,7 +74,6 @@ export function registerDesktopIpc({
   localAssetImportsRoot,
   openLocalAttachment,
   desktopPet,
-  getDesktopPetSettings,
   onOpenDesktopPetRole,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
@@ -214,16 +211,8 @@ export function registerDesktopIpc({
     }
     return await importPickerSelection(result.filePaths, localAssetImportsRoot, localAssets);
   });
-  ipcMain.handle("desktop:pet-settings", () => getDesktopPetSettings());
-  ipcMain.handle("desktop:pet-toggle-role", async (_event: IpcMainInvokeEvent, roleId: unknown) => {
-    const nextRoleId = String(roleId ?? "").trim();
-    if (!nextRoleId) throw new Error("桌宠角色不能为空");
-    if (getDesktopPetSettings().enabled && getDesktopPetSettings().roleId === nextRoleId) {
-      await desktopPet.disable();
-    } else {
-      await desktopPet.enable(nextRoleId);
-    }
-    return getDesktopPetSettings();
+  ipcMain.handle("desktop:pet-sync", async (_event: IpcMainInvokeEvent, forceVisible?: unknown) => {
+    await desktopPet.sync(typeof forceVisible === "boolean" ? forceVisible : undefined);
   });
   ipcMain.on("desktop:pet-drag", (_event: IpcMainInvokeEvent, payload?: { x?: unknown; y?: unknown }) => {
     const x = Number(payload?.x);
@@ -236,7 +225,7 @@ export function registerDesktopIpc({
     if (!petWindow) return;
     Menu.buildFromTemplate([
       { label: "显示主窗口", click: onOpenDesktopPetRole },
-      { label: "关闭桌宠", click: () => void desktopPet.disable() },
+      { label: "隐藏桌宠", click: () => void desktopPet.hide() },
     ]).popup({ window: petWindow });
   });
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {

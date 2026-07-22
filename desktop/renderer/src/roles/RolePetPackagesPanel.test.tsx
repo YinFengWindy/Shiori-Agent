@@ -28,6 +28,8 @@ function createRole(): RoleRecord {
       manifest_path: "assets/mira/pets/mira-pet/pet.json",
       spritesheet_path: "assets/mira/pets/mira-pet/spritesheet.webp",
       spritesheet_abs: "C:/workspace/mira/spritesheet.webp",
+      preview_path: "assets/mira/pets/mira-pet/preview.webp",
+      preview_abs: "C:/workspace/mira/preview.webp",
       imported_at: "",
     }],
     selected_pet_package_id: "mira-pet",
@@ -49,7 +51,9 @@ describe("RolePetPackagesPanel", () => {
     );
 
     assert.match(markup, /aria-pressed="true"/);
-    assert.match(markup, /width:800%;height:900%/);
+    assert.match(markup, /class="h-full w-full object-contain"/);
     assert.match(markup, /Mira Pet/);
+    assert.match(markup, /border-\[#4B5563\]/);
+    assert.doesNotMatch(markup, /border-primary|text-\[#8B4B4B\]/);
   });
 });

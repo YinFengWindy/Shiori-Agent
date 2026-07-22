@@ -11,6 +11,7 @@ from bus.events import InboundMessage
 from core.roles import (
     RoleAggregateService,
     RoleConfigMigrator,
+    RolePetPackage,
     RoleRepository,
     RoleStore,
 )
@@ -250,6 +251,30 @@ def test_role_store_updates_and_deletes_role(tmp_path: Path):
     assert store.get_role("mira") is not None
     assert store.delete_role("mira") is True
     assert store.get_role("mira") is None
+
+
+def test_role_store_keeps_desktop_pet_enablement_exclusive(tmp_path: Path):
+    store = RoleStore(tmp_path)
+    first = store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    second = store.create_role(name="Luna", system_prompt="luna", role_id="luna")
+    package = RolePetPackage(
+        id="pet",
+        format="codex-sprite@1",
+        display_name="Pet",
+        manifest_path="assets/mira/pets/pet/pet.json",
+        spritesheet_path="assets/mira/pets/pet/spritesheet.webp",
+        imported_at="",
+    )
+    store.replace_pet_packages(first.id, [package])
+    store.replace_pet_packages(second.id, [package])
+    store.select_pet_package(first.id, package.id)
+    store.select_pet_package(second.id, package.id)
+
+    store.update_role(first.id, desktop_pet_enabled=True)
+    updated = store.update_role(second.id, desktop_pet_enabled=True)
+
+    assert updated.desktop_pet_enabled is True
+    assert store.get_role(first.id).desktop_pet_enabled is False
 
 
 def test_role_store_persists_runtime_config_updates(tmp_path: Path):

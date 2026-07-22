@@ -48,6 +48,7 @@ export type RoleRecord = {
   asset_category_bindings: Record<string, string>;
   pet_packages?: RolePetPackage[];
   selected_pet_package_id?: string | null;
+  desktop_pet_enabled?: boolean;
   relationship_snapshot?: RelationshipSnapshot | null;
   loneliness_runtime?: LonelinessRuntime | null;
   created_at: string;
@@ -62,6 +63,8 @@ export type RolePetPackage = {
   manifest_path: string;
   spritesheet_path: string;
   spritesheet_abs: string;
+  preview_path: string | null;
+  preview_abs: string | null;
   imported_at: string;
 };
 
@@ -202,6 +205,7 @@ export type RoleFormState = {
   moodCatalog: string[];
   defaultMood: string;
   moodIllustrationBindings: Record<string, string>;
+  desktopPetEnabled: boolean;
 };
 
 /** New role composer form state. */

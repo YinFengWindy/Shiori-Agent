@@ -1,12 +1,12 @@
 import type { BrowserWindow } from "electron";
 import { desktopPetViewport, clampDesktopPetPosition, createDesktopPetWindow, displayForDesktopPet } from "./window.js";
-import { activateDesktopPetSettings } from "./settings.js";
+import { bindDesktopPetSettings } from "./settings.js";
 import type { DesktopPetBinding, DesktopPetSettings, DesktopPetState } from "./types.js";
 
 type DesktopPetControllerOptions = {
   getSettings: () => DesktopPetSettings;
   saveSettings: (settings: DesktopPetSettings) => Promise<void>;
-  resolveBinding: (roleId: string) => Promise<DesktopPetBinding | null>;
+  resolveBinding: (roleId?: string) => Promise<DesktopPetBinding | null>;
   createWindow?: typeof createDesktopPetWindow;
   openLocalAttachment: (url: string) => Promise<unknown> | unknown;
 };
@@ -26,27 +26,46 @@ export class DesktopPetController {
     return Boolean(this.window && !this.window.isDestroyed());
   }
 
-  enable(roleId = this.options.getSettings().roleId): Promise<void> {
+  show(): Promise<void> {
     return this.enqueue(async () => {
-      if (!roleId) throw new Error("桌宠尚未选择角色");
-      const binding = await this.options.resolveBinding(roleId);
-      if (!binding) throw new Error("角色尚未选择桌宠素材");
-      const nextSettings = activateDesktopPetSettings(this.options.getSettings(), binding);
+      const binding = await this.options.resolveBinding();
+      if (!binding) throw new Error("没有已启用且已选择素材的桌宠角色");
+      const nextSettings = bindDesktopPetSettings(this.options.getSettings(), binding, true);
       await this.load(binding, nextSettings, "idle");
       await this.options.saveSettings(nextSettings);
     });
   }
 
-  disable(): Promise<void> {
+  hide(): Promise<void> {
     return this.enqueue(async () => {
       this.destroyWindow();
-      await this.options.saveSettings({ ...this.options.getSettings(), enabled: false });
+      await this.options.saveSettings({ ...this.options.getSettings(), visible: false });
+    });
+  }
+
+  sync(forceVisible?: boolean): Promise<void> {
+    return this.enqueue(async () => {
+      const binding = await this.options.resolveBinding();
+      if (!binding) {
+        this.destroyWindow();
+        await this.options.saveSettings({ ...this.options.getSettings(), visible: false, roleId: null, packageId: null });
+        return;
+      }
+      const current = this.options.getSettings();
+      const changedBinding = current.roleId !== binding.roleId || current.packageId !== binding.package.id;
+      const nextSettings = bindDesktopPetSettings(
+        current,
+        binding,
+        forceVisible ?? (changedBinding || current.visible),
+      );
+      if (nextSettings.visible) await this.load(binding, nextSettings, "idle");
+      else this.destroyWindow();
+      await this.options.saveSettings(nextSettings);
     });
   }
 
   restore(): Promise<void> {
-    const settings = this.options.getSettings();
-    return settings.enabled ? this.enable() : Promise.resolve();
+    return this.sync();
   }
 
   play(state: DesktopPetState): void {

@@ -23,7 +23,7 @@ export function normalizeDesktopPetSettings(value: unknown): DesktopPetSettings 
     }
   }
   return {
-    enabled: Boolean(source.enabled) && Boolean(roleId && packageId),
+    visible: Boolean(source.visible ?? source.enabled) && Boolean(roleId && packageId),
     roleId,
     packageId,
     positions,
@@ -31,13 +31,14 @@ export function normalizeDesktopPetSettings(value: unknown): DesktopPetSettings 
 }
 
 /** Replaces the single active role/package slot while retaining per-role window positions. */
-export function activateDesktopPetSettings(
+export function bindDesktopPetSettings(
   settings: DesktopPetSettings,
   binding: DesktopPetBinding,
+  visible: boolean,
 ): DesktopPetSettings {
   return {
     ...settings,
-    enabled: true,
+    visible,
     roleId: binding.roleId,
     packageId: binding.package.id,
   };

@@ -170,10 +170,8 @@ export type DesktopApi = {
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */
   windowState(): Promise<WindowState>;
-  /** Returns the persisted desktop-pet binding and enable state. */
-  petSettings(): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
-  /** Toggles the selected desktop-pet role, replacing any currently visible role. */
-  togglePetForRole(roleId: string): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  /** Synchronizes the desktop-pet window with the role saved by the detail form. */
+  syncPet(forceVisible?: boolean): Promise<void>;
   /** Moves the pet during a user drag without exposing the native window. */
   movePet(x: number, y: number): void;
   /** Restores the main Shiori window from a pet double click. */

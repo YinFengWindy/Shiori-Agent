@@ -4,7 +4,7 @@ import { desktopWindowIcon } from "./paths.js";
 type CreateDesktopTrayOptions = {
   onShowWindow: () => void;
   onQuitRequested: () => void;
-  getDesktopPetState?: () => { enabled: boolean; available: boolean };
+  getDesktopPetState?: () => { visible: boolean; available: boolean };
   onToggleDesktopPet?: () => Promise<void>;
 };
 
@@ -12,12 +12,12 @@ type CreateDesktopTrayOptions = {
 export function createDesktopTray({ onShowWindow, onQuitRequested, getDesktopPetState, onToggleDesktopPet }: CreateDesktopTrayOptions): Tray {
   const tray = new Tray(desktopWindowIcon);
   const refresh = () => {
-    const state = getDesktopPetState?.() ?? { enabled: false, available: false };
+    const state = getDesktopPetState?.() ?? { visible: false, available: false };
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: "显示主窗口", click: () => onShowWindow() },
         {
-          label: state.enabled ? "桌宠模式：已开启" : "桌宠模式：已关闭",
+          label: state.visible ? "隐藏桌宠" : "显示桌宠",
           enabled: state.available,
           click: () => {
             void onToggleDesktopPet?.().finally(refresh);

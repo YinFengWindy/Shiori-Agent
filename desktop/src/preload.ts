@@ -79,11 +79,8 @@ const api: DesktopApi = {
   windowState() {
     return ipcRenderer.invoke("desktop:window-state") as Promise<WindowState>;
   },
-  petSettings() {
-    return ipcRenderer.invoke("desktop:pet-settings") as Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
-  },
-  togglePetForRole(roleId) {
-    return ipcRenderer.invoke("desktop:pet-toggle-role", roleId) as Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  syncPet(forceVisible) {
+    return ipcRenderer.invoke("desktop:pet-sync", forceVisible) as Promise<void>;
   },
   movePet(x, y) {
     ipcRenderer.send("desktop:pet-drag", { x, y });

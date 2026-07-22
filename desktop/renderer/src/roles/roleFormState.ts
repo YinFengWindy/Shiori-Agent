@@ -56,6 +56,7 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     moodCatalog: moodConfig.moodCatalog,
     defaultMood: moodConfig.defaultMood,
     moodIllustrationBindings: moodConfig.moodIllustrationBindings,
+    desktopPetEnabled: Boolean(role.desktop_pet_enabled),
   };
 }
 
@@ -83,6 +84,7 @@ export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null
         || (roleForm.proactiveDriftMaxSteps ?? 20) !== (role.proactive?.drift?.max_steps ?? 20)
         || (roleForm.proactiveDriftMinIntervalHours ?? 3) !== (role.proactive?.drift?.min_interval_hours ?? 3)
         || !roleMoodConfigEqual(roleForm, persistedMoodConfig)
+        || Boolean(roleForm.desktopPetEnabled) !== Boolean(role.desktop_pet_enabled)
         || Boolean(roleForm.avatarSource)
         || roleForm.illustrationSources.length > 0
         || roleForm.removedIllustrations.length > 0

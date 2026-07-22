@@ -395,6 +395,11 @@ class DesktopBridgeService:
                     clear_illustrations=bool(payload.get("clear_illustrations")),
                     asset_categories=asset_categories,
                     asset_category_bindings=asset_category_bindings,
+                    desktop_pet_enabled=(
+                        bool(payload.get("desktop_pet_enabled"))
+                        if isinstance(payload.get("desktop_pet_enabled"), bool)
+                        else None
+                    ),
                 )
                 return self._ok(
                     request_id,

@@ -118,11 +118,12 @@ function desktopPetSettingsPath(): string {
   return resolve(app.getPath("userData"), "desktop-pet.json");
 }
 
-async function resolveDesktopPetBinding(roleId: string): Promise<DesktopPetBinding | null> {
+async function resolveDesktopPetBinding(roleId?: string): Promise<DesktopPetBinding | null> {
   const response = await bridge.invoke({ method: "roles.list", payload: {} });
   const roles = response.payload.roles;
   if (!Array.isArray(roles)) return null;
-  const role = roles.find((item) => item && typeof item === "object" && (item as { id?: unknown }).id === roleId) as { pet_packages?: unknown; selected_pet_package_id?: unknown } | undefined;
+  const role = roles.find((item) => item && typeof item === "object" && (roleId ? (item as { id?: unknown }).id === roleId : (item as { desktop_pet_enabled?: unknown }).desktop_pet_enabled === true)) as { id?: unknown; pet_packages?: unknown; selected_pet_package_id?: unknown } | undefined;
+  if (!role) return null;
   const packages = role?.pet_packages;
   if (!Array.isArray(packages)) return null;
   const packageId = typeof role?.selected_pet_package_id === "string" ? role.selected_pet_package_id : "";
@@ -130,7 +131,8 @@ async function resolveDesktopPetBinding(roleId: string): Promise<DesktopPetBindi
   if (!packageValue || typeof packageValue.id !== "string" || typeof packageValue.display_name !== "string" || typeof packageValue.spritesheet_abs !== "string") return null;
   const reference = localAssets.grantPath(packageValue.spritesheet_abs);
   if (!reference) return null;
-  return { roleId, package: { id: packageValue.id, displayName: packageValue.display_name, spritesheetUrl: reference.url } };
+  if (typeof role.id !== "string") return null;
+  return { roleId: role.id, package: { id: packageValue.id, displayName: packageValue.display_name, spritesheetUrl: reference.url } };
 }
 
 async function persistDesktopPetSettings(settings: DesktopPetSettings): Promise<void> {
@@ -201,7 +203,6 @@ void app.whenReady().then(() => {
     localAssetImportsRoot,
     openLocalAttachment,
     desktopPet,
-    getDesktopPetSettings: () => desktopPetSettings,
     onOpenDesktopPetRole: showOrCreateDesktopWindow,
   });
   getOrCreateDesktopWindow();
@@ -212,13 +213,13 @@ void app.whenReady().then(() => {
       },
       onQuitRequested: requestAppQuit,
       getDesktopPetState: () => ({
-        enabled: desktopPetSettings.enabled,
+        visible: desktopPetSettings.visible,
         available: Boolean(desktopPetSettings.roleId && desktopPetSettings.packageId),
       }),
       onToggleDesktopPet: async () => {
         if (!desktopPet) return;
         try {
-          await (desktopPetSettings.enabled ? desktopPet.disable() : desktopPet.enable());
+          await (desktopPetSettings.visible ? desktopPet.hide() : desktopPet.show());
         } catch (error) {
           logDesktopDiagnostic({ scope: "main", event: "desktop-pet.toggle.failed", payload: { error } });
         }

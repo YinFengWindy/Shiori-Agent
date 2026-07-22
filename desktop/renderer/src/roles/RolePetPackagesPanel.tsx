@@ -1,5 +1,6 @@
 import { toFileUrl } from "../shared/format";
-import { DeleteIcon, UploadIcon } from "../shared/icons";
+import { CheckCircleIcon, TrashIcon } from "@phosphor-icons/react";
+import { UploadIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 import type { RoleRecord } from "../shared/types";
 
@@ -26,8 +27,8 @@ export function RolePetPackagesPanel({ role, disabled, onImport, onRemove, onSel
         {packages.map((item) => (
           <div
             className={cx(
-              "relative overflow-hidden rounded-md border bg-white",
-              role?.selected_pet_package_id === item.id ? "border-primary ring-2 ring-primary/20" : "border-[#E2E6EB]",
+              "group relative overflow-hidden rounded-md border bg-white",
+              role?.selected_pet_package_id === item.id ? "border-[#4B5563] shadow-[0_2px_8px_rgba(15,23,42,0.12)]" : "border-[#E2E6EB]",
             )}
             key={item.id}
           >
@@ -38,25 +39,21 @@ export function RolePetPackagesPanel({ role, disabled, onImport, onRemove, onSel
               aria-pressed={role?.selected_pet_package_id === item.id}
               onClick={() => onSelect(item.id)}
             >
-              <span className="relative block aspect-[12/13] w-full overflow-hidden bg-[#F2F5F8]">
-                <img
-                  className="absolute left-0 top-0 max-w-none"
-                  style={{ width: "800%", height: "900%" }}
-                  src={toFileUrl(item.spritesheet_abs)}
-                  alt={item.display_name}
-                />
+              <span className="relative block aspect-square w-full overflow-hidden bg-[#F2F5F8]">
+                {item.preview_abs ? <img className="h-full w-full object-contain" src={toFileUrl(item.preview_abs)} alt={item.display_name} /> : null}
               </span>
               <span className="min-w-0 truncate text-xs text-[#32363C]">{item.display_name}</span>
             </button>
             <button
-              className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-md border border-black/10 bg-white/92 text-[#8B4B4B] shadow-sm transition hover:bg-[#FFF3F3] focus:outline-none"
+              className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-md border border-black/10 bg-white/92 text-[#5B6472] opacity-0 shadow-sm transition hover:border-[#E0B8B8] hover:bg-white hover:text-[#9A4A4A] focus:opacity-100 group-hover:opacity-100 focus:outline-none"
               type="button"
               aria-label={`删除桌宠素材 ${item.display_name}`}
               disabled={disabled}
               onClick={() => onRemove(item.id)}
             >
-              <DeleteIcon className="h-3.5 w-3.5 fill-current" />
+              <TrashIcon className="h-4 w-4" weight="bold" />
             </button>
+            {role?.selected_pet_package_id === item.id ? <CheckCircleIcon className="absolute left-2 top-2 h-5 w-5 text-[#374151]" weight="fill" aria-label="已选中" /> : null}
           </div>
         ))}
       </div>

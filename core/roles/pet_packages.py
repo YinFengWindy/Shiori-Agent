@@ -53,11 +53,16 @@ class RolePetPackageService:
             if PurePosixPath(package_id).name != package_id or package_id in {".", ".."}:
                 raise ValueError("桌宠包 id 不安全")
             sprite_name = _safe_relative_path(str(manifest["spritesheetPath"]))
+            preview_name = _safe_relative_path(str(manifest["previewPath"]))
             if sprite_name not in names:
                 raise ValueError("桌宠包缺少 spritesheet")
+            if preview_name not in names:
+                raise ValueError("桌宠包缺少预览图")
             if any(item.id == package_id for item in role.pet_packages):
                 raise ValueError(f"桌宠包已存在: {package_id}")
             self._validate_atlas(archive.read(self._archive_entry(root, sprite_name)))
+            preview_data = archive.read(self._archive_entry(root, preview_name))
+            self._validate_preview(preview_data)
             destination = self._role_store.assets_dir / role_id / "pets" / package_id
             if destination.exists():
                 raise ValueError(f"桌宠包目录已存在: {package_id}")
@@ -66,6 +71,8 @@ class RolePetPackageService:
             try:
                 (temporary / "pet.json").write_bytes(archive.read(self._archive_entry(root, "pet.json")))
                 (temporary / "spritesheet.webp").write_bytes(archive.read(self._archive_entry(root, sprite_name)))
+                preview_filename = f"preview{PurePosixPath(preview_name).suffix.lower()}"
+                (temporary / preview_filename).write_bytes(preview_data)
                 os.replace(temporary, destination)
             except Exception:
                 shutil.rmtree(temporary, ignore_errors=True)
@@ -78,6 +85,7 @@ class RolePetPackageService:
             manifest_path=f"{root}/pet.json",
             spritesheet_path=f"{root}/spritesheet.webp",
             imported_at=_now_iso(),
+            preview_path=f"{root}/{preview_filename}",
         )
         try:
             self._role_store.replace_pet_packages(role_id, [*role.pet_packages, package])
@@ -135,7 +143,7 @@ class RolePetPackageService:
             raise ValueError("桌宠包 pet.json 无效") from error
         if not isinstance(value, dict):
             raise ValueError("桌宠包 pet.json 必须是对象")
-        for field in ("id", "displayName", "description", "spritesheetPath"):
+        for field in ("id", "displayName", "description", "spritesheetPath", "previewPath"):
             if not isinstance(value.get(field), str) or not str(value[field]).strip():
                 raise ValueError(f"桌宠包 pet.json 缺少 {field}")
         return value
@@ -155,3 +163,14 @@ class RolePetPackageService:
                     raise ValueError("桌宠精灵图缺少必需动画帧")
                 if column >= count and occupied:
                     raise ValueError("桌宠精灵图未使用单元必须透明")
+
+    def _validate_preview(self, data: bytes) -> None:
+        try:
+            with Image.open(io.BytesIO(data)) as image:
+                if image.format not in {"PNG", "WEBP"}:
+                    raise ValueError("桌宠预览图必须是 PNG 或 WebP")
+                width, height = image.size
+        except OSError as error:
+            raise ValueError("桌宠预览图无效") from error
+        if not 64 <= width <= 2048 or not 64 <= height <= 2048:
+            raise ValueError("桌宠预览图尺寸必须在 64 到 2048 像素之间")
