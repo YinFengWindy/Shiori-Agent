@@ -10,7 +10,11 @@ import { openGrantedLocalAsset } from "./localAssetOpen.js";
 import { LocalAssetRegistry, localAssetScheme } from "./localAssetRegistry.js";
 import { desktopRoot } from "./paths.js";
 import { createDesktopTray } from "./tray.js";
-import { attachDesktopWindowLifecycle, createDesktopWindow, showDesktopWindow } from "./window.js";
+import { createDesktopWindow, showDesktopWindow } from "./window.js";
+import {
+  attachDesktopWindowLifecycle,
+  shouldHideDesktopWindowOnClose as shouldHideDesktopWindowOnClosePolicy,
+} from "./windowLifecycle.js";
 import { registerDesktopContentSecurityPolicy } from "./windowSecurity.js";
 import { DesktopPetController } from "./pet/controller.js";
 import { loadDesktopPetSettings, saveDesktopPetSettings } from "./pet/settings.js";
@@ -147,7 +151,11 @@ function requestAppQuit(): void {
 }
 
 function shouldHideDesktopWindowOnClose(): boolean {
-  return trayLifecycleEnabled && !isQuitting;
+  return shouldHideDesktopWindowOnClosePolicy({
+    isQuitting,
+    trayLifecycleEnabled,
+    desktopPetRunning: Boolean(desktopPet?.isRunning || desktopPetSettings?.visible),
+  });
 }
 
 function wireDesktopWindow(window: BrowserWindow): BrowserWindow {

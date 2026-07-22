@@ -8,10 +8,6 @@ import {
   validateRendererDevServerUrl,
 } from "./windowSecurity.js";
 
-type AttachDesktopWindowLifecycleOptions = {
-  shouldHideOnClose: () => boolean;
-};
-
 type ReloadDesktopRendererOptions = {
   revealAfterReload: boolean;
 };
@@ -188,18 +184,4 @@ export function showDesktopWindow(window: BrowserWindow): void {
     window.show();
   }
   window.focus();
-}
-
-/** Keeps the desktop renderer alive when the user closes into the tray. */
-export function attachDesktopWindowLifecycle(
-  window: BrowserWindow,
-  { shouldHideOnClose }: AttachDesktopWindowLifecycleOptions,
-): void {
-  window.on("close", (event: { preventDefault(): void }) => {
-    if (!shouldHideOnClose()) {
-      return;
-    }
-    event.preventDefault();
-    window.hide();
-  });
 }
