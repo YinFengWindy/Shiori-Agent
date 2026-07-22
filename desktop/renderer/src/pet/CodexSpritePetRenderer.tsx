@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { spriteCell, spriteAnimations, spriteFramePosition, type SpriteState } from "./spriteContract";
+import { spriteCell, spriteAnimations, spriteFrameDuration, spriteFramePosition, type SpriteState } from "./spriteContract";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 
 type CodexSpritePetRendererProps = {
@@ -22,7 +22,7 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePet
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setFrame((current) => (current + 1) % animation.frames);
-    }, animation.frameDurations[activeFrame]);
+    }, spriteFrameDuration(activeState, activeFrame));
     return () => window.clearTimeout(timer);
   }, [activeFrame, animation]);
 

@@ -56,6 +56,7 @@ export function useCodexPetInteraction(onMove: (x: number, y: number) => void) {
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     if (event.button !== 0) return;
+    setNextInteractionState(null);
     dragRef.current = {
       pointerId: event.pointerId,
       offsetX: event.clientX,

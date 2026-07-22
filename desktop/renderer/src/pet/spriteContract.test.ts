@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { spriteAnimations, spriteFramePosition } from "./spriteContract";
+import { spriteAnimations, spriteFrameDuration, spriteFramePosition } from "./spriteContract";
 
 test("Codex sprite contract maps every state to its documented atlas row", () => {
   assert.deepEqual(Object.values(spriteAnimations).map((item) => item.row), [0, 1, 2, 3, 4, 5, 6, 7, 8]);
@@ -21,4 +21,9 @@ test("Codex sprite contract maps every state to its documented atlas row", () =>
 test("sprite frame position wraps inside the active row", () => {
   assert.equal(spriteFramePosition("running-right", 8), "0px -208px");
   assert.equal(spriteFramePosition("review", -1), "-960px -1664px");
+});
+
+test("sprite playback is slowed uniformly without changing the Codex frame cadence", () => {
+  assert.equal(spriteFrameDuration("running-right", 0), 144);
+  assert.equal(spriteFrameDuration("running-right", 7), 264);
 });

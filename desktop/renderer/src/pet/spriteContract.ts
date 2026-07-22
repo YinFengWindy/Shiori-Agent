@@ -1,4 +1,5 @@
 export const spriteCell = { width: 192, height: 208 };
+export const spritePlaybackScale = 1.2;
 
 export const spriteAnimations = {
   idle: { row: 0, frames: 6, frameDurations: [280, 110, 110, 140, 140, 320] },
@@ -13,6 +14,13 @@ export const spriteAnimations = {
 } as const;
 
 export type SpriteState = keyof typeof spriteAnimations;
+
+/** Returns a visually relaxed frame duration while preserving each row's Codex cadence. */
+export function spriteFrameDuration(state: SpriteState, frame: number): number {
+  const animation = spriteAnimations[state];
+  const boundedFrame = ((frame % animation.frames) + animation.frames) % animation.frames;
+  return Math.round(animation.frameDurations[boundedFrame] * spritePlaybackScale);
+}
 
 /** Resolves the background position for one fixed 192 x 208 sprite cell. */
 export function spriteFramePosition(state: SpriteState, frame: number): string {
