@@ -2,7 +2,7 @@
 title: 桌面端与桥接
 kind: 领域说明
 status: 当前有效
-last_verified_commit: dd5b3972
+last_verified_commit: e6877d7a
 source_paths:
   - desktop/src/
   - desktop/renderer/src/
@@ -27,7 +27,7 @@ related:
 
 renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatcher.py`；service 调用 owning domain，presenter 将结果转换为共享类型。后端事件沿反方向更新 renderer state。图片等本地资产通过专门的 registry/transport 暴露，不直接把任意文件路径交给视图。
 
-桌宠拖拽不经过 renderer IPC 或 Python bridge：桌宠主体是 Electron 原生拖拽区域，由系统直接移动独立窗口；主进程监听窗口移动保存位置，并接管右键菜单和 Windows 非客户区双击。
+桌宠拖拽不经过 renderer IPC 或 Python bridge：桌宠主体是 Electron 原生拖拽区域，由系统直接移动独立窗口；主进程从窗口移动事件推导左右 running 和 idle 动画、保存位置，并接管右键菜单与原生鼠标双击恢复主窗口。
 
 ## 修改影响
 
