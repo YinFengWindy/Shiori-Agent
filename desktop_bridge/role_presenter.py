@@ -31,6 +31,13 @@ class DesktopRolePresenter:
             for relative_path in illustrations
             if isinstance(relative_path, str) and relative_path
         ]
+        payload["pet_packages"] = [
+            {
+                **package.to_dict(),
+                "spritesheet_abs": str((self._role_store.roles_dir / package.spritesheet_path).resolve()),
+            }
+            for package in role.pet_packages
+        ]
         if self._relationship_runtime is not None:
             snapshot = self._relationship_runtime.read_snapshot(role.id)
             runtime = self._relationship_runtime.current_loneliness_runtime(role.id)

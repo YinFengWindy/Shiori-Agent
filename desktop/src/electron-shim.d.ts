@@ -9,6 +9,9 @@ declare module "electron" {
   export type MenuItemConstructorOptions = {
     label?: string;
     click?: () => void;
+    type?: "checkbox";
+    checked?: boolean;
+    enabled?: boolean;
   };
 
   export type Privileges = {
@@ -24,6 +27,11 @@ declare module "electron" {
     minWidth?: number;
     minHeight?: number;
     frame?: boolean;
+    transparent?: boolean;
+    resizable?: boolean;
+    skipTaskbar?: boolean;
+    alwaysOnTop?: boolean;
+    hasShadow?: boolean;
     backgroundColor?: string;
     webPreferences?: {
       preload?: string;
@@ -48,6 +56,15 @@ declare module "electron" {
     isMinimized(): boolean;
     isVisible(): boolean;
     close(): void;
+    destroy(): void;
+    isDestroyed(): boolean;
+    setPosition(x: number, y: number): void;
+    getPosition(): [number, number];
+    getBounds(): { x: number; y: number; width: number; height: number };
+    setAlwaysOnTop(flag: boolean, level?: string): void;
+    setVisibleOnAllWorkspaces(visible: boolean, options?: { visibleOnFullScreen?: boolean }): void;
+    showInactive(): void;
+    once(event: string, handler: (...args: unknown[]) => void): void;
     on(event: string, handler: (...args: unknown[]) => void): void;
     webContents: {
       send(channel: string, payload: unknown): void;
@@ -78,6 +95,11 @@ declare module "electron" {
   export const protocol: {
     registerSchemesAsPrivileged(customSchemes: Array<{ scheme: string; privileges?: Privileges }>): void;
     handle(scheme: string, handler: (request: { url: string }) => Promise<Response> | Response): void;
+  };
+
+  export const screen: {
+    getPrimaryDisplay(): { id: number; workArea: { x: number; y: number; width: number; height: number } };
+    getDisplayMatching(bounds: { x: number; y: number; width: number; height: number }): { id: number; workArea: { x: number; y: number; width: number; height: number } };
   };
 
   export const session: {

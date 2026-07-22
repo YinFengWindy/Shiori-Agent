@@ -138,6 +138,38 @@ def _default_asset_category() -> RoleAssetCategory:
     return RoleAssetCategory(id=_DEFAULT_ASSET_CATEGORY_ID, name="默认")
 
 
+@dataclass(frozen=True)
+class RolePetPackage:
+    """A validated Codex-compatible pet package owned by one role."""
+
+    id: str
+    format: str
+    display_name: str
+    manifest_path: str
+    spritesheet_path: str
+    imported_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "RolePetPackage":
+        package_id = str(payload.get("id") or "").strip()
+        display_name = str(payload.get("display_name") or "").strip()
+        manifest_path = _normalize_rel_path(str(payload.get("manifest_path") or ""))
+        spritesheet_path = _normalize_rel_path(str(payload.get("spritesheet_path") or ""))
+        if not package_id or not display_name or not manifest_path or not spritesheet_path:
+            raise ValueError("桌宠包元数据不完整")
+        return cls(
+            id=package_id,
+            format=str(payload.get("format") or "").strip(),
+            display_name=display_name,
+            manifest_path=manifest_path,
+            spritesheet_path=spritesheet_path,
+            imported_at=str(payload.get("imported_at") or _now_iso()),
+        )
+
+
 @dataclass
 class RoleRecord:
     """角色聚合根的持久化快照。"""
@@ -158,6 +190,7 @@ class RoleRecord:
     memory_init_state: dict[str, Any]
     created_at: str
     updated_at: str
+    pet_packages: list[RolePetPackage] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -174,6 +207,7 @@ class RoleRecord:
             for path, category_id in self.asset_category_bindings.items()
             if _normalize_rel_path(path)
         }
+        payload["pet_packages"] = [package.to_dict() for package in self.pet_packages]
         return payload
 
     @classmethod
@@ -224,6 +258,11 @@ class RoleRecord:
             memory_init_state=dict(payload.get("memory_init_state") or {}),
             created_at=str(payload.get("created_at") or _now_iso()),
             updated_at=str(payload.get("updated_at") or _now_iso()),
+            pet_packages=[
+                RolePetPackage.from_dict(item)
+                for item in payload.get("pet_packages", [])
+                if isinstance(item, dict)
+            ],
         )
 
 
@@ -392,6 +431,7 @@ class RoleStore:
                 memory_init_state={},
                 created_at=now,
                 updated_at=now,
+                pet_packages=[],
             )
             if avatar_source is not None:
                 record.avatar = self.import_asset(
@@ -620,6 +660,24 @@ class RoleStore:
         target = role_assets_dir / target_name
         shutil.copy2(src, target)
         return target.relative_to(self.roles_dir).as_posix()
+
+    def replace_pet_packages(
+        self,
+        role_id: str,
+        packages: list[RolePetPackage],
+    ) -> RoleRecord:
+        """Persists the complete validated pet-package set for one role."""
+        with self._lock:
+            roles = self.list_roles()
+            for index, role in enumerate(roles):
+                if role.id != role_id:
+                    continue
+                role.pet_packages = list(packages)
+                role.updated_at = _now_iso()
+                roles[index] = role
+                self._save_roles(roles)
+                return role
+        raise KeyError(f"role 不存在: {role_id}")
 
     def _is_role_asset_path(self, role_id: str, rel_path: str) -> bool:
         normalized = _normalize_rel_path(rel_path)

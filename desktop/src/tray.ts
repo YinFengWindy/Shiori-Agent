@@ -4,24 +4,32 @@ import { desktopWindowIcon } from "./paths.js";
 type CreateDesktopTrayOptions = {
   onShowWindow: () => void;
   onQuitRequested: () => void;
+  getDesktopPetState?: () => { enabled: boolean; available: boolean };
+  onToggleDesktopPet?: () => void;
 };
 
 /** Creates the Windows tray entry used to restore or quit the desktop shell. */
-export function createDesktopTray({ onShowWindow, onQuitRequested }: CreateDesktopTrayOptions): Tray {
+export function createDesktopTray({ onShowWindow, onQuitRequested, getDesktopPetState, onToggleDesktopPet }: CreateDesktopTrayOptions): Tray {
   const tray = new Tray(desktopWindowIcon);
+  const refresh = () => {
+    const state = getDesktopPetState?.() ?? { enabled: false, available: false };
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: "显示主窗口", click: () => onShowWindow() },
+        {
+          label: "桌宠模式",
+          type: "checkbox",
+          checked: state.enabled,
+          enabled: state.available,
+          click: () => onToggleDesktopPet?.(),
+        },
+        { label: "退出 Shiori", click: () => onQuitRequested() },
+      ]),
+    );
+  };
   tray.setToolTip("Shiori");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: "显示主窗口",
-        click: () => onShowWindow(),
-      },
-      {
-        label: "退出 Shiori",
-        click: () => onQuitRequested(),
-      },
-    ]),
-  );
+  refresh();
   tray.on("click", () => onShowWindow());
+  tray.on("right-click", refresh);
   return tray;
 }

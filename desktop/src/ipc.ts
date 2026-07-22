@@ -1,11 +1,16 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
+import { copyFile, mkdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { basename, extname, join } from "node:path";
+import { randomUUID } from "node:crypto";
 import type { IpcMainInvokeEvent } from "electron";
 import { logDesktopDiagnostic } from "./diagnostics.js";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
 import { importLocalAssets } from "./localAssetImport.js";
 import type { LocalAssetRegistry } from "./localAssetRegistry.js";
 import { loadSettingsData, saveSettings } from "./settings.js";
+import type { DesktopPetController } from "./pet/controller.js";
+import type { DesktopPetSettings } from "./pet/types.js";
 import type {
   LocalAssetOpenRequest,
   LocalAssetOpenResult,
@@ -22,6 +27,8 @@ type RegisterDesktopIpcOptions = {
   localAssets: LocalAssetRegistry;
   localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
+  desktopPet: DesktopPetController;
+  getDesktopPetSettings: () => DesktopPetSettings;
 };
 
 function assetTransport<T>(value: T, assets: LocalAssetReference[]): LocalAssetTransport<T> {
@@ -45,6 +52,21 @@ async function importPickerSelection(
   return assetTransport(importedPaths, assets);
 }
 
+async function importPetPackageSelection(paths: string[], importsRoot: string): Promise<string[]> {
+  const imported: string[] = [];
+  for (const source of paths) {
+    if (extname(source).toLowerCase() !== ".zip") throw new Error("桌宠包必须是 ZIP 文件");
+    const sourceStats = await stat(source);
+    if (!sourceStats.isFile() || sourceStats.size > 32 * 1024 * 1024) throw new Error("桌宠包无效或超过 32MB");
+    const destinationDirectory = join(importsRoot, "pets");
+    await mkdir(destinationDirectory, { recursive: true });
+    const destination = join(destinationDirectory, `${randomUUID()}-${basename(source)}`);
+    await copyFile(source, destination);
+    imported.push(destination);
+  }
+  return imported;
+}
+
 /** Registers all IPC handlers exposed through the desktop preload bridge. */
 export function registerDesktopIpc({
   bridge,
@@ -52,6 +74,8 @@ export function registerDesktopIpc({
   localAssets,
   localAssetImportsRoot,
   openLocalAttachment,
+  desktopPet,
+  getDesktopPetSettings,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
 
@@ -188,6 +212,22 @@ export function registerDesktopIpc({
     }
     return await importPickerSelection(result.filePaths, localAssetImportsRoot, localAssets);
   });
+  ipcMain.handle("desktop:pet-settings", () => getDesktopPetSettings());
+  ipcMain.handle("desktop:pet-toggle", async () => {
+    if (getDesktopPetSettings().enabled) {
+      await desktopPet.disable();
+    } else {
+      await desktopPet.enable();
+    }
+    return getDesktopPetSettings();
+  });
+  ipcMain.handle("desktop:pet-binding", async (_event: IpcMainInvokeEvent, payload?: { roleId?: unknown; packageId?: unknown }) => {
+    const roleId = String(payload?.roleId ?? "").trim();
+    const packageId = String(payload?.packageId ?? "").trim();
+    if (!roleId || !packageId) throw new Error("桌宠绑定不完整");
+    await desktopPet.updateBinding(roleId, packageId);
+    return getDesktopPetSettings();
+  });
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
     const result = await dialog.showOpenDialog({
       properties: options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],
@@ -202,6 +242,14 @@ export function registerDesktopIpc({
       return assetTransport([], []);
     }
     return await importPickerSelection(result.filePaths, localAssetImportsRoot, localAssets);
+  });
+  ipcMain.handle("desktop:pick-pet-package", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile"],
+      filters: [{ name: "Codex Pet Package", extensions: ["zip"] }],
+    });
+    if (result.canceled) return assetTransport([], []);
+    return assetTransport(await importPetPackageSelection(result.filePaths, localAssetImportsRoot), []);
   });
   ipcMain.handle("desktop:open-attachment", async (_event: IpcMainInvokeEvent, request: LocalAssetOpenRequest) => {
     const value = String(request?.url || request?.path || "").trim();

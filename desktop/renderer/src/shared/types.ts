@@ -46,10 +46,22 @@ export type RoleRecord = {
   illustrations_abs: string[];
   asset_categories: RoleAssetCategory[];
   asset_category_bindings: Record<string, string>;
+  pet_packages?: RolePetPackage[];
   relationship_snapshot?: RelationshipSnapshot | null;
   loneliness_runtime?: LonelinessRuntime | null;
   created_at: string;
   updated_at: string;
+};
+
+/** One validated desktop-pet package listed under its owning role. */
+export type RolePetPackage = {
+  id: string;
+  format: "codex-sprite@1";
+  display_name: string;
+  manifest_path: string;
+  spritesheet_path: string;
+  spritesheet_abs: string;
+  imported_at: string;
 };
 
 /** User-defined single-owner category for one role's asset library. */

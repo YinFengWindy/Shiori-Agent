@@ -12,6 +12,9 @@ import { desktopRoot } from "./paths.js";
 import { createDesktopTray } from "./tray.js";
 import { attachDesktopWindowLifecycle, createDesktopWindow, showDesktopWindow } from "./window.js";
 import { registerDesktopContentSecurityPolicy } from "./windowSecurity.js";
+import { DesktopPetController } from "./pet/controller.js";
+import { loadDesktopPetSettings, saveDesktopPetSettings } from "./pet/settings.js";
+import type { DesktopPetBinding, DesktopPetSettings } from "./pet/types.js";
 
 const bridge = new DesktopBridgeClient();
 const localAssets = new LocalAssetRegistry();
@@ -19,6 +22,8 @@ const trayLifecycleEnabled = process.platform === "win32";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 let desktopWindow: BrowserWindow | null = null;
 let desktopTray: ReturnType<typeof createDesktopTray> | null = null;
+let desktopPetSettings: DesktopPetSettings;
+let desktopPet: DesktopPetController | null = null;
 let isQuitting = false;
 let bridgeShutdownStarted = false;
 
@@ -109,6 +114,29 @@ async function openLocalAttachment(value: string) {
   return result;
 }
 
+function desktopPetSettingsPath(): string {
+  return resolve(app.getPath("userData"), "desktop-pet.json");
+}
+
+async function resolveDesktopPetBinding(roleId: string, packageId: string): Promise<DesktopPetBinding | null> {
+  const response = await bridge.invoke({ method: "roles.list", payload: {} });
+  const roles = response.payload.roles;
+  if (!Array.isArray(roles)) return null;
+  const role = roles.find((item) => item && typeof item === "object" && (item as { id?: unknown }).id === roleId) as { pet_packages?: unknown } | undefined;
+  const packages = role?.pet_packages;
+  if (!Array.isArray(packages)) return null;
+  const packageValue = packages.find((item) => item && typeof item === "object" && (item as { id?: unknown }).id === packageId) as { id?: unknown; display_name?: unknown; spritesheet_abs?: unknown } | undefined;
+  if (!packageValue || typeof packageValue.id !== "string" || typeof packageValue.display_name !== "string" || typeof packageValue.spritesheet_abs !== "string") return null;
+  const reference = localAssets.grantPath(packageValue.spritesheet_abs);
+  if (!reference) return null;
+  return { roleId, package: { id: packageValue.id, displayName: packageValue.display_name, spritesheetUrl: reference.url } };
+}
+
+async function persistDesktopPetSettings(settings: DesktopPetSettings): Promise<void> {
+  desktopPetSettings = settings;
+  await saveDesktopPetSettings(desktopPetSettingsPath(), settings);
+}
+
 function requestAppQuit(): void {
   isQuitting = true;
   app.quit();
@@ -148,6 +176,7 @@ function showOrCreateDesktopWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   ensureDesktopConfig();
+  desktopPetSettings = loadDesktopPetSettings(desktopPetSettingsPath());
   const privateWorkspaceRoot = resolve(app.getPath("home"), ".shiori", "workspace");
   const localAssetImportsRoot = resolve(privateWorkspaceRoot, "private_runtime", "imports");
   localAssets.addTrustedRoot(privateWorkspaceRoot);
@@ -158,12 +187,20 @@ void app.whenReady().then(() => {
   registerLocalAssetProtocol(protocol, localAssets);
   void startBridge(bridge);
   wireBridgeEvents(bridge, localAssets);
+  desktopPet = new DesktopPetController({
+    getSettings: () => desktopPetSettings,
+    saveSettings: persistDesktopPetSettings,
+    resolveBinding: resolveDesktopPetBinding,
+    openLocalAttachment,
+  });
   registerDesktopIpc({
     bridge,
     desktopRoot,
     localAssets,
     localAssetImportsRoot,
     openLocalAttachment,
+    desktopPet,
+    getDesktopPetSettings: () => desktopPetSettings,
   });
   getOrCreateDesktopWindow();
   if (trayLifecycleEnabled) {
@@ -172,6 +209,19 @@ void app.whenReady().then(() => {
         showOrCreateDesktopWindow();
       },
       onQuitRequested: requestAppQuit,
+      getDesktopPetState: () => ({
+        enabled: desktopPetSettings.enabled,
+        available: Boolean(desktopPetSettings.roleId && desktopPetSettings.packageId),
+      }),
+      onToggleDesktopPet: () => {
+        if (!desktopPet) return;
+        void (desktopPetSettings.enabled ? desktopPet.disable() : desktopPet.enable()).catch((error) => {
+          logDesktopDiagnostic({ scope: "main", event: "desktop-pet.toggle.failed", payload: { error } });
+        });
+      },
+    });
+    void desktopPet.restore().catch((error) => {
+      logDesktopDiagnostic({ scope: "main", event: "desktop-pet.restore.failed", payload: { error } });
     });
   }
   app.on("activate", () => {

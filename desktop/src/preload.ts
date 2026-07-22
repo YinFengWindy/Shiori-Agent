@@ -45,6 +45,10 @@ const api: DesktopApi = {
     return (ipcRenderer.invoke("desktop:pick-chat-attachments", options) as Promise<LocalAssetTransport<string[]>>)
       .then((transport) => localAssets.consume(transport));
   },
+  pickPetPackage() {
+    return (ipcRenderer.invoke("desktop:pick-pet-package") as Promise<LocalAssetTransport<string[]>>)
+      .then((transport) => localAssets.consume(transport)[0] ?? null);
+  },
   localAssetUrl(path) {
     return localAssets.resolve(path);
   },
@@ -74,6 +78,27 @@ const api: DesktopApi = {
   },
   windowState() {
     return ipcRenderer.invoke("desktop:window-state") as Promise<WindowState>;
+  },
+  petSettings() {
+    return ipcRenderer.invoke("desktop:pet-settings") as Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  },
+  togglePet() {
+    return ipcRenderer.invoke("desktop:pet-toggle") as Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  },
+  savePetBinding(roleId, packageId) {
+    return ipcRenderer.invoke("desktop:pet-binding", { roleId, packageId }) as Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  },
+  onPetLoad(listener) {
+    ipcRenderer.on("desktop:pet-load", listener);
+  },
+  offPetLoad(listener) {
+    ipcRenderer.off("desktop:pet-load", listener);
+  },
+  onPetPlay(listener) {
+    ipcRenderer.on("desktop:pet-play", listener);
+  },
+  offPetPlay(listener) {
+    ipcRenderer.off("desktop:pet-play", listener);
   },
 };
 

@@ -23,7 +23,7 @@ from core.integrations.novelai import (
 )
 from core.integrations.novelai.models import NovelAISettings
 from core.net.http import get_default_http_requester
-from core.roles import RoleAggregateService, RoleRelationshipRuntimeService, RoleStore
+from core.roles import RoleAggregateService, RolePetPackageService, RoleRelationshipRuntimeService, RoleStore
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.app_service import DesktopAppService
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
@@ -107,6 +107,7 @@ class DesktopBridgeService:
             relationship_runtime,
         )
         self.role_presenter = DesktopRolePresenter(role_store, relationship_runtime)
+        self.pet_packages = RolePetPackageService(role_store)
         self.chat_service = DesktopChatService(
             agent_loop=agent_loop,
             event_bus=event_bus,
@@ -410,6 +411,30 @@ class DesktopBridgeService:
                         "deleted": deleted,
                         "session_deleted": session_deleted,
                     },
+                )
+            if method == "roles.pets.import":
+                role_id = str(payload.get("role_id") or "").strip()
+                source = str(payload.get("source") or "").strip()
+                package = self.pet_packages.import_package(role_id, source)
+                role = self.role_store.get_role(role_id)
+                if role is None:
+                    raise KeyError(f"role 不存在: {role_id}")
+                return self._ok(
+                    request_id,
+                    method,
+                    {"package": package.to_dict(), "role": self.role_presenter.serialize(role)},
+                )
+            if method == "roles.pets.remove":
+                role_id = str(payload.get("role_id") or "").strip()
+                package_id = str(payload.get("package_id") or "").strip()
+                self.pet_packages.remove_package(role_id, package_id)
+                role = self.role_store.get_role(role_id)
+                if role is None:
+                    raise KeyError(f"role 不存在: {role_id}")
+                return self._ok(
+                    request_id,
+                    method,
+                    {"role": self.role_presenter.serialize(role)},
                 )
             if method == "session.openByRole":
                 role_id = str(payload.get("role_id") or "").strip()

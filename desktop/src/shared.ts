@@ -151,6 +151,8 @@ export type DesktopApi = {
   onEvent(listener: (event: BridgeEvent) => void): () => void;
   pickImages(options?: { multiple?: boolean }): Promise<string[]>;
   pickChatAttachments(options?: { multiple?: boolean }): Promise<string[]>;
+  /** Opens a picker for a self-contained Codex-compatible desktop-pet package. */
+  pickPetPackage(): Promise<string | null>;
   /** Resolves a previously transported local path to its opaque asset URL. */
   localAssetUrl(path: string): string;
   startAttachmentDrag(request: StartAttachmentDragRequest): void;
@@ -168,4 +170,16 @@ export type DesktopApi = {
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */
   windowState(): Promise<WindowState>;
+  /** Returns the persisted desktop-pet binding and enable state. */
+  petSettings(): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  /** Toggles the currently bound desktop pet. */
+  togglePet(): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  /** Saves a validated role/package binding, replacing a running pet when enabled. */
+  savePetBinding(roleId: string, packageId: string): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  /** Subscribes to package loads from the dedicated desktop-pet window. */
+  onPetLoad(listener: (event: unknown, payload: unknown) => void): void;
+  offPetLoad(listener: (event: unknown, payload: unknown) => void): void;
+  /** Subscribes to sprite state transitions from the desktop-pet controller. */
+  onPetPlay(listener: (event: unknown, payload: unknown) => void): void;
+  offPetPlay(listener: (event: unknown, payload: unknown) => void): void;
 };
