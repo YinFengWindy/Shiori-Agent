@@ -87,9 +87,11 @@ type DesktopAppFrameProps = {
   bridgeReady: boolean;
   onOpenSearch: () => void;
   onOpenRolesWorkspace: () => void;
+  onOpenWorld: () => void;
   onOpenRole: (roleId: string) => void;
   onOpenImageStudio: () => void;
   onOpenPromptTagLibrary: () => void;
+  worldWorkspace: React.ReactNode;
   imageStudioState: ImageStudioStateViewModel;
   workspaceFeedback: WorkspaceFeedback | null;
   activeRole: RoleRecord | null;
@@ -213,9 +215,11 @@ export function DesktopAppFrame({
   bridgeReady,
   onOpenSearch,
   onOpenRolesWorkspace,
+  onOpenWorld,
   onOpenRole,
   onOpenImageStudio,
   onOpenPromptTagLibrary,
+  worldWorkspace,
   imageStudioState,
   workspaceFeedback,
   activeRole,
@@ -392,6 +396,7 @@ export function DesktopAppFrame({
               width={sidebarState.width}
               onOpenSearch={onOpenSearch}
               onOpenRolesWorkspace={onOpenRolesWorkspace}
+              onOpenWorld={onOpenWorld}
               onOpenRole={onOpenRole}
               onOpenImageStudio={onOpenImageStudio}
               onOpenPromptTagLibrary={onOpenPromptTagLibrary}
@@ -452,6 +457,7 @@ export function DesktopAppFrame({
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
             />
           ) : null}
+          {mainView.kind === "world" ? worldWorkspace : null}
           {mainView.kind === "image-studio" ? (
             <ImageStudioPage
               activeRecord={imageStudioState.activeRecord}

@@ -3,9 +3,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  cloneView,
   getRoleIdFromSession,
   isProactiveAssistantMessage,
   navigationEntriesEqual,
+  viewsEqual,
 } from "./appState";
 import type { NavigationEntry } from "./appState";
 import type { SessionPayload } from "../shared/types";
@@ -43,6 +45,19 @@ describe("appState", () => {
       ...baseEntry,
       settingsSection: "integrations",
     }), false);
+  });
+
+  it("treats the world workspace as a distinct history destination", () => {
+    const worldEntry: NavigationEntry = {
+      view: { kind: "world" },
+      activeRoleId: "mira",
+      settingsSection: "models",
+    };
+
+    assert.equal(navigationEntriesEqual(worldEntry, { ...worldEntry, view: { kind: "world" } }), true);
+    assert.equal(navigationEntriesEqual(worldEntry, { ...worldEntry, view: { kind: "chat" } }), false);
+    assert.deepEqual(cloneView(worldEntry.view), { kind: "world" });
+    assert.equal(viewsEqual(worldEntry.view, { kind: "chat" }), false);
   });
 
   it("recognizes proactive assistant pushes from the latest assistant message", () => {

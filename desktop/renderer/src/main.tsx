@@ -1,5 +1,5 @@
 import type React from "react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { DesktopAppFrame } from "./app/DesktopAppFrame";
 import {
@@ -31,6 +31,7 @@ import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleSearch } from "./app/roleSearch";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
+import { useWorldWorkspacePresentation } from "./app/useWorldWorkspacePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalDiagnostics";
@@ -43,6 +44,8 @@ import { type SettingsSectionId } from "./settings/SettingsSidebar";
 import { useLatestRef } from "./shared/useLatestRef";
 import { useLeftSidebarState } from "./shared/useLeftSidebarState";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
+import { createWorldBridgeClient } from "./world/bridgeClient";
+import { useWorldWorkspaceController } from "./world/useWorldWorkspaceController";
 import type {
   AppMainView,
   EventLog,
@@ -146,6 +149,13 @@ function App(): React.ReactElement {
     activeRole: roles.find((role) => role.id === activeRoleId) ?? null,
     roles,
   });
+  const worldBridgeClient = useMemo(() => createWorldBridgeClient(), []);
+  const worldController = useWorldWorkspaceController(worldBridgeClient);
+  const worldWorkspace = useWorldWorkspacePresentation({
+    roles,
+    client: worldBridgeClient,
+    controller: worldController,
+  });
 
   const { updateRoleForm, updateNewRoleForm } = useRoleFormAdapters({
     roleFormRef,
@@ -179,6 +189,7 @@ function App(): React.ReactElement {
     buildNavigationEntry,
     replaceNavigationEntry,
     openChatView,
+    openWorldWorkspace,
     openImageStudio,
     openPromptTagLibrary,
     openSettingsWorkspace,
@@ -450,8 +461,8 @@ function App(): React.ReactElement {
       windowMaximized={windowMaximized}
       canGoBack={canGoBack}
       canGoForward={canGoForward}
-      canRefreshSession={Boolean(activeRoleId)}
-      canEditRole={Boolean(activeRoleId)}
+      canRefreshSession={mainView.kind === "chat" && Boolean(activeRoleId)}
+      canEditRole={mainView.kind === "chat" && Boolean(activeRoleId)}
       onToggleSidebar={leftSidebar.toggle}
       onGoBack={() => void navigateHistory("back", openRole)}
       onGoForward={() => void navigateHistory("forward", openRole)}
@@ -495,9 +506,11 @@ function App(): React.ReactElement {
       bridgeReady={bridgeReady}
       onOpenSearch={() => setShowSearchDialog(true)}
       onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
+      onOpenWorld={() => openWorldWorkspace()}
       onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
       onOpenImageStudio={() => openImageStudio()}
       onOpenPromptTagLibrary={() => { setPromptTagWorkspaceSection("list"); openPromptTagLibrary(); }}
+      worldWorkspace={worldWorkspace.content}
       imageStudioState={imageStudioState}
       workspaceFeedback={workspaceFeedback}
       activeRole={activeRole}

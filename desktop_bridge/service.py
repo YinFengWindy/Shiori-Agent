@@ -32,6 +32,7 @@ from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
 from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_presenter import DesktopSessionPresenter
+from desktop_bridge.world_simulation_handler import WorldSimulationHandler
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 from session.manager import Session, SessionManager
 
@@ -124,6 +125,10 @@ class DesktopBridgeService:
             novelai_store=self.novelai_store,
             prompt_tag_store=self.prompt_tag_store,
         )
+        self.world_simulation = WorldSimulationHandler(
+            workspace=workspace,
+            role_store=role_store,
+        )
         if push_tool is not None:
             self.register_desktop_push_channel(push_tool)
 
@@ -183,6 +188,7 @@ class DesktopBridgeService:
         )
         self._event_listeners.clear()
         await self.chat_service.aclose()
+        self.world_simulation.close()
 
     def register_desktop_push_channel(self, push_tool: MessagePushTool) -> None:
         """Registers the desktop proactive transport against the bridge event stream."""
@@ -264,6 +270,13 @@ class DesktopBridgeService:
         )
 
         try:
+            world_result = self.world_simulation.handle(
+                method,
+                payload,
+                request_id=request_id,
+            )
+            if world_result is not None:
+                return self._ok(request_id, method, world_result)
             if method == "health":
                 return self._ok(request_id, method, {"ok": True})
             if method == "roles.list":

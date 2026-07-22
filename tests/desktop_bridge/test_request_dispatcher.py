@@ -54,6 +54,29 @@ async def test_control_mutation_runs_while_novelai_lane_is_busy() -> None:
 
 
 @pytest.mark.asyncio
+async def test_world_run_submission_does_not_hold_global_mutation_lane() -> None:
+    dispatcher = BridgeRequestDispatcher(max_concurrency=2)
+    run_started = asyncio.Event()
+    release_run = asyncio.Event()
+    role_update_completed = asyncio.Event()
+
+    async def _run_world() -> None:
+        run_started.set()
+        await release_run.wait()
+
+    async def _update_role() -> None:
+        role_update_completed.set()
+
+    dispatcher.submit({"method": "worlds.advance"}, _run_world)
+    await run_started.wait()
+    dispatcher.submit({"method": "roles.update"}, _update_role)
+
+    await asyncio.wait_for(role_update_completed.wait(), timeout=0.2)
+    release_run.set()
+    await dispatcher.aclose()
+
+
+@pytest.mark.asyncio
 async def test_mutation_requests_run_one_at_a_time() -> None:
     dispatcher = BridgeRequestDispatcher(max_concurrency=4)
     active = 0

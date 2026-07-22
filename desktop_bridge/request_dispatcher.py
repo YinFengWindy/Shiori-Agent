@@ -16,9 +16,26 @@ _READ_ONLY_METHODS = frozenset(
         "roles.tasks.list",
         "novelai.history",
         "novelai.prompt_tags.list",
+        "worlds.list",
+        "worlds.get",
+        "worlds.timeline",
+        "worlds.events.catch_up",
     }
 )
-_INTEGRATION_METHODS = frozenset({"novelai.generate"})
+_INTEGRATION_METHODS = frozenset(
+    {
+        "novelai.generate",
+        "worlds.drafts.preview",
+    }
+)
+_BACKGROUND_WORLD_METHODS = frozenset(
+    {
+        "worlds.actions.submit",
+        "worlds.advance",
+        "worlds.barriers.resolve",
+        "worlds.runs.cancel",
+    }
+)
 
 
 class BridgeRequestDispatcher:
@@ -69,7 +86,7 @@ class BridgeRequestDispatcher:
         self._tasks.clear()
 
     async def _run(self, method: str, operation: RequestOperation) -> None:
-        if method in _INTEGRATION_METHODS:
+        if method in _INTEGRATION_METHODS or method in _BACKGROUND_WORLD_METHODS:
             async with self._integration_semaphore:
                 async with self._semaphore:
                     await operation()

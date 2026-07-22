@@ -219,6 +219,7 @@ export type RoleSearchResult = {
 /** Main content mode for the desktop shell. */
 export type AppMainView =
   | { kind: "chat" }
+  | { kind: "world" }
   | { kind: "image-studio" }
   | { kind: "image-prompt-tags" }
   | { kind: "roles-list" }
