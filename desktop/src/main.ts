@@ -15,6 +15,7 @@ import { registerDesktopContentSecurityPolicy } from "./windowSecurity.js";
 import { DesktopPetController } from "./pet/controller.js";
 import { loadDesktopPetSettings, saveDesktopPetSettings } from "./pet/settings.js";
 import type { DesktopPetBinding, DesktopPetSettings } from "./pet/types.js";
+import { createDesktopPetWindow, displayForDesktopPet } from "./pet/window.js";
 
 const bridge = new DesktopBridgeClient();
 const localAssets = new LocalAssetRegistry();
@@ -194,6 +195,8 @@ void app.whenReady().then(() => {
     getSettings: () => desktopPetSettings,
     saveSettings: persistDesktopPetSettings,
     resolveBinding: resolveDesktopPetBinding,
+    createWindow: createDesktopPetWindow,
+    displayForWindow: displayForDesktopPet,
     openLocalAttachment,
   });
   registerDesktopIpc({

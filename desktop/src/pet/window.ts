@@ -1,17 +1,9 @@
 import { BrowserWindow, screen } from "electron";
 import { rendererDevServerUrl, rendererPetDist, preloadScript } from "../paths.js";
 import { attachDesktopWindowSecurity, resolveRendererEntryUrl, validateRendererDevServerUrl } from "../windowSecurity.js";
-import type { DesktopPetPosition } from "./types.js";
+import { desktopPetViewport } from "./geometry.js";
 
-export const desktopPetViewport = { width: 192, height: 208 };
-
-/** Clamps the whole fixed pet viewport inside a display work area. */
-export function clampDesktopPetPosition(position: DesktopPetPosition, workArea: { x: number; y: number; width: number; height: number }): DesktopPetPosition {
-  return {
-    x: Math.min(Math.max(position.x, workArea.x), workArea.x + workArea.width - desktopPetViewport.width),
-    y: Math.min(Math.max(position.y, workArea.y), workArea.y + workArea.height - desktopPetViewport.height),
-  };
-}
+export { clampDesktopPetPosition, desktopPetViewport } from "./geometry.js";
 
 /** Creates the fixed transparent desktop-pet surface without loading the full application renderer. */
 export function createDesktopPetWindow(options: { openLocalAttachment: (url: string) => Promise<unknown> | unknown }): BrowserWindow {

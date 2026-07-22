@@ -1,5 +1,5 @@
 import type { BrowserWindow } from "electron";
-import { desktopPetViewport, clampDesktopPetPosition, createDesktopPetWindow, displayForDesktopPet } from "./window.js";
+import { desktopPetViewport, clampDesktopPetPosition } from "./geometry.js";
 import { desktopPetPositionFromCursor, type DesktopPetPoint } from "./drag.js";
 import { bindDesktopPetSettings } from "./settings.js";
 import type { DesktopPetBinding, DesktopPetSettings, DesktopPetState } from "./types.js";
@@ -8,20 +8,24 @@ type DesktopPetControllerOptions = {
   getSettings: () => DesktopPetSettings;
   saveSettings: (settings: DesktopPetSettings) => Promise<void>;
   resolveBinding: (roleId?: string) => Promise<DesktopPetBinding | null>;
-  createWindow?: typeof createDesktopPetWindow;
+  createWindow: (options: { openLocalAttachment: (url: string) => Promise<unknown> | unknown }) => BrowserWindow;
+  displayForWindow: (window: BrowserWindow | null) => { id: string | number; workArea: { x: number; y: number; width: number; height: number } };
   openLocalAttachment: (url: string) => Promise<unknown> | unknown;
 };
 
 /** Serializes desktop-pet lifecycle operations so a stale enable cannot recreate a disabled pet. */
 export class DesktopPetController {
-  private readonly createWindow: typeof createDesktopPetWindow;
+  private readonly createWindow: DesktopPetControllerOptions["createWindow"];
+  private readonly displayForWindow: DesktopPetControllerOptions["displayForWindow"];
   private window: BrowserWindow | null = null;
   private queue = Promise.resolve();
   private activeRoleId = "";
   private dragPointerOffset: DesktopPetPoint | null = null;
+  private lastDragPosition: DesktopPetPoint | null = null;
 
   constructor(private readonly options: DesktopPetControllerOptions) {
-    this.createWindow = options.createWindow ?? createDesktopPetWindow;
+    this.createWindow = options.createWindow;
+    this.displayForWindow = options.displayForWindow;
   }
 
   get isRunning(): boolean {
@@ -77,6 +81,7 @@ export class DesktopPetController {
   beginDrag(pointerOffsetX: number, pointerOffsetY: number): void {
     if (!this.window || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
     this.dragPointerOffset = { x: pointerOffsetX, y: pointerOffsetY };
+    this.lastDragPosition = null;
   }
 
   moveDrag(cursor: DesktopPetPoint): void {
@@ -87,12 +92,14 @@ export class DesktopPetController {
   endDrag(cursor: DesktopPetPoint): void {
     this.moveDrag(cursor);
     this.dragPointerOffset = null;
+    if (this.window) this.persistPosition(this.activeRoleId, this.window);
   }
 
   private moveTo(position: DesktopPetPoint): void {
     if (!this.window) return;
-    const display = displayForDesktopPet(this.window);
+    const display = this.displayForWindow(this.window);
     const clampedPosition = clampDesktopPetPosition(position, display.workArea);
+    this.lastDragPosition = clampedPosition;
     this.window.setPosition(clampedPosition.x, clampedPosition.y, false);
   }
 
@@ -105,7 +112,7 @@ export class DesktopPetController {
   private async load(binding: DesktopPetBinding, settings: DesktopPetSettings, state: DesktopPetState): Promise<void> {
     const created = this.window === null;
     const window = this.window ?? this.createWindow({ openLocalAttachment: this.options.openLocalAttachment });
-    const display = displayForDesktopPet(window);
+    const display = this.displayForWindow(window);
     const key = `${binding.roleId}:${display.id}`;
     const fallback = {
       x: display.workArea.x + display.workArea.width - desktopPetViewport.width,
@@ -120,7 +127,12 @@ export class DesktopPetController {
     };
     if (created) {
       window.once("ready-to-show", sendLoad);
-      window.on("moved", () => this.persistPosition(this.activeRoleId, window));
+      window.on("moved", () => {
+        const [x, y] = window.getPosition();
+        // Native moved events can arrive after endDrag, so identify our final drag position by value.
+        if (this.lastDragPosition?.x === x && this.lastDragPosition.y === y) return;
+        this.persistPosition(this.activeRoleId, window);
+      });
       window.on("closed", () => {
         if (this.window === window) this.window = null;
       });
@@ -131,7 +143,7 @@ export class DesktopPetController {
   }
 
   private persistPosition(roleId: string, window: BrowserWindow): void {
-    const display = displayForDesktopPet(window);
+    const display = this.displayForWindow(window);
     const [x, y] = window.getPosition();
     const settings = this.options.getSettings();
     void this.options.saveSettings({
@@ -142,6 +154,7 @@ export class DesktopPetController {
 
   private destroyWindow(): void {
     this.dragPointerOffset = null;
+    this.lastDragPosition = null;
     this.window?.destroy();
     this.window = null;
   }
