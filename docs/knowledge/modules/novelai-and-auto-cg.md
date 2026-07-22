@@ -2,13 +2,12 @@
 title: NovelAI 与自动 CG
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 27af068a
+last_verified_commit: b46611a6
 source_paths:
   - core/integrations/novelai/
-  - plugins/novelai/plugin.py
-  - plugins/novelai/auto_cg.py
-  - plugins/novelai/auto_cg_controller.py
-  - plugins/novelai/scene_decision.py
+  - plugins/scene_awareness/
+  - plugins/novelai/
+  - bus/events_lifecycle.py
 related:
   - roles.md
   - conversations-and-sessions.md
@@ -23,11 +22,12 @@ related:
 
 ## 自动 CG 生命周期
 
-1. NovelAI 插件在 `BeforeTurn` 捕获当前回合上下文，并推进冷却计数。
-2. `AfterTurn` 在不阻塞主回复的前提下调度场景判断。
-3. `scene_decision.py` 将结果归为 `same`、`changed` 或 `closed`。
-4. `AutoCgController` 根据策略、冷却和去重结果决定是否生成。
-5. 成功图片通过消息推送发送，并同步回权威角色会话。
+1. Scene Awareness 插件在 `BeforeTurn` 捕获被动回合上下文，并在 `AfterTurn` 对非空回复调度场景判断；主动消息则从 `ProactiveMessageCommitted` 接入同一判断链。
+2. `plugins/scene_awareness/decision.py` 将结果归为 `started`、`same`、`changed` 或 `closed`，并发布 `SceneObservationCommitted`。
+3. NovelAI 插件订阅场景观察事件，`AutoCgController` 根据策略、冷却和去重结果决定是否生成。
+4. 成功图片通过消息推送发送，并同步回权威角色会话。
+
+`AfterTurnCtx.will_dispatch` 只表示核心消息总线是否还需下发回复，不表示回合是否完成。桌面桥接直接取得回复时该值为 `false`，场景观察仍必须处理这个有效回合。
 
 ## 防重复与失败处理
 

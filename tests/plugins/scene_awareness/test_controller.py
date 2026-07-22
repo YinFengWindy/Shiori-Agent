@@ -110,6 +110,54 @@ async def test_passive_turn_publishes_started_scene_and_persists_scene_key(
 
 
 @pytest.mark.asyncio
+async def test_passive_turn_observes_reply_returned_by_desktop_bridge(
+    tmp_path: Path,
+) -> None:
+    bus = EventBus()
+    observations: list[SceneObservationCommitted] = []
+    bus.on(SceneObservationCommitted, observations.append)
+    decide = AsyncMock(
+        return_value=SceneDecision(
+            transition="started",
+            scene_key="kitchen",
+            should_generate=True,
+            prompt="1girl, cooking in kitchen",
+        )
+    )
+    controller = _controller(tmp_path, event_bus=bus, decision_provider=decide)
+
+    controller.capture_passive_turn(
+        BeforeTurnCtx(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
+            content="晚饭做什么？",
+            timestamp=datetime.now(),
+            retrieved_memory_block="",
+            retrieval_trace_raw=None,
+            history_messages=(),
+        )
+    )
+    controller.schedule_passive_turn(
+        AfterTurnCtx(
+            session_key="role:mira",
+            channel="desktop",
+            chat_id="role:mira",
+            reply="她正在厨房里准备晚饭。",
+            tools_used=(),
+            thinking=None,
+            will_dispatch=False,
+        )
+    )
+    await asyncio.gather(*controller.tasks.values())
+
+    assert decide.await_count == 1
+    assert observations[0].transition == "started"
+    assert observations[0].scene_key == "kitchen"
+    await controller.terminate()
+
+
+@pytest.mark.asyncio
 async def test_proactive_message_is_observed_with_shared_scene_state(
     tmp_path: Path,
 ) -> None:

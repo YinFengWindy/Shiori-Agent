@@ -89,7 +89,7 @@ class SceneAwarenessController:
         """Schedule scene observation for one completed passive role turn."""
 
         pending = self._pending_turns.pop(ctx.session_key, None)
-        if pending is None or not ctx.will_dispatch or not ctx.reply.strip():
+        if pending is None or not ctx.reply.strip():
             return
         self._schedule(
             _PendingTurn(
