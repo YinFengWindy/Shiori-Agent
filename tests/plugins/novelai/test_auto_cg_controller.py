@@ -23,6 +23,7 @@ def _observation(**overrides: Any) -> SceneObservationCommitted:
         "source": "passive",
         "transition": "same",
         "scene_key": "rain",
+        "visual_key": "rain-standing",
         "should_generate": False,
     }
     payload.update(overrides)

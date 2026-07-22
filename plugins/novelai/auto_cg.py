@@ -20,7 +20,7 @@ _FIRST_PERSON_NEGATIVE_TERMS = (
 class AutoCgPolicy:
     """Own automatic scene-CG cooldown and deduplication state."""
 
-    _COOLDOWN_TURNS = 8
+    _COOLDOWN_TURNS = 5
     _STATE_KEY = "auto_cg_sessions"
 
     def __init__(self, kv_store: PluginKVStore) -> None:
@@ -64,6 +64,7 @@ class AutoCgPolicy:
                 reason="scene_cg_missing_scene_key",
                 extra_message="自动 CG 缺少 scene_key，请继续文字回复，不要重试。",
             )
+        visual_key = normalize_scene_key(arguments.get("visual_key") or scene_key)
         state = self._get_session_state(session_key)
         turn = int(state.get("turn", 0))
         last_turn = state.get("last_success_turn")
@@ -77,15 +78,16 @@ class AutoCgPolicy:
                 reason="scene_cg_cooldown",
                 extra_message="自动 CG 仍在冷却期，请继续文字回复，不要重试。",
             )
-        if scene_key == str(state.get("last_scene_key") or ""):
+        if visual_key == str(state.get("last_visual_key") or ""):
             return HookOutcome(
                 decision="deny",
-                reason="scene_cg_duplicate_scene",
-                extra_message="该场景已经生成过 CG，请继续文字回复，不要重复生成。",
+                reason="scene_cg_duplicate_visual",
+                extra_message="该视觉定格已经生成过 CG，请继续文字回复，不要重复生成。",
             )
         return {
             **arguments,
             "scene_key": scene_key,
+            "visual_key": visual_key,
             "prompt": _append_prompt_terms(
                 arguments.get("prompt"),
                 _THIRD_PERSON_PROMPT_TERMS,
@@ -96,12 +98,12 @@ class AutoCgPolicy:
             ),
         }
 
-    def record_success(self, session_key: str, scene_key: object) -> None:
+    def record_success(self, session_key: str, visual_key: object) -> None:
         """Persist cooldown and deduplication state after successful generation."""
 
         state = self._get_session_state(session_key)
         state["last_success_turn"] = int(state.get("turn", 0))
-        state["last_scene_key"] = normalize_scene_key(scene_key)
+        state["last_visual_key"] = normalize_scene_key(visual_key)
         self._set_session_state(session_key, state)
 
     def _get_session_state(self, session_key: str) -> dict[str, Any]:

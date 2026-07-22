@@ -59,6 +59,7 @@ async def test_passive_turn_publishes_started_scene_and_persists_scene_key(
         return_value=SceneDecision(
             transition="started",
             scene_key="rain",
+            visual_key="rain-standing",
             should_generate=True,
             prompt="1girl, rain",
         )
@@ -93,6 +94,7 @@ async def test_passive_turn_publishes_started_scene_and_persists_scene_key(
     assert observations[0].transition == "started"
     assert observations[0].source == "passive"
     assert decide.await_args.kwargs["decision_input"].current_scene_key == ""
+    assert decide.await_args.kwargs["decision_input"].current_visual_key == ""
 
     controller.capture_passive_turn(
         BeforeTurnCtx(
@@ -106,7 +108,14 @@ async def test_passive_turn_publishes_started_scene_and_persists_scene_key(
             history_messages=(),
         )
     )
-    assert controller._pending_turns["role:mira"].decision_input.current_scene_key == "rain"
+    assert (
+        controller._pending_turns["role:mira"].decision_input.current_scene_key
+        == "rain"
+    )
+    assert (
+        controller._pending_turns["role:mira"].decision_input.current_visual_key
+        == "rain-standing"
+    )
     await controller.terminate()
 
 
@@ -121,6 +130,7 @@ async def test_passive_turn_observes_reply_returned_by_desktop_bridge(
         return_value=SceneDecision(
             transition="started",
             scene_key="kitchen",
+            visual_key="kitchen-cooking",
             should_generate=True,
             prompt="1girl, cooking in kitchen",
         )
@@ -258,6 +268,7 @@ async def test_proactive_message_is_observed_with_shared_scene_state(
         return_value=SceneDecision(
             transition="changed",
             scene_key="rain-hug",
+            visual_key="rain-hug-closeup",
             should_generate=True,
             prompt="2girls, hugging, rain",
         )
@@ -285,6 +296,7 @@ async def test_proactive_message_is_observed_with_shared_scene_state(
             source="proactive",
             transition="changed",
             scene_key="rain-hug",
+            visual_key="rain-hug-closeup",
             should_generate=True,
             prompt="2girls, hugging, rain",
             tools_used=("message_push",),

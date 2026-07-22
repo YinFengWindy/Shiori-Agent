@@ -187,6 +187,7 @@ async def test_plugin_generates_required_scene_cg_from_observation(
             source="passive",
             transition="started",
             scene_key="rain-confession",
+            visual_key="rain-confession-standing",
             should_generate=True,
             prompt="1girl, pink hair, standing in rain, emotional, night",
             negative_prompt="blurry, text",
@@ -197,10 +198,11 @@ async def test_plugin_generates_required_scene_cg_from_observation(
 
     generated_arguments = generate.await_args.kwargs
     assert generated_arguments["scene_key"] == "rain-confession"
+    assert generated_arguments["visual_key"] == "rain-confession-standing"
     assert "third-person view" in generated_arguments["prompt"]
     push_image.assert_awaited_once_with("chat", image_path)
     state = plugin.context.kv_store.get("auto_cg_sessions")
-    assert state["role:mira"]["last_scene_key"] == "rain-confession"
+    assert state["role:mira"]["last_visual_key"] == "rain-confession-standing"
     await plugin.terminate()
 
 
@@ -245,6 +247,7 @@ async def test_required_scene_change_bypasses_cooldown(
             source="proactive",
             transition="changed",
             scene_key="new-scene",
+            visual_key="new-scene-window",
             should_generate=True,
             prompt="1girl, sitting by window",
         )
@@ -287,6 +290,7 @@ async def test_same_scene_respects_manual_generation_and_cooldown(
         source="passive",
         transition="same",
         scene_key="same-scene",
+        visual_key="same-scene-window",
         should_generate=True,
         prompt="1girl, sitting by window",
     )
@@ -314,7 +318,11 @@ async def test_plugin_records_auto_cg_state_only_after_successful_media(
     plugin = NovelAIPlugin()
     plugin.context = _plugin_context(tmp_path)
     await plugin.initialize()
-    arguments = {"intent": "scene_cg", "scene_key": "rain"}
+    arguments = {
+        "intent": "scene_cg",
+        "scene_key": "rain",
+        "visual_key": "rain-standing",
+    }
 
     await plugin.collect_generated_media(
         AfterToolResultCtx(
@@ -341,5 +349,5 @@ async def test_plugin_records_auto_cg_state_only_after_successful_media(
         )
     )
     sessions = plugin.context.kv_store.get("auto_cg_sessions")
-    assert sessions["role:mira"]["last_scene_key"] == "rain"
+    assert sessions["role:mira"]["last_visual_key"] == "rain-standing"
     await plugin.terminate()

@@ -124,7 +124,7 @@ class NovelAIPlugin(Plugin):
         if str(event.arguments.get("intent") or "").strip() == "scene_cg":
             self._auto_cg.record_success(
                 event.session_key,
-                event.arguments.get("scene_key"),
+                event.arguments.get("visual_key") or event.arguments.get("scene_key"),
             )
         self._pending_media.setdefault(event.session_key, []).extend(media)
 

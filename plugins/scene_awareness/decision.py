@@ -23,7 +23,7 @@ _SCENE_OBSERVER_SYSTEM = """你是场景观察器，不是角色扮演者。
 只要最新对话明确出现环境、地点、人物姿势、动作、位置关系、构图或光线，便已形成可观测场景；
 例如雨夜车站中撑伞相望就是场景。没有 current_scene_key 时，这种场景必须是 started，不得返回 none。
 none 只用于完全没有可视觉化画面的普通闲聊或技术讨论，不得因为场景短暂、信息不完整或未提到 CG 而返回 none。
-started 和 changed 必须生成 CG；closed 和 none 的 scene_key、prompt、negative_prompt、size_preset 必须为空字符串。"""
+started 和 changed 必须生成 CG；same 只有 visual_key 变化时才生成 CG；closed 和 none 的 scene_key、visual_key、prompt、negative_prompt、size_preset 必须为空字符串。"""
 
 
 async def decide_scene(
@@ -66,6 +66,7 @@ async def decide_scene(
             return parse_scene_decision_tool_call(
                 response.tool_calls,
                 current_scene_key=decision_input.current_scene_key,
+                current_visual_key=decision_input.current_visual_key,
                 content_length=len((response.content or "").strip()),
             )
         except SceneDecisionProtocolError as error:
@@ -97,14 +98,18 @@ def _build_decision_prompt(decision_input: SceneDecisionInput) -> str:
         "role_name": decision_input.role_name,
         "role_prompt": decision_input.role_prompt[:4000],
         "current_scene_key": decision_input.current_scene_key,
+        "current_visual_key": decision_input.current_visual_key,
         "recent_history": list(decision_input.recent_history[-6:]),
         "user_message": decision_input.user_message,
         "assistant_reply": decision_input.assistant_reply,
     }
     return (
-        "根据 context 判断这一轮场景。没有 current_scene_key 且形成明确可见场景时为 started；"
-        "已有场景且地点、姿势、位置关系、人物关系或构图实质变化时为 changed；"
-        "已有场景且无实质变化时为 same；告别、睡觉、离场或场景明确结束时为 closed；"
+        "scene_key 表示持续场景，不要因同一地点内的动作变化而改变它；visual_key 表示本次画面定格，"
+        "必须由地点、人物布局、主动作、姿势、构图或光线等可见要素组成。"
+        "没有 current_scene_key 且形成明确可见场景时为 started；场景地点或关系阶段实质切换时为 changed；"
+        "同一场景内只要人物动作、姿势、位置关系、构图、服装、道具或光线有实质变化，返回 same、"
+        "should_generate=true 并提供不同于 current_visual_key 的新 visual_key；完全相同的画面才返回 same、"
+        "should_generate=false 并沿用 current_visual_key。告别、睡觉、离场或场景明确结束时为 closed；"
         "没有 current_scene_key 且本轮没有可见场景时为 none。\n"
         "普通闲聊、技术讨论和用户直接要求生图但未形成可见场景，不额外生成 CG。"
         "生成 CG 时，prompt 和 negative_prompt 必须是逗号分隔的英文 NovelAI tags。\n\n"

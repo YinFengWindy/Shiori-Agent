@@ -173,6 +173,7 @@ class SceneAwarenessController:
                 role_prompt=role.system_prompt,
                 user_message=user_message,
                 current_scene_key=self._current_scene_key(session_key),
+                current_visual_key=self._current_visual_key(session_key),
                 recent_history=_compact_history(history_messages),
             ),
             source=source,
@@ -205,6 +206,7 @@ class SceneAwarenessController:
                 user_message=source_input.user_message,
                 assistant_reply=assistant_reply,
                 current_scene_key=source_input.current_scene_key,
+                current_visual_key=source_input.current_visual_key,
                 recent_history=source_input.recent_history,
             ),
             session_key=pending.session_key,
@@ -219,6 +221,7 @@ class SceneAwarenessController:
                 source=pending.source,
                 transition=decision.transition,
                 scene_key=decision.scene_key,
+                visual_key=decision.visual_key,
                 should_generate=decision.should_generate,
                 prompt=decision.prompt,
                 negative_prompt=decision.negative_prompt,
@@ -252,18 +255,30 @@ class SceneAwarenessController:
             raise
 
     def _current_scene_key(self, session_key: str) -> str:
+        return self._current_scene_state(session_key).get("scene_key", "")
+
+    def _current_visual_key(self, session_key: str) -> str:
+        return self._current_scene_state(session_key).get("visual_key", "")
+
+    def _current_scene_state(self, session_key: str) -> dict[str, str]:
         sessions = self._read_sessions()
         state = sessions.get(session_key)
         if not isinstance(state, dict):
-            return ""
-        return str(state.get("scene_key") or "").strip()
+            return {}
+        return {
+            "scene_key": str(state.get("scene_key") or "").strip(),
+            "visual_key": str(state.get("visual_key") or "").strip(),
+        }
 
     def _apply_scene_state(self, session_key: str, decision: SceneDecision) -> None:
         sessions = self._read_sessions()
         if decision.transition == "closed":
             sessions.pop(session_key, None)
         elif decision.scene_key:
-            sessions[session_key] = {"scene_key": decision.scene_key}
+            sessions[session_key] = {
+                "scene_key": decision.scene_key,
+                "visual_key": decision.visual_key,
+            }
         self._kv_store.set(_STATE_KEY, sessions)
 
     def _read_sessions(self) -> dict[str, Any]:

@@ -16,6 +16,7 @@ _REQUIRED_ARGUMENTS = (
     "transition",
     "should_generate",
     "scene_key",
+    "visual_key",
     "prompt",
     "negative_prompt",
     "size_preset",
@@ -36,15 +37,19 @@ SCENE_DECISION_TOOL_SCHEMA: dict[str, Any] = {
                 "transition": {
                     "type": "string",
                     "enum": ["started", "same", "changed", "closed", "none"],
-                    "description": "无当前场景且出现可见场景时为 started；已有场景实质变化时为 changed；延续为 same；明确结束为 closed；仅在完全没有可见场景时为 none。",
+                    "description": "无当前场景且出现可见场景时为 started；场景本身切换时为 changed；同一场景延续为 same；明确结束为 closed；仅在完全没有可见场景时为 none。",
                 },
                 "should_generate": {
                     "type": "boolean",
-                    "description": "started 和 changed 必须为 true；closed 和 none 必须为 false。",
+                    "description": "started 和 changed 必须为 true；same 仅在 visual_key 变化时为 true；closed 和 none 必须为 false。",
                 },
                 "scene_key": {
                     "type": "string",
-                    "description": "started、changed 和 same 的稳定英文场景标识；closed 和 none 必须为空字符串。",
+                    "description": "持续场景的稳定英文标识。started 和 changed 提供新值；same 必须沿用 current_scene_key；closed 和 none 必须为空字符串。",
+                },
+                "visual_key": {
+                    "type": "string",
+                    "description": "本次可见定格的稳定英文标识，包含动作、姿势、位置关系、构图或光线。动作或镜头有实质变化时必须换新值；closed 和 none 必须为空字符串。",
                 },
                 "prompt": {
                     "type": "string",
@@ -74,6 +79,7 @@ class SceneDecisionInput:
     user_message: str
     assistant_reply: str = ""
     current_scene_key: str = ""
+    current_visual_key: str = ""
     recent_history: tuple[dict[str, str], ...] = ()
 
 
@@ -83,6 +89,7 @@ class SceneDecision:
 
     transition: SceneTransition
     scene_key: str = ""
+    visual_key: str = ""
     should_generate: bool = False
     prompt: str = ""
     negative_prompt: str = ""
@@ -112,6 +119,7 @@ def parse_scene_decision_tool_call(
     tool_calls: list["ToolCall"],
     *,
     current_scene_key: str,
+    current_visual_key: str = "",
     content_length: int,
 ) -> SceneDecision:
     """Validate the required scene-observation tool call and its arguments."""
@@ -153,6 +161,7 @@ def parse_scene_decision_tool_call(
     return parse_scene_decision_payload(
         arguments,
         current_scene_key=current_scene_key,
+        current_visual_key=current_visual_key,
         tool_call_count=1,
         tool_names=tool_names,
         argument_keys=argument_keys,
@@ -164,6 +173,7 @@ def parse_scene_decision_payload(
     payload: dict[str, Any],
     *,
     current_scene_key: str,
+    current_visual_key: str = "",
     tool_call_count: int = 0,
     tool_names: tuple[str, ...] = (),
     argument_keys: tuple[str, ...] = (),
@@ -193,6 +203,7 @@ def parse_scene_decision_payload(
         fail(f"场景 {transition} 不能生成 CG")
 
     scene_key = str(payload.get("scene_key") or "").strip()
+    visual_key = str(payload.get("visual_key") or "").strip()
     prompt = str(payload.get("prompt") or "").strip()
     negative_prompt = str(payload.get("negative_prompt") or "").strip()
     size_preset = str(payload.get("size_preset") or "").strip()
@@ -201,11 +212,11 @@ def parse_scene_decision_payload(
     if transition == "none":
         if current_scene_key:
             fail("已有场景时不能返回 none")
-        if scene_key or has_image_parameters:
+        if scene_key or visual_key or has_image_parameters:
             fail("无场景结果不能提供场景或图像参数")
         return SceneDecision(transition=transition)
     if transition == "closed":
-        if scene_key or has_image_parameters:
+        if scene_key or visual_key or has_image_parameters:
             fail("关闭场景结果不能提供场景或图像参数")
         return SceneDecision(transition=transition)
     if transition == "same" and not scene_key:
@@ -214,10 +225,22 @@ def parse_scene_decision_payload(
         fail("场景观察缺少 scene_key")
     if transition == "changed" and scene_key == current_scene_key:
         fail("场景 changed 必须提供新的 scene_key")
+    if transition == "same" and scene_key != current_scene_key:
+        fail("场景 same 必须沿用 current_scene_key")
+    if transition == "same" and not visual_key:
+        visual_key = current_visual_key
+    if not visual_key:
+        fail("场景观察缺少 visual_key")
+    if transition == "same" and should_generate == (visual_key == current_visual_key):
+        fail("场景 same 仅在 visual_key 变化时生成 CG")
     if not should_generate:
         if has_image_parameters:
             fail("未生成 CG 的场景不能提供图像参数")
-        return SceneDecision(transition=transition, scene_key=scene_key)
+        return SceneDecision(
+            transition=transition,
+            scene_key=scene_key,
+            visual_key=visual_key,
+        )
 
     if not prompt:
         fail("场景观察生成 CG 时缺少 prompt")
@@ -231,6 +254,7 @@ def parse_scene_decision_payload(
     return SceneDecision(
         transition=transition,
         scene_key=scene_key,
+        visual_key=visual_key,
         should_generate=True,
         prompt=prompt,
         negative_prompt=negative_prompt,

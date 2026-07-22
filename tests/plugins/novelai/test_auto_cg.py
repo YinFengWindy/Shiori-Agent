@@ -14,6 +14,7 @@ def test_auto_cg_policy_enforces_cooldown_dedup_and_manual_bypass(
     arguments = {
         "intent": "scene_cg",
         "scene_key": "  Rooftop  ",
+        "visual_key": "rooftop-standing",
         "prompt": "Mira on a rooftop",
         "negative_prompt": "blurry",
     }
@@ -21,11 +22,12 @@ def test_auto_cg_policy_enforces_cooldown_dedup_and_manual_bypass(
     prepared = policy.guard(session_key, arguments)
     assert isinstance(prepared, dict)
     assert prepared["scene_key"] == "rooftop"
+    assert prepared["visual_key"] == "rooftop-standing"
     assert "third-person view" in prepared["prompt"]
     assert "character visible in frame" in prepared["prompt"]
     assert prepared["negative_prompt"] == ("blurry, first-person view, pov, selfie")
-    policy.record_success(session_key, arguments["scene_key"])
-    for _ in range(8):
+    policy.record_success(session_key, arguments["visual_key"])
+    for _ in range(5):
         policy.advance_turn(session_key)
 
     cooldown = policy.guard(
@@ -42,6 +44,7 @@ def test_auto_cg_policy_enforces_cooldown_dedup_and_manual_bypass(
         {
             "intent": "scene_cg",
             "scene_key": "new scene",
+            "visual_key": "new-scene-standing",
             "prompt": "Mira by the window",
         },
     )
@@ -49,10 +52,14 @@ def test_auto_cg_policy_enforces_cooldown_dedup_and_manual_bypass(
     assert next_scene["scene_key"] == "new scene"
     duplicate = policy.guard(
         session_key,
-        {"intent": "scene_cg", "scene_key": "ROOFTOP"},
+        {
+            "intent": "scene_cg",
+            "scene_key": "rooftop",
+            "visual_key": "ROOFTOP-STANDING",
+        },
     )
     assert isinstance(duplicate, HookOutcome)
-    assert duplicate.reason == "scene_cg_duplicate_scene"
+    assert duplicate.reason == "scene_cg_duplicate_visual"
 
 
 def test_auto_cg_policy_requires_scene_key_and_isolates_sessions(
@@ -79,12 +86,46 @@ def test_auto_cg_policy_reports_current_cooldown(tmp_path: Path) -> None:
     policy.advance_turn(session_key)
     policy.record_success(session_key, "rain")
 
-    assert policy.cooldown_remaining(session_key) == 9
+    assert policy.cooldown_remaining(session_key) == 6
 
-    for _ in range(9):
+    for _ in range(6):
         policy.advance_turn(session_key)
 
     assert policy.cooldown_remaining(session_key) == 0
+
+
+def test_auto_cg_policy_allows_new_visual_beat_after_cooldown(
+    tmp_path: Path,
+) -> None:
+    policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
+    session_key = "role:mira"
+    policy.advance_turn(session_key)
+    policy.record_success(session_key, "bedroom-waiting")
+
+    blocked = policy.guard(
+        session_key,
+        {
+            "intent": "scene_cg",
+            "scene_key": "bedroom-together",
+            "visual_key": "bedroom-lying-down",
+        },
+    )
+    assert isinstance(blocked, HookOutcome)
+    assert blocked.reason == "scene_cg_cooldown"
+
+    for _ in range(6):
+        policy.advance_turn(session_key)
+
+    prepared = policy.guard(
+        session_key,
+        {
+            "intent": "scene_cg",
+            "scene_key": "bedroom-together",
+            "visual_key": "bedroom-lying-down",
+        },
+    )
+    assert isinstance(prepared, dict)
+    assert prepared["visual_key"] == "bedroom-lying-down"
 
 
 def test_auto_cg_third_person_terms_are_idempotent(tmp_path: Path) -> None:

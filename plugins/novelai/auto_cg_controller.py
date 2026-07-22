@@ -101,6 +101,7 @@ class AutoCgController:
                 "size_preset": event.size_preset,
                 "intent": "scene_cg",
                 "scene_key": event.scene_key,
+                "visual_key": event.visual_key,
                 "role_id": role_id,
                 "session_key": event.session_key,
             },
@@ -133,7 +134,7 @@ class AutoCgController:
         )
         if not isinstance(push_result, str) or "图片已发送" not in push_result:
             raise RuntimeError(f"自动场景 CG 补发失败: {push_result}")
-        self._policy.record_success(event.session_key, prepared["scene_key"])
+        self._policy.record_success(event.session_key, prepared["visual_key"])
 
     async def _generate_media_with_retry(
         self,

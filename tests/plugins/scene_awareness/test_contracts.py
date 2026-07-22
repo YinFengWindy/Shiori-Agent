@@ -15,6 +15,7 @@ def _arguments(**overrides: Any) -> dict[str, Any]:
         "transition": "started",
         "should_generate": True,
         "scene_key": "rain-confession",
+        "visual_key": "rain-confession-standing",
         "prompt": "1girl, standing in rain, night",
         "negative_prompt": "blurry, text",
         "size_preset": "portrait",
@@ -36,6 +37,7 @@ def test_parse_tool_call_returns_validated_started_decision() -> None:
 
     assert decision.transition == "started"
     assert decision.scene_key == "rain-confession"
+    assert decision.visual_key == "rain-confession-standing"
     assert decision.should_generate is True
 
 
@@ -47,6 +49,7 @@ def test_parse_tool_call_accepts_empty_terminal_decision(transition: str) -> Non
                 transition=transition,
                 should_generate=False,
                 scene_key="",
+                visual_key="",
                 prompt="",
                 negative_prompt="",
                 size_preset="",
@@ -112,6 +115,7 @@ def test_parse_tool_call_accepts_empty_terminal_decision(transition: str) -> Non
                     transition="none",
                     should_generate=False,
                     scene_key="empty_void",
+                    visual_key="",
                     prompt="",
                     negative_prompt="",
                     size_preset="",
@@ -131,6 +135,7 @@ def test_parse_tool_call_accepts_empty_terminal_decision(transition: str) -> Non
                     transition="closed",
                     should_generate=True,
                     scene_key="",
+                    visual_key="",
                     prompt="",
                     negative_prompt="",
                     size_preset="",
@@ -145,6 +150,7 @@ def test_parse_tool_call_accepts_empty_terminal_decision(transition: str) -> Non
                     transition="none",
                     should_generate=False,
                     scene_key="",
+                    visual_key="",
                     prompt="",
                     negative_prompt="",
                     size_preset="",
@@ -175,4 +181,43 @@ def test_parse_tool_call_rejects_invalid_protocol(
             tool_calls,
             current_scene_key=current_scene_key,
             content_length=17,
+        )
+
+
+def test_parse_tool_call_accepts_new_visual_beat_in_same_scene() -> None:
+    decision = parse_scene_decision_tool_call(
+        [
+            _call(
+                transition="same",
+                scene_key="bedroom-together",
+                visual_key="bedroom-together-lying-down",
+                should_generate=True,
+                prompt="2people, lying on bed, bedroom, night",
+            )
+        ],
+        current_scene_key="bedroom-together",
+        current_visual_key="bedroom-together-waiting",
+        content_length=0,
+    )
+
+    assert decision.transition == "same"
+    assert decision.scene_key == "bedroom-together"
+    assert decision.visual_key == "bedroom-together-lying-down"
+    assert decision.should_generate is True
+
+
+def test_parse_tool_call_rejects_same_visual_beat_as_new_image() -> None:
+    with pytest.raises(SceneDecisionProtocolError, match="visual_key 变化"):
+        parse_scene_decision_tool_call(
+            [
+                _call(
+                    transition="same",
+                    scene_key="bedroom-together",
+                    visual_key="bedroom-together-waiting",
+                    should_generate=True,
+                )
+            ],
+            current_scene_key="bedroom-together",
+            current_visual_key="bedroom-together-waiting",
+            content_length=0,
         )

@@ -107,7 +107,7 @@ SceneTurnSource = Literal["passive", "proactive"]
 
 @dataclass(frozen=True)
 class SceneObservationCommitted:
-    """Describes the visual scene inferred from one completed role turn."""
+    """Describes one persistent scene and its current visual beat."""
 
     session_key: str
     channel: str
@@ -116,6 +116,7 @@ class SceneObservationCommitted:
     source: SceneTurnSource
     transition: SceneTransition
     scene_key: str = ""
+    visual_key: str = ""
     should_generate: bool = False
     prompt: str = ""
     negative_prompt: str = ""
