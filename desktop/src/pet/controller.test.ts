@@ -7,7 +7,7 @@ import type { DesktopPetSettings } from "./types.js";
 
 class FakePetWindow extends EventEmitter {
   private position: [number, number] = [0, 0];
-  readonly webContents = { send: () => undefined };
+  readonly webContents = { send: () => undefined, on: () => undefined };
 
   isDestroyed(): boolean {
     return false;
@@ -33,7 +33,7 @@ class FakePetWindow extends EventEmitter {
   }
 }
 
-test("desktop pet only persists the final position when a drag emits many moved events", async () => {
+test("desktop pet persists only the final position after native window dragging stops", async () => {
   let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   let saveCount = 0;
   const window = new FakePetWindow();
@@ -49,19 +49,18 @@ test("desktop pet only persists the final position when a drag emits many moved 
     }),
     createWindow: () => window as unknown as BrowserWindow,
     displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    openPetRole: () => undefined,
+    showContextMenu: () => undefined,
     openLocalAttachment: () => undefined,
   });
 
   await controller.show();
   await new Promise((resolve) => setImmediate(resolve));
   saveCount = 0;
-  controller.moveDrag({ x: 500, y: 500 }, { x: 40, y: 40 });
-  assert.deepEqual(window.getPosition(), [460, 460]);
-  controller.beginDrag(40, 40);
-  controller.moveDrag({ x: 500, y: 500 });
-  controller.moveDrag({ x: 550, y: 550 });
-  controller.endDrag({ x: 600, y: 600 });
-  await new Promise((resolve) => setImmediate(resolve));
+  window.setPosition(500, 500);
+  window.setPosition(550, 550);
+  window.setPosition(560, 560);
+  await new Promise((resolve) => setTimeout(resolve, 200));
 
   assert.equal(saveCount, 1);
   assert.deepEqual(settings.positions["role-1:display-1"], { x: 560, y: 560 });

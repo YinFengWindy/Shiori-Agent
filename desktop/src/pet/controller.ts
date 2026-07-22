@@ -10,6 +10,8 @@ type DesktopPetControllerOptions = {
   resolveBinding: (roleId?: string) => Promise<DesktopPetBinding | null>;
   createWindow: (options: { openLocalAttachment: (url: string) => Promise<unknown> | unknown }) => BrowserWindow;
   displayForWindow: (window: BrowserWindow | null) => { id: string | number; workArea: { x: number; y: number; width: number; height: number } };
+  openPetRole: () => void;
+  showContextMenu: (window: BrowserWindow) => void;
   openLocalAttachment: (url: string) => Promise<unknown> | unknown;
 };
 
@@ -21,7 +23,7 @@ export class DesktopPetController {
   private queue = Promise.resolve();
   private activeRoleId = "";
   private dragPointerOffset: DesktopPetPoint | null = null;
-  private lastDragPosition: DesktopPetPoint | null = null;
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly options: DesktopPetControllerOptions) {
     this.createWindow = options.createWindow;
@@ -81,7 +83,6 @@ export class DesktopPetController {
   beginDrag(pointerOffsetX: number, pointerOffsetY: number): void {
     if (!this.window || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
     this.dragPointerOffset = { x: pointerOffsetX, y: pointerOffsetY };
-    this.lastDragPosition = null;
   }
 
   moveDrag(cursor: DesktopPetPoint, fallbackPointerOffset?: DesktopPetPoint): void {
@@ -95,14 +96,13 @@ export class DesktopPetController {
   endDrag(cursor: DesktopPetPoint, fallbackPointerOffset?: DesktopPetPoint): void {
     this.moveDrag(cursor, fallbackPointerOffset);
     this.dragPointerOffset = null;
-    if (this.window) this.persistPosition(this.activeRoleId, this.window);
+    if (this.window) this.schedulePersistPosition(this.activeRoleId, this.window);
   }
 
   private moveTo(position: DesktopPetPoint): void {
     if (!this.window) return;
     const display = this.displayForWindow(this.window);
     const clampedPosition = clampDesktopPetPosition(position, display.workArea);
-    this.lastDragPosition = clampedPosition;
     this.window.setPosition(clampedPosition.x, clampedPosition.y, false);
   }
 
@@ -130,11 +130,13 @@ export class DesktopPetController {
     };
     if (created) {
       window.once("ready-to-show", sendLoad);
-      window.on("moved", () => {
-        const [x, y] = window.getPosition();
-        // Native moved events can arrive after endDrag, so identify our final drag position by value.
-        if (this.lastDragPosition?.x === x && this.lastDragPosition.y === y) return;
-        this.persistPosition(this.activeRoleId, window);
+      window.on("moved", () => this.schedulePersistPosition(this.activeRoleId, window));
+      window.on("system-context-menu", () => this.options.showContextMenu(window));
+      window.webContents.on("before-input-event", (_event, input) => {
+        const mouseInput = input as { type?: unknown; button?: unknown; clickCount?: unknown };
+        if (mouseInput.type === "mouseDown" && mouseInput.button === "left" && mouseInput.clickCount === 2) {
+          this.options.openPetRole();
+        }
       });
       window.on("closed", () => {
         if (this.window === window) this.window = null;
@@ -155,9 +157,18 @@ export class DesktopPetController {
     });
   }
 
+  private schedulePersistPosition(roleId: string, window: BrowserWindow): void {
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      this.persistPosition(roleId, window);
+    }, 150);
+  }
+
   private destroyWindow(): void {
     this.dragPointerOffset = null;
-    this.lastDragPosition = null;
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = null;
     this.window?.destroy();
     this.window = null;
   }
