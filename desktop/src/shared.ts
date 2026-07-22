@@ -176,6 +176,10 @@ export type DesktopApi = {
   togglePet(): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
   /** Saves a validated role/package binding, replacing a running pet when enabled. */
   savePetBinding(roleId: string, packageId: string): Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
+  /** Moves the pet during a user drag without exposing the native window. */
+  movePet(x: number, y: number): void;
+  /** Restores the main Shiori window from a pet double click. */
+  openPetRole(): void;
   /** Subscribes to package loads from the dedicated desktop-pet window. */
   onPetLoad(listener: (event: unknown, payload: unknown) => void): void;
   offPetLoad(listener: (event: unknown, payload: unknown) => void): void;

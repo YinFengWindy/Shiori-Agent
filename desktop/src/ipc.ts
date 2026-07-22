@@ -29,6 +29,7 @@ type RegisterDesktopIpcOptions = {
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
   desktopPet: DesktopPetController;
   getDesktopPetSettings: () => DesktopPetSettings;
+  onOpenDesktopPetRole: () => void;
 };
 
 function assetTransport<T>(value: T, assets: LocalAssetReference[]): LocalAssetTransport<T> {
@@ -76,6 +77,7 @@ export function registerDesktopIpc({
   openLocalAttachment,
   desktopPet,
   getDesktopPetSettings,
+  onOpenDesktopPetRole,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
 
@@ -228,6 +230,12 @@ export function registerDesktopIpc({
     await desktopPet.updateBinding(roleId, packageId);
     return getDesktopPetSettings();
   });
+  ipcMain.on("desktop:pet-drag", (_event: IpcMainInvokeEvent, payload?: { x?: unknown; y?: unknown }) => {
+    const x = Number(payload?.x);
+    const y = Number(payload?.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) desktopPet.moveTo(x, y);
+  });
+  ipcMain.on("desktop:pet-open", () => onOpenDesktopPetRole());
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
     const result = await dialog.showOpenDialog({
       properties: options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],

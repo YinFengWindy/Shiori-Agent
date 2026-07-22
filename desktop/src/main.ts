@@ -201,6 +201,7 @@ void app.whenReady().then(() => {
     openLocalAttachment,
     desktopPet,
     getDesktopPetSettings: () => desktopPetSettings,
+    onOpenDesktopPetRole: showOrCreateDesktopWindow,
   });
   getOrCreateDesktopWindow();
   if (trayLifecycleEnabled) {

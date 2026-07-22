@@ -63,6 +63,13 @@ export class DesktopPetController {
     this.window?.webContents.send("desktop:pet-play", { state });
   }
 
+  moveTo(x: number, y: number): void {
+    if (!this.window) return;
+    const display = displayForDesktopPet(this.window);
+    const position = clampDesktopPetPosition({ x, y }, display.workArea);
+    this.window.setPosition(position.x, position.y);
+  }
+
   private enqueue(operation: () => Promise<void>): Promise<void> {
     const next = this.queue.then(operation, operation);
     this.queue = next.catch(() => undefined);

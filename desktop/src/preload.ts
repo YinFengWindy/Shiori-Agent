@@ -88,6 +88,12 @@ const api: DesktopApi = {
   savePetBinding(roleId, packageId) {
     return ipcRenderer.invoke("desktop:pet-binding", { roleId, packageId }) as Promise<{ enabled: boolean; roleId: string | null; packageId: string | null }>;
   },
+  movePet(x, y) {
+    ipcRenderer.send("desktop:pet-drag", { x, y });
+  },
+  openPetRole() {
+    ipcRenderer.send("desktop:pet-open");
+  },
   onPetLoad(listener) {
     ipcRenderer.on("desktop:pet-load", listener);
   },
