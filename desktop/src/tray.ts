@@ -5,7 +5,7 @@ type CreateDesktopTrayOptions = {
   onShowWindow: () => void;
   onQuitRequested: () => void;
   getDesktopPetState?: () => { enabled: boolean; available: boolean };
-  onToggleDesktopPet?: () => void;
+  onToggleDesktopPet?: () => Promise<void>;
 };
 
 /** Creates the Windows tray entry used to restore or quit the desktop shell. */
@@ -19,7 +19,9 @@ export function createDesktopTray({ onShowWindow, onQuitRequested, getDesktopPet
         {
           label: state.enabled ? "桌宠模式：已开启" : "桌宠模式：已关闭",
           enabled: state.available,
-          click: () => onToggleDesktopPet?.(),
+          click: () => {
+            void onToggleDesktopPet?.().finally(refresh);
+          },
         },
         { label: "退出 Shiori", click: () => onQuitRequested() },
       ]),

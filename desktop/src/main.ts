@@ -214,11 +214,13 @@ void app.whenReady().then(() => {
         enabled: desktopPetSettings.enabled,
         available: Boolean(desktopPetSettings.roleId && desktopPetSettings.packageId),
       }),
-      onToggleDesktopPet: () => {
+      onToggleDesktopPet: async () => {
         if (!desktopPet) return;
-        void (desktopPetSettings.enabled ? desktopPet.disable() : desktopPet.enable()).catch((error) => {
+        try {
+          await (desktopPetSettings.enabled ? desktopPet.disable() : desktopPet.enable());
+        } catch (error) {
           logDesktopDiagnostic({ scope: "main", event: "desktop-pet.toggle.failed", payload: { error } });
-        });
+        }
       },
     });
     void desktopPet.restore().catch((error) => {
