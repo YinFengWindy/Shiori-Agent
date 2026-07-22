@@ -85,11 +85,11 @@ const api: DesktopApi = {
   beginPetDrag(offsetX, offsetY) {
     ipcRenderer.send("desktop:pet-drag-start", { offsetX, offsetY });
   },
-  movePet() {
-    ipcRenderer.send("desktop:pet-drag-move");
+  movePet(offsetX, offsetY) {
+    ipcRenderer.send("desktop:pet-drag-move", { offsetX, offsetY });
   },
-  endPetDrag() {
-    ipcRenderer.send("desktop:pet-drag-end");
+  endPetDrag(offsetX, offsetY) {
+    ipcRenderer.send("desktop:pet-drag-end", { offsetX, offsetY });
   },
   openPetRole() {
     ipcRenderer.send("desktop:pet-open");

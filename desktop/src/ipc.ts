@@ -217,8 +217,12 @@ export function registerDesktopIpc({
   ipcMain.on("desktop:pet-drag-start", (_event: IpcMainInvokeEvent, payload?: { offsetX?: unknown; offsetY?: unknown }) => {
     desktopPet.beginDrag(Number(payload?.offsetX), Number(payload?.offsetY));
   });
-  ipcMain.on("desktop:pet-drag-move", () => desktopPet.moveDrag(screen.getCursorScreenPoint()));
-  ipcMain.on("desktop:pet-drag-end", () => desktopPet.endDrag(screen.getCursorScreenPoint()));
+  ipcMain.on("desktop:pet-drag-move", (_event: IpcMainInvokeEvent, payload?: { offsetX?: unknown; offsetY?: unknown }) => {
+    desktopPet.moveDrag(screen.getCursorScreenPoint(), { x: Number(payload?.offsetX), y: Number(payload?.offsetY) });
+  });
+  ipcMain.on("desktop:pet-drag-end", (_event: IpcMainInvokeEvent, payload?: { offsetX?: unknown; offsetY?: unknown }) => {
+    desktopPet.endDrag(screen.getCursorScreenPoint(), { x: Number(payload?.offsetX), y: Number(payload?.offsetY) });
+  });
   ipcMain.on("desktop:pet-open", () => onOpenDesktopPetRole());
   ipcMain.on("desktop:pet-context-menu", (event) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);

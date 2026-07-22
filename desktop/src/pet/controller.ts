@@ -84,13 +84,16 @@ export class DesktopPetController {
     this.lastDragPosition = null;
   }
 
-  moveDrag(cursor: DesktopPetPoint): void {
+  moveDrag(cursor: DesktopPetPoint, fallbackPointerOffset?: DesktopPetPoint): void {
+    if (!this.dragPointerOffset && fallbackPointerOffset) {
+      this.beginDrag(fallbackPointerOffset.x, fallbackPointerOffset.y);
+    }
     if (!this.dragPointerOffset) return;
     this.moveTo(desktopPetPositionFromCursor(cursor, this.dragPointerOffset));
   }
 
-  endDrag(cursor: DesktopPetPoint): void {
-    this.moveDrag(cursor);
+  endDrag(cursor: DesktopPetPoint, fallbackPointerOffset?: DesktopPetPoint): void {
+    this.moveDrag(cursor, fallbackPointerOffset);
     this.dragPointerOffset = null;
     if (this.window) this.persistPosition(this.activeRoleId, this.window);
   }

@@ -55,6 +55,8 @@ test("desktop pet only persists the final position when a drag emits many moved 
   await controller.show();
   await new Promise((resolve) => setImmediate(resolve));
   saveCount = 0;
+  controller.moveDrag({ x: 500, y: 500 }, { x: 40, y: 40 });
+  assert.deepEqual(window.getPosition(), [460, 460]);
   controller.beginDrag(40, 40);
   controller.moveDrag({ x: 500, y: 500 });
   controller.moveDrag({ x: 550, y: 550 });

@@ -174,10 +174,10 @@ export type DesktopApi = {
   syncPet(forceVisible?: boolean): Promise<void>;
   /** Starts a native pet drag using the pointer's local offset in the pet window. */
   beginPetDrag(offsetX: number, offsetY: number): void;
-  /** Advances a native pet drag from the main process's current system cursor location. */
-  movePet(): void;
+  /** Advances a native pet drag, retaining the original pointer offset when the start event races it. */
+  movePet(offsetX: number, offsetY: number): void;
   /** Completes a native pet drag and persists its final position. */
-  endPetDrag(): void;
+  endPetDrag(offsetX: number, offsetY: number): void;
   /** Restores the main Shiori window from a pet double click. */
   openPetRole(): void;
   /** Opens the native context menu for the desktop-pet window. */
