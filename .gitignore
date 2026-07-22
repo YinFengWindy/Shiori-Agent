@@ -54,6 +54,7 @@ plugins/**/.data/
 /docs/plan/
 /graphify-out/
 /.pytest_artifacts/
+/.test-tmp-root/
 /rss/
 
 # Benchmark 运行产物

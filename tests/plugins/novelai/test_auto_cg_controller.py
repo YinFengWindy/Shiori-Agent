@@ -1,25 +1,35 @@
 import asyncio
-from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
-from agent.lifecycle.types import BeforeTurnCtx
-from agent.lifecycle.types import AfterTurnCtx
 from agent.plugins.context import PluginKVStore
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
+from bus.events_lifecycle import SceneObservationCommitted
 from core.integrations.novelai.models import NovelAISettings
 from plugins.novelai.auto_cg import AutoCgPolicy
 from plugins.novelai.auto_cg_controller import AutoCgController
-from plugins.novelai.scene_decision import SceneCgDecision, SceneCgDecisionInput
 
 
-def test_controller_advances_cooldown_while_decision_is_unavailable(
-    tmp_path: Path,
-) -> None:
+def _observation(**overrides: Any) -> SceneObservationCommitted:
+    payload = {
+        "session_key": "role:mira",
+        "channel": "desktop",
+        "chat_id": "role:mira",
+        "role_id": "mira",
+        "source": "passive",
+        "transition": "same",
+        "scene_key": "rain",
+        "should_generate": False,
+    }
+    payload.update(overrides)
+    return SceneObservationCommitted(**payload)
+
+
+def test_controller_advances_cooldown_for_passive_observations(tmp_path: Path) -> None:
     policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
     session_key = "role:mira"
     policy.advance_turn(session_key)
@@ -28,38 +38,24 @@ def test_controller_advances_cooldown_while_decision_is_unavailable(
         settings=NovelAISettings(enabled=True, token="novel-token"),
         role_store=cast(Any, None),
         policy=policy,
-        light_provider=None,
-        light_model="",
-        session_manager=None,
+        session_manager=cast(Any, None),
         generate_tool=cast(Any, None),
         tool_registry=cast(Any, None),
     )
-    turn = BeforeTurnCtx(
-        session_key=session_key,
-        channel="desktop",
-        chat_id="chat",
-        content="message",
-        timestamp=datetime.now(),
-        retrieved_memory_block="",
-        retrieval_trace_raw=None,
-        history_messages=(),
-    )
 
     for _ in range(9):
-        controller.capture_turn(turn)
+        controller.schedule(_observation())
 
     assert policy.cooldown_remaining(session_key) == 0
 
 
 @pytest.mark.asyncio
-async def test_new_turn_cancels_stale_in_flight_scene_task(tmp_path: Path) -> None:
+async def test_new_observation_cancels_stale_in_flight_task(tmp_path: Path) -> None:
     controller = AutoCgController(
         settings=NovelAISettings(enabled=True, token="novel-token"),
         role_store=cast(Any, None),
         policy=AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json")),
-        light_provider=None,
-        light_model="",
-        session_manager=None,
+        session_manager=cast(Any, None),
         generate_tool=cast(Any, None),
         tool_registry=cast(Any, None),
     )
@@ -72,18 +68,7 @@ async def test_new_turn_cancels_stale_in_flight_scene_task(tmp_path: Path) -> No
     task = asyncio.create_task(stale_work())
     controller._tasks["role:mira"] = task
     await started.wait()
-    controller.capture_turn(
-        BeforeTurnCtx(
-            session_key="role:mira",
-            channel="desktop",
-            chat_id="role:mira",
-            content="new scene",
-            timestamp=datetime.now(),
-            retrieved_memory_block="",
-            retrieval_trace_raw=None,
-            history_messages=(),
-        )
-    )
+    controller.schedule(_observation(source="proactive"))
     await asyncio.sleep(0)
 
     assert task.cancelled()
@@ -91,7 +76,7 @@ async def test_new_turn_cancels_stale_in_flight_scene_task(tmp_path: Path) -> No
 
 
 @pytest.mark.asyncio
-async def test_controller_records_cooldown_only_after_all_media_pushes_succeed(
+async def test_controller_records_state_only_after_image_push_succeeds(
     tmp_path: Path,
 ) -> None:
     policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
@@ -104,13 +89,6 @@ async def test_controller_records_cooldown_only_after_all_media_pushes_succeed(
     registry = ToolRegistry()
     registry.register(push_tool)
 
-    async def decide(*_args: Any, **_kwargs: Any) -> SceneCgDecision:
-        return SceneCgDecision(
-            should_generate=True,
-            scene_key="rain",
-            prompt="a rainy street",
-        )
-
     class GenerateTool:
         async def execute(self, **_kwargs: Any) -> str:
             return '{"output_paths": ["cg.png"]}'
@@ -119,82 +97,20 @@ async def test_controller_records_cooldown_only_after_all_media_pushes_succeed(
         settings=NovelAISettings(enabled=True, token="novel-token"),
         role_store=cast(Any, None),
         policy=policy,
-        light_provider=cast(Any, object()),
-        light_model="light-model",
-        session_manager=cast(
-            Any,
-            SimpleNamespace(
-                get_or_create=lambda _session_key: SimpleNamespace(
-                    metadata={"role_id": "mira"}
-                )
-            ),
-        ),
+        session_manager=cast(Any, None),
         generate_tool=cast(Any, GenerateTool()),
         tool_registry=registry,
-        decision_provider=decide,
     )
-    ctx = AfterTurnCtx(
-        session_key="role:mira",
-        channel="desktop",
-        chat_id="role:mira",
-        reply="继续下雨了。",
-        tools_used=(),
-        thinking=None,
-        will_dispatch=True,
-    )
-    decision_input = SceneCgDecisionInput(
-        role_name="Mira",
-        role_prompt="prompt",
-        user_message="下雨了吗？",
+    event = _observation(
+        transition="started",
+        should_generate=True,
+        prompt="1girl, rainy street",
     )
 
     with pytest.raises(RuntimeError, match="自动场景 CG 补发失败"):
-        await controller._run(ctx, decision_input)
+        await controller._run(event, role_id="mira", bypass_cooldown=True)
 
     assert policy.cooldown_remaining("role:mira") == 0
-
-
-@pytest.mark.asyncio
-async def test_controller_applies_scene_transition_without_generating_cg(
-    tmp_path: Path,
-) -> None:
-    policy = AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json"))
-    transitions: list[tuple[str, str, str]] = []
-
-    async def decide(*_args: Any, **_kwargs: Any) -> SceneCgDecision:
-        return SceneCgDecision(should_generate=False, scene_transition="closed")
-
-    controller = AutoCgController(
-        settings=NovelAISettings(enabled=True, token="novel-token"),
-        role_store=cast(Any, None),
-        policy=policy,
-        light_provider=cast(Any, object()),
-        light_model="light-model",
-        session_manager=cast(Any, object()),
-        generate_tool=cast(Any, None),
-        tool_registry=cast(Any, None),
-        decision_provider=decide,
-        scene_transition_fn=lambda session_key, transition, scene_key: transitions.append(
-            (session_key, transition, scene_key)
-        ),
-    )
-    ctx = AfterTurnCtx(
-        session_key="role:mira",
-        channel="desktop",
-        chat_id="role:mira",
-        reply="晚安。",
-        tools_used=(),
-        thinking=None,
-        will_dispatch=True,
-    )
-
-    await controller._run(
-        ctx,
-        SceneCgDecisionInput(role_name="Mira", role_prompt="role", user_message="睡觉了"),
-        auto_cg_allowed=False,
-    )
-
-    assert transitions == [("role:mira", "closed", "")]
 
 
 @pytest.mark.asyncio
@@ -212,13 +128,6 @@ async def test_controller_retries_generation_once_and_pushes_one_image(
     registry = ToolRegistry()
     registry.register(push_tool)
 
-    async def decide(*_args: Any, **_kwargs: Any) -> SceneCgDecision:
-        return SceneCgDecision(
-            should_generate=True,
-            scene_key="rain",
-            prompt="a rainy street",
-        )
-
     class GenerateTool:
         calls = 0
 
@@ -233,33 +142,19 @@ async def test_controller_retries_generation_once_and_pushes_one_image(
         settings=NovelAISettings(enabled=True, token="novel-token"),
         role_store=cast(Any, None),
         policy=policy,
-        light_provider=cast(Any, object()),
-        light_model="light-model",
-        session_manager=cast(
-            Any,
-            SimpleNamespace(
-                get_or_create=lambda _session_key: SimpleNamespace(
-                    metadata={"role_id": "mira"}
-                )
-            ),
-        ),
+        session_manager=cast(Any, SimpleNamespace()),
         generate_tool=cast(Any, generate_tool),
         tool_registry=registry,
-        decision_provider=decide,
-    )
-    ctx = AfterTurnCtx(
-        session_key="role:mira",
-        channel="desktop",
-        chat_id="role:mira",
-        reply="继续下雨了。",
-        tools_used=(),
-        thinking=None,
-        will_dispatch=True,
     )
 
     await controller._run(
-        ctx,
-        SceneCgDecisionInput(role_name="Mira", role_prompt="role", user_message="下雨了吗？"),
+        _observation(
+            transition="started",
+            should_generate=True,
+            prompt="1girl, rainy street",
+        ),
+        role_id="mira",
+        bypass_cooldown=True,
     )
 
     assert generate_tool.calls == 2
@@ -284,9 +179,7 @@ async def test_controller_abandons_after_one_generation_retry(
         settings=NovelAISettings(enabled=True, token="novel-token"),
         role_store=cast(Any, None),
         policy=AutoCgPolicy(PluginKVStore(tmp_path / ".kv.json")),
-        light_provider=cast(Any, object()),
-        light_model="light-model",
-        session_manager=cast(Any, object()),
+        session_manager=cast(Any, None),
         generate_tool=cast(Any, generate_tool),
         tool_registry=cast(Any, None),
     )

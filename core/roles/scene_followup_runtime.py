@@ -9,7 +9,7 @@ from infra.persistence.json_store import atomic_save_json, load_json
 _FOLLOWUP_DELAYS_MINUTES = (5, 3, 1)
 _MAX_SCENE_LIFETIME = timedelta(hours=1)
 _STATE_FILE = "scene_followup_runtime.json"
-SceneTransition = Literal["same", "changed", "closed"]
+SceneTransition = Literal["started", "same", "changed", "closed"]
 
 
 def _now_utc(value: datetime | None = None) -> datetime:

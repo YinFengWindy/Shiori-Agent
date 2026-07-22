@@ -13,6 +13,7 @@ from agent.prompting import (
 from core.memory.markdown import MemoryProfileApi
 from prompts.agent import build_current_message_time_envelope
 from proactive_v2.context import AgentTickContext
+from .gates import ProactiveMode
 from proactive_v2.contracts import normalize_alert, normalize_content, normalize_context
 from proactive_v2.gateway import GatewayResult
 from proactive_v2.time import to_beijing_time
@@ -204,6 +205,10 @@ def build_runtime_context_message(
 ) -> dict[str, str]:
     """构建包含预取数据、角色记忆和共享规则的 context frame。"""
 
+    active_mode = ctx.active_gate.mode if ctx.active_gate is not None else None
+    scene_followup_attempt = int(
+        (ctx.active_gate.metadata.get("attempt_index", 0) if ctx.active_gate else 0) or 0
+    )
     sections: list[PromptSectionRender] = [
         PromptSectionRender(
             name="current_time",
@@ -216,8 +221,8 @@ def build_runtime_context_message(
             name="proactive_tick_state",
             content=(
                 f"context_fallback={'允许' if ctx.context_as_fallback_open else '不允许'}\n"
-                f"scene_followup={'是' if ctx.scene_followup_mode else '否'}\n"
-                f"scene_followup_attempt={ctx.scene_followup_attempt + 1 if ctx.scene_followup_mode else 0}\n"
+                f"scene_followup={'是' if active_mode == ProactiveMode.SCENE_FOLLOWUP else '否'}\n"
+                f"scene_followup_attempt={scene_followup_attempt + 1 if active_mode == ProactiveMode.SCENE_FOLLOWUP else 0}\n"
                 f"alert_count={len(gateway_result.alerts)}\n"
                 f"content_count={len(gateway_result.content_meta)}\n"
                 f"context_count={len(gateway_result.context)}"
@@ -284,15 +289,13 @@ def is_relationship_only_fallback(gateway_result: GatewayResult) -> bool:
 def allow_relationship_only_fallback(
     *,
     llm_fn: Any | None,
-    loneliness_gate_fn: Any | None,
-    scene_followup_gate_fn: Any | None,
     ctx: AgentTickContext,
 ) -> bool:
     """判断是否允许进入纯关系向 fallback。"""
 
     return (
         llm_fn is not None
-        and (loneliness_gate_fn is not None or scene_followup_gate_fn is not None)
+        and ctx.selected_gate is not None
         and not ctx.context_as_fallback_open
     )
 

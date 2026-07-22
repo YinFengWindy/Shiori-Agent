@@ -18,6 +18,7 @@ from agent.turns.orchestrator import TurnOrchestrator
 from proactive_v2 import mcp_sources
 from proactive_v2.mcp_sources import McpClientPool
 from agent.core.proactive_turn import ProactiveTurnPipeline, ProactiveTurnPipelineDeps
+from agent.core.proactive_turn.gates import ProactiveGateChain
 from agent.core.drift_turn import DriftTurnPipeline, DriftTurnPipelineDeps
 from proactive_v2.drift_state import DriftStateStore
 from proactive_v2.drift_tools import DriftToolDeps
@@ -57,10 +58,7 @@ class AgentTickDeps:
     turn_orchestrator: TurnOrchestrator | None = None
     pool: McpClientPool | None = None
     tool_hooks: list[ToolHook] = field(default_factory=list)
-    loneliness_gate_fn: Callable[[str, Any], tuple[bool, dict[str, Any]]] | None = None
-    scene_followup_gate_fn: Callable[[str, Any], tuple[bool, dict[str, Any]]] | None = None
-    scene_followup_sent_fn: Callable[[str, Any], Any] | None = None
-    scene_followup_closed_fn: Callable[[str], Any] | None = None
+    proactive_gates: ProactiveGateChain | None = None
 
 
 class AgentTickFactory:
@@ -103,10 +101,7 @@ class AgentTickFactory:
                 target_transport_fn=self._deps.sense.target_transport,
                 target_transports_fn=target_transports_fn,
                 tool_hooks=self._deps.tool_hooks,
-                loneliness_gate_fn=self._deps.loneliness_gate_fn,
-                scene_followup_gate_fn=self._deps.scene_followup_gate_fn,
-                scene_followup_sent_fn=self._deps.scene_followup_sent_fn,
-                scene_followup_closed_fn=self._deps.scene_followup_closed_fn,
+                proactive_gates=self._deps.proactive_gates,
             )
         )
 

@@ -4,6 +4,7 @@ from abc import ABC
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from agent.core.proactive_turn.gates import ProactiveGate
     from pydantic import BaseModel
     from infra.channels.contract import Channel
     from agent.plugins.context import PluginContext
@@ -44,6 +45,10 @@ class Plugin(ABC):
         return []
 
     def after_turn_modules(self) -> list[object]:
+        return []
+
+    def proactive_gates(self) -> list["ProactiveGate"]:
+        """Return official policies that participate in proactive tick admission."""
         return []
 
     def channels(self) -> list["Channel"]:

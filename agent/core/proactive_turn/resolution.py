@@ -7,13 +7,14 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha1
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Awaitable, Callable, Literal, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
 from core.common.diagnostic_log import diagnostic_line
 from proactive_v2.context import AgentTickContext
 
+from .gates import ProactiveGateCompletion
 from .types import ResolveResult
 
 logger = logging.getLogger(__name__)
@@ -33,8 +34,7 @@ class ProactiveResolutionHost(Protocol):
     _deduper: Any
     _tool_deps: Any
     _recent_proactive_fn: Callable[[], list] | None
-    _scene_followup_sent_fn: Callable[[str, datetime], Any] | None
-    _scene_followup_closed_fn: Callable[[str], Any] | None
+    _proactive_gates: Any
 
 
 @dataclass
@@ -164,32 +164,44 @@ async def _mark_delivery(*, state_store: Any, session_key: str, delivery_key: st
     state_store.mark_delivery(session_key, delivery_key)
 
 
-async def _mark_scene_followup_sent(
-    callback: Callable[[str, datetime], Any] | None,
-    session_key: str,
+async def _finalize_active_gate(
+    gate_chain: Any,
+    ctx: AgentTickContext,
+    *,
+    outcome: Literal["delivered", "closed"],
+    reason: str = "",
 ) -> None:
-    if callback is not None:
-        callback(session_key, datetime.now(timezone.utc))
+    activation = ctx.active_gate
+    if activation is None:
+        return
+    gate_chain.finalize(
+        ProactiveGateCompletion(
+            activation=activation,
+            session_key=ctx.session_key,
+            occurred_at=datetime.now(timezone.utc),
+            outcome=outcome,
+            reason=reason,
+        )
+    )
 
 
-async def _close_scene_followup(
-    callback: Callable[[str], Any] | None,
-    session_key: str,
-) -> None:
-    if callback is not None:
-        callback(session_key)
-
-
-def _scene_followup_close_effects(
-    callback: Callable[[str], Any] | None,
-    session_key: str,
+def _active_gate_close_effects(
+    gate_chain: Any,
+    ctx: AgentTickContext,
+    *,
+    reason: str,
 ) -> list[_CallbackSideEffect]:
-    if callback is None:
+    if ctx.active_gate is None:
         return []
     return [
         _CallbackSideEffect(
-            callback=lambda: _close_scene_followup(callback, session_key),
-            name="close_scene_followup",
+            callback=lambda: _finalize_active_gate(
+                gate_chain,
+                ctx,
+                outcome="closed",
+                reason=reason,
+            ),
+            name="finalize_active_gate_closed",
         )
     ]
 
@@ -231,11 +243,12 @@ async def resolve_decide(
                 name="ack_discarded_skip",
             )
         ]
-        if ctx.scene_followup_mode and ctx.skip_reason in {"scene_changed", "no_content"}:
+        if ctx.active_gate is not None and ctx.skip_reason in {"scene_changed", "no_content"}:
             skip_side_effects.extend(
-                _scene_followup_close_effects(
-                    pipeline._scene_followup_closed_fn,
-                    pipeline._session_key,
+                _active_gate_close_effects(
+                    pipeline._proactive_gates,
+                    ctx,
+                    reason=ctx.skip_reason,
                 )
             )
         return ResolveResult(
@@ -300,11 +313,12 @@ async def resolve_decide(
                         name="ack_post_guard_delivery",
                     ),
                     *(
-                        _scene_followup_close_effects(
-                            pipeline._scene_followup_closed_fn,
-                            pipeline._session_key,
+                        _active_gate_close_effects(
+                            pipeline._proactive_gates,
+                            ctx,
+                            reason="already_sent_similar",
                         )
-                        if ctx.scene_followup_mode
+                        if ctx.active_gate is not None
                         else []
                     ),
                 ],
@@ -363,11 +377,12 @@ async def resolve_decide(
                             name="ack_post_guard_message",
                         ),
                         *(
-                            _scene_followup_close_effects(
-                                pipeline._scene_followup_closed_fn,
-                                pipeline._session_key,
+                            _active_gate_close_effects(
+                                pipeline._proactive_gates,
+                                ctx,
+                                reason="already_sent_similar",
                             )
-                            if ctx.scene_followup_mode
+                            if ctx.active_gate is not None
                             else []
                         ),
                     ],
@@ -405,14 +420,15 @@ async def resolve_decide(
             name="ack_on_success",
         ),
     ]
-    if ctx.scene_followup_mode and pipeline._scene_followup_sent_fn is not None:
+    if ctx.active_gate is not None:
         success_side_effects.append(
             _CallbackSideEffect(
-                callback=lambda: _mark_scene_followup_sent(
-                    pipeline._scene_followup_sent_fn,
-                    pipeline._session_key,
+                callback=lambda: _finalize_active_gate(
+                    pipeline._proactive_gates,
+                    ctx,
+                    outcome="delivered",
                 ),
-                name="mark_scene_followup_sent",
+                name="finalize_active_gate_delivered",
             )
         )
     return ResolveResult(

@@ -5,7 +5,10 @@ from typing import Any
 
 import pytest
 
-from tests.proactive_v2.conftest import make_proactive_pipeline
+from tests.proactive_v2.conftest import (
+    make_proactive_pipeline,
+    relationship_gate_chain,
+)
 
 
 class _ScriptedLlm:
@@ -44,13 +47,15 @@ async def test_scene_followup_retries_plain_text_response_as_required_tool_call(
     )
     pipeline = make_proactive_pipeline(
         llm_fn=llm,
-        scene_followup_gate_fn=_scene_followup_gate,
-        scene_followup_sent_fn=lambda session_key, now: sent_calls.append(
-            (session_key, now)
-        ),
-        loneliness_gate_fn=lambda _session_key, _now: (
-            False,
-            {"reason": "below_threshold"},
+        proactive_gates=relationship_gate_chain(
+            scene_evaluate=_scene_followup_gate,
+            on_scene_delivered=lambda session_key, now: sent_calls.append(
+                (session_key, now)
+            ),
+            loneliness_evaluate=lambda _session_key, _now: (
+                False,
+                {"reason": "below_threshold"},
+            ),
         ),
     )
 
@@ -69,11 +74,13 @@ async def test_scene_followup_protocol_failure_preserves_pending_scene():
     llm = _ScriptedLlm([None, None])
     pipeline = make_proactive_pipeline(
         llm_fn=llm,
-        scene_followup_gate_fn=_scene_followup_gate,
-        scene_followup_closed_fn=closed_sessions.append,
-        loneliness_gate_fn=lambda _session_key, _now: (
-            False,
-            {"reason": "below_threshold"},
+        proactive_gates=relationship_gate_chain(
+            scene_evaluate=_scene_followup_gate,
+            on_scene_closed=closed_sessions.append,
+            loneliness_evaluate=lambda _session_key, _now: (
+                False,
+                {"reason": "below_threshold"},
+            ),
         ),
     )
 

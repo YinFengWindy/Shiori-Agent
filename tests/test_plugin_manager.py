@@ -97,6 +97,29 @@ async def test_load_hello_plugin():
 
 
 @pytest.mark.asyncio
+async def test_collects_and_clears_official_proactive_gates(tmp_path: Path):
+    source = Path(__file__).parents[1] / "plugins" / "relationship_proactive"
+    plugin_root = tmp_path / "plugins"
+    shutil.copytree(source, plugin_root / "relationship_proactive")
+    bus = EventBus()
+    mgr = PluginManager(
+        plugin_dirs=[plugin_root],
+        event_bus=bus,
+        relationship_runtime=object(),
+    )
+
+    await mgr.load_all()
+
+    assert [gate.name for gate in mgr.proactive_gates] == [
+        "relationship.scene_followup",
+        "relationship.loneliness",
+    ]
+    await mgr.terminate_all()
+    assert mgr.proactive_gates == []
+    await bus.aclose()
+
+
+@pytest.mark.asyncio
 async def test_observe_plugin_writes_turn_trace(tmp_path: Path):
     source = Path(__file__).parents[1] / "plugins" / "observe"
     plugin_root = tmp_path / "plugins"

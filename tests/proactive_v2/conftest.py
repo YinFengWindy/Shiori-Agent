@@ -7,7 +7,7 @@ from __future__ import annotations
 import random
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, Callable, cast
 from unittest.mock import AsyncMock, MagicMock
 
 from proactive_v2.config import ProactiveConfig
@@ -16,6 +16,14 @@ from proactive_v2.tools import ToolDeps
 from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import OutboundDispatch
+from agent.core.proactive_turn.gates import (
+    ProactiveGateAdapter,
+    ProactiveGateChain,
+    ProactiveGateCompletion,
+    ProactiveGateContext,
+    ProactiveGateDecision,
+    ProactiveMode,
+)
 
 
 # ── FakeStateStore ────────────────────────────────────────────────────────
@@ -200,6 +208,63 @@ def cfg_with(**kwargs) -> ProactiveConfig:
 
 # ── make_proactive_pipeline ─────────────────────────────────────────────────
 
+GateEvaluator = Callable[[str, datetime], tuple[bool, dict[str, Any]]]
+
+
+def _always_trigger(_session_key: str, _now_utc: datetime):
+    return True, {"reason": "threshold"}
+
+
+def relationship_gate_chain(
+    *,
+    loneliness_evaluate: GateEvaluator | None = _always_trigger,
+    scene_evaluate: GateEvaluator | None = None,
+    on_scene_delivered: Callable[[str, datetime], None] | None = None,
+    on_scene_closed: Callable[[str], None] | None = None,
+) -> ProactiveGateChain:
+    class _SceneGate(ProactiveGateAdapter):
+        name = "test.scene_followup"
+        priority = 100
+
+        def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateDecision:
+            if scene_evaluate is None:
+                return ProactiveGateDecision.continue_()
+            should_follow_up, metadata = scene_evaluate(ctx.session_key, ctx.now_utc)
+            if not should_follow_up:
+                return ProactiveGateDecision.continue_()
+            return ProactiveGateDecision.activate(
+                ProactiveMode.SCENE_FOLLOWUP,
+                reason="scene_followup",
+                metadata=metadata,
+            )
+
+        def finalize(self, completion: ProactiveGateCompletion) -> None:
+            if completion.outcome == "delivered" and on_scene_delivered is not None:
+                on_scene_delivered(completion.session_key, completion.occurred_at)
+            elif completion.outcome == "closed" and on_scene_closed is not None:
+                on_scene_closed(completion.session_key)
+
+    class _LonelinessGate(ProactiveGateAdapter):
+        name = "test.loneliness"
+        priority = 0
+
+        def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateDecision:
+            if loneliness_evaluate is None:
+                return ProactiveGateDecision.continue_()
+            should_trigger, metadata = loneliness_evaluate(
+                ctx.session_key,
+                ctx.now_utc,
+            )
+            if not should_trigger:
+                return ProactiveGateDecision.block("loneliness")
+            return ProactiveGateDecision.activate(
+                ProactiveMode.RELATIONSHIP_FALLBACK,
+                reason="loneliness",
+                metadata=metadata,
+            )
+
+    return ProactiveGateChain([_SceneGate(), _LonelinessGate()])
+
 def make_proactive_pipeline(
     *,
     cfg: ProactiveConfig | None = None,
@@ -220,10 +285,7 @@ def make_proactive_pipeline(
     target_transport_fn: Any = None,
     target_transports_fn: Any = None,
     retry_wait_fn: Any = None,
-    loneliness_gate_fn: Any = None,
-    scene_followup_gate_fn: Any = None,
-    scene_followup_sent_fn: Any = None,
-    scene_followup_closed_fn: Any = None,
+    proactive_gates: ProactiveGateChain | None = None,
 ):
     from agent.core.proactive_turn import (
         ProactiveTurnPipeline,
@@ -265,10 +327,8 @@ def make_proactive_pipeline(
     if rng is None:
         rng = FakeRng(value=0.0)  # 默认打开 context_fallback，避免空候选直接早退
 
-    if loneliness_gate_fn is False:
-        loneliness_gate_fn = None
-    elif loneliness_gate_fn is None:
-        loneliness_gate_fn = lambda _session_key, _now_utc: (True, {"reason": "threshold"})
+    if proactive_gates is None:
+        proactive_gates = relationship_gate_chain()
 
     session = _FakeSession(session_key)
     session_manager = SimpleNamespace(
@@ -311,9 +371,6 @@ def make_proactive_pipeline(
             target_transports_fn=target_transports_fn,
             retry_wait_fn=retry_wait_fn,
             tool_hooks=None,
-            loneliness_gate_fn=loneliness_gate_fn,
-            scene_followup_gate_fn=scene_followup_gate_fn,
-            scene_followup_sent_fn=scene_followup_sent_fn,
-            scene_followup_closed_fn=scene_followup_closed_fn,
+            proactive_gates=proactive_gates,
         )
     )

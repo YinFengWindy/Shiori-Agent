@@ -5,6 +5,11 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 from bootstrap.proactive import build_proactive_runtime
+from agent.core.proactive_turn.gates import (
+    ProactiveGateAdapter,
+    ProactiveGateContext,
+    ProactiveGateDecision,
+)
 from proactive_v2.config import ProactiveConfig
 
 
@@ -63,6 +68,13 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
         api_key="",
     )
     event_bus = object()
+    class _PassGate(ProactiveGateAdapter):
+        name = "test.gate"
+
+        def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateDecision:
+            return ProactiveGateDecision.continue_()
+
+    proactive_gate = _PassGate()
 
     tasks, loops = build_proactive_runtime(
         cast(Any, config),
@@ -80,6 +92,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
                 role_world_registry=MagicMock(),
             ),
         ),
+        proactive_gates=[proactive_gate],
         event_bus=event_bus,
     )
 
@@ -95,4 +108,6 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
     assert created[1]["state_store"].db_path == tmp_path / "roles" / "luna" / "proactive.db"
     assert created[0]["event_bus"] is event_bus
     assert created[1]["event_bus"] is event_bus
+    assert created[0]["proactive_gates"] == [proactive_gate]
+    assert created[1]["proactive_gates"] == [proactive_gate]
 

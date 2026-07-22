@@ -7,19 +7,16 @@ from typing import Any, cast
 from agent.lifecycle.types import (
     AfterReasoningCtx,
     AfterToolResultCtx,
-    AfterTurnCtx,
-    BeforeTurnCtx,
     PreToolCtx,
 )
 from agent.plugins import (
     Plugin,
     on_after_reasoning,
-    on_after_turn,
-    on_before_turn,
     on_tool_pre,
     on_tool_result,
 )
 from agent.tools.image_generate import GenerateImageTool
+from bus.events_lifecycle import SceneObservationCommitted
 from core.integrations.novelai.client import NovelAIClient
 from core.integrations.novelai.models import NovelAISettings
 from core.integrations.novelai.service import NovelAIService
@@ -28,7 +25,6 @@ from core.net.http import get_default_http_requester
 from core.roles.store import RoleStore
 from plugins.novelai.auto_cg import AutoCgPolicy
 from plugins.novelai.auto_cg_controller import AutoCgController
-from plugins.novelai.scene_decision import decide_scene_cg
 
 logger = logging.getLogger(__name__)
 
@@ -68,23 +64,13 @@ class NovelAIPlugin(Plugin):
             settings=settings,
             role_store=role_store,
             policy=self._auto_cg,
-            light_provider=self.context.light_provider,
-            light_model=self.context.light_model,
             session_manager=self.context.session_manager,
             generate_tool=self._tool,
             tool_registry=self.context.tool_registry,
-            decision_provider=decide_scene_cg,
-            scene_transition_fn=(
-                self.context.relationship_runtime.apply_scene_decision
-                if self.context.relationship_runtime is not None
-                else None
-            ),
         )
+        self._scene_handler = self._handle_scene_observation
+        self.context.event_bus.on(SceneObservationCommitted, self._scene_handler)
         self._pending_media: dict[str, list[str]] = {}
-        if settings.enabled and (
-            self.context.light_provider is None or not self.context.light_model.strip()
-        ):
-            logger.warning("自动场景 CG 缺少 light_model provider，后台判定已禁用")
         self.context.tool_registry.register(
             self._tool,
             risk="external-side-effect",
@@ -100,18 +86,8 @@ class NovelAIPlugin(Plugin):
 
         return self._auto_cg_controller.tasks
 
-    @on_before_turn()
-    async def advance_auto_cg_turn(self, ctx: BeforeTurnCtx) -> BeforeTurnCtx:
-        """Capture one eligible role turn and advance its cooldown counter."""
-
-        self._auto_cg_controller.capture_turn(ctx)
-        return ctx
-
-    @on_after_turn()
-    async def schedule_auto_cg(self, ctx: AfterTurnCtx) -> None:
-        """Schedule non-blocking scene judgment after the text turn completes."""
-
-        self._auto_cg_controller.schedule(ctx)
+    def _handle_scene_observation(self, event: SceneObservationCommitted) -> None:
+        self._auto_cg_controller.schedule(event)
 
     @on_tool_pre(tool_name="generate_image")
     async def guard_auto_cg(
@@ -123,6 +99,9 @@ class NovelAIPlugin(Plugin):
         return self._auto_cg.guard(event.session_key, event.arguments)
 
     async def terminate(self) -> None:
+        handler = getattr(self, "_scene_handler", None)
+        if handler is not None:
+            self.context.event_bus.off(SceneObservationCommitted, handler)
         controller = getattr(self, "_auto_cg_controller", None)
         if controller is not None:
             await controller.terminate()

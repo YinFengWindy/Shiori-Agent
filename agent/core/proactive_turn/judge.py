@@ -7,6 +7,7 @@ import logging
 from typing import Any, Protocol
 
 from agent.tool_hooks import ToolExecutionRequest
+from .gates import ProactiveMode
 from core.common.diagnostic_log import diagnostic_line
 from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayResult
@@ -84,8 +85,16 @@ async def judge_evaluate(
             messages,
             ctx,
             loop_tag="loop",
-            tool_choice="required" if ctx.scene_followup_mode else "auto",
-            retry_on_no_tool_call=ctx.scene_followup_mode,
+            tool_choice=(
+                "required"
+                if ctx.active_gate is not None
+                and ctx.active_gate.mode == ProactiveMode.SCENE_FOLLOWUP
+                else "auto"
+            ),
+            retry_on_no_tool_call=(
+                ctx.active_gate is not None
+                and ctx.active_gate.mode == ProactiveMode.SCENE_FOLLOWUP
+            ),
         )
         if not ok or ctx.terminal_action is not None:
             break
@@ -135,8 +144,8 @@ async def judge_evaluate(
                     break
 
     if (
-        ctx.relationship_fallback_open
-        and not ctx.scene_followup_mode
+        ctx.active_gate is not None
+        and ctx.active_gate.mode == ProactiveMode.RELATIONSHIP_FALLBACK
         and ctx.terminal_action == "skip"
         and ctx.skip_reason == "no_content"
         and ctx.steps_taken < pipeline._cfg.agent_tick_max_steps

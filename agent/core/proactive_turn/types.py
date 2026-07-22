@@ -13,6 +13,7 @@ from agent.turns.result import TurnResult
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
+from .gates import ProactiveGateActivation, ProactiveGateChain
 
 
 @dataclass
@@ -23,7 +24,7 @@ class GateResult:
     reason: str
     base_score: float | None
     context_as_fallback_open: bool = False
-    scene_followup_open: bool = False
+    activation: ProactiveGateActivation | None = None
 
 
 @dataclass
@@ -66,7 +67,4 @@ class ProactiveTurnPipelineDeps:
     target_transports_fn: Callable[[], list[tuple[str, str]]] | None = None
     retry_wait_fn: Callable[[float], Awaitable[None]] | None = None
     tool_hooks: list[ToolHook] | None = None
-    loneliness_gate_fn: Callable[[str, datetime], tuple[bool, dict[str, Any]]] | None = None
-    scene_followup_gate_fn: Callable[[str, datetime], tuple[bool, dict[str, Any]]] | None = None
-    scene_followup_sent_fn: Callable[[str, datetime], Any] | None = None
-    scene_followup_closed_fn: Callable[[str], Any] | None = None
+    proactive_gates: ProactiveGateChain | None = None

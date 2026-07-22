@@ -80,6 +80,9 @@ async def test_proactive_media_commit_notifies_shared_session() -> None:
             session_key="role:mira",
             channel="telegram",
             role_id="mira",
+            chat_id="123",
+            assistant_response="给你看张图",
+            tools_used=("message_push",),
         )
     ]
 

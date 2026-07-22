@@ -11,6 +11,7 @@ import pytest
 
 from agent.prompting import is_context_frame
 from agent.core.proactive_turn import ProactiveTurnPipeline, ProactiveTurnPipelineDeps
+from agent.core.proactive_turn.gates import ProactiveGateChain
 from agent.tools.base import Tool
 from agent.tools.registry import ToolRegistry
 from agent.looping.ports import SessionServices
@@ -596,7 +597,7 @@ async def test_agent_tick_enters_drift_and_records_steps(tmp_path: Path):
             ),
             max_steps=5,
         ),
-        loneliness_gate_fn=False,
+        proactive_gates=ProactiveGateChain(),
     )
     await tick.run()
     assert tick.last_ctx.drift_entered is True

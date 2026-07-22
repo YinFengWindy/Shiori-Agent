@@ -64,6 +64,7 @@ from .types import (
     ProactiveTurnPipelineDeps,
     ResolveResult,
 )
+from .gates import ProactiveGateChain
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ __all__ = [
     "GateResult",
     "ProactiveTurnPipeline",
     "ProactiveTurnPipelineDeps",
+    "ProactiveGateChain",
     "ResolveResult",
     "ack_discarded",
     "ack_on_success",
@@ -102,10 +104,7 @@ class ProactiveTurnPipeline:
         self._target_transport_fn = deps.target_transport_fn
         self._target_transports_fn = deps.target_transports_fn
         self._retry_wait_fn = deps.retry_wait_fn
-        self._loneliness_gate_fn = deps.loneliness_gate_fn
-        self._scene_followup_gate_fn = deps.scene_followup_gate_fn
-        self._scene_followup_sent_fn = deps.scene_followup_sent_fn
-        self._scene_followup_closed_fn = deps.scene_followup_closed_fn
+        self._proactive_gates = deps.proactive_gates or ProactiveGateChain()
         self._tool_executor = ToolExecutor(deps.tool_hooks or [])
         self._retry_task: asyncio.Task[None] | None = None
         self._retry_cancel_event = asyncio.Event()
@@ -198,7 +197,7 @@ class ProactiveTurnPipeline:
             return gate.base_score
 
         ctx.context_as_fallback_open = gate.context_as_fallback_open
-        ctx.scene_followup_open = gate.scene_followup_open
+        ctx.selected_gate = gate.activation
         self.last_ctx = ctx
         self._record_tick_log_start(ctx)
         logger.info(
@@ -370,8 +369,6 @@ class ProactiveTurnPipeline:
     def _allow_relationship_only_fallback(self, ctx: AgentTickContext) -> bool:
         return _allow_relationship_only_fallback(
             llm_fn=self._llm_fn,
-            loneliness_gate_fn=self._loneliness_gate_fn,
-            scene_followup_gate_fn=self._scene_followup_gate_fn,
             ctx=ctx,
         )
 

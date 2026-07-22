@@ -10,6 +10,7 @@ from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import DataGateway, GatewayDeps, GatewayResult
 
 from .types import FeedResult, GateResult
+from .gates import ProactiveGateContext, ProactiveMode
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,7 @@ class ProactivePhaseHost(Protocol):
     _session_key: str
     _state_store: Any
     _passive_busy_fn: Any
-    _scene_followup_gate_fn: Any
-    _loneliness_gate_fn: Any
+    _proactive_gates: Any
     _gateway_deps: Any
     _tool_deps: Any
     _llm_fn: Any
@@ -85,34 +85,40 @@ def gate_check(pipeline: ProactivePhaseHost, ctx: AgentTickContext) -> GateResul
         logger.debug("[proactive_v2] gate: passive_busy → blocked")
         return GateResult(blocked=True, reason="busy", base_score=None)
 
-    if pipeline._scene_followup_gate_fn is not None:
-        should_follow_up, scene_meta = pipeline._scene_followup_gate_fn(
-            pipeline._session_key,
-            ctx.now_utc,
+    gate_result = pipeline._proactive_gates.evaluate(
+        ProactiveGateContext(
+            tick_id=ctx.tick_id,
+            session_key=pipeline._session_key,
+            now_utc=ctx.now_utc,
+            target_transports=tuple(transports),
         )
-        if should_follow_up:
-            ctx.scene_followup_attempt = int(scene_meta.get("attempt_index", 0) or 0)
-            return GateResult(
-                blocked=False,
-                reason="scene_followup",
-                base_score=None,
-                scene_followup_open=True,
+    )
+    ctx.gate_trace = gate_result.trace
+    for item in gate_result.trace:
+        logger.info(
+            diagnostic_line(
+                "ProactiveTurnPipeline._gate_check",
+                event="plugin_gate",
+                flow="proactive",
+                phase="pregate",
+                session=pipeline._session_key,
+                tick=ctx.tick_id,
+                action=item.decision,
+                reason=item.reason or "-",
+                duration_ms=item.duration_ms,
+                note=f"gate={item.gate_name} priority={item.priority}",
             )
-
-    if pipeline._loneliness_gate_fn is not None:
-        should_trigger, meta = pipeline._loneliness_gate_fn(
-            pipeline._session_key,
-            ctx.now_utc,
         )
-        if not should_trigger:
-            logger.debug("[proactive_v2] gate: loneliness → blocked meta=%s", meta)
-            return GateResult(blocked=True, reason="loneliness", base_score=None)
+    if gate_result.blocked:
+        logger.debug("[proactive_v2] plugin gate blocked: %s", gate_result.reason)
+        return GateResult(blocked=True, reason=gate_result.reason, base_score=None)
 
     return GateResult(
         blocked=False,
-        reason="passed",
+        reason=gate_result.reason,
         base_score=None,
         context_as_fallback_open=False,
+        activation=gate_result.activation,
     )
 
 
@@ -176,7 +182,7 @@ async def fetch_pull(
         and not ctx.context_as_fallback_open
     ):
         if pipeline._allow_relationship_only_fallback(ctx):
-            ctx.relationship_fallback_open = True
+            ctx.active_gate = ctx.selected_gate
             logger.info(
                 "[proactive_v2] fetch: no data but relationship gate passed → relationship fallback"
             )
@@ -261,14 +267,19 @@ async def fetch_pull(
         "请基于上面的候选内容和规则，必须通过工具逐步完成分类，"
         "最后通过 message_push + finish_turn(decision=reply)，或 finish_turn(decision=skip, reason=...) 收尾。"
     )
-    ctx.scene_followup_mode = (
-        ctx.scene_followup_open
+    active_mode = ctx.active_gate.mode if ctx.active_gate is not None else None
+    scene_followup_mode = (
+        active_mode == ProactiveMode.SCENE_FOLLOWUP
         and pipeline._is_relationship_only_fallback(gateway_result)
     )
-    if ctx.scene_followup_mode:
+    if scene_followup_mode:
+        scene_followup_attempt = int(
+            (ctx.active_gate.metadata.get("attempt_index", 0) if ctx.active_gate else 0)
+            or 0
+        )
         kickoff_content = (
             "开始本轮同一场景追问。"
-            f"这是本场景第 {ctx.scene_followup_attempt + 1} 次追问，间隔会逐次缩短。"
+            f"这是本场景第 {scene_followup_attempt + 1} 次追问，间隔会逐次缩短。"
             "先用 get_recent_chat 判断最近对话是否仍属于同一个未结束场景。"
             "如果场景仍在继续，应该直接 message_push 一条自然的承接或追问，再 finish_turn(decision=reply)。"
             "如果已经告别、睡觉、转入新话题，必须 finish_turn(decision=skip, reason=scene_changed) 关闭本场景追问。"

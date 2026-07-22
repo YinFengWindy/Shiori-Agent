@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from agent.core.proactive_turn.gates import (
+        ProactiveGateActivation,
+        ProactiveGateTraceItem,
+    )
 
 
 @dataclass
@@ -12,10 +18,9 @@ class AgentTickContext:
     now_utc: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     session_key: str = ""
     context_as_fallback_open: bool = False
-    relationship_fallback_open: bool = False
-    scene_followup_open: bool = False
-    scene_followup_mode: bool = False
-    scene_followup_attempt: int = 0
+    selected_gate: "ProactiveGateActivation | None" = None
+    active_gate: "ProactiveGateActivation | None" = None
+    gate_trace: tuple["ProactiveGateTraceItem", ...] = field(default_factory=tuple)
     target_channel: str = ""
     target_chat_id: str = ""
     target_transports: list[tuple[str, str]] = field(default_factory=list)

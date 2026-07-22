@@ -8,6 +8,7 @@ from agent.config_models import Config
 from agent.looping.core import AgentLoop
 from agent.provider import LLMProvider
 from agent.tool_hooks import ToolHook
+from agent.core.proactive_turn.gates import ProactiveGate
 from agent.tools.message_push import MessagePushTool
 from core.roles import RoleRecord, RoleStore
 from proactive_v2.config_loader import load_proactive_config
@@ -57,6 +58,7 @@ def build_proactive_runtime(
     presence: PresenceStore,
     agent_loop: AgentLoop,
     tool_hooks: list[ToolHook] | None = None,
+    proactive_gates: list[ProactiveGate] | None = None,
     event_bus: "EventBus | None" = None,
 ) -> tuple[list, dict[str, ProactiveLoop]]:
     tasks: list = []
@@ -91,6 +93,7 @@ def build_proactive_runtime(
             ),
             shared_tools=getattr(agent_loop, "tools", None),
             tool_hooks=tool_hooks,
+            proactive_gates=proactive_gates,
             event_bus=event_bus,
             tick_dispatcher=_build_role_tick_dispatcher(
                 role_id=role.id,

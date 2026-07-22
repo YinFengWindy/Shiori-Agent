@@ -49,6 +49,8 @@ class AutoCgPolicy:
         self,
         session_key: str,
         arguments: dict[str, Any],
+        *,
+        bypass_cooldown: bool = False,
     ) -> HookOutcome | dict[str, Any] | None:
         """Enforce cooldown and scene deduplication before an image request."""
 
@@ -65,7 +67,11 @@ class AutoCgPolicy:
         state = self._get_session_state(session_key)
         turn = int(state.get("turn", 0))
         last_turn = state.get("last_success_turn")
-        if isinstance(last_turn, int) and turn - last_turn <= self._COOLDOWN_TURNS:
+        if (
+            not bypass_cooldown
+            and isinstance(last_turn, int)
+            and turn - last_turn <= self._COOLDOWN_TURNS
+        ):
             return HookOutcome(
                 decision="deny",
                 reason="scene_cg_cooldown",

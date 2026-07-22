@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from agent.core.types import ToolCallGroup
@@ -96,6 +96,31 @@ class ProactiveMessageCommitted:
     session_key: str
     channel: str
     role_id: str
+    chat_id: str = ""
+    assistant_response: str = ""
+    tools_used: tuple[str, ...] = ()
+
+
+SceneTransition = Literal["started", "same", "changed", "closed"]
+SceneTurnSource = Literal["passive", "proactive"]
+
+
+@dataclass(frozen=True)
+class SceneObservationCommitted:
+    """Describes the visual scene inferred from one completed role turn."""
+
+    session_key: str
+    channel: str
+    chat_id: str
+    role_id: str
+    source: SceneTurnSource
+    transition: SceneTransition
+    scene_key: str = ""
+    should_generate: bool = False
+    prompt: str = ""
+    negative_prompt: str = ""
+    size_preset: str = "landscape"
+    tools_used: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

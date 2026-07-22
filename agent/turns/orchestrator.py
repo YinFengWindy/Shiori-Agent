@@ -102,6 +102,9 @@ class TurnOrchestrator:
                         role_id=str(
                             getattr(session, "metadata", {}).get("role_id") or ""
                         ).strip(),
+                        chat_id=chat_id,
+                        assistant_response=content,
+                        tools_used=("message_push",),
                     )
                 )
         else:

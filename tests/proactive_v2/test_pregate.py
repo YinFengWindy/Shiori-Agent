@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agent.core.proactive_turn import ResolveResult
+from agent.core.proactive_turn.gates import ProactiveGateChain
 from agent.turns.result import TurnOutbound, TurnResult
 from proactive_v2.context import AgentTickContext
 from tests.proactive_v2.conftest import (
@@ -25,6 +26,7 @@ from tests.proactive_v2.conftest import (
     FakeStateStore,
     cfg_with,
     make_proactive_pipeline,
+    relationship_gate_chain,
 )
 
 
@@ -53,7 +55,7 @@ async def test_passive_busy_returns_none():
 async def test_passive_busy_false_does_not_block():
     tick = make_proactive_pipeline(
         passive_busy_fn=lambda sk: False,
-        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+        proactive_gates=relationship_gate_chain(),
     )
     result = await tick.run()
     assert result is not None
@@ -65,7 +67,7 @@ async def test_passive_busy_receives_session_key():
     tick = make_proactive_pipeline(
         session_key="my_session",
         passive_busy_fn=lambda sk: received.append(sk) or False,
-        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+        proactive_gates=relationship_gate_chain(),
     )
     await tick.run()
     assert received == ["my_session"]
@@ -76,7 +78,7 @@ async def test_target_transport_allows_role_only_desktop_target():
     tick = make_proactive_pipeline(
         cfg=cfg_with(default_channel="desktop", default_chat_id=""),
         target_transport_fn=lambda: ("desktop", "role:mira"),
-        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+        proactive_gates=relationship_gate_chain(),
     )
     result = await tick.run()
     assert result is not None
@@ -232,9 +234,11 @@ async def test_loneliness_gate_blocks_when_threshold_not_reached():
     gate_calls: list[tuple[str, datetime]] = []
     tick = make_proactive_pipeline(
         state_store=state,
-        loneliness_gate_fn=lambda session_key, now_utc: (
-            gate_calls.append((session_key, now_utc)) or False,
-            {"reason": "below_threshold"},
+        proactive_gates=relationship_gate_chain(
+            loneliness_evaluate=lambda session_key, now_utc: (
+                gate_calls.append((session_key, now_utc)) or False,
+                {"reason": "below_threshold"},
+            )
         ),
     )
     result = await tick.run()
@@ -247,7 +251,7 @@ async def test_loneliness_gate_blocks_when_threshold_not_reached():
 @pytest.mark.asyncio
 async def test_loneliness_gate_passes_when_threshold_reached():
     tick = make_proactive_pipeline(
-        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+        proactive_gates=relationship_gate_chain(),
     )
     result = await tick.run()
     assert result is not None
@@ -261,14 +265,16 @@ async def test_due_scene_followup_bypasses_loneliness_and_closes_on_scene_change
     )
     tick = make_proactive_pipeline(
         llm_fn=llm,
-        scene_followup_gate_fn=lambda _session_key, _now_utc: (
-            True,
-            {"reason": "scene_followup_due", "attempt_index": 0},
-        ),
-        scene_followup_closed_fn=closed_sessions.append,
-        loneliness_gate_fn=lambda _session_key, _now_utc: (
-            False,
-            {"reason": "below_threshold"},
+        proactive_gates=relationship_gate_chain(
+            scene_evaluate=lambda _session_key, _now_utc: (
+                True,
+                {"reason": "scene_followup_due", "attempt_index": 0},
+            ),
+            on_scene_closed=closed_sessions.append,
+            loneliness_evaluate=lambda _session_key, _now_utc: (
+                False,
+                {"reason": "below_threshold"},
+            ),
         ),
     )
 
@@ -276,7 +282,8 @@ async def test_due_scene_followup_bypasses_loneliness_and_closes_on_scene_change
 
     assert result == 0.0
     assert tick.last_ctx is not None
-    assert tick.last_ctx.scene_followup_open is True
+    assert tick.last_ctx.active_gate is not None
+    assert tick.last_ctx.active_gate.mode == "scene_followup"
     assert tick.last_ctx.skip_reason == "scene_changed"
     assert closed_sessions == ["test_session"]
     assert "同一场景追问" in str(llm.calls[0][2]["content"])
@@ -294,16 +301,18 @@ async def test_successful_scene_followup_advances_only_after_delivery():
     )
     tick = make_proactive_pipeline(
         llm_fn=llm,
-        scene_followup_gate_fn=lambda _session_key, _now_utc: (
-            True,
-            {"reason": "scene_followup_due", "attempt_index": 1},
-        ),
-        scene_followup_sent_fn=lambda session_key, now: sent_calls.append(
-            (session_key, now)
-        ),
-        loneliness_gate_fn=lambda _session_key, _now_utc: (
-            False,
-            {"reason": "below_threshold"},
+        proactive_gates=relationship_gate_chain(
+            scene_evaluate=lambda _session_key, _now_utc: (
+                True,
+                {"reason": "scene_followup_due", "attempt_index": 1},
+            ),
+            on_scene_delivered=lambda session_key, now: sent_calls.append(
+                (session_key, now)
+            ),
+            loneliness_evaluate=lambda _session_key, _now_utc: (
+                False,
+                {"reason": "below_threshold"},
+            ),
         ),
     )
 
@@ -317,17 +326,66 @@ async def test_successful_scene_followup_advances_only_after_delivery():
 
 
 @pytest.mark.asyncio
+async def test_scene_gate_does_not_advance_when_external_content_is_delivered():
+    from proactive_v2.gateway import GatewayDeps
+
+    sent_calls: list[tuple[str, datetime]] = []
+    closed_sessions: list[str] = []
+    tick = make_proactive_pipeline(
+        llm_fn=FakeLLM(
+            [
+                ("message_push", {"message": "有一条新内容", "evidence": []}),
+                ("finish_turn", {"decision": "reply"}),
+            ]
+        ),
+        gateway_deps=GatewayDeps(
+            feed_fn=AsyncMock(
+                return_value=[
+                    {
+                        "id": "content-1",
+                        "ack_server": "feed-mcp",
+                        "title": "新内容",
+                    }
+                ]
+            )
+        ),
+        proactive_gates=relationship_gate_chain(
+            scene_evaluate=lambda _session_key, _now_utc: (
+                True,
+                {"reason": "scene_followup_due", "attempt_index": 1},
+            ),
+            on_scene_delivered=lambda session_key, now: sent_calls.append(
+                (session_key, now)
+            ),
+            on_scene_closed=closed_sessions.append,
+        ),
+    )
+
+    result = await tick.run()
+
+    assert result == 0.0
+    assert tick.last_ctx is not None
+    assert tick.last_ctx.selected_gate is not None
+    assert tick.last_ctx.selected_gate.mode == "scene_followup"
+    assert tick.last_ctx.active_gate is None
+    assert sent_calls == []
+    assert closed_sessions == []
+
+
+@pytest.mark.asyncio
 async def test_pending_scene_that_is_not_due_still_uses_loneliness_gate():
     state = FakeStateStore()
     tick = make_proactive_pipeline(
         state_store=state,
-        scene_followup_gate_fn=lambda _session_key, _now_utc: (
-            False,
-            {"reason": "not_due"},
-        ),
-        loneliness_gate_fn=lambda _session_key, _now_utc: (
-            False,
-            {"reason": "below_threshold"},
+        proactive_gates=relationship_gate_chain(
+            scene_evaluate=lambda _session_key, _now_utc: (
+                False,
+                {"reason": "not_due"},
+            ),
+            loneliness_evaluate=lambda _session_key, _now_utc: (
+                False,
+                {"reason": "below_threshold"},
+            ),
         ),
     )
 
@@ -343,7 +401,7 @@ async def test_empty_candidates_enter_relationship_fallback_when_loneliness_gate
     tick = make_proactive_pipeline(
         llm_fn=llm,
         rng=FakeRng(value=1.0),
-        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+        proactive_gates=relationship_gate_chain(),
     )
     result = await tick.run()
     assert result == 0.0
@@ -362,7 +420,7 @@ async def test_relationship_fallback_takes_priority_over_drift_when_loneliness_g
         llm_fn=llm,
         drift_pipeline=drift_pipeline,
         rng=FakeRng(value=1.0),
-        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+        proactive_gates=relationship_gate_chain(),
     )
 
     await tick.run()
@@ -380,7 +438,7 @@ async def test_yinfeng_relationship_fallback_includes_direct_longing_style_hint(
         session_key="role:role-0424dd696dd6",
         llm_fn=llm,
         rng=FakeRng(value=1.0),
-        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+        proactive_gates=relationship_gate_chain(),
     )
 
     await tick.run()
@@ -403,7 +461,7 @@ async def test_drift_interval_blocks_recent_drift():
         rng=FakeRng(value=1.0),
         llm_fn=AsyncMock(return_value=None),
         drift_pipeline=drift_pipeline,
-        loneliness_gate_fn=False,
+        proactive_gates=ProactiveGateChain(),
     )
     await tick.run()
     assert tick.last_ctx.drift_entered is False
@@ -455,7 +513,7 @@ async def test_drift_interval_allows_after_window():
                     max_steps=5,
                 )
             ),
-            loneliness_gate_fn=False,
+            proactive_gates=ProactiveGateChain(),
         )
         await tick.run()
         assert tick.last_ctx.drift_entered is True
@@ -476,7 +534,7 @@ async def test_pregate_fail_does_not_call_alert_fn():
             alert_fn=alert_fn,
             feed_fn=AsyncMock(return_value=[]),
         ),
-        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+        proactive_gates=relationship_gate_chain(),
     )
     await tick.run()
     alert_fn.assert_not_called()
@@ -486,7 +544,7 @@ async def test_pregate_fail_does_not_call_alert_fn():
 async def test_all_gates_pass_returns_non_none():
     tick = make_proactive_pipeline(
         passive_busy_fn=lambda sk: False,
-        loneliness_gate_fn=lambda _session_key, _now_utc: (True, {"reason": "threshold"}),
+        proactive_gates=relationship_gate_chain(),
     )
     result = await tick.run()
     assert result is not None

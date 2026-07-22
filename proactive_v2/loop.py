@@ -29,6 +29,7 @@ from core.error_context import current_session_key
 from agent.looping.ports import SessionServices
 from agent.provider import LLMProvider
 from agent.tool_hooks import ToolHook
+from agent.core.proactive_turn.gates import ProactiveGate, ProactiveGateChain
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.turns.outbound import PushToolOutboundPort
@@ -85,6 +86,7 @@ class ProactiveLoop:
         passive_busy_fn: Callable[[str], bool] | None = None,
         shared_tools: ToolRegistry | None = None,
         tool_hooks: list[ToolHook] | None = None,
+        proactive_gates: list[ProactiveGate] | None = None,
         tick_dispatcher: Callable[[Callable[[], Any]], Any] | None = None,
         event_bus: EventBus | None = None,
     ) -> None:
@@ -103,6 +105,7 @@ class ProactiveLoop:
         self._passive_busy_fn = passive_busy_fn
         self._shared_tools = shared_tools
         self._tool_hooks = tool_hooks or []
+        self._proactive_gates = ProactiveGateChain(proactive_gates)
         self._tick_dispatcher = tick_dispatcher
         self._event_bus = event_bus
         self._turn_started_handler = self._handle_turn_started
@@ -201,26 +204,7 @@ class ProactiveLoop:
                 shared_tools=self._shared_tools,
                 pool=self._mcp_pool,
                 tool_hooks=self._tool_hooks,
-                loneliness_gate_fn=(
-                    self._relationship_runtime.should_trigger_proactive
-                    if self._relationship_runtime is not None
-                    else None
-                ),
-                scene_followup_gate_fn=(
-                    self._relationship_runtime.should_trigger_scene_followup
-                    if self._relationship_runtime is not None
-                    else None
-                ),
-                scene_followup_sent_fn=(
-                    self._relationship_runtime.handle_scene_followup_sent
-                    if self._relationship_runtime is not None
-                    else None
-                ),
-                scene_followup_closed_fn=(
-                    self._relationship_runtime.close_scene_followup
-                    if self._relationship_runtime is not None
-                    else None
-                ),
+                proactive_gates=self._proactive_gates,
             )
         ).build()
 

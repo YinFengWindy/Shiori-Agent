@@ -27,6 +27,7 @@ from agent.lifecycle.types import (
 from agent.plugins.registry import MetadataKind, PluginEventType, plugin_registry
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.types import HookContext, HookOutcome
+from agent.core.proactive_turn.gates import ProactiveGate
 from bus.event_bus import EventBus
 from infra.channels.contract import Channel
 
@@ -74,6 +75,7 @@ class PluginManager:
         self._loaded: set[str] = set()
         self._channels: list[Channel] = []
         self._tool_hooks: list[ToolHook] = []
+        self._proactive_gates: list[ProactiveGate] = []
         self._before_turn_modules: list[object] = []
         self._before_reasoning_modules: list[object] = []
         self._prompt_render_modules: list[object] = []
@@ -93,6 +95,10 @@ class PluginManager:
     @property
     def channels(self) -> list[Channel]:
         return list(self._channels)
+
+    @property
+    def proactive_gates(self) -> list[ProactiveGate]:
+        return list(self._proactive_gates)
 
     @property
     def before_turn_modules(self) -> list[object]:
@@ -224,6 +230,8 @@ class PluginManager:
         tool_names = self._register_tools(instance, mp)
         hook_count_before = len(self._tool_hooks)
         self._bind_tool_hooks(instance, mp)
+        proactive_gate_count_before = len(self._proactive_gates)
+        self._collect_proactive_gates(instance)
         before_turn_count_before = len(self._before_turn_modules)
         self._collect_before_turn_modules(instance)
         before_reasoning_count_before = len(self._before_reasoning_modules)
@@ -249,6 +257,7 @@ class PluginManager:
                 if self._tool_registry is not None:
                     self._tool_registry.unregister(tn)
             del self._tool_hooks[hook_count_before:]
+            del self._proactive_gates[proactive_gate_count_before:]
             del self._before_turn_modules[before_turn_count_before:]
             del self._before_reasoning_modules[before_reasoning_count_before:]
             del self._prompt_render_modules[prompt_render_count_before:]
@@ -346,6 +355,14 @@ class PluginManager:
             self._before_turn_modules,
         )
 
+    def _collect_proactive_gates(self, instance: Any) -> None:
+        for gate in _load_module_list(instance, "proactive_gates"):
+            if not isinstance(gate, ProactiveGate):
+                raise TypeError(
+                    f"插件 {type(instance).__name__}.proactive_gates 返回了无效 gate: {type(gate).__name__}"
+                )
+            self._proactive_gates.append(gate)
+
     def _collect_before_reasoning_modules(self, instance: Any) -> None:
         self._collect_phase_modules(
             instance,
@@ -415,6 +432,7 @@ class PluginManager:
             plugin_registry.remove_plugin(mp)
         self._loaded.clear()
         self._tool_hooks.clear()
+        self._proactive_gates.clear()
         self._before_turn_modules.clear()
         self._before_reasoning_modules.clear()
         self._prompt_render_modules.clear()
