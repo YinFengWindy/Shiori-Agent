@@ -37,10 +37,9 @@ class FakePetWindow extends EventEmitter {
   }
 }
 
-test("desktop pet follows the cursor from renderer drag commands and persists only its final position", async () => {
+test("desktop pet moves immediately from a renderer drag command and persists the position", async () => {
   let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   let saveCount = 0;
-  let cursorPosition = { x: 500, y: 500 };
   const window = new FakePetWindow();
   const controller = new DesktopPetController({
     getSettings: () => settings,
@@ -54,22 +53,16 @@ test("desktop pet follows the cursor from renderer drag commands and persists on
     }),
     createWindow: () => window as unknown as BrowserWindow,
     displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
-    getCursorPosition: () => cursorPosition,
     openLocalAttachment: () => undefined,
   });
 
   await controller.show();
   await new Promise((resolve) => setImmediate(resolve));
   saveCount = 0;
-  controller.beginDrag(40, 40);
+  controller.moveTo(460, 460);
   assert.deepEqual(window.getPosition(), [460, 460]);
-
-  cursorPosition = { x: 600, y: 600 };
-  await new Promise((resolve) => setTimeout(resolve, 25));
-  assert.deepEqual(window.getPosition(), [560, 560]);
-  controller.endDrag();
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(saveCount, 1);
-  assert.deepEqual(settings.positions["role-1:display-1"], { x: 560, y: 560 });
+  assert.deepEqual(settings.positions["role-1:display-1"], { x: 460, y: 460 });
 });

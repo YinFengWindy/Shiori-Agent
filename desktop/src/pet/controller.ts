@@ -1,6 +1,5 @@
 import type { BrowserWindow } from "electron";
 import { desktopPetViewport, clampDesktopPetPosition } from "./geometry.js";
-import { desktopPetPositionFromCursor, type DesktopPetPoint } from "./drag.js";
 import { bindDesktopPetSettings } from "./settings.js";
 import type { DesktopPetBinding, DesktopPetSettings, DesktopPetState } from "./types.js";
 
@@ -10,11 +9,8 @@ type DesktopPetControllerOptions = {
   resolveBinding: (roleId?: string) => Promise<DesktopPetBinding | null>;
   createWindow: (options: { openLocalAttachment: (url: string) => Promise<unknown> | unknown }) => BrowserWindow;
   displayForWindow: (window: BrowserWindow | null) => { id: string | number; workArea: { x: number; y: number; width: number; height: number } };
-  getCursorPosition: () => DesktopPetPoint;
   openLocalAttachment: (url: string) => Promise<unknown> | unknown;
 };
-
-const desktopPetDragIntervalMilliseconds = 1000 / 60;
 
 /** Serializes desktop-pet lifecycle operations so a stale enable cannot recreate a disabled pet. */
 export class DesktopPetController {
@@ -23,9 +19,6 @@ export class DesktopPetController {
   private window: BrowserWindow | null = null;
   private queue = Promise.resolve();
   private activeRoleId = "";
-  private dragPointerOffset: DesktopPetPoint | null = null;
-  private lastDragPosition: DesktopPetPoint | null = null;
-  private dragTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly options: DesktopPetControllerOptions) {
     this.createWindow = options.createWindow;
@@ -82,41 +75,11 @@ export class DesktopPetController {
     this.window?.webContents.send("desktop:pet-play", { state });
   }
 
-  /** Starts tracking the system cursor from the renderer's pointer-down command. */
-  beginDrag(pointerOffsetX: number, pointerOffsetY: number): void {
-    if (!this.window || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
-    this.dragPointerOffset = { x: pointerOffsetX, y: pointerOffsetY };
-    this.lastDragPosition = null;
-    this.followCursor();
-    this.stopDragTracking();
-    this.dragTimer = setInterval(() => this.followCursor(), desktopPetDragIntervalMilliseconds);
-  }
-
-  /** Stops cursor tracking and persists the final desktop-pet position. */
-  endDrag(): void {
-    if (!this.dragPointerOffset) return;
-    this.followCursor();
-    this.dragPointerOffset = null;
-    this.stopDragTracking();
-    if (this.window) this.persistPosition(this.activeRoleId, this.window);
-  }
-
-  /** Moves at a stable cadence without putting renderer pointermove events on IPC. */
-  private followCursor(): void {
-    if (!this.dragPointerOffset) return;
-    this.moveTo(desktopPetPositionFromCursor(this.options.getCursorPosition(), this.dragPointerOffset));
-  }
-
-  private stopDragTracking(): void {
-    if (this.dragTimer) clearInterval(this.dragTimer);
-    this.dragTimer = null;
-  }
-
-  private moveTo(position: DesktopPetPoint): void {
+  /** Moves the pet immediately in response to one renderer drag event. */
+  moveTo(x: number, y: number): void {
     if (!this.window) return;
     const display = this.displayForWindow(this.window);
-    const clampedPosition = clampDesktopPetPosition(position, display.workArea);
-    this.lastDragPosition = clampedPosition;
+    const clampedPosition = clampDesktopPetPosition({ x, y }, display.workArea);
     this.window.setPosition(clampedPosition.x, clampedPosition.y, false);
   }
 
@@ -145,8 +108,6 @@ export class DesktopPetController {
     if (created) {
       window.once("ready-to-show", sendLoad);
       window.on("moved", () => {
-        const [x, y] = window.getPosition();
-        if (this.lastDragPosition?.x === x && this.lastDragPosition.y === y) return;
         this.persistPosition(this.activeRoleId, window);
       });
       window.on("closed", () => {
@@ -169,9 +130,6 @@ export class DesktopPetController {
   }
 
   private destroyWindow(): void {
-    this.dragPointerOffset = null;
-    this.lastDragPosition = null;
-    this.stopDragTracking();
     this.window?.destroy();
     this.window = null;
   }

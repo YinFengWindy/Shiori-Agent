@@ -214,11 +214,10 @@ export function registerDesktopIpc({
   ipcMain.handle("desktop:pet-sync", async (_event: IpcMainInvokeEvent, forceVisible?: unknown) => {
     await desktopPet.sync(typeof forceVisible === "boolean" ? forceVisible : undefined);
   });
-  ipcMain.on("desktop:pet-drag-start", (_event: IpcMainInvokeEvent, payload?: { offsetX?: unknown; offsetY?: unknown }) => {
-    desktopPet.beginDrag(Number(payload?.offsetX), Number(payload?.offsetY));
-  });
-  ipcMain.on("desktop:pet-drag-end", () => {
-    desktopPet.endDrag();
+  ipcMain.on("desktop:pet-drag", (_event: IpcMainInvokeEvent, payload?: { x?: unknown; y?: unknown }) => {
+    const x = Number(payload?.x);
+    const y = Number(payload?.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) desktopPet.moveTo(x, y);
   });
   ipcMain.on("desktop:pet-open", () => onOpenDesktopPetRole());
   ipcMain.on("desktop:pet-context-menu", (event) => {

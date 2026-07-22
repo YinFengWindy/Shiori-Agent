@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { app, protocol, screen, session, shell, type BrowserWindow } from "electron";
+import { app, protocol, session, shell, type BrowserWindow } from "electron";
 import { localAssetSchemePrivileges, registerLocalAssetProtocol } from "./assetProtocol.js";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 import { startBridge, wireBridgeEvents } from "./bridgeLifecycle.js";
@@ -205,7 +205,6 @@ void app.whenReady().then(() => {
     resolveBinding: resolveDesktopPetBinding,
     createWindow: createDesktopPetWindow,
     displayForWindow: displayForDesktopPet,
-    getCursorPosition: () => screen.getCursorScreenPoint(),
     openLocalAttachment,
   });
   registerDesktopIpc({
