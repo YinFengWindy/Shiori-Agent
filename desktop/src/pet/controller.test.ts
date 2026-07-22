@@ -78,7 +78,7 @@ test("desktop pet persists a position moved by Electron's native drag region", a
   assert.deepEqual(settings.positions["role-1:display-1"], { x: 460, y: 460 });
 });
 
-test("desktop pet derives drag animation from native window movement", async () => {
+test("desktop pet keeps the Codex directional drag animation active until native movement settles", async () => {
   let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   const window = new FakePetWindow();
   const controller = new DesktopPetController({
@@ -104,5 +104,7 @@ test("desktop pet derives drag animation from native window movement", async () 
   window.setPosition(x + 24, y);
   await new Promise((resolve) => setImmediate(resolve));
 
+  assert.deepEqual(window.webContents.states, ["running-right"]);
+  await new Promise((resolve) => setTimeout(resolve, 240));
   assert.deepEqual(window.webContents.states, ["running-right", "idle"]);
 });

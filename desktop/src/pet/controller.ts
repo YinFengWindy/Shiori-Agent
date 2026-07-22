@@ -4,6 +4,9 @@ import { attachDesktopPetNativeInteractions } from "./nativeInteractions.js";
 import { bindDesktopPetSettings } from "./settings.js";
 import type { DesktopPetBinding, DesktopPetSettings, DesktopPetState } from "./types.js";
 
+/** Lets a completed native drag show at least one directional Codex animation frame before idling. */
+export const desktopPetDragIdleDelayMs = 220;
+
 type DesktopPetControllerOptions = {
   getSettings: () => DesktopPetSettings;
   saveSettings: (settings: DesktopPetSettings) => Promise<void>;
@@ -22,6 +25,7 @@ export class DesktopPetController {
   private window: BrowserWindow | null = null;
   private queue = Promise.resolve();
   private activeRoleId = "";
+  private dragIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly options: DesktopPetControllerOptions) {
     this.createWindow = options.createWindow;
@@ -113,9 +117,10 @@ export class DesktopPetController {
         if (position[0] === previousPosition[0] && position[1] === previousPosition[1]) return;
         this.play(position[0] < previousPosition[0] ? "running-left" : "running-right");
         previousPosition = position;
+        this.scheduleDragIdle(window);
       });
       window.on("moved", () => {
-        this.play("idle");
+        this.scheduleDragIdle(window);
         this.persistPosition(this.activeRoleId, window);
       });
       window.on("closed", () => {
@@ -137,7 +142,17 @@ export class DesktopPetController {
     });
   }
 
+  private scheduleDragIdle(window: BrowserWindow): void {
+    if (this.dragIdleTimer) clearTimeout(this.dragIdleTimer);
+    this.dragIdleTimer = setTimeout(() => {
+      this.dragIdleTimer = null;
+      if (this.window === window && !window.isDestroyed()) this.play("idle");
+    }, desktopPetDragIdleDelayMs);
+  }
+
   private destroyWindow(): void {
+    if (this.dragIdleTimer) clearTimeout(this.dragIdleTimer);
+    this.dragIdleTimer = null;
     this.window?.destroy();
     this.window = null;
   }

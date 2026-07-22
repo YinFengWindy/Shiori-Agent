@@ -62,3 +62,22 @@ test("native mouse double click restores the desktop window when the drag region
 
   assert.equal(openCount, 1);
 });
+
+test("native desktop pet double-click sources restore the desktop window only once", () => {
+  const window = new FakeNativePetWindow();
+  let openCount = 0;
+
+  attachDesktopPetNativeInteractions({
+    window: window as unknown as BrowserWindow,
+    platform: "win32",
+    onOpenPetRole: () => {
+      openCount += 1;
+    },
+    onShowContextMenu: () => undefined,
+  });
+
+  window.emitWindowMessage(windowsNonClientLeftButtonDoubleClick);
+  window.webContents.emit("before-mouse-event", {}, { type: "mouseDown", button: "left", clickCount: 2 });
+
+  assert.equal(openCount, 1);
+});
