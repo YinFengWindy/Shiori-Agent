@@ -1,4 +1,4 @@
-"""Backend-owned, consent-gated primary-screen capture for role tools."""
+"""Backend-owned, role-bound primary-screen capture for role tools."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ _SETTINGS_FILE = "desktop-pet.json"
 
 
 class DesktopScreenCapture:
-    """Captures a primary display only when the role owns an active consent session."""
+    """Captures a primary display only for the desktop role bound to the pet."""
 
     def __init__(
         self,
@@ -30,9 +30,9 @@ class DesktopScreenCapture:
         self._grab = grab or (lambda: ImageGrab.grab(all_screens=False))
 
     def capture(self, role_id: str) -> dict[str, Any]:
-        """Returns one ephemeral PNG frame after checking the persisted desktop consent."""
+        """Returns one ephemeral PNG frame after checking the persisted role binding."""
 
-        self._require_consent(role_id)
+        self._require_role_binding(role_id)
         image = self._grab()
         if image.width <= 0 or image.height <= 0:
             raise RuntimeError("主屏幕捕获返回空帧")
@@ -48,20 +48,16 @@ class DesktopScreenCapture:
             "image_base64": base64.b64encode(buffer.getvalue()).decode("ascii"),
         }
 
-    def _require_consent(self, role_id: str) -> None:
+    def _require_role_binding(self, role_id: str) -> None:
         settings_path = self._settings_path()
         try:
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
         except FileNotFoundError as exc:
-            raise ValueError("桌宠未开启屏幕观察") from exc
+            raise ValueError("桌宠未绑定角色") from exc
         except json.JSONDecodeError as exc:
-            raise ValueError("桌宠屏幕观察配置无效") from exc
+            raise ValueError("桌宠角色配置无效") from exc
         if not isinstance(settings, dict):
-            raise ValueError("桌宠屏幕观察配置无效")
-        if settings.get("observationEnabled") is not True:
-            raise ValueError("用户尚未授权屏幕观察")
-        if settings.get("visible") is not True:
-            raise ValueError("桌宠未显示，不能观察屏幕")
+            raise ValueError("桌宠角色配置无效")
         if str(settings.get("roleId") or "").strip() != role_id:
             raise ValueError("当前角色不拥有屏幕观察授权")
 

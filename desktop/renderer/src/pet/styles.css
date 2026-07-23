@@ -36,45 +36,10 @@ body {
   transition: transform 160ms ease-out;
 }
 
-.pet-observation-toggle {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  display: grid;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.76);
-  border-radius: 6px;
-  color: #374151;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.2);
-  cursor: pointer;
-}
-
-.pet-observation-toggle:disabled {
-  cursor: grabbing;
-  opacity: 0.5;
-}
-
-.pet-observation-observing,
-.pet-observation-reviewing {
-  color: #166534;
-}
-
-.pet-observation-paused {
-  color: #a16207;
-}
-
-.pet-observation-failed {
-  color: #b91c1c;
-}
-
 .pet-bubble {
   position: absolute;
   right: 7px;
-  bottom: 38px;
+  bottom: 7px;
   z-index: 2;
   box-sizing: border-box;
   width: max-content;

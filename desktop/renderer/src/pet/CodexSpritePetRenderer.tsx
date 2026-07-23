@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, EyeSlash, CircleNotch, PauseCircle, WarningCircle, X } from "@phosphor-icons/react";
+import { X } from "@phosphor-icons/react";
 import { spriteCell, spriteFramePosition, spritePlaybackFrameAt, type SpriteState } from "./spriteContract";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 import type { PetObservationPayload } from "../../../src/observation/types";
@@ -58,45 +58,7 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state, observation }: C
           touchAction: "none",
         }}
       />
-      <PetObservationToggle observation={observation} disabled={isDragging} />
     </div>
-  );
-}
-
-function PetObservationToggle({ observation, disabled }: { observation: PetObservationPayload; disabled: boolean }) {
-  const Icon = observation.status === "failed"
-    ? WarningCircle
-    : observation.status === "paused"
-      ? PauseCircle
-      : observation.status === "reviewing"
-        ? CircleNotch
-        : observation.enabled
-          ? Eye
-          : EyeSlash;
-  const label = observation.status === "failed"
-    ? "屏幕观察失败"
-    : observation.status === "paused"
-      ? "屏幕观察已暂停"
-      : observation.status === "reviewing"
-        ? "正在观察主屏幕"
-        : observation.enabled
-          ? "关闭屏幕观察"
-          : "开启屏幕观察";
-  return (
-    <button
-      type="button"
-      className={`pet-observation-toggle pet-observation-${observation.status}`}
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => {
-        event.stopPropagation();
-        void window.miraDesktop.togglePetObservation();
-      }}
-    >
-      <Icon size={16} weight="bold" />
-    </button>
   );
 }
 

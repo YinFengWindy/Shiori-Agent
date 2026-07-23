@@ -26,9 +26,11 @@ test("desktop pet keeps renderer pointer handling and the Codex grab cursor", ()
   assert.match(interactions, /function onDoubleClick\(\): void/);
   assert.match(interactions, /pointerHandlers:\s*\{[^}]*onDoubleClick/s);
   assert.doesNotMatch(interactions, /function onClick\(\): void/);
+  assert.doesNotMatch(markup, /屏幕观察/);
+  assert.doesNotMatch(styles, /pet-observation-toggle/);
 });
 
-test("persistent observation failures expose a dismiss control", () => {
+test("persistent observation bubbles expose a dismiss control", () => {
   const markup = renderToStaticMarkup(
     <CodexSpritePetRenderer
       spritesheetUrl="mira-asset://pet"
@@ -38,7 +40,6 @@ test("persistent observation failures expose a dismiss control", () => {
   );
 
   assert.match(markup, /aria-label="关闭消息"/);
-  assert.match(markup, /pet-observation-failed/);
 });
 
 test("transient observation bubbles do not expose a dismiss control", () => {
@@ -52,5 +53,5 @@ test("transient observation bubbles do not expose a dismiss control", () => {
 
   assert.match(markup, /继续写吧/);
   assert.doesNotMatch(markup, /aria-label="关闭消息"/);
-  assert.match(markup, /aria-label="关闭屏幕观察"/);
+  assert.doesNotMatch(markup, /屏幕观察/);
 });

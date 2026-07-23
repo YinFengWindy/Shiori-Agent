@@ -224,19 +224,10 @@ void app.whenReady().then(() => {
     displayForWindow: displayForDesktopPet,
     cursorScreenPoint: () => screen.getCursorScreenPoint(),
     openLocalAttachment,
-    onUnavailable: () => {
-      void desktopObservation?.suspend("桌宠不可用，屏幕观察已暂停").catch((error) => {
-        logDesktopDiagnostic({ scope: "main", event: "desktop-observation.suspend.failed", payload: { error } });
-      });
-    },
   });
   desktopObservation = new DesktopObservationController({
     pet: desktopPet,
     getRoleId: () => desktopPetSettings.roleId,
-    getEnabled: () => desktopPetSettings.observationEnabled,
-    saveEnabled: async (enabled) => {
-      await persistDesktopPetSettings({ ...desktopPetSettings, observationEnabled: enabled });
-    },
   });
   wireRoleObservationBubbles(bridge, desktopObservation);
   powerMonitor.on("lock-screen", () => {

@@ -172,8 +172,6 @@ export type DesktopApi = {
   windowState(): Promise<WindowState>;
   /** Synchronizes the desktop-pet window with the role saved by the detail form. */
   syncPet(forceVisible?: boolean): Promise<void>;
-  /** Toggles the persistent primary-screen observation session from the pet window. */
-  togglePetObservation(): Promise<void>;
   /** Dismisses the active safe observation bubble. */
   dismissPetObservationBubble(): Promise<void>;
   /** Starts following the system cursor from the given local pet offset and screen sample. */

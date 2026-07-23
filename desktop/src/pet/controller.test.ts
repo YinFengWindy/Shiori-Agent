@@ -58,7 +58,7 @@ class FakePetWindow extends EventEmitter {
 }
 
 test("desktop pet persists only the final system-cursor position after a drag", async () => {
-  let settings: DesktopPetSettings = { visible: false, observationEnabled: false, roleId: null, packageId: null, positions: {} };
+  let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   let saveCount = 0;
   let cursor = { x: 532, y: 564 };
   const window = new FakePetWindow();
@@ -98,7 +98,7 @@ test("desktop pet persists only the final system-cursor position after a drag", 
 });
 
 test("desktop pet ignores drag requests from a closed window", async () => {
-  let settings: DesktopPetSettings = { visible: false, observationEnabled: false, roleId: null, packageId: null, positions: {} };
+  let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   const window = new FakePetWindow();
   const controller = new DesktopPetController({
     getSettings: () => settings,
@@ -124,7 +124,7 @@ test("desktop pet ignores drag requests from a closed window", async () => {
 });
 
 test("desktop pet keeps its fixed viewport bounds while following a drag", async () => {
-  let settings: DesktopPetSettings = { visible: false, observationEnabled: false, roleId: null, packageId: null, positions: {} };
+  let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
   const window = new FakePetWindow();
   const controller = new DesktopPetController({
     getSettings: () => settings,
@@ -153,7 +153,6 @@ test("desktop pet keeps its fixed viewport bounds while following a drag", async
 test("desktop pet replays the latest observation state after its renderer becomes ready", async () => {
   let settings: DesktopPetSettings = {
     visible: false,
-    observationEnabled: true,
     roleId: "role-1",
     packageId: "pet-1",
     positions: {},
@@ -196,7 +195,6 @@ test("desktop pet replays the latest observation state after its renderer become
 test("desktop pet waits for the renderer handshake before sending its initial load", async () => {
   let settings: DesktopPetSettings = {
     visible: true,
-    observationEnabled: false,
     roleId: "role-1",
     packageId: "pet-1",
     positions: {},
@@ -233,10 +231,8 @@ test("desktop pet waits for the renderer handshake before sending its initial lo
 
 test("changing the package for one role invalidates the active pet binding", async () => {
   let packageId = "pet-1";
-  let unavailableCount = 0;
   let settings: DesktopPetSettings = {
     visible: false,
-    observationEnabled: false,
     roleId: "role-1",
     packageId,
     positions: {},
@@ -253,7 +249,6 @@ test("changing the package for one role invalidates the active pet binding", asy
     displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
     cursorScreenPoint: () => ({ x: 0, y: 0 }),
     openLocalAttachment: () => undefined,
-    onUnavailable: () => { unavailableCount += 1; },
   });
 
   await controller.show();
@@ -261,6 +256,9 @@ test("changing the package for one role invalidates the active pet binding", asy
   packageId = "pet-2";
   await controller.sync(true);
 
-  assert.equal(unavailableCount, 1);
+  assert.equal(
+    window.webContents.messages.filter((message) => message.channel === "desktop:pet-load").length,
+    2,
+  );
   window.destroy();
 });

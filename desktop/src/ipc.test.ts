@@ -35,14 +35,15 @@ test("generic renderer bridge calls cannot invoke observation methods", () => {
   assert.match(source, /restricted to the main process/);
 });
 
-test("pet observation controls authorize the active pet window", () => {
-  const start = ipcSource.indexOf('ipcMain.handle("desktop:pet-observation-toggle"');
+test("pet observation exposes only bubble dismissal controls", () => {
+  const start = ipcSource.indexOf('ipcMain.handle("desktop:pet-observation-dismiss"');
   const end = ipcSource.indexOf('ipcMain.on("desktop:pet-renderer-ready"', start + 1);
   const source = ipcSource.slice(start, end);
 
   assert.match(source, /desktop:pet-observation-dismiss/);
+  assert.doesNotMatch(ipcSource, /desktop:pet-observation-toggle/);
   assert.doesNotMatch(source, /desktop:pet-observation-request/);
-  assert.equal(source.match(/desktopPet\.isPetWindow\(petWindow\)/g)?.length, 2);
+  assert.equal(source.match(/desktopPet\.isPetWindow\(petWindow\)/g)?.length, 1);
 });
 
 test("pet renderer handshake is delegated to the active pet controller", () => {

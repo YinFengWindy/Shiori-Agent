@@ -223,12 +223,6 @@ export function registerDesktopIpc({
     await desktopPet.sync(typeof forceVisible === "boolean" ? forceVisible : undefined);
     await desktopObservation.restore();
   });
-  ipcMain.handle("desktop:pet-observation-toggle", async (event: IpcMainInvokeEvent) => {
-    const petWindow = BrowserWindow.fromWebContents(event.sender);
-    if (!desktopPet.isPetWindow(petWindow)) return;
-    desktopObservation.recordUserInteraction();
-    await desktopObservation.toggle();
-  });
   ipcMain.handle("desktop:pet-observation-dismiss", async (event: IpcMainInvokeEvent) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (!desktopPet.isPetWindow(petWindow)) return;
@@ -240,7 +234,6 @@ export function registerDesktopIpc({
   ipcMain.on("desktop:pet-drag-start", (event, payload?: { offsetX?: unknown; offsetY?: unknown; screenX?: unknown; screenY?: unknown }) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (!desktopPet.isPetWindow(petWindow)) return;
-    desktopObservation.recordUserInteraction();
     desktopPet.beginDrag(
       Number(payload?.offsetX),
       Number(payload?.offsetY),
@@ -264,7 +257,6 @@ export function registerDesktopIpc({
   }) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (!desktopPet.isPetWindow(petWindow)) return;
-    desktopObservation.recordUserInteraction();
     const screenX = Number(payload?.screenX);
     const screenY = Number(payload?.screenY);
     const velocityX = Number(payload?.velocityX);

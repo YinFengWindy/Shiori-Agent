@@ -22,7 +22,6 @@ type DesktopPetControllerOptions = {
   displayForWindow: (window: BrowserWindow | null) => { id: string | number; workArea: { x: number; y: number; width: number; height: number } };
   cursorScreenPoint: () => DesktopPetPosition;
   openLocalAttachment: (url: string) => Promise<unknown> | unknown;
-  onUnavailable?: () => void;
 };
 
 /** Serializes desktop-pet lifecycle operations so a stale enable cannot recreate a disabled pet. */
@@ -164,10 +163,6 @@ export class DesktopPetController {
   }
 
   private async load(binding: DesktopPetBinding, settings: DesktopPetSettings, state: DesktopPetState): Promise<void> {
-    if (
-      this.activeRoleId
-      && (this.activeRoleId !== binding.roleId || this.activePackageId !== binding.package.id)
-    ) this.options.onUnavailable?.();
     const created = this.window === null;
     const window = this.window ?? this.createWindow({ openLocalAttachment: this.options.openLocalAttachment });
     if (created) this.rendererIsReady = false;
@@ -195,7 +190,6 @@ export class DesktopPetController {
         this.activePackageId = "";
         this.activeLoad = null;
         this.rendererIsReady = false;
-        this.options.onUnavailable?.();
       });
     }
     this.window = window;
@@ -295,7 +289,6 @@ export class DesktopPetController {
   }
 
   private destroyWindow(): void {
-    if (this.window) this.options.onUnavailable?.();
     this.stopDragFollow();
     this.stopMomentum();
     this.dragPointerOffset = null;

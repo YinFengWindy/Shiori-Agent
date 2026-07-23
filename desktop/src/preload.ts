@@ -82,9 +82,6 @@ const api: DesktopApi = {
   syncPet(forceVisible) {
     return ipcRenderer.invoke("desktop:pet-sync", forceVisible) as Promise<void>;
   },
-  togglePetObservation() {
-    return ipcRenderer.invoke("desktop:pet-observation-toggle") as Promise<void>;
-  },
   dismissPetObservationBubble() {
     return ipcRenderer.invoke("desktop:pet-observation-dismiss") as Promise<void>;
   },

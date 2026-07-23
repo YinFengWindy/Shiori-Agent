@@ -24,7 +24,6 @@ export function normalizeDesktopPetSettings(value: unknown): DesktopPetSettings 
   }
   return {
     visible: Boolean(source.visible ?? source.enabled) && Boolean(roleId && packageId),
-    observationEnabled: Boolean(source.observationEnabled) && Boolean(roleId && packageId),
     roleId,
     packageId,
     positions,
@@ -37,11 +36,9 @@ export function bindDesktopPetSettings(
   binding: DesktopPetBinding,
   visible: boolean,
 ): DesktopPetSettings {
-  const bindingChanged = settings.roleId !== binding.roleId || settings.packageId !== binding.package.id;
   return {
     ...settings,
     visible,
-    observationEnabled: bindingChanged ? false : settings.observationEnabled,
     roleId: binding.roleId,
     packageId: binding.package.id,
   };

@@ -3,19 +3,15 @@ import test from "node:test";
 import { DesktopObservationController } from "./controller.js";
 import type { PetObservationPayload } from "./types.js";
 
-test("enabling observation only grants the role tool and does not capture a screen", async () => {
-  let enabled = false;
+test("visible pets activate only the role-reply bubble surface", async () => {
   const payloads: PetObservationPayload[] = [];
   const controller = new DesktopObservationController({
     pet: { isRunning: true, publishObservation: (payload) => payloads.push(payload) },
     getRoleId: () => "role-a",
-    getEnabled: () => enabled,
-    saveEnabled: async (next) => { enabled = next; },
   });
 
-  await controller.start();
+  await controller.restore();
 
-  assert.equal(enabled, true);
   assert.equal(controller.state, "observing");
   assert.equal(payloads.at(-1)?.bubble, "");
 });
@@ -25,8 +21,6 @@ test("role-produced screen replies use the transient pet bubble", async () => {
   const controller = new DesktopObservationController({
     pet: { isRunning: true, publishObservation: (payload) => payloads.push(payload) },
     getRoleId: () => "role-a",
-    getEnabled: () => true,
-    saveEnabled: async () => undefined,
   });
   await controller.restore();
 
@@ -37,17 +31,15 @@ test("role-produced screen replies use the transient pet bubble", async () => {
   assert.equal(payloads.at(-1)?.persistent, false);
 });
 
-test("hidden pets pause the tool capability without revoking persisted consent", async () => {
+test("hidden pets suppress bubbles without changing the role tool capability", async () => {
   const payloads: PetObservationPayload[] = [];
   const controller = new DesktopObservationController({
     pet: { isRunning: false, publishObservation: (payload) => payloads.push(payload) },
     getRoleId: () => "role-a",
-    getEnabled: () => true,
-    saveEnabled: async () => undefined,
   });
 
   await controller.restore();
 
-  assert.equal(controller.state, "paused");
+  assert.equal(controller.state, "off");
   assert.equal(payloads.at(-1)?.enabled, true);
 });
