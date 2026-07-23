@@ -10,7 +10,7 @@ import pytest
 
 from bus.event_bus import EventBus
 from desktop_bridge.models import BridgeResponse
-from desktop_bridge.server import DesktopBridgeServer
+from desktop_bridge.server import DesktopBridgeServer, _build_observation_service
 from session.manager import SessionManager
 
 
@@ -25,6 +25,52 @@ def _build_server(tmp_path: Path) -> DesktopBridgeServer:
         event_bus=EventBus(),
     )
     return DesktopBridgeServer(runtime)
+
+
+def test_observation_service_prefers_dedicated_vl_provider(tmp_path: Path) -> None:
+    role_store = SimpleNamespace()
+    main_provider = SimpleNamespace(name="main")
+    vl_provider = SimpleNamespace(name="vl")
+    memory = SimpleNamespace()
+    runtime = SimpleNamespace(
+        config=SimpleNamespace(multimodal=False, model="main-model", vl_model="vl-model"),
+        provider=main_provider,
+        vl_provider=vl_provider,
+        memory_runtime=SimpleNamespace(engine=memory),
+    )
+
+    service = _build_observation_service(runtime, role_store)
+
+    assert service is not None
+    assert service._model_adapter._provider is vl_provider
+    assert service._model_adapter._model == "vl-model"
+
+
+def test_observation_service_requires_a_visual_provider(tmp_path: Path) -> None:
+    runtime = SimpleNamespace(
+        config=SimpleNamespace(multimodal=False, model="text-model", vl_model=""),
+        provider=SimpleNamespace(),
+        vl_provider=None,
+        memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
+    )
+
+    assert _build_observation_service(runtime, SimpleNamespace()) is None
+
+
+def test_observation_service_uses_main_provider_when_it_is_multimodal() -> None:
+    main_provider = SimpleNamespace(name="main")
+    runtime = SimpleNamespace(
+        config=SimpleNamespace(multimodal=True, model="main-model", vl_model=""),
+        provider=main_provider,
+        vl_provider=None,
+        memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
+    )
+
+    service = _build_observation_service(runtime, SimpleNamespace())
+
+    assert service is not None
+    assert service._model_adapter._provider is main_provider
+    assert service._model_adapter._model == "main-model"
 
 
 @pytest.mark.asyncio

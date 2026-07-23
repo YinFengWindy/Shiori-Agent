@@ -7,8 +7,10 @@ import type { DesktopPetSettings } from "./types.js";
 
 class FakePetWebContents extends EventEmitter {
   readonly states: string[] = [];
+  readonly messages: Array<{ channel: string; payload: unknown }> = [];
 
-  send(_channel: string, payload: { state?: string }): void {
+  send(channel: string, payload: { state?: string }): void {
+    this.messages.push({ channel, payload });
     if (payload.state) this.states.push(payload.state);
   }
 }
@@ -47,7 +49,7 @@ class FakePetWindow extends EventEmitter {
 }
 
 test("desktop pet persists only the final system-cursor position after a drag", async () => {
-  let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
+  let settings: DesktopPetSettings = { visible: false, observationEnabled: false, roleId: null, packageId: null, positions: {} };
   let saveCount = 0;
   let cursor = { x: 532, y: 564 };
   const window = new FakePetWindow();
@@ -87,7 +89,7 @@ test("desktop pet persists only the final system-cursor position after a drag", 
 });
 
 test("desktop pet ignores drag requests from a closed window", async () => {
-  let settings: DesktopPetSettings = { visible: false, roleId: null, packageId: null, positions: {} };
+  let settings: DesktopPetSettings = { visible: false, observationEnabled: false, roleId: null, packageId: null, positions: {} };
   const window = new FakePetWindow();
   const controller = new DesktopPetController({
     getSettings: () => settings,
@@ -110,4 +112,81 @@ test("desktop pet ignores drag requests from a closed window", async () => {
   controller.beginDrag(72, 104);
   window.destroy();
   assert.equal(controller.isPetWindow(window as unknown as BrowserWindow), false);
+});
+
+test("desktop pet replays the latest observation state after its renderer becomes ready", async () => {
+  let settings: DesktopPetSettings = {
+    visible: false,
+    observationEnabled: true,
+    roleId: "role-1",
+    packageId: "pet-1",
+    positions: {},
+  };
+  const window = new FakePetWindow();
+  const controller = new DesktopPetController({
+    getSettings: () => settings,
+    saveSettings: async (nextSettings) => { settings = nextSettings; },
+    resolveBinding: async () => ({
+      roleId: "role-1",
+      package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "mira-asset://pet" },
+    }),
+    createWindow: () => window as unknown as BrowserWindow,
+    displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    cursorScreenPoint: () => ({ x: 0, y: 0 }),
+    openLocalAttachment: () => undefined,
+  });
+  controller.publishObservation({
+    status: "paused",
+    enabled: true,
+    bubble: "屏幕观察已暂停",
+    persistent: true,
+  });
+
+  await controller.show();
+  window.emit("ready-to-show");
+
+  const observation = window.webContents.messages.find(
+    (message) => message.channel === "desktop:pet-observation",
+  );
+  assert.deepEqual(observation?.payload, {
+    status: "paused",
+    enabled: true,
+    bubble: "屏幕观察已暂停",
+    persistent: true,
+  });
+  window.destroy();
+});
+
+test("changing the package for one role invalidates the active pet binding", async () => {
+  let packageId = "pet-1";
+  let unavailableCount = 0;
+  let settings: DesktopPetSettings = {
+    visible: false,
+    observationEnabled: false,
+    roleId: "role-1",
+    packageId,
+    positions: {},
+  };
+  const window = new FakePetWindow();
+  const controller = new DesktopPetController({
+    getSettings: () => settings,
+    saveSettings: async (nextSettings) => { settings = nextSettings; },
+    resolveBinding: async () => ({
+      roleId: "role-1",
+      package: { id: packageId, displayName: "Pet", spritesheetUrl: `mira-asset://${packageId}` },
+    }),
+    createWindow: () => window as unknown as BrowserWindow,
+    displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    cursorScreenPoint: () => ({ x: 0, y: 0 }),
+    openLocalAttachment: () => undefined,
+    onUnavailable: () => { unavailableCount += 1; },
+  });
+
+  await controller.show();
+  window.emit("ready-to-show");
+  packageId = "pet-2";
+  await controller.sync(true);
+
+  assert.equal(unavailableCount, 1);
+  window.destroy();
 });

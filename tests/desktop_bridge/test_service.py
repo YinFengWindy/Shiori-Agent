@@ -62,6 +62,40 @@ async def test_novelai_regenerate_message_media_returns_updated_session(
 
 
 @pytest.mark.asyncio
+async def test_observation_bridge_routes_only_through_the_owned_service(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    session_manager = SessionManager(tmp_path)
+    observation = SimpleNamespace(
+        analyze=AsyncMock(return_value={"frame_id": "frame-1"}),
+        remember=AsyncMock(return_value={"item_id": "event-1"}),
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+        observation_service=observation,
+    )
+
+    analyzed = await service.handle(
+        {"id": "observe-1", "method": "observation.analyze", "payload": {"frame_id": "frame-1"}},
+        emit_event=Mock(),
+    )
+    remembered = await service.handle(
+        {"id": "observe-2", "method": "observation.remember", "payload": {"summary": "共同经历"}},
+        emit_event=Mock(),
+    )
+
+    assert analyzed.error is None
+    assert analyzed.payload == {"frame_id": "frame-1"}
+    assert remembered.error is None
+    assert remembered.payload == {"item_id": "event-1"}
+    observation.analyze.assert_awaited_once()
+    observation.remember.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_chat_send_returns_busy_before_persisting_second_message(tmp_path) -> None:
     role_store = RoleStore(tmp_path)
     role_store.create_role(

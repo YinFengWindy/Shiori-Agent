@@ -29,6 +29,7 @@ from desktop_bridge.app_service import DesktopAppService
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.image_service import DesktopImageService
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
+from desktop_bridge.observation_service import DesktopObservationService
 from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_presenter import DesktopSessionPresenter
@@ -58,6 +59,7 @@ class DesktopBridgeService:
         scheduler: Any | None = None,
         subagent_manager: Any | None = None,
         memory_optimizer: Any | None = None,
+        observation_service: DesktopObservationService | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -131,6 +133,7 @@ class DesktopBridgeService:
             workspace=workspace,
             role_store=role_store,
         )
+        self.observation_service = observation_service
         if push_tool is not None:
             self.register_desktop_push_channel(push_tool)
 
@@ -272,6 +275,22 @@ class DesktopBridgeService:
         )
 
         try:
+            if method == "observation.analyze":
+                if self.observation_service is None:
+                    raise RuntimeError("desktop observation service unavailable")
+                return self._ok(
+                    request_id,
+                    method,
+                    await self.observation_service.analyze(payload),
+                )
+            if method == "observation.remember":
+                if self.observation_service is None:
+                    raise RuntimeError("desktop observation service unavailable")
+                return self._ok(
+                    request_id,
+                    method,
+                    await self.observation_service.remember(payload),
+                )
             world_result = self.world_simulation.handle(
                 method,
                 payload,

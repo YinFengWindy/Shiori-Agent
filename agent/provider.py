@@ -240,6 +240,7 @@ class LLMProvider:
         tool_choice: str | dict = "auto",
         extra_body: dict | None = None,
         disable_thinking: bool = False,
+        payload_snapshot_enabled: bool | None = None,
         on_content_delta: Callable[[StreamDelta], Awaitable[None]] | None = None,
     ) -> LLMResponse:
         strategy = _select_provider_strategy(
@@ -270,9 +271,20 @@ class LLMProvider:
         )
 
         if on_content_delta is not None:
-            return await self._chat_streaming(kwargs, on_content_delta, strategy)
+            return await self._chat_streaming(
+                kwargs,
+                on_content_delta,
+                strategy,
+                payload_snapshot_enabled=payload_snapshot_enabled,
+            )
 
-        resp = cast(Any, await self._create_with_retry(kwargs))
+        resp = cast(
+            Any,
+            await self._create_with_retry(
+                kwargs,
+                payload_snapshot_enabled=payload_snapshot_enabled,
+            ),
+        )
         msg = resp.choices[0].message
 
         tool_calls = []
@@ -309,10 +321,15 @@ class LLMProvider:
         kwargs: dict[str, Any],
         on_content_delta: Callable[[StreamDelta], Awaitable[None]],
         strategy: ProviderStrategy,
+        *,
+        payload_snapshot_enabled: bool | None = None,
     ) -> LLMResponse:
         stream = cast(
             Any,
-            await self._create_with_retry(strategy.prepare_stream_request(kwargs)),
+            await self._create_with_retry(
+                strategy.prepare_stream_request(kwargs),
+                payload_snapshot_enabled=payload_snapshot_enabled,
+            ),
         )
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
@@ -403,8 +420,20 @@ class LLMProvider:
             cache_hit_tokens=cache_hit_tokens,
         )
 
-    async def _create_with_retry(self, kwargs: dict) -> object:
-        _save_llm_payload_snapshot(kwargs, enabled=self._payload_snapshot_enabled)
+    async def _create_with_retry(
+        self,
+        kwargs: dict,
+        *,
+        payload_snapshot_enabled: bool | None = None,
+    ) -> object:
+        _save_llm_payload_snapshot(
+            kwargs,
+            enabled=(
+                self._payload_snapshot_enabled
+                if payload_snapshot_enabled is None
+                else payload_snapshot_enabled
+            ),
+        )
         last_err: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:

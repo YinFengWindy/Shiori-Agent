@@ -88,6 +88,7 @@ class CoreRuntime:
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
     role_world_registry: RoleWorldRegistry
+    vl_provider: LLMProvider | None = None
     image_sync_service: ExternalImageSyncService | None = None
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginManager | None" = None
@@ -580,6 +581,7 @@ def build_core_runtime(
         scheduler=scheduler,
         provider=provider,
         light_provider=light_provider,
+        vl_provider=vl_provider,
         agent_provider=agent_provider,
         mcp_registry=mcp_registry,
         memory_runtime=memory_runtime,

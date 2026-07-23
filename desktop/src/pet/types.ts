@@ -29,6 +29,7 @@ export type DesktopPetPosition = { x: number; y: number };
 /** Persisted application-level desktop-pet configuration. */
 export type DesktopPetSettings = {
   visible: boolean;
+  observationEnabled: boolean;
   roleId: string | null;
   packageId: string | null;
   positions: Record<string, DesktopPetPosition>;
@@ -36,6 +37,7 @@ export type DesktopPetSettings = {
 
 export const defaultDesktopPetSettings: DesktopPetSettings = {
   visible: false,
+  observationEnabled: false,
   roleId: null,
   packageId: null,
   positions: {},

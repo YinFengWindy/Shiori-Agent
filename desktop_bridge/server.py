@@ -11,6 +11,7 @@ from bootstrap.tools import CoreRuntime
 from core.integrations.novelai.store import NovelAIStore
 from core.roles import RoleStore
 from desktop_bridge.models import BridgeError, BridgeResponse
+from desktop_bridge.observation_service import DesktopObservationService
 from desktop_bridge.request_dispatcher import BridgeRequestDispatcher
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.stream_writer import BridgeStreamWriter
@@ -19,6 +20,33 @@ logger = logging.getLogger("desktop.bridge")
 
 ReadLine = Callable[[], Awaitable[str | None]]
 WritePayload = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+def _build_observation_service(
+    runtime: CoreRuntime,
+    role_store: RoleStore,
+) -> DesktopObservationService | None:
+    config = getattr(runtime, "config", None)
+    memory_runtime = getattr(runtime, "memory_runtime", None)
+    vl_provider = getattr(runtime, "vl_provider", None)
+    main_multimodal = bool(getattr(config, "multimodal", True))
+    if vl_provider is None and not main_multimodal:
+        return None
+    provider = vl_provider or getattr(runtime, "provider", None)
+    model = (
+        getattr(config, "vl_model", "")
+        if vl_provider is not None
+        else getattr(config, "model", "")
+    )
+    memory = getattr(memory_runtime, "engine", None)
+    if provider is None or not model or memory is None:
+        return None
+    return DesktopObservationService(
+        role_store=role_store,
+        provider=provider,
+        model=model,
+        memory=memory,
+    )
 
 
 class DesktopBridgeServer:
@@ -42,6 +70,7 @@ class DesktopBridgeServer:
             scheduler=getattr(runtime, "scheduler", None),
             subagent_manager=getattr(spawn_tool, "manager", None),
             memory_optimizer=getattr(runtime, "memory_optimizer", None),
+            observation_service=_build_observation_service(runtime, self.role_store),
         )
 
     async def serve_streams(

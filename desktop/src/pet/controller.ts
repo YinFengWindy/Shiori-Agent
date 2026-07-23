@@ -9,6 +9,7 @@ import {
 } from "./momentum.js";
 import { bindDesktopPetSettings } from "./settings.js";
 import type { DesktopPetBinding, DesktopPetPosition, DesktopPetSettings, DesktopPetState } from "./types.js";
+import type { PetObservationPayload } from "../observation/types.js";
 
 /** Keeps the main-process cursor follower aligned with the display refresh rate. */
 export const desktopPetDragFollowIntervalMs = 1000 / 60;
@@ -21,6 +22,7 @@ type DesktopPetControllerOptions = {
   displayForWindow: (window: BrowserWindow | null) => { id: string | number; workArea: { x: number; y: number; width: number; height: number } };
   cursorScreenPoint: () => DesktopPetPosition;
   openLocalAttachment: (url: string) => Promise<unknown> | unknown;
+  onUnavailable?: () => void;
 };
 
 /** Serializes desktop-pet lifecycle operations so a stale enable cannot recreate a disabled pet. */
@@ -30,6 +32,8 @@ export class DesktopPetController {
   private window: BrowserWindow | null = null;
   private queue = Promise.resolve();
   private activeRoleId = "";
+  private activePackageId = "";
+  private latestObservation: PetObservationPayload | null = null;
   private dragPointerOffset: DesktopPetPosition | null = null;
   private dragFollowTimer: ReturnType<typeof setInterval> | null = null;
   private momentum: DesktopPetMomentum | null = null;
@@ -97,6 +101,12 @@ export class DesktopPetController {
     this.window?.webContents.send("desktop:pet-play", { state });
   }
 
+  /** Publishes observation state without exposing frames or model output internals. */
+  publishObservation(payload: PetObservationPayload): void {
+    this.latestObservation = payload;
+    this.window?.webContents.send("desktop:pet-observation", payload);
+  }
+
   /** Starts following the system cursor while preserving the initial pointer offset. */
   beginDrag(pointerOffsetX: number, pointerOffsetY: number, pointerScreenX?: number, pointerScreenY?: number): void {
     if (!this.isRunning || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
@@ -143,6 +153,10 @@ export class DesktopPetController {
   }
 
   private async load(binding: DesktopPetBinding, settings: DesktopPetSettings, state: DesktopPetState): Promise<void> {
+    if (
+      this.activeRoleId
+      && (this.activeRoleId !== binding.roleId || this.activePackageId !== binding.package.id)
+    ) this.options.onUnavailable?.();
     const created = this.window === null;
     const window = this.window ?? this.createWindow({ openLocalAttachment: this.options.openLocalAttachment });
     const display = this.displayForWindow(window);
@@ -154,9 +168,13 @@ export class DesktopPetController {
     const position = clampDesktopPetPosition(settings.positions[key] ?? fallback, display.workArea);
     window.setPosition(position.x, position.y);
     this.activeRoleId = binding.roleId;
+    this.activePackageId = binding.package.id;
     const sendLoad = () => {
       window.showInactive();
       window.webContents.send("desktop:pet-load", { package: binding.package, state });
+      if (this.latestObservation) {
+        window.webContents.send("desktop:pet-observation", this.latestObservation);
+      }
     };
     if (created) {
       window.once("ready-to-show", sendLoad);
@@ -165,6 +183,9 @@ export class DesktopPetController {
         this.stopDragFollow();
         this.dragPointerOffset = null;
         this.window = null;
+        this.activeRoleId = "";
+        this.activePackageId = "";
+        this.options.onUnavailable?.();
       });
     } else {
       sendLoad();
@@ -254,10 +275,13 @@ export class DesktopPetController {
   }
 
   private destroyWindow(): void {
+    if (this.window) this.options.onUnavailable?.();
     this.stopDragFollow();
     this.stopMomentum();
     this.dragPointerOffset = null;
     this.window?.destroy();
     this.window = null;
+    this.activeRoleId = "";
+    this.activePackageId = "";
   }
 }

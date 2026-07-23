@@ -140,6 +140,7 @@ class MemoryMutation:
     memory_kind: str = ""
     memory_domain: str = ""
     source_ref: str = ""
+    happened_at: str = ""
     ids: tuple[str, ...] = ()
     metadata: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
 

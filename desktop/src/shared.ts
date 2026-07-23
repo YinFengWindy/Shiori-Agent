@@ -172,6 +172,12 @@ export type DesktopApi = {
   windowState(): Promise<WindowState>;
   /** Synchronizes the desktop-pet window with the role saved by the detail form. */
   syncPet(forceVisible?: boolean): Promise<void>;
+  /** Toggles the persistent primary-screen observation session from the pet window. */
+  togglePetObservation(): Promise<void>;
+  /** Requests one observation frame without changing persistent consent. */
+  requestPetObservation(): Promise<void>;
+  /** Dismisses the active safe observation bubble. */
+  dismissPetObservationBubble(): Promise<void>;
   /** Starts following the system cursor from the given local pet offset and screen sample. */
   beginPetDrag(offsetX: number, offsetY: number, screenX?: number, screenY?: number): void;
   /** Applies an immediate renderer cursor sample during a pet drag. */
@@ -188,4 +194,7 @@ export type DesktopApi = {
   /** Subscribes to sprite state transitions from the desktop-pet controller. */
   onPetPlay(listener: (event: unknown, payload: unknown) => void): void;
   offPetPlay(listener: (event: unknown, payload: unknown) => void): void;
+  /** Subscribes to safe observation status and speech-bubble updates. */
+  onPetObservation(listener: (event: unknown, payload: unknown) => void): void;
+  offPetObservation(listener: (event: unknown, payload: unknown) => void): void;
 };

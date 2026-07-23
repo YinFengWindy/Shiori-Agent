@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+import base64
+from types import SimpleNamespace
+
+import pytest
+
+from desktop_bridge.observation_contract import (
+    normalize_observation_result,
+    parse_json_observation_request,
+    parse_observation_frame,
+    parse_observation_tool_request,
+)
+
+
+def _frame():
+    return SimpleNamespace(
+        frame_id="frame-1",
+        captured_at="2026-07-23T12:00:00Z",
+        width=1000,
+        height=800,
+        scale_factor=1.25,
+        image_base64="frame",
+    )
+
+
+def _result(**overrides):
+    return {
+        "interface_summary": "编辑器",
+        "activity_key": "editing",
+        "targets": [{"label": "保存", "x": 100, "y": 80, "confidence": 0.9}],
+        "risks": [],
+        "bubble": "继续写吧",
+        "experience_candidate": "下午一起整理了报告",
+        **overrides,
+    }
+
+
+def _payload() -> dict[str, object]:
+    return {
+        "role_id": "mira",
+        "frame_id": "frame-1",
+        "captured_at": "2026-07-23T12:00:00Z",
+        "width": 100,
+        "height": 80,
+        "scale_factor": 1.25,
+        "image_base64": base64.b64encode(b"\x89PNG\r\n\x1a\ncontent").decode("ascii"),
+    }
+
+
+def test_normalize_observation_validates_targets_and_unknown_risks() -> None:
+    normalized = normalize_observation_result(_frame(), _result())
+    assert normalized["targets"] == [
+        {"label": "保存", "x": 100.0, "y": 80.0, "confidence": 0.9}
+    ]
+
+    with pytest.raises(ValueError, match="目标结构"):
+        normalize_observation_result(
+            _frame(),
+            _result(targets=[{"label": "保存", "x": 1200, "y": 0, "confidence": 1}]),
+        )
+    with pytest.raises(ValueError, match="风险结构"):
+        normalize_observation_result(_frame(), _result(risks=["model_invented"]))
+
+
+def test_sensitive_text_and_risky_frames_suppress_bubbles_and_memory() -> None:
+    sensitive = normalize_observation_result(
+        _frame(),
+        _result(
+            targets=[{"label": "密码", "x": 1, "y": 2, "confidence": 0.9}],
+            bubble="密码已经填好了",
+        ),
+    )
+    assert sensitive["targets"] == []
+    assert sensitive["risks"] == ["sensitive"]
+    assert sensitive["bubble"] == ""
+    assert sensitive["experience_candidate"] == ""
+
+    high_risk = normalize_observation_result(
+        _frame(),
+        _result(risks=["payment", "prompt_injection"]),
+    )
+    assert high_risk["bubble"] == ""
+    assert high_risk["experience_candidate"] == ""
+
+
+def test_parse_frame_requires_png_and_valid_timestamp() -> None:
+    frame = parse_observation_frame(_payload())
+    assert frame.frame_id == "frame-1"
+
+    invalid = {**_payload(), "image_base64": base64.b64encode(b"not-png").decode("ascii")}
+    with pytest.raises(ValueError, match="PNG"):
+        parse_observation_frame(invalid)
+
+
+def test_action_contract_allows_only_one_screenshot_request() -> None:
+    screenshot = SimpleNamespace(name="screenshot", arguments={})
+    click = SimpleNamespace(name="click", arguments={"x": 1, "y": 2})
+
+    assert parse_observation_tool_request([screenshot]) == {"request": "screenshot"}
+    assert parse_json_observation_request({"action": {"type": "screenshot"}}) == {
+        "request": "screenshot"
+    }
+    with pytest.raises(ValueError, match="未授权桌面动作"):
+        parse_observation_tool_request([click])
+    with pytest.raises(ValueError, match="未授权桌面动作"):
+        parse_json_observation_request({"action": {"type": "click"}})

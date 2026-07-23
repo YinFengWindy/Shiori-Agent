@@ -974,6 +974,31 @@ async def test_default_memory_engine_remember_uses_memorizer():
     )
 
 
+async def test_default_memory_engine_remember_forwards_happened_at():
+    memorizer = SimpleNamespace(
+        save_item_with_supersede=AsyncMock(return_value="new:event-1")
+    )
+    engine = _make_default_engine(
+        retriever=cast(Any, SimpleNamespace()),
+        memorizer=cast(Any, memorizer),
+    )
+
+    await engine.mutate(
+        MemoryMutation(
+            kind="remember",
+            summary="下午一起整理了报告",
+            memory_kind="event",
+            scope=MemoryScope(role_id="mira"),
+            happened_at="2026-07-23T12:00:00Z",
+        )
+    )
+
+    assert (
+        memorizer.save_item_with_supersede.await_args.kwargs["happened_at"]
+        == "2026-07-23T12:00:00Z"
+    )
+
+
 async def test_default_memory_engine_remember_keeps_explicit_memory_domain():
     memorizer = SimpleNamespace(
         save_item_with_supersede=AsyncMock(return_value="new:memu-1")

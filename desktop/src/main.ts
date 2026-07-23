@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { app, Menu, protocol, screen, session, shell, type BrowserWindow } from "electron";
+import { app, Menu, powerMonitor, protocol, screen, session, shell, type BrowserWindow } from "electron";
 import { localAssetSchemePrivileges, registerLocalAssetProtocol } from "./assetProtocol.js";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 import { startBridge, wireBridgeEvents } from "./bridgeLifecycle.js";
@@ -20,6 +20,8 @@ import { DesktopPetController } from "./pet/controller.js";
 import { loadDesktopPetSettings, saveDesktopPetSettings } from "./pet/settings.js";
 import type { DesktopPetBinding, DesktopPetSettings } from "./pet/types.js";
 import { createDesktopPetWindow, displayForDesktopPet } from "./pet/window.js";
+import { capturePrimaryDisplay } from "./observation/capture.js";
+import { DesktopObservationController } from "./observation/controller.js";
 
 const bridge = new DesktopBridgeClient();
 const localAssets = new LocalAssetRegistry();
@@ -29,6 +31,8 @@ let desktopWindow: BrowserWindow | null = null;
 let desktopTray: ReturnType<typeof createDesktopTray> | null = null;
 let desktopPetSettings: DesktopPetSettings;
 let desktopPet: DesktopPetController | null = null;
+let desktopObservation: DesktopObservationController | null = null;
+let screenLocked = false;
 let isQuitting = false;
 let bridgeShutdownStarted = false;
 
@@ -150,6 +154,19 @@ function requestAppQuit(): void {
   app.quit();
 }
 
+async function hideDesktopPet(): Promise<void> {
+  try {
+    await desktopObservation?.suspend("桌宠已隐藏，屏幕观察已暂停");
+  } finally {
+    await desktopPet?.hide();
+  }
+}
+
+async function showDesktopPet(): Promise<void> {
+  await desktopPet?.show();
+  await desktopObservation?.restore();
+}
+
 function shouldHideDesktopWindowOnClose(): boolean {
   return shouldHideDesktopWindowOnClosePolicy({
     isQuitting,
@@ -207,6 +224,37 @@ void app.whenReady().then(() => {
     displayForWindow: displayForDesktopPet,
     cursorScreenPoint: () => screen.getCursorScreenPoint(),
     openLocalAttachment,
+    onUnavailable: () => {
+      void desktopObservation?.suspend("桌宠不可用，屏幕观察已暂停").catch((error) => {
+        logDesktopDiagnostic({ scope: "main", event: "desktop-observation.suspend.failed", payload: { error } });
+      });
+    },
+  });
+  desktopObservation = new DesktopObservationController({
+    bridge,
+    pet: desktopPet,
+    getRoleId: () => desktopPetSettings.roleId,
+    getEnabled: () => desktopPetSettings.observationEnabled,
+    saveEnabled: async (enabled) => {
+      await persistDesktopPetSettings({ ...desktopPetSettings, observationEnabled: enabled });
+    },
+    captureFrame: () => capturePrimaryDisplay({ screenLocked }),
+    getIdleSeconds: () => powerMonitor.getSystemIdleTime(),
+    onError: (error) => {
+      logDesktopDiagnostic({ scope: "main", event: "desktop-observation.background.failed", payload: { error } });
+    },
+  });
+  powerMonitor.on("lock-screen", () => {
+    screenLocked = true;
+    void desktopObservation?.suspend("Windows 已锁定，屏幕观察已暂停").catch((error) => {
+      logDesktopDiagnostic({ scope: "main", event: "desktop-observation.suspend.failed", payload: { error } });
+    });
+  });
+  powerMonitor.on("unlock-screen", () => {
+    screenLocked = false;
+    void desktopObservation?.resume().catch((error) => {
+      logDesktopDiagnostic({ scope: "main", event: "desktop-observation.resume.failed", payload: { error } });
+    });
   });
   registerDesktopIpc({
     bridge,
@@ -215,11 +263,12 @@ void app.whenReady().then(() => {
     localAssetImportsRoot,
     openLocalAttachment,
     desktopPet,
+    desktopObservation,
     onOpenPetRole: showOrCreateDesktopWindow,
     onShowPetContextMenu: (petWindow) => {
       Menu.buildFromTemplate([
         { label: "显示主窗口", click: showOrCreateDesktopWindow },
-        { label: "隐藏桌宠", click: () => void desktopPet?.hide() },
+        { label: "隐藏桌宠", click: () => void hideDesktopPet() },
       ]).popup({ window: petWindow });
     },
   });
@@ -237,13 +286,13 @@ void app.whenReady().then(() => {
       onToggleDesktopPet: async () => {
         if (!desktopPet) return;
         try {
-          await (desktopPetSettings.visible ? desktopPet.hide() : desktopPet.show());
+          await (desktopPetSettings.visible ? hideDesktopPet() : showDesktopPet());
         } catch (error) {
           logDesktopDiagnostic({ scope: "main", event: "desktop-pet.toggle.failed", payload: { error } });
         }
       },
     });
-    void desktopPet.restore().catch((error) => {
+    void desktopPet.restore().then(() => desktopObservation?.restore()).catch((error) => {
       logDesktopDiagnostic({ scope: "main", event: "desktop-pet.restore.failed", payload: { error } });
     });
   }
@@ -278,7 +327,16 @@ app.on("before-quit", (event) => {
   }
   event.preventDefault();
   bridgeShutdownStarted = true;
-  void bridge.stop().finally(() => app.quit());
+  void (async () => {
+    try {
+      await desktopObservation?.shutdown();
+    } catch (error) {
+      logDesktopDiagnostic({ scope: "main", event: "desktop-observation.shutdown.failed", payload: { error } });
+    } finally {
+      await bridge.stop();
+      app.quit();
+    }
+  })();
 });
 
 export { bridge };

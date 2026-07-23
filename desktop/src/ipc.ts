@@ -10,6 +10,7 @@ import { importLocalAssets } from "./localAssetImport.js";
 import type { LocalAssetRegistry } from "./localAssetRegistry.js";
 import { loadSettingsData, saveSettings } from "./settings.js";
 import type { DesktopPetController } from "./pet/controller.js";
+import type { DesktopObservationController } from "./observation/controller.js";
 import type {
   LocalAssetOpenRequest,
   LocalAssetOpenResult,
@@ -27,6 +28,7 @@ type RegisterDesktopIpcOptions = {
   localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
   desktopPet: DesktopPetController;
+  desktopObservation: DesktopObservationController;
   onOpenPetRole: () => void;
   onShowPetContextMenu: (window: BrowserWindow) => void;
 };
@@ -75,12 +77,16 @@ export function registerDesktopIpc({
   localAssetImportsRoot,
   openLocalAttachment,
   desktopPet,
+  desktopObservation,
   onOpenPetRole,
   onShowPetContextMenu,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
 
   ipcMain.handle("desktop:invoke", async (_event: IpcMainInvokeEvent, request: { method: string; payload: Record<string, unknown> }) => {
+    if (request.method.startsWith("observation.")) {
+      throw new Error("observation bridge methods are restricted to the main process");
+    }
     const response = await bridge.invoke(request);
     return assetTransport(response, localAssets.grantTrustedPayload(response.payload));
   });
@@ -215,10 +221,29 @@ export function registerDesktopIpc({
   });
   ipcMain.handle("desktop:pet-sync", async (_event: IpcMainInvokeEvent, forceVisible?: unknown) => {
     await desktopPet.sync(typeof forceVisible === "boolean" ? forceVisible : undefined);
+    await desktopObservation.restore();
+  });
+  ipcMain.handle("desktop:pet-observation-toggle", async (event: IpcMainInvokeEvent) => {
+    const petWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!desktopPet.isPetWindow(petWindow)) return;
+    desktopObservation.recordUserInteraction();
+    await desktopObservation.toggle();
+  });
+  ipcMain.handle("desktop:pet-observation-request", async (event: IpcMainInvokeEvent) => {
+    const petWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!desktopPet.isPetWindow(petWindow)) return;
+    desktopObservation.recordUserInteraction();
+    await desktopObservation.requestObservation();
+  });
+  ipcMain.handle("desktop:pet-observation-dismiss", async (event: IpcMainInvokeEvent) => {
+    const petWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!desktopPet.isPetWindow(petWindow)) return;
+    desktopObservation.dismissBubble();
   });
   ipcMain.on("desktop:pet-drag-start", (event, payload?: { offsetX?: unknown; offsetY?: unknown; screenX?: unknown; screenY?: unknown }) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (!desktopPet.isPetWindow(petWindow)) return;
+    desktopObservation.recordUserInteraction();
     desktopPet.beginDrag(
       Number(payload?.offsetX),
       Number(payload?.offsetY),
@@ -242,6 +267,7 @@ export function registerDesktopIpc({
   }) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (!desktopPet.isPetWindow(petWindow)) return;
+    desktopObservation.recordUserInteraction();
     const screenX = Number(payload?.screenX);
     const screenY = Number(payload?.screenY);
     const velocityX = Number(payload?.velocityX);

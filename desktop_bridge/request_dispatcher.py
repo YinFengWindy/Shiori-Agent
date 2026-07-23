@@ -27,6 +27,7 @@ _INTEGRATION_METHODS = frozenset(
         "novelai.generate",
         "novelai.regenerateMessageMedia",
         "worlds.drafts.preview",
+        "observation.analyze",
     }
 )
 _BACKGROUND_WORLD_METHODS = frozenset(

@@ -82,6 +82,15 @@ const api: DesktopApi = {
   syncPet(forceVisible) {
     return ipcRenderer.invoke("desktop:pet-sync", forceVisible) as Promise<void>;
   },
+  togglePetObservation() {
+    return ipcRenderer.invoke("desktop:pet-observation-toggle") as Promise<void>;
+  },
+  requestPetObservation() {
+    return ipcRenderer.invoke("desktop:pet-observation-request") as Promise<void>;
+  },
+  dismissPetObservationBubble() {
+    return ipcRenderer.invoke("desktop:pet-observation-dismiss") as Promise<void>;
+  },
   beginPetDrag(offsetX, offsetY, screenX, screenY) {
     ipcRenderer.send("desktop:pet-drag-start", { offsetX, offsetY, screenX, screenY });
   },
@@ -108,6 +117,12 @@ const api: DesktopApi = {
   },
   offPetPlay(listener) {
     ipcRenderer.off("desktop:pet-play", listener);
+  },
+  onPetObservation(listener) {
+    ipcRenderer.on("desktop:pet-observation", listener);
+  },
+  offPetObservation(listener) {
+    ipcRenderer.off("desktop:pet-observation", listener);
   },
 };
 

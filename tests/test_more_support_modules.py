@@ -215,7 +215,14 @@ async def test_provider_payload_snapshot_switch_default_off_and_opt_in(
     monkeypatch.setattr(provider_module, "_LAST_PAYLOAD_PATH", last_payload)
 
     stream = _FakeStream([SimpleNamespace(choices=[])])
-    fake = _FakeClient([_Response(content="off"), _Response(content="ok"), stream])
+    fake = _FakeClient(
+        [
+            _Response(content="off"),
+            _Response(content="ok"),
+            stream,
+            _Response(content="private"),
+        ]
+    )
     monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
 
     provider = LLMProvider(api_key="k")
@@ -243,6 +250,13 @@ async def test_provider_payload_snapshot_switch_default_off_and_opt_in(
         model="m",
         max_tokens=10,
         on_content_delta=lambda chunk: _collect_delta([], chunk),
+    )
+    await provider_enabled.chat(
+        messages=[{"role": "user", "content": "private image"}],
+        tools=[],
+        model="m",
+        max_tokens=10,
+        payload_snapshot_enabled=False,
     )
 
     files = sorted(snapshot_dir.glob("*.json"))

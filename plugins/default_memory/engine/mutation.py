@@ -182,6 +182,7 @@ class _MutationMixin:
             memory_type=memory_type,
             extra=extra,
             source_ref=request.source_ref or "memorize_tool",
+            happened_at=request.happened_at or None,
         )
         write_status, actual_id = _split_write_result(result)
         return MemoryMutationResult(

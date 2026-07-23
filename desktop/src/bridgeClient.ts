@@ -14,6 +14,7 @@ const BRIDGE_START_TIMEOUT_MS = 60_000;
 const BRIDGE_START_RETRY_DELAY_MS = 250;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const IMAGE_GENERATION_TIMEOUT_MS = 5 * 60_000;
+const OBSERVATION_TIMEOUT_MS = 2 * 60_000;
 const GRACEFUL_STOP_TIMEOUT_MS = 5_000;
 const FORCED_STOP_TIMEOUT_MS = 2_000;
 
@@ -106,6 +107,9 @@ export class DesktopBridgeClient extends EventEmitter {
     }
     if (method === "novelai.generate" || method === "novelai.regenerateMessageMedia") {
       return IMAGE_GENERATION_TIMEOUT_MS;
+    }
+    if (method === "observation.analyze") {
+      return OBSERVATION_TIMEOUT_MS;
     }
     return DEFAULT_REQUEST_TIMEOUT_MS;
   }

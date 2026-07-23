@@ -9,6 +9,7 @@
   "include": [
     "src/main.ts",
     "src/pet/**/*.ts",
+    "src/observation/**/*.ts",
     "src/assetProtocol.ts",
     "src/bridgeClient.ts",
     "src/bridgeLifecycle.ts",
