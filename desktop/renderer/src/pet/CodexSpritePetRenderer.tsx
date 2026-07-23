@@ -1,17 +1,18 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { X } from "@phosphor-icons/react";
 import { spriteCell, spriteFramePosition, spritePlaybackFrameAt, type SpriteState } from "./spriteContract";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
-import type { PetObservationPayload } from "../../../src/observation/types";
+import type { PetBubbleLayout, PetObservationPayload } from "../../../src/observation/types";
 
 type CodexSpritePetRendererProps = {
   spritesheetUrl: string;
   state: SpriteState;
   observation: PetObservationPayload;
+  bubbleLayout: PetBubbleLayout;
 };
 
 /** Renders the fixed Codex sprite atlas with its documented state rows and cadence. */
-export function CodexSpritePetRenderer({ spritesheetUrl, state, observation }: CodexSpritePetRendererProps) {
+export function CodexSpritePetRenderer({ spritesheetUrl, state, observation, bubbleLayout }: CodexSpritePetRendererProps) {
   const [frame, setFrame] = useState(0);
   const { interactionState, isDragging, pointerHandlers } = useCodexPetInteraction(
     typeof window === "undefined" ? null : window.miraDesktop,
@@ -37,9 +38,17 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state, observation }: C
     return () => window.clearTimeout(timer);
   }, [activePlaybackFrame.duration, activeState, frame]);
 
+  useEffect(() => {
+    if (!observation.bubble) window.miraDesktop.setPetBubbleHeight(0);
+  }, [observation.bubble]);
+
+  const surfaceClass = observation.bubble
+    ? `pet-surface pet-bubble-${bubbleLayout.placement}`
+    : "pet-surface";
+
   return (
-    <div className="pet-surface">
-      {observation.bubble ? <PetBubble text={observation.bubble} persistent={observation.persistent} /> : null}
+    <div className={surfaceClass}>
+      {observation.bubble ? <PetBubble text={observation.bubble} persistent={observation.persistent} maxHeight={bubbleLayout.height} /> : null}
       <div
         aria-label="桌宠"
         className={isDragging ? "pet-drag-region pet-dragging" : "pet-drag-region"}
@@ -62,9 +71,26 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state, observation }: C
   );
 }
 
-function PetBubble({ text, persistent }: { text: string; persistent: boolean }) {
+function PetBubble({ text, persistent, maxHeight }: { text: string; persistent: boolean; maxHeight: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const reportHeight = () => window.miraDesktop.setPetBubbleHeight(element.scrollHeight);
+    reportHeight();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reportHeight);
+    observer?.observe(element);
+    return () => observer?.disconnect();
+  }, [maxHeight, persistent, text]);
+
   return (
-    <div className="pet-bubble" role="status">
+    <div
+      ref={ref}
+      className="pet-bubble"
+      role="status"
+      style={maxHeight ? { maxHeight } : undefined}
+    >
       <span>{text}</span>
       {persistent ? (
         <button

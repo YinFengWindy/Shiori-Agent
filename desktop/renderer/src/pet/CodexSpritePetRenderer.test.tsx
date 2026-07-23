@@ -13,6 +13,7 @@ test("desktop pet keeps renderer pointer handling and the Codex grab cursor", ()
       spritesheetUrl="mira-asset://pet"
       state="idle"
       observation={{ status: "off", enabled: false, bubble: "", persistent: false }}
+      bubbleLayout={{ placement: "below", height: 0 }}
     />,
   );
   const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
@@ -36,6 +37,7 @@ test("persistent observation bubbles expose a dismiss control", () => {
       spritesheetUrl="mira-asset://pet"
       state="idle"
       observation={{ status: "failed", enabled: true, bubble: "观察失败", persistent: true }}
+      bubbleLayout={{ placement: "below", height: 80 }}
     />,
   );
 
@@ -48,10 +50,12 @@ test("transient observation bubbles do not expose a dismiss control", () => {
       spritesheetUrl="mira-asset://pet"
       state="idle"
       observation={{ status: "observing", enabled: true, bubble: "继续写吧", persistent: false }}
+      bubbleLayout={{ placement: "below", height: 80 }}
     />,
   );
 
   assert.match(markup, /继续写吧/);
+  assert.match(markup, /pet-bubble-below/);
   assert.doesNotMatch(markup, /aria-label="关闭消息"/);
   assert.doesNotMatch(markup, /屏幕观察/);
 });

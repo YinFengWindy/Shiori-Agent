@@ -150,6 +150,34 @@ test("desktop pet keeps its fixed viewport bounds while following a drag", async
   }
 });
 
+test("desktop pet expands a full reply below the sprite and flips above at the display bottom", async () => {
+  let settings: DesktopPetSettings = {
+    visible: false,
+    roleId: "role-1",
+    packageId: "pet-1",
+    positions: { "role-1:display-1": { x: 510, y: 800 } },
+  };
+  const window = new FakePetWindow();
+  const controller = new DesktopPetController({
+    getSettings: () => settings,
+    saveSettings: async (nextSettings) => { settings = nextSettings; },
+    resolveBinding: async () => ({
+      roleId: "role-1",
+      package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "mira-asset://pet" },
+    }),
+    createWindow: () => window as unknown as BrowserWindow,
+    displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    cursorScreenPoint: () => ({ x: 0, y: 0 }),
+    openLocalAttachment: () => undefined,
+  });
+
+  await controller.show();
+  controller.setBubbleHeight(120);
+
+  assert.deepEqual(window.boundsWrites.at(-1), { x: 510, y: 674, width: 192, height: 334 });
+  window.destroy();
+});
+
 test("desktop pet replays the latest observation state after its renderer becomes ready", async () => {
   let settings: DesktopPetSettings = {
     visible: false,

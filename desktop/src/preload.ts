@@ -103,6 +103,9 @@ const api: DesktopApi = {
   petRendererReady() {
     ipcRenderer.send("desktop:pet-renderer-ready");
   },
+  setPetBubbleHeight(height) {
+    ipcRenderer.send("desktop:pet-bubble-height", height);
+  },
   onPetLoad(listener) {
     ipcRenderer.on("desktop:pet-load", listener);
   },
@@ -120,6 +123,12 @@ const api: DesktopApi = {
   },
   offPetObservation(listener) {
     ipcRenderer.off("desktop:pet-observation", listener);
+  },
+  onPetBubbleLayout(listener) {
+    ipcRenderer.on("desktop:pet-bubble-layout", listener);
+  },
+  offPetBubbleLayout(listener) {
+    ipcRenderer.off("desktop:pet-bubble-layout", listener);
   },
 };
 

@@ -186,6 +186,8 @@ export type DesktopApi = {
   openPetMenu(): void;
   /** Announces that the pet renderer has installed its initial-state listeners. */
   petRendererReady(): void;
+  /** Reports the rendered full-reply bubble height so the main process can resize the transparent pet window. */
+  setPetBubbleHeight(height: number): void;
   /** Subscribes to package loads from the dedicated desktop-pet window. */
   onPetLoad(listener: (event: unknown, payload: unknown) => void): void;
   offPetLoad(listener: (event: unknown, payload: unknown) => void): void;
@@ -195,4 +197,7 @@ export type DesktopApi = {
   /** Subscribes to safe observation status and speech-bubble updates. */
   onPetObservation(listener: (event: unknown, payload: unknown) => void): void;
   offPetObservation(listener: (event: unknown, payload: unknown) => void): void;
+  /** Subscribes to main-process placement updates for the current full-reply bubble. */
+  onPetBubbleLayout(listener: (event: unknown, payload: unknown) => void): void;
+  offPetBubbleLayout(listener: (event: unknown, payload: unknown) => void): void;
 };

@@ -43,6 +43,34 @@ test("role-produced screen replies are not lost before observation display state
   assert.equal(payloads.at(-1)?.bubble, "我看到桌宠在右上角。");
 });
 
+test("role reply bubbles retain the full reply text", async () => {
+  const payloads: PetObservationPayload[] = [];
+  const controller = new DesktopObservationController({
+    pet: { isRunning: true, publishObservation: (payload) => payloads.push(payload) },
+    getRoleId: () => "role-a",
+  });
+  const reply = "完整回复。".repeat(40);
+
+  await controller.restore();
+  controller.acceptRoleReply("role-a", reply);
+
+  assert.equal(payloads.at(-1)?.bubble, reply);
+});
+
+test("repeated regular role replies still replace the pet bubble", async () => {
+  const payloads: PetObservationPayload[] = [];
+  const controller = new DesktopObservationController({
+    pet: { isRunning: true, publishObservation: (payload) => payloads.push(payload) },
+    getRoleId: () => "role-a",
+  });
+
+  await controller.restore();
+  controller.acceptRoleReply("role-a", "嗯。 ");
+  controller.acceptRoleReply("role-a", "嗯。 ");
+
+  assert.equal(payloads.filter((payload) => payload.bubble === "嗯。").length, 2);
+});
+
 test("hidden pets clear bubbles without changing the role tool capability", async () => {
   const payloads: PetObservationPayload[] = [];
   let isRunning = true;

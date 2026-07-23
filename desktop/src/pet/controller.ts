@@ -1,5 +1,10 @@
 import type { BrowserWindow } from "electron";
-import { desktopPetViewport, clampDesktopPetPosition } from "./geometry.js";
+import {
+  clampDesktopPetPosition,
+  desktopPetBubbleGap,
+  desktopPetViewport,
+  resolveDesktopPetBubbleLayout,
+} from "./geometry.js";
 import { desktopPetPositionFromCursor } from "./drag.js";
 import {
   advanceDesktopPetMomentum,
@@ -9,7 +14,7 @@ import {
 } from "./momentum.js";
 import { bindDesktopPetSettings } from "./settings.js";
 import type { DesktopPetBinding, DesktopPetPosition, DesktopPetSettings, DesktopPetState } from "./types.js";
-import type { PetObservationPayload } from "../observation/types.js";
+import type { PetBubbleLayout, PetObservationPayload } from "../observation/types.js";
 
 /** Keeps the main-process cursor follower aligned with the display refresh rate. */
 export const desktopPetDragFollowIntervalMs = 1000 / 60;
@@ -35,6 +40,9 @@ export class DesktopPetController {
   private activeLoad: { binding: DesktopPetBinding; state: DesktopPetState } | null = null;
   private rendererIsReady = false;
   private latestObservation: PetObservationPayload | null = null;
+  private bubbleHeight = 0;
+  private bubbleLayout: PetBubbleLayout = { placement: "below", height: 0 };
+  private anchorPosition: DesktopPetPosition | null = null;
   private dragPointerOffset: DesktopPetPosition | null = null;
   private dragFollowTimer: ReturnType<typeof setInterval> | null = null;
   private momentum: DesktopPetMomentum | null = null;
@@ -117,6 +125,16 @@ export class DesktopPetController {
     if (this.rendererIsReady) this.window?.webContents.send("desktop:pet-observation", payload);
   }
 
+  /** Resizes the transparent window around the renderer-measured full reply bubble. */
+  setBubbleHeight(height: number): void {
+    if (!Number.isFinite(height)) return;
+    const nextHeight = Math.max(0, Math.ceil(height));
+    if (nextHeight === this.bubbleHeight) return;
+    this.bubbleHeight = nextHeight;
+    const position = this.anchorPosition;
+    if (position) this.moveTo(position);
+  }
+
   /** Starts following the system cursor while preserving the initial pointer offset. */
   beginDrag(pointerOffsetX: number, pointerOffsetY: number, pointerScreenX?: number, pointerScreenY?: number): void {
     if (!this.isRunning || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
@@ -173,7 +191,6 @@ export class DesktopPetController {
       y: display.workArea.y + display.workArea.height - desktopPetViewport.height,
     };
     const position = clampDesktopPetPosition(settings.positions[key] ?? fallback, display.workArea);
-    window.setBounds({ ...position, ...desktopPetViewport });
     this.activeRoleId = binding.roleId;
     this.activePackageId = binding.package.id;
     this.activeLoad = { binding, state };
@@ -190,9 +207,13 @@ export class DesktopPetController {
         this.activePackageId = "";
         this.activeLoad = null;
         this.rendererIsReady = false;
+        this.anchorPosition = null;
+        this.bubbleHeight = 0;
+        this.bubbleLayout = { placement: "below", height: 0 };
       });
     }
     this.window = window;
+    this.moveTo(position);
     if (!created && this.rendererIsReady) this.sendCurrentLoad(window);
   }
 
@@ -205,6 +226,7 @@ export class DesktopPetController {
     if (this.latestObservation) {
       window.webContents.send("desktop:pet-observation", this.latestObservation);
     }
+    this.publishBubbleLayout(window);
   }
 
   private followDrag(): void {
@@ -218,7 +240,22 @@ export class DesktopPetController {
     const display = this.displayForWindow(window);
     const clamped = clampDesktopPetPosition(position, display.workArea);
     const rounded = { x: Math.round(clamped.x), y: Math.round(clamped.y) };
-    window.setBounds({ ...rounded, ...desktopPetViewport });
+    this.anchorPosition = rounded;
+    this.bubbleLayout = resolveDesktopPetBubbleLayout(
+      rounded,
+      display.workArea,
+      this.bubbleHeight,
+    );
+    const bubbleOffset = this.bubbleLayout.height
+      ? this.bubbleLayout.height + desktopPetBubbleGap
+      : 0;
+    window.setBounds({
+      x: rounded.x,
+      y: this.bubbleLayout.placement === "above" ? rounded.y - bubbleOffset : rounded.y,
+      width: desktopPetViewport.width,
+      height: desktopPetViewport.height + bubbleOffset,
+    });
+    this.publishBubbleLayout(window);
     return rounded;
   }
 
@@ -227,8 +264,7 @@ export class DesktopPetController {
     const window = this.window;
     if (!window || window.isDestroyed()) return;
     this.stopMomentum();
-    const [x, y] = window.getPosition();
-    this.momentum = { position: { x, y }, velocity };
+    this.momentum = { position: this.currentAnchorPosition(window), velocity };
     this.momentumStartedAtMs = Date.now();
     this.momentumUpdatedAtMs = this.momentumStartedAtMs;
     this.scheduleMomentum();
@@ -269,12 +305,26 @@ export class DesktopPetController {
 
   private persistPosition(roleId: string, window: BrowserWindow): void {
     const display = this.displayForWindow(window);
-    const [x, y] = window.getPosition();
+    const position = this.currentAnchorPosition(window);
     const settings = this.options.getSettings();
     void this.options.saveSettings({
       ...settings,
-      positions: { ...settings.positions, [`${roleId}:${display.id}`]: clampDesktopPetPosition({ x, y }, display.workArea) },
+      positions: { ...settings.positions, [`${roleId}:${display.id}`]: clampDesktopPetPosition(position, display.workArea) },
     });
+  }
+
+  private currentAnchorPosition(window: BrowserWindow): DesktopPetPosition {
+    if (this.anchorPosition) return { ...this.anchorPosition };
+    const [x, y] = window.getPosition();
+    return {
+      x,
+      y: this.bubbleLayout.placement === "above" ? y + this.bubbleLayout.height + desktopPetBubbleGap : y,
+    };
+  }
+
+  private publishBubbleLayout(window: BrowserWindow): void {
+    if (!this.rendererIsReady || window.isDestroyed()) return;
+    window.webContents.send("desktop:pet-bubble-layout", this.bubbleLayout);
   }
 
   private stopDragFollow(): void {
@@ -298,5 +348,8 @@ export class DesktopPetController {
     this.activePackageId = "";
     this.activeLoad = null;
     this.rendererIsReady = false;
+    this.anchorPosition = null;
+    this.bubbleHeight = 0;
+    this.bubbleLayout = { placement: "below", height: 0 };
   }
 }

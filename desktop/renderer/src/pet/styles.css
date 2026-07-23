@@ -17,12 +17,24 @@ body {
 }
 
 .pet-surface {
-  position: relative;
+  display: flex;
+  align-items: flex-start;
   width: 100%;
   height: 100%;
 }
 
+.pet-bubble-below {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pet-bubble-above {
+  flex-direction: column-reverse;
+  gap: 6px;
+}
+
 .pet-drag-region {
+  flex: 0 0 208px;
   cursor: grab;
   touch-action: none;
 }
@@ -37,13 +49,12 @@ body {
 }
 
 .pet-bubble {
-  position: absolute;
-  right: 7px;
-  bottom: 7px;
+  position: relative;
   z-index: 2;
   box-sizing: border-box;
-  width: max-content;
+  width: calc(100% - 14px);
   max-width: calc(100% - 14px);
+  margin: 0 7px;
   padding: 7px 9px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 8px;
@@ -53,9 +64,43 @@ body {
   font-size: 11px;
   line-height: 1.35;
   overflow-wrap: anywhere;
+  overflow-y: auto;
+  white-space: pre-wrap;
   display: flex;
   gap: 5px;
   align-items: flex-start;
+}
+
+.pet-bubble-below .pet-drag-region {
+  order: 1;
+}
+
+.pet-bubble-below .pet-bubble {
+  order: 2;
+}
+
+.pet-bubble::before {
+  position: absolute;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.95);
+  content: "";
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.pet-bubble-below .pet-bubble::before {
+  top: -6px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.pet-bubble-above .pet-bubble::before {
+  right: auto;
+  bottom: -6px;
+  border-top: 0;
+  border-left: 0;
 }
 
 .pet-bubble > span {

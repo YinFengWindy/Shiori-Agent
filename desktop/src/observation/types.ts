@@ -6,3 +6,9 @@ export type PetObservationPayload = {
   bubble: string;
   persistent: boolean;
 };
+
+/** Layout assigned by the main process after measuring a full pet reply bubble. */
+export type PetBubbleLayout = {
+  placement: "above" | "below";
+  height: number;
+};

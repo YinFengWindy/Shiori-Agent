@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { CodexSpritePetRenderer } from "./CodexSpritePetRenderer";
 import { spriteAnimations, type SpriteState } from "./spriteContract";
 import { usePetActivityState } from "./usePetActivityState";
-import type { PetObservationPayload } from "../../../src/observation/types";
+import type { PetBubbleLayout, PetObservationPayload } from "../../../src/observation/types";
 import "./styles.css";
 
 type PetPackagePayload = { spritesheetUrl: string };
@@ -14,6 +14,7 @@ const defaultObservation: PetObservationPayload = {
   bubble: "",
   persistent: false,
 };
+const defaultBubbleLayout: PetBubbleLayout = { placement: "below", height: 0 };
 
 function isSpriteState(value: unknown): value is SpriteState {
   return typeof value === "string" && value in spriteAnimations;
@@ -33,10 +34,20 @@ function isObservationStatus(value: unknown): value is PetObservationPayload["st
     || value === "failed";
 }
 
+function isBubbleLayout(value: unknown): value is PetBubbleLayout {
+  if (!value || typeof value !== "object") return false;
+  const layout = value as Partial<PetBubbleLayout>;
+  return (layout.placement === "above" || layout.placement === "below")
+    && typeof layout.height === "number"
+    && Number.isFinite(layout.height)
+    && layout.height >= 0;
+}
+
 function DesktopPetSurface() {
   const [payload, setPayload] = useState<PetPayload | null>(null);
   const [state, setState] = useState<SpriteState>("idle");
   const [observation, setObservation] = useState<PetObservationPayload>(defaultObservation);
+  const [bubbleLayout, setBubbleLayout] = useState<PetBubbleLayout>(defaultBubbleLayout);
   const activityState = usePetActivityState(state);
 
   useEffect(() => {
@@ -63,16 +74,26 @@ function DesktopPetSurface() {
       });
     };
     window.miraDesktop.onPetObservation(onObservation);
+    const onBubbleLayout = (_event: unknown, next: unknown) => {
+      if (!isBubbleLayout(next)) return;
+      setBubbleLayout((current) => (
+        current.placement === next.placement && current.height === next.height
+          ? current
+          : next
+      ));
+    };
+    window.miraDesktop.onPetBubbleLayout(onBubbleLayout);
     window.miraDesktop.petRendererReady();
     return () => {
       window.miraDesktop.offPetLoad(onLoad);
       window.miraDesktop.offPetPlay(onPlay);
       window.miraDesktop.offPetObservation(onObservation);
+      window.miraDesktop.offPetBubbleLayout(onBubbleLayout);
     };
   }, []);
 
   if (!payload) return null;
-  return <CodexSpritePetRenderer spritesheetUrl={payload.package.spritesheetUrl} state={activityState} observation={observation} />;
+  return <CodexSpritePetRenderer spritesheetUrl={payload.package.spritesheetUrl} state={activityState} observation={observation} bubbleLayout={bubbleLayout} />;
 }
 
 createRoot(document.getElementById("root") as HTMLElement).render(<DesktopPetSurface />);

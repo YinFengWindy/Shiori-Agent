@@ -53,3 +53,13 @@ test("pet renderer handshake is delegated to the active pet controller", () => {
 
   assert.match(source, /desktopPet\.rendererReady\(BrowserWindow\.fromWebContents\(event\.sender\)\)/);
 });
+
+test("pet bubble size reports are restricted to the active pet window", () => {
+  const start = ipcSource.indexOf('ipcMain.on("desktop:pet-bubble-height"');
+  const end = ipcSource.indexOf('ipcMain.on("desktop:pet-drag-start"', start + 1);
+  const source = ipcSource.slice(start, end);
+
+  assert.notEqual(start, -1);
+  assert.match(source, /desktopPet\.isPetWindow\(petWindow\)/);
+  assert.match(source, /desktopPet\.setBubbleHeight\(Number\(height\)\)/);
+});

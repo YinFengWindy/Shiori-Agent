@@ -45,7 +45,13 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
     };
     setIsDragging(true);
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragBridge.beginPetDrag(event.clientX, event.clientY, event.screenX, event.screenY);
+    const bounds = event.currentTarget.getBoundingClientRect();
+    dragBridge.beginPetDrag(
+      event.clientX - bounds.left,
+      event.clientY - bounds.top,
+      event.screenX,
+      event.screenY,
+    );
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {

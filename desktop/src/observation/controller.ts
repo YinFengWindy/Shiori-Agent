@@ -71,7 +71,7 @@ export class DesktopObservationController {
       !this.options.pet.isRunning
       || roleId !== this.options.getRoleId()
     ) return;
-    const bubble = this.bubbles.accept(reply.slice(0, 120));
+    const bubble = reply.trim();
     if (bubble) this.publish("observing", bubble);
   }
 
