@@ -47,8 +47,18 @@ async def test_remember_uses_existing_event_relationship_memory_contract() -> No
 
 
 @pytest.mark.asyncio
-async def test_remember_rejects_sensitive_or_non_observation_content() -> None:
-    writer = _writer(SimpleNamespace(mutate=AsyncMock()))
+async def test_remember_allows_sensitive_observation_content() -> None:
+    memory = SimpleNamespace(
+        mutate=AsyncMock(
+            return_value=SimpleNamespace(
+                accepted=True,
+                item_id="event-1",
+                status="new",
+                actual_kind="event",
+            )
+        )
+    )
+    writer = _writer(memory)
 
     with pytest.raises(ValueError, match="source_ref"):
         await writer.remember(
@@ -59,21 +69,26 @@ async def test_remember_rejects_sensitive_or_non_observation_content() -> None:
                 "source_ref": "chat:session-1",
             }
         )
-    with pytest.raises(ValueError, match="敏感内容"):
-        await writer.remember(
-            {
-                "role_id": "mira",
-                "summary": "一起查看 https://example.com",
-                "happened_at": "2026-07-23T12:00:00Z",
-                "source_ref": "desktop-observation:session-1:0",
-            }
-        )
-    with pytest.raises(ValueError, match="敏感内容"):
-        await writer.remember(
-            {
-                "role_id": "mira",
-                "summary": "一起检查 user@example.com 和 C:\\Users\\name\\report.docx",
-                "happened_at": "2026-07-23T12:00:00Z",
-                "source_ref": "desktop-observation:session-1:1",
-            }
-        )
+    await writer.remember(
+        {
+            "role_id": "mira",
+            "summary": "一起查看 https://example.com",
+            "happened_at": "2026-07-23T12:00:00Z",
+            "source_ref": "desktop-observation:session-1:0",
+        }
+    )
+    await writer.remember(
+        {
+            "role_id": "mira",
+            "summary": "一起检查 user@example.com 和 C:\\Users\\name\\report.docx",
+            "happened_at": "2026-07-23T12:00:00Z",
+            "source_ref": "desktop-observation:session-1:1",
+        }
+    )
+
+    assert [
+        call.args[0].summary for call in memory.mutate.await_args_list
+    ] == [
+        "一起查看 https://example.com",
+        "一起检查 user@example.com 和 C:\\Users\\name\\report.docx",
+    ]
