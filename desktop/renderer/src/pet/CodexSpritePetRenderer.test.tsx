@@ -59,3 +59,20 @@ test("transient observation bubbles do not expose a dismiss control", () => {
   assert.doesNotMatch(markup, /aria-label="关闭消息"/);
   assert.doesNotMatch(markup, /屏幕观察/);
 });
+
+test("above observation bubbles render ahead of the sprite", () => {
+  const markup = renderToStaticMarkup(
+    <CodexSpritePetRenderer
+      spritesheetUrl="mira-asset://pet"
+      state="idle"
+      observation={{ status: "observing", enabled: true, bubble: "继续写吧", persistent: false }}
+      bubbleLayout={{ placement: "above", height: 80 }}
+    />,
+  );
+  const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+
+  assert.match(markup, /pet-bubble-above/);
+  assert.ok(markup.indexOf('class="pet-bubble"') < markup.indexOf('class="pet-drag-region"'));
+  assert.match(styles, /\.pet-bubble-above\s*\{[^}]*flex-direction:\s*column;/s);
+  assert.doesNotMatch(styles, /\.pet-bubble-above\s*\{[^}]*column-reverse/s);
+});

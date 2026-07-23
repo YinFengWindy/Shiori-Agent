@@ -29,7 +29,7 @@ body {
 }
 
 .pet-bubble-above {
-  flex-direction: column-reverse;
+  flex-direction: column;
   gap: 6px;
 }
 
