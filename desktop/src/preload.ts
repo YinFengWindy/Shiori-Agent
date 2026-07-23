@@ -88,8 +88,8 @@ const api: DesktopApi = {
   movePet(screenX, screenY) {
     ipcRenderer.send("desktop:pet-drag-move", { screenX, screenY });
   },
-  endPetDrag() {
-    ipcRenderer.send("desktop:pet-drag-end");
+  endPetDrag(screenX, screenY, velocityX, velocityY) {
+    ipcRenderer.send("desktop:pet-drag-end", { screenX, screenY, velocityX, velocityY });
   },
   openPetRole() {
     ipcRenderer.send("desktop:pet-open");

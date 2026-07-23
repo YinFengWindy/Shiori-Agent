@@ -1,5 +1,12 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { hasPetDragMoved, petDragState, petHoverState } from "./interactionContract";
+import {
+  hasPetDragMoved,
+  petDragRelease,
+  petDragSamplesWith,
+  petDragState,
+  petHoverState,
+  type PetPointerSample,
+} from "./interactionContract";
 import type { SpriteState } from "./spriteContract";
 
 type PetDragBridge = Pick<Window["miraDesktop"], "beginPetDrag" | "movePet" | "endPetDrag" | "openPetRole">;
@@ -9,6 +16,7 @@ type DragState = {
   previousScreenX: number;
   previousScreenY: number;
   hasMoved: boolean;
+  samples: PetPointerSample[];
 };
 
 /** Maps renderer pointer gestures to Codex pet animation rows and main-process drag commands. */
@@ -30,6 +38,7 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
       previousScreenX: event.screenX,
       previousScreenY: event.screenY,
       hasMoved: false,
+      samples: [pointerSample(event)],
     };
     setIsDragging(true);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -39,6 +48,8 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
+    const sample = pointerSample(event);
+    drag.samples = petDragSamplesWith(drag.samples, sample);
     if (!hasPetDragMoved(drag.previousScreenX, drag.previousScreenY, event.screenX, event.screenY)) return;
     drag.hasMoved = true;
     const nextState = petDragState(drag.previousScreenX, event.screenX);
@@ -51,10 +62,16 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
   function onPointerUp(event: ReactPointerEvent<HTMLDivElement>): void {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
+    const release = petDragRelease(drag.samples, pointerSample(event), drag.hasMoved);
     dragRef.current = null;
     setIsDragging(false);
-    if (!drag.hasMoved) dragBridge?.openPetRole();
-    dragBridge?.endPetDrag();
+    if (!release.hasMoved) dragBridge?.openPetRole();
+    dragBridge?.endPetDrag(
+      release.sample.screenX,
+      release.sample.screenY,
+      release.velocity?.x,
+      release.velocity?.y,
+    );
     setNextInteractionState(petHoverState);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
@@ -81,4 +98,8 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
     isDragging,
     pointerHandlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onPointerEnter, onPointerLeave },
   };
+}
+
+function pointerSample(event: ReactPointerEvent<HTMLDivElement>): PetPointerSample {
+  return { screenX: event.screenX, screenY: event.screenY, timeMs: event.timeStamp };
 }

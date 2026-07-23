@@ -176,8 +176,8 @@ export type DesktopApi = {
   beginPetDrag(offsetX: number, offsetY: number, screenX?: number, screenY?: number): void;
   /** Applies an immediate renderer cursor sample during a pet drag. */
   movePet(screenX: number, screenY: number): void;
-  /** Stops the current pet drag and persists its final location. */
-  endPetDrag(): void;
+  /** Stops the current pet drag and optionally starts a Codex-style release glide. */
+  endPetDrag(screenX?: number, screenY?: number, velocityX?: number, velocityY?: number): void;
   /** Restores the main Shiori window from a pet double click. */
   openPetRole(): void;
   /** Opens the native context menu for the desktop-pet window. */

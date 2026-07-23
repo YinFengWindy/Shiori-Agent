@@ -1,5 +1,8 @@
 export const spriteCell = { width: 192, height: 208 };
-export const spritePlaybackScale = 1.2;
+/** Codex keeps its idle loop deliberately calm after task and gesture animations. */
+export const spriteIdleFrameDurationScale = 6;
+/** Codex plays a non-idle row three times before returning to the idle loop. */
+export const spriteActionLoopCount = 3;
 
 export const spriteAnimations = {
   idle: { row: 0, frames: 6, frameDurations: [280, 110, 110, 140, 140, 320] },
@@ -15,11 +18,39 @@ export const spriteAnimations = {
 
 export type SpriteState = keyof typeof spriteAnimations;
 
-/** Returns a visually relaxed frame duration while preserving each row's Codex cadence. */
+export type SpritePlaybackFrame = {
+  state: SpriteState;
+  frame: number;
+  duration: number;
+};
+
+/** Returns the frame duration stored in the original Codex sprite contract. */
 export function spriteFrameDuration(state: SpriteState, frame: number): number {
   const animation = spriteAnimations[state];
   const boundedFrame = ((frame % animation.frames) + animation.frames) % animation.frames;
-  return Math.round(animation.frameDurations[boundedFrame] * spritePlaybackScale);
+  return animation.frameDurations[boundedFrame];
+}
+
+function framesForState(state: SpriteState, durationScale = 1): SpritePlaybackFrame[] {
+  return Array.from({ length: spriteAnimations[state].frames }, (_, frame) => ({
+    state,
+    frame,
+    duration: spriteFrameDuration(state, frame) * durationScale,
+  }));
+}
+
+const idlePlaybackFrames = framesForState("idle", spriteIdleFrameDurationScale);
+
+/** Builds the exact Codex sequence: action loops three times, then a slow idle loop. */
+export function spritePlaybackFrames(state: SpriteState): readonly SpritePlaybackFrame[] {
+  if (state === "idle") return idlePlaybackFrames;
+  const actionFrames = framesForState(state);
+  return [
+    ...actionFrames,
+    ...actionFrames,
+    ...actionFrames,
+    ...idlePlaybackFrames,
+  ];
 }
 
 /** Resolves the background position for one fixed 192 x 208 sprite cell. */

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { spriteCell, spriteAnimations, spriteFrameDuration, spriteFramePosition, type SpriteState } from "./spriteContract";
+import { spriteCell, spriteFramePosition, spritePlaybackFrames, type SpriteState } from "./spriteContract";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 
 type CodexSpritePetRendererProps = {
@@ -14,8 +14,8 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePet
     typeof window === "undefined" ? null : window.miraDesktop,
   );
   const activeState = interactionState ?? state;
-  const animation = spriteAnimations[activeState];
-  const activeFrame = frame % animation.frames;
+  const playbackFrames = spritePlaybackFrames(activeState);
+  const activePlaybackFrame = playbackFrames[frame % playbackFrames.length];
 
   useEffect(() => {
     setFrame(0);
@@ -23,10 +23,10 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePet
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setFrame((current) => (current + 1) % animation.frames);
-    }, spriteFrameDuration(activeState, activeFrame));
+      setFrame((current) => (current + 1) % playbackFrames.length);
+    }, activePlaybackFrame.duration);
     return () => window.clearTimeout(timer);
-  }, [activeFrame, animation]);
+  }, [activePlaybackFrame.duration, activeState, frame, playbackFrames.length]);
 
   return (
     <div
@@ -42,7 +42,7 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePet
         width: spriteCell.width,
         height: spriteCell.height,
         backgroundImage: `url(${JSON.stringify(spritesheetUrl)})`,
-        backgroundPosition: spriteFramePosition(activeState, activeFrame),
+        backgroundPosition: spriteFramePosition(activePlaybackFrame.state, activePlaybackFrame.frame),
         backgroundRepeat: "no-repeat",
         touchAction: "none",
       }}

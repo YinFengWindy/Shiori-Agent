@@ -1,6 +1,12 @@
 import type { BrowserWindow } from "electron";
 import { desktopPetViewport, clampDesktopPetPosition } from "./geometry.js";
 import { desktopPetPositionFromCursor } from "./drag.js";
+import {
+  advanceDesktopPetMomentum,
+  desktopPetMomentumIntervalMs,
+  shouldStopDesktopPetMomentum,
+  type DesktopPetMomentum,
+} from "./momentum.js";
 import { bindDesktopPetSettings } from "./settings.js";
 import type { DesktopPetBinding, DesktopPetPosition, DesktopPetSettings, DesktopPetState } from "./types.js";
 
@@ -26,6 +32,10 @@ export class DesktopPetController {
   private activeRoleId = "";
   private dragPointerOffset: DesktopPetPosition | null = null;
   private dragFollowTimer: ReturnType<typeof setInterval> | null = null;
+  private momentum: DesktopPetMomentum | null = null;
+  private momentumStartedAtMs = 0;
+  private momentumUpdatedAtMs = 0;
+  private momentumTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly options: DesktopPetControllerOptions) {
     this.createWindow = options.createWindow;
@@ -90,6 +100,7 @@ export class DesktopPetController {
   /** Starts following the system cursor while preserving the initial pointer offset. */
   beginDrag(pointerOffsetX: number, pointerOffsetY: number, pointerScreenX?: number, pointerScreenY?: number): void {
     if (!this.isRunning || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
+    this.stopMomentum();
     this.stopDragFollow();
     this.dragPointerOffset = { x: pointerOffsetX, y: pointerOffsetY };
     if (
@@ -111,12 +122,17 @@ export class DesktopPetController {
     this.moveTo(desktopPetPositionFromCursor(cursor, this.dragPointerOffset));
   }
 
-  /** Stops following the system cursor and persists only the final drag location. */
-  endDrag(): void {
+  /** Stops following the cursor and either persists or glides with the Codex release velocity. */
+  endDrag(releaseCursor?: DesktopPetPosition, releaseVelocity?: DesktopPetPosition): void {
     if (!this.dragPointerOffset || !this.window) return;
-    this.followDrag();
+    if (releaseCursor) this.moveDrag(releaseCursor);
+    else this.followDrag();
     this.stopDragFollow();
     this.dragPointerOffset = null;
+    if (releaseVelocity && Number.isFinite(releaseVelocity.x) && Number.isFinite(releaseVelocity.y)) {
+      this.startMomentum(releaseVelocity);
+      return;
+    }
     this.persistPosition(this.activeRoleId, this.window);
   }
 
@@ -161,12 +177,59 @@ export class DesktopPetController {
     this.moveDrag(this.options.cursorScreenPoint());
   }
 
-  private moveTo(position: DesktopPetPosition): void {
+  private moveTo(position: DesktopPetPosition): DesktopPetPosition | null {
     const window = this.window;
-    if (!window || window.isDestroyed()) return;
+    if (!window || window.isDestroyed()) return null;
     const display = this.displayForWindow(window);
     const clamped = clampDesktopPetPosition(position, display.workArea);
-    window.setPosition(clamped.x, clamped.y);
+    const rounded = { x: Math.round(clamped.x), y: Math.round(clamped.y) };
+    window.setPosition(rounded.x, rounded.y);
+    return rounded;
+  }
+
+  /** Starts the same decaying release glide used by the Codex desktop-pet overlay. */
+  private startMomentum(velocity: DesktopPetPosition): void {
+    const window = this.window;
+    if (!window || window.isDestroyed()) return;
+    this.stopMomentum();
+    const [x, y] = window.getPosition();
+    this.momentum = { position: { x, y }, velocity };
+    this.momentumStartedAtMs = Date.now();
+    this.momentumUpdatedAtMs = this.momentumStartedAtMs;
+    this.scheduleMomentum();
+  }
+
+  private scheduleMomentum(): void {
+    this.momentumTimer = setTimeout(() => this.advanceMomentum(), desktopPetMomentumIntervalMs);
+  }
+
+  private advanceMomentum(): void {
+    this.momentumTimer = null;
+    const momentum = this.momentum;
+    const window = this.window;
+    if (!momentum || !window || window.isDestroyed()) {
+      this.stopMomentum();
+      return;
+    }
+    const now = Date.now();
+    const next = advanceDesktopPetMomentum(momentum, now - this.momentumUpdatedAtMs);
+    this.momentumUpdatedAtMs = now;
+    const requestedPosition = next.position;
+    const applied = this.moveTo(requestedPosition);
+    if (!applied) {
+      this.stopMomentum();
+      return;
+    }
+    next.position = applied;
+    if (applied.x !== Math.round(requestedPosition.x)) next.velocity.x = 0;
+    if (applied.y !== Math.round(requestedPosition.y)) next.velocity.y = 0;
+    this.momentum = next;
+    if (shouldStopDesktopPetMomentum(next, now - this.momentumStartedAtMs)) {
+      this.stopMomentum();
+      this.persistPosition(this.activeRoleId, window);
+      return;
+    }
+    this.scheduleMomentum();
   }
 
   private persistPosition(roleId: string, window: BrowserWindow): void {
@@ -184,8 +247,15 @@ export class DesktopPetController {
     this.dragFollowTimer = null;
   }
 
+  private stopMomentum(): void {
+    if (this.momentumTimer) clearTimeout(this.momentumTimer);
+    this.momentumTimer = null;
+    this.momentum = null;
+  }
+
   private destroyWindow(): void {
     this.stopDragFollow();
+    this.stopMomentum();
     this.dragPointerOffset = null;
     this.window?.destroy();
     this.window = null;

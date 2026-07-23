@@ -234,10 +234,22 @@ export function registerDesktopIpc({
     if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) return;
     desktopPet.moveDrag({ x: screenX, y: screenY });
   });
-  ipcMain.on("desktop:pet-drag-end", (event) => {
+  ipcMain.on("desktop:pet-drag-end", (event, payload?: {
+    screenX?: unknown;
+    screenY?: unknown;
+    velocityX?: unknown;
+    velocityY?: unknown;
+  }) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (!desktopPet.isPetWindow(petWindow)) return;
-    desktopPet.endDrag();
+    const screenX = Number(payload?.screenX);
+    const screenY = Number(payload?.screenY);
+    const velocityX = Number(payload?.velocityX);
+    const velocityY = Number(payload?.velocityY);
+    desktopPet.endDrag(
+      Number.isFinite(screenX) && Number.isFinite(screenY) ? { x: screenX, y: screenY } : undefined,
+      Number.isFinite(velocityX) && Number.isFinite(velocityY) ? { x: velocityX, y: velocityY } : undefined,
+    );
   });
   ipcMain.on("desktop:pet-open", (event) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
