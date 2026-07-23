@@ -634,42 +634,6 @@ class DesktopBridgeService:
                         "events": [],
                     },
                 )
-            if method == "chat.observeScreen":
-                role_id = str(payload.get("role_id") or "").strip()
-                aggregate = await self.role_service.open_role_async(role_id)
-                session = aggregate.session
-                if self.chat_service.is_busy(session.key):
-                    return self._error(
-                        request_id,
-                        method,
-                        "chat_busy",
-                        "当前会话已有正在执行的聊天任务",
-                    )
-                metadata = self.app_service.build_desktop_user_message_metadata(
-                    {"request_id": request_id, "delivery_key": request_id},
-                    role_id=aggregate.role.id,
-                    chat_id=session.key,
-                )
-                self._start_chat_turn(
-                    request_id=request_id,
-                    session_key=session.key,
-                    content=(
-                        "用户已经授权你查看当前屏幕。现在调用 observe_screen 工具一次，"
-                        "再根据工具结果自然地用一句话回应。"
-                    ),
-                    media=[],
-                    metadata=metadata,
-                    omit_user_turn=True,
-                    emit_event=emit_event,
-                )
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "session": self.session_presenter.serialize(session),
-                        "events": [],
-                    },
-                )
             if method == "chat.cancel":
                 role_id = str(payload.get("role_id") or "").strip()
                 aggregate = await self.role_service.open_role_async(role_id)

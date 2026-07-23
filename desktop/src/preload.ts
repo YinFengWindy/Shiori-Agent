@@ -85,9 +85,6 @@ const api: DesktopApi = {
   togglePetObservation() {
     return ipcRenderer.invoke("desktop:pet-observation-toggle") as Promise<void>;
   },
-  requestPetObservation() {
-    return ipcRenderer.invoke("desktop:pet-observation-request") as Promise<void>;
-  },
   dismissPetObservationBubble() {
     return ipcRenderer.invoke("desktop:pet-observation-dismiss") as Promise<void>;
   },

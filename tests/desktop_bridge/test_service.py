@@ -128,35 +128,6 @@ async def test_chat_send_returns_busy_before_persisting_second_message(tmp_path)
     assert session.messages == []
 
 
-@pytest.mark.asyncio
-async def test_pet_observation_starts_a_role_turn_without_persisting_a_fake_user_message(
-    tmp_path,
-) -> None:
-    role_store = RoleStore(tmp_path)
-    role_store.create_role(role_id="mira", name="Mira", system_prompt="test")
-    session_manager = SessionManager(tmp_path)
-    service = DesktopBridgeService(
-        workspace=tmp_path,
-        role_store=role_store,
-        session_manager=session_manager,
-        agent_loop=SimpleNamespace(),
-        event_bus=EventBus(),
-    )
-    service.chat_service.start_chat_turn = Mock()
-
-    response = await service.handle(
-        {
-            "id": "observe-screen-1",
-            "method": "chat.observeScreen",
-            "payload": {"role_id": "mira"},
-        },
-        emit_event=Mock(),
-    )
-
-    assert response.error is None
-    assert session_manager.get_or_create("role:mira").messages == []
-    assert service.chat_service.start_chat_turn.call_args.kwargs["omit_user_turn"] is True
-    assert "observe_screen" in service.chat_service.start_chat_turn.call_args.kwargs["content"]
 
 
 @pytest.mark.asyncio

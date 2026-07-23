@@ -174,8 +174,6 @@ export type DesktopApi = {
   syncPet(forceVisible?: boolean): Promise<void>;
   /** Toggles the persistent primary-screen observation session from the pet window. */
   togglePetObservation(): Promise<void>;
-  /** Requests one observation frame without changing persistent consent. */
-  requestPetObservation(): Promise<void>;
   /** Dismisses the active safe observation bubble. */
   dismissPetObservationBubble(): Promise<void>;
   /** Starts following the system cursor from the given local pet offset and screen sample. */

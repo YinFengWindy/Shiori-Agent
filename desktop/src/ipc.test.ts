@@ -40,9 +40,9 @@ test("pet observation controls authorize the active pet window", () => {
   const end = ipcSource.indexOf('ipcMain.on("desktop:pet-renderer-ready"', start + 1);
   const source = ipcSource.slice(start, end);
 
-  assert.match(source, /desktop:pet-observation-request/);
   assert.match(source, /desktop:pet-observation-dismiss/);
-  assert.equal(source.match(/desktopPet\.isPetWindow\(petWindow\)/g)?.length, 3);
+  assert.doesNotMatch(source, /desktop:pet-observation-request/);
+  assert.equal(source.match(/desktopPet\.isPetWindow\(petWindow\)/g)?.length, 2);
 });
 
 test("pet renderer handshake is delegated to the active pet controller", () => {
