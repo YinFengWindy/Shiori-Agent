@@ -26,8 +26,8 @@ export type PetDragRelease = {
 /** Codex uses jumping as the playful pointer-hover acknowledgement. */
 export const petHoverState: SpriteState = "jumping";
 
-/** A completed click selects the main window only when the gesture never became a drag. */
-export function petGestureSelectsMainWindow(hasMoved: boolean): boolean {
+/** A completed double click selects the main window only when the gesture never became a drag. */
+export function petDoubleClickSelectsMainWindow(hasMoved: boolean): boolean {
   return !hasMoved;
 }
 
