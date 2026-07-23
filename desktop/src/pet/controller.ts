@@ -41,7 +41,6 @@ export class DesktopPetController {
   private window: BrowserWindow | null = null;
   private queue = Promise.resolve();
   private activeRoleId = "";
-  private activePackageId = "";
   private activeLoad: { binding: DesktopPetBinding; state: DesktopPetState } | null = null;
   private rendererIsReady = false;
   private latestObservation: PetObservationPayload | null = null;
@@ -193,7 +192,6 @@ export class DesktopPetController {
     };
     const position = clampDesktopPetPosition(settings.positions[key] ?? fallback, display.workArea);
     this.activeRoleId = binding.roleId;
-    this.activePackageId = binding.package.id;
     this.activeLoad = { binding, state };
     if (created) {
       window.once("ready-to-show", () => {
@@ -205,7 +203,6 @@ export class DesktopPetController {
         this.dragPointerOffset = null;
         this.window = null;
         this.activeRoleId = "";
-        this.activePackageId = "";
         this.activeLoad = null;
         this.rendererIsReady = false;
         this.anchorPosition = null;
@@ -329,7 +326,6 @@ export class DesktopPetController {
     this.window?.destroy();
     this.window = null;
     this.activeRoleId = "";
-    this.activePackageId = "";
     this.activeLoad = null;
     this.rendererIsReady = false;
     this.anchorPosition = null;

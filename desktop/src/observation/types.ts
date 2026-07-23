@@ -1,5 +1,7 @@
+/** Lifecycle states that determine the pet's observation presentation. */
 export type ObservationStatus = "off" | "observing" | "reviewing" | "paused" | "failed";
 
+/** Main-process payload for the pet renderer's status and optional reply bubble. */
 export type PetObservationPayload = {
   status: ObservationStatus;
   enabled: boolean;
