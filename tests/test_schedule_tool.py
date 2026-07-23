@@ -1,10 +1,6 @@
 """Tests for ScheduleTool, ListSchedulesTool, CancelScheduleTool."""
 
 from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from agent.scheduler import LatencyTracker, SchedulerService
 from agent.tools.schedule import CancelScheduleTool, ListSchedulesTool, ScheduleTool
 from tests.conftest import make_job

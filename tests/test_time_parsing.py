@@ -4,13 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from agent.scheduler import (
-    _next_cron_fire_fallback,
-    is_cron_expr,
-    next_cron_fire,
-    parse_duration,
-    parse_when_at,
-)
+from agent.scheduler import is_cron_expr, next_cron_fire, parse_duration, parse_when_at
+from agent.scheduler_cron import _next_cron_fire_fallback
 
 
 class TestParseDuration:

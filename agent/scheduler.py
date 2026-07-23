@@ -29,7 +29,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from core.common.timekit import parse_iso as _parse_iso
 from infra.persistence.json_store import atomic_save_json, load_json
-from agent.scheduler_cron import _next_cron_fire_fallback, is_cron_expr, next_cron_fire
+from agent.scheduler_cron import is_cron_expr, next_cron_fire
 
 logger = logging.getLogger(__name__)
 

@@ -3,11 +3,11 @@
 import asyncio
 import json
 from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, Mock, call
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from agent.scheduler import JobStore, LatencyTracker, SchedulerService, ScheduledJob
+from agent.scheduler import JobStore, LatencyTracker, SchedulerService
 from tests.conftest import drain_tasks, make_job
 
 # ── Helpers ──────────────────────────────────────────────────────
