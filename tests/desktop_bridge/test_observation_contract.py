@@ -61,7 +61,7 @@ def test_normalize_observation_validates_targets_and_unknown_risks() -> None:
         normalize_observation_result(_frame(), _result(risks=["model_invented"]))
 
 
-def test_sensitive_text_and_risky_frames_suppress_bubbles_and_memory() -> None:
+def test_sensitive_text_and_risky_frames_remain_available_to_the_role() -> None:
     sensitive = normalize_observation_result(
         _frame(),
         _result(
@@ -69,17 +69,19 @@ def test_sensitive_text_and_risky_frames_suppress_bubbles_and_memory() -> None:
             bubble="密码已经填好了",
         ),
     )
-    assert sensitive["targets"] == []
-    assert sensitive["risks"] == ["sensitive"]
-    assert sensitive["bubble"] == ""
-    assert sensitive["experience_candidate"] == ""
+    assert sensitive["targets"] == [
+        {"label": "密码", "x": 1.0, "y": 2.0, "confidence": 0.9}
+    ]
+    assert sensitive["risks"] == []
+    assert sensitive["bubble"] == "密码已经填好了"
+    assert sensitive["experience_candidate"] == "下午一起整理了报告"
 
     high_risk = normalize_observation_result(
         _frame(),
         _result(risks=["payment", "prompt_injection"]),
     )
-    assert high_risk["bubble"] == ""
-    assert high_risk["experience_candidate"] == ""
+    assert high_risk["bubble"] == "继续写吧"
+    assert high_risk["experience_candidate"] == "下午一起整理了报告"
 
 
 def test_parse_frame_requires_png_and_valid_timestamp() -> None:

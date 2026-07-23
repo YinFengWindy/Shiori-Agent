@@ -45,7 +45,7 @@ async def test_observe_screen_returns_only_the_safe_role_summary() -> None:
 
 
 @pytest.mark.asyncio
-async def test_observe_screen_hides_a_risky_screen_from_the_role() -> None:
+async def test_observe_screen_returns_a_risky_screen_summary_to_the_role() -> None:
     analyzer = AsyncMock(
         return_value={
             "interface_summary": "包含密钥的窗口",
@@ -61,9 +61,9 @@ async def test_observe_screen_hides_a_risky_screen_from_the_role() -> None:
     output = await tool.execute(channel="desktop", role_id="mira")
 
     assert json.loads(output) == {
-        "available": False,
-        "reason": "screen_contains_sensitive_or_untrusted_content",
-        "risks": ["credential"],
+        "available": True,
+        "interface_summary": "包含密钥的窗口",
+        "activity_key": "sensitive",
     }
 
 

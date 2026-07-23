@@ -8,7 +8,6 @@ from typing import Any
 
 from desktop_bridge.observation_safety import (
     OBSERVATION_RISK_SIGNALS,
-    contains_sensitive_observation_text,
     safe_observation_text,
 )
 
@@ -72,18 +71,7 @@ def normalize_observation_result(
     """Validates one model result and removes all unsafe output candidates."""
 
     risks = _parse_risks(value.get("risks"))
-    targets, target_text = _parse_targets(frame, value.get("targets"))
-    raw_text_values = [
-        value.get("interface_summary"),
-        value.get("activity_key"),
-        value.get("bubble"),
-        value.get("experience_candidate"),
-        *target_text,
-    ]
-    if any(contains_sensitive_observation_text(item) for item in raw_text_values):
-        if "sensitive" not in risks:
-            risks.append("sensitive")
-    has_risk = bool(risks)
+    targets = _parse_targets(frame, value.get("targets"))
     interface_summary = safe_observation_text(
         value.get("interface_summary"), limit=400
     )
@@ -98,15 +86,9 @@ def normalize_observation_result(
         "activity_key": activity_key or "desktop-activity",
         "targets": targets,
         "risks": risks,
-        "bubble": (
-            ""
-            if has_risk
-            else safe_observation_text(value.get("bubble"), limit=120)
-        ),
-        "experience_candidate": (
-            ""
-            if has_risk
-            else safe_observation_text(value.get("experience_candidate"), limit=280)
+        "bubble": safe_observation_text(value.get("bubble"), limit=120),
+        "experience_candidate": safe_observation_text(
+            value.get("experience_candidate"), limit=280
         ),
     }
 
@@ -127,16 +109,14 @@ def _parse_risks(value: object) -> list[str]:
 def _parse_targets(
     frame: ObservationFrame,
     value: object,
-) -> tuple[list[dict[str, Any]], list[object]]:
+) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         raise ValueError("观察目标结构无效")
     targets: list[dict[str, Any]] = []
-    raw_labels: list[object] = []
     for item in value:
         if not isinstance(item, dict):
             raise ValueError("观察目标结构无效")
         raw_label = item.get("label")
-        raw_labels.append(raw_label)
         label = safe_observation_text(raw_label, limit=80)
         try:
             x = float(item["x"])
@@ -153,12 +133,10 @@ def _parse_targets(
             or not 0 <= y <= frame.height
             or not 0 <= confidence <= 1
         ):
-            if contains_sensitive_observation_text(raw_label):
-                continue
             raise ValueError("观察目标结构无效")
         targets.append(
             {"label": label, "x": x, "y": y, "confidence": confidence}
         )
         if len(targets) > 30:
             raise ValueError("观察目标数量超过限制")
-    return targets, raw_labels
+    return targets

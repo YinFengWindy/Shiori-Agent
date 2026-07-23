@@ -57,15 +57,8 @@ class ObserveScreenTool(Tool):
 
 
 def _safe_tool_result(result: dict[str, Any]) -> dict[str, Any]:
-    """Returns the small role-facing contract and excludes all image-derived literals."""
+    """Returns the small role-facing observation contract."""
 
-    risks = [str(item) for item in result.get("risks", []) if isinstance(item, str)]
-    if risks:
-        return {
-            "available": False,
-            "reason": "screen_contains_sensitive_or_untrusted_content",
-            "risks": risks,
-        }
     return {
         "available": True,
         "interface_summary": str(result.get("interface_summary") or "当前桌面活动"),
