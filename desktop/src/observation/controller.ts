@@ -153,7 +153,7 @@ export class DesktopObservationController {
       if (intent !== this.lifecycleIntent) return;
       await this.options.saveEnabled(false);
       if (settlementError) {
-        this.publish("failed", "观察经历保存失败", true, false);
+        this.publish("failed", "观察经历保存失败，已关闭屏幕观察", true, false);
         throw settlementError;
       }
       this.publish("off", "", false, false);
@@ -183,7 +183,7 @@ export class DesktopObservationController {
   /** Pauses an enabled session when Windows makes the primary screen unavailable. */
   suspend(message: string): Promise<void> {
     if (!this.options.getEnabled() || this.status === "paused") return Promise.resolve();
-    return this.pause(message);
+    return this.pauseOrFail(message);
   }
 
   /** Resumes a paused persistent session without capturing a frame immediately. */
@@ -206,7 +206,7 @@ export class DesktopObservationController {
     if (!this.options.getEnabled()) return Promise.resolve();
     const roleId = this.options.getRoleId();
     if (!roleId || !this.options.pet.isRunning) {
-      return this.pause("桌宠不可用，屏幕观察已暂停");
+      return this.pauseOrFail("桌宠不可用，屏幕观察已暂停");
     }
     if (!this.sessionId || this.sessionRoleId !== roleId) {
       const intent = this.lifecycleIntent;
@@ -258,14 +258,12 @@ export class DesktopObservationController {
       if (!this.isCurrentSession(generation, roleId)) return;
       this.clearEphemera();
       if (error instanceof ScreenLockedCaptureError) {
-        await this.pause("主屏幕暂时不可用，屏幕观察已暂停");
+        await this.pauseOrFail("主屏幕暂时不可用，屏幕观察已暂停");
         return;
       }
-      if (error instanceof ScreenCaptureFailedError) {
-        await this.disableAfterCaptureFailure();
-        return;
-      }
-      this.publish("failed", "屏幕观察失败，请稍后重试", true);
+      await this.failClosed(error instanceof ScreenCaptureFailedError
+        ? "屏幕捕捉失败，已关闭屏幕观察"
+        : "屏幕观察失败，已关闭屏幕观察");
     }
   }
 
@@ -326,19 +324,20 @@ export class DesktopObservationController {
     return this.enqueueLifecycle(async () => {
       const queuedSnapshot = this.invalidateSession();
       if (intent === this.lifecycleIntent) this.publish("paused", message, true, true);
-      try {
-        await this.settleSnapshots(immediateSnapshot, queuedSnapshot);
-      } catch (error) {
-        if (intent === this.lifecycleIntent) {
-          this.publish("failed", "观察经历保存失败", true, true);
-        }
-        throw error;
-      }
+      await this.settleSnapshots(immediateSnapshot, queuedSnapshot);
     });
   }
 
-  private disableAfterCaptureFailure(): Promise<void> {
-    const message = "屏幕捕捉失败，已关闭屏幕观察";
+  private async pauseOrFail(message: string): Promise<void> {
+    try {
+      await this.pause(message);
+    } catch (error) {
+      await this.failClosed("观察经历保存失败，已关闭屏幕观察");
+      throw error;
+    }
+  }
+
+  private failClosed(message: string): Promise<void> {
     this.targetEnabled = false;
     const intent = ++this.lifecycleIntent;
     const immediateSnapshot = this.invalidateSession();

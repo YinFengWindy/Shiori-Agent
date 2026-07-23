@@ -332,7 +332,7 @@ test("a screen lock during capture pauses without disabling observation", async 
   assert.equal(payloads.at(-1)?.enabled, true);
 });
 
-test("an observation service failure remains enabled for a later retry", async () => {
+test("an observation service failure disables observation", async () => {
   let enabled = true;
   const payloads: PetObservationPayload[] = [];
   const controller = new DesktopObservationController({
@@ -356,7 +356,74 @@ test("an observation service failure remains enabled for a later retry", async (
   await controller.restore();
   await controller.requestObservation();
 
-  assert.equal(enabled, true);
+  assert.equal(enabled, false);
   assert.equal(controller.state, "failed");
-  assert.equal(payloads.at(-1)?.enabled, true);
+  assert.equal(payloads.at(-1)?.enabled, false);
+});
+
+test("an experience settlement failure while pausing disables observation", async () => {
+  let enabled = true;
+  const payloads: PetObservationPayload[] = [];
+  const controller = new DesktopObservationController({
+    bridge: {
+      invoke: async (request: { method: string }) => request.method === "observation.analyze"
+        ? { payload: observationPayload(), error: null }
+        : {
+            payload: {},
+            error: { code: "memory_failed", message: "remember failed" },
+          },
+    },
+    pet: {
+      isRunning: true,
+      publishObservation: (payload) => payloads.push(payload),
+    },
+    getRoleId: () => "role-a",
+    getEnabled: () => enabled,
+    saveEnabled: async (next) => { enabled = next; },
+    captureFrame: async () => frame,
+    getIdleSeconds: () => 60,
+  });
+
+  await controller.restore();
+  await controller.requestObservation();
+  await assert.rejects(
+    controller.suspend("Windows 已锁定，屏幕观察已暂停"),
+    /remember failed/,
+  );
+
+  assert.equal(enabled, false);
+  assert.equal(controller.state, "failed");
+  assert.equal(payloads.at(-1)?.enabled, false);
+});
+
+test("an experience settlement failure while stopping remains disabled", async () => {
+  let enabled = true;
+  const payloads: PetObservationPayload[] = [];
+  const controller = new DesktopObservationController({
+    bridge: {
+      invoke: async (request: { method: string }) => request.method === "observation.analyze"
+        ? { payload: observationPayload(), error: null }
+        : {
+            payload: {},
+            error: { code: "memory_failed", message: "remember failed" },
+          },
+    },
+    pet: {
+      isRunning: true,
+      publishObservation: (payload) => payloads.push(payload),
+    },
+    getRoleId: () => "role-a",
+    getEnabled: () => enabled,
+    saveEnabled: async (next) => { enabled = next; },
+    captureFrame: async () => frame,
+    getIdleSeconds: () => 60,
+  });
+
+  await controller.restore();
+  await controller.requestObservation();
+  await assert.rejects(controller.stop(), /remember failed/);
+
+  assert.equal(enabled, false);
+  assert.equal(controller.state, "failed");
+  assert.equal(payloads.at(-1)?.enabled, false);
 });
