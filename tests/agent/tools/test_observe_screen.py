@@ -9,6 +9,12 @@ import pytest
 from agent.tools.observe_screen import ObserveScreenTool
 
 
+def test_observe_screen_description_matches_role_owned_availability() -> None:
+    assert "屏幕观察已开启" not in ObserveScreenTool.description
+    assert "桌宠可见" not in ObserveScreenTool.description
+    assert "可以识别桌宠及其气泡" in ObserveScreenTool.description
+
+
 @pytest.mark.asyncio
 async def test_observe_screen_returns_only_the_safe_role_summary() -> None:
     capture = SimpleNamespace(

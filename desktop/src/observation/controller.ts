@@ -68,8 +68,7 @@ export class DesktopObservationController {
   /** Displays the final reply of the role that successfully used observe_screen. */
   acceptRoleObservationReply(roleId: string, reply: string): void {
     if (
-      this.status !== "observing"
-      || !this.options.pet.isRunning
+      !this.options.pet.isRunning
       || roleId !== this.options.getRoleId()
     ) return;
     const bubble = this.bubbles.accept(reply.slice(0, 120));

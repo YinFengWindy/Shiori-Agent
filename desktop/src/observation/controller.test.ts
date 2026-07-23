@@ -31,6 +31,18 @@ test("role-produced screen replies use the transient pet bubble", async () => {
   assert.equal(payloads.at(-1)?.persistent, false);
 });
 
+test("role-produced screen replies are not lost before observation display state restores", () => {
+  const payloads: PetObservationPayload[] = [];
+  const controller = new DesktopObservationController({
+    pet: { isRunning: true, publishObservation: (payload) => payloads.push(payload) },
+    getRoleId: () => "role-a",
+  });
+
+  controller.acceptRoleObservationReply("role-a", "我看到桌宠在右上角。 ");
+
+  assert.equal(payloads.at(-1)?.bubble, "我看到桌宠在右上角。");
+});
+
 test("hidden pets clear bubbles without changing the role tool capability", async () => {
   const payloads: PetObservationPayload[] = [];
   let isRunning = true;
