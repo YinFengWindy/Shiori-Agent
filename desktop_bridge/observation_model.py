@@ -4,7 +4,7 @@ from typing import Any
 
 from agent.llm_json import load_json_object_loose
 from agent.provider import LLMProvider
-from core.roles import RoleStore
+from core.roles import RoleRepository
 from desktop_bridge.observation_contract import (
     SCREENSHOT_REQUEST,
     normalize_observation_result,
@@ -49,11 +49,11 @@ class ObservationModelAdapter:
     def __init__(
         self,
         *,
-        role_store: RoleStore,
+        roles: RoleRepository,
         provider: LLMProvider,
         model: str,
     ) -> None:
-        self._role_store = role_store
+        self._roles = roles
         self._provider = provider
         self._model = model
 
@@ -61,7 +61,7 @@ class ObservationModelAdapter:
         """Analyzes one frame without retaining it or enabling desktop actions."""
 
         frame = parse_observation_frame(payload)
-        role = self._role_store.get_required(frame.role_id)
+        role = self._roles.get_required(frame.role_id)
         previous_context = self._previous_context(payload.get("previous_observation"))
         recent_bubbles = self._recent_bubbles_context(payload.get("recent_bubbles"))
         role_context = "\n".join(

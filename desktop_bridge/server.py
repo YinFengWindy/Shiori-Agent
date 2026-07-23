@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from bootstrap.tools import CoreRuntime
 from core.integrations.novelai.store import NovelAIStore
-from core.roles import RoleStore
+from core.roles import RoleRepository, RoleStore
 from desktop_bridge.models import BridgeError, BridgeResponse
 from desktop_bridge.observation_service import DesktopObservationService
 from desktop_bridge.request_dispatcher import BridgeRequestDispatcher
@@ -41,8 +41,9 @@ def _build_observation_service(
     memory = getattr(memory_runtime, "engine", None)
     if provider is None or not model or memory is None:
         return None
+    roles = RoleRepository(role_store)
     return DesktopObservationService(
-        role_store=role_store,
+        roles=roles,
         provider=provider,
         model=model,
         memory=memory,

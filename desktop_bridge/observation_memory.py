@@ -5,22 +5,22 @@ from datetime import datetime
 from typing import Any
 
 from core.memory.engine import MemoryMutation, MemoryScope, MemoryWriteApi
-from core.roles import RoleStore
+from core.roles import RoleRepository
 from desktop_bridge.observation_safety import safe_observation_text
 
 
 class ObservationMemoryWriter:
     """Persists one filtered shared-experience event through the common memory API."""
 
-    def __init__(self, *, role_store: RoleStore, memory: MemoryWriteApi) -> None:
-        self._role_store = role_store
+    def __init__(self, *, roles: RoleRepository, memory: MemoryWriteApi) -> None:
+        self._roles = roles
         self._memory = memory
 
     async def remember(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Validates and writes a settled observation episode."""
 
         role_id = str(payload.get("role_id") or "").strip()
-        self._role_store.get_required(role_id)
+        _ = self._roles.get_required(role_id)
         summary = safe_observation_text(payload.get("summary"), limit=280)
         if not summary:
             raise ValueError("观察经历摘要为空或包含敏感内容")

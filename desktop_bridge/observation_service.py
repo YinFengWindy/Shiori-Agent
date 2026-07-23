@@ -4,7 +4,7 @@ from typing import Any
 
 from agent.provider import LLMProvider
 from core.memory.engine import MemoryWriteApi
-from core.roles import RoleStore
+from core.roles import RoleRepository
 from desktop_bridge.observation_memory import ObservationMemoryWriter
 from desktop_bridge.observation_model import ObservationModelAdapter
 
@@ -15,18 +15,18 @@ class DesktopObservationService:
     def __init__(
         self,
         *,
-        role_store: RoleStore,
+        roles: RoleRepository,
         provider: LLMProvider,
         model: str,
         memory: MemoryWriteApi,
     ) -> None:
         self._model_adapter = ObservationModelAdapter(
-            role_store=role_store,
+            roles=roles,
             provider=provider,
             model=model,
         )
         self._memory_writer = ObservationMemoryWriter(
-            role_store=role_store,
+            roles=roles,
             memory=memory,
         )
 

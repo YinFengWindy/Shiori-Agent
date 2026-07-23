@@ -11,7 +11,7 @@ from desktop_bridge.observation_model import ObservationModelAdapter
 
 def _adapter(provider=None) -> ObservationModelAdapter:
     return ObservationModelAdapter(
-        role_store=SimpleNamespace(
+        roles=SimpleNamespace(
             get_required=lambda _role_id: SimpleNamespace(
                 name="Mira",
                 description="陪伴者",

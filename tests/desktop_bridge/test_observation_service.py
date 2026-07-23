@@ -11,7 +11,7 @@ from desktop_bridge.observation_service import DesktopObservationService
 @pytest.mark.asyncio
 async def test_service_keeps_model_and_memory_operations_separate() -> None:
     service = DesktopObservationService(
-        role_store=SimpleNamespace(),
+        roles=SimpleNamespace(),
         provider=SimpleNamespace(),
         model="vision-model",
         memory=SimpleNamespace(),

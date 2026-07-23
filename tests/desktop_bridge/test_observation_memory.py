@@ -10,7 +10,7 @@ from desktop_bridge.observation_memory import ObservationMemoryWriter
 
 def _writer(memory=None) -> ObservationMemoryWriter:
     return ObservationMemoryWriter(
-        role_store=SimpleNamespace(get_required=lambda _role_id: SimpleNamespace()),
+        roles=SimpleNamespace(get_required=lambda _role_id: SimpleNamespace()),
         memory=memory or SimpleNamespace(),
     )
 
