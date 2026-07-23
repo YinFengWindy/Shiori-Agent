@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from agent.scheduler import get_system_timezone_name
+from agent.scheduler import DEFAULT_SCHEDULE_TIMEZONE
 from desktop_bridge.schedule_role_task_presenter import serialize_schedule_role_task
 
 
@@ -92,5 +92,5 @@ class ScheduleRoleTaskService:
             "trigger": fields.get("trigger", ""),
             "when": fields.get("when", ""),
             "content": fields.get("content", ""),
-            "timezone_name": get_system_timezone_name(),
+            "timezone_name": DEFAULT_SCHEDULE_TIMEZONE,
         }

@@ -14,7 +14,6 @@ Scheduler: 定时任务核心模块
 """
 
 import asyncio
-from importlib import import_module
 import logging
 import re
 import statistics
@@ -30,8 +29,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from core.common.timekit import parse_iso as _parse_iso
 from infra.persistence.json_store import atomic_save_json, load_json
+from agent.scheduler_cron import _next_cron_fire_fallback, is_cron_expr, next_cron_fire
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_SCHEDULE_TIMEZONE = "Asia/Shanghai"
 
 
 # ── LatencyTracker ───────────────────────────────────────────────
@@ -72,7 +74,7 @@ def parse_duration(s: str) -> timedelta:
 
 def parse_when_at(
     s: str,
-    tz: str = "UTC",
+    tz: str = DEFAULT_SCHEDULE_TIMEZONE,
     _now_fn: Callable[[], datetime] | None = None,
 ) -> datetime:
     """解析 'at' 时间：HH:MM（自动判断今天/明天）或 ISO datetime。"""
@@ -101,119 +103,13 @@ def parse_when_at(
     raise ValueError(f"无法解析时间: {s!r}，示例: '14:30', '2025-06-01T09:00'")
 
 
-def is_cron_expr(s: str) -> bool:
-    """判断字符串是否是 cron 表达式（5 或 6 字段）。"""
-    parts = s.strip().split()
-    return len(parts) in (5, 6)
-
-
-def get_system_timezone_name() -> str:
-    """Returns the host system timezone as an IANA name for scheduler inputs."""
-    from tzlocal import get_localzone_name
-
-    timezone_name = str(get_localzone_name()).strip()
-    if not timezone_name:
-        raise RuntimeError("无法读取系统时区")
-    ZoneInfo(timezone_name)
-    return timezone_name
-
-
-def _parse_cron_field(field: str, minimum: int, maximum: int) -> set[int]:
-    values: set[int] = set()
-    for part in field.split(","):
-        part = part.strip()
-        if not part:
-            continue
-        step = 1
-        if "/" in part:
-            part, step_str = part.split("/", 1)
-            step = int(step_str)
-            if step <= 0:
-                raise ValueError(f"无效 cron step: {field!r}")
-        if part == "*":
-            start, end = minimum, maximum
-        elif "-" in part:
-            start_str, end_str = part.split("-", 1)
-            start, end = int(start_str), int(end_str)
-        else:
-            start = end = int(part)
-        if start < minimum or end > maximum or start > end:
-            raise ValueError(f"无效 cron 字段: {field!r}")
-        values.update(range(start, end + 1, step))
-    if not values:
-        raise ValueError(f"无效 cron 字段: {field!r}")
-    return values
-
-
-def _next_cron_fire_fallback(cron_expr: str, tz: str, after: datetime) -> datetime:
-    parts = cron_expr.strip().split()
-    if len(parts) == 5:
-        second_values = {0}
-        minute_s, hour_s, dom_s, month_s, dow_s = parts
-        step = timedelta(minutes=1)
-        current = after.astimezone(ZoneInfo(tz)).replace(second=0, microsecond=0)
-        if current <= after.astimezone(ZoneInfo(tz)):
-            current += step
-    elif len(parts) == 6:
-        second_s, minute_s, hour_s, dom_s, month_s, dow_s = parts
-        second_values = _parse_cron_field(second_s, 0, 59)
-        step = timedelta(seconds=1)
-        current = after.astimezone(ZoneInfo(tz)).replace(microsecond=0) + step
-    else:
-        raise ValueError(f"无效的 cron 表达式: {cron_expr!r}")
-
-    minute_values = _parse_cron_field(minute_s, 0, 59)
-    hour_values = _parse_cron_field(hour_s, 0, 23)
-    dom_values = _parse_cron_field(dom_s, 1, 31)
-    month_values = _parse_cron_field(month_s, 1, 12)
-    dow_values = _parse_cron_field(dow_s.replace("7", "0"), 0, 6)
-
-    for _ in range(366 * 24 * 60 * (60 if len(parts) == 6 else 1)):
-        cron_dow = (current.weekday() + 1) % 7
-        if (
-            current.second in second_values
-            and current.minute in minute_values
-            and current.hour in hour_values
-            and current.day in dom_values
-            and current.month in month_values
-            and cron_dow in dow_values
-        ):
-            return current.astimezone(timezone.utc)
-        current += step
-    raise ValueError(f"无法在合理范围内解析 cron 表达式: {cron_expr!r}")
-
-
-def next_cron_fire(cron_expr: str, tz: str, after: datetime) -> datetime:
-    """用 APScheduler CronTrigger 计算 cron 下次触发时间。"""
-    try:
-        from apscheduler.triggers.cron import CronTrigger
-    except ModuleNotFoundError:
-        return _next_cron_fire_fallback(cron_expr, tz, after)
-
-    # APScheduler 3.x 兼容：优先用 pytz，回退到 ZoneInfo
-    try:
-        pytz = import_module("pytz")
-        tzinfo = pytz.timezone(tz)
-    except Exception:
-        tzinfo = ZoneInfo(tz)
-
-    trigger = CronTrigger.from_crontab(cron_expr, timezone=tzinfo)
-    result = trigger.get_next_fire_time(None, after)
-    if result is None:
-        raise ValueError(f"无效的 cron 表达式: {cron_expr!r}")
-    # Normalize to UTC-aware datetime
-    if result.tzinfo is None:
-        result = result.replace(tzinfo=timezone.utc)
-    return result
-
-
 # ── fire_at Computation ──────────────────────────────────────────
 
 
 def compute_fire_at(
     trigger: str,
     when: str,
-    tz: str = "UTC",
+    tz: str = DEFAULT_SCHEDULE_TIMEZONE,
     request_time: str | None = None,
     _now_fn: Callable[[], datetime] | None = None,
 ) -> datetime:
@@ -286,7 +182,7 @@ class ScheduledJob:
     prompt: str | None = None  # soft tier
 
     name: str | None = None
-    timezone: str = "UTC"
+    timezone: str = DEFAULT_SCHEDULE_TIMEZONE
     when: str = ""
 
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -528,6 +424,7 @@ class SchedulerService:
         now = self._now()
         jobs = self.store.load()
         count_loaded = 0
+        jobs_changed = False
 
         for job in jobs:
             if not job.enabled:
@@ -535,12 +432,20 @@ class SchedulerService:
 
             if job.fire_at.tzinfo is None:
                 job.fire_at = job.fire_at.replace(tzinfo=timezone.utc)
+                jobs_changed = True
+
+            if job.trigger == "every" and job.cron_expr and job.fire_at > now:
+                normalized_fire_at = next_cron_fire(job.cron_expr, job.timezone, now)
+                if normalized_fire_at != job.fire_at:
+                    job.fire_at = normalized_fire_at
+                    jobs_changed = True
 
             if job.fire_at <= now:
                 age = (now - job.fire_at).total_seconds()
                 if job.trigger == "every":
                     # 推进到下一个未来时间
                     job.fire_at = self._advance_every(job, now)
+                    jobs_changed = True
                     self._jobs[job.id] = job
                     count_loaded += 1
                 elif age <= self.GRACE_SECONDS:
@@ -552,10 +457,13 @@ class SchedulerService:
                         f"Job {job.id[:8]} ({job.name or 'unnamed'}) expired "
                         f"{age:.0f}s ago, beyond grace period — discarded"
                     )
+                    jobs_changed = True
             else:
                 self._jobs[job.id] = job
                 count_loaded += 1
 
+        if jobs_changed:
+            self.store.save(self._jobs)
         logger.info(f"SchedulerService recovered {count_loaded} jobs")
 
     def _build_job(

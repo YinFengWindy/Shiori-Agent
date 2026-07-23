@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.scheduler import get_system_timezone_name
 from desktop_bridge.role_task_service import RoleTaskService
 
 
@@ -157,7 +156,8 @@ def test_role_task_service_creates_and_updates_desktop_schedule_binding():
     assert scheduler.last_create["channel"] == "desktop"
     assert scheduler.last_create["chat_id"] == "role:mira"
     assert scheduler.last_create["role_id"] == "mira"
-    assert scheduler.last_create["timezone_name"] == get_system_timezone_name()
+    assert scheduler.last_create["timezone_name"] == "Asia/Shanghai"
+    assert scheduler.last_update["timezone_name"] == "Asia/Shanghai"
     assert scheduler.last_update["role_id"] == "mira"
     assert created["schedule"]["content"] == "喝水"
     assert updated["schedule"]["tier"] == "soft"

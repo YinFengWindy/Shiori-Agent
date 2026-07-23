@@ -9,6 +9,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from agent.scheduler import (
+    DEFAULT_SCHEDULE_TIMEZONE,
     ScheduledJob,
     SchedulerService,
     compute_fire_at,
@@ -69,7 +70,7 @@ class ScheduleTool(Tool):
             },
             "timezone": {
                 "type": "string",
-                "description": "时区，如 Asia/Shanghai，默认使用系统配置",
+                "description": "时区，如 Asia/Shanghai；省略时固定使用 Asia/Shanghai",
             },
             "name": {
                 "type": "string",
@@ -86,7 +87,11 @@ class ScheduleTool(Tool):
         "required": ["tier", "trigger", "when", "channel", "chat_id"],
     }
 
-    def __init__(self, service: SchedulerService, default_tz: str = "UTC") -> None:
+    def __init__(
+        self,
+        service: SchedulerService,
+        default_tz: str = DEFAULT_SCHEDULE_TIMEZONE,
+    ) -> None:
         self._service = service
         self._default_tz = default_tz
 

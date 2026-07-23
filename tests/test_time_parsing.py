@@ -4,7 +4,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from agent.scheduler import is_cron_expr, next_cron_fire, parse_duration, parse_when_at
+from agent.scheduler import (
+    _next_cron_fire_fallback,
+    is_cron_expr,
+    next_cron_fire,
+    parse_duration,
+    parse_when_at,
+)
 
 
 class TestParseDuration:
@@ -77,6 +83,11 @@ class TestParseWhenAt:
         result = parse_when_at("09:00", tz, _now_fn=lambda: ref)
         assert result.tzinfo is not None
 
+    def test_default_timezone_is_shanghai(self):
+        result = parse_when_at("2025-06-01T09:00:00")
+
+        assert str(result.tzinfo) == "Asia/Shanghai"
+
     def test_invalid_raises(self):
         with pytest.raises(ValueError, match="无法解析时间"):
             parse_when_at("not-a-time", "UTC")
@@ -109,3 +120,12 @@ class TestNextCronFire:
         after = datetime(2025, 6, 1, 8, 1, 0, tzinfo=timezone.utc)
         result = next_cron_fire("*/5 * * * *", "UTC", after)
         assert result == datetime(2025, 6, 1, 8, 5, 0, tzinfo=timezone.utc)
+
+    @pytest.mark.parametrize("sunday", ["0", "7"])
+    def test_sunday_uses_posix_numbering_in_all_cron_paths(self, sunday):
+        after = datetime(2026, 7, 23, 9, 37, 0, tzinfo=timezone.utc)
+        cron_expr = f"0 20 * * {sunday}"
+        expected = datetime(2026, 7, 26, 12, 0, 0, tzinfo=timezone.utc)
+
+        assert next_cron_fire(cron_expr, "Asia/Shanghai", after) == expected
+        assert _next_cron_fire_fallback(cron_expr, "Asia/Shanghai", after) == expected

@@ -598,6 +598,27 @@ def test_every_misfire_advances_to_future(tmp_path, mock_push, mock_loop, fixed_
     assert svc._jobs[job.id].fire_at > fixed_now
 
 
+def test_recovery_normalizes_persisted_posix_cron_weekday(
+    tmp_path, mock_push, mock_loop
+):
+    now = datetime(2026, 7, 23, 9, 37, tzinfo=timezone.utc)
+    svc = make_service(tmp_path, mock_push, mock_loop, now)
+    job = make_job(
+        trigger="every",
+        tier="instant",
+        cron_expr="0 20 * * 0",
+        timezone_="Asia/Shanghai",
+        fire_at=datetime(2026, 7, 27, 12, 0, tzinfo=timezone.utc),
+    )
+    svc.store.save({job.id: job})
+
+    svc.load_and_recover()
+
+    expected = datetime(2026, 7, 26, 12, 0, tzinfo=timezone.utc)
+    assert svc._jobs[job.id].fire_at == expected
+    assert JobStore(tmp_path / "jobs.json").load()[0].fire_at == expected
+
+
 # ── Cancel ───────────────────────────────────────────────────────
 
 

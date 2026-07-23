@@ -107,6 +107,26 @@ async def test_instant_after_registers_job(tmp_path, mock_push, mock_loop):
     assert job.message == "喝水了"
 
 
+async def test_schedule_tool_defaults_to_shanghai_timezone(
+    tmp_path, mock_push, mock_loop
+):
+    svc = make_svc(tmp_path, mock_push, mock_loop)
+    tool = ScheduleTool(svc)
+
+    await tool.execute(
+        tier="instant",
+        trigger="after",
+        when="5m",
+        channel="telegram",
+        chat_id="123",
+        message="喝水了",
+        request_time=_NOW.isoformat(),
+    )
+
+    job = next(iter(svc._jobs.values()))
+    assert job.timezone == "Asia/Shanghai"
+
+
 async def test_schedule_persists_role_execution_identity(tmp_path, mock_push, mock_loop):
     svc = make_svc(tmp_path, mock_push, mock_loop)
     tool = ScheduleTool(svc, default_tz="UTC")
