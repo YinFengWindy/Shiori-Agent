@@ -24,8 +24,8 @@ test("role-produced screen replies use the transient pet bubble", async () => {
   });
   await controller.restore();
 
-  controller.acceptRoleObservationReply("role-a", "我看到你在整理代码。\n继续吧。");
-  controller.acceptRoleObservationReply("role-b", "这句不应显示。");
+  controller.acceptRoleReply("role-a", "我看到你在整理代码。\n继续吧。");
+  controller.acceptRoleReply("role-b", "这句不应显示。");
 
   assert.equal(payloads.at(-1)?.bubble, "我看到你在整理代码。\n继续吧。");
   assert.equal(payloads.at(-1)?.persistent, false);
@@ -38,7 +38,7 @@ test("role-produced screen replies are not lost before observation display state
     getRoleId: () => "role-a",
   });
 
-  controller.acceptRoleObservationReply("role-a", "我看到桌宠在右上角。 ");
+  controller.acceptRoleReply("role-a", "我看到桌宠在右上角。 ");
 
   assert.equal(payloads.at(-1)?.bubble, "我看到桌宠在右上角。");
 });
@@ -55,7 +55,7 @@ test("hidden pets clear bubbles without changing the role tool capability", asyn
   });
 
   await controller.restore();
-  controller.acceptRoleObservationReply("role-a", "这句会在隐藏时清除。");
+  controller.acceptRoleReply("role-a", "这句会在隐藏时清除。");
   isRunning = false;
   await controller.restore();
 

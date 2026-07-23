@@ -65,8 +65,8 @@ export class DesktopObservationController {
     return this.restore();
   }
 
-  /** Displays the final reply of the role that successfully used observe_screen. */
-  acceptRoleObservationReply(roleId: string, reply: string): void {
+  /** Displays the final desktop reply from the role bound to the visible pet. */
+  acceptRoleReply(roleId: string, reply: string): void {
     if (
       !this.options.pet.isRunning
       || roleId !== this.options.getRoleId()

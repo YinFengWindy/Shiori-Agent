@@ -21,7 +21,7 @@ import { loadDesktopPetSettings, saveDesktopPetSettings } from "./pet/settings.j
 import type { DesktopPetBinding, DesktopPetSettings } from "./pet/types.js";
 import { createDesktopPetWindow, displayForDesktopPet } from "./pet/window.js";
 import { DesktopObservationController } from "./observation/controller.js";
-import { wireRoleObservationBubbles } from "./observation/roleBubble.js";
+import { wireRoleReplyBubbles } from "./observation/roleBubble.js";
 
 const bridge = new DesktopBridgeClient();
 const localAssets = new LocalAssetRegistry();
@@ -226,7 +226,7 @@ void app.whenReady().then(() => {
     pet: desktopPet,
     getRoleId: () => desktopPetSettings.roleId,
   });
-  wireRoleObservationBubbles(bridge, desktopObservation);
+  wireRoleReplyBubbles(bridge, desktopObservation);
   powerMonitor.on("lock-screen", () => {
     void desktopObservation?.suspend("Windows 已锁定，屏幕观察已暂停").catch((error) => {
       logDesktopDiagnostic({ scope: "main", event: "desktop-observation.suspend.failed", payload: { error } });

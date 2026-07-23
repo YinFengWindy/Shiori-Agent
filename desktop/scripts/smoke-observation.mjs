@@ -13,7 +13,7 @@ const controller = new DesktopObservationController({
 });
 
 await controller.restore();
-controller.acceptRoleObservationReply("smoke-role", "我在这里");
+controller.acceptRoleReply("smoke-role", "我在这里");
 if (states.at(-1)?.status !== "observing" || states.at(-1)?.bubble !== "我在这里") {
   throw new Error("observation smoke did not publish a role bubble");
 }
