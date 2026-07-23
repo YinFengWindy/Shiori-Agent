@@ -41,16 +41,14 @@ function framesForState(state: SpriteState, durationScale = 1): SpritePlaybackFr
 
 const idlePlaybackFrames = framesForState("idle", spriteIdleFrameDurationScale);
 
-/** Builds the exact Codex sequence: action loops three times, then a slow idle loop. */
-export function spritePlaybackFrames(state: SpriteState): readonly SpritePlaybackFrame[] {
-  if (state === "idle") return idlePlaybackFrames;
+/** Resolves the frame at a playback tick, keeping idle infinite after an action finishes. */
+export function spritePlaybackFrameAt(state: SpriteState, playhead: number): SpritePlaybackFrame {
+  const boundedPlayhead = Math.max(0, Math.trunc(playhead));
+  if (state === "idle") return idlePlaybackFrames[boundedPlayhead % idlePlaybackFrames.length];
   const actionFrames = framesForState(state);
-  return [
-    ...actionFrames,
-    ...actionFrames,
-    ...actionFrames,
-    ...idlePlaybackFrames,
-  ];
+  const actionFrameCount = actionFrames.length * spriteActionLoopCount;
+  if (boundedPlayhead < actionFrameCount) return actionFrames[boundedPlayhead % actionFrames.length];
+  return idlePlaybackFrames[(boundedPlayhead - actionFrameCount) % idlePlaybackFrames.length];
 }
 
 /** Resolves the background position for one fixed 192 x 208 sprite cell. */

@@ -1,6 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   hasPetDragMoved,
+  petGestureSelectsMainWindow,
   petDragRelease,
   petDragSamplesWith,
   petDragState,
@@ -24,6 +25,7 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
   const [interactionState, setInteractionState] = useState<SpriteState | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<DragState | null>(null);
+  const lastGestureWasDragRef = useRef(true);
 
   function setNextInteractionState(nextState: SpriteState | null): void {
     setInteractionState((current) => current === nextState ? current : nextState);
@@ -33,6 +35,7 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
     if (event.button !== 0 || !dragBridge) return;
     event.preventDefault();
     setNextInteractionState(null);
+    lastGestureWasDragRef.current = true;
     dragRef.current = {
       pointerId: event.pointerId,
       previousScreenX: event.screenX,
@@ -65,7 +68,7 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
     const release = petDragRelease(drag.samples, pointerSample(event), drag.hasMoved);
     dragRef.current = null;
     setIsDragging(false);
-    if (!release.hasMoved) dragBridge?.openPetRole();
+    lastGestureWasDragRef.current = release.hasMoved;
     dragBridge?.endPetDrag(
       release.sample.screenX,
       release.sample.screenY,
@@ -81,6 +84,7 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
     if (!drag) return;
     dragRef.current = null;
     setIsDragging(false);
+    lastGestureWasDragRef.current = true;
     dragBridge?.endPetDrag();
     setNextInteractionState(null);
   }
@@ -93,10 +97,14 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
     if (!dragRef.current) setNextInteractionState(null);
   }
 
+  function onClick(): void {
+    if (petGestureSelectsMainWindow(lastGestureWasDragRef.current)) dragBridge?.openPetRole();
+  }
+
   return {
     interactionState,
     isDragging,
-    pointerHandlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onPointerEnter, onPointerLeave },
+    pointerHandlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onPointerEnter, onPointerLeave, onClick },
   };
 }
 

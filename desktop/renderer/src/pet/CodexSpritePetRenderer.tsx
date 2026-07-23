@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { spriteCell, spriteFramePosition, spritePlaybackFrames, type SpriteState } from "./spriteContract";
+import { spriteCell, spriteFramePosition, spritePlaybackFrameAt, type SpriteState } from "./spriteContract";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 
 type CodexSpritePetRendererProps = {
@@ -14,8 +14,7 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePet
     typeof window === "undefined" ? null : window.miraDesktop,
   );
   const activeState = interactionState ?? state;
-  const playbackFrames = spritePlaybackFrames(activeState);
-  const activePlaybackFrame = playbackFrames[frame % playbackFrames.length];
+  const activePlaybackFrame = spritePlaybackFrameAt(activeState, frame);
 
   useEffect(() => {
     setFrame(0);
@@ -23,10 +22,10 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state }: CodexSpritePet
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setFrame((current) => (current + 1) % playbackFrames.length);
+      setFrame((current) => current + 1);
     }, activePlaybackFrame.duration);
     return () => window.clearTimeout(timer);
-  }, [activePlaybackFrame.duration, activeState, frame, playbackFrames.length]);
+  }, [activePlaybackFrame.duration, activeState, frame]);
 
   return (
     <div

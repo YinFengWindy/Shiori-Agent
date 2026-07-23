@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   hasPetDragMoved,
+  petGestureSelectsMainWindow,
   petDragRelease,
   petDragState,
   petHoverState,
@@ -19,6 +20,11 @@ test("Codex pet treats vertical movement as a drag without selecting a horizonta
   assert.equal(hasPetDragMoved(120, 160, 120, 163), false);
   assert.equal(hasPetDragMoved(120, 160, 120, 164), true);
   assert.equal(petDragState(120, 120), null);
+});
+
+test("Codex pet selects the main window only after a click gesture", () => {
+  assert.equal(petGestureSelectsMainWindow(false), true);
+  assert.equal(petGestureSelectsMainWindow(true), false);
 });
 
 test("Codex pet derives a bounded throw velocity from the recent meaningful drag samples", () => {

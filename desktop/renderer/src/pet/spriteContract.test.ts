@@ -6,7 +6,7 @@ import {
   spriteFrameDuration,
   spriteFramePosition,
   spriteIdleFrameDurationScale,
-  spritePlaybackFrames,
+  spritePlaybackFrameAt,
 } from "./spriteContract";
 
 test("Codex sprite contract maps every state to its documented atlas row", () => {
@@ -30,12 +30,10 @@ test("sprite frame position wraps inside the active row", () => {
   assert.equal(spriteFramePosition("review", -1), "-960px -1664px");
 });
 
-test("Codex sprite playback loops active rows three times then settles into a slow idle cycle", () => {
-  const runningRight = spritePlaybackFrames("running-right");
+test("Codex sprite playback loops active rows three times then settles into a permanent slow idle cycle", () => {
   assert.equal(spriteActionLoopCount, 3);
   assert.equal(spriteIdleFrameDurationScale, 6);
-  assert.equal(runningRight.length, 8 * spriteActionLoopCount + 6);
-  assert.deepEqual(runningRight.slice(0, 8).map(({ state, frame, duration }) => ({ state, frame, duration })), [
+  assert.deepEqual(Array.from({ length: 8 }, (_, playhead) => spritePlaybackFrameAt("running-right", playhead)), [
     { state: "running-right", frame: 0, duration: 120 },
     { state: "running-right", frame: 1, duration: 120 },
     { state: "running-right", frame: 2, duration: 120 },
@@ -45,9 +43,14 @@ test("Codex sprite playback loops active rows three times then settles into a sl
     { state: "running-right", frame: 6, duration: 120 },
     { state: "running-right", frame: 7, duration: 220 },
   ]);
-  assert.deepEqual(runningRight.slice(-2), [
+  assert.deepEqual([
+    spritePlaybackFrameAt("running-right", 8 * spriteActionLoopCount + 4),
+    spritePlaybackFrameAt("running-right", 8 * spriteActionLoopCount + 5),
+  ], [
     { state: "idle", frame: 4, duration: 840 },
     { state: "idle", frame: 5, duration: 1920 },
   ]);
+  assert.deepEqual(spritePlaybackFrameAt("running-right", 8 * spriteActionLoopCount + 6), { state: "idle", frame: 0, duration: 1680 });
+  assert.deepEqual(spritePlaybackFrameAt("running-right", 8 * spriteActionLoopCount + 6 + 6 * 20), { state: "idle", frame: 0, duration: 1680 });
   assert.equal(spriteFrameDuration("running-right", 7), 220);
 });
