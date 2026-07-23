@@ -209,7 +209,12 @@ class LLMProvider:
         payload_snapshot_enabled: bool | None = None,
     ) -> None:
         normalized_base_url = _normalize_openai_base_url(base_url)
-        self._client = AsyncOpenAI(api_key=api_key, base_url=normalized_base_url)
+        # Keep retry ownership here so every provider obeys the same retry budget.
+        self._client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=normalized_base_url,
+            max_retries=0,
+        )
         self._base_url = normalized_base_url or ""
         self._provider_name = provider_name
         self._system = system_prompt

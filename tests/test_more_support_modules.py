@@ -420,7 +420,7 @@ async def test_provider_chat_stream_times_out_when_idle(
         )
 
 
-def test_bootstrap_providers_set_stream_idle_timeout(
+def test_bootstrap_providers_set_a_shared_request_budget(
     monkeypatch: pytest.MonkeyPatch,
 ):
     created: list[dict] = []
@@ -452,11 +452,12 @@ def test_bootstrap_providers_set_stream_idle_timeout(
     build_providers(cast(Any, cfg))
     build_vl_provider(cast(Any, cfg))
 
+    assert [item["request_timeout_s"] for item in created] == [45.0, 45.0, 45.0, 45.0]
     assert [item["stream_idle_timeout_s"] for item in created] == [
-        120.0,
-        60.0,
-        120.0,
-        120.0,
+        45.0,
+        45.0,
+        45.0,
+        45.0,
     ]
 
 

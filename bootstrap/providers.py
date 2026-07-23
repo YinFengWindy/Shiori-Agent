@@ -3,10 +3,10 @@ from __future__ import annotations
 from agent.config_models import Config
 from infra.providers.llm_provider import LLMProvider
 
-_MAIN_PROVIDER_TIMEOUT_S = 300.0
-_LIGHT_PROVIDER_TIMEOUT_S = 180.0
-_MAIN_STREAM_IDLE_TIMEOUT_S = 120.0
-_LIGHT_STREAM_IDLE_TIMEOUT_S = 60.0
+_MAIN_PROVIDER_TIMEOUT_S = 45.0
+_LIGHT_PROVIDER_TIMEOUT_S = 45.0
+_MAIN_STREAM_IDLE_TIMEOUT_S = 45.0
+_LIGHT_STREAM_IDLE_TIMEOUT_S = 45.0
 
 
 def build_providers(
