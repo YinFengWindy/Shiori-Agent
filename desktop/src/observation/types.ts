@@ -12,6 +12,20 @@ export type ObservationRisk =
 /** Indicates that Windows cannot currently expose the primary display capture surface. */
 export class PrimaryDisplayUnavailableError extends Error {}
 
+/** Indicates that capture was rejected because Windows is currently locked. */
+export class ScreenLockedCaptureError extends PrimaryDisplayUnavailableError {}
+
+/** Marks failures originating specifically from acquiring a desktop screenshot. */
+export class ScreenCaptureFailedError extends Error {
+  readonly cause: unknown;
+
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "ScreenCaptureFailedError";
+    this.cause = cause;
+  }
+}
+
 export type ObservationTarget = {
   label: string;
   x: number;

@@ -1,6 +1,11 @@
 import type { BridgeRequest, BridgeResponse } from "../shared.js";
 import { isScreenshotObservationRequest, parseObservationResult } from "./result.js";
-import type { CapturedObservationFrame, ObservationResult } from "./types.js";
+import {
+  ScreenCaptureFailedError,
+  ScreenLockedCaptureError,
+  type CapturedObservationFrame,
+  type ObservationResult,
+} from "./types.js";
 
 const maximumScreenshotRefreshes = 1;
 
@@ -24,7 +29,13 @@ export async function requestObservationResult(
 ): Promise<ObservationResult | null> {
   let screenshotRefreshes = 0;
   while (true) {
-    const frame = await options.captureFrame();
+    let frame: CapturedObservationFrame;
+    try {
+      frame = await options.captureFrame();
+    } catch (error) {
+      if (error instanceof ScreenLockedCaptureError) throw error;
+      throw new ScreenCaptureFailedError(error);
+    }
     if (!options.isCurrent()) return null;
     const response = await options.bridge.invoke({
       method: "observation.analyze",

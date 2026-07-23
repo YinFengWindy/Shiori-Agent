@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DesktopObservationController } from "./controller.js";
-import type { CapturedObservationFrame, PetObservationPayload } from "./types.js";
+import {
+  ScreenLockedCaptureError,
+  type CapturedObservationFrame,
+  type PetObservationPayload,
+} from "./types.js";
 
 const frame: CapturedObservationFrame = {
   frameId: "frame-1",
@@ -268,4 +272,91 @@ test("a second toggle cancels an in-flight enable before any screenshot is captu
   assert.equal(enabled, false);
   assert.equal(captureCount, 0);
   assert.equal(controller.state, "off");
+});
+
+test("a screen capture failure disables observation and prevents further captures", async () => {
+  let enabled = true;
+  let captureCount = 0;
+  const payloads: PetObservationPayload[] = [];
+  const controller = new DesktopObservationController({
+    bridge: { invoke: async () => ({ payload: {}, error: null }) },
+    pet: {
+      isRunning: true,
+      publishObservation: (payload) => payloads.push(payload),
+    },
+    getRoleId: () => "role-a",
+    getEnabled: () => enabled,
+    saveEnabled: async (next) => { enabled = next; },
+    captureFrame: async () => {
+      captureCount += 1;
+      throw new Error("desktopCapturer failed");
+    },
+    getIdleSeconds: () => 60,
+  });
+
+  await controller.restore();
+  await controller.requestObservation();
+
+  assert.equal(enabled, false);
+  assert.equal(controller.state, "failed");
+  assert.equal(payloads.at(-1)?.enabled, false);
+  assert.equal(payloads.at(-1)?.bubble, "屏幕捕捉失败，已关闭屏幕观察");
+
+  await controller.requestObservation();
+  assert.equal(captureCount, 1);
+});
+
+test("a screen lock during capture pauses without disabling observation", async () => {
+  let enabled = true;
+  const payloads: PetObservationPayload[] = [];
+  const controller = new DesktopObservationController({
+    bridge: { invoke: async () => ({ payload: {}, error: null }) },
+    pet: {
+      isRunning: true,
+      publishObservation: (payload) => payloads.push(payload),
+    },
+    getRoleId: () => "role-a",
+    getEnabled: () => enabled,
+    saveEnabled: async (next) => { enabled = next; },
+    captureFrame: async () => {
+      throw new ScreenLockedCaptureError("Windows is locked");
+    },
+    getIdleSeconds: () => 60,
+  });
+
+  await controller.restore();
+  await controller.requestObservation();
+
+  assert.equal(enabled, true);
+  assert.equal(controller.state, "paused");
+  assert.equal(payloads.at(-1)?.enabled, true);
+});
+
+test("an observation service failure remains enabled for a later retry", async () => {
+  let enabled = true;
+  const payloads: PetObservationPayload[] = [];
+  const controller = new DesktopObservationController({
+    bridge: {
+      invoke: async () => ({
+        payload: {},
+        error: { code: "observation_failed", message: "model unavailable" },
+      }),
+    },
+    pet: {
+      isRunning: true,
+      publishObservation: (payload) => payloads.push(payload),
+    },
+    getRoleId: () => "role-a",
+    getEnabled: () => enabled,
+    saveEnabled: async (next) => { enabled = next; },
+    captureFrame: async () => frame,
+    getIdleSeconds: () => 60,
+  });
+
+  await controller.restore();
+  await controller.requestObservation();
+
+  assert.equal(enabled, true);
+  assert.equal(controller.state, "failed");
+  assert.equal(payloads.at(-1)?.enabled, true);
 });

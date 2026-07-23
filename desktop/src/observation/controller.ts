@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { BridgeRequest, BridgeResponse } from "../shared.js";
 import {
-  PrimaryDisplayUnavailableError,
+  ScreenCaptureFailedError,
+  ScreenLockedCaptureError,
   type CapturedObservationFrame,
   type ObservationResult,
   type ObservationStatus,
@@ -256,8 +257,12 @@ export class DesktopObservationController {
     } catch (error) {
       if (!this.isCurrentSession(generation, roleId)) return;
       this.clearEphemera();
-      if (error instanceof PrimaryDisplayUnavailableError) {
+      if (error instanceof ScreenLockedCaptureError) {
         await this.pause("主屏幕暂时不可用，屏幕观察已暂停");
+        return;
+      }
+      if (error instanceof ScreenCaptureFailedError) {
+        await this.disableAfterCaptureFailure();
         return;
       }
       this.publish("failed", "屏幕观察失败，请稍后重试", true);
@@ -329,6 +334,28 @@ export class DesktopObservationController {
         }
         throw error;
       }
+    });
+  }
+
+  private disableAfterCaptureFailure(): Promise<void> {
+    const message = "屏幕捕捉失败，已关闭屏幕观察";
+    this.targetEnabled = false;
+    const intent = ++this.lifecycleIntent;
+    const immediateSnapshot = this.invalidateSession();
+    this.publish("failed", message, true, false);
+    return this.enqueueLifecycle(async () => {
+      const queuedSnapshot = this.invalidateSession();
+      let settlementError: unknown;
+      try {
+        await this.settleSnapshots(immediateSnapshot, queuedSnapshot);
+      } catch (error) {
+        settlementError = error;
+      }
+      if (intent !== this.lifecycleIntent) return;
+      await this.options.saveEnabled(false);
+      if (intent !== this.lifecycleIntent) return;
+      this.publish("failed", message, true, false);
+      if (settlementError) throw settlementError;
     });
   }
 

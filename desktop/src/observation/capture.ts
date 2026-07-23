@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { desktopCapturer, screen } from "electron";
 import { selectPrimaryDisplaySource } from "./primaryDisplay.js";
-import { PrimaryDisplayUnavailableError, type CapturedObservationFrame } from "./types.js";
+import {
+  PrimaryDisplayUnavailableError,
+  ScreenLockedCaptureError,
+  type CapturedObservationFrame,
+} from "./types.js";
 
 type PrimaryDisplayCaptureOptions = {
   screenLocked?: boolean;
@@ -12,7 +16,7 @@ export async function capturePrimaryDisplay(
   options: PrimaryDisplayCaptureOptions = {},
 ): Promise<CapturedObservationFrame> {
   if (options.screenLocked) {
-    throw new PrimaryDisplayUnavailableError("Windows 已锁定，无法捕获主屏幕");
+    throw new ScreenLockedCaptureError("Windows 已锁定，无法捕获主屏幕");
   }
   const primary = screen.getPrimaryDisplay();
   const thumbnailSize = {
