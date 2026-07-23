@@ -46,7 +46,7 @@ def _payload() -> dict[str, object]:
     }
 
 
-def test_normalize_observation_validates_targets_and_unknown_risks() -> None:
+def test_normalize_observation_validates_targets_and_keeps_optional_risks() -> None:
     normalized = normalize_observation_result(_frame(), _result())
     assert normalized["targets"] == [
         {"label": "保存", "x": 100.0, "y": 80.0, "confidence": 0.9}
@@ -57,8 +57,10 @@ def test_normalize_observation_validates_targets_and_unknown_risks() -> None:
             _frame(),
             _result(targets=[{"label": "保存", "x": 1200, "y": 0, "confidence": 1}]),
         )
-    with pytest.raises(ValueError, match="风险结构"):
-        normalize_observation_result(_frame(), _result(risks=["model_invented"]))
+    assert normalize_observation_result(
+        _frame(), _result(risks=["model_invented", "safe", "model_invented"])
+    )["risks"] == ["model_invented", "safe"]
+    assert normalize_observation_result(_frame(), _result(risks=None))["risks"] == []
 
 
 def test_sensitive_text_and_risky_frames_remain_available_to_the_role() -> None:

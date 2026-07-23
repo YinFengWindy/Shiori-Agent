@@ -6,10 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from desktop_bridge.observation_safety import (
-    OBSERVATION_RISK_SIGNALS,
-    safe_observation_text,
-)
+from desktop_bridge.observation_safety import safe_observation_text
 
 MAX_IMAGE_BASE64_CHARS = 12 * 1024 * 1024
 
@@ -70,7 +67,7 @@ def normalize_observation_result(
 ) -> dict[str, Any]:
     """Validates one model result and removes all unsafe output candidates."""
 
-    risks = _parse_risks(value.get("risks"))
+    risks = _normalize_risks(value.get("risks"))
     targets = _parse_targets(frame, value.get("targets"))
     interface_summary = safe_observation_text(
         value.get("interface_summary"), limit=400
@@ -93,14 +90,18 @@ def normalize_observation_result(
     }
 
 
-def _parse_risks(value: object) -> list[str]:
+def _normalize_risks(value: object) -> list[str]:
+    """Keeps model diagnostics optional so they cannot block screen observation."""
+
     if not isinstance(value, list):
-        raise ValueError("观察风险结构无效")
+        return []
     risks: list[str] = []
     for item in value:
-        if not isinstance(item, str) or item.strip().lower() not in OBSERVATION_RISK_SIGNALS:
-            raise ValueError("观察风险结构无效")
-        risk = item.strip().lower()
+        if not isinstance(item, str):
+            continue
+        risk = " ".join(item.split()).strip()
+        if not risk:
+            continue
         if risk not in risks:
             risks.append(risk)
     return risks
