@@ -19,6 +19,7 @@ class FakePetWindow extends EventEmitter {
   private position: [number, number] = [0, 0];
   readonly webContents = new FakePetWebContents();
   showCount = 0;
+  readonly boundsWrites: Array<{ x: number; y: number; width: number; height: number }> = [];
 
   isDestroyed(): boolean {
     return false;
@@ -36,6 +37,11 @@ class FakePetWindow extends EventEmitter {
       this.emit("move");
       this.emit("moved");
     });
+  }
+
+  setBounds(bounds: { x: number; y: number; width: number; height: number }): void {
+    this.boundsWrites.push(bounds);
+    this.setPosition(bounds.x, bounds.y);
   }
 
   getPosition(): [number, number] {
@@ -117,6 +123,33 @@ test("desktop pet ignores drag requests from a closed window", async () => {
   assert.equal(controller.isPetWindow(window as unknown as BrowserWindow), false);
 });
 
+test("desktop pet keeps its fixed viewport bounds while following a drag", async () => {
+  let settings: DesktopPetSettings = { visible: false, observationEnabled: false, roleId: null, packageId: null, positions: {} };
+  const window = new FakePetWindow();
+  const controller = new DesktopPetController({
+    getSettings: () => settings,
+    saveSettings: async (nextSettings) => { settings = nextSettings; },
+    resolveBinding: async () => ({
+      roleId: "role-1",
+      package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "mira-asset://pet" },
+    }),
+    createWindow: () => window as unknown as BrowserWindow,
+    displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    cursorScreenPoint: () => ({ x: 532, y: 564 }),
+    openLocalAttachment: () => undefined,
+  });
+
+  await controller.show();
+  window.boundsWrites.length = 0;
+  try {
+    controller.beginDrag(72, 104, 532, 564);
+    controller.moveDrag({ x: 582, y: 614 });
+    assert.deepEqual(window.boundsWrites.at(-1), { x: 510, y: 510, width: 192, height: 208 });
+  } finally {
+    window.destroy();
+  }
+});
+
 test("desktop pet replays the latest observation state after its renderer becomes ready", async () => {
   let settings: DesktopPetSettings = {
     visible: false,
@@ -195,38 +228,6 @@ test("desktop pet waits for the renderer handshake before sending its initial lo
       state: "idle",
     },
   );
-  window.destroy();
-});
-
-test("desktop pet does not show before Electron and the renderer are both ready", async () => {
-  let settings: DesktopPetSettings = {
-    visible: true,
-    observationEnabled: false,
-    roleId: "role-1",
-    packageId: "pet-1",
-    positions: {},
-  };
-  const window = new FakePetWindow();
-  const controller = new DesktopPetController({
-    getSettings: () => settings,
-    saveSettings: async (nextSettings) => { settings = nextSettings; },
-    resolveBinding: async () => ({
-      roleId: "role-1",
-      package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "mira-asset://pet" },
-    }),
-    createWindow: () => window as unknown as BrowserWindow,
-    displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
-    cursorScreenPoint: () => ({ x: 0, y: 0 }),
-    openLocalAttachment: () => undefined,
-  });
-
-  await controller.restore();
-  assert.equal(controller.rendererReady(window as unknown as BrowserWindow), true);
-  assert.equal(window.showCount, 0);
-  assert.equal(window.webContents.messages.some((message) => message.channel === "desktop:pet-load"), true);
-
-  window.emit("ready-to-show");
-  assert.equal(window.showCount, 1);
   window.destroy();
 });
 

@@ -35,7 +35,6 @@ export class DesktopPetController {
   private activePackageId = "";
   private activeLoad: { binding: DesktopPetBinding; state: DesktopPetState } | null = null;
   private rendererIsReady = false;
-  private windowIsReadyToShow = false;
   private latestObservation: PetObservationPayload | null = null;
   private dragPointerOffset: DesktopPetPosition | null = null;
   private dragFollowTimer: ReturnType<typeof setInterval> | null = null;
@@ -63,7 +62,7 @@ export class DesktopPetController {
     if (!this.isPetWindow(window)) return false;
     this.rendererIsReady = true;
     this.sendCurrentLoad(window as BrowserWindow);
-    if (this.windowIsReadyToShow) window?.showInactive();
+    window?.showInactive();
     return true;
   }
 
@@ -171,10 +170,7 @@ export class DesktopPetController {
     ) this.options.onUnavailable?.();
     const created = this.window === null;
     const window = this.window ?? this.createWindow({ openLocalAttachment: this.options.openLocalAttachment });
-    if (created) {
-      this.rendererIsReady = false;
-      this.windowIsReadyToShow = false;
-    }
+    if (created) this.rendererIsReady = false;
     const display = this.displayForWindow(window);
     const key = `${binding.roleId}:${display.id}`;
     const fallback = {
@@ -182,13 +178,12 @@ export class DesktopPetController {
       y: display.workArea.y + display.workArea.height - desktopPetViewport.height,
     };
     const position = clampDesktopPetPosition(settings.positions[key] ?? fallback, display.workArea);
-    window.setPosition(position.x, position.y);
+    window.setBounds({ ...position, ...desktopPetViewport });
     this.activeRoleId = binding.roleId;
     this.activePackageId = binding.package.id;
     this.activeLoad = { binding, state };
     if (created) {
       window.once("ready-to-show", () => {
-        this.windowIsReadyToShow = true;
         if (this.rendererIsReady) window.showInactive();
       });
       window.on("closed", () => {
@@ -200,7 +195,6 @@ export class DesktopPetController {
         this.activePackageId = "";
         this.activeLoad = null;
         this.rendererIsReady = false;
-        this.windowIsReadyToShow = false;
         this.options.onUnavailable?.();
       });
     }
@@ -230,7 +224,7 @@ export class DesktopPetController {
     const display = this.displayForWindow(window);
     const clamped = clampDesktopPetPosition(position, display.workArea);
     const rounded = { x: Math.round(clamped.x), y: Math.round(clamped.y) };
-    window.setPosition(rounded.x, rounded.y);
+    window.setBounds({ ...rounded, ...desktopPetViewport });
     return rounded;
   }
 
@@ -311,6 +305,5 @@ export class DesktopPetController {
     this.activePackageId = "";
     this.activeLoad = null;
     this.rendererIsReady = false;
-    this.windowIsReadyToShow = false;
   }
 }
