@@ -11,7 +11,6 @@ from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
 
 logger = logging.getLogger("agent.tool_discovery")
 
-from bus.events import InboundMessage
 
 
 @dataclass

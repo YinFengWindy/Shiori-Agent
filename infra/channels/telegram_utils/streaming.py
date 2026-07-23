@@ -10,7 +10,6 @@ from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 from .limiter import (
     TelegramOutboundLimiter,
     _run_outbound,
-    _send_with_retry_result,
 )
 from .rendering import (
     _is_telegram_html_parse_error,

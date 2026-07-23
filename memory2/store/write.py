@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import sqlite3
 import time
 
 from .common import (
@@ -11,6 +13,8 @@ from .common import (
     _content_hash,
     _now_iso,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class _StoreWriteMixin:

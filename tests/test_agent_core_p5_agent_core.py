@@ -17,7 +17,7 @@ from agent.looping.ports import SessionServices
 from agent.tools.registry import ToolRegistry
 from agent.turns.outbound import OutboundPort
 from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
+from bus.events import InboundMessage
 from agent.lifecycle.types import BeforeReasoningCtx, BeforeTurnCtx
 from agent.lifecycle.phases.before_turn import MemoryConsolidationFailedError
 from session.manager import SessionManager

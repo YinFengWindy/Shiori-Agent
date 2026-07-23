@@ -47,7 +47,10 @@ class TestComputeFireAt:
         # request_time 包含 +08:00 时，不能被当作 UTC 处理
         # CST 15:48:40 = UTC 07:48:40
         request_time = "2025-06-01T15:48:40+08:00"
-        now_fn = lambda: datetime(2025, 6, 1, 7, 48, 50, tzinfo=timezone.utc)
+
+        def now_fn():
+            return datetime(2025, 6, 1, 7, 48, 50, tzinfo=timezone.utc)
+
         fire_at = compute_fire_at("after", "30s", "UTC", request_time, now_fn)
         # fire_at 应是 CST 15:49:10 = UTC 07:49:10，不是 UTC 15:49:10
         assert fire_at.utctimetuple().tm_hour == 7

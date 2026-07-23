@@ -5,7 +5,6 @@ from __future__ import annotations
 import html
 import json
 from dataclasses import dataclass
-from typing import Any
 
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 

@@ -335,7 +335,7 @@ def test_consolidation_recent_context_keeps_fast_model_for_non_nsfw_sessions():
 
 
 def test_consolidation_service_uses_profile_maint_for_reads():
-    memory_port = SimpleNamespace(
+    _memory_port = SimpleNamespace(
         save_from_consolidation=AsyncMock(),
         save_item=AsyncMock(return_value="new:profile-1"),
     )

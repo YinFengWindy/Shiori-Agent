@@ -1,6 +1,5 @@
 import re
 
-from agent.tool_runtime import tool_call_signature as _tool_call_signature
 
 # 安全拦截时递减历史窗口的倍率序列：全量 → 减半 → 清空
 _SAFETY_RETRY_RATIOS = (1.0, 0.5, 0.0)

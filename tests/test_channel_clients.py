@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-import logging
 import sys
 import types
 from pathlib import Path
@@ -10,7 +9,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
-import httpx
 import pytest
 
 from bus.event_bus import EventBus
@@ -23,8 +21,6 @@ from bus.events_lifecycle import (
 )
 from core.roles import RoleStore
 from conversation.service import LegacySessionDescriptor
-from infra.channels.base import AttachmentStore
-from infra.channels.contract import ChannelContext
 
 
 class _Bus:

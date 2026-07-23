@@ -8,6 +8,15 @@ line-length = 88
 target-version = ["py314"]
 include = '\.pyi?$'
 
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"scripts/build_akasha_db.py" = ["E402"]
+"scripts/build_fts_idf.py" = ["E402"]
+"tests/conftest.py" = ["E402"]
+
 [dependency-groups]
 dev = [
     "rich>=15.0.0",

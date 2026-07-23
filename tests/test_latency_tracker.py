@@ -2,7 +2,6 @@
 
 import statistics
 
-import pytest
 
 from agent.scheduler import LatencyTracker
 

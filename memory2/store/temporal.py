@@ -268,7 +268,7 @@ class _StoreTemporalMixin:
 
         or_conditions = " OR ".join("summary LIKE ?" for _ in terms)
         score_expr = " + ".join(
-            f"(CASE WHEN summary LIKE ? THEN 1 ELSE 0 END)" for _ in terms
+            "(CASE WHEN summary LIKE ? THEN 1 ELSE 0 END)" for _ in terms
         )
         like_vals = [f"%{t}%" for t in terms]
 

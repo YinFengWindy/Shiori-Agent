@@ -8,7 +8,6 @@ TDD — Phase 2: proactive/config.py v2 新字段
   - 字段类型正确
 """
 
-import pytest
 
 from proactive_v2.config import ProactiveConfig
 

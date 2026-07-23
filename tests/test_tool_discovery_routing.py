@@ -13,12 +13,10 @@ tool_search 路由机制单元测试。
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
 
-import pytest
 
 from agent.looping.core import AgentLoop
 from agent.looping.ports import AgentLoopConfig, AgentLoopDeps, LLMConfig, MemoryServices

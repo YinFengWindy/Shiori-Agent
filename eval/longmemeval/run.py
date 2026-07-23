@@ -187,7 +187,6 @@ async def _process_instance(
     counter: list,
     t_start: float,
 ) -> None:
-    from agent.config import load_config
     from .ingest import ingest_instance
     from .metrics import judge_answer, token_f1
     from .qa_runner import format_tool_trace, run_qa_instance
@@ -358,7 +357,6 @@ async def _run(args: argparse.Namespace) -> None:
     from agent.config import load_config
     from .dataset import SUPPORTED_QUESTION_TYPES, load_dataset
     from .metrics import score_results
-    from .runtime import close_runtime, create_runtime
 
     logging.basicConfig(
         level=logging.WARNING,

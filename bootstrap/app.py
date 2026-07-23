@@ -10,14 +10,17 @@ from typing import Awaitable, Callable
 from agent.config_models import Config
 from bootstrap.channel_host import ChannelHost
 from bootstrap.channels import start_channels
-from bootstrap.memory import build_memory_runtime
 from bootstrap.proactive import build_memory_optimizer_task, build_proactive_runtime
-from bootstrap.providers import build_providers
 from bootstrap.tools import CoreRuntime, build_core_runtime
 from bus.event_bus import EventBus
 from core.common.workspace import resolve_default_workspace
 from core.roles import (
     LonelinessHeartbeatLoop,
+)
+from core.net.http import (
+    SharedHttpResources,
+    clear_default_shared_http_resources,
+    configure_default_shared_http_resources,
 )
 
 def configure_logging_stream(stream) -> None:
@@ -33,12 +36,6 @@ def configure_logging_stream(stream) -> None:
     logging.getLogger("apscheduler").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)
 
-
-from core.net.http import (
-    SharedHttpResources,
-    clear_default_shared_http_resources,
-    configure_default_shared_http_resources,
-)
 
 configure_logging_stream(sys.stderr)
 

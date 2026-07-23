@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
-import shutil
-import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any

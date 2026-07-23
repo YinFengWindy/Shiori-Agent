@@ -1,6 +1,5 @@
 from typing import Any, cast
 import pytest
-from agent.tools.base import Tool
 from agent.tools.filesystem import ListDirTool, ReadFileTool
 from agent.tools.meta import (
     META_TOOLBOX_NAMES,

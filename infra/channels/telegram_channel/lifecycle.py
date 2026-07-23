@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any
 
 from telegram import BotCommand, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters

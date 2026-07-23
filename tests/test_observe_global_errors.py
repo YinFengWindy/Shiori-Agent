@@ -1,4 +1,3 @@
-import asyncio
 import importlib
 import json
 import logging

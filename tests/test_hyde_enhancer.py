@@ -10,9 +10,8 @@ HyDE 检索增强单元测试。
 
 import asyncio
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
 from agent.provider import LLMResponse
 from agent.tools.base import Tool

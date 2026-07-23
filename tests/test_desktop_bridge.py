@@ -784,7 +784,7 @@ async def test_desktop_bridge_push_rolls_back_runtime_side_effects_when_persist_
     push_tool = MessagePushTool()
     presence = _Presence()
     relationship = _Relationship()
-    service = DesktopBridgeService(
+    _ = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
@@ -830,7 +830,7 @@ async def test_desktop_bridge_desktop_push_does_not_duplicate_existing_proactive
     )
     await session_manager.save_async(session)
     push_tool = MessagePushTool()
-    service = DesktopBridgeService(
+    _ = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
         session_manager=session_manager,
@@ -893,7 +893,7 @@ async def test_desktop_bridge_push_does_not_treat_subset_media_as_duplicate(
 
 @pytest.mark.asyncio
 async def test_desktop_bridge_server_streams_requests_and_responses(tmp_path: Path):
-    role_store = RoleStore(tmp_path)
+    _ = RoleStore(tmp_path)
     session_manager = SessionManager(tmp_path)
     event_bus = EventBus()
     runtime = SimpleNamespace(
@@ -939,7 +939,7 @@ async def test_desktop_bridge_server_streams_requests_and_responses(tmp_path: Pa
 async def test_desktop_bridge_server_returns_invalid_request_and_keeps_stream_open(
     tmp_path: Path,
 ):
-    role_store = RoleStore(tmp_path)
+    _ = RoleStore(tmp_path)
     session_manager = SessionManager(tmp_path)
     event_bus = EventBus()
     runtime = SimpleNamespace(
@@ -981,7 +981,7 @@ async def test_desktop_bridge_server_returns_invalid_request_and_keeps_stream_op
 async def test_desktop_bridge_server_wraps_handler_errors_without_closing_stream(
     tmp_path: Path,
 ):
-    role_store = RoleStore(tmp_path)
+    _ = RoleStore(tmp_path)
     session_manager = SessionManager(tmp_path)
     event_bus = EventBus()
     runtime = SimpleNamespace(

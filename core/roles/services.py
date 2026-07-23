@@ -421,7 +421,7 @@ class RoleMemoryService:
 
     def _build_first_impression(self, role: RoleRecord) -> str:
         pieces = [
-            f"来源: seed:first_impression",
+            "来源: seed:first_impression",
             f"角色: {role.name or role.id}",
         ]
         if role.description.strip():

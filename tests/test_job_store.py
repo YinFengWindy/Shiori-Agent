@@ -1,9 +1,7 @@
 """Tests for JobStore persistence."""
 
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
+from datetime import datetime, timezone
 
-import pytest
 
 from agent.scheduler import JobStore, ScheduledJob
 from tests.conftest import make_job

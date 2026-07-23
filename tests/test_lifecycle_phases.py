@@ -983,7 +983,7 @@ async def test_before_reasoning_finalize_calls_render():
     state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
     state.session = session
 
-    ctx = await phase.run(BeforeReasoningInput(state=state, before_turn=before_turn))
+    await phase.run(BeforeReasoningInput(state=state, before_turn=before_turn))
 
     context_builder.render.assert_called_once()
     call_args = context_builder.render.call_args[0][0]

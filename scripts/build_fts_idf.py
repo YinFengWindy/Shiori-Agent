@@ -36,9 +36,11 @@ def main() -> None:
     akasha_db = workspace / "memory" / "akasha.db"
     sessions_db = workspace / "sessions.db"
     if not akasha_db.exists():
-        print(f"❌ {akasha_db} 不存在"); sys.exit(1)
+        print(f"❌ {akasha_db} 不存在")
+        sys.exit(1)
     if not sessions_db.exists():
-        print(f"❌ {sessions_db} 不存在"); sys.exit(1)
+        print(f"❌ {sessions_db} 不存在")
+        sys.exit(1)
 
     sconn = sqlite3.connect(sessions_db)
     cur = sconn.cursor()
@@ -77,7 +79,7 @@ def main() -> None:
 
     # 分布报告
     sorted_by_idf = sorted(idf.items(), key=lambda x: x[1])
-    print(f"\n=== IDF 分布 ===")
+    print("\n=== IDF 分布 ===")
     bins = [
         (-1, 1, "极常见"),
         (1, 2, "常见"),
@@ -89,11 +91,11 @@ def main() -> None:
         cnt = sum(1 for _, v in idf.items() if lo <= v < hi)
         print(f"  IDF [{lo:.1f},{hi:.1f}) {label:<8} {cnt} tokens")
 
-    print(f"\n=== 最常见 token (低 IDF，应过滤) ===")
+    print("\n=== 最常见 token (低 IDF，应过滤) ===")
     for tok, v in sorted_by_idf[:20]:
         print(f"  IDF={v:.2f}  df={df[tok]:>5}  {tok}")
 
-    print(f"\n=== 最稀有 token sample (高 IDF，有信息量) ===")
+    print("\n=== 最稀有 token sample (高 IDF，有信息量) ===")
     rare = [t for t in sorted_by_idf if 4.5 < t[1] < 8.5]
     for tok, v in rare[::max(1, len(rare)//20)][:20]:
         print(f"  IDF={v:.2f}  df={df[tok]:>5}  {tok}")

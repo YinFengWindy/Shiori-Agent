@@ -33,7 +33,11 @@ from .models import (
     _normalize_tags,
 )
 from .persistence import _RelationshipPersistenceMixin
-from .snapshot import _RELATIONSHIP_PROMPT, _RELATIONSHIP_SYSTEM
+from .snapshot import (
+    _RELATIONSHIP_PROMPT,
+    _RELATIONSHIP_SYSTEM,
+    RelationshipSnapshotOptimizer,
+)
 
 class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
     """Owns role runtime relationship snapshot and loneliness state."""

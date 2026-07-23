@@ -7,7 +7,6 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from agent.llm_json import load_json_object_loose
 
 from .contracts import _ConsolidationFailure, _ConsolidationWindow
 from .formatting import (
@@ -19,7 +18,7 @@ from .formatting import (
 )
 
 if TYPE_CHECKING:
-    from agent.provider import LLMProvider
+    pass
 
 logger = logging.getLogger("memory.markdown")
 

@@ -45,9 +45,7 @@ def build_agent_static_identity_prompt(*, workspace: Path) -> str:
 
 # ─── 行为规范层：工具路由 + 历史检索协议 + 输出格式 ────────────────────────────
 def build_agent_behavior_rules_prompt(*, workspace: Path) -> str:
-    workspace_path = str(workspace.expanduser().resolve())
-
-    return f"""## 行为规范
+    return """## 行为规范
 
 ### 工具与事实
 - 执行类动作必须走工具；无工具结果不得声称“已完成/已发送/已查询”。

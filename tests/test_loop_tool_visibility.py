@@ -12,8 +12,6 @@ tool_search 可见性机制 + LRU 回归测试。
 """
 
 import asyncio
-import json
-from collections import OrderedDict
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -21,7 +19,6 @@ from unittest.mock import MagicMock
 from agent.looping.core import AgentLoop
 from agent.looping.ports import AgentLoopConfig, AgentLoopDeps, LLMConfig, MemoryServices
 
-import pytest
 
 from agent.provider import LLMResponse, ToolCall
 from agent.tools.base import Tool
@@ -169,23 +166,6 @@ class TestVisibilityGuard:
         reg = _base_registry()
         target = _DummyTool("target_tool")
         reg.register(target)
-
-        # tool_search 直接返回匹配结果（模拟 registry.search 找到了 target_tool）
-        tool_search_result = json.dumps(
-            {
-                "matched": [
-                    {
-                        "name": "target_tool",
-                        "summary": "...",
-                        "why_matched": [],
-                        "key_params": [],
-                        "tags": [],
-                        "risk": "read-only",
-                    }
-                ]
-            },
-            ensure_ascii=False,
-        )
 
         provider = _FakeProvider(
             [

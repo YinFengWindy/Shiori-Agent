@@ -6,7 +6,6 @@ TDD for proactive/memory_sampler.py
 """
 
 import random
-import pytest
 from proactive_v2.memory_sampler import split_memory_chunks, sample_memory_chunks
 
 MEMORY_MD = """\
@@ -76,7 +75,6 @@ def test_split_single_line_memory():
 
 
 def test_sample_returns_requested_count():
-    chunks = split_memory_chunks(MEMORY_MD)
     rng = random.Random(1)
     result = sample_memory_chunks(MEMORY_MD, n=2, rng=rng)
     assert len(result) == 2

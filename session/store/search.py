@@ -104,7 +104,7 @@ class _SearchMixin:
 
         term_conditions_or = " OR ".join("m.content LIKE ?" for _ in terms)
         score_expr = " + ".join(
-            f"(CASE WHEN m.content LIKE ? THEN 1 ELSE 0 END)" for _ in terms
+            "(CASE WHEN m.content LIKE ? THEN 1 ELSE 0 END)" for _ in terms
         )
         if self._has_fts:
             # 长词走 FTS，短词继续走 LIKE，再把两路结果合并去重。

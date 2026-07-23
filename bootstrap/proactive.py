@@ -20,7 +20,6 @@ from session.manager import SessionManager
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
-    from core.memory.engine import MemoryEngine
     from core.memory.markdown import MarkdownMemoryStore
     from core.memory.runtime import MemoryRuntime
 

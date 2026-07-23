@@ -509,7 +509,6 @@ async def test_drift_pipeline_restricts_tools_after_send_message(tmp_path: Path)
     )
     ctx = AgentTickContext(now_utc=datetime.now(timezone.utc), session_key="s")
     await pipeline.run(ctx, cast(Any, llm))
-    second_names = {schema["function"]["name"] for schema in llm.calls[1][0:1]} if False else None
     assert llm.calls
     # 第二次 llm 调用的 schemas 只能由 DriftTurnPipeline 约束为 write_file/edit_file/finish_drift；
     # FakeLLM 不记录 schemas，这里用行为结果兜底：send 后仍正常 finish。

@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 from .contracts import (
     _ConsolidationDraft,
     _ConsolidationFailure,
-    _ConsolidationWindow,
 )
 from .formatting import (
     _build_consolidation_source_ref,

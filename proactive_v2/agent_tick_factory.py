@@ -7,8 +7,6 @@ from hashlib import sha1
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-logger = logging.getLogger(__name__)
-
 from agent.skills import BUILTIN_SKILLS_DIR
 from agent.tool_hooks import ToolHook
 from agent.tools.registry import ToolRegistry
@@ -24,6 +22,8 @@ from proactive_v2.drift_state import DriftStateStore
 from proactive_v2.drift_tools import DriftToolDeps
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
+
+logger = logging.getLogger(__name__)
 
 
 BUILTIN_DRIFT_SKILLS_DIR = BUILTIN_SKILLS_DIR
@@ -176,7 +176,6 @@ class AgentTickFactory:
 
     def _build_context_fn(self) -> ContextFn:
         pool = self._deps.pool
-        sense = self._deps.sense
         assert pool is not None
 
         async def context_fn() -> list[dict]:

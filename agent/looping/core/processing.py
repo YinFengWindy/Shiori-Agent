@@ -187,11 +187,12 @@ class _ProcessingMixin:
                 session_key=session_key,
                 dispatch_outbound=dispatch_outbound,
             )
-        operation = lambda: self._process(
-            item,
-            session_key=session_key,
-            dispatch_outbound=dispatch_outbound,
-        )
+        async def operation() -> OutboundMessage:
+            return await self._process(
+                item,
+                session_key=session_key,
+                dispatch_outbound=dispatch_outbound,
+            )
         if context.work_kind == "scheduled_job":
             return await registry.dispatch_background_task(context, operation)
         return await registry.dispatch_passive_turn(context, operation)

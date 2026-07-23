@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
@@ -11,7 +10,6 @@ from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
     ProactiveMessageCommitted,
-    StreamDeltaReady,
     TurnCommitted,
 )
 from conversation.service import ConversationService

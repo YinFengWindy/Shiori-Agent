@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import sys
 from typing import Any, cast
 
 from proactive_v2.config import ProactiveConfig

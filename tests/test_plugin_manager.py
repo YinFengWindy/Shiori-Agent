@@ -833,7 +833,7 @@ async def test_on_tool_pre_skips_non_shell_tool():
             source="passive",
             session_key="test:1",
         )
-        result = await executor.execute(req, fake_invoker)
+        await executor.execute(req, fake_invoker)
         assert captured.get("file_path") == "/tmp/a.txt"  # unchanged
 
 
@@ -863,7 +863,7 @@ async def test_on_tool_pre_skips_non_rm_command():
             source="passive",
             session_key="test:1",
         )
-        result = await executor.execute(req, fake_invoker)
+        await executor.execute(req, fake_invoker)
         assert captured.get("command") == "echo hi"  # unchanged
 
 

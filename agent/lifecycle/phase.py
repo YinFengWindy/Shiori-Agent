@@ -8,9 +8,9 @@ from typing import Generic, Protocol, TypeVar
 
 logger = logging.getLogger(__name__)
 
-I = TypeVar("I")
-O = TypeVar("O")
-F = TypeVar("F", bound="PhaseFrame[Any, Any]")
+InputT = TypeVar("InputT")
+OutputT = TypeVar("OutputT")
+FrameT = TypeVar("FrameT", bound="PhaseFrame[Any, Any]")
 
 
 def _empty_slots() -> dict[str, Any]:
@@ -59,16 +59,16 @@ def append_string_exports(target: list[str], exports: Mapping[str, object]) -> N
 
 
 @dataclass
-class PhaseFrame(Generic[I, O]):
-    input: I
+class PhaseFrame(Generic[InputT, OutputT]):
+    input: InputT
     slots: dict[str, Any] = field(default_factory=_empty_slots)
-    output: O | None = None
+    output: OutputT | None = None
 
 
-class PhaseModule(Protocol[F]):
+class PhaseModule(Protocol[FrameT]):
     """模块约定：可选 requires / produces 类属性由 Phase 启动校验读取。"""
 
-    async def run(self, frame: F) -> F:
+    async def run(self, frame: FrameT) -> FrameT:
         ...
 
 
@@ -180,8 +180,8 @@ def _active_module_slots(slot_map: Mapping[str, object]) -> set[str]:
 
 
 def _disable_modules_with_missing_module_dependencies(
-    modules: Sequence[PhaseModule[F]],
-) -> list[PhaseModule[F]]:
+    modules: Sequence[PhaseModule[FrameT]],
+) -> list[PhaseModule[FrameT]]:
     module_slots = {
         str(slot)
         for slot in (getattr(module, "slot", None) for module in modules)
@@ -298,18 +298,18 @@ def _append_tree_details(
         lines.append(f"{indent}→ produces: {', '.join(produces)}")
 
 
-class Phase(Generic[I, O, F]):
+class Phase(Generic[InputT, OutputT, FrameT]):
     def __init__(
         self,
-        modules: Sequence[PhaseModule[F]],
+        modules: Sequence[PhaseModule[FrameT]],
         *,
-        frame_factory: Callable[[I], F],
+        frame_factory: Callable[[InputT], FrameT],
     ) -> None:
         self._modules = _disable_modules_with_missing_module_dependencies(modules)
         self._frame_factory = frame_factory
         self._validate()
 
-    async def run(self, input: I) -> O:
+    async def run(self, input: InputT) -> OutputT:
         frame = self._frame_factory(input)
         for module in self._modules:
             frame = await module.run(frame)

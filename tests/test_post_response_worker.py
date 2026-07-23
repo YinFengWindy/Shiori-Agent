@@ -50,7 +50,7 @@ def test_post_worker_run_only_handles_invalidations_no_implicit_save():
     """per-turn run() 只做 invalidation 处理，不再做隐式 procedure/preference/profile 提取。
     隐式提取已移至 consolidation 窗口期（与 event 提取并行，用主模型处理）。
     """
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import AsyncMock
 
     memorizer = _DummyMemorizer()
     retriever = _DummyRetriever([])

@@ -3,11 +3,8 @@ from typing import Any, cast
 
 import asyncio
 import json
-import runpy
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -17,7 +14,6 @@ from agent.prompting import SYSTEM_CONTEXT_FRAME_MARKER
 from agent.tools.base import Tool
 from agent.tools.memorize import MemorizeTool
 from agent.tools.message_push import MessagePushTool
-from agent.tools.registry import ToolMeta, ToolRegistry
 from agent.tools.web_search import WebSearchTool
 from bus.events import InboundMessage, OutboundMessage
 from bus.queue import MessageBus

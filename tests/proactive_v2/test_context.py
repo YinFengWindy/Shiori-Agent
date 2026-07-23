@@ -9,9 +9,7 @@ TDD — Phase 1: proactive_v2/context.py
   - _fetch 保护字段
 """
 
-from datetime import datetime, timezone
 
-import pytest
 
 from proactive_v2.context import AgentTickContext
 
@@ -168,8 +166,8 @@ def test_compound_key_format_from_event():
 
 def test_alert_content_same_id_no_collision():
     """alert-mcp 和 feed-mcp 即使 id 相同，复合键不碰撞"""
-    alert_key = f"alert-mcp:42"
-    content_key = f"feed-mcp:42"
+    alert_key = "alert-mcp:42"
+    content_key = "feed-mcp:42"
     assert alert_key != content_key
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
 _UNANSWERED_REPLY_WINDOW_HOURS = 24
 _NIGHT_SUPPRESSION_START_HOUR = 0

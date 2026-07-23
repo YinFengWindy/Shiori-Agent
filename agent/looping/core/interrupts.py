@@ -16,7 +16,6 @@ from bus.events import (
 from bus.events_lifecycle import (
     TurnStarted,
 )
-from bus.queue import MessageBus
 
 from .helpers import (
     _build_resume_content,

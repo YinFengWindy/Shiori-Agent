@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agent.mcp.client import McpClient, McpToolInfo
+from agent.mcp.client import McpClient
 from agent.mcp.tool import McpToolWrapper
 from agent.tools.registry import ToolRegistry
 

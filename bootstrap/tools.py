@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING, Any, Callable, cast
 if TYPE_CHECKING:
     from agent.plugins.manager import PluginManager
 
-logger = logging.getLogger(__name__)
-
 from agent.config_models import Config, WiringConfig
 from agent.context import ContextBuilder
 from agent.looping.core import AgentLoop
@@ -29,16 +27,11 @@ from agent.scheduler import SchedulerService
 from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.turns.outbound import BusOutboundPort
-from bootstrap.toolsets.mcp import McpToolsetProvider
-from bootstrap.toolsets.memory import MemoryToolsetProvider
 from bootstrap.toolsets.meta import (
-    CommonMetaToolsetProvider,
-    SpawnToolsetProvider,
     build_readonly_tools,
 )
 from bootstrap.toolsets.protocol import ToolsetDeps
 from bootstrap.toolsets.schedule import (
-    SchedulerToolsetProvider,
     build_scheduler,
 )
 from bootstrap.wiring import (
@@ -68,6 +61,8 @@ from core.roles import (
 from conversation.push_sync import ExternalImageSyncService
 from proactive_v2.presence import PresenceStore
 from session.manager import Session, SessionManager
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

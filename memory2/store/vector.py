@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import cast
-import numpy as np
-import logging
 
-logger = logging.getLogger(__name__)
+import numpy as np
 
 from .common import (
     _EmbeddingRow,
@@ -25,6 +24,8 @@ from .common import (
     _role_json_filter,
     _time_prefilter_clauses,
 )
+
+logger = logging.getLogger(__name__)
 
 class _StoreVectorMixin:
     def get_all_with_embedding(self, include_superseded: bool = False) -> list[_EmbeddingRow]:

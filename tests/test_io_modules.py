@@ -3,9 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
-from typing import cast
+from unittest.mock import AsyncMock
 
 import pytest
 import agent.mcp.client as mcp_client_module
@@ -20,7 +18,6 @@ from agent.tools.filesystem import (
     WriteFileTool,
     _IMAGE_TARGET_B64_LEN,
     _READ_MAX_BYTES,
-    _READ_MAX_LINES,
     _FILE_MUTATION_LOCKS,
     _resolve_path,
     _run_with_file_mutation_lock,

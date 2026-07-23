@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from collections import deque
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 from uuid import uuid4
 
 from core.common.workspace import resolve_default_workspace

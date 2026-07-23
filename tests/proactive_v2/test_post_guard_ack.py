@@ -10,7 +10,7 @@ from typing import Any, cast
 
 import json
 from hashlib import sha1
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -679,7 +679,9 @@ async def test_message_dedupe_receives_recent_proactive_list():
     deduper.is_duplicate = AsyncMock(return_value=(False, ""))
 
     recent_msgs = [{"role": "assistant", "text": "上次发的消息"}]
-    recent_proactive_fn = lambda: recent_msgs  # 同步函数，不能 await
+
+    def recent_proactive_fn():
+        return recent_msgs
 
     llm = FakeLLM([
         ("message_push", {"message": "new message", "evidence": []}),
