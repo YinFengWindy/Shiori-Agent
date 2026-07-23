@@ -31,15 +31,23 @@ test("role-produced screen replies use the transient pet bubble", async () => {
   assert.equal(payloads.at(-1)?.persistent, false);
 });
 
-test("hidden pets suppress bubbles without changing the role tool capability", async () => {
+test("hidden pets clear bubbles without changing the role tool capability", async () => {
   const payloads: PetObservationPayload[] = [];
+  let isRunning = true;
   const controller = new DesktopObservationController({
-    pet: { isRunning: false, publishObservation: (payload) => payloads.push(payload) },
+    pet: {
+      get isRunning() { return isRunning; },
+      publishObservation: (payload) => payloads.push(payload),
+    },
     getRoleId: () => "role-a",
   });
 
   await controller.restore();
+  controller.acceptRoleObservationReply("role-a", "这句会在隐藏时清除。");
+  isRunning = false;
+  await controller.restore();
 
   assert.equal(controller.state, "off");
+  assert.equal(payloads.at(-1)?.bubble, "");
   assert.equal(payloads.at(-1)?.enabled, true);
 });

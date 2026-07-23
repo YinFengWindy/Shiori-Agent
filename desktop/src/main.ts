@@ -154,11 +154,8 @@ function requestAppQuit(): void {
 }
 
 async function hideDesktopPet(): Promise<void> {
-  try {
-    await desktopObservation?.suspend("桌宠已隐藏，屏幕观察已暂停");
-  } finally {
-    await desktopPet?.hide();
-  }
+  await desktopPet?.hide();
+  await desktopObservation?.restore();
 }
 
 async function showDesktopPet(): Promise<void> {
