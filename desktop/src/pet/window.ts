@@ -24,7 +24,6 @@ export function createDesktopPetWindow(options: { openLocalAttachment: (url: str
       spellcheck: false,
     },
   });
-  window.setAlwaysOnTop(true, "screen-saver");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   attachDesktopWindowSecurity(window.webContents, {
     rendererEntryUrl: resolveRendererEntryUrl(rendererPetDist, rendererDevServerUrl),
