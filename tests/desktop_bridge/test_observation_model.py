@@ -64,12 +64,12 @@ async def test_analyze_uses_bounded_context_and_disables_payload_snapshots() -> 
     user_text = call["messages"][1]["content"][0]["text"]
     assert "上一帧活动=research" in user_text
     assert "近期已说过=这个问题快解决了" in user_text
-    assert call["tools"][0]["function"]["name"] == "screenshot"
+    assert call["tools"] == []
     assert call["payload_snapshot_enabled"] is False
 
 
 @pytest.mark.asyncio
-async def test_analyze_allows_only_the_screenshot_model_action() -> None:
+async def test_analyze_rejects_model_tool_actions() -> None:
     provider = SimpleNamespace(
         chat=AsyncMock(
             return_value=SimpleNamespace(
@@ -80,13 +80,14 @@ async def test_analyze_allows_only_the_screenshot_model_action() -> None:
     )
     adapter = _adapter(provider)
 
-    assert await adapter.analyze(_payload()) == {"request": "screenshot"}
+    with pytest.raises(ValueError, match="未授权工具调用"):
+        await adapter.analyze(_payload())
 
     provider.chat.return_value = SimpleNamespace(
         content="",
         tool_calls=[SimpleNamespace(name="click", arguments={"x": 1, "y": 2})],
     )
-    with pytest.raises(ValueError, match="未授权桌面动作"):
+    with pytest.raises(ValueError, match="未授权工具调用"):
         await adapter.analyze(_payload())
 
     provider.chat.return_value = SimpleNamespace(

@@ -13,8 +13,10 @@ from core.roles import RoleRepository, RoleStore
 from desktop_bridge.models import BridgeError, BridgeResponse
 from desktop_bridge.observation_service import DesktopObservationService
 from desktop_bridge.request_dispatcher import BridgeRequestDispatcher
+from desktop_bridge.screen_capture import DesktopScreenCapture
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.stream_writer import BridgeStreamWriter
+from agent.tools.observe_screen import ObserveScreenTool
 
 logger = logging.getLogger("desktop.bridge")
 
@@ -57,6 +59,7 @@ class DesktopBridgeServer:
         self.runtime = runtime
         self.role_store = RoleStore(runtime.session_manager.workspace)
         spawn_tool = runtime.tools.get_tool("spawn") if getattr(runtime, "tools", None) else None
+        observation_service = _build_observation_service(runtime, self.role_store)
         self.service = DesktopBridgeService(
             workspace=runtime.session_manager.workspace,
             role_store=self.role_store,
@@ -71,8 +74,19 @@ class DesktopBridgeServer:
             scheduler=getattr(runtime, "scheduler", None),
             subagent_manager=getattr(spawn_tool, "manager", None),
             memory_optimizer=getattr(runtime, "memory_optimizer", None),
-            observation_service=_build_observation_service(runtime, self.role_store),
+            observation_service=observation_service,
         )
+        tools = getattr(runtime, "tools", None)
+        if tools is not None and observation_service is not None:
+            tools.register(
+                ObserveScreenTool(
+                    capture=DesktopScreenCapture(),
+                    analyzer=observation_service,
+                ),
+                always_on=True,
+                risk="read-only",
+                search_hint="屏幕 桌面 当前窗口 观察主屏",
+            )
 
     async def serve_streams(
         self,

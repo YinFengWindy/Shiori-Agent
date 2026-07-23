@@ -233,7 +233,10 @@ export function registerDesktopIpc({
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (!desktopPet.isPetWindow(petWindow)) return;
     desktopObservation.recordUserInteraction();
-    await desktopObservation.requestObservation();
+    const roleId = desktopPet.getRoleId().trim();
+    if (!roleId) throw new Error("桌宠未绑定角色");
+    const response = await bridge.invoke({ method: "chat.observeScreen", payload: { role_id: roleId } });
+    if (response.error) throw new Error(response.error.message);
   });
   ipcMain.handle("desktop:pet-observation-dismiss", async (event: IpcMainInvokeEvent) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);

@@ -57,6 +57,11 @@ export class DesktopPetController {
     return Boolean(window && window === this.window && !window.isDestroyed());
   }
 
+  /** Returns the role currently bound to the visible desktop pet. */
+  getRoleId(): string {
+    return this.activeRoleId;
+  }
+
   /** Replays the current package only after the pet renderer has installed its IPC listeners. */
   rendererReady(window: BrowserWindow | null): boolean {
     if (!this.isPetWindow(window)) return false;

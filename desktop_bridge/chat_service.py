@@ -108,6 +108,7 @@ class DesktopChatService:
                 method="chat.done",
                 payload={
                     "session_key": event.session_key,
+                    "role_id": self._role_id_from_session_key(event.session_key),
                     "reply": event.assistant_response,
                     "thinking": event.thinking,
                     "tools_used": list(event.tools_used),

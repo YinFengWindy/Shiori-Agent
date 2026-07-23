@@ -7,9 +7,7 @@ import pytest
 
 from desktop_bridge.observation_contract import (
     normalize_observation_result,
-    parse_json_observation_request,
     parse_observation_frame,
-    parse_observation_tool_request,
 )
 
 
@@ -91,17 +89,3 @@ def test_parse_frame_requires_png_and_valid_timestamp() -> None:
     invalid = {**_payload(), "image_base64": base64.b64encode(b"not-png").decode("ascii")}
     with pytest.raises(ValueError, match="PNG"):
         parse_observation_frame(invalid)
-
-
-def test_action_contract_allows_only_one_screenshot_request() -> None:
-    screenshot = SimpleNamespace(name="screenshot", arguments={})
-    click = SimpleNamespace(name="click", arguments={"x": 1, "y": 2})
-
-    assert parse_observation_tool_request([screenshot]) == {"request": "screenshot"}
-    assert parse_json_observation_request({"action": {"type": "screenshot"}}) == {
-        "request": "screenshot"
-    }
-    with pytest.raises(ValueError, match="未授权桌面动作"):
-        parse_observation_tool_request([click])
-    with pytest.raises(ValueError, match="未授权桌面动作"):
-        parse_json_observation_request({"action": {"type": "click"}})

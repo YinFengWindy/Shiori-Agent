@@ -13,7 +13,6 @@ from desktop_bridge.observation_safety import (
 )
 
 MAX_IMAGE_BASE64_CHARS = 12 * 1024 * 1024
-SCREENSHOT_REQUEST = "screenshot"
 
 
 @dataclass(frozen=True)
@@ -110,33 +109,6 @@ def normalize_observation_result(
             else safe_observation_text(value.get("experience_candidate"), limit=280)
         ),
     }
-
-
-def parse_observation_tool_request(tool_calls: list[Any]) -> dict[str, str]:
-    """Accepts exactly one argument-free screenshot request and rejects all actions."""
-
-    if len(tool_calls) != 1:
-        raise ValueError("观察模型返回了未授权工具调用")
-    call = tool_calls[0]
-    if call.name != SCREENSHOT_REQUEST or call.arguments:
-        raise ValueError("观察模型返回了未授权桌面动作")
-    return {"request": SCREENSHOT_REQUEST}
-
-
-def parse_json_observation_request(value: dict[str, Any]) -> dict[str, str] | None:
-    """Accepts the JSON screenshot form and rejects every other action payload."""
-
-    action = value.get("action")
-    if (
-        set(value) == {"action"}
-        and isinstance(action, dict)
-        and set(action) == {"type"}
-        and action.get("type") == SCREENSHOT_REQUEST
-    ):
-        return {"request": SCREENSHOT_REQUEST}
-    if any(key in value for key in ("action", "actions", "computer_action")):
-        raise ValueError("观察模型返回了未授权桌面动作")
-    return None
 
 
 def _parse_risks(value: object) -> list[str]:

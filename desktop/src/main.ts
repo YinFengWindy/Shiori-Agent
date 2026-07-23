@@ -20,8 +20,8 @@ import { DesktopPetController } from "./pet/controller.js";
 import { loadDesktopPetSettings, saveDesktopPetSettings } from "./pet/settings.js";
 import type { DesktopPetBinding, DesktopPetSettings } from "./pet/types.js";
 import { createDesktopPetWindow, displayForDesktopPet } from "./pet/window.js";
-import { capturePrimaryDisplay } from "./observation/capture.js";
 import { DesktopObservationController } from "./observation/controller.js";
+import { wireRoleObservationBubbles } from "./observation/roleBubble.js";
 
 const bridge = new DesktopBridgeClient();
 const localAssets = new LocalAssetRegistry();
@@ -32,7 +32,6 @@ let desktopTray: ReturnType<typeof createDesktopTray> | null = null;
 let desktopPetSettings: DesktopPetSettings;
 let desktopPet: DesktopPetController | null = null;
 let desktopObservation: DesktopObservationController | null = null;
-let screenLocked = false;
 let isQuitting = false;
 let bridgeShutdownStarted = false;
 
@@ -205,6 +204,7 @@ function showOrCreateDesktopWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   ensureDesktopConfig();
+  process.env.MIRA_DESKTOP_USER_DATA_DIR = app.getPath("userData");
   desktopPetSettings = loadDesktopPetSettings(desktopPetSettingsPath());
   const privateWorkspaceRoot = resolve(app.getPath("home"), ".shiori", "workspace");
   const localAssetImportsRoot = resolve(privateWorkspaceRoot, "private_runtime", "imports");
@@ -231,27 +231,20 @@ void app.whenReady().then(() => {
     },
   });
   desktopObservation = new DesktopObservationController({
-    bridge,
     pet: desktopPet,
     getRoleId: () => desktopPetSettings.roleId,
     getEnabled: () => desktopPetSettings.observationEnabled,
     saveEnabled: async (enabled) => {
       await persistDesktopPetSettings({ ...desktopPetSettings, observationEnabled: enabled });
     },
-    captureFrame: () => capturePrimaryDisplay({ screenLocked }),
-    getIdleSeconds: () => powerMonitor.getSystemIdleTime(),
-    onError: (error) => {
-      logDesktopDiagnostic({ scope: "main", event: "desktop-observation.background.failed", payload: { error } });
-    },
   });
+  wireRoleObservationBubbles(bridge, desktopObservation);
   powerMonitor.on("lock-screen", () => {
-    screenLocked = true;
     void desktopObservation?.suspend("Windows 已锁定，屏幕观察已暂停").catch((error) => {
       logDesktopDiagnostic({ scope: "main", event: "desktop-observation.suspend.failed", payload: { error } });
     });
   });
   powerMonitor.on("unlock-screen", () => {
-    screenLocked = false;
     void desktopObservation?.resume().catch((error) => {
       logDesktopDiagnostic({ scope: "main", event: "desktop-observation.resume.failed", payload: { error } });
     });

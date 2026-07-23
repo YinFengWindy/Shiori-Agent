@@ -13,7 +13,9 @@ from bus.event_bus import EventBus
 from core.roles import RoleRepository, RoleStore
 from desktop_bridge.models import BridgeResponse
 from desktop_bridge.server import DesktopBridgeServer, _build_observation_service
+from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
+from agent.tools.registry import ToolRegistry
 
 
 def _build_server(tmp_path: Path) -> DesktopBridgeServer:
@@ -73,6 +75,31 @@ def test_observation_service_uses_main_provider_when_it_is_multimodal() -> None:
     assert service is not None
     assert service._model_adapter._provider is main_provider
     assert service._model_adapter._model == "main-model"
+
+
+def test_desktop_server_registers_screen_observation_as_a_role_tool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        DesktopBridgeService,
+        "_build_novelai_service",
+        lambda self: None,
+    )
+    runtime = SimpleNamespace(
+        session_manager=SimpleNamespace(workspace=tmp_path),
+        loop=SimpleNamespace(),
+        event_bus=EventBus(),
+        tools=ToolRegistry(),
+        config=SimpleNamespace(multimodal=True, model="main-model", vl_model=""),
+        provider=SimpleNamespace(),
+        vl_provider=None,
+        memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
+    )
+
+    DesktopBridgeServer(runtime)
+
+    assert runtime.tools.get_tool("observe_screen") is not None
+    assert "observe_screen" in runtime.tools.get_always_on_names()
 
 
 @pytest.mark.asyncio
