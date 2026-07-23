@@ -1,10 +1,9 @@
 import type { BrowserWindow } from "electron";
 import {
   clampDesktopPetPosition,
-  desktopPetBubbleGap,
   desktopPetViewport,
-  resolveDesktopPetBubbleLayout,
 } from "./geometry.js";
+import { DesktopPetBubbleLayout } from "./bubbleLayout.js";
 import { desktopPetPositionFromCursor } from "./drag.js";
 import {
   advanceDesktopPetMomentum,
@@ -13,8 +12,14 @@ import {
   type DesktopPetMomentum,
 } from "./momentum.js";
 import { bindDesktopPetSettings } from "./settings.js";
-import type { DesktopPetBinding, DesktopPetPosition, DesktopPetSettings, DesktopPetState } from "./types.js";
-import type { PetBubbleLayout, PetObservationPayload } from "../observation/types.js";
+import type {
+  DesktopPetBinding,
+  DesktopPetPosition,
+  DesktopPetSettings,
+  DesktopPetState,
+  DesktopPetWorkArea,
+} from "./types.js";
+import type { PetObservationPayload } from "../observation/types.js";
 
 /** Keeps the main-process cursor follower aligned with the display refresh rate. */
 export const desktopPetDragFollowIntervalMs = 1000 / 60;
@@ -24,7 +29,7 @@ type DesktopPetControllerOptions = {
   saveSettings: (settings: DesktopPetSettings) => Promise<void>;
   resolveBinding: (roleId?: string) => Promise<DesktopPetBinding | null>;
   createWindow: (options: { openLocalAttachment: (url: string) => Promise<unknown> | unknown }) => BrowserWindow;
-  displayForWindow: (window: BrowserWindow | null) => { id: string | number; workArea: { x: number; y: number; width: number; height: number } };
+  displayForWindow: (window: BrowserWindow | null) => { id: string | number; workArea: DesktopPetWorkArea };
   cursorScreenPoint: () => DesktopPetPosition;
   openLocalAttachment: (url: string) => Promise<unknown> | unknown;
 };
@@ -40,8 +45,7 @@ export class DesktopPetController {
   private activeLoad: { binding: DesktopPetBinding; state: DesktopPetState } | null = null;
   private rendererIsReady = false;
   private latestObservation: PetObservationPayload | null = null;
-  private bubbleHeight = 0;
-  private bubbleLayout: PetBubbleLayout = { placement: "below", height: 0 };
+  private readonly bubbleLayout = new DesktopPetBubbleLayout();
   private anchorPosition: DesktopPetPosition | null = null;
   private dragPointerOffset: DesktopPetPosition | null = null;
   private dragFollowTimer: ReturnType<typeof setInterval> | null = null;
@@ -127,10 +131,7 @@ export class DesktopPetController {
 
   /** Resizes the transparent window around the renderer-measured full reply bubble. */
   setBubbleHeight(height: number): void {
-    if (!Number.isFinite(height)) return;
-    const nextHeight = Math.max(0, Math.ceil(height));
-    if (nextHeight === this.bubbleHeight) return;
-    this.bubbleHeight = nextHeight;
+    if (!this.bubbleLayout.setMeasuredHeight(height)) return;
     const position = this.anchorPosition;
     if (position) this.moveTo(position);
   }
@@ -208,8 +209,7 @@ export class DesktopPetController {
         this.activeLoad = null;
         this.rendererIsReady = false;
         this.anchorPosition = null;
-        this.bubbleHeight = 0;
-        this.bubbleLayout = { placement: "below", height: 0 };
+        this.bubbleLayout.reset();
       });
     }
     this.window = window;
@@ -241,20 +241,7 @@ export class DesktopPetController {
     const clamped = clampDesktopPetPosition(position, display.workArea);
     const rounded = { x: Math.round(clamped.x), y: Math.round(clamped.y) };
     this.anchorPosition = rounded;
-    this.bubbleLayout = resolveDesktopPetBubbleLayout(
-      rounded,
-      display.workArea,
-      this.bubbleHeight,
-    );
-    const bubbleOffset = this.bubbleLayout.height
-      ? this.bubbleLayout.height + desktopPetBubbleGap
-      : 0;
-    window.setBounds({
-      x: rounded.x,
-      y: this.bubbleLayout.placement === "above" ? rounded.y - bubbleOffset : rounded.y,
-      width: desktopPetViewport.width,
-      height: desktopPetViewport.height + bubbleOffset,
-    });
+    window.setBounds(this.bubbleLayout.place(rounded, display.workArea));
     this.publishBubbleLayout(window);
     return rounded;
   }
@@ -316,15 +303,12 @@ export class DesktopPetController {
   private currentAnchorPosition(window: BrowserWindow): DesktopPetPosition {
     if (this.anchorPosition) return { ...this.anchorPosition };
     const [x, y] = window.getPosition();
-    return {
-      x,
-      y: this.bubbleLayout.placement === "above" ? y + this.bubbleLayout.height + desktopPetBubbleGap : y,
-    };
+    return this.bubbleLayout.anchorFromWindow({ x, y });
   }
 
   private publishBubbleLayout(window: BrowserWindow): void {
     if (!this.rendererIsReady || window.isDestroyed()) return;
-    window.webContents.send("desktop:pet-bubble-layout", this.bubbleLayout);
+    window.webContents.send("desktop:pet-bubble-layout", this.bubbleLayout.layout);
   }
 
   private stopDragFollow(): void {
@@ -349,7 +333,6 @@ export class DesktopPetController {
     this.activeLoad = null;
     this.rendererIsReady = false;
     this.anchorPosition = null;
-    this.bubbleHeight = 0;
-    this.bubbleLayout = { placement: "below", height: 0 };
+    this.bubbleLayout.reset();
   }
 }

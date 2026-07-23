@@ -26,6 +26,14 @@ export type DesktopPetBinding = {
 
 export type DesktopPetPosition = { x: number; y: number };
 
+/** Available display area for positioning the transparent desktop-pet window. */
+export type DesktopPetWorkArea = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 /** Persisted application-level desktop-pet configuration. */
 export type DesktopPetSettings = {
   visible: boolean;
