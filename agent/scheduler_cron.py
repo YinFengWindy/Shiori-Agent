@@ -2,10 +2,17 @@
 
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
+import re
 from zoneinfo import ZoneInfo
 
 
 _POSIX_CRON_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
+_POSIX_CRON_WEEKDAY_VALUES = {
+    name: str(index) for index, name in enumerate(_POSIX_CRON_WEEKDAY_NAMES)
+}
+_POSIX_CRON_WEEKDAY_PATTERN = re.compile(
+    r"\b(?:sun|mon|tue|wed|thu|fri|sat)\b", re.IGNORECASE
+)
 
 
 def is_cron_expr(value: str) -> bool:
@@ -42,7 +49,13 @@ def _parse_cron_field(field: str, minimum: int, maximum: int) -> set[int]:
 
 def _parse_posix_cron_weekdays(field: str) -> set[int]:
     """Parses cron weekdays with the POSIX convention: 0 and 7 both mean Sunday."""
-    return {0 if value == 7 else value for value in _parse_cron_field(field, 0, 7)}
+    normalized_field = _POSIX_CRON_WEEKDAY_PATTERN.sub(
+        lambda match: _POSIX_CRON_WEEKDAY_VALUES[match.group().lower()], field
+    )
+    return {
+        0 if value == 7 else value
+        for value in _parse_cron_field(normalized_field, 0, 7)
+    }
 
 
 def _next_cron_fire_fallback(cron_expr: str, tz: str, after: datetime) -> datetime:

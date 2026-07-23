@@ -124,3 +124,11 @@ class TestNextCronFire:
 
         assert next_cron_fire(cron_expr, "Asia/Shanghai", after) == expected
         assert _next_cron_fire_fallback(cron_expr, "Asia/Shanghai", after) == expected
+
+    @pytest.mark.parametrize("cron_expr", ["0 20 * * mon-fri", "0 0 20 * * mon-fri"])
+    def test_named_weekday_ranges_work_in_all_cron_paths(self, cron_expr):
+        after = datetime(2026, 7, 23, 9, 37, 0, tzinfo=timezone.utc)
+        expected = datetime(2026, 7, 23, 12, 0, 0, tzinfo=timezone.utc)
+
+        assert next_cron_fire(cron_expr, "Asia/Shanghai", after) == expected
+        assert _next_cron_fire_fallback(cron_expr, "Asia/Shanghai", after) == expected
