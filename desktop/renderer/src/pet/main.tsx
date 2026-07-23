@@ -63,6 +63,7 @@ function DesktopPetSurface() {
       });
     };
     window.miraDesktop.onPetObservation(onObservation);
+    window.miraDesktop.petRendererReady();
     return () => {
       window.miraDesktop.offPetLoad(onLoad);
       window.miraDesktop.offPetPlay(onPlay);

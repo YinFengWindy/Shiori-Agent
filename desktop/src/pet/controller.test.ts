@@ -18,12 +18,15 @@ class FakePetWebContents extends EventEmitter {
 class FakePetWindow extends EventEmitter {
   private position: [number, number] = [0, 0];
   readonly webContents = new FakePetWebContents();
+  showCount = 0;
 
   isDestroyed(): boolean {
     return false;
   }
 
-  showInactive(): void {}
+  showInactive(): void {
+    this.showCount += 1;
+  }
 
   hookWindowMessage(): void {}
 
@@ -143,7 +146,7 @@ test("desktop pet replays the latest observation state after its renderer become
   });
 
   await controller.show();
-  window.emit("ready-to-show");
+  controller.rendererReady(window as unknown as BrowserWindow);
 
   const observation = window.webContents.messages.find(
     (message) => message.channel === "desktop:pet-observation",
@@ -154,6 +157,76 @@ test("desktop pet replays the latest observation state after its renderer become
     bubble: "屏幕观察已暂停",
     persistent: true,
   });
+  window.destroy();
+});
+
+test("desktop pet waits for the renderer handshake before sending its initial load", async () => {
+  let settings: DesktopPetSettings = {
+    visible: true,
+    observationEnabled: false,
+    roleId: "role-1",
+    packageId: "pet-1",
+    positions: {},
+  };
+  const window = new FakePetWindow();
+  const controller = new DesktopPetController({
+    getSettings: () => settings,
+    saveSettings: async (nextSettings) => { settings = nextSettings; },
+    resolveBinding: async () => ({
+      roleId: "role-1",
+      package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "mira-asset://pet" },
+    }),
+    createWindow: () => window as unknown as BrowserWindow,
+    displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    cursorScreenPoint: () => ({ x: 0, y: 0 }),
+    openLocalAttachment: () => undefined,
+  });
+
+  await controller.restore();
+  window.emit("ready-to-show");
+  assert.equal(window.webContents.messages.some((message) => message.channel === "desktop:pet-load"), false);
+
+  assert.equal(controller.rendererReady(window as unknown as BrowserWindow), true);
+  assert.equal(window.showCount, 1);
+  assert.deepEqual(
+    window.webContents.messages.find((message) => message.channel === "desktop:pet-load")?.payload,
+    {
+      package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "mira-asset://pet" },
+      state: "idle",
+    },
+  );
+  window.destroy();
+});
+
+test("desktop pet does not show before Electron and the renderer are both ready", async () => {
+  let settings: DesktopPetSettings = {
+    visible: true,
+    observationEnabled: false,
+    roleId: "role-1",
+    packageId: "pet-1",
+    positions: {},
+  };
+  const window = new FakePetWindow();
+  const controller = new DesktopPetController({
+    getSettings: () => settings,
+    saveSettings: async (nextSettings) => { settings = nextSettings; },
+    resolveBinding: async () => ({
+      roleId: "role-1",
+      package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "mira-asset://pet" },
+    }),
+    createWindow: () => window as unknown as BrowserWindow,
+    displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    cursorScreenPoint: () => ({ x: 0, y: 0 }),
+    openLocalAttachment: () => undefined,
+  });
+
+  await controller.restore();
+  assert.equal(controller.rendererReady(window as unknown as BrowserWindow), true);
+  assert.equal(window.showCount, 0);
+  assert.equal(window.webContents.messages.some((message) => message.channel === "desktop:pet-load"), true);
+
+  window.emit("ready-to-show");
+  assert.equal(window.showCount, 1);
   window.destroy();
 });
 
@@ -183,7 +256,7 @@ test("changing the package for one role invalidates the active pet binding", asy
   });
 
   await controller.show();
-  window.emit("ready-to-show");
+  controller.rendererReady(window as unknown as BrowserWindow);
   packageId = "pet-2";
   await controller.sync(true);
 

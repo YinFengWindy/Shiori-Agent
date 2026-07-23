@@ -240,6 +240,9 @@ export function registerDesktopIpc({
     if (!desktopPet.isPetWindow(petWindow)) return;
     desktopObservation.dismissBubble();
   });
+  ipcMain.on("desktop:pet-renderer-ready", (event) => {
+    desktopPet.rendererReady(BrowserWindow.fromWebContents(event.sender));
+  });
   ipcMain.on("desktop:pet-drag-start", (event, payload?: { offsetX?: unknown; offsetY?: unknown; screenX?: unknown; screenY?: unknown }) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (!desktopPet.isPetWindow(petWindow)) return;

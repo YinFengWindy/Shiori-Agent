@@ -106,6 +106,9 @@ const api: DesktopApi = {
   openPetMenu() {
     ipcRenderer.send("desktop:pet-context-menu");
   },
+  petRendererReady() {
+    ipcRenderer.send("desktop:pet-renderer-ready");
+  },
   onPetLoad(listener) {
     ipcRenderer.on("desktop:pet-load", listener);
   },

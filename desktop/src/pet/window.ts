@@ -10,6 +10,7 @@ export function createDesktopPetWindow(options: { openLocalAttachment: (url: str
   const window = new BrowserWindow({
     width: desktopPetViewport.width,
     height: desktopPetViewport.height,
+    show: false,
     frame: false,
     transparent: true,
     resizable: false,

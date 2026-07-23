@@ -188,6 +188,8 @@ export type DesktopApi = {
   openPetRole(): void;
   /** Opens the native context menu for the desktop-pet window. */
   openPetMenu(): void;
+  /** Announces that the pet renderer has installed its initial-state listeners. */
+  petRendererReady(): void;
   /** Subscribes to package loads from the dedicated desktop-pet window. */
   onPetLoad(listener: (event: unknown, payload: unknown) => void): void;
   offPetLoad(listener: (event: unknown, payload: unknown) => void): void;

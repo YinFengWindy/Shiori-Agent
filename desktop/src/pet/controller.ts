@@ -33,6 +33,9 @@ export class DesktopPetController {
   private queue = Promise.resolve();
   private activeRoleId = "";
   private activePackageId = "";
+  private activeLoad: { binding: DesktopPetBinding; state: DesktopPetState } | null = null;
+  private rendererIsReady = false;
+  private windowIsReadyToShow = false;
   private latestObservation: PetObservationPayload | null = null;
   private dragPointerOffset: DesktopPetPosition | null = null;
   private dragFollowTimer: ReturnType<typeof setInterval> | null = null;
@@ -53,6 +56,15 @@ export class DesktopPetController {
   /** Returns whether an IPC sender owns the currently active pet window. */
   isPetWindow(window: BrowserWindow | null): boolean {
     return Boolean(window && window === this.window && !window.isDestroyed());
+  }
+
+  /** Replays the current package only after the pet renderer has installed its IPC listeners. */
+  rendererReady(window: BrowserWindow | null): boolean {
+    if (!this.isPetWindow(window)) return false;
+    this.rendererIsReady = true;
+    this.sendCurrentLoad(window as BrowserWindow);
+    if (this.windowIsReadyToShow) window?.showInactive();
+    return true;
   }
 
   show(): Promise<void> {
@@ -104,7 +116,7 @@ export class DesktopPetController {
   /** Publishes observation state without exposing frames or model output internals. */
   publishObservation(payload: PetObservationPayload): void {
     this.latestObservation = payload;
-    this.window?.webContents.send("desktop:pet-observation", payload);
+    if (this.rendererIsReady) this.window?.webContents.send("desktop:pet-observation", payload);
   }
 
   /** Starts following the system cursor while preserving the initial pointer offset. */
@@ -159,6 +171,10 @@ export class DesktopPetController {
     ) this.options.onUnavailable?.();
     const created = this.window === null;
     const window = this.window ?? this.createWindow({ openLocalAttachment: this.options.openLocalAttachment });
+    if (created) {
+      this.rendererIsReady = false;
+      this.windowIsReadyToShow = false;
+    }
     const display = this.displayForWindow(window);
     const key = `${binding.roleId}:${display.id}`;
     const fallback = {
@@ -169,15 +185,12 @@ export class DesktopPetController {
     window.setPosition(position.x, position.y);
     this.activeRoleId = binding.roleId;
     this.activePackageId = binding.package.id;
-    const sendLoad = () => {
-      window.showInactive();
-      window.webContents.send("desktop:pet-load", { package: binding.package, state });
-      if (this.latestObservation) {
-        window.webContents.send("desktop:pet-observation", this.latestObservation);
-      }
-    };
+    this.activeLoad = { binding, state };
     if (created) {
-      window.once("ready-to-show", sendLoad);
+      window.once("ready-to-show", () => {
+        this.windowIsReadyToShow = true;
+        if (this.rendererIsReady) window.showInactive();
+      });
       window.on("closed", () => {
         if (this.window !== window) return;
         this.stopDragFollow();
@@ -185,12 +198,25 @@ export class DesktopPetController {
         this.window = null;
         this.activeRoleId = "";
         this.activePackageId = "";
+        this.activeLoad = null;
+        this.rendererIsReady = false;
+        this.windowIsReadyToShow = false;
         this.options.onUnavailable?.();
       });
-    } else {
-      sendLoad();
     }
     this.window = window;
+    if (!created && this.rendererIsReady) this.sendCurrentLoad(window);
+  }
+
+  private sendCurrentLoad(window: BrowserWindow): void {
+    if (window !== this.window || window.isDestroyed() || !this.activeLoad) return;
+    window.webContents.send("desktop:pet-load", {
+      package: this.activeLoad.binding.package,
+      state: this.activeLoad.state,
+    });
+    if (this.latestObservation) {
+      window.webContents.send("desktop:pet-observation", this.latestObservation);
+    }
   }
 
   private followDrag(): void {
@@ -283,5 +309,8 @@ export class DesktopPetController {
     this.window = null;
     this.activeRoleId = "";
     this.activePackageId = "";
+    this.activeLoad = null;
+    this.rendererIsReady = false;
+    this.windowIsReadyToShow = false;
   }
 }
