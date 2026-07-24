@@ -38,6 +38,32 @@ def test_import_pet_package_accepts_a_single_wrapper_directory(tmp_path: Path, m
     assert (store.roles_dir / package.preview_path).read_bytes() == b"preview"
 
 
+def test_import_pet_package_accepts_a_package_without_preview(tmp_path: Path, monkeypatch) -> None:
+    archive_path = tmp_path / "legacy.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "pet.json",
+            json.dumps(
+                {
+                    "id": "legacy",
+                    "displayName": "Legacy",
+                    "description": "fixture",
+                    "spritesheetPath": "spritesheet.webp",
+                }
+            ),
+        )
+        archive.writestr("spritesheet.webp", b"fixture")
+    store = RoleStore(tmp_path / "workspace")
+    role = store.create_role(name="Legacy", system_prompt="fixture")
+    service = RolePetPackageService(store)
+    monkeypatch.setattr(service, "_validate_atlas", lambda _data: None)
+
+    package = service.import_package(role.id, archive_path)
+
+    assert package.preview_path is None
+    assert (store.roles_dir / package.manifest_path).is_file()
+
+
 def test_selecting_a_pet_package_is_role_local_and_removal_clears_selection(
     tmp_path: Path,
     monkeypatch,

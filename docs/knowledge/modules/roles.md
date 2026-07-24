@@ -2,9 +2,10 @@
 title: 角色、关系、心情与素材
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 27af068a
+last_verified_commit: 8fdae87c
 source_paths:
   - core/roles/store.py
+  - core/roles/pet_packages.py
   - core/roles/services.py
   - core/roles/world.py
   - core/roles/relationship_runtime/
@@ -33,6 +34,7 @@ related:
 - 修改角色删除：检查会话、对话线程、关系状态、记忆、调度任务、工作区和素材清理。
 - 修改心情或关系：检查主动触发条件、提示词装配、场景判断和桌面展示。
 - 修改素材分类：检查角色素材页、选择器、图片提示词与本地资源传输。
+- 导入桌宠素材包：`pet.json` 的预览图字段兼容可选；提供 `previewPath` 时仍校验并保存预览图。
 
 ## 不变量
 
