@@ -128,12 +128,11 @@ async def deliver_retries(
                     pipeline._session_key,
                 )
                 return
-            await pipeline._turn_orchestrator.handle_proactive_turn(
+            await pipeline._turn_orchestrator.dispatch_proactive_retry(
                 result=result,
                 session_key=pipeline._session_key,
                 channel=target_channel,
                 chat_id=target_chat_id,
-                record_proactive_state=False,
             )
     except asyncio.CancelledError:
         raise

@@ -103,11 +103,18 @@ class ExternalImageSyncService:
         message = session.messages[-1]
         metadata = message.get("metadata")
         source = cast(dict[str, Any], metadata) if isinstance(metadata, dict) else {}
+        same_transport = (
+            str(source.get("transport_channel") or "") == event.channel
+            and str(source.get("transport_chat_id") or "") == event.chat_id
+        )
+        multi_transport_proactive = (
+            message.get("proactive") is True
+            and str(source.get("source") or "") == "proactive"
+        )
         return (
             message.get("role") == "assistant"
             and event.image in list(message.get("media") or [])
-            and str(source.get("transport_channel") or "") == event.channel
-            and str(source.get("transport_chat_id") or "") == event.chat_id
+            and (same_transport or multi_transport_proactive)
         )
 
     @staticmethod

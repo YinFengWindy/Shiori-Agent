@@ -85,7 +85,7 @@ async def test_target_transport_allows_role_only_desktop_target():
 
 
 @pytest.mark.asyncio
-async def test_multi_channel_delivery_retries_all_targets_without_reply():
+async def test_multi_channel_delivery_retries_transports_without_recommitting():
     waits: list[float] = []
 
     async def wait(delay: float) -> None:
@@ -97,6 +97,7 @@ async def test_multi_channel_delivery_retries_all_targets_without_reply():
     )
     orchestrator = AsyncMock()
     orchestrator.handle_proactive_turn = AsyncMock(return_value=True)
+    orchestrator.dispatch_proactive_retry = AsyncMock(return_value=True)
     tick._turn_orchestrator = orchestrator
 
     result = TurnResult(
@@ -117,17 +118,25 @@ async def test_multi_channel_delivery_retries_all_targets_without_reply():
     await tick._retry_task
 
     assert waits == [300.0, 300.0]
-    assert [call.kwargs["channel"] for call in orchestrator.handle_proactive_turn.call_args_list] == [
-        "desktop",
+    orchestrator.handle_proactive_turn.assert_awaited_once()
+    assert orchestrator.handle_proactive_turn.await_args.kwargs["channel"] == "desktop"
+    assert (
+        orchestrator.handle_proactive_turn.await_args.kwargs["chat_id"] == "role:mira"
+    )
+    assert [
+        call.kwargs["channel"]
+        for call in orchestrator.dispatch_proactive_retry.call_args_list
+    ] == [
         "telegram",
         "qq",
     ]
-    assert [call.kwargs["chat_id"] for call in orchestrator.handle_proactive_turn.call_args_list] == [
-        "role:mira",
+    assert [
+        call.kwargs["chat_id"]
+        for call in orchestrator.dispatch_proactive_retry.call_args_list
+    ] == [
         "42",
         "gqq:7",
     ]
-    assert orchestrator.handle_proactive_turn.call_args_list[1].kwargs["record_proactive_state"] is False
 
 
 @pytest.mark.asyncio

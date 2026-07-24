@@ -99,3 +99,47 @@ async def test_pre_persisted_proactive_image_is_not_duplicated(tmp_path: Path) -
 
     assert result == "图片已发送"
     assert len(session_manager.get_or_create("role:mira").messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_pre_persisted_proactive_image_allows_retry_transport(
+    tmp_path: Path,
+) -> None:
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.open_role_session("mira", role_name="Mira")
+    image = str(tmp_path / "scene.png")
+    session.add_message(
+        "assistant",
+        "给你看张图",
+        media=[image],
+        proactive=True,
+        metadata={
+            "source": "proactive",
+            "transport_channel": "qqbot",
+            "transport_chat_id": "primary",
+        },
+    )
+    await session_manager.append_messages(session, session.messages[-1:])
+    event_bus = EventBus()
+    _ = ExternalImageSyncService(
+        session_manager=session_manager,
+        event_bus=event_bus,
+    )
+    push_tool = MessagePushTool(event_bus=event_bus)
+
+    async def send_image(_chat_id: str, _image: str) -> None:
+        return None
+
+    push_tool.register_channel("telegram", image=send_image)
+
+    result = await push_tool.execute(
+        channel="telegram",
+        chat_id="retry-target",
+        image=image,
+        role_id="mira",
+        session_key="role:mira",
+        push_message_already_persisted="true",
+    )
+
+    assert result == "图片已发送"
+    assert len(session_manager.get_or_create("role:mira").messages) == 1

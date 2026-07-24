@@ -38,7 +38,6 @@ class TurnOrchestrator:
         session_key: str,
         channel: str,
         chat_id: str,
-        record_proactive_state: bool = True,
     ) -> bool:
         # 1. proactive 先处理 skip：不发消息，只跑 skip 路径副作用。
         if result.decision == "skip":
@@ -65,33 +64,32 @@ class TurnOrchestrator:
             result=result,
             metadata=source_metadata,
         )
-        await self._session.session_manager.append_messages(session, session.messages[-1:])
+        await self._session.session_manager.append_messages(
+            session, session.messages[-1:]
+        )
 
-        sent = False
-        try:
-            # 3. 先执行发送前 side_effects，再真正 dispatch 到 outbound。
-            await self._run_effects(result.side_effects)
-            sent = await self._outbound.dispatch(
-                OutboundDispatch(
-                    channel=channel,
-                    chat_id=chat_id,
-                    content=content,
-                    metadata=source_metadata,
-                    media=media,
-                )
-            )
-        except Exception as e:
-            logger.warning("proactive outbound dispatch failed: %s", e)
+        # 3. 先执行发送前 side_effects，再真正 dispatch 到 outbound。
+        await self._run_effects(result.side_effects)
+        sent = await self._dispatch_outbound(
+            channel=channel,
+            chat_id=chat_id,
+            content=content,
+            media=media,
+            metadata=source_metadata,
+            operation="proactive",
+        )
 
         # 4. 根据是否真正发送成功，分别执行 success / failure side_effects。
         if sent:
-            if record_proactive_state and self._session.presence:
-                role_id = str(getattr(session, "metadata", {}).get("role_id") or "").strip()
+            if self._session.presence:
+                role_id = str(
+                    getattr(session, "metadata", {}).get("role_id") or ""
+                ).strip()
                 if role_id:
                     self._session.presence.record_proactive_sent_by_role(role_id)
                 else:
                     self._session.presence.record_proactive_sent(session_key)
-            if record_proactive_state and self._session.relationship_runtime is not None:
+            if self._session.relationship_runtime is not None:
                 self._session.relationship_runtime.handle_proactive_sent(session_key)
             await self._run_effects(result.success_side_effects)
             if self._event_bus is not None:
@@ -112,6 +110,30 @@ class TurnOrchestrator:
 
         return sent
 
+    async def dispatch_proactive_retry(
+        self,
+        *,
+        result: TurnResult,
+        session_key: str,
+        channel: str,
+        chat_id: str,
+    ) -> bool:
+        """Retries an already committed proactive message on another transport."""
+
+        if result.decision != "reply" or result.outbound is None:
+            raise ValueError("proactive retry requires reply outbound")
+        return await self._dispatch_outbound(
+            channel=channel,
+            chat_id=chat_id,
+            content=result.outbound.content,
+            media=list(result.outbound.media or []),
+            metadata={
+                "source": "proactive_retry",
+                "session_key_override": session_key,
+            },
+            operation="proactive retry",
+        )
+
     async def _run_side_effects(self, result: TurnResult) -> None:
         await self._run_effects(result.side_effects)
 
@@ -123,6 +145,30 @@ class TurnOrchestrator:
                     await maybe
             except Exception as e:
                 logger.warning("turn side effect failed: %s", e)
+
+    async def _dispatch_outbound(
+        self,
+        *,
+        channel: str,
+        chat_id: str,
+        content: str,
+        media: list[str],
+        metadata: dict[str, Any],
+        operation: str,
+    ) -> bool:
+        try:
+            return await self._outbound.dispatch(
+                OutboundDispatch(
+                    channel=channel,
+                    chat_id=chat_id,
+                    content=content,
+                    metadata=metadata,
+                    media=media,
+                )
+            )
+        except Exception as e:
+            logger.warning("%s outbound dispatch failed: %s", operation, e)
+            return False
 
     def _persist_proactive_session(
         self,
