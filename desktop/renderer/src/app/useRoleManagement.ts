@@ -472,6 +472,7 @@ export function useRoleManagement({
     const updated = response.payload.role as RoleRecord;
     setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
     applyRoleSnapshot(updated);
+    await window.miraDesktop.syncPet();
   }
 
   return {

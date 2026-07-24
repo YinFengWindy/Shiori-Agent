@@ -8,8 +8,11 @@ type CreateDesktopTrayOptions = {
   onToggleDesktopPet?: () => Promise<void>;
 };
 
+/** Electron tray handle with an explicit state refresh hook for async startup changes. */
+export type DesktopTray = Tray & { refresh(): void };
+
 /** Creates the Windows tray entry used to restore or quit the desktop shell. */
-export function createDesktopTray({ onShowWindow, onQuitRequested, getDesktopPetState, onToggleDesktopPet }: CreateDesktopTrayOptions): Tray {
+export function createDesktopTray({ onShowWindow, onQuitRequested, getDesktopPetState, onToggleDesktopPet }: CreateDesktopTrayOptions): DesktopTray {
   const tray = new Tray(desktopWindowIcon);
   const refresh = () => {
     const state = getDesktopPetState?.() ?? { visible: false, available: false };
@@ -31,5 +34,5 @@ export function createDesktopTray({ onShowWindow, onQuitRequested, getDesktopPet
   refresh();
   tray.on("click", () => onShowWindow());
   tray.on("right-click", refresh);
-  return tray;
+  return Object.assign(tray, { refresh });
 }

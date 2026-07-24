@@ -2,7 +2,7 @@
 title: 桌面端与桥接
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 5b6917e9
+last_verified_commit: 93af65a8
 source_paths:
   - desktop/src/
   - desktop/renderer/src/
@@ -38,4 +38,5 @@ renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatc
 - 修改会话切换：检查 bridge 事件优先级、Session cache、聊天消息连续性和导航历史。
 - 修改角色 CRUD：复用统一刷新/派生状态流程，避免各页面重复“调用、刷新、同步、导航”。
 - 修改桌宠拖拽：同步检查 renderer 原生拖拽区域、窗口原生交互注册与 `DesktopPetController`，并验证窗口位置会保存。
+- 修改桌宠绑定或托盘开关：同步检查角色素材选择后的 `syncPet()`、主进程持久化状态和托盘菜单刷新。
 - 修改屏幕观察：区分截图获取、模型分析和环境暂停三类失败，并同步验证 scheduler、持久化开关与桌宠提示状态。

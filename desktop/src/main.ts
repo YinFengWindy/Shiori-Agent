@@ -273,7 +273,10 @@ void app.whenReady().then(() => {
         }
       },
     });
-    void desktopPet.restore().then(() => desktopObservation?.restore()).catch((error) => {
+    void desktopPet.restore().then(async () => {
+      desktopTray?.refresh();
+      await desktopObservation?.restore();
+    }).catch((error) => {
       logDesktopDiagnostic({ scope: "main", event: "desktop-pet.restore.failed", payload: { error } });
     });
   }
