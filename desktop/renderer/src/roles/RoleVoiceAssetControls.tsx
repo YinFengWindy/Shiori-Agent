@@ -1,8 +1,13 @@
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DeleteIcon } from "../shared/icons";
 import type { RoleFormState } from "../shared/types";
-import { queueManagedVoiceAssetDeletion } from "./roleVoiceConfig";
+
+type TemporaryVoiceAsset = {
+  provider: string;
+  voiceId: string;
+  ownership: "shiori_managed";
+};
 
 type RoleVoiceAssetControlsProps = {
   bridgeReady: boolean;
@@ -16,23 +21,35 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
   const [cloning, setCloning] = useState(false);
   const [previewAudio, setPreviewAudio] = useState("");
   const [error, setError] = useState("");
+  const temporaryAssetRef = useRef<TemporaryVoiceAsset | null>(null);
+
+  useEffect(() => () => {
+    void abandonTemporaryVoice(temporaryAssetRef.current);
+  }, []);
 
   async function cloneVoice(): Promise<void> {
     setError("");
     setCloning(true);
     try {
+      await abandonTemporaryVoice(temporaryAssetRef.current);
+      temporaryAssetRef.current = null;
       const result = await window.miraDesktop.cloneVoice();
       if (result.canceled) return;
       if (!result.ok || !result.voiceId || !result.provider || result.ownership !== "shiori_managed") {
         throw new Error(result.error || "声音复刻结果缺少资产归属信息");
       }
+      temporaryAssetRef.current = {
+        provider: result.provider,
+        voiceId: result.voiceId,
+        ownership: "shiori_managed",
+      };
       onUpdate((current) => ({
         ...current,
         voiceEnabled: true,
         voiceProvider: result.provider || current.voiceProvider,
         voiceOwnership: "shiori_managed",
         voiceId: result.voiceId || current.voiceId,
-        pendingVoiceAssetDeletes: queueManagedVoiceAssetDeletion(current),
+        pendingVoiceAssetDeletes: [],
       }));
       setPreviewAudio(result.audioBase64 || "");
       if (result.audioBase64) await window.miraDesktop.playVoicePreview(result.audioBase64);
@@ -44,12 +61,14 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
   }
 
   function discardManagedVoice(): void {
+    void abandonTemporaryVoice(temporaryAssetRef.current);
+    temporaryAssetRef.current = null;
     onUpdate((current) => ({
       ...current,
       voiceOwnership: "external",
       voiceId: "",
       voiceName: "",
-      pendingVoiceAssetDeletes: queueManagedVoiceAssetDeletion(current),
+      pendingVoiceAssetDeletes: [],
     }));
     setPreviewAudio("");
   }
@@ -83,4 +102,16 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
       {error ? <div className="text-xs text-[#8f2d2d]">{error}</div> : null}
     </div>
   );
+}
+
+async function abandonTemporaryVoice(asset: TemporaryVoiceAsset | null): Promise<void> {
+  if (!asset) return;
+  await window.miraDesktop.invoke({
+    method: "voice.clone.abandon",
+    payload: {
+      provider: asset.provider,
+      voice_id: asset.voiceId,
+      ownership: asset.ownership,
+    },
+  });
 }

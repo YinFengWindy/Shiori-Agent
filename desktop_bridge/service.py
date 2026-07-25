@@ -33,6 +33,7 @@ from agent.screen_observation.service import ScreenObservationService
 from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_presenter import DesktopSessionPresenter
+from desktop_bridge.voice_assets import VoiceAssetLifecycle
 from desktop_bridge.world_simulation_handler import WorldSimulationHandler
 from agent.voice_config import VoiceConfig
 from desktop_bridge.voice_service import VoiceService, VoiceServiceError
@@ -135,6 +136,13 @@ class DesktopBridgeService:
         self.role_presenter = DesktopRolePresenter(role_store, relationship_runtime)
         self.pet_packages = RolePetPackageService(role_store)
         self.voice_service = voice_service or VoiceService(getattr(config, "voice", None) or VoiceConfig())
+        self.voice_assets = VoiceAssetLifecycle(
+            workspace,
+            self.voice_service.delete_managed_voice,
+        )
+        self.voice_assets.recover_orphans(
+            role.runtime_config for role in self.role_service.repository.list_roles()
+        )
         self.chat_service = DesktopChatService(
             agent_loop=agent_loop,
             event_bus=event_bus,
@@ -391,11 +399,25 @@ class DesktopBridgeService:
                     audio = base64.b64decode(audio_base64, validate=True)
                 except (binascii.Error, ValueError) as exc:
                     raise ValueError("audio_base64 无效") from exc
+                result = self.voice_service.clone_voice(audio, file_name=file_name)
+                self.voice_assets.track_clone(result)
                 return self._ok(
                     request_id,
                     method,
-                    self.voice_service.clone_voice(audio, file_name=file_name),
+                    result,
                 )
+            if method == "voice.clone.abandon":
+                provider = str(payload.get("provider") or "").strip()
+                voice_id = str(payload.get("voice_id") or "").strip()
+                ownership = str(payload.get("ownership") or "").strip()
+                if not provider or not voice_id or not ownership:
+                    raise ValueError("provider、voice_id 和 ownership 不能为空")
+                abandoned = self.voice_assets.abandon_clone(
+                    provider=provider,
+                    voice_id=voice_id,
+                    ownership=ownership,
+                )
+                return self._ok(request_id, method, {"abandoned": abandoned})
             if method == "voice.delete":
                 provider = str(payload.get("provider") or "").strip()
                 voice_id = str(payload.get("voice_id") or "").strip()
@@ -487,8 +509,11 @@ class DesktopBridgeService:
                     if isinstance(raw_asset_category_bindings, dict)
                     else None
                 )
+                role_id = str(payload.get("role_id") or "")
+                previous = self.role_service.repository.get_required(role_id)
+                previous_runtime_config = dict(previous.runtime_config)
                 aggregate = await self.role_service.update_role_async(
-                    str(payload.get("role_id") or ""),
+                    role_id,
                     name=payload.get("name"),
                     description=payload.get("description"),
                     system_prompt=payload.get("system_prompt"),
@@ -528,6 +553,10 @@ class DesktopBridgeService:
                         else None
                     ),
                 )
+                self.voice_assets.reconcile_role_update(
+                    previous_runtime_config,
+                    aggregate.role.runtime_config,
+                )
                 return self._ok(
                     request_id,
                     method,
@@ -535,7 +564,10 @@ class DesktopBridgeService:
                 )
             if method == "roles.delete":
                 role_id = str(payload.get("role_id") or "").strip()
+                role = self.role_service.repository.get_required(role_id)
                 deleted, session_deleted = self.role_service.delete_role(role_id)
+                if deleted:
+                    self.voice_assets.retire_deleted_role(role.runtime_config)
                 return self._ok(
                     request_id,
                     method,
