@@ -2,7 +2,7 @@
 title: 桌面端与桥接
 kind: 领域说明
 status: 当前有效
-last_verified_commit: dd424e65
+last_verified_commit: 112a31c1
 source_paths:
   - desktop/src/
   - desktop/renderer/src/
@@ -29,6 +29,8 @@ related:
 renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatcher.py`；service 调用 owning domain，presenter 将结果转换为共享类型。后端事件沿反方向更新 renderer state。图片等本地资产通过专门的 registry/transport 暴露，不直接把任意文件路径交给视图。
 
 桌宠拖拽不经过 renderer IPC 或 Python bridge：桌宠主体是 Electron 原生拖拽区域，由系统直接移动独立窗口；主进程用窗口移动的左右位移驱动 Codex 图集的 `running-left` / `running-right` 行，在 220ms 静默后回到 `idle`，保存位置，并接管右键菜单与去重后的原生双击恢复主窗口。
+
+角色通过 `pet_action` 操控桌宠时，工具 schema 会按当前回合的角色和渠道动态投影桌宠状态：桌面端角色可看到桌宠开关、当前绑定桌宠包和包声明的动作名及其精灵状态；外部渠道会明确标记为不可用。动作名来自角色素材包的 `actions` 映射，工具执行层仍会再次校验角色绑定、开关、渠道和动作支持情况。
 
 屏幕识别是每个角色默认拥有的 Agent 工具，由核心 runtime 注册，桌面端和 Telegram/QQ 等渠道共用同一能力。`desktop_bridge` 只负责桌面 IPC 的观察分析/记忆接口和环境状态；主屏捕获由 `infra/screen_capture.py` 提供，不读取桌宠绑定配置。Electron 的 `DesktopObservationController` 仍负责桌面端的定时观察、持久化开关和桌宠提示，但不决定 Agent 是否拥有 `observe_screen`。
 
