@@ -256,6 +256,9 @@ class ToolRegistry:
                 **(context or self.get_context()),
                 **arguments,
             }
+            for key in getattr(tool, "context_precedence", frozenset()):
+                if context is not None and key in context:
+                    merged[key] = context[key]
             if not _tool_defines_parameter(tool, _PROGRESS_DESCRIPTION_FIELD):
                 merged.pop(_PROGRESS_DESCRIPTION_FIELD, None)
             return await tool.execute(**merged)

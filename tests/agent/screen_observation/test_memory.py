@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from desktop_bridge.observation_memory import ObservationMemoryWriter
+from agent.screen_observation.memory import ObservationMemoryWriter
 
 
 def _writer(memory=None) -> ObservationMemoryWriter:
@@ -34,7 +34,7 @@ async def test_remember_uses_existing_event_relationship_memory_contract() -> No
             "role_id": "mira",
             "summary": "下午一起整理了报告",
             "happened_at": "2026-07-23T12:00:00Z",
-            "source_ref": "desktop-observation:session-1:0",
+            "source_ref": "screen-observation:session-1:0",
         }
     )
 
@@ -74,7 +74,7 @@ async def test_remember_allows_sensitive_observation_content() -> None:
             "role_id": "mira",
             "summary": "一起查看 https://example.com",
             "happened_at": "2026-07-23T12:00:00Z",
-            "source_ref": "desktop-observation:session-1:0",
+            "source_ref": "screen-observation:session-1:0",
         }
     )
     await writer.remember(
@@ -82,7 +82,7 @@ async def test_remember_allows_sensitive_observation_content() -> None:
             "role_id": "mira",
             "summary": "一起检查 user@example.com 和 C:\\Users\\name\\report.docx",
             "happened_at": "2026-07-23T12:00:00Z",
-            "source_ref": "desktop-observation:session-1:1",
+            "source_ref": "screen-observation:session-1:1",
         }
     )
 

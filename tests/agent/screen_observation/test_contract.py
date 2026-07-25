@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from desktop_bridge.observation_contract import (
+from agent.screen_observation.contract import (
     normalize_observation_result,
     parse_observation_frame,
 )

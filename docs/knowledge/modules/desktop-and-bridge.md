@@ -2,7 +2,7 @@
 title: 桌面端与桥接
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 93af65a8
+last_verified_commit: dd424e65
 source_paths:
   - desktop/src/
   - desktop/renderer/src/
@@ -11,6 +11,7 @@ related:
   - roles.md
   - conversations-and-sessions.md
   - scheduling.md
+  - agent-lifecycle-and-tools.md
 ---
 
 # 桌面端与桥接
@@ -29,7 +30,7 @@ renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatc
 
 桌宠拖拽不经过 renderer IPC 或 Python bridge：桌宠主体是 Electron 原生拖拽区域，由系统直接移动独立窗口；主进程用窗口移动的左右位移驱动 Codex 图集的 `running-left` / `running-right` 行，在 220ms 静默后回到 `idle`，保存位置，并接管右键菜单与去重后的原生双击恢复主窗口。
 
-屏幕观察由 Electron 主进程中的 `DesktopObservationController` 持有会话、定时器和持久化开关。截图、模型、bridge 或观察经历保存进入失败状态时，Controller 会立即停止当前会话和调度、持久化关闭观察开关，并向桌宠发布失败提示。Windows 锁屏和桌宠暂时不可用属于暂停，不撤销用户已开启的观察状态。
+屏幕识别是每个角色默认拥有的 Agent 工具，由核心 runtime 注册，桌面端和 Telegram/QQ 等渠道共用同一能力。`desktop_bridge` 只负责桌面 IPC 的观察分析/记忆接口和环境状态；主屏捕获由 `infra/screen_capture.py` 提供，不读取桌宠绑定配置。Electron 的 `DesktopObservationController` 仍负责桌面端的定时观察、持久化开关和桌宠提示，但不决定 Agent 是否拥有 `observe_screen`。
 
 ## 修改影响
 
@@ -39,4 +40,4 @@ renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatc
 - 修改角色 CRUD：复用统一刷新/派生状态流程，避免各页面重复“调用、刷新、同步、导航”。
 - 修改桌宠拖拽：同步检查 renderer 原生拖拽区域、窗口原生交互注册与 `DesktopPetController`，并验证窗口位置会保存。
 - 修改桌宠绑定或托盘开关：同步检查角色素材选择后的 `syncPet()`、主进程持久化状态和托盘菜单刷新。
-- 修改屏幕观察：区分截图获取、模型分析和环境暂停三类失败，并同步验证 scheduler、持久化开关与桌宠提示状态。
+- 修改屏幕识别：同步检查核心工具注册、角色会话中的 `role_id`、渠道回合、截图获取、模型分析和桌面观察调度；桌面 UI 的暂停状态不能改变角色工具的默认归属。

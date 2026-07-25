@@ -10,6 +10,26 @@ export type DesktopPetState =
   | "running"
   | "review";
 
+/** States a role-owned package may expose as a temporary action overlay. */
+export type DesktopPetActionState =
+  | "idle"
+  | "running-right"
+  | "running-left"
+  | "waving"
+  | "jumping";
+
+export type DesktopPetActionPayload = {
+  action_id: string;
+  role_id: string;
+  session_key: string;
+  channel: "desktop";
+  kind: "move" | "play";
+  name?: string;
+  target?: "top_left" | "top_right" | "center" | "bottom_left" | "bottom_right";
+  animation?: "" | "idle" | "run";
+  state?: DesktopPetState;
+};
+
 /** One validated role-owned pet package available to the desktop shell. */
 export type DesktopPetPackage = {
   id: string;
@@ -22,6 +42,7 @@ export type DesktopPetPackage = {
 export type DesktopPetBinding = {
   roleId: string;
   package: DesktopPetPackage;
+  actions?: Record<string, DesktopPetActionState>;
 };
 
 export type DesktopPetPosition = { x: number; y: number };

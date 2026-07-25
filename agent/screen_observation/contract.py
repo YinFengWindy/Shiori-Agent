@@ -6,14 +6,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from desktop_bridge.observation_safety import safe_observation_text
+from agent.screen_observation.safety import safe_observation_text
 
 MAX_IMAGE_BASE64_CHARS = 12 * 1024 * 1024
 
 
 @dataclass(frozen=True)
 class ObservationFrame:
-    """Validated ephemeral primary-display frame received from the desktop host."""
+    """Validated ephemeral primary-display frame received from the host."""
 
     role_id: str
     frame_id: str

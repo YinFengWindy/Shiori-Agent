@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
 import tempfile
 import zipfile
@@ -19,6 +20,16 @@ _FORMAT = "codex-sprite@1"
 _ATLAS_SIZE = (1536, 1872)
 _CELL_SIZE = (192, 208)
 _USED_CELLS = (6, 8, 8, 4, 5, 8, 6, 6, 6)
+_ACTION_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+_ACTION_STATES = frozenset(
+    {
+        "idle",
+        "running-right",
+        "running-left",
+        "waving",
+        "jumping",
+    }
+)
 
 
 def _now_iso() -> str:
@@ -49,6 +60,7 @@ class RolePetPackageService:
         with zipfile.ZipFile(source_path) as archive:
             names, root = self._archive_names(archive)
             manifest = self._manifest(archive, root)
+            actions = self._manifest_actions(manifest)
             package_id = str(manifest["id"]).strip()
             if PurePosixPath(package_id).name != package_id or package_id in {".", ".."}:
                 raise ValueError("桌宠包 id 不安全")
@@ -96,6 +108,7 @@ class RolePetPackageService:
             spritesheet_path=f"{root}/spritesheet.webp",
             imported_at=_now_iso(),
             preview_path=f"{root}/{preview_filename}" if preview_filename else None,
+            actions=actions,
         )
         try:
             self._role_store.replace_pet_packages(role_id, [*role.pet_packages, package])
@@ -157,6 +170,21 @@ class RolePetPackageService:
             if not isinstance(value.get(field), str) or not str(value[field]).strip():
                 raise ValueError(f"桌宠包 pet.json 缺少 {field}")
         return value
+
+    def _manifest_actions(self, manifest: dict[str, object]) -> dict[str, str]:
+        raw_actions = manifest.get("actions", {})
+        if raw_actions is None:
+            return {}
+        if not isinstance(raw_actions, dict):
+            raise ValueError("桌宠包 actions 必须是对象")
+        actions: dict[str, str] = {}
+        for raw_name, raw_state in raw_actions.items():
+            if not isinstance(raw_name, str) or not _ACTION_NAME_PATTERN.fullmatch(raw_name):
+                raise ValueError("桌宠包动作名称无效")
+            if not isinstance(raw_state, str) or raw_state not in _ACTION_STATES:
+                raise ValueError("桌宠包动作状态无效")
+            actions[raw_name] = raw_state
+        return actions
 
     def _validate_atlas(self, data: bytes) -> None:
         try:

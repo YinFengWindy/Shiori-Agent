@@ -2,12 +2,13 @@
 title: Agent 生命周期、工具、插件与 MCP
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 27af068a
+last_verified_commit: dd424e65
 source_paths:
   - agent/core/
   - agent/turns/
   - agent/lifecycle/
   - agent/tools/
+  - agent/screen_observation/
   - agent/plugins/
   - agent/mcp/
 related:
@@ -27,6 +28,8 @@ related:
 `ToolRegistry` 保存工具和索引视图，搜索后端支持按需发现工具。ToolExecutor 执行调用，ToolHook 在执行前后接入插件逻辑。文件、Shell、消息、记忆、调度、图片、网页和 subagent 等能力都是具体工具实现。
 
 工具搜索的目的是控制可见工具规模；搜索结果进入当前回合，不应永久污染全局 registry。后台 Shell 任务由独立 runtime 管理注册、轮询和停止。
+
+`observe_screen` 是所有角色默认拥有的只读工具，在核心 runtime 注册并可由桌面、Telegram、QQ 等渠道调用。它只读取当前主屏幕并返回经过过滤的摘要，不执行桌面动作；捕获宿主和视觉模型不可用时，工具仍可发现，但执行会返回明确错误。
 
 ## 插件与 MCP
 

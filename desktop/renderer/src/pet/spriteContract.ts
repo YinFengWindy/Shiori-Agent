@@ -31,6 +31,12 @@ export function spriteFrameDuration(state: SpriteState, frame: number): number {
   return animation.frameDurations[boundedFrame];
 }
 
+/** Returns the bounded playback time used by one transient role action. */
+export function spriteActionDurationMs(state: SpriteState): number {
+  if (state === "idle") return 0;
+  return spriteAnimations[state].frameDurations.reduce((total, duration) => total + duration, 0) * spriteActionLoopCount;
+}
+
 function framesForState(state: SpriteState, durationScale = 1): SpritePlaybackFrame[] {
   return Array.from({ length: spriteAnimations[state].frames }, (_, frame) => ({
     state,

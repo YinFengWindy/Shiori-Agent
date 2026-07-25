@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CodexSpritePetRenderer } from "./CodexSpritePetRenderer";
 import { spriteAnimations, type SpriteState } from "./spriteContract";
 import { usePetActivityState } from "./usePetActivityState";
@@ -46,19 +46,28 @@ function isBubbleLayout(value: unknown): value is PetBubbleLayout {
 function DesktopPetSurface() {
   const [payload, setPayload] = useState<PetPayload | null>(null);
   const [state, setState] = useState<SpriteState>("idle");
+  const [transientState, setTransientState] = useState<SpriteState | null>(null);
   const [observation, setObservation] = useState<PetObservationPayload>(defaultObservation);
   const [bubbleLayout, setBubbleLayout] = useState<PetBubbleLayout>(defaultBubbleLayout);
   const activityState = usePetActivityState(state);
+  const onTransientFinished = useCallback(() => setTransientState(null), []);
 
   useEffect(() => {
     const onLoad = (_event: unknown, next: unknown) => {
       if (!isPetPayload(next)) return;
       setPayload(next);
       setState(next.state);
+      setTransientState(null);
     };
     const onPlay = (_event: unknown, next: unknown) => {
       if (!next || typeof next !== "object" || !isSpriteState((next as { state?: unknown }).state)) return;
-      setState((next as { state: SpriteState }).state);
+      const value = next as { state: SpriteState; transient?: unknown };
+      if (value.transient === true) {
+        setTransientState(value.state);
+        return;
+      }
+      setState(value.state);
+      setTransientState(null);
     };
     window.miraDesktop.onPetLoad(onLoad);
     window.miraDesktop.onPetPlay(onPlay);
@@ -93,7 +102,16 @@ function DesktopPetSurface() {
   }, []);
 
   if (!payload) return null;
-  return <CodexSpritePetRenderer spritesheetUrl={payload.package.spritesheetUrl} state={activityState} observation={observation} bubbleLayout={bubbleLayout} />;
+  return (
+    <CodexSpritePetRenderer
+      spritesheetUrl={payload.package.spritesheetUrl}
+      state={activityState}
+      transientState={transientState}
+      onTransientFinished={onTransientFinished}
+      observation={observation}
+      bubbleLayout={bubbleLayout}
+    />
+  );
 }
 
 createRoot(document.getElementById("root") as HTMLElement).render(<DesktopPetSurface />);

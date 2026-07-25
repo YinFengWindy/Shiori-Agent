@@ -6,11 +6,11 @@ from typing import Any
 
 from core.memory.engine import MemoryMutation, MemoryScope, MemoryWriteApi
 from core.roles import RoleRepository
-from desktop_bridge.observation_safety import safe_observation_text
+from agent.screen_observation.safety import safe_observation_text
 
 
 class ObservationMemoryWriter:
-    """Persists one filtered shared-experience event through the common memory API."""
+    """Persists one filtered screen-observation event through common memory."""
 
     def __init__(self, *, roles: RoleRepository, memory: MemoryWriteApi) -> None:
         self._roles = roles
@@ -26,7 +26,7 @@ class ObservationMemoryWriter:
             raise ValueError("观察经历摘要为空或包含敏感内容")
         source_ref = str(payload.get("source_ref") or "").strip()
         if not re.fullmatch(
-            r"desktop-observation:[A-Za-z0-9-]{1,128}:\d{1,6}", source_ref
+            r"screen-observation:[A-Za-z0-9-]{1,128}:\d{1,6}", source_ref
         ):
             raise ValueError("观察经历 source_ref 无效")
         happened_at = str(payload.get("happened_at") or "").strip()

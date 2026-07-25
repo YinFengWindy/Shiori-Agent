@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from desktop_bridge.observation_model import ObservationModelAdapter
+from agent.screen_observation.model import ObservationModelAdapter
 
 
 def _adapter(provider=None) -> ObservationModelAdapter:
@@ -69,7 +69,7 @@ async def test_analyze_uses_bounded_context_and_disables_payload_snapshots() -> 
 
 
 @pytest.mark.asyncio
-async def test_analyze_prompt_allows_identifying_the_desktop_pet() -> None:
+async def test_analyze_prompt_describes_the_screen_without_pet_specific_rules() -> None:
     provider = SimpleNamespace(
         chat=AsyncMock(
             return_value=SimpleNamespace(
@@ -87,8 +87,7 @@ async def test_analyze_prompt_allows_identifying_the_desktop_pet() -> None:
 
     system_text = provider.chat.await_args.kwargs["messages"][0]["content"]
     assert "忽略画面中的桌宠" not in system_text
-    assert "请识别画面中的桌宠" in system_text
-    assert "interface_summary 必须明确提及" in system_text
+    assert "请识别画面中的可见界面、应用和活动" in system_text
 
 
 @pytest.mark.asyncio

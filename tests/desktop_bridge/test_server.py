@@ -11,11 +11,22 @@ import pytest
 
 from bus.event_bus import EventBus
 from core.roles import RoleRepository, RoleStore
+from agent.screen_observation.service import build_screen_observation_service
 from desktop_bridge.models import BridgeResponse
-from desktop_bridge.server import DesktopBridgeServer, _build_observation_service
+from desktop_bridge.server import DesktopBridgeServer
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
 from agent.tools.registry import ToolRegistry
+
+
+def _build_observation_service(runtime, role_store):
+    return build_screen_observation_service(
+        roles=RoleRepository(role_store),
+        config=runtime.config,
+        provider=runtime.provider,
+        vl_provider=runtime.vl_provider,
+        memory=runtime.memory_runtime.engine,
+    )
 
 
 def _build_server(tmp_path: Path) -> DesktopBridgeServer:
@@ -50,7 +61,8 @@ def test_observation_service_prefers_dedicated_vl_provider(tmp_path: Path) -> No
     assert service._model_adapter._model == "vl-model"
 
 
-def test_observation_service_requires_a_visual_provider(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_observation_service_requires_a_visual_provider(tmp_path: Path) -> None:
     runtime = SimpleNamespace(
         config=SimpleNamespace(multimodal=False, model="text-model", vl_model=""),
         provider=SimpleNamespace(),
@@ -58,7 +70,10 @@ def test_observation_service_requires_a_visual_provider(tmp_path: Path) -> None:
         memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
     )
 
-    assert _build_observation_service(runtime, SimpleNamespace()) is None
+    service = _build_observation_service(runtime, SimpleNamespace())
+
+    with pytest.raises(RuntimeError, match="视觉模型未配置"):
+        await service.analyze({})
 
 
 def test_observation_service_uses_main_provider_when_it_is_multimodal() -> None:
@@ -77,7 +92,7 @@ def test_observation_service_uses_main_provider_when_it_is_multimodal() -> None:
     assert service._model_adapter._model == "main-model"
 
 
-def test_desktop_server_registers_screen_observation_as_a_role_tool(
+def test_desktop_server_reuses_core_screen_observation_service(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
@@ -85,6 +100,7 @@ def test_desktop_server_registers_screen_observation_as_a_role_tool(
         "_build_novelai_service",
         lambda self: None,
     )
+    observation = SimpleNamespace()
     runtime = SimpleNamespace(
         session_manager=SimpleNamespace(workspace=tmp_path),
         loop=SimpleNamespace(),
@@ -94,12 +110,13 @@ def test_desktop_server_registers_screen_observation_as_a_role_tool(
         provider=SimpleNamespace(),
         vl_provider=None,
         memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
+        screen_observation=observation,
     )
 
     DesktopBridgeServer(runtime)
 
-    assert runtime.tools.get_tool("observe_screen") is not None
-    assert "observe_screen" in runtime.tools.get_always_on_names()
+    assert runtime.tools.get_tool("observe_screen") is None
+    assert runtime.screen_observation is observation
 
 
 @pytest.mark.asyncio
@@ -185,7 +202,7 @@ async def test_observation_service_validates_memory_roles_through_the_repository
             "role_id": "mira",
             "summary": "一起整理了报告",
             "happened_at": "2026-07-23T12:00:00Z",
-            "source_ref": "desktop-observation:session-1:0",
+            "source_ref": "screen-observation:session-1:0",
         }
     )
 

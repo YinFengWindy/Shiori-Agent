@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from desktop_bridge.observation_service import DesktopObservationService
+from agent.screen_observation.service import ScreenObservationService
 
 
 @pytest.mark.asyncio
 async def test_service_keeps_model_and_memory_operations_separate() -> None:
-    service = DesktopObservationService(
+    service = ScreenObservationService(
         roles=SimpleNamespace(),
         provider=SimpleNamespace(),
         model="vision-model",

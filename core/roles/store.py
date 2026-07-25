@@ -149,6 +149,7 @@ class RolePetPackage:
     spritesheet_path: str
     imported_at: str
     preview_path: str | None = None
+    actions: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -161,6 +162,16 @@ class RolePetPackage:
         spritesheet_path = _normalize_rel_path(str(payload.get("spritesheet_path") or ""))
         if not package_id or not display_name or not manifest_path or not spritesheet_path:
             raise ValueError("桌宠包元数据不完整")
+        raw_actions = payload.get("actions", {})
+        actions = (
+            {
+                str(name).strip(): str(state).strip()
+                for name, state in raw_actions.items()
+                if str(name).strip() and str(state).strip()
+            }
+            if isinstance(raw_actions, dict)
+            else {}
+        )
         return cls(
             id=package_id,
             format=str(payload.get("format") or "").strip(),
@@ -169,6 +180,7 @@ class RolePetPackage:
             spritesheet_path=spritesheet_path,
             imported_at=str(payload.get("imported_at") or _now_iso()),
             preview_path=_normalize_rel_path(payload.get("preview_path")),
+            actions=actions,
         )
 
 

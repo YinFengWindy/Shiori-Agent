@@ -4,6 +4,8 @@ import json
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from core.roles import RolePetPackageService, RoleStore
 
 
@@ -19,6 +21,7 @@ def test_import_pet_package_accepts_a_single_wrapper_directory(tmp_path: Path, m
                     "description": "fixture",
                     "spritesheetPath": "spritesheet.webp",
                     "previewPath": "preview.webp",
+                    "actions": {"greeting": "waving"},
                 }
             ),
         )
@@ -36,6 +39,57 @@ def test_import_pet_package_accepts_a_single_wrapper_directory(tmp_path: Path, m
     assert (store.roles_dir / package.manifest_path).is_file()
     assert package.preview_path is not None
     assert (store.roles_dir / package.preview_path).read_bytes() == b"preview"
+    assert package.actions == {"greeting": "waving"}
+
+
+def test_import_pet_package_rejects_unknown_action_state(tmp_path: Path, monkeypatch) -> None:
+    archive_path = tmp_path / "invalid-actions.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "pet.json",
+            json.dumps(
+                {
+                    "id": "invalid-actions",
+                    "displayName": "Invalid",
+                    "description": "fixture",
+                    "spritesheetPath": "spritesheet.webp",
+                    "actions": {"sleep": "not-a-sprite-state"},
+                }
+            ),
+        )
+        archive.writestr("spritesheet.webp", b"fixture")
+    store = RoleStore(tmp_path / "workspace")
+    role = store.create_role(name="Invalid", system_prompt="fixture")
+    service = RolePetPackageService(store)
+    monkeypatch.setattr(service, "_validate_atlas", lambda _data: None)
+
+    with pytest.raises(ValueError, match="动作状态无效"):
+        service.import_package(role.id, archive_path)
+
+
+def test_import_pet_package_rejects_system_action_state(tmp_path: Path, monkeypatch) -> None:
+    archive_path = tmp_path / "system-action.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "pet.json",
+            json.dumps(
+                {
+                    "id": "system-action",
+                    "displayName": "System action",
+                    "description": "fixture",
+                    "spritesheetPath": "spritesheet.webp",
+                    "actions": {"broken": "failed"},
+                }
+            ),
+        )
+        archive.writestr("spritesheet.webp", b"fixture")
+    store = RoleStore(tmp_path / "workspace")
+    role = store.create_role(name="System action", system_prompt="fixture")
+    service = RolePetPackageService(store)
+    monkeypatch.setattr(service, "_validate_atlas", lambda _data: None)
+
+    with pytest.raises(ValueError, match="动作状态无效"):
+        service.import_package(role.id, archive_path)
 
 
 def test_import_pet_package_accepts_a_package_without_preview(tmp_path: Path, monkeypatch) -> None:

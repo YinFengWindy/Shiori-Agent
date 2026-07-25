@@ -18,7 +18,7 @@ import {
 import { registerDesktopContentSecurityPolicy } from "./windowSecurity.js";
 import { DesktopPetController } from "./pet/controller.js";
 import { loadDesktopPetSettings, saveDesktopPetSettings } from "./pet/settings.js";
-import type { DesktopPetBinding, DesktopPetSettings } from "./pet/types.js";
+import type { DesktopPetActionState, DesktopPetBinding, DesktopPetSettings, DesktopPetState } from "./pet/types.js";
 import { createDesktopPetWindow, displayForDesktopPet } from "./pet/window.js";
 import { DesktopObservationController } from "./observation/controller.js";
 import { wireRoleReplyBubbles } from "./observation/roleBubble.js";
@@ -135,12 +135,43 @@ async function resolveDesktopPetBinding(roleId?: string): Promise<DesktopPetBind
   const packages = role?.pet_packages;
   if (!Array.isArray(packages)) return null;
   const packageId = typeof role?.selected_pet_package_id === "string" ? role.selected_pet_package_id : "";
-  const packageValue = packages.find((item) => item && typeof item === "object" && (item as { id?: unknown }).id === packageId) as { id?: unknown; display_name?: unknown; spritesheet_abs?: unknown } | undefined;
+  const packageValue = packages.find((item) => item && typeof item === "object" && (item as { id?: unknown }).id === packageId) as { id?: unknown; display_name?: unknown; spritesheet_abs?: unknown; actions?: unknown } | undefined;
   if (!packageValue || typeof packageValue.id !== "string" || typeof packageValue.display_name !== "string" || typeof packageValue.spritesheet_abs !== "string") return null;
   const reference = localAssets.grantPath(packageValue.spritesheet_abs);
   if (!reference) return null;
   if (typeof role.id !== "string") return null;
-  return { roleId: role.id, package: { id: packageValue.id, displayName: packageValue.display_name, spritesheetUrl: reference.url } };
+  return {
+    roleId: role.id,
+    package: { id: packageValue.id, displayName: packageValue.display_name, spritesheetUrl: reference.url },
+    actions: desktopPetActions(packageValue.actions),
+  };
+}
+
+function desktopPetActions(value: unknown): Record<string, DesktopPetActionState> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, DesktopPetActionState> = {};
+  for (const [name, state] of Object.entries(value)) {
+    if (typeof state === "string" && isDesktopPetActionState(state)) result[name] = state;
+  }
+  return result;
+}
+
+function isDesktopPetActionState(value: string): value is DesktopPetActionState {
+  return ["idle", "running-right", "running-left", "waving", "jumping"].includes(value);
+}
+
+function isDesktopPetState(value: string): value is DesktopPetState {
+  return [
+    "idle",
+    "running-right",
+    "running-left",
+    "waving",
+    "jumping",
+    "failed",
+    "waiting",
+    "running",
+    "review",
+  ].includes(value);
 }
 
 async function persistDesktopPetSettings(settings: DesktopPetSettings): Promise<void> {
@@ -212,7 +243,11 @@ void app.whenReady().then(() => {
   );
   registerLocalAssetProtocol(protocol, localAssets);
   void startBridge(bridge);
-  wireBridgeEvents(bridge, localAssets);
+  wireBridgeEvents(bridge, localAssets, (event) => {
+    if (event.method === "desktop.pet.action") {
+      desktopPet?.handleAgentAction(event.payload);
+    }
+  });
   desktopPet = new DesktopPetController({
     getSettings: () => desktopPetSettings,
     saveSettings: persistDesktopPetSettings,

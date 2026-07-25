@@ -1,4 +1,4 @@
-"""Role-owned desktop screen observation tool."""
+"""Role-owned screen observation tool."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from agent.tools.base import Tool
 
 
 class ScreenCapture(Protocol):
-    """Captures one consented desktop frame for a specific role."""
+    """Captures one primary-screen frame for a specific role context."""
 
     def capture(self, role_id: str) -> dict[str, Any]: ...
 
@@ -21,11 +21,12 @@ class ScreenAnalyzer(Protocol):
 
 
 class ObserveScreenTool(Tool):
-    """Lets the active desktop role inspect a consented primary-screen snapshot."""
+    """Lets the active role inspect a primary-screen snapshot."""
 
     name = "observe_screen"
+    context_precedence = frozenset({"role_id"})
     description = (
-        "查看桌面角色当前可观察的主屏幕，并返回活动摘要；可以识别桌宠及其气泡。"
+        "查看当前角色可观察的主屏幕，并返回界面与活动摘要。"
         "仅用于只读观察，不能点击、输入、滚动或执行任何屏幕操作。"
     )
     parameters = {
@@ -41,14 +42,11 @@ class ObserveScreenTool(Tool):
     async def execute(
         self,
         *,
-        channel: str = "",
         role_id: str = "",
         **_: Any,
     ) -> str:
         """Captures and analyzes one frame without exposing image bytes to the role."""
 
-        if channel != "desktop":
-            raise ValueError("屏幕观察仅能在桌面角色会话中使用")
         clean_role_id = str(role_id or "").strip()
         if not clean_role_id:
             raise ValueError("当前会话缺少角色身份，无法观察屏幕")

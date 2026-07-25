@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   spriteActionLoopCount,
+  spriteActionDurationMs,
   spriteAnimations,
   spriteFrameDuration,
   spriteFramePosition,
@@ -53,4 +54,9 @@ test("Codex sprite playback loops active rows three times then settles into a pe
   assert.deepEqual(spritePlaybackFrameAt("running-right", 8 * spriteActionLoopCount + 6), { state: "idle", frame: 0, duration: 1680 });
   assert.deepEqual(spritePlaybackFrameAt("running-right", 8 * spriteActionLoopCount + 6 + 6 * 20), { state: "idle", frame: 0, duration: 1680 });
   assert.equal(spriteFrameDuration("running-right", 7), 220);
+});
+
+test("transient role actions use exactly the documented three-loop duration", () => {
+  assert.equal(spriteActionDurationMs("waving"), (140 + 140 + 140 + 280) * 3);
+  assert.equal(spriteActionDurationMs("idle"), 0);
 });

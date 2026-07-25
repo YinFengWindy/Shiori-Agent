@@ -290,3 +290,56 @@ test("changing the package for one role invalidates the active pet binding", asy
   );
   window.destroy();
 });
+
+test("agent pet actions move to a bounded target and play a transient package action", async () => {
+  let settings: DesktopPetSettings = {
+    visible: false,
+    roleId: null,
+    packageId: null,
+    positions: { "role-1:display-1": { x: 0, y: 0 } },
+  };
+  const window = new FakePetWindow();
+  const controller = new DesktopPetController({
+    getSettings: () => settings,
+    saveSettings: async (nextSettings) => { settings = nextSettings; },
+    resolveBinding: async () => ({
+      roleId: "role-1",
+      package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "mira-asset://pet" },
+      actions: { greeting: "waving" },
+    }),
+    createWindow: () => window as unknown as BrowserWindow,
+    displayForWindow: () => ({ id: "display-1", workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    cursorScreenPoint: () => ({ x: 0, y: 0 }),
+    openLocalAttachment: () => undefined,
+  });
+
+  await controller.show();
+  controller.rendererReady(window as unknown as BrowserWindow);
+  controller.handleAgentAction({
+    action_id: "action-1",
+    role_id: "role-1",
+    session_key: "role:role-1",
+    channel: "desktop",
+    kind: "move",
+    target: "bottom_right",
+    animation: "run",
+  });
+  controller.handleAgentAction({
+    action_id: "action-2",
+    role_id: "role-1",
+    session_key: "role:role-1",
+    channel: "desktop",
+    kind: "play",
+    name: "greeting",
+  });
+
+  assert.deepEqual(settings.positions["role-1:display-1"], { x: 1728, y: 872 });
+  assert.deepEqual(
+    window.webContents.messages.slice(-2),
+    [
+      { channel: "desktop:pet-play", payload: { state: "running-right", transient: true } },
+      { channel: "desktop:pet-play", payload: { state: "waving", transient: true } },
+    ],
+  );
+  window.destroy();
+});

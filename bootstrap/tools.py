@@ -22,9 +22,14 @@ from agent.looping.ports import (
 )
 from agent.mcp.registry import McpServerRegistry
 from agent.provider import LLMProvider
+from agent.screen_observation import (
+    ScreenObservationService,
+    build_screen_observation_service,
+)
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.scheduler import SchedulerService
 from agent.tools.message_push import MessagePushTool
+from agent.tools.observe_screen import ObserveScreenTool
 from agent.tools.registry import ToolRegistry
 from agent.turns.outbound import BusOutboundPort
 from bootstrap.toolsets.meta import (
@@ -58,6 +63,7 @@ from core.roles import (
     RoleStore,
     RoleWorldRegistry,
 )
+from infra.screen_capture import PrimaryScreenCapture
 from conversation.push_sync import ExternalImageSyncService
 from proactive_v2.presence import PresenceStore
 from session.manager import Session, SessionManager
@@ -88,6 +94,7 @@ class CoreRuntime:
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginManager | None" = None
     memory_optimizer: Any | None = None
+    screen_observation: ScreenObservationService | None = None
 
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
@@ -246,12 +253,14 @@ def build_registered_tools(
     tools: ToolRegistry | None = None,
     event_publisher: EventBus | None = None,
     agent_loop_provider: Callable[[], Any] | None = None,
+    role_repository: RoleRepository | None = None,
 ) -> tuple[
     ToolRegistry,
     MessagePushTool,
     SchedulerService,
     McpServerRegistry,
     MemoryRuntime,
+    ScreenObservationService,
 ]:
     from session.store import SessionStore
 
@@ -277,6 +286,22 @@ def build_registered_tools(
         ),
     )
     memory_runtime = memory_result.extras["memory_runtime"]
+    screen_observation = build_screen_observation_service(
+        roles=role_repository or RoleRepository(RoleStore(workspace)),
+        config=config,
+        provider=provider,
+        vl_provider=vl_provider,
+        memory=memory_runtime.engine,
+    )
+    tools.register(
+        ObserveScreenTool(
+            capture=PrimaryScreenCapture(),
+            analyzer=screen_observation,
+        ),
+        always_on=True,
+        risk="read-only",
+        search_hint="屏幕 桌面 当前窗口 观察主屏",
+    )
     scheduler = build_scheduler(
         workspace,
         push_tool,
@@ -325,6 +350,7 @@ def build_registered_tools(
         scheduler,
         mcp_registry,
         memory_runtime,
+        screen_observation,
     )
 
 
@@ -470,7 +496,7 @@ def build_core_runtime(
         len(migration_summary.unresolved_session_keys),
     )
     loop_ref: dict[str, AgentLoop] = {}
-    tools, push_tool, scheduler, mcp_registry, memory_runtime = (
+    tools, push_tool, scheduler, mcp_registry, memory_runtime, screen_observation = (
         build_registered_tools(
             config,
             workspace,
@@ -482,6 +508,7 @@ def build_core_runtime(
             session_store=session_manager._store,
             event_publisher=event_bus,
             agent_loop_provider=lambda: loop_ref.get("loop"),
+            role_repository=role_repository,
         )
     )
     presence = PresenceStore(session_manager._store)
@@ -584,6 +611,7 @@ def build_core_runtime(
         relationship_runtime=relationship_runtime,
         role_world_registry=role_world_registry,
         plugin_manager=plugin_manager,
+        screen_observation=screen_observation,
     )
 
 

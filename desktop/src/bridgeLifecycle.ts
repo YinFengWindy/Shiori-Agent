@@ -16,8 +16,10 @@ export async function startBridge(bridge: DesktopBridgeClient): Promise<void> {
 export function wireBridgeEvents(
   bridge: DesktopBridgeClient,
   localAssets: LocalAssetRegistry,
+  onEvent?: (event: BridgeEvent) => void,
 ): void {
   bridge.on("event", (payload) => {
+    onEvent?.(payload);
     const transport: LocalAssetTransport<BridgeEvent> = {
       value: payload,
       assets: localAssets.grantTrustedPayload(payload.payload),

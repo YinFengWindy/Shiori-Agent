@@ -29,6 +29,7 @@ class Tool(ABC):
     name: str
     description: str
     parameters: dict[str, Any]
+    context_precedence: frozenset[str] = frozenset()
 
     # JSON Schema 类型 → Python 类型映射
     _TYPE_MAP = {

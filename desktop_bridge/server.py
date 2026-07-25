@@ -9,47 +9,17 @@ from typing import Any, cast
 
 from bootstrap.tools import CoreRuntime
 from core.integrations.novelai.store import NovelAIStore
-from core.roles import RoleRepository, RoleStore
+from core.roles import RoleStore
 from desktop_bridge.models import BridgeError, BridgeResponse
-from desktop_bridge.observation_service import DesktopObservationService
 from desktop_bridge.request_dispatcher import BridgeRequestDispatcher
-from desktop_bridge.screen_capture import DesktopScreenCapture
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.stream_writer import BridgeStreamWriter
-from agent.tools.observe_screen import ObserveScreenTool
+from bus.events_lifecycle import DesktopPetActionRequested
 
 logger = logging.getLogger("desktop.bridge")
 
 ReadLine = Callable[[], Awaitable[str | None]]
 WritePayload = Callable[[dict[str, Any]], Awaitable[None]]
-
-
-def _build_observation_service(
-    runtime: CoreRuntime,
-    role_store: RoleStore,
-) -> DesktopObservationService | None:
-    config = getattr(runtime, "config", None)
-    memory_runtime = getattr(runtime, "memory_runtime", None)
-    vl_provider = getattr(runtime, "vl_provider", None)
-    main_multimodal = bool(getattr(config, "multimodal", True))
-    if vl_provider is None and not main_multimodal:
-        return None
-    provider = vl_provider or getattr(runtime, "provider", None)
-    model = (
-        getattr(config, "vl_model", "")
-        if vl_provider is not None
-        else getattr(config, "model", "")
-    )
-    memory = getattr(memory_runtime, "engine", None)
-    if provider is None or not model or memory is None:
-        return None
-    roles = RoleRepository(role_store)
-    return DesktopObservationService(
-        roles=roles,
-        provider=provider,
-        model=model,
-        memory=memory,
-    )
 
 
 class DesktopBridgeServer:
@@ -59,7 +29,7 @@ class DesktopBridgeServer:
         self.runtime = runtime
         self.role_store = RoleStore(runtime.session_manager.workspace)
         spawn_tool = runtime.tools.get_tool("spawn") if getattr(runtime, "tools", None) else None
-        observation_service = _build_observation_service(runtime, self.role_store)
+        observation_service = getattr(runtime, "screen_observation", None)
         self.service = DesktopBridgeService(
             workspace=runtime.session_manager.workspace,
             role_store=self.role_store,
@@ -76,17 +46,8 @@ class DesktopBridgeServer:
             memory_optimizer=getattr(runtime, "memory_optimizer", None),
             observation_service=observation_service,
         )
-        tools = getattr(runtime, "tools", None)
-        if tools is not None and observation_service is not None:
-            tools.register(
-                ObserveScreenTool(
-                    capture=DesktopScreenCapture(),
-                    analyzer=observation_service,
-                ),
-                always_on=True,
-                risk="read-only",
-                search_hint="屏幕 桌面 当前窗口 观察主屏",
-            )
+        self._pet_action_handler = self._handle_pet_action
+        runtime.event_bus.on(DesktopPetActionRequested, self._pet_action_handler)
 
     async def serve_streams(
         self,
@@ -163,10 +124,43 @@ class DesktopBridgeServer:
                         continue
                 await writer.write(response.to_dict())
         finally:
+            self.runtime.event_bus.off(
+                DesktopPetActionRequested,
+                self._pet_action_handler,
+            )
             self.service.remove_event_listener(_emit_event)
             await dispatcher.aclose(cancel=True)
             await self.service.aclose()
             await writer.aclose()
+
+    async def _handle_pet_action(self, event: DesktopPetActionRequested) -> None:
+        """Forwards one validated desktop-only action to the Electron host."""
+
+        if event.channel != "desktop":
+            event.error = "unsupported_channel"
+            return
+        if not self.service.has_event_listeners:
+            event.error = "desktop_bridge_unavailable"
+            return
+        await self.service.publish_event(
+            {
+                "id": event.action_id,
+                "type": "event",
+                "method": "desktop.pet.action",
+                "payload": {
+                    "action_id": event.action_id,
+                    "role_id": event.role_id,
+                    "session_key": event.session_key,
+                    "channel": event.channel,
+                    "kind": event.kind,
+                    "name": event.name,
+                    "target": event.target,
+                    "animation": event.animation,
+                    "state": event.state,
+                },
+            }
+        )
+        event.dispatched = True
 
     async def serve_stdio(self) -> None:
         """Runs the bridge against process stdin and stdout."""

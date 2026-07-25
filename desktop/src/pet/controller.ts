@@ -14,6 +14,7 @@ import {
 import { bindDesktopPetSettings } from "./settings.js";
 import type {
   DesktopPetBinding,
+  DesktopPetActionPayload,
   DesktopPetPosition,
   DesktopPetSettings,
   DesktopPetState,
@@ -120,6 +121,28 @@ export class DesktopPetController {
 
   play(state: DesktopPetState): void {
     this.window?.webContents.send("desktop:pet-play", { state });
+  }
+
+  /** Executes one already-authorized role action without exposing window APIs to the renderer. */
+  handleAgentAction(value: unknown): void {
+    if (!isDesktopPetActionPayload(value)) return;
+    if (!this.isRunning || value.role_id !== this.activeRoleId || value.channel !== "desktop") return;
+    if (value.kind === "play") {
+      const state = value.name ? this.activeLoad?.binding.actions?.[value.name] : undefined;
+      if (state) this.playTransient(state);
+      return;
+    }
+    if (!value.target) return;
+    const display = this.displayForWindow(this.window);
+    const current = this.currentAnchorPosition(this.window as BrowserWindow);
+    const next = desktopPetTargetPosition(value.target, display.workArea);
+    this.stopMomentum();
+    this.moveTo(next);
+    this.persistPosition(this.activeRoleId, this.window as BrowserWindow);
+    if (value.animation === "run") {
+      const state = next.x < current.x ? "running-left" : next.x > current.x ? "running-right" : "idle";
+      this.playTransient(state);
+    }
   }
 
   /** Publishes observation state without exposing frames or model output internals. */
@@ -308,6 +331,10 @@ export class DesktopPetController {
     window.webContents.send("desktop:pet-bubble-layout", this.bubbleLayout.layout);
   }
 
+  private playTransient(state: DesktopPetState): void {
+    this.window?.webContents.send("desktop:pet-play", { state, transient: true });
+  }
+
   private stopDragFollow(): void {
     if (this.dragFollowTimer) clearInterval(this.dragFollowTimer);
     this.dragFollowTimer = null;
@@ -331,4 +358,28 @@ export class DesktopPetController {
     this.anchorPosition = null;
     this.bubbleLayout.reset();
   }
+}
+
+function isDesktopPetActionPayload(value: unknown): value is DesktopPetActionPayload {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Partial<DesktopPetActionPayload>;
+  return payload.channel === "desktop"
+    && typeof payload.role_id === "string"
+    && (payload.kind === "move" || payload.kind === "play");
+}
+
+function desktopPetTargetPosition(
+  target: NonNullable<DesktopPetActionPayload["target"]>,
+  workArea: DesktopPetWorkArea,
+): DesktopPetPosition {
+  const right = workArea.x + workArea.width - desktopPetViewport.width;
+  const bottom = workArea.y + workArea.height - desktopPetViewport.height;
+  if (target === "top_left") return { x: workArea.x, y: workArea.y };
+  if (target === "top_right") return { x: right, y: workArea.y };
+  if (target === "bottom_left") return { x: workArea.x, y: bottom };
+  if (target === "bottom_right") return { x: right, y: bottom };
+  return {
+    x: workArea.x + (workArea.width - desktopPetViewport.width) / 2,
+    y: workArea.y + (workArea.height - desktopPetViewport.height) / 2,
+  };
 }

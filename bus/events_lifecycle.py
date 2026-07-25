@@ -101,6 +101,23 @@ class ProactiveMessageCommitted:
     tools_used: tuple[str, ...] = ()
 
 
+@dataclass
+class DesktopPetActionRequested:
+    """Carries one validated desktop-pet command from an agent tool to the desktop host."""
+
+    action_id: str
+    role_id: str
+    session_key: str
+    channel: str
+    kind: str
+    name: str = ""
+    target: str = ""
+    animation: str = ""
+    state: str = ""
+    dispatched: bool = False
+    error: str = ""
+
+
 SceneTransition = Literal["started", "same", "changed", "closed", "none"]
 SceneTurnSource = Literal["passive", "proactive"]
 

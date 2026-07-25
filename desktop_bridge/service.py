@@ -27,7 +27,7 @@ from desktop_bridge.app_service import DesktopAppService
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.image_service import DesktopImageService
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
-from desktop_bridge.observation_service import DesktopObservationService
+from agent.screen_observation.service import ScreenObservationService
 from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_presenter import DesktopSessionPresenter
@@ -57,7 +57,7 @@ class DesktopBridgeService:
         scheduler: Any | None = None,
         subagent_manager: Any | None = None,
         memory_optimizer: Any | None = None,
-        observation_service: DesktopObservationService | None = None,
+        observation_service: ScreenObservationService | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -180,6 +180,17 @@ class DesktopBridgeService:
         listener: Callable[[dict[str, Any]], Awaitable[None] | None],
     ) -> None:
         self._event_listeners.discard(listener)
+
+    @property
+    def has_event_listeners(self) -> bool:
+        """Returns whether an Electron or stream consumer is attached."""
+
+        return bool(self._event_listeners)
+
+    async def publish_event(self, payload: dict[str, Any]) -> None:
+        """Publishes one host event to every connected desktop client."""
+
+        await self._broadcast_event(payload)
 
     async def aclose(self) -> None:
         """Releases bridge event subscriptions and desktop chat tasks."""
