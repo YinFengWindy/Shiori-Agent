@@ -347,6 +347,20 @@ class DesktopBridgeService:
                     method,
                     {"audio_base64": base64.b64encode(audio).decode("ascii"), "format": "mp3"},
                 )
+            if method == "voice.clone":
+                audio_base64 = str(payload.get("audio_base64") or "")
+                file_name = str(payload.get("file_name") or "voice-clone.wav").strip()
+                if not audio_base64:
+                    raise ValueError("audio_base64 不能为空")
+                try:
+                    audio = base64.b64decode(audio_base64, validate=True)
+                except (binascii.Error, ValueError) as exc:
+                    raise ValueError("audio_base64 无效") from exc
+                return self._ok(
+                    request_id,
+                    method,
+                    self.voice_service.clone_voice(audio, file_name=file_name),
+                )
             if method == "roles.list":
                 return self._ok(
                     request_id,

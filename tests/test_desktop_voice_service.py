@@ -136,3 +136,33 @@ def test_minimax_stream_synthesize_uses_streaming_request_contract() -> None:
     assert client.stream_synthesize("你好", voice_id="mira", emotion="calm") == b"\x00\x01\xff"
     assert calls[0]["stream"] is True
     assert calls[0]["audio_setting"]["format"] == "mp3"
+
+
+def test_minimax_voice_clone_uploads_transient_audio_and_returns_preview() -> None:
+    uploads: list[dict[str, object]] = []
+    requests: list[dict] = []
+
+    def upload(url: str, headers: dict[str, str], fields: dict[str, str], file_name: str, content_type: str, content: bytes) -> dict:
+        uploads.append({"url": url, "headers": headers, "fields": fields, "file_name": file_name, "content_type": content_type, "content": content})
+        return {"base_resp": {"status_code": 0}, "file": {"file_id": 123}}
+
+    def requester(url: str, _headers: dict[str, str], body: bytes) -> dict:
+        assert url == "https://api.minimaxi.com/v1/voice_clone"
+        requests.append(json.loads(body))
+        return {"base_resp": {"status_code": 0}, "demo_audio": "https://demo.example/audio.mp3"}
+
+    client = MiniMaxTtsClient(
+        VoiceTtsConfig(enabled=True, api_key="key"),
+        requester=requester,
+        upload_requester=upload,
+        binary_requester=lambda url: b"preview" if url.endswith("audio.mp3") else b"",
+    )
+
+    result = client.clone_voice(b"wav-bytes", file_name="sample.wav")
+
+    assert uploads[0]["url"] == "https://api.minimaxi.com/v1/files/upload"
+    assert uploads[0]["fields"] == {"purpose": "voice_clone"}
+    assert uploads[0]["content_type"] == "audio/wav"
+    assert requests[0]["file_id"] == 123
+    assert requests[0]["voice_id"].startswith("Shiori_")
+    assert result["audio_base64"] == base64.b64encode(b"preview").decode("ascii")

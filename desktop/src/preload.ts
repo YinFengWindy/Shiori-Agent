@@ -10,6 +10,7 @@ import type {
   WindowState,
   VoiceCaptureCommand,
   VoiceInputDevice,
+  VoiceCloneResult,
   VoicePlaybackCommand,
 } from "./shared.js";
 
@@ -84,6 +85,12 @@ const api: DesktopApi = {
   },
   stopVoiceTest() {
     return ipcRenderer.invoke("desktop:voice-test-stop");
+  },
+  cloneVoice() {
+    return ipcRenderer.invoke("desktop:voice-clone") as Promise<VoiceCloneResult>;
+  },
+  playVoicePreview(audioBase64) {
+    return ipcRenderer.invoke("desktop:voice-preview", audioBase64);
   },
   windowControl(action: WindowControlAction) {
     return ipcRenderer.invoke("desktop:window-control", action) as Promise<void>;

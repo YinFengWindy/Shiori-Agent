@@ -26,6 +26,8 @@ class VoiceServiceError(RuntimeError):
 
 JsonRequester = Callable[[str, dict[str, str], bytes], dict[str, Any]]
 StreamRequester = Callable[[str, dict[str, str], bytes], Iterable[bytes]]
+MultipartRequester = Callable[[str, dict[str, str], dict[str, str], str, str, bytes], dict[str, Any]]
+BinaryRequester = Callable[[str], bytes]
 
 
 def request_json(url: str, headers: dict[str, str], body: bytes) -> dict[str, Any]:
@@ -60,7 +62,58 @@ def request_stream(url: str, headers: dict[str, str], body: bytes) -> Iterator[b
         detail = exc.read().decode("utf-8", errors="replace")
         raise VoiceServiceError(f"语音服务 HTTP {exc.code}: {detail[:500]}") from exc
     except urllib.error.URLError as exc:
-        raise VoiceServiceError(f"语音服务网络错误: {exc.reason}") from exc
+            raise VoiceServiceError(f"语音服务网络错误: {exc.reason}") from exc
+
+
+def request_multipart(
+    url: str,
+    headers: dict[str, str],
+    fields: dict[str, str],
+    file_name: str,
+    content_type: str,
+    file_content: bytes,
+) -> dict[str, Any]:
+    """Uploads one transient file without persisting it in the bridge."""
+
+    boundary = f"----ShioriVoice{uuid.uuid4().hex}"
+    chunks: list[bytes] = []
+    for name, value in fields.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode(),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
+                str(value).encode("utf-8"),
+                b"\r\n",
+            ]
+        )
+    chunks.extend(
+        [
+            f"--{boundary}\r\n".encode(),
+            f'Content-Disposition: form-data; name="file"; filename="{file_name}"\r\n'.encode(),
+            f"Content-Type: {content_type}\r\n\r\n".encode(),
+            file_content,
+            b"\r\n",
+            f"--{boundary}--\r\n".encode(),
+        ]
+    )
+    request_headers = {
+        **headers,
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+    }
+    return request_json(url, request_headers, b"".join(chunks))
+
+
+def request_binary(url: str) -> bytes:
+    """Downloads provider-generated preview audio without writing a local file."""
+
+    request = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        raise VoiceServiceError(f"语音试听 HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise VoiceServiceError(f"语音试听网络错误: {exc.reason}") from exc
 
 
 def validate_wav_audio(audio: bytes, *, max_seconds: int = 60) -> None:
@@ -339,10 +392,14 @@ class MiniMaxTtsClient:
         *,
         requester: JsonRequester = request_json,
         stream_requester: StreamRequester = request_stream,
+        upload_requester: MultipartRequester = request_multipart,
+        binary_requester: BinaryRequester = request_binary,
     ) -> None:
         self.config = config
         self._requester = requester
         self._stream_requester = stream_requester
+        self._upload_requester = upload_requester
+        self._binary_requester = binary_requester
 
     def synthesize(
         self,
@@ -389,6 +446,77 @@ class MiniMaxTtsClient:
         if not audio:
             raise VoiceServiceError("MiniMax TTS 未返回音频")
         return audio
+
+    def clone_voice(self, audio: bytes, *, file_name: str = "voice-clone.wav") -> dict[str, Any]:
+        """Uploads a clone sample, creates a unique voice, and returns one preview."""
+
+        if not self.config.enabled:
+            raise VoiceServiceError("TTS 未启用")
+        if self.config.provider != "minimax":
+            raise VoiceServiceError(f"不支持的 TTS provider: {self.config.provider}")
+        if not self.config.api_key:
+            raise VoiceServiceError("MiniMax TTS 缺少 API Key")
+        if not audio:
+            raise VoiceServiceError("复刻录音不能为空")
+        if len(audio) > 20 * 1024 * 1024:
+            raise VoiceServiceError("复刻录音不能超过 20MB")
+        suffix = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else "wav"
+        content_type = {"wav": "audio/wav", "mp3": "audio/mpeg", "m4a": "audio/mp4"}.get(suffix)
+        if content_type is None:
+            raise VoiceServiceError("复刻录音必须是 WAV、MP3 或 M4A")
+        headers = {"Authorization": f"Bearer {self.config.api_key}"}
+        upload = self._upload_requester(
+            self._clone_url("/v1/files/upload"),
+            headers,
+            {"purpose": "voice_clone"},
+            file_name,
+            content_type,
+            audio,
+        )
+        self._raise_minimax_error(upload)
+        file_payload = upload.get("file")
+        file_id = file_payload.get("file_id") if isinstance(file_payload, dict) else None
+        if not isinstance(file_id, int):
+            raise VoiceServiceError("MiniMax 上传复刻音频未返回 file_id")
+        voice_id = f"Shiori_{uuid.uuid4().hex}"
+        clone = self._requester(
+            self._clone_url("/v1/voice_clone"),
+            {**headers, "Content-Type": "application/json"},
+            json.dumps(
+                {
+                    "file_id": file_id,
+                    "voice_id": voice_id,
+                    "text": "你好，这是我的声音。",
+                    "model": self.config.model or "speech-2.8-turbo",
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+        )
+        self._raise_minimax_error(clone)
+        demo_url = str(clone.get("demo_audio") or "").strip()
+        demo_audio = self._binary_requester(demo_url) if demo_url else b""
+        return {
+            "voice_id": voice_id,
+            "audio_base64": base64.b64encode(demo_audio).decode("ascii") if demo_audio else "",
+            "format": "mp3",
+        }
+
+    def _clone_url(self, path: str) -> str:
+        base = self.config.base_url.rstrip("/")
+        for suffix in ("/v1/t2a_v2", "/v1"):
+            if base.endswith(suffix):
+                base = base[: -len(suffix)]
+                break
+        return f"{base}{path}"
+
+    @staticmethod
+    def _raise_minimax_error(response: dict[str, Any]) -> None:
+        base_resp = response.get("base_resp")
+        if not isinstance(base_resp, dict):
+            raise VoiceServiceError("MiniMax 返回格式无效")
+        if base_resp.get("status_code", 0) not in (0, None):
+            raise VoiceServiceError(str(base_resp.get("status_msg") or "MiniMax 请求失败"))
 
     def _validate_request(self, text: str, voice_id: str, speed: float) -> None:
         if not self.config.enabled:
@@ -453,3 +581,6 @@ class VoiceService:
 
     def stream_synthesize(self, text: str, *, voice_id: str, speed: float, emotion: str = "") -> bytes:
         return self.tts.stream_synthesize(text, voice_id=voice_id, speed=speed, emotion=emotion)
+
+    def clone_voice(self, audio: bytes, *, file_name: str = "voice-clone.wav") -> dict[str, Any]:
+        return self.tts.clone_voice(audio, file_name=file_name)
