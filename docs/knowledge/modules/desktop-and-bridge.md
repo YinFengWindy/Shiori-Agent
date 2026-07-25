@@ -12,6 +12,7 @@ related:
   - conversations-and-sessions.md
   - scheduling.md
   - agent-lifecycle-and-tools.md
+  - voice.md
 ---
 
 # 桌面端与桥接
@@ -23,6 +24,8 @@ related:
 - `desktop_bridge/`：Python 业务边界，按 app、chat、role、image、schedule/role task 等职责拆分 service 与 presenter。
 
 `DesktopAppFrame.tsx` 只应装配状态、依赖与视图。bridge lifecycle、会话切换、角色管理、聊天交互、图片状态、UI effect 和导航历史已经按 hook 边界分离，新增行为应进入对应 hook/service，而不是重新堆回入口组件。
+
+桌宠语音的 Electron 主进程控制、隐藏 renderer 采集/播放与 Python provider 协调边界见 [桌宠语音交互](voice.md)。通用 `ipc.ts` 不拥有语音业务，语音 IPC 统一注册在 `desktop/src/voice/ipc.ts`。
 
 ## 数据流
 

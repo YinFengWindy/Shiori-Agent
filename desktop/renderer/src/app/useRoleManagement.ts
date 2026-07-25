@@ -5,9 +5,11 @@ import type { AppMainView } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import { writeRoleMoodConfigToRuntimeConfig } from "../roles/roleMoodConfig";
 import { buildRoleProactiveConfig } from "../roles/roleFormState";
+import { deleteManagedVoiceAssets, managedVoiceAssetsForRole, writeRoleVoiceConfigToRuntimeConfig } from "../roles/roleVoiceConfig";
 
 type UseRoleManagementArgs = {
   activeRoleId: string;
+  roles: RoleRecord[];
   detailRoleId: string;
   detailRole: RoleRecord | null;
   activeIllustration: string;
@@ -60,6 +62,7 @@ async function waitForMinimumRoleCardBusy(startedAt: number): Promise<void> {
 /** Owns role CRUD and role asset operations so the root app only composes them. */
 export function useRoleManagement({
   activeRoleId,
+  roles,
   detailRoleId,
   detailRole,
   activeIllustration,
@@ -201,12 +204,15 @@ export function useRoleManagement({
         name: nextRoleForm.name,
         description: nextRoleForm.description,
         system_prompt: nextRoleForm.systemPrompt,
-        runtime_config: writeRoleMoodConfigToRuntimeConfig(
-          {
-            ...(detailRole?.runtime_config ?? {}),
-            nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
-            auto_scene_cg_enabled: nextRoleForm.autoSceneCgEnabled,
-          },
+        runtime_config: writeRoleVoiceConfigToRuntimeConfig(
+          writeRoleMoodConfigToRuntimeConfig(
+            {
+              ...(detailRole?.runtime_config ?? {}),
+              nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
+              auto_scene_cg_enabled: nextRoleForm.autoSceneCgEnabled,
+            },
+            nextRoleForm,
+          ),
           nextRoleForm,
         ),
         channel_bindings: nextRoleForm.channelBindings ?? [],
@@ -217,8 +223,8 @@ export function useRoleManagement({
         removed_illustrations: nextRoleForm.removedIllustrations,
       },
     });
-    setSavingRole(false);
     if (res.error) {
+      setSavingRole(false);
       setError(res.error.message);
       setWorkspaceFeedback({ tone: "error", message: `角色保存失败：${res.error.message}` });
       return;
@@ -228,15 +234,34 @@ export function useRoleManagement({
       try {
         await window.miraDesktop.syncPet(nextRoleForm.desktopPetEnabled);
       } catch (reason) {
+        setSavingRole(false);
         const message = String(reason);
         setError(message);
         setWorkspaceFeedback({ tone: "error", message: `桌宠同步失败：${message}` });
         return;
       }
     }
+    const failedVoiceAssetDeletes = await deleteManagedVoiceAssets(
+      nextRoleForm.pendingVoiceAssetDeletes,
+      window.miraDesktop.invoke,
+    );
     const { resolvedRole } = await refreshRolesAndResolveRole(updated);
-    updateRoleForm((current) => ({ ...current, avatarSource: "", illustrationSources: [], removedIllustrations: [] }));
+    updateRoleForm((current) => ({
+      ...current,
+      avatarSource: "",
+      illustrationSources: [],
+      removedIllustrations: [],
+      pendingVoiceAssetDeletes: failedVoiceAssetDeletes,
+    }));
     await openRole(updated.id, resolvedRole, { recordHistory: false });
+    setSavingRole(false);
+    if (failedVoiceAssetDeletes.length > 0) {
+      updateRoleForm((current) => ({ ...current, pendingVoiceAssetDeletes: failedVoiceAssetDeletes }));
+      const message = "角色已保存，但复刻音色清理失败，请重试保存";
+      setError(message);
+      setWorkspaceFeedback({ tone: "error", message });
+      return;
+    }
     setWorkspaceFeedback({ tone: "success", message: "角色保存成功。" });
   }
 
@@ -317,6 +342,26 @@ export function useRoleManagement({
     setDeletingRole(true);
     setPendingRoleCardAction({ roleId, action: "delete" });
     setError("");
+    const roleToDelete = roles.find((role) => role.id === roleId)
+      ?? (await loadRolesFromBridge())?.find((role) => role.id === roleId);
+    if (!roleToDelete) {
+      await waitForMinimumRoleCardBusy(startedAt);
+      setDeletingRole(false);
+      setPendingRoleCardAction(null);
+      setError("无法读取角色音色配置，角色未删除");
+      return;
+    }
+    const failedVoiceAssetDeletes = await deleteManagedVoiceAssets(
+      managedVoiceAssetsForRole(roleToDelete),
+      window.miraDesktop.invoke,
+    );
+    if (failedVoiceAssetDeletes.length > 0) {
+      await waitForMinimumRoleCardBusy(startedAt);
+      setDeletingRole(false);
+      setPendingRoleCardAction(null);
+      setError("复刻音色清理失败，角色未删除，请重试");
+      return;
+    }
     const res = await window.miraDesktop.invoke({
       method: "roles.delete",
       payload: { role_id: roleId },

@@ -8,6 +8,10 @@ import type {
   RendererDiagnosticPayload,
   WindowControlAction,
   WindowState,
+  VoiceCaptureCommand,
+  VoiceInputDevice,
+  VoiceCloneResult,
+  VoicePlaybackCommand,
 } from "./shared.js";
 
 const localAssets = new PreloadLocalAssetCache();
@@ -73,6 +77,21 @@ const api: DesktopApi = {
   saveSettings(formData) {
     return ipcRenderer.invoke("desktop:settings-save", formData) as Promise<import("./shared.js").SaveSettingsResult>;
   },
+  listVoiceInputDevices() {
+    return ipcRenderer.invoke("desktop:voice-input-devices-list") as Promise<VoiceInputDevice[]>;
+  },
+  startVoiceTest(deviceId) {
+    return ipcRenderer.invoke("desktop:voice-test-start", deviceId);
+  },
+  stopVoiceTest() {
+    return ipcRenderer.invoke("desktop:voice-test-stop");
+  },
+  cloneVoice() {
+    return ipcRenderer.invoke("desktop:voice-clone") as Promise<VoiceCloneResult>;
+  },
+  playVoicePreview(audioBase64) {
+    return ipcRenderer.invoke("desktop:voice-preview", audioBase64);
+  },
   windowControl(action: WindowControlAction) {
     return ipcRenderer.invoke("desktop:window-control", action) as Promise<void>;
   },
@@ -129,6 +148,84 @@ const api: DesktopApi = {
   },
   offPetBubbleLayout(listener) {
     ipcRenderer.off("desktop:pet-bubble-layout", listener);
+  },
+  onVoiceCaptureCommand(listener) {
+    const wrapped = (_event: unknown, value: unknown) => {
+      if (value === "stop" || value === "cancel") {
+        listener(value);
+        return;
+      }
+      if (!value || typeof value !== "object") return;
+      const command = value as { command?: unknown; deviceId?: unknown; audioBase64?: unknown };
+      if (command.command === "start" && (command.deviceId === undefined || typeof command.deviceId === "string")) {
+        listener({ command: "start", deviceId: typeof command.deviceId === "string" ? command.deviceId : undefined });
+      } else if (command.command === "list-devices") {
+        listener({ command: "list-devices" });
+      } else if (command.command === "play-test" && typeof command.audioBase64 === "string") {
+        listener({ command: "play-test", audioBase64: command.audioBase64 });
+      }
+    };
+    ipcRenderer.on("desktop:voice-capture-command", wrapped);
+    return () => ipcRenderer.off("desktop:voice-capture-command", wrapped);
+  },
+  voiceCaptureData(samples) {
+    ipcRenderer.send("desktop:voice-capture-data", samples);
+  },
+  voiceCaptureReady() {
+    ipcRenderer.send("desktop:voice-capture-ready");
+  },
+  voiceCaptureStopped() {
+    ipcRenderer.send("desktop:voice-capture-stopped");
+  },
+  voiceCaptureError(message) {
+    ipcRenderer.send("desktop:voice-capture-error", message);
+  },
+  voiceInputDevices(devices: VoiceInputDevice[]) {
+    ipcRenderer.send("desktop:voice-input-devices", devices);
+  },
+  onVoicePlaybackCommand(listener) {
+    const wrapped = (_event: unknown, value: unknown) => {
+      if (!value || typeof value !== "object") return;
+      const command = value as Partial<VoicePlaybackCommand>;
+      if (command.command === "cancel") {
+        listener({ command: "cancel" });
+        return;
+      }
+      if (command.command === "play" && typeof command.id === "string" && typeof command.audioBase64 === "string" && command.format === "mp3") {
+        listener({ command: "play", id: command.id, audioBase64: command.audioBase64, format: "mp3" });
+      }
+    };
+    ipcRenderer.on("desktop:voice-playback-command", wrapped);
+    return () => ipcRenderer.off("desktop:voice-playback-command", wrapped);
+  },
+  voicePlaybackStarted(id) {
+    ipcRenderer.send("desktop:voice-playback-started", id);
+  },
+  voicePlaybackFinished(id) {
+    ipcRenderer.send("desktop:voice-playback-finished", id);
+  },
+  voicePlaybackError(id, message) {
+    ipcRenderer.send("desktop:voice-playback-error", { id, message });
+  },
+  startVoicePress() {
+    ipcRenderer.send("desktop:voice-press-start");
+  },
+  voicePointerMoved() {
+    ipcRenderer.send("desktop:voice-pointer-moved");
+  },
+  voiceRelease() {
+    ipcRenderer.send("desktop:voice-release");
+  },
+  voiceCancel() {
+    ipcRenderer.send("desktop:voice-cancel");
+  },
+  onVoiceState(listener) {
+    const wrapped = (_event: unknown, value: unknown) => {
+      if (!value || typeof value !== "object") return;
+      listener(value as import("./shared.js").VoiceStatePayload);
+    };
+    ipcRenderer.on("desktop:voice-state", wrapped);
+    return () => ipcRenderer.off("desktop:voice-state", wrapped);
   },
 };
 

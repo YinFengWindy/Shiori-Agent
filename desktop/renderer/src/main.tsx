@@ -375,6 +375,7 @@ function App(): React.ReactElement {
     updateRoleAssetOrganization,
   } = useRoleManagement({
     activeRoleId,
+    roles,
     detailRoleId,
     detailRole,
     activeIllustration,

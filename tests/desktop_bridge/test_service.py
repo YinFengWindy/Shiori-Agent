@@ -11,6 +11,11 @@ from bus.events_lifecycle import ProactiveMessageCommitted, TurnCommitted
 from conversation.push_sync import ExternalImageSyncService
 from core.roles import RoleStore
 from desktop_bridge.service import DesktopBridgeService
+from desktop_bridge.voice_service import (
+    VoiceOperationMetrics,
+    VoiceServiceError,
+    VoiceTranscriptionResult,
+)
 from session.manager import SessionManager
 
 
@@ -126,6 +131,197 @@ async def test_chat_send_returns_busy_before_persisting_second_message(tmp_path)
     assert response.error.code == "chat_busy"
     session = session_manager.get_or_create("role:mira")
     assert session.messages == []
+
+
+@pytest.mark.asyncio
+async def test_chat_send_preserves_voice_turn_identity_in_metadata(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="You are Mira.",
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    service._start_chat_turn = Mock()
+
+    response = await service.handle(
+        {
+            "id": "request-voice-1",
+            "method": "chat.send",
+            "payload": {
+                "role_id": "mira",
+                "content": "你好",
+                "input_method": "voice",
+                "voice_turn_id": "voice-turn-1",
+                "asr_metrics": {
+                    "provider": "tencent",
+                    "request_id": "asr-request-1",
+                    "elapsed_ms": 120,
+                    "audio_duration_ms": 1000,
+                    "character_count": 2,
+                    "error_code": "",
+                    "ignored": "raw-provider-field",
+                },
+            },
+        },
+        emit_event=Mock(),
+    )
+
+    assert response.error is None
+    metadata = service._start_chat_turn.call_args.kwargs["metadata"]
+    assert metadata["voice_turn_id"] == "voice-turn-1"
+    assert metadata["asr_metrics"] == {
+        "provider": "tencent",
+        "request_id": "asr-request-1",
+        "elapsed_ms": 120,
+        "audio_duration_ms": 1000,
+        "character_count": 2,
+        "error_code": "",
+    }
+
+
+@pytest.mark.asyncio
+async def test_voice_transcribe_returns_structured_metrics(tmp_path) -> None:
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    service.voice_service.transcribe_result = Mock(
+        return_value=VoiceTranscriptionResult(
+            text="你好",
+            metrics=VoiceOperationMetrics(
+                provider="tencent",
+                request_id="asr-request-1",
+                elapsed_ms=120,
+                audio_duration_ms=1000,
+                character_count=2,
+            ),
+        )
+    )
+
+    response = await service.handle(
+        {
+            "id": "request-asr-1",
+            "method": "voice.transcribe",
+            "payload": {"audio_base64": "AA=="},
+        },
+        emit_event=Mock(),
+    )
+
+    assert response.error is None
+    assert response.payload == {
+        "text": "你好",
+        "metrics": {
+            "provider": "tencent",
+            "request_id": "asr-request-1",
+            "elapsed_ms": 120,
+            "audio_duration_ms": 1000,
+            "character_count": 2,
+            "error_code": "",
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_voice_transcribe_error_returns_structured_metrics(tmp_path) -> None:
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    metrics = VoiceOperationMetrics(
+        provider="tencent",
+        request_id="asr-request-error",
+        elapsed_ms=80,
+        audio_duration_ms=900,
+        character_count=0,
+        error_code="FailedOperation.ServiceIsolate",
+    )
+    service.voice_service.transcribe_result = Mock(
+        side_effect=VoiceServiceError("failed", metrics=metrics)
+    )
+
+    response = await service.handle(
+        {
+            "id": "request-asr-error",
+            "method": "voice.transcribe",
+            "payload": {"audio_base64": "AA=="},
+        },
+        emit_event=Mock(),
+    )
+
+    assert response.error is not None
+    assert response.error.code == "voice_service_error"
+    assert response.error.details == {"metrics": metrics.to_dict()}
+
+
+@pytest.mark.asyncio
+async def test_voice_turn_cancel_targets_only_the_requested_turn(tmp_path) -> None:
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    service.chat_service.cancel_voice_turn = Mock(return_value=True)
+
+    response = await service.handle(
+        {
+            "id": "request-cancel-1",
+            "method": "voice.turn.cancel",
+            "payload": {"voice_turn_id": "voice-turn-1"},
+        },
+        emit_event=Mock(),
+    )
+
+    assert response.error is None
+    assert response.payload == {"cancelled": True, "voice_turn_id": "voice-turn-1"}
+    service.chat_service.cancel_voice_turn.assert_called_once_with("voice-turn-1")
+
+
+@pytest.mark.asyncio
+async def test_voice_delete_preserves_provider_and_ownership_guard(tmp_path) -> None:
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+    service.voice_service.delete_managed_voice = Mock()
+
+    response = await service.handle(
+        {
+            "id": "request-delete-voice-1",
+            "method": "voice.delete",
+            "payload": {
+                "provider": "minimax",
+                "voice_id": "Shiori_voice123",
+                "ownership": "shiori_managed",
+            },
+        },
+        emit_event=Mock(),
+    )
+
+    assert response.error is None
+    assert response.payload == {"deleted": True}
+    service.voice_service.delete_managed_voice.assert_called_once_with(
+        provider="minimax",
+        voice_id="Shiori_voice123",
+        ownership="shiori_managed",
+    )
 
 
 

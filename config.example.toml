@@ -29,6 +29,26 @@ api_key = "sk-..."
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 # =============================================================================
+# 可选：桌宠语音交互
+# 密钥可以直接填写，也可以使用 ${ENV_VAR}。
+# =============================================================================
+
+[voice.asr]
+enabled = false
+provider = "tencent"
+base_url = "https://asr.tencentcloudapi.com/"
+model = "16k_zh"
+secret_id = ""
+secret_key = ""
+
+[voice.tts]
+enabled = false
+provider = "minimax"
+base_url = "https://api.minimaxi.com/v1/t2a_v2"
+model = "speech-2.8-turbo"
+api_key = ""
+
+# =============================================================================
 # Agent 行为
 # =============================================================================
 

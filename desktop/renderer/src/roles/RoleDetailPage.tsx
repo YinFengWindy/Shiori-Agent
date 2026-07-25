@@ -4,6 +4,7 @@ import { ArrowDownIcon, ArrowUpIcon, DeleteIcon, ResetIcon, SaveIcon } from "../
 import { cx, focusResetClass, inputClass } from "../shared/styles";
 import type { RoleChannelBinding, RoleFormState, RoleRecord } from "../shared/types";
 import { SettingsToggleCard } from "../settings/SettingsToggleCard";
+import { RoleVoiceSettingsPanel } from "./RoleVoiceSettingsPanel";
 import {
   changeRoleBindingChannel,
   createRoleChannelBinding,
@@ -243,6 +244,11 @@ export function RoleDetailPage({
                   onChange={(checked) => preserveScrollDuringFormUpdate((current) => ({ ...current, desktopPetEnabled: checked }))}
                 />
               </div>
+              <RoleVoiceSettingsPanel
+                bridgeReady={bridgeReady}
+                roleForm={roleForm}
+                onUpdate={preserveScrollDuringFormUpdate}
+              />
               <div className="grid gap-3 rounded-md border border-[#D8DFE7] bg-white/82 p-4 text-xs text-[#374151]" data-testid="role-channel-config">
                 <div className="flex items-center justify-between gap-3">
                   <span>渠道绑定</span>

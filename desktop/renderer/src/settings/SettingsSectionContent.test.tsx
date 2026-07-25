@@ -48,6 +48,20 @@ function createSettingsFormData(): SettingsFormData {
       novelaiUndesiredContentPreset: 1,
       novelaiAutoWritebackRoleAssets: true,
     },
+    voice: {
+      enabled: true,
+      hotkey: "Ctrl+Space",
+      microphoneDeviceId: "",
+      asrProvider: "tencent",
+      asrBaseUrl: "https://asr.tencentcloudapi.com/",
+      asrModel: "16k_zh",
+      asrSecretId: "secret-id",
+      asrSecretKey: "secret-key",
+      ttsProvider: "minimax",
+      ttsBaseUrl: "https://api.minimaxi.com/v1/t2a_v2",
+      ttsModel: "speech-2.8-turbo",
+      ttsApiKey: "tts-key",
+    },
     advanced: {
       systemPrompt: "system prompt",
       maxTokens: 4000,
@@ -73,6 +87,7 @@ describe("SettingsSectionContent", () => {
       { sectionId: "channels", subsectionId: "qqbot", expected: "qq-app" },
       { sectionId: "memory", subsectionId: "embedding", expected: "embed-model" },
       { sectionId: "integrations", subsectionId: "novelai", expected: "novel-token" },
+      { sectionId: "voice", subsectionId: "provider", expected: "secret-id" },
       { sectionId: "advanced", subsectionId: "general", expected: "system prompt" },
     ] as const;
 
