@@ -36,7 +36,6 @@ related:
 | 生命周期 phase | 所有 phase module、记忆、插件、自动 CG、观测 | `BeforeTurn AfterTurn PhaseModule` |
 | MCP | registry、client pool、工具同步、配置、断线清理 | `McpServerRegistry McpClient ToolRegistry` |
 | Bridge API | dispatcher、service、presenter、Electron client、renderer hook | `DesktopBridgeService request_dispatcher DesktopBridgeClient` |
-| ASR / TTS / 声音资产 | 全局与角色 provider、turn 归属、播放队列、取消、指标、ownership 与供应商清理 | `DesktopVoiceController TtsTurnCoordinator VoiceService` |
 | 调度任务 | scheduler、工具、持久化、主动投递、角色删除、桌面表单 | `ScheduleRoleTaskService compute_fire_at` |
 
 ## 判断顺序

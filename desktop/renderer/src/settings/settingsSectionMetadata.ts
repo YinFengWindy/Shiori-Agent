@@ -25,10 +25,6 @@ export const settingsSubsections: Record<SettingsSectionId, SettingsSubsection[]
   integrations: [
     { id: "novelai", label: "NovelAI" },
   ],
-  voice: [
-    { id: "provider", label: "供应商" },
-    { id: "input", label: "输入" },
-  ],
   advanced: [
     { id: "general", label: "基础" },
   ],
@@ -41,7 +37,6 @@ export function createInitialSettingsSubsectionState(): Record<SettingsSectionId
     channels: settingsSubsections.channels[0]?.id ?? "",
     memory: settingsSubsections.memory[0]?.id ?? "",
     integrations: settingsSubsections.integrations[0]?.id ?? "",
-    voice: settingsSubsections.voice[0]?.id ?? "",
     advanced: settingsSubsections.advanced[0]?.id ?? "",
   };
 }
