@@ -24,6 +24,7 @@ from agent.config_models import (
     TelegramChannelConfig,
     WiringConfig,
 )
+from agent.voice_config import VoiceAsrConfig, VoiceConfig, VoiceTtsConfig
 from core.common.workspace import resolve_default_workspace
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
@@ -68,6 +69,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     proactive = _load_proactive_config(data)
     memory = _load_memory_config(data)
     novelai = _load_novelai_config(data)
+    voice = _load_voice_config(data)
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
 
@@ -137,6 +139,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
         vl_api_key=_resolve(str(llm_vl.get("api_key") or data.get("vl_api_key", ""))),
         vl_base_url=str(llm_vl.get("base_url") or data.get("vl_base_url", "")),
         novelai=novelai,
+        voice=voice,
         wiring=wiring,
         plugins=plugins,
     )
@@ -229,6 +232,29 @@ def _load_novelai_config(data: dict) -> NovelAISettings:
         default_samples=int(raw.get("default_samples", defaults.default_samples)),
         add_quality_tags=bool(raw.get("add_quality_tags", defaults.add_quality_tags)),
         undesired_content_preset=int(raw.get("undesired_content_preset", defaults.undesired_content_preset)),
+    )
+
+
+def _load_voice_config(data: dict) -> VoiceConfig:
+    voice = _as_dict(data.get("voice"))
+    asr = _as_dict(voice.get("asr"))
+    tts = _as_dict(voice.get("tts"))
+    return VoiceConfig(
+        asr=VoiceAsrConfig(
+            enabled=bool(asr.get("enabled", False)),
+            provider=str(asr.get("provider", "tencent") or "tencent"),
+            base_url=str(asr.get("base_url", "https://asr.tencentcloudapi.com/") or "https://asr.tencentcloudapi.com/"),
+            model=str(asr.get("model", "16k_zh") or "16k_zh"),
+            secret_id=_resolve(str(asr.get("secret_id", ""))),
+            secret_key=_resolve(str(asr.get("secret_key", ""))),
+        ),
+        tts=VoiceTtsConfig(
+            enabled=bool(tts.get("enabled", False)),
+            provider=str(tts.get("provider", "minimax") or "minimax"),
+            base_url=str(tts.get("base_url", "https://api.minimaxi.com/v1/t2a_v2") or "https://api.minimaxi.com/v1/t2a_v2"),
+            model=str(tts.get("model", "speech-2.8-turbo") or "speech-2.8-turbo"),
+            api_key=_resolve(str(tts.get("api_key", ""))),
+        ),
     )
 
 
