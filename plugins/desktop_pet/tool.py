@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
@@ -68,6 +69,15 @@ class DesktopPetActionTool(Tool):
         self._last_turn_key: dict[str, str] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
+    def to_schema(self):
+        """Adds the current role's desktop-pet status and action names to the schema."""
+        schema = deepcopy(super().to_schema())
+        function = schema["function"]
+        description, action_names = self._schema_context()
+        function["description"] = description
+        function["parameters"]["properties"]["name"]["enum"] = action_names
+        return schema
+
     async def execute(
         self,
         *,
@@ -89,10 +99,7 @@ class DesktopPetActionTool(Tool):
         role = self._role_store.get_role(role_id)
         if role is None or not role.desktop_pet_enabled:
             return _rejected("pet_not_enabled")
-        package = next(
-            (item for item in role.pet_packages if item.id == role.selected_pet_package_id),
-            None,
-        )
+        package = self._selected_package(role)
         if package is None:
             return _rejected("pet_not_bound_to_role")
 
@@ -150,6 +157,42 @@ class DesktopPetActionTool(Tool):
                 },
                 ensure_ascii=False,
             )
+
+    def _schema_context(self) -> tuple[str, list[str]]:
+        context = self._tool_registry.get_context()
+        channel = str(context.get("channel") or "").strip()
+        role_id = str(context.get("role_id") or "").strip()
+        if channel != "desktop":
+            return (
+                f"{self.description} 当前渠道不是桌面端（{channel or '未知'}），桌宠操控不可用。",
+                [],
+            )
+        if not role_id:
+            return f"{self.description} 桌宠状态：不可用（缺少角色上下文）。", []
+        role = self._role_store.get_role(role_id)
+        if role is None:
+            return f"{self.description} 桌宠状态：不可用（角色不存在）。", []
+        if not role.desktop_pet_enabled:
+            return f"{self.description} 桌宠状态：已关闭。", []
+        package = self._selected_package(role)
+        if package is None:
+            return f"{self.description} 桌宠状态：已开启，但尚未绑定桌宠包。", []
+        action_names = list(package.actions)
+        action_hint = "、".join(
+            f"{name}（{state}）" for name, state in package.actions.items()
+        ) or "无已声明动作"
+        return (
+            f"{self.description} 桌宠状态：已开启；当前桌宠包：{package.display_name}；"
+            f"可用动作：{action_hint}。",
+            action_names,
+        )
+
+    @staticmethod
+    def _selected_package(role):
+        return next(
+            (item for item in role.pet_packages if item.id == role.selected_pet_package_id),
+            None,
+        )
 
 
 def _rejected(reason: str, *, action_id: str = "") -> str:

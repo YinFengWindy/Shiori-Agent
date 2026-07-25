@@ -65,6 +65,35 @@ async def _execute(
     return json.loads(await tool.execute(**arguments))
 
 
+def test_pet_action_schema_exposes_current_desktop_pet_state_and_actions(
+    tmp_path: Path,
+) -> None:
+    tool, registry = _build_tool(tmp_path, clock_value=[0.0])
+    registry.set_context(channel="desktop", role_id="mira", session_key="role:mira")
+    registry.register(tool, always_on=True)
+
+    function = registry.get_schemas(names={"pet_action"})[0]["function"]
+    description = function["description"]
+    name_schema = function["parameters"]["properties"]["name"]
+
+    assert "桌宠状态：已开启" in description
+    assert "当前桌宠包：Pet" in description
+    assert "可用动作：greeting" in description
+    assert name_schema["enum"] == ["greeting"]
+
+
+def test_pet_action_schema_reports_disabled_desktop_pet(tmp_path: Path) -> None:
+    tool, registry = _build_tool(tmp_path, clock_value=[0.0])
+    registry.set_context(channel="desktop", role_id="mira", session_key="role:mira")
+    registry.register(tool, always_on=True)
+    tool._role_store.update_role("mira", desktop_pet_enabled=False)
+
+    function = registry.get_schemas(names={"pet_action"})[0]["function"]
+
+    assert "桌宠状态：已关闭" in function["description"]
+    assert function["parameters"]["properties"]["name"]["enum"] == []
+
+
 async def test_pet_action_rejects_external_channels(tmp_path: Path) -> None:
     tool, registry = _build_tool(tmp_path, clock_value=[0.0])
 
