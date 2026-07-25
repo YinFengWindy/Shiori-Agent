@@ -11,7 +11,7 @@ import {
 
 /** Supplies short PCM/WAV recordings to the desktop voice controller. */
 export interface VoiceRecorder {
-  start(): Promise<void>;
+  start(deviceId?: string): Promise<void>;
   stop(): Promise<Uint8Array>;
   cancel(): Promise<void>;
 }
@@ -29,6 +29,7 @@ export type DesktopVoiceControllerOptions = {
   publishState: (payload: VoiceStatePayload) => void;
   /** Drops queued speech when a new input turn begins. */
   onNewInput?: () => void;
+  microphoneDeviceId?: () => string;
   now?: () => number;
   schedule?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
   clearSchedule?: (timer: ReturnType<typeof setTimeout>) => void;
@@ -145,7 +146,7 @@ export class DesktopVoiceController {
   }
 
   private beginRecording(): void {
-    this.recordingStart = this.options.recorder.start().catch((error: unknown) => {
+    this.recordingStart = this.options.recorder.start(this.options.microphoneDeviceId?.() ?? "").catch((error: unknown) => {
       this.apply({ type: "recording_failed", message: errorMessage(error, "没有可用的麦克风") });
     });
     this.recordingTimer = this.schedule(() => {

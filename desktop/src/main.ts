@@ -302,6 +302,7 @@ void app.whenReady().then(() => {
     bridge,
     isEnabled: () => Boolean(voiceSettings?.enabled && desktopPet?.isRunning && desktopPetSettings.visible),
     roleId: () => desktopPetSettings?.roleId ?? null,
+    microphoneDeviceId: () => voiceSettings?.microphoneDeviceId ?? "",
     publishState: publishVoiceState,
     onNewInput: () => activeVoicePlayback.stopAfterCurrent(),
   });
