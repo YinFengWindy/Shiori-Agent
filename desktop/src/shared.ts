@@ -44,6 +44,11 @@ export type VoiceStatePayload = {
 /** Commands sent from the Electron main process to the hidden capture page. */
 export type VoiceCaptureCommand = "start" | "stop" | "cancel";
 
+/** Commands sent from the main process to the hidden voice playback surface. */
+export type VoicePlaybackCommand =
+  | { command: "play"; id: string; audioBase64: string; format: "mp3" }
+  | { command: "cancel" };
+
 export type SettingsFormData = {
   models: {
     provider: string;
@@ -231,6 +236,14 @@ export type DesktopApi = {
   voiceCaptureStopped(): void;
   /** Reports a microphone or Web Audio failure without exposing raw audio. */
   voiceCaptureError(message: string): void;
+  /** Subscribes to audio playback commands issued by the main process. */
+  onVoicePlaybackCommand(listener: (command: VoicePlaybackCommand) => void): () => void;
+  /** Reports that one decoded audio item started playing. */
+  voicePlaybackStarted(id: string): void;
+  /** Reports that one audio item finished naturally. */
+  voicePlaybackFinished(id: string): void;
+  /** Reports a playback decode or device error. */
+  voicePlaybackError(id: string, message: string): void;
   /** Starts the shared pet long-press voice gesture. */
   startVoicePress(): void;
   /** Lets pet dragging cancel a pending voice gesture. */

@@ -129,3 +129,33 @@ test("a recorder startup failure is surfaced without contacting ASR", async () =
   assert.deepEqual(requests, []);
   assert.deepEqual(events.at(-1), { status: "error", message: "权限被拒绝" });
 });
+
+test("a new press can start while the previous sentence is speaking", async () => {
+  let stoppedPendingPlayback = 0;
+  let schedules = 0;
+  const active = new DesktopVoiceController({
+    recorder: new FakeRecorder(),
+    bridge: { invoke: async () => response({ text: "ok" }) },
+    isEnabled: () => true,
+    roleId: () => "mira",
+    publishState: () => undefined,
+    onNewInput: () => { stoppedPendingPlayback += 1; },
+    schedule: (callback) => {
+      schedules += 1;
+      if (schedules === 1) callback();
+      return schedules as unknown as ReturnType<typeof setTimeout>;
+    },
+    clearSchedule: () => undefined,
+  });
+  assert.equal(active.startPress("pet", 0), true);
+  active.release();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(active.currentState.kind, "waiting_reply");
+  active.replyStarted(true);
+  active.sentenceReady("sentence-1");
+
+  assert.equal(active.startPress("hotkey", 10), true);
+  assert.equal(stoppedPendingPlayback, 1);
+  assert.equal(active.currentState.kind, "press_pending");
+  active.cancel();
+});

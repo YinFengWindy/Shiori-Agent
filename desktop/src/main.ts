@@ -26,6 +26,7 @@ import { createVoiceCaptureWindow } from "./voice/window.js";
 import { BrowserVoiceRecorder } from "./voice/recorder.js";
 import { DesktopVoiceController } from "./voice/controller.js";
 import { VoiceHotkeyController } from "./voice/hotkey.js";
+import { BrowserVoicePlayback } from "./voice/playback.js";
 import type { VoiceStatePayload } from "./shared.js";
 
 const bridge = new DesktopBridgeClient();
@@ -39,6 +40,7 @@ let desktopPet: DesktopPetController | null = null;
 let desktopObservation: DesktopObservationController | null = null;
 let voiceRecorder: BrowserVoiceRecorder | null = null;
 let voiceController: DesktopVoiceController | null = null;
+let voicePlayback: BrowserVoicePlayback | null = null;
 let voiceHotkey: VoiceHotkeyController | null = null;
 let isQuitting = false;
 let bridgeShutdownStarted = false;
@@ -272,11 +274,6 @@ void app.whenReady().then(() => {
   );
   registerLocalAssetProtocol(protocol, localAssets);
   void startBridge(bridge);
-  wireBridgeEvents(bridge, localAssets, (event) => {
-    if (event.method === "desktop.pet.action") {
-      desktopPet?.handleAgentAction(event.payload);
-    }
-  });
   desktopPet = new DesktopPetController({
     getSettings: () => desktopPetSettings,
     saveSettings: persistDesktopPetSettings,
@@ -290,14 +287,31 @@ void app.whenReady().then(() => {
     pet: desktopPet,
     getRoleId: () => desktopPetSettings.roleId,
   });
+  let activeVoicePlayback: BrowserVoicePlayback;
   const activeVoiceController = new DesktopVoiceController({
     recorder: activeVoiceRecorder,
     bridge,
     isEnabled: () => Boolean(desktopPet?.isRunning && desktopPetSettings.visible),
     roleId: () => desktopPetSettings?.roleId ?? null,
     publishState: publishVoiceState,
+    onNewInput: () => activeVoicePlayback.stopAfterCurrent(),
   });
   voiceController = activeVoiceController;
+  activeVoicePlayback = new BrowserVoicePlayback(createVoiceCaptureWindow, {
+    onStarted: (item) => {
+      activeVoiceController.sentenceReady(item.id);
+    },
+    onFinished: (item, nextItem) => {
+      activeVoiceController.sentencePlaybackFinished(item.id, nextItem?.id);
+    },
+    onError: (_item, message) => {
+      activeVoiceController.ttsFailed(message);
+    },
+    onDrained: () => {
+      activeVoiceController.replyFinished();
+    },
+  });
+  voicePlayback = activeVoicePlayback;
   if (process.platform === "win32") {
     voiceHotkey = new VoiceHotkeyController({
       onPress: (source) => activeVoiceController.startPress(source),
@@ -306,6 +320,37 @@ void app.whenReady().then(() => {
     });
     voiceHotkey.setHotkey("Ctrl+Space");
   }
+  wireBridgeEvents(bridge, localAssets, (event) => {
+    if (event.method === "desktop.pet.action") {
+      desktopPet?.handleAgentAction(event.payload);
+      return;
+    }
+    if (event.method === "voice.reply.started") {
+      voiceController?.replyStarted(Boolean(event.payload.has_voice));
+      return;
+    }
+    if (event.method === "voice.tts.audio") {
+      const requestId = String(event.payload.request_id || event.id || "");
+      const sequence = Number(event.payload.sequence);
+      const audioBase64 = String(event.payload.audio_base64 || "");
+      if (!requestId || !Number.isInteger(sequence) || !audioBase64) return;
+      const itemId = `${requestId}:${sequence}`;
+      voiceController?.sentenceReady(itemId);
+      activeVoicePlayback.enqueue({
+        id: itemId,
+        sessionKey: String(event.payload.session_key || ""),
+        requestId,
+        sequence,
+        text: String(event.payload.text || ""),
+        audioBase64,
+        format: "mp3",
+      });
+      return;
+    }
+    if (event.method === "voice.tts.error") {
+      voiceController?.ttsFailed(String(event.payload.message || "角色语音合成失败"));
+    }
+  });
   wireRoleReplyBubbles(bridge, desktopObservation);
   powerMonitor.on("lock-screen", () => {
     void desktopObservation?.suspend("Windows 已锁定，屏幕观察已暂停").catch((error) => {
@@ -334,6 +379,7 @@ void app.whenReady().then(() => {
     },
     voiceRecorder: activeVoiceRecorder,
     voiceController: activeVoiceController,
+    voicePlayback: activeVoicePlayback,
     onPetVisibilityChanged: syncVoiceAvailability,
   });
   getOrCreateDesktopWindow();
@@ -392,6 +438,7 @@ app.on("before-quit", (event) => {
   desktopTray?.destroy();
   voiceHotkey?.stop();
   voiceController?.dispose();
+  voicePlayback?.dispose();
   voiceRecorder?.dispose();
   if (bridgeShutdownStarted || !bridge.isRunning()) {
     return;
