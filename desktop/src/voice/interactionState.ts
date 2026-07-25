@@ -28,6 +28,7 @@ export type VoiceInteractionEvent =
   | { type: "pointer_moved" }
   | { type: "released" }
   | { type: "escape" }
+  | { type: "recording_failed"; message: string }
   | { type: "recording_timed_out" }
   | { type: "asr_succeeded"; text: string }
   | { type: "asr_failed"; message: string }
@@ -81,6 +82,9 @@ export function transitionVoiceInteraction(
       if (event.type === "escape") {
         return { kind: "idle" };
       }
+      if (event.type === "recording_failed") {
+        return { kind: "error", message: event.message };
+      }
       return state;
     case "transcribing":
       if (event.type === "asr_succeeded") {
@@ -89,7 +93,7 @@ export function transitionVoiceInteraction(
       if (event.type === "asr_failed") {
         return { kind: "error", message: event.message };
       }
-      if (event.type === "new_input" || event.type === "reset") {
+      if (event.type === "escape" || event.type === "new_input" || event.type === "reset") {
         return { kind: "idle" };
       }
       return state;
@@ -100,7 +104,7 @@ export function transitionVoiceInteraction(
       if (event.type === "chat_failed") {
         return { kind: "error", message: event.message };
       }
-      if (event.type === "new_input" || event.type === "reset") {
+      if (event.type === "escape" || event.type === "new_input" || event.type === "reset") {
         return { kind: "idle" };
       }
       return state;
@@ -108,7 +112,7 @@ export function transitionVoiceInteraction(
       if (event.type === "reply_started") {
         return event.hasVoice ? { kind: "speaking_prepare" } : { kind: "idle" };
       }
-      if (event.type === "reply_finished" || event.type === "new_input" || event.type === "reset") {
+      if (event.type === "escape" || event.type === "reply_finished" || event.type === "new_input" || event.type === "reset") {
         return { kind: "idle" };
       }
       return state;
@@ -116,7 +120,7 @@ export function transitionVoiceInteraction(
       if (event.type === "sentence_ready") {
         return { kind: "speaking", sentenceId: event.sentenceId };
       }
-      if (event.type === "reply_finished" || event.type === "new_input" || event.type === "reset") {
+      if (event.type === "escape" || event.type === "reply_finished" || event.type === "new_input" || event.type === "reset") {
         return { kind: "idle" };
       }
       return state;
