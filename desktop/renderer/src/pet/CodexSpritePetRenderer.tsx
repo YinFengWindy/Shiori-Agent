@@ -3,7 +3,6 @@ import { X } from "@phosphor-icons/react";
 import { spriteActionDurationMs, spriteCell, spriteFramePosition, spritePlaybackFrameAt, type SpriteState } from "./spriteContract";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 import type { PetBubbleLayout, PetObservationPayload } from "../../../src/observation/types";
-import type { VoiceStatePayload } from "../../../src/shared";
 
 type CodexSpritePetRendererProps = {
   spritesheetUrl: string;
@@ -12,11 +11,10 @@ type CodexSpritePetRendererProps = {
   onTransientFinished?: () => void;
   observation: PetObservationPayload;
   bubbleLayout: PetBubbleLayout;
-  voice?: VoiceStatePayload;
 };
 
 /** Renders the fixed Codex sprite atlas with its documented state rows and cadence. */
-export function CodexSpritePetRenderer({ spritesheetUrl, state, transientState = null, onTransientFinished = noop, observation, bubbleLayout, voice = { status: "idle" } }: CodexSpritePetRendererProps) {
+export function CodexSpritePetRenderer({ spritesheetUrl, state, transientState = null, onTransientFinished = noop, observation, bubbleLayout }: CodexSpritePetRendererProps) {
   const [frame, setFrame] = useState(0);
   const { interactionState, isDragging, pointerHandlers } = useCodexPetInteraction(
     typeof window === "undefined" ? null : window.miraDesktop,
@@ -28,22 +26,7 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state, transientState =
       : observation.status === "failed"
         ? "failed"
         : null;
-  const voicePlaybackState: SpriteState | null = voice.status === "recording"
-    || voice.status === "transcribing"
-    || voice.status === "sending"
-    || voice.status === "waiting_reply"
-    || voice.status === "speaking_prepare"
-    ? "waiting"
-    : null;
-  const voiceBubble = voice.status === "recording"
-    ? "我在听"
-    : voice.status === "transcribing" || voice.status === "sending" || voice.status === "waiting_reply" || voice.status === "speaking_prepare"
-      ? "正在理解"
-      : voice.status === "error"
-        ? voice.message || "没听清，再试一次"
-        : "";
-  const bubbleText = voiceBubble || observation.bubble;
-  const activeState = transientState ?? observationState ?? interactionState ?? voicePlaybackState ?? state;
+  const activeState = transientState ?? observationState ?? interactionState ?? state;
   const activePlaybackFrame = spritePlaybackFrameAt(activeState, frame);
 
   useEffect(() => {
@@ -69,16 +52,16 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state, transientState =
   }, [activePlaybackFrame.duration, activeState, frame]);
 
   useEffect(() => {
-    if (!bubbleText) window.miraDesktop.setPetBubbleHeight(0);
-  }, [bubbleText]);
+    if (!observation.bubble) window.miraDesktop.setPetBubbleHeight(0);
+  }, [observation.bubble]);
 
-  const surfaceClass = bubbleText
+  const surfaceClass = observation.bubble
     ? `pet-surface pet-bubble-${bubbleLayout.placement}`
     : "pet-surface";
 
   return (
     <div className={surfaceClass}>
-      {bubbleText ? <PetBubble text={bubbleText} persistent={!voiceBubble && observation.persistent} maxHeight={bubbleLayout.height} /> : null}
+      {observation.bubble ? <PetBubble text={observation.bubble} persistent={observation.persistent} maxHeight={bubbleLayout.height} /> : null}
       <div
         aria-label="桌宠"
         className={isDragging ? "pet-drag-region pet-dragging" : "pet-drag-region"}

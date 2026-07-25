@@ -40,7 +40,6 @@ related:
 | 渠道 | [渠道系统](modules/channels.md) | Telegram、QQ 和统一 Channel 合约如何连接消息总线 |
 | Agent、工具、插件、MCP | [Agent 生命周期与工具](modules/agent-lifecycle-and-tools.md) | 一个回合经历哪些 phase；工具怎样注册、搜索、执行和拦截 |
 | 桌面端与桥接 | [桌面端与桥接](modules/desktop-and-bridge.md) | Electron、React 和 Python 服务如何通信；状态由谁装配 |
-| 桌宠语音 | [桌宠语音交互](modules/voice.md) | ASR 如何进入现有 Loop；TTS turn、中断、声音资产和指标由谁管理 |
 | 调度与角色任务 | [调度与任务](modules/scheduling.md) | 定时任务如何创建、触发和展示；角色任务如何执行 |
 | 本地数据与迁移 | [本地工作区数据](data/local-workspace.md) | 哪些数据是权威数据；删除、迁移和备份要注意什么 |
 

@@ -10,7 +10,7 @@ import {
 } from "./interactionContract";
 import type { SpriteState } from "./spriteContract";
 
-type PetDragBridge = Pick<Window["miraDesktop"], "beginPetDrag" | "movePet" | "endPetDrag" | "openPetRole" | "startVoicePress" | "voicePointerMoved" | "voiceRelease" | "voiceCancel">;
+type PetDragBridge = Pick<Window["miraDesktop"], "beginPetDrag" | "movePet" | "endPetDrag" | "openPetRole">;
 
 type DragState = {
   pointerId: number;
@@ -34,7 +34,6 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     if (event.button !== 0 || !dragBridge) return;
     event.preventDefault();
-    dragBridge.startVoicePress();
     setNextInteractionState(null);
     lastGestureWasDragRef.current = true;
     dragRef.current = {
@@ -62,7 +61,6 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
     drag.samples = petDragSamplesWith(drag.samples, sample);
     if (!hasPetDragMoved(drag.previousScreenX, drag.previousScreenY, event.screenX, event.screenY)) return;
     drag.hasMoved = true;
-    dragBridge?.voicePointerMoved();
     const nextState = petDragState(drag.previousScreenX, event.screenX);
     drag.previousScreenX = event.screenX;
     drag.previousScreenY = event.screenY;
@@ -83,7 +81,6 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
       release.velocity?.x,
       release.velocity?.y,
     );
-    dragBridge?.voiceRelease();
     setNextInteractionState(petHoverState);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
@@ -95,7 +92,6 @@ export function useCodexPetInteraction(dragBridge: PetDragBridge | null) {
     setIsDragging(false);
     lastGestureWasDragRef.current = true;
     dragBridge?.endPetDrag();
-    dragBridge?.voiceCancel();
     setNextInteractionState(null);
   }
 

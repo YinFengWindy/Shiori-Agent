@@ -67,14 +67,6 @@ describe("roleFormState", () => {
 
     assert.equal(form.desktopPetEnabled, false);
     assert.equal(isRoleFormDirty({ ...form, desktopPetEnabled: true }, role), true);
-    assert.equal(isRoleFormDirty({
-      ...form,
-      pendingVoiceAssetDeletes: [{
-        provider: "minimax",
-        voiceId: "Shiori_stale",
-        ownership: "shiori_managed",
-      }],
-    }, role), true);
   });
 
   it("reads and compares role-owned proactive settings", () => {

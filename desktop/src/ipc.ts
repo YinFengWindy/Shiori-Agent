@@ -11,10 +11,6 @@ import type { LocalAssetRegistry } from "./localAssetRegistry.js";
 import { loadSettingsData, saveSettings } from "./settings.js";
 import type { DesktopPetController } from "./pet/controller.js";
 import type { DesktopObservationController } from "./observation/controller.js";
-import type { BrowserVoiceRecorder } from "./voice/recorder.js";
-import type { DesktopVoiceController } from "./voice/controller.js";
-import type { BrowserVoicePlayback } from "./voice/playback.js";
-import { registerVoiceIpc } from "./voice/ipc.js";
 import type {
   LocalAssetOpenRequest,
   LocalAssetOpenResult,
@@ -35,11 +31,6 @@ type RegisterDesktopIpcOptions = {
   desktopObservation: DesktopObservationController;
   onOpenPetRole: () => void;
   onShowPetContextMenu: (window: BrowserWindow) => void;
-  voiceRecorder: BrowserVoiceRecorder;
-  voiceController: DesktopVoiceController;
-  voicePlayback: BrowserVoicePlayback;
-  onVoiceSettingsChanged?: () => void;
-  onPetVisibilityChanged?: () => void;
 };
 
 function assetTransport<T>(value: T, assets: LocalAssetReference[]): LocalAssetTransport<T> {
@@ -89,11 +80,6 @@ export function registerDesktopIpc({
   desktopObservation,
   onOpenPetRole,
   onShowPetContextMenu,
-  voiceRecorder,
-  voiceController,
-  voicePlayback,
-  onVoiceSettingsChanged,
-  onPetVisibilityChanged,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
 
@@ -160,7 +146,7 @@ export function registerDesktopIpc({
     return loadSettingsData();
   });
   ipcMain.handle("desktop:settings-save", async (_event: IpcMainInvokeEvent, formData: SettingsFormData) => {
-    const result = await saveSettings(
+    return await saveSettings(
       formData,
       async () => {
         try {
@@ -189,8 +175,6 @@ export function registerDesktopIpc({
         };
       },
     );
-    onVoiceSettingsChanged?.();
-    return result;
   });
   ipcMain.handle("desktop:window-control", (event: IpcMainInvokeEvent, action: WindowControlAction) => {
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -238,7 +222,6 @@ export function registerDesktopIpc({
   ipcMain.handle("desktop:pet-sync", async (_event: IpcMainInvokeEvent, forceVisible?: unknown) => {
     await desktopPet.sync(typeof forceVisible === "boolean" ? forceVisible : undefined);
     await desktopObservation.restore();
-    onPetVisibilityChanged?.();
   });
   ipcMain.handle("desktop:pet-observation-dismiss", async (event: IpcMainInvokeEvent) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
@@ -296,7 +279,6 @@ export function registerDesktopIpc({
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (petWindow && desktopPet.isPetWindow(petWindow)) onShowPetContextMenu(petWindow);
   });
-  registerVoiceIpc({ bridge, desktopPet, voiceRecorder, voiceController, voicePlayback });
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
     const result = await dialog.showOpenDialog({
       properties: options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],
