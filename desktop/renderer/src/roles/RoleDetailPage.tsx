@@ -245,6 +245,7 @@ export function RoleDetailPage({
                 />
               </div>
               <RoleVoiceSettingsPanel
+                bridgeReady={bridgeReady}
                 roleForm={roleForm}
                 onUpdate={preserveScrollDuringFormUpdate}
               />

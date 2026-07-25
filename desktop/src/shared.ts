@@ -47,6 +47,15 @@ export type VoiceInputDevice = {
   label: string;
 };
 
+export type VoiceCloneResult = {
+  ok: boolean;
+  canceled?: boolean;
+  voiceId?: string;
+  audioBase64?: string;
+  format?: "mp3";
+  error?: string;
+};
+
 export type VoiceCaptureCommand =
   | "stop"
   | "cancel"
@@ -222,6 +231,10 @@ export type DesktopApi = {
   startVoiceTest(deviceId?: string): Promise<void>;
   /** Stops the local microphone test and plays it back locally. */
   stopVoiceTest(): Promise<void>;
+  /** Opens the native picker and clones one transient voice sample through the bridge. */
+  cloneVoice(): Promise<VoiceCloneResult>;
+  /** Plays a provider-generated voice preview through the hidden audio surface. */
+  playVoicePreview(audioBase64: string): Promise<void>;
   /** Controls the custom frameless Electron window chrome. */
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */
