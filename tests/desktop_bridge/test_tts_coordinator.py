@@ -114,6 +114,39 @@ async def test_tts_provider_failure_emits_diagnostic_without_raising() -> None:
 
 
 @pytest.mark.asyncio
+async def test_provider_failure_stops_later_sentences_in_the_same_turn() -> None:
+    emitted: list[dict] = []
+
+    class _FailsSecondSentence(_VoiceService):
+        def stream_synthesize_result(self, text: str, **kwargs) -> VoiceSynthesisResult:
+            if len(self.calls) == 1:
+                self.calls.append({"text": text})
+                raise RuntimeError("provider down")
+            return super().stream_synthesize_result(text, **kwargs)
+
+    service = _FailsSecondSentence()
+    coordinator = TtsTurnCoordinator(
+        voice_service=service,  # type: ignore[arg-type]
+        session_key="role:mira",
+        request_id="turn-stop-after-error",
+        turn_id="voice-turn-stop-after-error",
+        settings=resolve_role_tts_settings({"tts": {"voice_id": "mira"}}, "平静"),
+        emit_event=emitted.append,
+    )
+
+    coordinator.push("第一句。第二句。第三句。")
+    coordinator.finish()
+    await coordinator.wait()
+
+    assert [call["text"] for call in service.calls] == ["第一句。", "第二句。"]
+    assert [event["method"] for event in emitted] == [
+        "voice.tts.audio",
+        "voice.tts.error",
+        "voice.tts.finished",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_tts_event_emission_failure_propagates() -> None:
     emitted: list[str] = []
 

@@ -45,6 +45,7 @@ class TtsTurnCoordinator:
         self._worker: asyncio.Task[None] | None = None
         self._wake = asyncio.Event()
         self._finished = False
+        self._failed = False
         self._cancelled = False
         self._cancel_event = threading.Event()
         self._sequence = 0
@@ -71,7 +72,7 @@ class TtsTurnCoordinator:
     def push(self, content_delta: str) -> None:
         """Adds streamed text and schedules any newly completed sentences."""
 
-        if not self.enabled or self._finished or self._cancelled:
+        if not self.enabled or self._finished or self._failed or self._cancelled:
             return
         for sentence in self._buffer.push(content_delta):
             self._queue.put_nowait((self._next_sequence(), sentence))
@@ -81,7 +82,7 @@ class TtsTurnCoordinator:
     def finish(self) -> None:
         """Flushes the final sentence and lets the worker drain in the background."""
 
-        if self._finished or self._cancelled:
+        if self._finished or self._failed or self._cancelled:
             return
         self._finished = True
         if self.enabled:
@@ -191,6 +192,11 @@ class TtsTurnCoordinator:
                         },
                     ).to_dict()
                 )
+                # A partial spoken reply is less surprising than continuing after
+                # a provider failure while the desktop has already reported it.
+                self._failed = True
+                self._finished = True
+                self._discard_queued_sentences()
             else:
                 await self._emit(
                     BridgeEvent(
@@ -230,3 +236,10 @@ class TtsTurnCoordinator:
         result = self._emit_event(payload)
         if isinstance(result, Awaitable):
             await result
+
+    def _discard_queued_sentences(self) -> None:
+        """Drops unsynthesized sentences after a terminal provider failure."""
+
+        while not self._queue.empty():
+            _ = self._queue.get_nowait()
+            self._queue.task_done()

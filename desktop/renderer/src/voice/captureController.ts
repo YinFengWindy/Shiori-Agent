@@ -25,6 +25,7 @@ export class VoiceCaptureRenderer {
   private processor: ScriptProcessorNode | null = null;
   private mutedSink: GainNode | null = null;
   private chunks: Float32Array[] = [];
+  private captureGeneration = 0;
 
   handleCommand(command: VoiceCaptureCommand): boolean {
     if (command === "stop") {
@@ -47,9 +48,15 @@ export class VoiceCaptureRenderer {
   }
 
   private async start(deviceId?: string): Promise<void> {
+    const generation = ++this.captureGeneration;
     try {
-      await this.cancel();
-      this.stream = await openVoiceInputStream(navigator.mediaDevices, deviceId);
+      await this.releaseCapture();
+      const stream = await openVoiceInputStream(navigator.mediaDevices, deviceId);
+      if (generation !== this.captureGeneration) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      this.stream = stream;
       this.context = new AudioContext();
       this.source = this.context.createMediaStreamSource(this.stream);
       this.processor = this.context.createScriptProcessor(4096, 1, 1);
@@ -96,6 +103,12 @@ export class VoiceCaptureRenderer {
   }
 
   private async cancel(): Promise<void> {
+    this.captureGeneration += 1;
+    await this.releaseCapture();
+  }
+
+  /** Releases current media resources without invalidating a newer start operation. */
+  private async releaseCapture(): Promise<void> {
     this.processor?.disconnect();
     this.source?.disconnect();
     this.mutedSink?.disconnect();

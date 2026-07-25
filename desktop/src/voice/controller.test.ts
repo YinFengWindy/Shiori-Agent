@@ -225,3 +225,22 @@ test("a short click or drag does not retire the active voice turn", async () => 
   assert.equal(active.currentState.kind, "speaking");
   assert.deepEqual(turnChanges, [[null, "turn-1"]]);
 });
+
+test("waits for queued playback to drain before reporting a terminal TTS failure", async () => {
+  const { controller, events } = createController();
+  controller.startPress("hotkey");
+  controller.release();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  controller.replyStarted(true);
+  controller.sentenceReady("sentence-1");
+
+  controller.ttsFailed("合成服务不可用");
+
+  assert.deepEqual(controller.currentState, { kind: "speaking", sentenceId: "sentence-1" });
+  assert.equal(events.at(-1)?.status, "speaking");
+
+  controller.replyFinished();
+
+  assert.deepEqual(controller.currentState, { kind: "idle" });
+  assert.deepEqual(events.at(-1), { status: "error", message: "合成服务不可用" });
+});

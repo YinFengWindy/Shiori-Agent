@@ -14,17 +14,26 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
   private stopped: Deferred<Uint8Array> | null = null;
   private devices: Deferred<VoiceInputDevice[]> | null = null;
   private sampleChunks: Int16Array[] = [];
+  private captureGeneration = 0;
 
   constructor(private readonly createWindow: VoiceCaptureWindowFactory) {}
 
   async start(deviceId = ""): Promise<void> {
+    const generation = ++this.captureGeneration;
     const window = this.ensureWindow();
     await this.waitUntilReady(window);
+    if (generation !== this.captureGeneration) {
+      throw new Error("麦克风采集已取消");
+    }
     this.sampleChunks = [];
-    this.started = createDeferred<void>();
+    const started = createDeferred<void>();
+    this.started = started;
     this.sendCommand({ command: "start", deviceId: deviceId.trim() || undefined });
-    await this.started.promise;
-    this.started = null;
+    try {
+      await started.promise;
+    } finally {
+      if (this.started === started) this.started = null;
+    }
   }
 
   async stop(): Promise<Uint8Array> {
@@ -39,11 +48,15 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
   }
 
   async cancel(): Promise<void> {
-    if (!this.window || this.window.isDestroyed()) return;
-    this.sendCommand("cancel");
-    this.sampleChunks = [];
+    this.captureGeneration += 1;
+    const cancellation = new Error("麦克风采集已取消");
+    this.started?.reject(cancellation);
+    this.stopped?.reject(cancellation);
     this.started = null;
     this.stopped = null;
+    this.sampleChunks = [];
+    if (!this.window || this.window.isDestroyed()) return;
+    this.sendCommand("cancel");
   }
 
   /** Enumerates sanitized input devices from the browser-owned media surface. */
@@ -115,8 +128,8 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     const normalized = Array.isArray(devices)
       ? devices.flatMap((value) => {
         if (!value || typeof value !== "object") return [];
-        const item = value as { deviceId?: unknown; label?: unknown; kind?: unknown };
-        if (item.kind !== "audioinput" || typeof item.deviceId !== "string") return [];
+        const item = value as { deviceId?: unknown; label?: unknown };
+        if (typeof item.deviceId !== "string") return [];
         return [{ deviceId: item.deviceId, label: typeof item.label === "string" ? item.label : "" }];
       })
       : [];

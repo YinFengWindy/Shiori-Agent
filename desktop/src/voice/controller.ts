@@ -49,6 +49,7 @@ export class DesktopVoiceController {
   private recordingTimer: ReturnType<typeof setTimeout> | null = null;
   private recordingStart: Promise<void> | null = null;
   private activeTurnId: string | null = null;
+  private pendingTtsFailure = "";
   private disposed = false;
 
   constructor(private readonly options: DesktopVoiceControllerOptions) {
@@ -122,6 +123,7 @@ export class DesktopVoiceController {
 
   /** Cancels the current recording without contacting ASR or the chat Loop. */
   cancel(): void {
+    this.pendingTtsFailure = "";
     this.pendingReplyPress = null;
     this.clearPressTimer();
     this.clearRecordingTimer();
@@ -134,6 +136,7 @@ export class DesktopVoiceController {
   /** Cancels timers and releases the recorder during app or pet shutdown. */
   dispose(): void {
     this.disposed = true;
+    this.pendingTtsFailure = "";
     this.pendingReplyPress = null;
     this.clearPressTimer();
     this.clearRecordingTimer();
@@ -157,21 +160,24 @@ export class DesktopVoiceController {
     this.apply({ type: "sentence_playback_finished", sentenceId, nextSentenceId });
   }
 
-  /** Ends a text-only reply or a reply whose TTS queue failed. */
+  /** Ends a text-only reply or finishes any audio queued before a TTS failure. */
   replyFinished(): void {
+    const failure = this.pendingTtsFailure;
+    this.pendingTtsFailure = "";
     this.apply({ type: "reply_finished" });
+    if (failure) this.options.publishState({ status: "error", message: failure });
   }
 
-  /** Reports a non-blocking TTS failure while returning the controller to idle. */
+  /** Defers TTS failure presentation until previously queued audio has drained. */
   ttsFailed(message: string): void {
-    this.apply({ type: "reply_finished" });
-    this.options.publishState({ status: "error", message: message || "角色语音合成失败" });
+    this.pendingTtsFailure = message || "角色语音合成失败";
   }
 
   private beginRecording(): void {
     this.recordingStart = this.options.recorder.start(this.options.microphoneDeviceId?.() ?? "")
       .then(() => {
         if (this.disposed || !["recording", "transcribing"].includes(this.state.kind)) return;
+        this.pendingTtsFailure = "";
         const previousTurnId = this.activeTurnId;
         const nextTurnId = (this.options.createTurnId ?? randomUUID)();
         this.activeTurnId = nextTurnId;
