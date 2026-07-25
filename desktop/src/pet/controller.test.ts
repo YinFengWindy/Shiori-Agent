@@ -315,6 +315,7 @@ test("agent pet actions move to a bounded target and play a transient package ac
 
   await controller.show();
   controller.rendererReady(window as unknown as BrowserWindow);
+  const moveStart = window.boundsWrites.length;
   controller.handleAgentAction({
     action_id: "action-1",
     role_id: "role-1",
@@ -324,6 +325,9 @@ test("agent pet actions move to a bounded target and play a transient package ac
     target: "bottom_right",
     animation: "run",
   });
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  const moveFrames = window.boundsWrites.slice(moveStart);
+  assert.ok(moveFrames.some((bounds) => bounds.x > 0 && bounds.x < 1728));
   controller.handleAgentAction({
     action_id: "action-2",
     role_id: "role-1",
@@ -332,10 +336,11 @@ test("agent pet actions move to a bounded target and play a transient package ac
     kind: "play",
     name: "greeting",
   });
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   assert.deepEqual(settings.positions["role-1:display-1"], { x: 1728, y: 872 });
   assert.deepEqual(
-    window.webContents.messages.slice(-2),
+    window.webContents.messages.filter((message) => message.channel === "desktop:pet-play").slice(-2),
     [
       { channel: "desktop:pet-play", payload: { state: "running-right", transient: true } },
       { channel: "desktop:pet-play", payload: { state: "waving", transient: true } },

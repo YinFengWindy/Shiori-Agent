@@ -24,6 +24,9 @@ import type { PetObservationPayload } from "../observation/types.js";
 
 /** Keeps the main-process cursor follower aligned with the display refresh rate. */
 export const desktopPetDragFollowIntervalMs = 1000 / 60;
+/** Keeps role-requested moves visible as a short, deliberate desktop animation. */
+export const desktopPetAgentMoveDurationMs = 420;
+const desktopPetAgentMoveFrameMs = 16;
 
 type DesktopPetControllerOptions = {
   getSettings: () => DesktopPetSettings;
@@ -53,6 +56,14 @@ export class DesktopPetController {
   private momentumStartedAtMs = 0;
   private momentumUpdatedAtMs = 0;
   private momentumTimer: ReturnType<typeof setTimeout> | null = null;
+  private agentMoveTimer: ReturnType<typeof setTimeout> | null = null;
+  private agentMoveAnimation: {
+    window: BrowserWindow;
+    roleId: string;
+    from: DesktopPetPosition;
+    to: DesktopPetPosition;
+    startedAtMs: number;
+  } | null = null;
 
   constructor(private readonly options: DesktopPetControllerOptions) {
     this.createWindow = options.createWindow;
@@ -137,8 +148,7 @@ export class DesktopPetController {
     const current = this.currentAnchorPosition(this.window as BrowserWindow);
     const next = desktopPetTargetPosition(value.target, display.workArea);
     this.stopMomentum();
-    this.moveTo(next);
-    this.persistPosition(this.activeRoleId, this.window as BrowserWindow);
+    this.animateAgentMove(next);
     if (value.animation === "run") {
       const state = next.x < current.x ? "running-left" : next.x > current.x ? "running-right" : "idle";
       this.playTransient(state);
@@ -161,6 +171,7 @@ export class DesktopPetController {
   /** Starts following the system cursor while preserving the initial pointer offset. */
   beginDrag(pointerOffsetX: number, pointerOffsetY: number, pointerScreenX?: number, pointerScreenY?: number): void {
     if (!this.isRunning || !Number.isFinite(pointerOffsetX) || !Number.isFinite(pointerOffsetY)) return;
+    this.stopAgentMoveAnimation();
     this.stopMomentum();
     this.stopDragFollow();
     this.dragPointerOffset = { x: pointerOffsetX, y: pointerOffsetY };
@@ -204,6 +215,7 @@ export class DesktopPetController {
   }
 
   private async load(binding: DesktopPetBinding, settings: DesktopPetSettings, state: DesktopPetState): Promise<void> {
+    this.stopAgentMoveAnimation();
     const created = this.window === null;
     const window = this.window ?? this.createWindow({ openLocalAttachment: this.options.openLocalAttachment });
     if (created) this.rendererIsReady = false;
@@ -222,6 +234,7 @@ export class DesktopPetController {
       });
       window.on("closed", () => {
         if (this.window !== window) return;
+        this.stopAgentMoveAnimation();
         this.stopDragFollow();
         this.dragPointerOffset = null;
         this.window = null;
@@ -264,6 +277,55 @@ export class DesktopPetController {
     window.setBounds(this.bubbleLayout.place(rounded, display.workArea));
     this.publishBubbleLayout(window);
     return rounded;
+  }
+
+  /** Interpolates a role-requested move while keeping the renderer and bounds in one process. */
+  private animateAgentMove(position: DesktopPetPosition): void {
+    const window = this.window;
+    if (!window || window.isDestroyed()) return;
+    this.stopAgentMoveAnimation();
+    const display = this.displayForWindow(window);
+    const from = this.currentAnchorPosition(window);
+    const to = clampDesktopPetPosition(position, display.workArea);
+    if (from.x === to.x && from.y === to.y) {
+      this.moveTo(to);
+      this.persistPosition(this.activeRoleId, window);
+      return;
+    }
+    const animation = {
+      window,
+      roleId: this.activeRoleId,
+      from,
+      to,
+      startedAtMs: Date.now(),
+    };
+    this.agentMoveAnimation = animation;
+    const tick = () => {
+      this.agentMoveTimer = null;
+      if (
+        this.agentMoveAnimation !== animation
+        || this.window !== window
+        || window.isDestroyed()
+      ) {
+        return;
+      }
+      const progress = Math.min(
+        1,
+        Math.max(0, (Date.now() - animation.startedAtMs) / desktopPetAgentMoveDurationMs),
+      );
+      const eased = 1 - (1 - progress) ** 3;
+      this.moveTo({
+        x: animation.from.x + (animation.to.x - animation.from.x) * eased,
+        y: animation.from.y + (animation.to.y - animation.from.y) * eased,
+      });
+      if (progress >= 1) {
+        this.agentMoveAnimation = null;
+        this.persistPosition(animation.roleId, window);
+        return;
+      }
+      this.agentMoveTimer = setTimeout(tick, desktopPetAgentMoveFrameMs);
+    };
+    this.agentMoveTimer = setTimeout(tick, desktopPetAgentMoveFrameMs);
   }
 
   /** Starts the same decaying release glide used by the Codex desktop-pet overlay. */
@@ -346,7 +408,14 @@ export class DesktopPetController {
     this.momentum = null;
   }
 
+  private stopAgentMoveAnimation(): void {
+    if (this.agentMoveTimer) clearTimeout(this.agentMoveTimer);
+    this.agentMoveTimer = null;
+    this.agentMoveAnimation = null;
+  }
+
   private destroyWindow(): void {
+    this.stopAgentMoveAnimation();
     this.stopDragFollow();
     this.stopMomentum();
     this.dragPointerOffset = null;
