@@ -23,6 +23,24 @@ export type BridgeEvent = {
   payload: Record<string, unknown>;
 };
 
+/** Public desktop-pet voice state used by the pet and settings surfaces. */
+export type VoiceStatePayload = {
+  status:
+    | "idle"
+    | "press_pending"
+    | "dragging"
+    | "recording"
+    | "transcribing"
+    | "sending"
+    | "waiting_reply"
+    | "speaking_prepare"
+    | "speaking"
+    | "finish_current_sentence_then_idle"
+    | "error";
+  source?: "pet" | "hotkey";
+  message?: string;
+};
+
 export type SettingsFormData = {
   models: {
     provider: string;

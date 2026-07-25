@@ -60,6 +60,24 @@ test("recording release, empty ASR and chat failure are fail-closed", () => {
   );
 });
 
+test("recording startup failures and Esc leave no active voice task", () => {
+  assert.deepEqual(
+    transitionVoiceInteraction({ kind: "recording", source: "pet", startedAtMs: 0 }, {
+      type: "recording_failed",
+      message: "麦克风权限被拒绝",
+    }),
+    { kind: "error", message: "麦克风权限被拒绝" },
+  );
+  assert.deepEqual(
+    transitionVoiceInteraction({ kind: "transcribing" }, { type: "escape" }),
+    { kind: "idle" },
+  );
+  assert.deepEqual(
+    transitionVoiceInteraction({ kind: "sending" }, { type: "escape" }),
+    { kind: "idle" },
+  );
+});
+
 test("a new input keeps the current sentence but drops later playback", () => {
   let state = transitionVoiceInteraction({ kind: "waiting_reply" }, {
     type: "reply_started",
