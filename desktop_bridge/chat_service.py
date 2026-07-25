@@ -9,6 +9,8 @@ from agent.looping.core import AgentLoop
 from bus.event_bus import EventBus
 from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
 from desktop_bridge.models import BridgeEvent
+from desktop_bridge.tts_coordinator import TtsTurnCoordinator, resolve_role_tts_settings
+from desktop_bridge.voice_service import VoiceService
 from session.manager import Session, SessionManager
 
 logger = logging.getLogger("desktop.bridge.chat")
@@ -54,6 +56,7 @@ class DesktopChatService:
             Awaitable[None],
         ],
         emit_session_updated: EmitSessionUpdated,
+        tts_service: VoiceService | None = None,
     ) -> None:
         self._agent_loop = agent_loop
         self._event_bus = event_bus
@@ -62,7 +65,10 @@ class DesktopChatService:
         self._sync_desktop_session_thread = sync_desktop_session_thread
         self._emit_payload = emit_payload
         self._emit_session_updated = emit_session_updated
+        self._tts_service = tts_service
         self._tasks_by_session: dict[str, asyncio.Task[None]] = {}
+        self._tts_tasks: set[asyncio.Task[None]] = set()
+        self._tts_coordinators: set[TtsTurnCoordinator] = set()
 
     def is_busy(self, session_key: str) -> bool:
         """Returns whether the session already has an active desktop turn."""
@@ -82,6 +88,12 @@ class DesktopChatService:
         emit_event: EventEmitter,
     ) -> tuple[Session, list[BridgeEvent]]:
         collected: list[BridgeEvent] = []
+        tts = self._create_tts_coordinator(
+            request_id=request_id,
+            session_key=session_key,
+            metadata=metadata,
+            emit_event=emit_event,
+        )
 
         async def _on_delta(event: StreamDeltaReady) -> None:
             if event.session_key != session_key:
@@ -98,6 +110,8 @@ class DesktopChatService:
             )
             collected.append(bridge_event)
             await self._emit_payload(emit_event, bridge_event.to_dict())
+            if tts is not None:
+                tts.push(event.content_delta)
 
         async def _on_done(event: TurnCommitted) -> None:
             if event.session_key != session_key:
@@ -130,6 +144,9 @@ class DesktopChatService:
                 metadata=metadata,
                 stream_events=True,
             )
+            if tts is not None:
+                tts.finish()
+                self._track_tts(tts)
             await asyncio.sleep(0)
             session = self._session_manager.get_or_create(session_key)
             role_id = self._role_id_from_session_key(session_key)
@@ -142,6 +159,8 @@ class DesktopChatService:
             )
             return session, collected
         except Exception as exc:
+            if tts is not None:
+                tts.cancel()
             bridge_event = BridgeEvent(
                 id=request_id,
                 type="event",
@@ -202,6 +221,59 @@ class DesktopChatService:
         if tasks:
             _ = await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks_by_session.clear()
+        for coordinator in self._tts_coordinators:
+            coordinator.cancel()
+        if self._tts_tasks:
+            _ = await asyncio.gather(*self._tts_tasks, return_exceptions=True)
+        self._tts_coordinators.clear()
+        self._tts_tasks.clear()
+
+    async def wait_for_tts(self) -> None:
+        """Waits for background TTS jobs without waiting for unrelated chat turns."""
+
+        if self._tts_tasks:
+            _ = await asyncio.gather(*list(self._tts_tasks), return_exceptions=True)
+
+    def _create_tts_coordinator(
+        self,
+        *,
+        request_id: str,
+        session_key: str,
+        metadata: dict[str, object] | None,
+        emit_event: EventEmitter,
+    ) -> TtsTurnCoordinator | None:
+        if self._tts_service is None or not isinstance(metadata, dict):
+            return None
+        if metadata.get("input_method") != "voice":
+            return None
+        session = self._session_manager.get_or_create(session_key)
+        session_metadata = getattr(session, "metadata", {})
+        runtime_config = session_metadata.get("role_runtime_config") if isinstance(session_metadata, dict) else {}
+        mood = session_metadata.get("current_mood") if isinstance(session_metadata, dict) else ""
+
+        async def _emit(payload: dict[str, Any]) -> None:
+            await self._emit_payload(emit_event, payload)
+
+        return TtsTurnCoordinator(
+            voice_service=self._tts_service,
+            session_key=session_key,
+            request_id=request_id,
+            settings=resolve_role_tts_settings(runtime_config, mood),
+            emit_event=_emit,
+        )
+
+    def _track_tts(self, coordinator: TtsTurnCoordinator) -> None:
+        if not coordinator.enabled:
+            return
+        self._tts_coordinators.add(coordinator)
+        task = asyncio.create_task(coordinator.wait(), name=f"desktop-tts-wait:{id(coordinator)}")
+        self._tts_tasks.add(task)
+
+        def _discard(completed: asyncio.Task[None]) -> None:
+            self._tts_tasks.discard(completed)
+            self._tts_coordinators.discard(coordinator)
+
+        task.add_done_callback(_discard)
 
     def _discard_task(self, session_key: str, task: asyncio.Task[None]) -> None:
         if self._tasks_by_session.get(session_key) is task:

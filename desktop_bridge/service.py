@@ -113,6 +113,7 @@ class DesktopBridgeService:
         )
         self.role_presenter = DesktopRolePresenter(role_store, relationship_runtime)
         self.pet_packages = RolePetPackageService(role_store)
+        self.voice_service = voice_service or VoiceService(getattr(config, "voice", None) or VoiceConfig())
         self.chat_service = DesktopChatService(
             agent_loop=agent_loop,
             event_bus=event_bus,
@@ -121,6 +122,7 @@ class DesktopBridgeService:
             sync_desktop_session_thread=self._sync_desktop_session_thread,
             emit_payload=self._emit_event,
             emit_session_updated=self._emit_session_updated,
+            tts_service=self.voice_service,
         )
         self.novelai_store = novelai_store or NovelAIStore(workspace)
         self.prompt_tag_store = PromptTagStore(workspace)
@@ -137,7 +139,6 @@ class DesktopBridgeService:
             role_store=role_store,
         )
         self.observation_service = observation_service
-        self.voice_service = voice_service or VoiceService(getattr(config, "voice", None) or VoiceConfig())
         if push_tool is not None:
             self.register_desktop_push_channel(push_tool)
 
