@@ -8,6 +8,7 @@ import type {
   RendererDiagnosticPayload,
   WindowControlAction,
   WindowState,
+  VoiceCaptureCommand,
 } from "./shared.js";
 
 const localAssets = new PreloadLocalAssetCache();
@@ -129,6 +130,45 @@ const api: DesktopApi = {
   },
   offPetBubbleLayout(listener) {
     ipcRenderer.off("desktop:pet-bubble-layout", listener);
+  },
+  onVoiceCaptureCommand(listener) {
+    const wrapped = (_event: unknown, value: unknown) => {
+      if (value === "start" || value === "stop" || value === "cancel") listener(value as VoiceCaptureCommand);
+    };
+    ipcRenderer.on("desktop:voice-capture-command", wrapped);
+    return () => ipcRenderer.off("desktop:voice-capture-command", wrapped);
+  },
+  voiceCaptureData(samples) {
+    ipcRenderer.send("desktop:voice-capture-data", samples);
+  },
+  voiceCaptureReady() {
+    ipcRenderer.send("desktop:voice-capture-ready");
+  },
+  voiceCaptureStopped() {
+    ipcRenderer.send("desktop:voice-capture-stopped");
+  },
+  voiceCaptureError(message) {
+    ipcRenderer.send("desktop:voice-capture-error", message);
+  },
+  startVoicePress() {
+    ipcRenderer.send("desktop:voice-press-start");
+  },
+  voicePointerMoved() {
+    ipcRenderer.send("desktop:voice-pointer-moved");
+  },
+  voiceRelease() {
+    ipcRenderer.send("desktop:voice-release");
+  },
+  voiceCancel() {
+    ipcRenderer.send("desktop:voice-cancel");
+  },
+  onVoiceState(listener) {
+    const wrapped = (_event: unknown, value: unknown) => {
+      if (!value || typeof value !== "object") return;
+      listener(value as import("./shared.js").VoiceStatePayload);
+    };
+    ipcRenderer.on("desktop:voice-state", wrapped);
+    return () => ipcRenderer.off("desktop:voice-state", wrapped);
   },
 };
 

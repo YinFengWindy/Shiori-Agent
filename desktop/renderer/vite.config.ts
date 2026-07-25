@@ -18,6 +18,7 @@ export default defineConfig({
       input: {
         main: resolvePath(here, "index.html"),
         pet: resolvePath(here, "pet.html"),
+        voice: resolvePath(here, "voice.html"),
       },
     },
   },

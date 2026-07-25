@@ -616,6 +616,7 @@ class DesktopBridgeService:
                 reply_to_content = str(payload.get("reply_to_content") or "").strip()
                 reply_to_sender = str(payload.get("reply_to_sender") or "").strip()
                 client_message_id = str(payload.get("client_message_id") or "").strip()
+                input_method = str(payload.get("input_method") or "").strip()
                 if not content and not media:
                     return self._error(
                         request_id,
@@ -639,6 +640,18 @@ class DesktopBridgeService:
                 metadata["delivery_key"] = request_id
                 if client_message_id:
                     metadata["client_message_id"] = client_message_id
+                if input_method == "voice":
+                    metadata["input_method"] = "voice"
+                    for key in ("asr_provider", "asr_request_id"):
+                        value = str(payload.get(key) or "").strip()
+                        if value:
+                            metadata[key] = value
+                    asr_duration_ms = payload.get("asr_duration_ms")
+                    if isinstance(asr_duration_ms, (int, float)) and asr_duration_ms >= 0:
+                        metadata["asr_duration_ms"] = asr_duration_ms
+                    audio_duration_ms = payload.get("audio_duration_ms")
+                    if isinstance(audio_duration_ms, (int, float)) and audio_duration_ms >= 0:
+                        metadata["audio_duration_ms"] = audio_duration_ms
                 if reply_to_message_id:
                     metadata["reply_to_message_id"] = reply_to_message_id
                 if reply_to_sender:
