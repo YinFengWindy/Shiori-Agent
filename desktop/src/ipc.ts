@@ -37,6 +37,7 @@ type RegisterDesktopIpcOptions = {
   voiceRecorder: BrowserVoiceRecorder;
   voiceController: DesktopVoiceController;
   voicePlayback: BrowserVoicePlayback;
+  onVoiceSettingsChanged?: () => void;
   onPetVisibilityChanged?: () => void;
 };
 
@@ -90,6 +91,7 @@ export function registerDesktopIpc({
   voiceRecorder,
   voiceController,
   voicePlayback,
+  onVoiceSettingsChanged,
   onPetVisibilityChanged,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
@@ -157,7 +159,7 @@ export function registerDesktopIpc({
     return loadSettingsData();
   });
   ipcMain.handle("desktop:settings-save", async (_event: IpcMainInvokeEvent, formData: SettingsFormData) => {
-    return await saveSettings(
+    const result = await saveSettings(
       formData,
       async () => {
         try {
@@ -186,6 +188,8 @@ export function registerDesktopIpc({
         };
       },
     );
+    onVoiceSettingsChanged?.();
+    return result;
   });
   ipcMain.handle("desktop:window-control", (event: IpcMainInvokeEvent, action: WindowControlAction) => {
     const window = BrowserWindow.fromWebContents(event.sender);

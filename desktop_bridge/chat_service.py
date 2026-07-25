@@ -276,6 +276,8 @@ class DesktopChatService:
     ) -> TtsTurnCoordinator | None:
         if self._tts_service is None or not isinstance(metadata, dict):
             return None
+        if not bool(getattr(self._tts_service, "tts_enabled", True)):
+            return None
         if metadata.get("input_method") != "voice":
             return None
         session = self._session_manager.get_or_create(session_key)

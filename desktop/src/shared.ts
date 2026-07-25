@@ -90,6 +90,20 @@ export type SettingsFormData = {
     novelaiUndesiredContentPreset: number;
     novelaiAutoWritebackRoleAssets: boolean;
   };
+  voice: {
+    enabled: boolean;
+    hotkey: string;
+    microphoneDeviceId: string;
+    asrProvider: string;
+    asrBaseUrl: string;
+    asrModel: string;
+    asrSecretId: string;
+    asrSecretKey: string;
+    ttsProvider: string;
+    ttsBaseUrl: string;
+    ttsModel: string;
+    ttsApiKey: string;
+  };
   advanced: {
     systemPrompt: string;
     maxTokens: number;

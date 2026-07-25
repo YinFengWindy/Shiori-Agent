@@ -23,6 +23,7 @@ MINIMAX_EMOTIONS = frozenset(
 class RoleTtsSettings:
     """Resolved voice settings for one assistant turn."""
 
+    enabled: bool
     voice_id: str
     speed: float
     emotion: str
@@ -35,6 +36,7 @@ def resolve_role_tts_settings(runtime_config: object, mood: object) -> RoleTtsSe
     config = runtime_config if isinstance(runtime_config, dict) else {}
     raw_tts = config.get("tts")
     tts = raw_tts if isinstance(raw_tts, dict) else {}
+    enabled = tts.get("enabled", True) is not False
     voice_id = str(tts.get("voice_id") or "").strip()
     raw_speed = tts.get("speed", 1.0)
     speed = float(raw_speed) if isinstance(raw_speed, (int, float)) else 1.0
@@ -45,7 +47,7 @@ def resolve_role_tts_settings(runtime_config: object, mood: object) -> RoleTtsSe
     mapping = raw_mapping if isinstance(raw_mapping, dict) else {}
     candidate = str(mapping.get(mood_name) or "").strip().lower()
     emotion = candidate if candidate in MINIMAX_EMOTIONS else ""
-    return RoleTtsSettings(voice_id=voice_id, speed=speed, emotion=emotion, mood=mood_name)
+    return RoleTtsSettings(enabled=enabled, voice_id=voice_id, speed=speed, emotion=emotion, mood=mood_name)
 
 
 class TtsTurnCoordinator:
@@ -76,7 +78,7 @@ class TtsTurnCoordinator:
     def enabled(self) -> bool:
         """Returns whether this role has a usable voice id for the turn."""
 
-        return bool(self._settings.voice_id)
+        return self._settings.enabled and bool(self._settings.voice_id)
 
     def push(self, content_delta: str) -> None:
         """Adds streamed text and schedules any newly completed sentences."""

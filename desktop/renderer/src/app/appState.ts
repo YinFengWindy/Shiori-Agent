@@ -105,6 +105,11 @@ export function createEmptyRoleForm(): RoleFormState {
     moodCatalog: ["平静"],
     defaultMood: "平静",
     moodIllustrationBindings: {},
+    voiceEnabled: true,
+    voiceId: "",
+    voiceName: "",
+    voiceSpeed: 1,
+    voiceMoodEmotions: {},
   };
 }
 

@@ -5,6 +5,7 @@ import type { AppMainView } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import { writeRoleMoodConfigToRuntimeConfig } from "../roles/roleMoodConfig";
 import { buildRoleProactiveConfig } from "../roles/roleFormState";
+import { writeRoleVoiceConfigToRuntimeConfig } from "../roles/roleVoiceConfig";
 
 type UseRoleManagementArgs = {
   activeRoleId: string;
@@ -201,12 +202,15 @@ export function useRoleManagement({
         name: nextRoleForm.name,
         description: nextRoleForm.description,
         system_prompt: nextRoleForm.systemPrompt,
-        runtime_config: writeRoleMoodConfigToRuntimeConfig(
-          {
-            ...(detailRole?.runtime_config ?? {}),
-            nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
-            auto_scene_cg_enabled: nextRoleForm.autoSceneCgEnabled,
-          },
+        runtime_config: writeRoleVoiceConfigToRuntimeConfig(
+          writeRoleMoodConfigToRuntimeConfig(
+            {
+              ...(detailRole?.runtime_config ?? {}),
+              nsfw_memory_enabled: nextRoleForm.nsfwMemoryEnabled,
+              auto_scene_cg_enabled: nextRoleForm.autoSceneCgEnabled,
+            },
+            nextRoleForm,
+          ),
           nextRoleForm,
         ),
         channel_bindings: nextRoleForm.channelBindings ?? [],
