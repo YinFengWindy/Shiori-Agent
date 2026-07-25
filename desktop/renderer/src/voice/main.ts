@@ -12,15 +12,23 @@ let playbackId = "";
 let ignorePlaybackEnd = false;
 
 window.miraDesktop.onVoiceCaptureCommand((command) => {
-  if (command === "start") {
-    void startCapture();
-    return;
-  }
   if (command === "stop") {
     void stopCapture();
     return;
   }
-  void cancelCapture();
+  if (command === "cancel") {
+    void cancelCapture();
+    return;
+  }
+  if (command.command === "start") {
+    void startCapture(command.deviceId);
+    return;
+  }
+  if (command.command === "list-devices") {
+    void listInputDevices();
+    return;
+  }
+  void playTestAudio(command.audioBase64);
 });
 
 window.miraDesktop.onVoicePlaybackCommand((command) => {
@@ -28,10 +36,10 @@ window.miraDesktop.onVoicePlaybackCommand((command) => {
     cancelPlayback();
     return;
   }
-  void playAudio(command.id, command.audioBase64);
+  void playAudio(command.id, command.audioBase64, true);
 });
 
-async function playAudio(id: string, audioBase64: string): Promise<void> {
+async function playAudio(id: string, audioBase64: string, reportPlayback: boolean): Promise<void> {
   try {
     cancelPlayback();
     playbackContext ??= new AudioContext();
@@ -47,16 +55,20 @@ async function playAudio(id: string, audioBase64: string): Promise<void> {
       if (ignorePlaybackEnd || playbackSource !== sourceNode || playbackId !== id) return;
       playbackSource = null;
       playbackId = "";
-      window.miraDesktop.voicePlaybackFinished(id);
+      if (reportPlayback) window.miraDesktop.voicePlaybackFinished(id);
     };
     await playbackContext.resume();
     sourceNode.start();
-    window.miraDesktop.voicePlaybackStarted(id);
+    if (reportPlayback) window.miraDesktop.voicePlaybackStarted(id);
   } catch (error) {
     playbackSource = null;
     playbackId = "";
-    window.miraDesktop.voicePlaybackError(id, error instanceof Error ? error.message : "音频播放失败");
+    if (reportPlayback) window.miraDesktop.voicePlaybackError(id, error instanceof Error ? error.message : "音频播放失败");
   }
+}
+
+async function playTestAudio(audioBase64: string): Promise<void> {
+  await playAudio("voice-test", audioBase64, false);
 }
 
 function cancelPlayback(): void {
@@ -80,17 +92,10 @@ function decodeBase64(value: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-async function startCapture(): Promise<void> {
+async function startCapture(deviceId?: string): Promise<void> {
   try {
     await cancelCapture();
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
+    stream = await openInputStream(deviceId);
     context = new AudioContext();
     source = context.createMediaStreamSource(stream);
     processor = context.createScriptProcessor(4096, 1, 1);
@@ -109,6 +114,41 @@ async function startCapture(): Promise<void> {
     window.miraDesktop.voiceCaptureError(error instanceof Error ? error.message : "没有可用的麦克风");
     await cancelCapture();
   }
+}
+
+async function listInputDevices(): Promise<void> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    window.miraDesktop.voiceInputDevices(
+      devices
+        .filter((device) => device.kind === "audioinput")
+        .map((device) => ({ deviceId: device.deviceId, label: device.label })),
+    );
+  } catch (error) {
+    window.miraDesktop.voiceCaptureError(error instanceof Error ? error.message : "无法读取麦克风设备");
+  }
+}
+
+async function openInputStream(deviceId?: string): Promise<MediaStream> {
+  const audio = {
+    channelCount: 1,
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+  };
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio });
+  } catch (error) {
+    if (!deviceId || !isMissingDeviceConstraintError(error)) throw error;
+    return await navigator.mediaDevices.getUserMedia({ audio: { ...audio, deviceId: undefined } });
+  }
+}
+
+function isMissingDeviceConstraintError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "name" in error
+    && ((error as { name?: unknown }).name === "OverconstrainedError"
+      || (error as { name?: unknown }).name === "NotFoundError"));
 }
 
 async function stopCapture(): Promise<void> {

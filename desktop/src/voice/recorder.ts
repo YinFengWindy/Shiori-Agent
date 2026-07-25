@@ -1,7 +1,7 @@
 import type { BrowserWindow, WebContents } from "electron";
 import { encodeVoiceWav } from "./wav.js";
 import type { VoiceRecorder } from "./controller.js";
-import type { VoiceCaptureCommand } from "../shared.js";
+import type { VoiceCaptureCommand, VoiceInputDevice } from "../shared.js";
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -28,16 +28,17 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
   private ready: Deferred<void> | null = null;
   private started: Deferred<void> | null = null;
   private stopped: Deferred<Uint8Array> | null = null;
+  private devices: Deferred<VoiceInputDevice[]> | null = null;
   private sampleChunks: Int16Array[] = [];
 
   constructor(private readonly createWindow: VoiceCaptureWindowFactory) {}
 
-  async start(): Promise<void> {
+  async start(deviceId = ""): Promise<void> {
     const window = this.ensureWindow();
     await this.waitUntilReady(window);
     this.sampleChunks = [];
     this.started = deferred<void>();
-    this.sendCommand("start");
+    this.sendCommand({ command: "start", deviceId: deviceId.trim() || undefined });
     await this.started.promise;
     this.started = null;
   }
@@ -59,6 +60,22 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.sampleChunks = [];
     this.started = null;
     this.stopped = null;
+  }
+
+  /** Enumerates sanitized input devices from the browser-owned media surface. */
+  async listInputDevices(): Promise<VoiceInputDevice[]> {
+    const window = this.ensureWindow();
+    await this.waitUntilReady(window);
+    this.devices = deferred<VoiceInputDevice[]>();
+    this.sendCommand({ command: "list-devices" });
+    return await this.devices.promise;
+  }
+
+  /** Plays a local test recording without routing playback events to the voice controller. */
+  async playTestAudio(audio: Uint8Array): Promise<void> {
+    const window = this.ensureWindow();
+    await this.waitUntilReady(window);
+    this.sendCommand({ command: "play-test", audioBase64: Buffer.from(audio).toString("base64") });
   }
 
   /** Accepts a readiness signal from the authorized hidden capture renderer. */
@@ -100,9 +117,27 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     const error = new Error(message || "麦克风采集失败");
     this.started?.reject(error);
     this.stopped?.reject(error);
+    this.devices?.reject(error);
     this.started = null;
     this.stopped = null;
+    this.devices = null;
     this.sampleChunks = [];
+    return true;
+  }
+
+  /** Accepts the browser's input-device enumeration response. */
+  handleInputDevices(sender: WebContents, devices: unknown): boolean {
+    if (!this.isCaptureSender(sender)) return false;
+    const normalized = Array.isArray(devices)
+      ? devices.flatMap((value) => {
+        if (!value || typeof value !== "object") return [];
+        const item = value as { deviceId?: unknown; label?: unknown; kind?: unknown };
+        if (item.kind !== "audioinput" || typeof item.deviceId !== "string") return [];
+        return [{ deviceId: item.deviceId, label: typeof item.label === "string" ? item.label : "" }];
+      })
+      : [];
+    this.devices?.resolve(normalized);
+    this.devices = null;
     return true;
   }
 
@@ -113,6 +148,8 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.stopped?.reject(new Error("麦克风采集已关闭"));
     this.started = null;
     this.stopped = null;
+    this.devices?.reject(new Error("麦克风采集已关闭"));
+    this.devices = null;
     this.ready?.reject(new Error("麦克风采集已关闭"));
     this.ready = null;
     this.window?.destroy();

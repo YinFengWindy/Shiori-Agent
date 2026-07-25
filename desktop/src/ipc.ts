@@ -315,6 +315,34 @@ export function registerDesktopIpc({
   ipcMain.on("desktop:voice-capture-error", (event, message: unknown) => {
     voiceRecorder.handleError(event.sender, String(message || "麦克风采集失败"));
   });
+  ipcMain.on("desktop:voice-input-devices", (event, devices: unknown) => {
+    voiceRecorder.handleInputDevices(event.sender, devices);
+  });
+  let voiceTestActive = false;
+  ipcMain.handle("desktop:voice-input-devices-list", async () => {
+    return await voiceRecorder.listInputDevices();
+  });
+  ipcMain.handle("desktop:voice-test-start", async (_event: IpcMainInvokeEvent, deviceId?: unknown) => {
+    if (voiceTestActive || voiceController.currentState.kind !== "idle") {
+      throw new Error("当前已有语音任务正在进行");
+    }
+    voiceTestActive = true;
+    try {
+      await voiceRecorder.start(typeof deviceId === "string" ? deviceId : "");
+    } catch (error) {
+      voiceTestActive = false;
+      throw error;
+    }
+  });
+  ipcMain.handle("desktop:voice-test-stop", async () => {
+    if (!voiceTestActive) return;
+    try {
+      const audio = await voiceRecorder.stop();
+      await voiceRecorder.playTestAudio(audio);
+    } finally {
+      voiceTestActive = false;
+    }
+  });
   ipcMain.on("desktop:voice-playback-started", (event, id: unknown) => {
     voicePlayback.handleStarted(event.sender, String(id || ""));
   });

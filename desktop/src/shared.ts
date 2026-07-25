@@ -42,7 +42,17 @@ export type VoiceStatePayload = {
 };
 
 /** Commands sent from the Electron main process to the hidden capture page. */
-export type VoiceCaptureCommand = "start" | "stop" | "cancel";
+export type VoiceInputDevice = {
+  deviceId: string;
+  label: string;
+};
+
+export type VoiceCaptureCommand =
+  | "stop"
+  | "cancel"
+  | { command: "start"; deviceId?: string }
+  | { command: "list-devices" }
+  | { command: "play-test"; audioBase64: string };
 
 /** Commands sent from the main process to the hidden voice playback surface. */
 export type VoicePlaybackCommand =
@@ -206,6 +216,12 @@ export type DesktopApi = {
   }>;
   readSettings(): Promise<SettingsSnapshot>;
   saveSettings(formData: SettingsFormData): Promise<SaveSettingsResult>;
+  /** Lists input devices exposed by the hidden capture renderer. */
+  listVoiceInputDevices(): Promise<VoiceInputDevice[]>;
+  /** Starts a short local microphone test without sending it to ASR. */
+  startVoiceTest(deviceId?: string): Promise<void>;
+  /** Stops the local microphone test and plays it back locally. */
+  stopVoiceTest(): Promise<void>;
   /** Controls the custom frameless Electron window chrome. */
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */
@@ -250,6 +266,8 @@ export type DesktopApi = {
   voiceCaptureStopped(): void;
   /** Reports a microphone or Web Audio failure without exposing raw audio. */
   voiceCaptureError(message: string): void;
+  /** Reports the sanitized input-device list from the hidden capture renderer. */
+  voiceInputDevices(devices: VoiceInputDevice[]): void;
   /** Subscribes to audio playback commands issued by the main process. */
   onVoicePlaybackCommand(listener: (command: VoicePlaybackCommand) => void): () => void;
   /** Reports that one decoded audio item started playing. */
