@@ -1,24 +1,8 @@
 import type { BrowserWindow, WebContents } from "electron";
 import { encodeVoiceWav } from "./wav.js";
+import { createDeferred, type Deferred } from "./deferred.js";
 import type { VoiceRecorder } from "./controller.js";
 import type { VoiceCaptureCommand, VoiceInputDevice } from "../shared.js";
-
-type Deferred<T> = {
-  promise: Promise<T>;
-  resolve(value: T): void;
-  reject(error: Error): void;
-};
-
-/** Creates a one-shot promise used for the hidden capture page handshake. */
-function deferred<T>(): Deferred<T> {
-  let resolvePromise!: (value: T) => void;
-  let rejectPromise!: (error: Error) => void;
-  const promise = new Promise<T>((resolve, reject) => {
-    resolvePromise = resolve;
-    rejectPromise = reject;
-  });
-  return { promise, resolve: resolvePromise, reject: rejectPromise };
-}
 
 type VoiceCaptureWindowFactory = () => BrowserWindow;
 
@@ -37,7 +21,7 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     const window = this.ensureWindow();
     await this.waitUntilReady(window);
     this.sampleChunks = [];
-    this.started = deferred<void>();
+    this.started = createDeferred<void>();
     this.sendCommand({ command: "start", deviceId: deviceId.trim() || undefined });
     await this.started.promise;
     this.started = null;
@@ -47,7 +31,7 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     if (!this.window || this.window.isDestroyed()) {
       throw new Error("麦克风采集窗口不可用");
     }
-    this.stopped = deferred<Uint8Array>();
+    this.stopped = createDeferred<Uint8Array>();
     this.sendCommand("stop");
     const audio = await this.stopped.promise;
     this.stopped = null;
@@ -66,7 +50,7 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
   async listInputDevices(): Promise<VoiceInputDevice[]> {
     const window = this.ensureWindow();
     await this.waitUntilReady(window);
-    this.devices = deferred<VoiceInputDevice[]>();
+    this.devices = createDeferred<VoiceInputDevice[]>();
     this.sendCommand({ command: "list-devices" });
     return await this.devices.promise;
   }
@@ -160,7 +144,7 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     if (this.window && !this.window.isDestroyed()) return this.window;
     const window = this.createWindow();
     this.window = window;
-    this.ready = deferred<void>();
+    this.ready = createDeferred<void>();
     window.webContents.once("did-finish-load", () => this.ready?.resolve(undefined));
     window.once("closed", () => {
       if (this.window !== window) return;

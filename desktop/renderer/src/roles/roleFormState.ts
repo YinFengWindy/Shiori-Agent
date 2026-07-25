@@ -60,10 +60,13 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     moodIllustrationBindings: moodConfig.moodIllustrationBindings,
     desktopPetEnabled: Boolean(role.desktop_pet_enabled),
     voiceEnabled: voiceConfig.enabled,
+    voiceProvider: voiceConfig.provider,
+    voiceOwnership: voiceConfig.ownership,
     voiceId: voiceConfig.voiceId,
     voiceName: voiceConfig.voiceName,
     voiceSpeed: voiceConfig.speed,
     voiceMoodEmotions: voiceConfig.moodTtsEmotions,
+    pendingVoiceAssetDeletes: [],
   };
 }
 
@@ -97,6 +100,7 @@ export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null
         || Boolean(roleForm.avatarSource)
         || roleForm.illustrationSources.length > 0
         || roleForm.removedIllustrations.length > 0
+        || roleForm.pendingVoiceAssetDeletes.length > 0
       )
   );
 }

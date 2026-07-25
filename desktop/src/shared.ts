@@ -47,9 +47,12 @@ export type VoiceInputDevice = {
   label: string;
 };
 
+/** Result of creating a provider voice asset through the trusted main process. */
 export type VoiceCloneResult = {
   ok: boolean;
   canceled?: boolean;
+  provider?: string;
+  ownership?: "shiori_managed";
   voiceId?: string;
   audioBase64?: string;
   format?: "mp3";

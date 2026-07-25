@@ -6,11 +6,9 @@ import hashlib
 import hmac
 import io
 import json
-import re
 import time
-import urllib.error
+import threading
 import urllib.parse
-import urllib.request
 import uuid
 import wave
 from collections.abc import Callable, Iterable, Iterator
@@ -18,102 +16,26 @@ from datetime import datetime, timezone
 from typing import Any
 
 from agent.voice_config import VoiceAsrConfig, VoiceConfig, VoiceTtsConfig
-
-
-class VoiceServiceError(RuntimeError):
-    """Raised when a voice provider rejects a request or returns invalid data."""
-
-
-JsonRequester = Callable[[str, dict[str, str], bytes], dict[str, Any]]
-StreamRequester = Callable[[str, dict[str, str], bytes], Iterable[bytes]]
-MultipartRequester = Callable[[str, dict[str, str], dict[str, str], str, str, bytes], dict[str, Any]]
-BinaryRequester = Callable[[str], bytes]
-
-
-def request_json(url: str, headers: dict[str, str], body: bytes) -> dict[str, Any]:
-    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            raw = response.read()
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise VoiceServiceError(f"语音服务 HTTP {exc.code}: {detail[:500]}") from exc
-    except urllib.error.URLError as exc:
-        raise VoiceServiceError(f"语音服务网络错误: {exc.reason}") from exc
-    try:
-        value = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise VoiceServiceError("语音服务返回了无效 JSON") from exc
-    if not isinstance(value, dict):
-        raise VoiceServiceError("语音服务返回格式无效")
-    return value
-
-
-def request_stream(url: str, headers: dict[str, str], body: bytes) -> Iterator[bytes]:
-    """Yields provider response chunks without retaining the complete response."""
-
-    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            for chunk in response:
-                if chunk:
-                    yield bytes(chunk)
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise VoiceServiceError(f"语音服务 HTTP {exc.code}: {detail[:500]}") from exc
-    except urllib.error.URLError as exc:
-            raise VoiceServiceError(f"语音服务网络错误: {exc.reason}") from exc
-
-
-def request_multipart(
-    url: str,
-    headers: dict[str, str],
-    fields: dict[str, str],
-    file_name: str,
-    content_type: str,
-    file_content: bytes,
-) -> dict[str, Any]:
-    """Uploads one transient file without persisting it in the bridge."""
-
-    boundary = f"----ShioriVoice{uuid.uuid4().hex}"
-    chunks: list[bytes] = []
-    for name, value in fields.items():
-        chunks.extend(
-            [
-                f"--{boundary}\r\n".encode(),
-                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
-                str(value).encode("utf-8"),
-                b"\r\n",
-            ]
-        )
-    chunks.extend(
-        [
-            f"--{boundary}\r\n".encode(),
-            f'Content-Disposition: form-data; name="file"; filename="{file_name}"\r\n'.encode(),
-            f"Content-Type: {content_type}\r\n\r\n".encode(),
-            file_content,
-            b"\r\n",
-            f"--{boundary}--\r\n".encode(),
-        ]
-    )
-    request_headers = {
-        **headers,
-        "Content-Type": f"multipart/form-data; boundary={boundary}",
-    }
-    return request_json(url, request_headers, b"".join(chunks))
-
-
-def request_binary(url: str) -> bytes:
-    """Downloads provider-generated preview audio without writing a local file."""
-
-    request = urllib.request.Request(url, method="GET")
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return response.read()
-    except urllib.error.HTTPError as exc:
-        raise VoiceServiceError(f"语音试听 HTTP {exc.code}") from exc
-    except urllib.error.URLError as exc:
-        raise VoiceServiceError(f"语音试听网络错误: {exc.reason}") from exc
+from desktop_bridge.tts_text import (
+    TtsSentenceBuffer as TtsSentenceBuffer,
+    split_tts_sentences as split_tts_sentences,
+)
+from desktop_bridge.voice_http import (
+    BinaryRequester,
+    JsonRequester,
+    MultipartRequester,
+    StreamRequester,
+    request_binary,
+    request_json,
+    request_multipart,
+    request_stream,
+)
+from desktop_bridge.voice_models import (
+    VoiceOperationMetrics,
+    VoiceServiceError,
+    VoiceSynthesisResult,
+    VoiceTranscriptionResult,
+)
 
 
 def validate_wav_audio(audio: bytes, *, max_seconds: int = 60) -> None:
@@ -154,6 +76,13 @@ class TencentAsrClient:
         self._clock = clock
 
     def transcribe(self, audio: bytes) -> str:
+        """Returns only recognized text for compatibility with non-bridge callers."""
+
+        return self.transcribe_result(audio).text
+
+    def transcribe_result(self, audio: bytes) -> VoiceTranscriptionResult:
+        """Returns recognized text and Tencent request diagnostics."""
+
         if not self.config.enabled:
             raise VoiceServiceError("ASR 未启用")
         if self.config.provider != "tencent":
@@ -161,6 +90,7 @@ class TencentAsrClient:
         if not self.config.secret_id or not self.config.secret_key:
             raise VoiceServiceError("腾讯云 ASR 缺少 SecretId 或 SecretKey")
         validate_wav_audio(audio)
+        started_at = time.perf_counter()
         timestamp = int(self._clock())
         body = {
             "EngSerViceType": self.config.model or "16k_zh",
@@ -171,17 +101,89 @@ class TencentAsrClient:
         }
         payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         headers = self._signed_headers(payload, timestamp)
-        response = self._requester(self.config.base_url, headers, payload)
+        try:
+            response = self._requester(self.config.base_url, headers, payload)
+        except VoiceServiceError as exc:
+            metrics = VoiceOperationMetrics(
+                provider=self.config.provider,
+                request_id=exc.request_id,
+                elapsed_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
+                audio_duration_ms=0,
+                character_count=0,
+                error_code=exc.error_code or "transport_error",
+            )
+            raise VoiceServiceError(
+                str(exc),
+                error_code=metrics.error_code,
+                request_id=metrics.request_id,
+                metrics=metrics,
+            ) from exc
         response_error = response.get("Response")
         if not isinstance(response_error, dict):
-            raise VoiceServiceError("腾讯云 ASR 返回格式无效")
+            metrics = VoiceOperationMetrics(
+                provider=self.config.provider,
+                request_id="",
+                elapsed_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
+                audio_duration_ms=0,
+                character_count=0,
+                error_code="invalid_response",
+            )
+            raise VoiceServiceError(
+                "腾讯云 ASR 返回格式无效",
+                error_code=metrics.error_code,
+                metrics=metrics,
+            )
+        raw_audio_duration_ms = response_error.get("AudioDuration")
+        audio_duration_ms = (
+            int(raw_audio_duration_ms)
+            if isinstance(raw_audio_duration_ms, (int, float))
+            and raw_audio_duration_ms >= 0
+            else 0
+        )
+        request_id = str(response_error.get("RequestId") or "").strip()
         error = response_error.get("Error")
         if isinstance(error, dict):
-            raise VoiceServiceError(str(error.get("Message") or "腾讯云 ASR 请求失败"))
+            error_code = str(error.get("Code") or "provider_error").strip()
+            metrics = VoiceOperationMetrics(
+                provider=self.config.provider,
+                request_id=request_id,
+                elapsed_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
+                audio_duration_ms=audio_duration_ms,
+                character_count=0,
+                error_code=error_code,
+            )
+            raise VoiceServiceError(
+                str(error.get("Message") or "腾讯云 ASR 请求失败"),
+                error_code=error_code,
+                request_id=request_id,
+                metrics=metrics,
+            )
         result = str(response_error.get("Result") or "").strip()
         if not result:
-            raise VoiceServiceError("没有听清，请重试")
-        return result
+            metrics = VoiceOperationMetrics(
+                provider=self.config.provider,
+                request_id=request_id,
+                elapsed_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
+                audio_duration_ms=audio_duration_ms,
+                character_count=0,
+                error_code="no_speech",
+            )
+            raise VoiceServiceError(
+                "没有听清，请重试",
+                error_code=metrics.error_code,
+                request_id=request_id,
+                metrics=metrics,
+            )
+        return VoiceTranscriptionResult(
+            text=result,
+            metrics=VoiceOperationMetrics(
+                provider=self.config.provider,
+                request_id=request_id,
+                elapsed_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
+                audio_duration_ms=audio_duration_ms,
+                character_count=len(result),
+            ),
+        )
 
     def _signed_headers(self, payload: bytes, timestamp: int) -> dict[str, str]:
         url = self.config.base_url
@@ -225,80 +227,11 @@ class TencentAsrClient:
         }
 
 
-def split_tts_sentences(text: str, *, max_length: int = 80) -> list[str]:
-    """Removes non-spoken markup and creates bounded sentence-sized TTS jobs."""
-
-    cleaned = _strip_tts_markup(text)
-    if not cleaned:
-        return []
-    chunks = [part.strip() for part in re.split(r"(?<=[。！？；!?;])\s*|\n+", cleaned) if part.strip()]
-    result: list[str] = []
-    for chunk in chunks:
-        while len(chunk) > max_length:
-            split_at = max(
-                chunk.rfind("，", 0, max_length + 1),
-                chunk.rfind(",", 0, max_length + 1),
-            )
-            if split_at <= 0:
-                split_at = max_length
-            comma_at = split_at < len(chunk) and chunk[split_at] in {"，", ","}
-            result.append(chunk[:split_at + (1 if comma_at else 0)].strip())
-            chunk = chunk[split_at + (1 if comma_at else 0):].strip()
-        if chunk:
-            result.append(chunk)
-    return result
-
-
-class TtsSentenceBuffer:
-    """Buffers streamed reply text into bounded, spoken sentence units."""
-
-    def __init__(self, *, max_length: int = 80) -> None:
-        self._max_length = max_length
-        self._buffer = ""
-
-    def push(self, content_delta: str) -> list[str]:
-        """Returns only sentences made complete by this content delta."""
-
-        if content_delta:
-            self._buffer += content_delta
-        return self._drain(final=False)
-
-    def finish(self) -> list[str]:
-        """Flushes the final sentence after the assistant turn commits."""
-
-        return self._drain(final=True)
-
-    def _drain(self, *, final: bool) -> list[str]:
-        result: list[str] = []
-        while self._buffer:
-            visible = _strip_unclosed_code_block(self._buffer)
-            if not visible:
-                break
-            boundary = _find_sentence_boundary(visible)
-            if boundary is None:
-                normalized = _strip_tts_markup(visible)
-                if len(normalized) <= self._max_length and not final:
-                    break
-                cut = _find_bounded_cut(visible, self._max_length)
-                if cut is None:
-                    if not final:
-                        break
-                    result.extend(split_tts_sentences(self._buffer, max_length=self._max_length))
-                    self._buffer = ""
-                    break
-                candidate = self._buffer[:cut]
-                self._buffer = self._buffer[cut:]
-                result.extend(split_tts_sentences(candidate, max_length=self._max_length))
-                continue
-
-            end = boundary + 1
-            candidate = self._buffer[:end]
-            self._buffer = self._buffer[end:]
-            result.extend(split_tts_sentences(candidate, max_length=self._max_length))
-        return result
-
-
-def parse_minimax_stream_chunks(chunks: Iterable[bytes]) -> Iterator[bytes]:
+def parse_minimax_stream_chunks(
+    chunks: Iterable[bytes],
+    *,
+    on_payload: Callable[[dict[str, Any]], None] | None = None,
+) -> Iterator[bytes]:
     """Decodes newline-delimited MiniMax JSON/``data:`` audio chunks."""
 
     pending = b""
@@ -306,12 +239,28 @@ def parse_minimax_stream_chunks(chunks: Iterable[bytes]) -> Iterator[bytes]:
         pending += chunk
         while b"\n" in pending:
             line, pending = pending.split(b"\n", 1)
-            yield from _parse_minimax_stream_line(line)
+            yield from _parse_minimax_stream_line(line, on_payload=on_payload)
     if pending.strip():
-        yield from _parse_minimax_stream_line(pending)
+        yield from _parse_minimax_stream_line(pending, on_payload=on_payload)
 
 
-def _parse_minimax_stream_line(line: bytes) -> Iterator[bytes]:
+def _cancelable_stream_chunks(
+    chunks: Iterable[bytes],
+    cancel_event: threading.Event | None,
+) -> Iterator[bytes]:
+    for chunk in chunks:
+        if cancel_event is not None and cancel_event.is_set():
+            raise VoiceServiceError("语音合成已取消", error_code="cancelled")
+        yield chunk
+    if cancel_event is not None and cancel_event.is_set():
+        raise VoiceServiceError("语音合成已取消", error_code="cancelled")
+
+
+def _parse_minimax_stream_line(
+    line: bytes,
+    *,
+    on_payload: Callable[[dict[str, Any]], None] | None = None,
+) -> Iterator[bytes]:
     text = line.decode("utf-8", errors="replace").strip()
     if not text or text == "[DONE]":
         return
@@ -325,9 +274,15 @@ def _parse_minimax_stream_line(line: bytes) -> Iterator[bytes]:
         raise VoiceServiceError("MiniMax TTS 流式响应格式无效") from exc
     if not isinstance(payload, dict):
         raise VoiceServiceError("MiniMax TTS 流式响应格式无效")
+    if on_payload is not None:
+        on_payload(payload)
     base_resp = payload.get("base_resp")
     if isinstance(base_resp, dict) and base_resp.get("status_code", 0) not in (0, None):
-        raise VoiceServiceError(str(base_resp.get("status_msg") or "MiniMax TTS 请求失败"))
+        raise VoiceServiceError(
+            str(base_resp.get("status_msg") or "MiniMax TTS 请求失败"),
+            error_code=str(base_resp.get("status_code") or ""),
+            request_id=str(payload.get("trace_id") or "").strip(),
+        )
     data = payload.get("data")
     if not isinstance(data, dict):
         return
@@ -345,42 +300,6 @@ def _decode_audio_string(raw_audio: str) -> bytes:
             return base64.b64decode(raw_audio, validate=True)
         except (binascii.Error, ValueError) as exc:
             raise VoiceServiceError("MiniMax TTS 音频数据无效") from exc
-
-
-def _strip_tts_markup(text: str) -> str:
-    cleaned = re.sub(r"```[\s\S]*?```", "", text)
-    cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
-    cleaned = re.sub(r"!\[[^]]*\]\([^)]*\)", "", cleaned)
-    cleaned = re.sub(r"\[([^]]+)\]\([^)]*\)", r"\1", cleaned)
-    cleaned = re.sub(r"(^|\n)\s{0,3}#+\s*", r"\1", cleaned)
-    cleaned = re.sub(r"[*_~]", "", cleaned)
-    return re.sub(r"\s+", " ", cleaned).strip()
-
-
-def _strip_unclosed_code_block(text: str) -> str:
-    fences = list(re.finditer(r"```", text))
-    if len(fences) % 2 == 0:
-        return text
-    return text[:fences[-1].start()]
-
-
-def _find_sentence_boundary(text: str) -> int | None:
-    fences = [match.start() for match in re.finditer(r"```", text)]
-    code_ranges = list(zip(fences[0::2], fences[1::2]))
-    for match in re.finditer(r"[。！？；!?;.\n]", text):
-        if any(start < match.start() < end for start, end in code_ranges):
-            continue
-        return match.start()
-    return None
-
-
-def _find_bounded_cut(text: str, max_length: int) -> int | None:
-    normalized = _strip_tts_markup(text)
-    if len(normalized) <= max_length:
-        return None
-    prefix = text[:max_length]
-    comma = max(prefix.rfind("，"), prefix.rfind(","))
-    return (comma + 1) if comma >= 0 else max_length
 
 
 class MiniMaxTtsClient:
@@ -435,17 +354,81 @@ class MiniMaxTtsClient:
     ) -> bytes:
         """Collects one sentence from MiniMax's streaming response."""
 
+        return self.stream_synthesize_result(
+            text,
+            voice_id=voice_id,
+            speed=speed,
+            emotion=emotion,
+        ).audio
+
+    def stream_synthesize_result(
+        self,
+        text: str,
+        *,
+        voice_id: str,
+        speed: float = 1.0,
+        emotion: str = "",
+        cancel_event: threading.Event | None = None,
+    ) -> VoiceSynthesisResult:
+        """Collects one sentence and its MiniMax trace diagnostics."""
+
         self._validate_request(text, voice_id, speed)
+        if cancel_event is not None and cancel_event.is_set():
+            raise VoiceServiceError("语音合成已取消", error_code="cancelled")
+        started_at = time.perf_counter()
         body = self._build_body(text, voice_id=voice_id, speed=speed, emotion=emotion, stream=True)
         chunks = self._stream_requester(
             self.config.base_url,
             {"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json"},
             json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
-        audio = b"".join(parse_minimax_stream_chunks(chunks))
+        request_id = ""
+        audio_duration_ms = 0
+
+        def _capture_metrics(payload: dict[str, Any]) -> None:
+            nonlocal request_id, audio_duration_ms
+            request_id = str(payload.get("trace_id") or request_id).strip()
+            extra_info = payload.get("extra_info")
+            if not isinstance(extra_info, dict):
+                return
+            raw_duration = extra_info.get("audio_length")
+            if isinstance(raw_duration, (int, float)) and raw_duration >= 0:
+                audio_duration_ms = int(raw_duration)
+
+        try:
+            audio = b"".join(
+                parse_minimax_stream_chunks(
+                    _cancelable_stream_chunks(chunks, cancel_event),
+                    on_payload=_capture_metrics,
+                )
+            )
+        except VoiceServiceError as exc:
+            metrics = VoiceOperationMetrics(
+                provider=self.config.provider,
+                request_id=exc.request_id or request_id,
+                elapsed_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
+                audio_duration_ms=audio_duration_ms,
+                character_count=len(text),
+                error_code=exc.error_code or "provider_error",
+            )
+            raise VoiceServiceError(
+                str(exc),
+                error_code=metrics.error_code,
+                request_id=metrics.request_id,
+                metrics=metrics,
+            ) from exc
         if not audio:
             raise VoiceServiceError("MiniMax TTS 未返回音频")
-        return audio
+        return VoiceSynthesisResult(
+            audio=audio,
+            metrics=VoiceOperationMetrics(
+                provider=self.config.provider,
+                request_id=request_id,
+                elapsed_ms=max(0, int((time.perf_counter() - started_at) * 1000)),
+                audio_duration_ms=audio_duration_ms,
+                character_count=len(text),
+            ),
+        )
 
     def clone_voice(self, audio: bytes, *, file_name: str = "voice-clone.wav") -> dict[str, Any]:
         """Uploads a clone sample, creates a unique voice, and returns one preview."""
@@ -498,9 +481,40 @@ class MiniMaxTtsClient:
         demo_audio = self._binary_requester(demo_url) if demo_url else b""
         return {
             "voice_id": voice_id,
+            "provider": self.config.provider,
+            "ownership": "shiori_managed",
             "audio_base64": base64.b64encode(demo_audio).decode("ascii") if demo_audio else "",
             "format": "mp3",
         }
+
+    def delete_voice(self, voice_id: str) -> None:
+        """Deletes one MiniMax cloned voice previously created by Shiori."""
+
+        if not self.config.enabled:
+            raise VoiceServiceError("TTS 未启用")
+        if self.config.provider != "minimax":
+            raise VoiceServiceError(f"不支持的 TTS provider: {self.config.provider}")
+        if not self.config.api_key:
+            raise VoiceServiceError("MiniMax TTS 缺少 API Key")
+        normalized_voice_id = voice_id.strip()
+        if not normalized_voice_id:
+            raise VoiceServiceError("voice_id 不能为空")
+        response = self._requester(
+            self._clone_url("/v1/delete_voice"),
+            {
+                "Authorization": f"Bearer {self.config.api_key}",
+                "Content-Type": "application/json",
+            },
+            json.dumps(
+                {
+                    "voice_type": "voice_cloning",
+                    "voice_id": normalized_voice_id,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+        )
+        self._raise_minimax_error(response)
 
     def _clone_url(self, path: str) -> str:
         base = self.config.base_url.rstrip("/")
@@ -546,6 +560,8 @@ class MiniMaxTtsClient:
             "voice_setting": {"voice_id": voice_id, "speed": speed, "vol": 1, "pitch": 0},
             "audio_setting": {"sample_rate": 32000, "bitrate": 128000, "format": "mp3", "channel": 1},
         }
+        if stream:
+            body["stream_options"] = {"exclude_aggregated_audio": True}
         if emotion:
             body["voice_setting"]["emotion"] = emotion
         return body
@@ -571,10 +587,23 @@ class VoiceService:
 
         return self.config.enabled and self.config.tts.enabled
 
+    @property
+    def tts_provider(self) -> str:
+        """Returns the configured TTS provider accepted by role voice settings."""
+
+        return self.config.tts.provider
+
     def transcribe(self, audio: bytes) -> str:
         if not self.enabled:
             raise VoiceServiceError("语音未启用")
         return self.asr.transcribe(audio)
+
+    def transcribe_result(self, audio: bytes) -> VoiceTranscriptionResult:
+        """Returns recognized text with structured provider diagnostics."""
+
+        if not self.enabled:
+            raise VoiceServiceError("语音未启用")
+        return self.asr.transcribe_result(audio)
 
     def synthesize(self, text: str, *, voice_id: str, speed: float, emotion: str = "") -> bytes:
         return self.tts.synthesize(text, voice_id=voice_id, speed=speed, emotion=emotion)
@@ -582,5 +611,41 @@ class VoiceService:
     def stream_synthesize(self, text: str, *, voice_id: str, speed: float, emotion: str = "") -> bytes:
         return self.tts.stream_synthesize(text, voice_id=voice_id, speed=speed, emotion=emotion)
 
+    def stream_synthesize_result(
+        self,
+        text: str,
+        *,
+        voice_id: str,
+        speed: float,
+        emotion: str = "",
+        cancel_event: threading.Event | None = None,
+    ) -> VoiceSynthesisResult:
+        """Returns one synthesized sentence with structured provider diagnostics."""
+
+        return self.tts.stream_synthesize_result(
+            text,
+            voice_id=voice_id,
+            speed=speed,
+            emotion=emotion,
+            cancel_event=cancel_event,
+        )
+
     def clone_voice(self, audio: bytes, *, file_name: str = "voice-clone.wav") -> dict[str, Any]:
         return self.tts.clone_voice(audio, file_name=file_name)
+
+    def delete_managed_voice(
+        self,
+        *,
+        provider: str,
+        voice_id: str,
+        ownership: str,
+    ) -> None:
+        """Deletes only provider assets explicitly recorded as Shiori-managed clones."""
+
+        if ownership != "shiori_managed":
+            raise VoiceServiceError("外部音色不能由 Shiori 删除")
+        if provider != self.tts_provider:
+            raise VoiceServiceError("音色 provider 与当前 TTS provider 不匹配")
+        if not voice_id.startswith("Shiori_"):
+            raise VoiceServiceError("拒绝删除非 Shiori 管理的音色")
+        self.tts.delete_voice(voice_id)

@@ -1,8 +1,11 @@
 import type { BrowserWindow, WebContents } from "electron";
 import type { VoicePlaybackCommand } from "../shared.js";
+import { createDeferred, type Deferred } from "./deferred.js";
 
+/** One complete synthesized sentence owned by a specific voice turn. */
 export type VoicePlaybackItem = {
   id: string;
+  turnId: string;
   sessionKey: string;
   requestId: string;
   sequence: number;
@@ -13,65 +16,77 @@ export type VoicePlaybackItem = {
 
 type VoicePlaybackWindowFactory = () => BrowserWindow;
 
-type VoicePlaybackCallbacks = {
+export type VoicePlaybackCallbacks = {
   onStarted(item: VoicePlaybackItem): void;
   onFinished(item: VoicePlaybackItem, nextItem: VoicePlaybackItem | null): void;
   onError(item: VoicePlaybackItem, message: string): void;
-  onDrained(): void;
+  onDrained(turnId: string): void;
 };
-
-type Deferred = {
-  promise: Promise<void>;
-  resolve(): void;
-  reject(error: Error): void;
-};
-
-function deferred(): Deferred {
-  let resolvePromise!: () => void;
-  let rejectPromise!: (error: Error) => void;
-  const promise = new Promise<void>((resolve, reject) => {
-    resolvePromise = resolve;
-    rejectPromise = reject;
-  });
-  return { promise, resolve: resolvePromise, reject: rejectPromise };
-}
 
 /** Queues complete MP3 sentences and owns the hidden renderer playback surface. */
 export class BrowserVoicePlayback {
   private window: BrowserWindow | null = null;
-  private ready: Deferred | null = null;
+  private ready: Deferred<void> | null = null;
   private queue: VoicePlaybackItem[] = [];
   private current: VoicePlaybackItem | null = null;
   private pumping = false;
-  private finishCurrent = false;
+  private activeTurnId = "";
+  private activeTurnFinished = false;
+  private activeTurnDrained = false;
+  private stoppedTurnId = "";
 
   constructor(
     private readonly createWindow: VoicePlaybackWindowFactory,
     private readonly callbacks: VoicePlaybackCallbacks,
   ) {}
 
+  /** Selects the only turn whose newly arriving audio may enter the queue. */
+  beginTurn(turnId: string): void {
+    const nextTurnId = turnId.trim();
+    if (!nextTurnId || nextTurnId === this.activeTurnId) return;
+    this.activeTurnId = nextTurnId;
+    this.activeTurnFinished = false;
+    this.activeTurnDrained = false;
+    this.stoppedTurnId = "";
+    this.queue = [];
+  }
+
   /** Adds an audio sentence while preserving bridge sequence order. */
   enqueue(item: VoicePlaybackItem): void {
-    if (!item.id || !item.audioBase64) return;
+    if (!item.id || !item.audioBase64 || item.turnId !== this.activeTurnId) return;
     this.queue.push(item);
     void this.pump();
   }
 
+  /** Marks backend synthesis complete so an empty queue can end the turn. */
+  finishTurn(turnId: string): void {
+    if (!turnId || turnId !== this.activeTurnId) return;
+    this.activeTurnFinished = true;
+    this.notifyActiveTurnDrained();
+  }
+
   /** Drops queued sentences while allowing the currently playing sentence to finish. */
   stopAfterCurrent(): void {
+    const stoppedTurnId = this.activeTurnId;
+    this.activeTurnId = "";
+    this.activeTurnFinished = false;
+    this.activeTurnDrained = false;
     this.queue = [];
     if (this.current) {
-      this.finishCurrent = true;
+      this.stoppedTurnId = stoppedTurnId;
       return;
     }
-    this.callbacks.onDrained();
+    if (stoppedTurnId) this.callbacks.onDrained(stoppedTurnId);
   }
 
   /** Cancels playback during app teardown and releases the hidden renderer. */
   dispose(): void {
     this.queue = [];
     this.current = null;
-    this.finishCurrent = false;
+    this.activeTurnId = "";
+    this.activeTurnFinished = false;
+    this.activeTurnDrained = false;
+    this.stoppedTurnId = "";
     if (this.window && !this.window.isDestroyed()) {
       this.window.webContents.send("desktop:voice-playback-command", { command: "cancel" } satisfies VoicePlaybackCommand);
       this.window.destroy();
@@ -91,12 +106,15 @@ export class BrowserVoicePlayback {
   handleFinished(sender: WebContents, id: string): boolean {
     if (!this.isPlaybackSender(sender) || this.current?.id !== id) return false;
     const completed = this.current;
-    const next = this.finishCurrent ? null : (this.queue[0] ?? null);
+    const next = this.queue[0] ?? null;
     this.current = null;
     this.callbacks.onFinished(completed, next);
-    if (this.finishCurrent || !next) {
-      this.finishCurrent = false;
-      if (!next) this.callbacks.onDrained();
+    if (!next) {
+      if (this.stoppedTurnId === completed.turnId) {
+        this.callbacks.onDrained(this.stoppedTurnId);
+        this.stoppedTurnId = "";
+      }
+      this.notifyActiveTurnDrained();
       return true;
     }
     void this.pump();
@@ -109,9 +127,12 @@ export class BrowserVoicePlayback {
     const failed = this.current;
     this.current = null;
     this.callbacks.onError(failed, message || "音频播放失败");
-    if (this.finishCurrent || this.queue.length === 0) {
-      this.finishCurrent = false;
-      if (this.queue.length === 0) this.callbacks.onDrained();
+    if (this.queue.length === 0) {
+      if (this.stoppedTurnId === failed.turnId) {
+        this.callbacks.onDrained(this.stoppedTurnId);
+        this.stoppedTurnId = "";
+      }
+      this.notifyActiveTurnDrained();
       return true;
     }
     void this.pump();
@@ -143,7 +164,7 @@ export class BrowserVoicePlayback {
     if (this.window && !this.window.isDestroyed()) return this.window;
     const window = this.createWindow();
     this.window = window;
-    this.ready = deferred();
+    this.ready = createDeferred<void>();
     window.webContents.once("did-finish-load", () => this.ready?.resolve());
     window.once("closed", () => {
       if (this.window !== window) return;
@@ -153,6 +174,20 @@ export class BrowserVoicePlayback {
       this.queue = [];
     });
     return window;
+  }
+
+  private notifyActiveTurnDrained(): void {
+    if (
+      !this.activeTurnId
+      || !this.activeTurnFinished
+      || this.activeTurnDrained
+      || this.queue.length > 0
+      || this.current?.turnId === this.activeTurnId
+    ) {
+      return;
+    }
+    this.activeTurnDrained = true;
+    this.callbacks.onDrained(this.activeTurnId);
   }
 
   private isPlaybackSender(sender: WebContents): boolean {
