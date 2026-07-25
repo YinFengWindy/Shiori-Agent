@@ -98,3 +98,21 @@ async def test_role_without_voice_id_does_not_start_provider_work() -> None:
     await coordinator.wait()
 
     assert service.calls == []
+
+
+@pytest.mark.asyncio
+async def test_disabled_role_voice_does_not_start_provider_work() -> None:
+    service = _VoiceService()
+    coordinator = TtsTurnCoordinator(
+        voice_service=service,  # type: ignore[arg-type]
+        session_key="role:mira",
+        request_id="turn-4",
+        settings=resolve_role_tts_settings({"tts": {"enabled": False, "voice_id": "mira"}}, "平静"),
+        emit_event=lambda _payload: None,
+    )
+
+    coordinator.push("不会合成。")
+    coordinator.finish()
+    await coordinator.wait()
+
+    assert service.calls == []

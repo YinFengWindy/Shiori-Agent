@@ -206,6 +206,11 @@ export type RoleFormState = {
   defaultMood: string;
   moodIllustrationBindings: Record<string, string>;
   desktopPetEnabled: boolean;
+  voiceEnabled: boolean;
+  voiceId: string;
+  voiceName: string;
+  voiceSpeed: number;
+  voiceMoodEmotions: Record<string, string>;
 };
 
 /** New role composer form state. */

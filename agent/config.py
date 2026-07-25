@@ -240,6 +240,9 @@ def _load_voice_config(data: dict) -> VoiceConfig:
     asr = _as_dict(voice.get("asr"))
     tts = _as_dict(voice.get("tts"))
     return VoiceConfig(
+        enabled=bool(voice.get("enabled", False)),
+        hotkey=str(voice.get("hotkey", "Ctrl+Space") or "Ctrl+Space"),
+        microphone_device_id=str(voice.get("microphone_device_id", "") or "").strip(),
         asr=VoiceAsrConfig(
             enabled=bool(asr.get("enabled", False)),
             provider=str(asr.get("provider", "tencent") or "tencent"),

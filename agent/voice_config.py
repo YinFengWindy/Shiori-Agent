@@ -28,7 +28,10 @@ class VoiceTtsConfig:
 
 @dataclass(frozen=True)
 class VoiceConfig:
-    """Groups global ASR and TTS provider settings."""
+    """Groups global voice switches, input preferences, and providers."""
 
+    enabled: bool = False
+    hotkey: str = "Ctrl+Space"
+    microphone_device_id: str = ""
     asr: VoiceAsrConfig = VoiceAsrConfig()
     tts: VoiceTtsConfig = VoiceTtsConfig()

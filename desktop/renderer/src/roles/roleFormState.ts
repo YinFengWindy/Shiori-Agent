@@ -1,5 +1,6 @@
 import type { RoleFormState, RoleProactiveConfig, RoleRecord } from "../shared/types";
 import { readRoleMoodConfig, roleMoodConfigEqual } from "./roleMoodConfig";
+import { readRoleVoiceConfig, roleVoiceConfigEqual } from "./roleVoiceConfig";
 
 /** Builds a proactive update while preserving persisted fields outside the form. */
 export function buildRoleProactiveConfig(
@@ -32,6 +33,7 @@ export function buildRoleProactiveConfig(
 /** Builds the editable role form state from a persisted role snapshot. */
 export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
   const moodConfig = readRoleMoodConfig(role);
+  const voiceConfig = readRoleVoiceConfig(role);
   return {
     name: role.name,
     description: role.description,
@@ -57,12 +59,18 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     defaultMood: moodConfig.defaultMood,
     moodIllustrationBindings: moodConfig.moodIllustrationBindings,
     desktopPetEnabled: Boolean(role.desktop_pet_enabled),
+    voiceEnabled: voiceConfig.enabled,
+    voiceId: voiceConfig.voiceId,
+    voiceName: voiceConfig.voiceName,
+    voiceSpeed: voiceConfig.speed,
+    voiceMoodEmotions: voiceConfig.moodTtsEmotions,
   };
 }
 
 /** Checks whether the editable role form has diverged from the persisted role snapshot. */
 export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null): boolean {
   const persistedMoodConfig = readRoleMoodConfig(role);
+  const persistedVoiceConfig = readRoleVoiceConfig(role);
   return Boolean(
     role
       && (
@@ -85,6 +93,7 @@ export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null
         || (roleForm.proactiveDriftMinIntervalHours ?? 3) !== (role.proactive?.drift?.min_interval_hours ?? 3)
         || !roleMoodConfigEqual(roleForm, persistedMoodConfig)
         || Boolean(roleForm.desktopPetEnabled) !== Boolean(role.desktop_pet_enabled)
+        || !roleVoiceConfigEqual(roleForm, persistedVoiceConfig)
         || Boolean(roleForm.avatarSource)
         || roleForm.illustrationSources.length > 0
         || roleForm.removedIllustrations.length > 0

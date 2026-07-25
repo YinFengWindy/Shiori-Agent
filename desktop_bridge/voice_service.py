@@ -427,10 +427,25 @@ class VoiceService:
     """Owns configured ASR and TTS clients while keeping provider details out of IPC."""
 
     def __init__(self, config: VoiceConfig) -> None:
+        self.config = config
         self.asr = TencentAsrClient(config.asr)
         self.tts = MiniMaxTtsClient(config.tts)
 
+    @property
+    def enabled(self) -> bool:
+        """Returns whether the global desktop voice switch is enabled."""
+
+        return self.config.enabled
+
+    @property
+    def tts_enabled(self) -> bool:
+        """Returns whether global voice settings allow TTS work."""
+
+        return self.config.enabled and self.config.tts.enabled
+
     def transcribe(self, audio: bytes) -> str:
+        if not self.enabled:
+            raise VoiceServiceError("语音未启用")
         return self.asr.transcribe(audio)
 
     def synthesize(self, text: str, *, voice_id: str, speed: float, emotion: str = "") -> bytes:

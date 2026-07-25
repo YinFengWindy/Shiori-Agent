@@ -27,7 +27,8 @@ import { BrowserVoiceRecorder } from "./voice/recorder.js";
 import { DesktopVoiceController } from "./voice/controller.js";
 import { VoiceHotkeyController } from "./voice/hotkey.js";
 import { BrowserVoicePlayback } from "./voice/playback.js";
-import type { VoiceStatePayload } from "./shared.js";
+import { loadSettingsData } from "./settings.js";
+import type { SettingsFormData, VoiceStatePayload } from "./shared.js";
 
 const bridge = new DesktopBridgeClient();
 const localAssets = new LocalAssetRegistry();
@@ -42,6 +43,7 @@ let voiceRecorder: BrowserVoiceRecorder | null = null;
 let voiceController: DesktopVoiceController | null = null;
 let voicePlayback: BrowserVoicePlayback | null = null;
 let voiceHotkey: VoiceHotkeyController | null = null;
+let voiceSettings: SettingsFormData["voice"];
 let isQuitting = false;
 let bridgeShutdownStarted = false;
 
@@ -202,13 +204,19 @@ function publishVoiceState(payload: VoiceStatePayload): void {
 
 function syncVoiceAvailability(): void {
   if (!voiceHotkey) return;
-  const enabled = Boolean(desktopPet?.isRunning && desktopPetSettings.visible);
+  const enabled = Boolean(voiceSettings?.enabled && desktopPet?.isRunning && desktopPetSettings.visible);
   if (enabled) {
     voiceHotkey.start();
     return;
   }
   voiceHotkey.stop();
   voiceController?.cancel();
+}
+
+function reloadVoiceSettings(): void {
+  voiceSettings = loadSettingsData().formData.voice;
+  voiceHotkey?.setHotkey(voiceSettings.hotkey);
+  syncVoiceAvailability();
 }
 
 async function hideDesktopPet(): Promise<void> {
@@ -261,6 +269,7 @@ function showOrCreateDesktopWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   ensureDesktopConfig();
+  reloadVoiceSettings();
   process.env.MIRA_DESKTOP_USER_DATA_DIR = app.getPath("userData");
   desktopPetSettings = loadDesktopPetSettings(desktopPetSettingsPath());
   const activeVoiceRecorder = new BrowserVoiceRecorder(createVoiceCaptureWindow);
@@ -291,7 +300,7 @@ void app.whenReady().then(() => {
   const activeVoiceController = new DesktopVoiceController({
     recorder: activeVoiceRecorder,
     bridge,
-    isEnabled: () => Boolean(desktopPet?.isRunning && desktopPetSettings.visible),
+    isEnabled: () => Boolean(voiceSettings?.enabled && desktopPet?.isRunning && desktopPetSettings.visible),
     roleId: () => desktopPetSettings?.roleId ?? null,
     publishState: publishVoiceState,
     onNewInput: () => activeVoicePlayback.stopAfterCurrent(),
@@ -318,7 +327,7 @@ void app.whenReady().then(() => {
       onRelease: () => activeVoiceController.release(),
       onCancel: () => activeVoiceController.cancel(),
     });
-    voiceHotkey.setHotkey("Ctrl+Space");
+    voiceHotkey.setHotkey(voiceSettings.hotkey);
   }
   wireBridgeEvents(bridge, localAssets, (event) => {
     if (event.method === "desktop.pet.action") {
@@ -380,6 +389,7 @@ void app.whenReady().then(() => {
     voiceRecorder: activeVoiceRecorder,
     voiceController: activeVoiceController,
     voicePlayback: activeVoicePlayback,
+    onVoiceSettingsChanged: reloadVoiceSettings,
     onPetVisibilityChanged: syncVoiceAvailability,
   });
   getOrCreateDesktopWindow();
