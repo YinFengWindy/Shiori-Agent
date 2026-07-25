@@ -42,10 +42,13 @@ function createRoleForm(overrides: Partial<RoleFormState> = {}): RoleFormState {
     defaultMood: overrides.defaultMood ?? "平静",
     moodIllustrationBindings: overrides.moodIllustrationBindings ?? {},
     voiceEnabled: overrides.voiceEnabled ?? true,
+    voiceProvider: overrides.voiceProvider ?? "minimax",
+    voiceOwnership: overrides.voiceOwnership ?? "external",
     voiceId: overrides.voiceId ?? "",
     voiceName: overrides.voiceName ?? "",
     voiceSpeed: overrides.voiceSpeed ?? 1,
     voiceMoodEmotions: overrides.voiceMoodEmotions ?? {},
+    pendingVoiceAssetDeletes: overrides.pendingVoiceAssetDeletes ?? [],
   };
 }
 

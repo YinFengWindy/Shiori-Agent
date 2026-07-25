@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { BridgeResponse, VoiceStatePayload } from "../shared.js";
 import {
   VOICE_MAX_RECORDING_MS,
@@ -21,15 +22,17 @@ export interface VoiceBridge {
   invoke(request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse>;
 }
 
+/** Injected device, bridge, timing, and turn-selection dependencies. */
 export type DesktopVoiceControllerOptions = {
   recorder: VoiceRecorder;
   bridge: VoiceBridge;
   isEnabled: () => boolean;
   roleId: () => string | null;
   publishState: (payload: VoiceStatePayload) => void;
-  /** Drops queued speech when a new input turn begins. */
-  onNewInput?: () => void;
+  /** Selects the new turn and retires queued speech owned by the previous turn. */
+  onNewInput?: (previousTurnId: string | null, nextTurnId: string) => void;
   microphoneDeviceId?: () => string;
+  createTurnId?: () => string;
   now?: () => number;
   schedule?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
   clearSchedule?: (timer: ReturnType<typeof setTimeout>) => void;
@@ -42,8 +45,10 @@ export class DesktopVoiceController {
   private readonly schedule: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
   private readonly clearSchedule: (timer: ReturnType<typeof setTimeout>) => void;
   private pressTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingReplyPress: { source: VoiceInputSource; atMs: number } | null = null;
   private recordingTimer: ReturnType<typeof setTimeout> | null = null;
   private recordingStart: Promise<void> | null = null;
+  private activeTurnId: string | null = null;
   private disposed = false;
 
   constructor(private readonly options: DesktopVoiceControllerOptions) {
@@ -57,14 +62,20 @@ export class DesktopVoiceController {
     return this.state;
   }
 
+  /** Returns the turn whose bridge and playback events are currently authoritative. */
+  get currentTurnId(): string | null {
+    return this.activeTurnId;
+  }
+
   /** Starts the shared press-pending phase for a pet or global-hotkey input. */
   startPress(source: VoiceInputSource, atMs = this.now()): boolean {
     if (this.disposed || !this.options.isEnabled()) return false;
     if (["waiting_reply", "speaking_prepare", "speaking", "finish_current_sentence_then_idle"].includes(this.state.kind)) {
-      this.options.onNewInput?.();
+      if (this.pendingReplyPress) return false;
+      this.pendingReplyPress = { source, atMs };
       this.clearPressTimer();
-      this.clearRecordingTimer();
-      this.apply({ type: "reset" });
+      this.pressTimer = this.schedule(() => this.beginReplyInterruptPress(), VOICE_PRESS_THRESHOLD_MS);
+      return true;
     }
     if (this.state.kind === "error") this.apply({ type: "reset" });
     if (this.state.kind !== "idle") return false;
@@ -81,6 +92,11 @@ export class DesktopVoiceController {
 
   /** Lets the pet drag recognizer win before the voice threshold expires. */
   pointerMoved(): void {
+    if (this.pendingReplyPress) {
+      this.pendingReplyPress = null;
+      this.clearPressTimer();
+      return;
+    }
     if (this.state.kind !== "press_pending") return;
     this.clearPressTimer();
     this.apply({ type: "pointer_moved" });
@@ -88,6 +104,11 @@ export class DesktopVoiceController {
 
   /** Finishes a pending press or submits the current recording for ASR. */
   release(): void {
+    if (this.pendingReplyPress) {
+      this.pendingReplyPress = null;
+      this.clearPressTimer();
+      return;
+    }
     if (this.state.kind === "press_pending") {
       this.clearPressTimer();
       this.apply({ type: "released" });
@@ -101,6 +122,7 @@ export class DesktopVoiceController {
 
   /** Cancels the current recording without contacting ASR or the chat Loop. */
   cancel(): void {
+    this.pendingReplyPress = null;
     this.clearPressTimer();
     this.clearRecordingTimer();
     if (this.state.kind === "recording") {
@@ -112,6 +134,7 @@ export class DesktopVoiceController {
   /** Cancels timers and releases the recorder during app or pet shutdown. */
   dispose(): void {
     this.disposed = true;
+    this.pendingReplyPress = null;
     this.clearPressTimer();
     this.clearRecordingTimer();
     if (this.state.kind === "recording") void this.options.recorder.cancel();
@@ -146,9 +169,17 @@ export class DesktopVoiceController {
   }
 
   private beginRecording(): void {
-    this.recordingStart = this.options.recorder.start(this.options.microphoneDeviceId?.() ?? "").catch((error: unknown) => {
-      this.apply({ type: "recording_failed", message: errorMessage(error, "没有可用的麦克风") });
-    });
+    this.recordingStart = this.options.recorder.start(this.options.microphoneDeviceId?.() ?? "")
+      .then(() => {
+        if (this.disposed || !["recording", "transcribing"].includes(this.state.kind)) return;
+        const previousTurnId = this.activeTurnId;
+        const nextTurnId = (this.options.createTurnId ?? randomUUID)();
+        this.activeTurnId = nextTurnId;
+        this.options.onNewInput?.(previousTurnId, nextTurnId);
+      })
+      .catch((error: unknown) => {
+        this.apply({ type: "recording_failed", message: errorMessage(error, "没有可用的麦克风") });
+      });
     this.recordingTimer = this.schedule(() => {
       this.recordingTimer = null;
       if (this.state.kind !== "recording") return;
@@ -157,11 +188,23 @@ export class DesktopVoiceController {
     }, VOICE_MAX_RECORDING_MS);
   }
 
+  private beginReplyInterruptPress(): void {
+    const pending = this.pendingReplyPress;
+    this.pendingReplyPress = null;
+    this.pressTimer = null;
+    if (!pending || !this.options.isEnabled()) return;
+    this.apply({ type: "reset" });
+    this.apply({ type: "press_started", source: pending.source, atMs: pending.atMs });
+    this.apply({ type: "press_elapsed", atMs: this.now() });
+    if (this.currentState.kind === "recording") this.beginRecording();
+  }
+
   private async finishRecording(): Promise<void> {
     const start = this.recordingStart;
     this.recordingStart = null;
     try {
       await start;
+      if (this.disposed || this.state.kind !== "transcribing") return;
       const audio = await this.options.recorder.stop();
       if (this.disposed || this.state.kind !== "transcribing") return;
       const transcribe = await this.options.bridge.invoke({
@@ -173,6 +216,7 @@ export class DesktopVoiceController {
         return;
       }
       const text = String(transcribe.payload.text ?? "").trim();
+      const asrMetrics = normalizeVoiceMetrics(transcribe.payload.metrics);
       this.apply({ type: "asr_succeeded", text });
       if (this.currentState.kind !== "sending") return;
       const roleId = this.options.roleId();
@@ -187,6 +231,8 @@ export class DesktopVoiceController {
           content: text,
           media: [],
           input_method: "voice",
+          voice_turn_id: this.activeTurnId,
+          asr_metrics: asrMetrics ?? undefined,
         },
       });
       if (chat.error) {
@@ -233,4 +279,23 @@ function toVoiceStatePayload(state: VoiceInteractionState): VoiceStatePayload {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function normalizeVoiceMetrics(value: unknown): Record<string, string | number> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const metrics = value as Record<string, unknown>;
+  const provider = String(metrics.provider ?? "").trim();
+  if (!provider) return null;
+  const nonNegativeNumber = (field: string) => {
+    const raw = Number(metrics[field]);
+    return Number.isFinite(raw) && raw >= 0 ? raw : 0;
+  };
+  return {
+    provider,
+    request_id: String(metrics.request_id ?? "").trim(),
+    elapsed_ms: nonNegativeNumber("elapsed_ms"),
+    audio_duration_ms: nonNegativeNumber("audio_duration_ms"),
+    character_count: nonNegativeNumber("character_count"),
+    error_code: String(metrics.error_code ?? "").trim(),
+  };
 }

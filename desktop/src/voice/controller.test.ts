@@ -42,6 +42,7 @@ function createController(overrides: {
     isEnabled: () => overrides.enabled ?? true,
     roleId: () => "role-a",
     publishState: (payload) => events.push(payload),
+    createTurnId: () => "voice-turn-1",
     now: () => clock,
     schedule: (callback, delayMs) => {
       nextTimer += 1;
@@ -61,7 +62,17 @@ test("submits one ASR result through the existing chat.send method", async () =>
   const { controller, recorder, events } = createController({
     invoke: async (request) => {
       requests.push(request);
-      return request.method === "voice.transcribe" ? response({ text: "你好" }) : response();
+      return request.method === "voice.transcribe" ? response({
+        text: "你好",
+        metrics: {
+          provider: "tencent",
+          request_id: "asr-request-1",
+          elapsed_ms: 120,
+          audio_duration_ms: 1000,
+          character_count: 2,
+          error_code: "",
+        },
+      }) : response();
     },
   });
 
@@ -74,6 +85,15 @@ test("submits one ASR result through the existing chat.send method", async () =>
   assert.equal(requests[0]?.method, "voice.transcribe");
   assert.equal(requests[1]?.method, "chat.send");
   assert.equal(requests[1]?.payload.input_method, "voice");
+  assert.equal(requests[1]?.payload.voice_turn_id, "voice-turn-1");
+  assert.deepEqual(requests[1]?.payload.asr_metrics, {
+    provider: "tencent",
+    request_id: "asr-request-1",
+    elapsed_ms: 120,
+    audio_duration_ms: 1000,
+    character_count: 2,
+    error_code: "",
+  });
   assert.equal(events.at(-1)?.status, "waiting_reply");
 });
 
@@ -131,18 +151,20 @@ test("a recorder startup failure is surfaced without contacting ASR", async () =
 });
 
 test("a new press can start while the previous sentence is speaking", async () => {
-  let stoppedPendingPlayback = 0;
+  const turnChanges: Array<[string | null, string]> = [];
   let schedules = 0;
+  let turnSequence = 0;
   const active = new DesktopVoiceController({
     recorder: new FakeRecorder(),
     bridge: { invoke: async () => response({ text: "ok" }) },
     isEnabled: () => true,
     roleId: () => "mira",
     publishState: () => undefined,
-    onNewInput: () => { stoppedPendingPlayback += 1; },
+    onNewInput: (previous, next) => { turnChanges.push([previous, next]); },
+    createTurnId: () => `turn-${turnSequence += 1}`,
     schedule: (callback) => {
       schedules += 1;
-      if (schedules === 1) callback();
+      if (schedules === 1 || schedules === 3) callback();
       return schedules as unknown as ReturnType<typeof setTimeout>;
     },
     clearSchedule: () => undefined,
@@ -155,7 +177,51 @@ test("a new press can start while the previous sentence is speaking", async () =
   active.sentenceReady("sentence-1");
 
   assert.equal(active.startPress("hotkey", 10), true);
-  assert.equal(stoppedPendingPlayback, 1);
-  assert.equal(active.currentState.kind, "press_pending");
+  await Promise.resolve();
+  assert.deepEqual(turnChanges, [[null, "turn-1"], ["turn-1", "turn-2"]]);
+  assert.equal(active.currentState.kind, "recording");
   active.cancel();
+});
+
+test("a short click or drag does not retire the active voice turn", async () => {
+  const turnChanges: Array<[string | null, string]> = [];
+  const scheduled: Array<() => void> = [];
+  let turnSequence = 0;
+  const active = new DesktopVoiceController({
+    recorder: new FakeRecorder(),
+    bridge: { invoke: async () => response({ text: "ok" }) },
+    isEnabled: () => true,
+    roleId: () => "mira",
+    publishState: () => undefined,
+    onNewInput: (previous, next) => { turnChanges.push([previous, next]); },
+    createTurnId: () => `turn-${turnSequence += 1}`,
+    schedule: (callback) => {
+      scheduled.push(callback);
+      return scheduled.length as unknown as ReturnType<typeof setTimeout>;
+    },
+    clearSchedule: () => undefined,
+  });
+
+  assert.equal(active.startPress("pet", 0), true);
+  scheduled.shift()?.();
+  await Promise.resolve();
+  active.release();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  active.replyStarted(true);
+  active.sentenceReady("sentence-1");
+  assert.equal(active.currentState.kind, "speaking");
+  assert.deepEqual(turnChanges, [[null, "turn-1"]]);
+
+  assert.equal(active.startPress("pet", 10), true);
+  active.release();
+  assert.equal(active.currentState.kind, "speaking");
+  assert.deepEqual(turnChanges, [[null, "turn-1"]]);
+
+  assert.equal(active.startPress("pet", 20), true);
+  active.pointerMoved();
+  scheduled.forEach((callback) => callback());
+  await Promise.resolve();
+
+  assert.equal(active.currentState.kind, "speaking");
+  assert.deepEqual(turnChanges, [[null, "turn-1"]]);
 });

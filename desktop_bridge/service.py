@@ -35,11 +35,32 @@ from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from desktop_bridge.world_simulation_handler import WorldSimulationHandler
 from agent.voice_config import VoiceConfig
-from desktop_bridge.voice_service import VoiceService
+from desktop_bridge.voice_service import VoiceService, VoiceServiceError
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 from session.manager import Session, SessionManager
 
 logger = logging.getLogger("desktop.bridge")
+
+
+def _sanitize_voice_metrics(value: object) -> dict[str, str | int] | None:
+    if not isinstance(value, dict):
+        return None
+    provider = str(value.get("provider") or "").strip()
+    if not provider:
+        return None
+
+    def _non_negative_int(key: str) -> int:
+        raw = value.get(key)
+        return int(raw) if isinstance(raw, (int, float)) and raw >= 0 else 0
+
+    return {
+        "provider": provider,
+        "request_id": str(value.get("request_id") or "").strip(),
+        "elapsed_ms": _non_negative_int("elapsed_ms"),
+        "audio_duration_ms": _non_negative_int("audio_duration_ms"),
+        "character_count": _non_negative_int("character_count"),
+        "error_code": str(value.get("error_code") or "").strip(),
+    }
 
 
 class DesktopBridgeService:
@@ -316,6 +337,19 @@ class DesktopBridgeService:
                 return self._ok(request_id, method, world_result)
             if method == "health":
                 return self._ok(request_id, method, {"ok": True})
+            if method == "voice.turn.cancel":
+                voice_turn_id = str(payload.get("voice_turn_id") or "").strip()
+                if not voice_turn_id:
+                    raise ValueError("voice_turn_id 不能为空")
+                cancelled = self.chat_service.cancel_voice_turn(voice_turn_id)
+                return self._ok(
+                    request_id,
+                    method,
+                    {
+                        "cancelled": cancelled,
+                        "voice_turn_id": voice_turn_id,
+                    },
+                )
             if method == "voice.transcribe":
                 audio_base64 = str(payload.get("audio_base64") or "")
                 if not audio_base64:
@@ -324,10 +358,11 @@ class DesktopBridgeService:
                     audio = base64.b64decode(audio_base64, validate=True)
                 except (binascii.Error, ValueError) as exc:
                     raise ValueError("audio_base64 无效") from exc
+                result = self.voice_service.transcribe_result(audio)
                 return self._ok(
                     request_id,
                     method,
-                    {"text": self.voice_service.transcribe(audio)},
+                    {"text": result.text, "metrics": result.metrics.to_dict()},
                 )
             if method == "voice.synthesize":
                 text = str(payload.get("text") or "").strip()
@@ -361,6 +396,18 @@ class DesktopBridgeService:
                     method,
                     self.voice_service.clone_voice(audio, file_name=file_name),
                 )
+            if method == "voice.delete":
+                provider = str(payload.get("provider") or "").strip()
+                voice_id = str(payload.get("voice_id") or "").strip()
+                ownership = str(payload.get("ownership") or "").strip()
+                if not provider or not voice_id or not ownership:
+                    raise ValueError("provider、voice_id 和 ownership 不能为空")
+                self.voice_service.delete_managed_voice(
+                    provider=provider,
+                    voice_id=voice_id,
+                    ownership=ownership,
+                )
+                return self._ok(request_id, method, {"deleted": True})
             if method == "roles.list":
                 return self._ok(
                     request_id,
@@ -657,6 +704,12 @@ class DesktopBridgeService:
                     metadata["client_message_id"] = client_message_id
                 if input_method == "voice":
                     metadata["input_method"] = "voice"
+                    voice_turn_id = str(payload.get("voice_turn_id") or "").strip()
+                    if voice_turn_id:
+                        metadata["voice_turn_id"] = voice_turn_id
+                    asr_metrics = _sanitize_voice_metrics(payload.get("asr_metrics"))
+                    if asr_metrics is not None:
+                        metadata["asr_metrics"] = asr_metrics
                     for key in ("asr_provider", "asr_request_id"):
                         value = str(payload.get(key) or "").strip()
                         if value:
@@ -773,6 +826,27 @@ class DesktopBridgeService:
                 return self._ok(request_id, method, {})
         except KeyError as exc:
             return self._error(request_id, method, "role_not_found", str(exc))
+        except VoiceServiceError as exc:
+            metrics = getattr(exc, "metrics", None)
+            details = {"metrics": metrics.to_dict()} if metrics is not None else {}
+            if metrics is not None:
+                logger.warning(
+                    "voice request failed method=%s provider=%s request_id=%s error_code=%s elapsed_ms=%d audio_duration_ms=%d characters=%d",
+                    method,
+                    metrics.provider,
+                    metrics.request_id,
+                    metrics.error_code,
+                    metrics.elapsed_ms,
+                    metrics.audio_duration_ms,
+                    metrics.character_count,
+                )
+            return self._error(
+                request_id,
+                method,
+                "voice_service_error",
+                str(exc),
+                details=details,
+            )
         except ValueError as exc:
             return self._error(request_id, method, "invalid_request", str(exc))
         except ChatTurnBusyError as exc:
@@ -842,12 +916,14 @@ class DesktopBridgeService:
         method: str,
         code: str,
         message: str,
+        *,
+        details: dict[str, Any] | None = None,
     ) -> BridgeResponse:
         return BridgeResponse(
             id=request_id,
             type="response",
             method=method,
-            error=BridgeError(code=code, message=message),
+            error=BridgeError(code=code, message=message, details=details or {}),
         )
 
     async def _emit_event(self, emit_event, payload: dict[str, Any]) -> None:

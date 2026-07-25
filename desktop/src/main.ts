@@ -18,7 +18,7 @@ import {
 import { registerDesktopContentSecurityPolicy } from "./windowSecurity.js";
 import { DesktopPetController } from "./pet/controller.js";
 import { loadDesktopPetSettings, saveDesktopPetSettings } from "./pet/settings.js";
-import type { DesktopPetActionState, DesktopPetBinding, DesktopPetSettings, DesktopPetState } from "./pet/types.js";
+import type { DesktopPetActionState, DesktopPetBinding, DesktopPetSettings } from "./pet/types.js";
 import { createDesktopPetWindow, displayForDesktopPet } from "./pet/window.js";
 import { DesktopObservationController } from "./observation/controller.js";
 import { wireRoleReplyBubbles } from "./observation/roleBubble.js";
@@ -27,6 +27,7 @@ import { BrowserVoiceRecorder } from "./voice/recorder.js";
 import { DesktopVoiceController } from "./voice/controller.js";
 import { VoiceHotkeyController } from "./voice/hotkey.js";
 import { BrowserVoicePlayback } from "./voice/playback.js";
+import { createVoicePlaybackCallbacks, handleVoiceBridgeEvent, selectVoiceTurn } from "./voice/bridgeEvents.js";
 import { loadSettingsData } from "./settings.js";
 import type { SettingsFormData, VoiceStatePayload } from "./shared.js";
 
@@ -172,20 +173,6 @@ function isDesktopPetActionState(value: string): value is DesktopPetActionState 
   return ["idle", "running-right", "running-left", "waving", "jumping"].includes(value);
 }
 
-function isDesktopPetState(value: string): value is DesktopPetState {
-  return [
-    "idle",
-    "running-right",
-    "running-left",
-    "waving",
-    "jumping",
-    "failed",
-    "waiting",
-    "running",
-    "review",
-  ].includes(value);
-}
-
 async function persistDesktopPetSettings(settings: DesktopPetSettings): Promise<void> {
   desktopPetSettings = settings;
   await saveDesktopPetSettings(desktopPetSettingsPath(), settings);
@@ -296,7 +283,6 @@ void app.whenReady().then(() => {
     pet: desktopPet,
     getRoleId: () => desktopPetSettings.roleId,
   });
-  let activeVoicePlayback: BrowserVoicePlayback;
   const activeVoiceController = new DesktopVoiceController({
     recorder: activeVoiceRecorder,
     bridge,
@@ -304,23 +290,21 @@ void app.whenReady().then(() => {
     roleId: () => desktopPetSettings?.roleId ?? null,
     microphoneDeviceId: () => voiceSettings?.microphoneDeviceId ?? "",
     publishState: publishVoiceState,
-    onNewInput: () => activeVoicePlayback.stopAfterCurrent(),
+    onNewInput: (previousTurnId, nextTurnId) => {
+      void selectVoiceTurn(bridge, activeVoicePlayback, previousTurnId, nextTurnId).catch((error) => {
+        logDesktopDiagnostic({
+          scope: "main",
+          event: "voice-turn.cancel.failed",
+          payload: { error, previousTurnId, nextTurnId },
+        });
+      });
+    },
   });
   voiceController = activeVoiceController;
-  activeVoicePlayback = new BrowserVoicePlayback(createVoiceCaptureWindow, {
-    onStarted: (item) => {
-      activeVoiceController.sentenceReady(item.id);
-    },
-    onFinished: (item, nextItem) => {
-      activeVoiceController.sentencePlaybackFinished(item.id, nextItem?.id);
-    },
-    onError: (_item, message) => {
-      activeVoiceController.ttsFailed(message);
-    },
-    onDrained: () => {
-      activeVoiceController.replyFinished();
-    },
-  });
+  const activeVoicePlayback = new BrowserVoicePlayback(
+    createVoiceCaptureWindow,
+    createVoicePlaybackCallbacks(activeVoiceController),
+  );
   voicePlayback = activeVoicePlayback;
   if (process.platform === "win32") {
     voiceHotkey = new VoiceHotkeyController({
@@ -335,31 +319,7 @@ void app.whenReady().then(() => {
       desktopPet?.handleAgentAction(event.payload);
       return;
     }
-    if (event.method === "voice.reply.started") {
-      voiceController?.replyStarted(Boolean(event.payload.has_voice));
-      return;
-    }
-    if (event.method === "voice.tts.audio") {
-      const requestId = String(event.payload.request_id || event.id || "");
-      const sequence = Number(event.payload.sequence);
-      const audioBase64 = String(event.payload.audio_base64 || "");
-      if (!requestId || !Number.isInteger(sequence) || !audioBase64) return;
-      const itemId = `${requestId}:${sequence}`;
-      voiceController?.sentenceReady(itemId);
-      activeVoicePlayback.enqueue({
-        id: itemId,
-        sessionKey: String(event.payload.session_key || ""),
-        requestId,
-        sequence,
-        text: String(event.payload.text || ""),
-        audioBase64,
-        format: "mp3",
-      });
-      return;
-    }
-    if (event.method === "voice.tts.error") {
-      voiceController?.ttsFailed(String(event.payload.message || "角色语音合成失败"));
-    }
+    if (handleVoiceBridgeEvent(event, activeVoiceController, activeVoicePlayback)) return;
   });
   wireRoleReplyBubbles(bridge, desktopObservation);
   powerMonitor.on("lock-screen", () => {

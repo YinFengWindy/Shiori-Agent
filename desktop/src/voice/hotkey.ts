@@ -9,6 +9,7 @@ type KeyboardHook = {
   stop(): void;
 };
 
+/** Voice lifecycle callbacks invoked by the process-wide keyboard hook. */
 export type VoiceHotkeyCallbacks = {
   onPress(source: VoiceInputSource): void;
   onRelease(source: VoiceInputSource): void;
