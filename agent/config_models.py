@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from core.integrations.novelai.models import NovelAISettings
+from agent.voice_config import VoiceConfig
 from proactive_v2.config import ProactiveConfig
 
 
@@ -85,6 +86,7 @@ class Config:
     spawn_enabled: bool = True
     dev_mode: bool = False
     novelai: NovelAISettings = field(default_factory=NovelAISettings)
+    voice: VoiceConfig = field(default_factory=VoiceConfig)
     wiring: WiringConfig = field(default_factory=WiringConfig)
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
 

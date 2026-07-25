@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
@@ -32,6 +34,8 @@ from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from desktop_bridge.world_simulation_handler import WorldSimulationHandler
+from agent.voice_config import VoiceConfig
+from desktop_bridge.voice_service import VoiceService
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 from session.manager import Session, SessionManager
 
@@ -58,6 +62,7 @@ class DesktopBridgeService:
         subagent_manager: Any | None = None,
         memory_optimizer: Any | None = None,
         observation_service: ScreenObservationService | None = None,
+        voice_service: VoiceService | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -132,6 +137,7 @@ class DesktopBridgeService:
             role_store=role_store,
         )
         self.observation_service = observation_service
+        self.voice_service = voice_service or VoiceService(getattr(config, "voice", None) or VoiceConfig())
         if push_tool is not None:
             self.register_desktop_push_channel(push_tool)
 
@@ -309,6 +315,37 @@ class DesktopBridgeService:
                 return self._ok(request_id, method, world_result)
             if method == "health":
                 return self._ok(request_id, method, {"ok": True})
+            if method == "voice.transcribe":
+                audio_base64 = str(payload.get("audio_base64") or "")
+                if not audio_base64:
+                    raise ValueError("audio_base64 不能为空")
+                try:
+                    audio = base64.b64decode(audio_base64, validate=True)
+                except (binascii.Error, ValueError) as exc:
+                    raise ValueError("audio_base64 无效") from exc
+                return self._ok(
+                    request_id,
+                    method,
+                    {"text": self.voice_service.transcribe(audio)},
+                )
+            if method == "voice.synthesize":
+                text = str(payload.get("text") or "").strip()
+                voice_id = str(payload.get("voice_id") or "").strip()
+                if not text or not voice_id:
+                    raise ValueError("text 和 voice_id 不能为空")
+                speed = float(payload.get("speed", 1.0))
+                emotion = str(payload.get("emotion") or "").strip()
+                audio = self.voice_service.synthesize(
+                    text,
+                    voice_id=voice_id,
+                    speed=speed,
+                    emotion=emotion,
+                )
+                return self._ok(
+                    request_id,
+                    method,
+                    {"audio_base64": base64.b64encode(audio).decode("ascii"), "format": "mp3"},
+                )
             if method == "roles.list":
                 return self._ok(
                     request_id,
