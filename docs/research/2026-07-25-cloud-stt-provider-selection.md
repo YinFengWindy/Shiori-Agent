@@ -25,7 +25,7 @@
 | Deepgram | 很适合作为技术备选，提供预录音和实时转写接口 | 公开价格通常约 $0.004/分钟级别，具体随模型和模式变化 | 中文模型、区域可用性和最终报价需要用真实账号确认；项目没有现成 Deepgram 客户端 |
 | Google Cloud Speech-to-Text | 能力成熟，适合企业级和多语言场景 | 常规识别公开价位约 $0.016/分钟级别，明显高于 OpenAI mini 转写 | GCP 项目、服务账号和计费配置更重；对桌宠短句未显示出足够的性价比优势 |
 | Azure AI Speech | Windows 生态和企业合规场景友好 | 常规识别公开价位约 $1/小时级别，约 $0.016/分钟 | Azure 资源和区域配置较重，接入成本高于当前项目所需 |
-| 腾讯云 / 阿里云 / 火山引擎 | 中国大陆网络和中文场景值得做区域备选 | 通常按调用或音频时长计费，价格可能更低，但活动、地域、套餐差异较大 | 本次未能在不登录账号的情况下稳定确认与上述国际服务同口径的当前价格；需要真实账号、地域和接口规格做小样本压测 |
+| 腾讯云 / 阿里云 / 火山引擎 | 中国大陆网络和中文场景值得做区域备选 | 腾讯云、阿里云已公开资源包和后付费阶梯；火山引擎按模型、时长、资源包和并发组合计费 | 价格会随地域、模型和套餐变化；需要真实账号、地域和接口规格做小样本压测 |
 
 ## 适合本项目的请求链路
 
@@ -59,7 +59,10 @@
 - Azure AI Speech 定价：<https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/>
 - Azure AI Speech 语言支持：<https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support>
 - 腾讯云语音识别产品文档：<https://www.tencentcloud.com/document/product/1093>
+- 腾讯云语音识别计费概述：<https://cloud.tencent.com/document/product/1093/35686>
 - 阿里云智能语音交互文档：<https://www.alibabacloud.com/help/en/isi>
+- 阿里云智能语音交互计费方式：<https://help.aliyun.com/zh/isi/product-overview/billing-10>
 - 火山引擎语音技术文档：<https://www.volcengine.com/docs/6561>
+- 火山引擎豆包语音计费说明：<https://www.volcengine.com/docs/6561/1359370>
 
 > 价格是公开页面的粗粒度比较，不是最终报价。国际服务的价格和模型会更新，国内服务还会受到地域、套餐和接口规格影响；落地前必须用实际账号重新核价。
