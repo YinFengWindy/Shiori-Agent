@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { app, Menu, powerMonitor, protocol, screen, session, shell, type BrowserWindow } from "electron";
+import { app, BrowserWindow, Menu, powerMonitor, protocol, screen, session, shell } from "electron";
 import { localAssetSchemePrivileges, registerLocalAssetProtocol } from "./assetProtocol.js";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 import { startBridge, wireBridgeEvents } from "./bridgeLifecycle.js";
@@ -22,6 +22,11 @@ import type { DesktopPetActionState, DesktopPetBinding, DesktopPetSettings, Desk
 import { createDesktopPetWindow, displayForDesktopPet } from "./pet/window.js";
 import { DesktopObservationController } from "./observation/controller.js";
 import { wireRoleReplyBubbles } from "./observation/roleBubble.js";
+import { createVoiceCaptureWindow } from "./voice/window.js";
+import { BrowserVoiceRecorder } from "./voice/recorder.js";
+import { DesktopVoiceController } from "./voice/controller.js";
+import { VoiceHotkeyController } from "./voice/hotkey.js";
+import type { VoiceStatePayload } from "./shared.js";
 
 const bridge = new DesktopBridgeClient();
 const localAssets = new LocalAssetRegistry();
@@ -32,6 +37,9 @@ let desktopTray: ReturnType<typeof createDesktopTray> | null = null;
 let desktopPetSettings: DesktopPetSettings;
 let desktopPet: DesktopPetController | null = null;
 let desktopObservation: DesktopObservationController | null = null;
+let voiceRecorder: BrowserVoiceRecorder | null = null;
+let voiceController: DesktopVoiceController | null = null;
+let voiceHotkey: VoiceHotkeyController | null = null;
 let isQuitting = false;
 let bridgeShutdownStarted = false;
 
@@ -184,13 +192,32 @@ function requestAppQuit(): void {
   app.quit();
 }
 
+function publishVoiceState(payload: VoiceStatePayload): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send("desktop:voice-state", payload);
+  }
+}
+
+function syncVoiceAvailability(): void {
+  if (!voiceHotkey) return;
+  const enabled = Boolean(desktopPet?.isRunning && desktopPetSettings.visible);
+  if (enabled) {
+    voiceHotkey.start();
+    return;
+  }
+  voiceHotkey.stop();
+  voiceController?.cancel();
+}
+
 async function hideDesktopPet(): Promise<void> {
   await desktopPet?.hide();
+  syncVoiceAvailability();
   await desktopObservation?.restore();
 }
 
 async function showDesktopPet(): Promise<void> {
   await desktopPet?.show();
+  syncVoiceAvailability();
   await desktopObservation?.restore();
 }
 
@@ -234,6 +261,8 @@ void app.whenReady().then(() => {
   ensureDesktopConfig();
   process.env.MIRA_DESKTOP_USER_DATA_DIR = app.getPath("userData");
   desktopPetSettings = loadDesktopPetSettings(desktopPetSettingsPath());
+  const activeVoiceRecorder = new BrowserVoiceRecorder(createVoiceCaptureWindow);
+  voiceRecorder = activeVoiceRecorder;
   const privateWorkspaceRoot = resolve(app.getPath("home"), ".shiori", "workspace");
   const localAssetImportsRoot = resolve(privateWorkspaceRoot, "private_runtime", "imports");
   localAssets.addTrustedRoot(privateWorkspaceRoot);
@@ -261,6 +290,22 @@ void app.whenReady().then(() => {
     pet: desktopPet,
     getRoleId: () => desktopPetSettings.roleId,
   });
+  const activeVoiceController = new DesktopVoiceController({
+    recorder: activeVoiceRecorder,
+    bridge,
+    isEnabled: () => Boolean(desktopPet?.isRunning && desktopPetSettings.visible),
+    roleId: () => desktopPetSettings?.roleId ?? null,
+    publishState: publishVoiceState,
+  });
+  voiceController = activeVoiceController;
+  if (process.platform === "win32") {
+    voiceHotkey = new VoiceHotkeyController({
+      onPress: (source) => activeVoiceController.startPress(source),
+      onRelease: () => activeVoiceController.release(),
+      onCancel: () => activeVoiceController.cancel(),
+    });
+    voiceHotkey.setHotkey("Ctrl+Space");
+  }
   wireRoleReplyBubbles(bridge, desktopObservation);
   powerMonitor.on("lock-screen", () => {
     void desktopObservation?.suspend("Windows 已锁定，屏幕观察已暂停").catch((error) => {
@@ -287,6 +332,9 @@ void app.whenReady().then(() => {
         { label: "隐藏桌宠", click: () => void hideDesktopPet() },
       ]).popup({ window: petWindow });
     },
+    voiceRecorder: activeVoiceRecorder,
+    voiceController: activeVoiceController,
+    onPetVisibilityChanged: syncVoiceAvailability,
   });
   getOrCreateDesktopWindow();
   if (trayLifecycleEnabled) {
@@ -310,6 +358,7 @@ void app.whenReady().then(() => {
     });
     void desktopPet.restore().then(async () => {
       desktopTray?.refresh();
+      syncVoiceAvailability();
       await desktopObservation?.restore();
     }).catch((error) => {
       logDesktopDiagnostic({ scope: "main", event: "desktop-pet.restore.failed", payload: { error } });
@@ -341,6 +390,9 @@ app.on("window-all-closed", () => {
 app.on("before-quit", (event) => {
   isQuitting = true;
   desktopTray?.destroy();
+  voiceHotkey?.stop();
+  voiceController?.dispose();
+  voiceRecorder?.dispose();
   if (bridgeShutdownStarted || !bridge.isRunning()) {
     return;
   }

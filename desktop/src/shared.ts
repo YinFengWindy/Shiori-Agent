@@ -41,6 +41,9 @@ export type VoiceStatePayload = {
   message?: string;
 };
 
+/** Commands sent from the Electron main process to the hidden capture page. */
+export type VoiceCaptureCommand = "start" | "stop" | "cancel";
+
 export type SettingsFormData = {
   models: {
     provider: string;
@@ -218,4 +221,24 @@ export type DesktopApi = {
   /** Subscribes to main-process placement updates for the current full-reply bubble. */
   onPetBubbleLayout(listener: (event: unknown, payload: unknown) => void): void;
   offPetBubbleLayout(listener: (event: unknown, payload: unknown) => void): void;
+  /** Subscribes to microphone commands issued by the main-process recorder. */
+  onVoiceCaptureCommand(listener: (command: VoiceCaptureCommand) => void): () => void;
+  /** Reports captured 16-bit PCM samples to the owning main-process recorder. */
+  voiceCaptureData(samples: ArrayBuffer): void;
+  /** Reports that microphone permission and capture initialization succeeded. */
+  voiceCaptureReady(): void;
+  /** Reports that the current capture stream has stopped. */
+  voiceCaptureStopped(): void;
+  /** Reports a microphone or Web Audio failure without exposing raw audio. */
+  voiceCaptureError(message: string): void;
+  /** Starts the shared pet long-press voice gesture. */
+  startVoicePress(): void;
+  /** Lets pet dragging cancel a pending voice gesture. */
+  voicePointerMoved(): void;
+  /** Releases a pending or active pet voice gesture. */
+  voiceRelease(): void;
+  /** Cancels a pet voice gesture without submitting audio. */
+  voiceCancel(): void;
+  /** Subscribes to main-process voice state updates. */
+  onVoiceState(listener: (payload: VoiceStatePayload) => void): () => void;
 };

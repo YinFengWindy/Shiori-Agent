@@ -11,6 +11,8 @@ import type { LocalAssetRegistry } from "./localAssetRegistry.js";
 import { loadSettingsData, saveSettings } from "./settings.js";
 import type { DesktopPetController } from "./pet/controller.js";
 import type { DesktopObservationController } from "./observation/controller.js";
+import type { BrowserVoiceRecorder } from "./voice/recorder.js";
+import type { DesktopVoiceController } from "./voice/controller.js";
 import type {
   LocalAssetOpenRequest,
   LocalAssetOpenResult,
@@ -31,6 +33,9 @@ type RegisterDesktopIpcOptions = {
   desktopObservation: DesktopObservationController;
   onOpenPetRole: () => void;
   onShowPetContextMenu: (window: BrowserWindow) => void;
+  voiceRecorder: BrowserVoiceRecorder;
+  voiceController: DesktopVoiceController;
+  onPetVisibilityChanged?: () => void;
 };
 
 function assetTransport<T>(value: T, assets: LocalAssetReference[]): LocalAssetTransport<T> {
@@ -80,6 +85,9 @@ export function registerDesktopIpc({
   desktopObservation,
   onOpenPetRole,
   onShowPetContextMenu,
+  voiceRecorder,
+  voiceController,
+  onPetVisibilityChanged,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
 
@@ -222,6 +230,7 @@ export function registerDesktopIpc({
   ipcMain.handle("desktop:pet-sync", async (_event: IpcMainInvokeEvent, forceVisible?: unknown) => {
     await desktopPet.sync(typeof forceVisible === "boolean" ? forceVisible : undefined);
     await desktopObservation.restore();
+    onPetVisibilityChanged?.();
   });
   ipcMain.handle("desktop:pet-observation-dismiss", async (event: IpcMainInvokeEvent) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
@@ -278,6 +287,42 @@ export function registerDesktopIpc({
   ipcMain.on("desktop:pet-context-menu", (event) => {
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (petWindow && desktopPet.isPetWindow(petWindow)) onShowPetContextMenu(petWindow);
+  });
+  ipcMain.on("desktop:voice-capture-ready", (event) => {
+    voiceRecorder.handleReady(event.sender);
+  });
+  ipcMain.on("desktop:voice-capture-data", (event, value: unknown) => {
+    let data: ArrayBuffer | null = null;
+    if (value instanceof ArrayBuffer) {
+      data = value;
+    } else if (ArrayBuffer.isView(value)) {
+      const copied = new Uint8Array(value.byteLength);
+      copied.set(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+      data = copied.buffer;
+    }
+    if (data) voiceRecorder.handleData(event.sender, data);
+  });
+  ipcMain.on("desktop:voice-capture-stopped", (event) => {
+    voiceRecorder.handleStopped(event.sender);
+  });
+  ipcMain.on("desktop:voice-capture-error", (event, message: unknown) => {
+    voiceRecorder.handleError(event.sender, String(message || "麦克风采集失败"));
+  });
+  ipcMain.on("desktop:voice-press-start", (event) => {
+    if (!desktopPet.isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
+    voiceController.startPress("pet");
+  });
+  ipcMain.on("desktop:voice-pointer-moved", (event) => {
+    if (!desktopPet.isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
+    voiceController.pointerMoved();
+  });
+  ipcMain.on("desktop:voice-release", (event) => {
+    if (!desktopPet.isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
+    voiceController.release();
+  });
+  ipcMain.on("desktop:voice-cancel", (event) => {
+    if (!desktopPet.isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
+    voiceController.cancel();
   });
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
     const result = await dialog.showOpenDialog({
