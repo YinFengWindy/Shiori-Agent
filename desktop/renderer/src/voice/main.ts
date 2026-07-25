@@ -6,6 +6,10 @@ let source: MediaStreamAudioSourceNode | null = null;
 let processor: ScriptProcessorNode | null = null;
 let mutedSink: GainNode | null = null;
 let chunks: Float32Array[] = [];
+let playbackContext: AudioContext | null = null;
+let playbackSource: AudioBufferSourceNode | null = null;
+let playbackId = "";
+let ignorePlaybackEnd = false;
 
 window.miraDesktop.onVoiceCaptureCommand((command) => {
   if (command === "start") {
@@ -18,6 +22,63 @@ window.miraDesktop.onVoiceCaptureCommand((command) => {
   }
   void cancelCapture();
 });
+
+window.miraDesktop.onVoicePlaybackCommand((command) => {
+  if (command.command === "cancel") {
+    cancelPlayback();
+    return;
+  }
+  void playAudio(command.id, command.audioBase64);
+});
+
+async function playAudio(id: string, audioBase64: string): Promise<void> {
+  try {
+    cancelPlayback();
+    playbackContext ??= new AudioContext();
+    const audio = await playbackContext.decodeAudioData(decodeBase64(audioBase64));
+    if (!playbackContext) return;
+    const sourceNode = playbackContext.createBufferSource();
+    sourceNode.buffer = audio;
+    sourceNode.connect(playbackContext.destination);
+    playbackSource = sourceNode;
+    playbackId = id;
+    ignorePlaybackEnd = false;
+    sourceNode.onended = () => {
+      if (ignorePlaybackEnd || playbackSource !== sourceNode || playbackId !== id) return;
+      playbackSource = null;
+      playbackId = "";
+      window.miraDesktop.voicePlaybackFinished(id);
+    };
+    await playbackContext.resume();
+    sourceNode.start();
+    window.miraDesktop.voicePlaybackStarted(id);
+  } catch (error) {
+    playbackSource = null;
+    playbackId = "";
+    window.miraDesktop.voicePlaybackError(id, error instanceof Error ? error.message : "音频播放失败");
+  }
+}
+
+function cancelPlayback(): void {
+  ignorePlaybackEnd = true;
+  try {
+    playbackSource?.stop();
+  } catch {
+    // The source may already have ended between queue transitions.
+  }
+  playbackSource?.disconnect();
+  playbackSource = null;
+  playbackId = "";
+}
+
+function decodeBase64(value: string): ArrayBuffer {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes.buffer;
+}
 
 async function startCapture(): Promise<void> {
   try {

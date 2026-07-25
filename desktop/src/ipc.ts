@@ -13,6 +13,7 @@ import type { DesktopPetController } from "./pet/controller.js";
 import type { DesktopObservationController } from "./observation/controller.js";
 import type { BrowserVoiceRecorder } from "./voice/recorder.js";
 import type { DesktopVoiceController } from "./voice/controller.js";
+import type { BrowserVoicePlayback } from "./voice/playback.js";
 import type {
   LocalAssetOpenRequest,
   LocalAssetOpenResult,
@@ -35,6 +36,7 @@ type RegisterDesktopIpcOptions = {
   onShowPetContextMenu: (window: BrowserWindow) => void;
   voiceRecorder: BrowserVoiceRecorder;
   voiceController: DesktopVoiceController;
+  voicePlayback: BrowserVoicePlayback;
   onPetVisibilityChanged?: () => void;
 };
 
@@ -87,6 +89,7 @@ export function registerDesktopIpc({
   onShowPetContextMenu,
   voiceRecorder,
   voiceController,
+  voicePlayback,
   onPetVisibilityChanged,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
@@ -307,6 +310,16 @@ export function registerDesktopIpc({
   });
   ipcMain.on("desktop:voice-capture-error", (event, message: unknown) => {
     voiceRecorder.handleError(event.sender, String(message || "麦克风采集失败"));
+  });
+  ipcMain.on("desktop:voice-playback-started", (event, id: unknown) => {
+    voicePlayback.handleStarted(event.sender, String(id || ""));
+  });
+  ipcMain.on("desktop:voice-playback-finished", (event, id: unknown) => {
+    voicePlayback.handleFinished(event.sender, String(id || ""));
+  });
+  ipcMain.on("desktop:voice-playback-error", (event, value: unknown) => {
+    const payload = value && typeof value === "object" ? value as { id?: unknown; message?: unknown } : {};
+    voicePlayback.handleError(event.sender, String(payload.id || ""), String(payload.message || "音频播放失败"));
   });
   ipcMain.on("desktop:voice-press-start", (event) => {
     if (!desktopPet.isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;

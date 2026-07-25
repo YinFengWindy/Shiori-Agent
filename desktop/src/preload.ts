@@ -9,6 +9,7 @@ import type {
   WindowControlAction,
   WindowState,
   VoiceCaptureCommand,
+  VoicePlaybackCommand,
 } from "./shared.js";
 
 const localAssets = new PreloadLocalAssetCache();
@@ -149,6 +150,30 @@ const api: DesktopApi = {
   },
   voiceCaptureError(message) {
     ipcRenderer.send("desktop:voice-capture-error", message);
+  },
+  onVoicePlaybackCommand(listener) {
+    const wrapped = (_event: unknown, value: unknown) => {
+      if (!value || typeof value !== "object") return;
+      const command = value as Partial<VoicePlaybackCommand>;
+      if (command.command === "cancel") {
+        listener({ command: "cancel" });
+        return;
+      }
+      if (command.command === "play" && typeof command.id === "string" && typeof command.audioBase64 === "string" && command.format === "mp3") {
+        listener({ command: "play", id: command.id, audioBase64: command.audioBase64, format: "mp3" });
+      }
+    };
+    ipcRenderer.on("desktop:voice-playback-command", wrapped);
+    return () => ipcRenderer.off("desktop:voice-playback-command", wrapped);
+  },
+  voicePlaybackStarted(id) {
+    ipcRenderer.send("desktop:voice-playback-started", id);
+  },
+  voicePlaybackFinished(id) {
+    ipcRenderer.send("desktop:voice-playback-finished", id);
+  },
+  voicePlaybackError(id, message) {
+    ipcRenderer.send("desktop:voice-playback-error", { id, message });
   },
   startVoicePress() {
     ipcRenderer.send("desktop:voice-press-start");

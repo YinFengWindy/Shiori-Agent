@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -67,6 +68,7 @@ class TtsTurnCoordinator:
         self._buffer = TtsSentenceBuffer()
         self._queue: asyncio.Queue[tuple[int, str]] = asyncio.Queue()
         self._worker: asyncio.Task[None] | None = None
+        self._wake = asyncio.Event()
         self._finished = False
         self._sequence = 0
 
@@ -83,6 +85,7 @@ class TtsTurnCoordinator:
             return
         for sentence in self._buffer.push(content_delta):
             self._queue.put_nowait((self._next_sequence(), sentence))
+        self._wake.set()
         self._ensure_worker()
 
     def finish(self) -> None:
@@ -94,6 +97,7 @@ class TtsTurnCoordinator:
         if self.enabled:
             for sentence in self._buffer.finish():
                 self._queue.put_nowait((self._next_sequence(), sentence))
+            self._wake.set()
             self._ensure_worker()
 
     async def wait(self) -> None:
@@ -121,7 +125,10 @@ class TtsTurnCoordinator:
     async def _run(self) -> None:
         while not self._finished or not self._queue.empty():
             if self._queue.empty():
-                await asyncio.sleep(0)
+                self._wake.clear()
+                if self._finished and self._queue.empty():
+                    break
+                await self._wake.wait()
                 continue
             sequence, sentence = await self._queue.get()
             try:
@@ -180,7 +187,7 @@ class TtsTurnCoordinator:
     async def _emit(self, payload: dict[str, Any]) -> None:
         try:
             result = self._emit_event(payload)
-            if isinstance(result, Awaitable):
+            if inspect.isawaitable(result):
                 await result
         except Exception:
             logger.exception("tts event emission failed session=%s", self._session_key)

@@ -27,6 +27,8 @@ export type DesktopVoiceControllerOptions = {
   isEnabled: () => boolean;
   roleId: () => string | null;
   publishState: (payload: VoiceStatePayload) => void;
+  /** Drops queued speech when a new input turn begins. */
+  onNewInput?: () => void;
   now?: () => number;
   schedule?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
   clearSchedule?: (timer: ReturnType<typeof setTimeout>) => void;
@@ -57,6 +59,12 @@ export class DesktopVoiceController {
   /** Starts the shared press-pending phase for a pet or global-hotkey input. */
   startPress(source: VoiceInputSource, atMs = this.now()): boolean {
     if (this.disposed || !this.options.isEnabled()) return false;
+    if (["waiting_reply", "speaking_prepare", "speaking", "finish_current_sentence_then_idle"].includes(this.state.kind)) {
+      this.options.onNewInput?.();
+      this.clearPressTimer();
+      this.clearRecordingTimer();
+      this.apply({ type: "reset" });
+    }
     if (this.state.kind === "error") this.apply({ type: "reset" });
     if (this.state.kind !== "idle") return false;
     this.apply({ type: "press_started", source, atMs });
@@ -107,6 +115,33 @@ export class DesktopVoiceController {
     this.clearRecordingTimer();
     if (this.state.kind === "recording") void this.options.recorder.cancel();
     this.state = { kind: "idle" };
+  }
+
+  /** Advances the reply portion of the state machine when bridge text begins. */
+  replyStarted(hasVoice: boolean): void {
+    this.apply({ type: "reply_started", hasVoice });
+  }
+
+  /** Marks one sentence as ready for playback after its audio reaches Electron. */
+  sentenceReady(sentenceId: string): void {
+    if (this.state.kind === "waiting_reply") this.apply({ type: "reply_started", hasVoice: true });
+    this.apply({ type: "sentence_ready", sentenceId });
+  }
+
+  /** Advances or completes the current sentence after the hidden player reports onended. */
+  sentencePlaybackFinished(sentenceId: string, nextSentenceId?: string): void {
+    this.apply({ type: "sentence_playback_finished", sentenceId, nextSentenceId });
+  }
+
+  /** Ends a text-only reply or a reply whose TTS queue failed. */
+  replyFinished(): void {
+    this.apply({ type: "reply_finished" });
+  }
+
+  /** Reports a non-blocking TTS failure while returning the controller to idle. */
+  ttsFailed(message: string): void {
+    this.apply({ type: "reply_finished" });
+    this.options.publishState({ status: "error", message: message || "角色语音合成失败" });
   }
 
   private beginRecording(): void {
