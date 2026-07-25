@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
 import type { BrowserWindow } from "electron";
-import { DesktopPetController } from "./controller.js";
+import { DesktopPetController, desktopPetAgentMoveDurationMs } from "./controller.js";
 import type { DesktopPetSettings } from "./types.js";
 
 class FakePetWebContents extends EventEmitter {
@@ -337,6 +337,8 @@ test("agent pet actions move to a bounded target and play a transient package ac
     name: "greeting",
   });
   await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.notDeepEqual(settings.positions["role-1:display-1"], { x: 1728, y: 872 });
+  await new Promise((resolve) => setTimeout(resolve, desktopPetAgentMoveDurationMs));
 
   assert.deepEqual(settings.positions["role-1:display-1"], { x: 1728, y: 872 });
   assert.deepEqual(

@@ -25,7 +25,7 @@ import type { PetObservationPayload } from "../observation/types.js";
 /** Keeps the main-process cursor follower aligned with the display refresh rate. */
 export const desktopPetDragFollowIntervalMs = 1000 / 60;
 /** Keeps role-requested moves visible as a short, deliberate desktop animation. */
-export const desktopPetAgentMoveDurationMs = 420;
+export const desktopPetAgentMoveDurationMs = 900;
 const desktopPetAgentMoveFrameMs = 16;
 
 type DesktopPetControllerOptions = {
