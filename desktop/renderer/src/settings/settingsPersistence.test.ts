@@ -65,6 +65,7 @@ function createSettingsFormData(
       ttsBaseUrl: "https://api.minimaxi.com/v1/t2a_v2",
       ttsModel: "speech-2.8-turbo",
       ttsApiKey: "",
+      ttsVolume: 2,
     },
     advanced: {
       systemPrompt: "",

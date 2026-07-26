@@ -60,6 +60,7 @@ function createSettingsFormData(): SettingsFormData {
       ttsBaseUrl: "https://api.minimaxi.com/v1/t2a_v2",
       ttsModel: "speech-2.8-turbo",
       ttsApiKey: "tts-key",
+      ttsVolume: 2,
     },
     advanced: {
       systemPrompt: "system prompt",
@@ -116,5 +117,20 @@ describe("SettingsSectionContent", () => {
     assert.match(markup, /Agent 模型/);
     assert.match(markup, /value="gpt-agent"/);
     assert.match(markup, /value="agent-key"/);
+  });
+
+  it("renders the global TTS volume control", () => {
+    const markup = renderToStaticMarkup(
+      <SettingsSectionContent
+        sectionId="voice"
+        subsectionId="provider"
+        draft={draft}
+        updateDraft={updateDraft}
+      />,
+    );
+
+    assert.match(markup, /aria-label="TTS 音量"/);
+    assert.match(markup, /type="range"/);
+    assert.match(markup, /value="2"/);
   });
 });

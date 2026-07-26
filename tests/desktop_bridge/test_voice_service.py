@@ -124,7 +124,7 @@ def test_minimax_tts_decodes_hex_audio_and_preserves_emotion() -> None:
         return {"base_resp": {"status_code": 0}, "data": {"audio": "0001ff"}}
 
     client = MiniMaxTtsClient(
-        VoiceTtsConfig(enabled=True, api_key="key"),
+        VoiceTtsConfig(enabled=True, api_key="key", volume=2.5),
         requester=requester,
     )
 
@@ -132,7 +132,7 @@ def test_minimax_tts_decodes_hex_audio_and_preserves_emotion() -> None:
     assert calls[0]["voice_setting"] == {
         "voice_id": "mira",
         "speed": 1.2,
-        "vol": 1,
+        "vol": 2.5,
         "pitch": 0,
         "emotion": "happy",
     }
@@ -142,6 +142,13 @@ def test_minimax_tts_decodes_hex_audio_and_preserves_emotion() -> None:
         "format": "mp3",
         "channel": 1,
     }
+
+
+def test_minimax_tts_rejects_volume_outside_provider_range() -> None:
+    client = MiniMaxTtsClient(VoiceTtsConfig(enabled=True, api_key="key", volume=10.1))
+
+    with pytest.raises(VoiceServiceError, match="音量必须在 0.1 到 10.0 之间"):
+        client.synthesize("你好", voice_id="mira")
 
 
 def test_minimax_stream_parser_handles_split_sse_lines_and_hex_chunks() -> None:

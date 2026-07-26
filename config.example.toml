@@ -46,6 +46,7 @@ provider = "minimax"
 base_url = "https://api.minimaxi.com/v1/t2a_v2"
 model = "speech-2.8-turbo"
 api_key = ""
+volume = 2.0
 
 # =============================================================================
 # Agent 行为

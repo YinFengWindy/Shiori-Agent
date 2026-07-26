@@ -256,6 +256,7 @@ def _load_voice_config(data: dict) -> VoiceConfig:
             base_url=str(tts.get("base_url", "https://api.minimaxi.com/v1/t2a_v2") or "https://api.minimaxi.com/v1/t2a_v2"),
             model=str(tts.get("model", "speech-2.8-turbo") or "speech-2.8-turbo"),
             api_key=_resolve(str(tts.get("api_key", ""))),
+            volume=float(tts.get("volume", 2.0)),
         ),
     )
 

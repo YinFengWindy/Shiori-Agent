@@ -124,6 +124,7 @@ export type SettingsFormData = {
     ttsBaseUrl: string;
     ttsModel: string;
     ttsApiKey: string;
+    ttsVolume: number;
   };
   advanced: {
     systemPrompt: string;

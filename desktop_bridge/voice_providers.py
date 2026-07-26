@@ -540,6 +540,8 @@ class MiniMaxTtsClient:
             raise VoiceServiceError("text 和 voice_id 不能为空")
         if not 0.5 <= speed <= 2.0:
             raise VoiceServiceError("语速必须在 0.5 到 2.0 之间")
+        if not 0.1 <= self.config.volume <= 10.0:
+            raise VoiceServiceError("音量必须在 0.1 到 10.0 之间")
 
     def _build_body(
         self,
@@ -554,7 +556,12 @@ class MiniMaxTtsClient:
             "model": self.config.model or "speech-2.8-turbo",
             "text": text,
             "stream": stream,
-            "voice_setting": {"voice_id": voice_id, "speed": speed, "vol": 1, "pitch": 0},
+            "voice_setting": {
+                "voice_id": voice_id,
+                "speed": speed,
+                "vol": self.config.volume,
+                "pitch": 0,
+            },
             "audio_setting": {"sample_rate": 32000, "bitrate": 128000, "format": "mp3", "channel": 1},
         }
         if stream:

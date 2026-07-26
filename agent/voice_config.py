@@ -23,6 +23,7 @@ class VoiceTtsConfig:
     base_url: str = "https://api.minimaxi.com/v1/t2a_v2"
     model: str = "speech-2.8-turbo"
     api_key: str = ""
+    volume: float = 2.0
 
 
 @dataclass(frozen=True)

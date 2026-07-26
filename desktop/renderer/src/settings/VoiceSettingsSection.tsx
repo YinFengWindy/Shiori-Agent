@@ -38,6 +38,21 @@ export function VoiceSettingsSection({ draft, subsectionId, updateDraft }: Setti
       <Field label="MiniMax API Key">
         <SettingsSecretInput value={draft.voice.ttsApiKey} onChange={(value) => updateDraft((current) => ({ ...current, voice: { ...current.voice, ttsApiKey: value } }))} />
       </Field>
+      <Field label={`TTS 音量 (${draft.voice.ttsVolume.toFixed(1)})`}>
+        <input
+          aria-label="TTS 音量"
+          className="w-full accent-primary"
+          type="range"
+          min="0.1"
+          max="10"
+          step="0.1"
+          value={draft.voice.ttsVolume}
+          onChange={(event) => updateDraft((current) => ({
+            ...current,
+            voice: { ...current.voice, ttsVolume: Number(event.target.value) },
+          }))}
+        />
+      </Field>
     </SettingsSectionCard>
   );
 }

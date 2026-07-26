@@ -212,6 +212,7 @@ export function loadSettingsData(): SettingsSnapshot {
         ttsBaseUrl: String(voiceTts.base_url ?? "https://api.minimaxi.com/v1/t2a_v2"),
         ttsModel: String(voiceTts.model ?? "speech-2.8-turbo"),
         ttsApiKey: String(voiceTts.api_key ?? ""),
+        ttsVolume: Number(voiceTts.volume ?? 2.0),
       },
       advanced: {
         systemPrompt: String(agent.system_prompt ?? ""),
@@ -358,6 +359,7 @@ function renderSettingsToml(formData: SettingsFormData): string {
     `model = ${quote(formData.voice.ttsModel.trim())}`,
     `enabled = ${formData.voice.enabled ? "true" : "false"}`,
     `api_key = ${quote(formData.voice.ttsApiKey)}`,
+    `volume = ${formData.voice.ttsVolume}`,
     "",
     formData.advanced.pluginsRawToml.trim(),
     "",
@@ -395,6 +397,9 @@ function validateSettings(formData: SettingsFormData): void {
   }
   if (formData.voice.enabled && !parseHotkey(formData.voice.hotkey)) {
     throw new Error("语音快捷键格式无效");
+  }
+  if (!Number.isFinite(formData.voice.ttsVolume) || formData.voice.ttsVolume < 0.1 || formData.voice.ttsVolume > 10) {
+    throw new Error("TTS 音量必须在 0.1 到 10.0 之间");
   }
 }
 
