@@ -78,7 +78,7 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state, transientState =
 
   return (
     <div className={surfaceClass}>
-      {bubbleText ? <PetBubble text={bubbleText} persistent={!voiceBubble && observation.persistent} maxHeight={bubbleLayout.height} /> : null}
+      {bubbleText ? <PetBubble text={bubbleText} persistent={!voiceBubble && observation.persistent} /> : null}
       <div
         aria-label="桌宠"
         className={isDragging ? "pet-drag-region pet-dragging" : "pet-drag-region"}
@@ -103,7 +103,7 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state, transientState =
 
 function noop(): void {}
 
-function PetBubble({ text, persistent, maxHeight }: { text: string; persistent: boolean; maxHeight: number }) {
+function PetBubble({ text, persistent }: { text: string; persistent: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -114,14 +114,13 @@ function PetBubble({ text, persistent, maxHeight }: { text: string; persistent: 
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reportHeight);
     observer?.observe(element);
     return () => observer?.disconnect();
-  }, [maxHeight, persistent, text]);
+  }, [persistent, text]);
 
   return (
     <div
       ref={ref}
       className="pet-bubble"
       role="status"
-      style={maxHeight ? { maxHeight } : undefined}
     >
       <span>{text}</span>
       {persistent ? (
