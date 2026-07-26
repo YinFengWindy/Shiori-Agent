@@ -2,13 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BrowserVoicePlayback, type VoicePlaybackItem } from "./playback.js";
 
-function createWindow() {
+function createWindow(ready: Promise<void> = Promise.resolve()) {
   const sent: unknown[] = [];
   const webContents = {
     send: (_channel: string, value: unknown) => sent.push(value),
-    once: (event: string, listener: () => void) => {
-      if (event === "did-finish-load") listener();
-    },
   };
   const window = {
     webContents,
@@ -16,7 +13,7 @@ function createWindow() {
     destroy: () => undefined,
     once: () => undefined,
   };
-  return { window, sent, webContents };
+  return { surface: { window, ready }, sent, webContents };
 }
 
 function item(sequence: number, turnId = "turn"): VoicePlaybackItem {
@@ -36,7 +33,7 @@ test("plays queued sentences in order and drops later items after a new input", 
   const surface = createWindow();
   const finished: Array<[string, string | null]> = [];
   const drained: number[] = [];
-  const playback = new BrowserVoicePlayback(() => surface.window as never, {
+  const playback = new BrowserVoicePlayback(() => surface.surface as never, {
     onStarted: () => undefined,
     onFinished: (current, next) => finished.push([current.id, next?.id ?? null]),
     onError: () => undefined,
@@ -60,7 +57,7 @@ test("plays queued sentences in order and drops later items after a new input", 
 
 test("finishes the current sentence then continues only with the new turn", async () => {
   const surface = createWindow();
-  const playback = new BrowserVoicePlayback(() => surface.window as never, {
+  const playback = new BrowserVoicePlayback(() => surface.surface as never, {
     onStarted: () => undefined,
     onFinished: () => undefined,
     onError: () => undefined,
@@ -88,7 +85,7 @@ test("finishes the current sentence then continues only with the new turn", asyn
 
 test("ignores playback completion from an unrelated renderer", async () => {
   const surface = createWindow();
-  const playback = new BrowserVoicePlayback(() => surface.window as never, {
+  const playback = new BrowserVoicePlayback(() => surface.surface as never, {
     onStarted: () => undefined,
     onFinished: () => undefined,
     onError: () => undefined,
@@ -106,7 +103,7 @@ test("ignores playback completion from an unrelated renderer", async () => {
 test("waits for producer completion before draining a temporarily empty queue", async () => {
   const surface = createWindow();
   const drained: string[] = [];
-  const playback = new BrowserVoicePlayback(() => surface.window as never, {
+  const playback = new BrowserVoicePlayback(() => surface.surface as never, {
     onStarted: () => undefined,
     onFinished: () => undefined,
     onError: () => undefined,
@@ -135,7 +132,7 @@ test("reports old-turn playback errors without draining the active turn", async 
   const surface = createWindow();
   const errors: string[] = [];
   const drained: string[] = [];
-  const playback = new BrowserVoicePlayback(() => surface.window as never, {
+  const playback = new BrowserVoicePlayback(() => surface.surface as never, {
     onStarted: () => undefined,
     onFinished: () => undefined,
     onError: (failed) => errors.push(failed.turnId),
@@ -158,4 +155,41 @@ test("reports old-turn playback errors without draining the active turn", async 
   assert.deepEqual(drained, []);
   assert.equal(playback.handleFinished(surface.webContents as never, "new:0"), true);
   assert.deepEqual(drained, ["new"]);
+});
+
+test("plays when the hidden window finished loading before the queue started waiting", async () => {
+  const surface = createWindow(Promise.resolve());
+  const playback = new BrowserVoicePlayback(() => surface.surface as never, {
+    onStarted: () => undefined,
+    onFinished: () => undefined,
+    onError: () => undefined,
+    onDrained: () => undefined,
+  });
+
+  playback.beginTurn("turn");
+  playback.enqueue(item(0));
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.deepEqual(surface.sent, [
+    { command: "play", id: "turn:0", audioBase64: "AA==", format: "mp3" },
+  ]);
+});
+
+test("reports a hidden window load failure instead of hanging the playback queue", async () => {
+  const surface = createWindow(Promise.reject(new Error("语音窗口加载失败")));
+  const errors: string[] = [];
+  const playback = new BrowserVoicePlayback(() => surface.surface as never, {
+    onStarted: () => undefined,
+    onFinished: () => undefined,
+    onError: (_item, message) => errors.push(message),
+    onDrained: () => undefined,
+  });
+
+  playback.beginTurn("turn");
+  playback.enqueue(item(0));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(surface.sent, []);
+  assert.deepEqual(errors, ["语音窗口加载失败"]);
 });

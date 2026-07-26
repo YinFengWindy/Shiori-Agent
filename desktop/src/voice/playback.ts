@@ -1,6 +1,6 @@
 import type { BrowserWindow, WebContents } from "electron";
 import type { VoicePlaybackCommand } from "../shared.js";
-import { createDeferred, type Deferred } from "./deferred.js";
+import type { VoiceWindowSurface } from "./window.js";
 
 /** One complete synthesized sentence owned by a specific voice turn. */
 export type VoicePlaybackItem = {
@@ -14,7 +14,7 @@ export type VoicePlaybackItem = {
   format: "mp3";
 };
 
-type VoicePlaybackWindowFactory = () => BrowserWindow;
+type VoicePlaybackWindowFactory = () => VoiceWindowSurface;
 
 export type VoicePlaybackCallbacks = {
   onStarted(item: VoicePlaybackItem): void;
@@ -26,7 +26,7 @@ export type VoicePlaybackCallbacks = {
 /** Queues complete MP3 sentences and owns the hidden renderer playback surface. */
 export class BrowserVoicePlayback {
   private window: BrowserWindow | null = null;
-  private ready: Deferred<void> | null = null;
+  private ready: Promise<void> | null = null;
   private queue: VoicePlaybackItem[] = [];
   private current: VoicePlaybackItem | null = null;
   private pumping = false;
@@ -144,7 +144,7 @@ export class BrowserVoicePlayback {
     this.pumping = true;
     try {
       const window = this.ensureWindow();
-      await this.ready?.promise;
+      await this.ready;
       if (window.isDestroyed() || this.current || this.queue.length === 0) return;
       this.current = this.queue.shift() ?? null;
       if (!this.current) return;
@@ -155,6 +155,13 @@ export class BrowserVoicePlayback {
         format: this.current.format,
       };
       window.webContents.send("desktop:voice-playback-command", command);
+    } catch (error) {
+      const failed = this.queue.shift() ?? null;
+      this.queue = [];
+      if (failed) {
+        this.callbacks.onError(failed, error instanceof Error ? error.message : "语音播放窗口不可用");
+      }
+      this.notifyActiveTurnDrained();
     } finally {
       this.pumping = false;
     }
@@ -162,10 +169,10 @@ export class BrowserVoicePlayback {
 
   private ensureWindow(): BrowserWindow {
     if (this.window && !this.window.isDestroyed()) return this.window;
-    const window = this.createWindow();
+    const surface = this.createWindow();
+    const window = surface.window;
     this.window = window;
-    this.ready = createDeferred<void>();
-    window.webContents.once("did-finish-load", () => this.ready?.resolve());
+    this.ready = surface.ready;
     window.once("closed", () => {
       if (this.window !== window) return;
       this.window = null;

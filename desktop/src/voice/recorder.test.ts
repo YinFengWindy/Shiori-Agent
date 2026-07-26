@@ -28,13 +28,25 @@ class FakeCaptureWindow extends EventEmitter {
   }
 }
 
+function createSurface(window: FakeCaptureWindow) {
+  let resolveReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    resolveReady = resolve;
+  });
+  return {
+    createWindow: () => ({ window, ready }) as never,
+    resolveReady,
+  };
+}
+
 test("cancelling before the capture page loads rejects start and never reopens the microphone", async () => {
   const window = new FakeCaptureWindow();
-  const recorder = new BrowserVoiceRecorder(() => window as never);
+  const surface = createSurface(window);
+  const recorder = new BrowserVoiceRecorder(surface.createWindow);
 
   const start = recorder.start("microphone-a");
   await recorder.cancel();
-  window.webContents.emit("did-finish-load");
+  surface.resolveReady();
 
   await assert.rejects(start, /麦克风采集已取消/);
   assert.deepEqual(window.commands, [{ channel: "desktop:voice-capture-command", command: "cancel" }]);
@@ -42,10 +54,11 @@ test("cancelling before the capture page loads rejects start and never reopens t
 
 test("accepts the renderer's sanitized audio-input device contract", async () => {
   const window = new FakeCaptureWindow();
-  const recorder = new BrowserVoiceRecorder(() => window as never);
+  const surface = createSurface(window);
+  const recorder = new BrowserVoiceRecorder(surface.createWindow);
 
   const devices = recorder.listInputDevices();
-  window.webContents.emit("did-finish-load");
+  surface.resolveReady();
   await new Promise<void>((resolve) => setImmediate(resolve));
   recorder.handleInputDevices(window.webContents as never, [{ deviceId: "microphone-a", label: "USB Mic" }]);
 

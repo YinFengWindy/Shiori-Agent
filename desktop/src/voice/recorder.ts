@@ -3,13 +3,14 @@ import { encodeVoiceWav } from "./wav.js";
 import { createDeferred, type Deferred } from "./deferred.js";
 import type { VoiceRecorder } from "./controller.js";
 import type { VoiceCaptureCommand, VoiceInputDevice } from "../shared.js";
+import type { VoiceWindowSurface } from "./window.js";
 
-type VoiceCaptureWindowFactory = () => BrowserWindow;
+type VoiceCaptureWindowFactory = () => VoiceWindowSurface;
 
 /** Owns the hidden capture renderer and converts its samples to an ASR WAV. */
 export class BrowserVoiceRecorder implements VoiceRecorder {
   private window: BrowserWindow | null = null;
-  private ready: Deferred<void> | null = null;
+  private ready: Promise<void> | null = null;
   private started: Deferred<void> | null = null;
   private stopped: Deferred<Uint8Array> | null = null;
   private devices: Deferred<VoiceInputDevice[]> | null = null;
@@ -147,7 +148,6 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.stopped = null;
     this.devices?.reject(new Error("麦克风采集已关闭"));
     this.devices = null;
-    this.ready?.reject(new Error("麦克风采集已关闭"));
     this.ready = null;
     this.window?.destroy();
     this.window = null;
@@ -155,10 +155,10 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
 
   private ensureWindow(): BrowserWindow {
     if (this.window && !this.window.isDestroyed()) return this.window;
-    const window = this.createWindow();
+    const surface = this.createWindow();
+    const window = surface.window;
     this.window = window;
-    this.ready = createDeferred<void>();
-    window.webContents.once("did-finish-load", () => this.ready?.resolve(undefined));
+    this.ready = surface.ready;
     window.once("closed", () => {
       if (this.window !== window) return;
       this.window = null;
@@ -169,7 +169,7 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
 
   private async waitUntilReady(window: BrowserWindow): Promise<void> {
     if (window.isDestroyed()) throw new Error("麦克风采集窗口不可用");
-    await this.ready?.promise;
+    await this.ready;
   }
 
   private sendCommand(command: VoiceCaptureCommand): void {
