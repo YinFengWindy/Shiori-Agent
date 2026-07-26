@@ -45,3 +45,20 @@ def test_tts_sentence_buffer_ignores_boundaries_inside_parentheses() -> None:
     assert buffer.push("（轻声。") == []
     assert buffer.push("）你好。") == ["你好。"]
     assert buffer.finish() == []
+
+
+def test_tts_sentence_buffer_drops_unclosed_fenced_code_on_finish() -> None:
+    buffer = TtsSentenceBuffer()
+
+    assert buffer.push("前言```python\nprint('x')") == []
+    assert buffer.finish() == ["前言"]
+
+
+def test_tts_sentence_buffer_does_not_split_inside_parenthetical_details() -> None:
+    visible = "可见内容" * 15
+    text = "你好（" + "内心" * 50 + "）" + visible + "。"
+
+    sentences = split_tts_sentences(text, max_length=20)
+
+    assert all("内心" not in sentence for sentence in sentences)
+    assert "".join(sentences) == "你好" + visible + "。"

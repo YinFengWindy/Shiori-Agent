@@ -287,3 +287,140 @@ async def test_streamed_voice_reply_does_not_synthesize_final_response_twice() -
     await service.wait_for_tts()
 
     assert tts_service.calls == ["流式回复。"]
+
+
+@pytest.mark.asyncio
+async def test_voice_reply_finishes_when_tts_is_disabled() -> None:
+    event_bus = EventBus()
+    tts_service = _VoiceService()
+    tts_service.tts_enabled = False
+    emitted: list[dict] = []
+
+    async def _emit_payload(_emit_event, payload: dict) -> None:
+        emitted.append(payload)
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(return_value=SimpleNamespace(metadata={}))
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=_emit_payload,
+        emit_session_updated=AsyncMock(),
+        tts_service=tts_service,  # type: ignore[arg-type]
+    )
+
+    await service.run_chat_turn(
+        request_id="request-voice-disabled",
+        session_key="role:role-1",
+        content="hello",
+        media=[],
+        metadata={"input_method": "voice", "voice_turn_id": "voice-turn-disabled"},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+    await service.wait_for_tts()
+
+    voice_events = [event for event in emitted if event["method"].startswith("voice.")]
+    assert [event["method"] for event in voice_events] == [
+        "voice.reply.started",
+        "voice.tts.finished",
+    ]
+    assert voice_events[0]["payload"]["has_voice"] is False
+
+
+@pytest.mark.asyncio
+async def test_chat_failure_terminates_voice_lifecycle() -> None:
+    emitted: list[dict] = []
+
+    async def _emit_payload(_emit_event, payload: dict) -> None:
+        emitted.append(payload)
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        raise RuntimeError("backend down")
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=EventBus(),
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(
+                return_value=SimpleNamespace(
+                    metadata={"role_runtime_config": {"tts": {"voice_id": "mira"}}}
+                )
+            )
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=_emit_payload,
+        emit_session_updated=AsyncMock(),
+        tts_service=_VoiceService(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RuntimeError, match="backend down"):
+        await service.run_chat_turn(
+            request_id="request-voice-error",
+            session_key="role:role-1",
+            content="hello",
+            media=[],
+            metadata={"input_method": "voice", "voice_turn_id": "voice-turn-error"},
+            omit_user_turn=True,
+            emit_event=AsyncMock(),
+        )
+
+    assert [
+        event["method"] for event in emitted if event["method"].startswith("voice.")
+    ] == ["voice.reply.started", "voice.tts.finished"]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_chat_task_terminates_voice_lifecycle() -> None:
+    started = asyncio.Event()
+    emitted: list[dict] = []
+
+    async def _emit_payload(_emit_event, payload: dict) -> None:
+        emitted.append(payload)
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=EventBus(),
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(
+                return_value=SimpleNamespace(
+                    metadata={"role_runtime_config": {"tts": {"voice_id": "mira"}}}
+                )
+            )
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=_emit_payload,
+        emit_session_updated=AsyncMock(),
+        tts_service=_VoiceService(),  # type: ignore[arg-type]
+    )
+    task = asyncio.create_task(
+        service.run_chat_turn(
+            request_id="request-voice-cancelled",
+            session_key="role:role-1",
+            content="hello",
+            media=[],
+            metadata={
+                "input_method": "voice",
+                "voice_turn_id": "voice-turn-cancelled",
+            },
+            omit_user_turn=True,
+            emit_event=AsyncMock(),
+        )
+    )
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert [
+        event["method"] for event in emitted if event["method"].startswith("voice.")
+    ] == ["voice.reply.started", "voice.tts.finished"]

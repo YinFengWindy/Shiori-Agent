@@ -77,7 +77,7 @@ test("above observation bubbles render ahead of the sprite", () => {
   assert.doesNotMatch(styles, /\.pet-bubble-above\s*\{[^}]*column-reverse/s);
 });
 
-test("full reply bubbles expand without an internal scrollbar", () => {
+test("oversized reply bubbles keep their full text in a scrollable surface", () => {
   const markup = renderToStaticMarkup(
     <CodexSpritePetRenderer
       spritesheetUrl="mira-asset://pet"
@@ -88,6 +88,6 @@ test("full reply bubbles expand without an internal scrollbar", () => {
   );
   const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 
-  assert.doesNotMatch(markup, /max-height/);
-  assert.doesNotMatch(styles, /\.pet-bubble\s*\{[^}]*overflow-y:\s*auto;/s);
+  assert.match(styles, /\.pet-bubble\s*\{[^}]*overflow-y:\s*auto;/s);
+  assert.match(styles, /scrollbar-width:\s*none/);
 });

@@ -1,13 +1,8 @@
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { DeleteIcon } from "../shared/icons";
 import type { RoleFormState } from "../shared/types";
-
-type TemporaryVoiceAsset = {
-  provider: string;
-  voiceId: string;
-  ownership: "shiori_managed";
-};
+import { abandonTemporaryVoiceAsset } from "./temporaryVoiceAsset";
 
 type RoleVoiceAssetControlsProps = {
   bridgeReady: boolean;
@@ -21,28 +16,22 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
   const [cloning, setCloning] = useState(false);
   const [previewAudio, setPreviewAudio] = useState("");
   const [error, setError] = useState("");
-  const temporaryAssetRef = useRef<TemporaryVoiceAsset | null>(null);
-
-  useEffect(() => () => {
-    void abandonTemporaryVoice(temporaryAssetRef.current);
-  }, []);
 
   async function cloneVoice(): Promise<void> {
     setError("");
     setCloning(true);
     try {
-      await abandonTemporaryVoice(temporaryAssetRef.current);
-      temporaryAssetRef.current = null;
+      await abandonTemporaryVoiceAsset(roleForm.temporaryVoiceAsset);
       const result = await window.miraDesktop.cloneVoice();
       if (result.canceled) return;
       if (!result.ok || !result.voiceId || !result.provider || result.ownership !== "shiori_managed") {
         throw new Error(result.error || "声音复刻结果缺少资产归属信息");
       }
-      temporaryAssetRef.current = {
+      const temporaryVoiceAsset = {
         provider: result.provider,
         voiceId: result.voiceId,
         ownership: "shiori_managed",
-      };
+      } as const;
       onUpdate((current) => ({
         ...current,
         voiceEnabled: true,
@@ -50,6 +39,7 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
         voiceOwnership: "shiori_managed",
         voiceId: result.voiceId || current.voiceId,
         pendingVoiceAssetDeletes: [],
+        temporaryVoiceAsset,
       }));
       setPreviewAudio(result.audioBase64 || "");
       if (result.audioBase64) await window.miraDesktop.playVoicePreview(result.audioBase64);
@@ -60,15 +50,20 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
     }
   }
 
-  function discardManagedVoice(): void {
-    void abandonTemporaryVoice(temporaryAssetRef.current);
-    temporaryAssetRef.current = null;
+  async function discardManagedVoice(): Promise<void> {
+    try {
+      await abandonTemporaryVoiceAsset(roleForm.temporaryVoiceAsset);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+      return;
+    }
     onUpdate((current) => ({
       ...current,
       voiceOwnership: "external",
       voiceId: "",
       voiceName: "",
       pendingVoiceAssetDeletes: [],
+      temporaryVoiceAsset: null,
     }));
     setPreviewAudio("");
   }
@@ -93,7 +88,7 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
         <button className="rounded-md border border-[#D8DCE2] px-3 py-2 text-sm transition hover:border-primary disabled:cursor-default disabled:opacity-50" type="button" disabled={!bridgeReady || !authorized || cloning} onClick={() => void cloneVoice()}>{cloning ? "复刻中..." : "选择录音并复刻"}</button>
         <button className="rounded-md border border-[#D8DCE2] px-3 py-2 text-sm transition hover:border-primary disabled:cursor-default disabled:opacity-50" type="button" disabled={!previewAudio || cloning} onClick={() => void playPreview()}>试听</button>
         {roleForm.voiceOwnership === "shiori_managed" ? (
-          <button className="inline-flex items-center gap-1.5 rounded-md border border-[#D8DCE2] px-3 py-2 text-sm text-[#8f2d2d] transition hover:border-[#8f2d2d] disabled:cursor-default disabled:opacity-50" type="button" disabled={cloning} onClick={discardManagedVoice} title="移除复刻音色">
+          <button className="inline-flex items-center gap-1.5 rounded-md border border-[#D8DCE2] px-3 py-2 text-sm text-[#8f2d2d] transition hover:border-[#8f2d2d] disabled:cursor-default disabled:opacity-50" type="button" disabled={cloning} onClick={() => void discardManagedVoice()} title="移除复刻音色">
             <DeleteIcon />
             移除
           </button>
@@ -102,16 +97,4 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
       {error ? <div className="text-xs text-[#8f2d2d]">{error}</div> : null}
     </div>
   );
-}
-
-async function abandonTemporaryVoice(asset: TemporaryVoiceAsset | null): Promise<void> {
-  if (!asset) return;
-  await window.miraDesktop.invoke({
-    method: "voice.clone.abandon",
-    payload: {
-      provider: asset.provider,
-      voice_id: asset.voiceId,
-      ownership: asset.ownership,
-    },
-  });
 }

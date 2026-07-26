@@ -51,11 +51,12 @@ export function registerVoiceIpc({
   });
 
   let voiceTestActive = false;
+  let voiceTestStop: Promise<void> | null = null;
   ipcMain.handle("desktop:voice-input-devices-list", async () => {
     return await voiceRecorder.listInputDevices();
   });
   ipcMain.handle("desktop:voice-test-start", async (_event: IpcMainInvokeEvent, deviceId?: unknown) => {
-    if (voiceTestActive || isVoiceInteractionBusy(voiceController.currentState)) {
+    if (voiceTestActive || voiceTestStop || isVoiceInteractionBusy(voiceController.currentState)) {
       throw new Error("当前已有语音任务正在进行");
     }
     voiceTestActive = true;
@@ -67,13 +68,20 @@ export function registerVoiceIpc({
     }
   });
   ipcMain.handle("desktop:voice-test-stop", async () => {
+    if (voiceTestStop) return voiceTestStop;
     if (!voiceTestActive) return;
-    try {
+    voiceTestActive = false;
+    voiceTestStop = (async () => {
       const audio = await voiceRecorder.stop();
       await voiceRecorder.playTestAudio(audio);
-    } finally {
-      voiceTestActive = false;
-    }
+    })().finally(() => {
+      voiceTestStop = null;
+    });
+    return voiceTestStop;
+  });
+  ipcMain.handle("desktop:voice-test-cancel", async () => {
+    voiceTestActive = false;
+    await voiceRecorder.cancel();
   });
   ipcMain.handle("desktop:voice-clone", async (event: IpcMainInvokeEvent) => {
     const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
@@ -136,14 +144,14 @@ export function registerVoiceIpc({
   });
   ipcMain.on("desktop:voice-pointer-moved", (event) => {
     if (!desktopPet.isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
-    voiceController.pointerMoved();
+    voiceController.pointerMoved("pet");
   });
   ipcMain.on("desktop:voice-release", (event) => {
     if (!desktopPet.isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
-    voiceController.release();
+    voiceController.release("pet");
   });
   ipcMain.on("desktop:voice-cancel", (event) => {
     if (!desktopPet.isPetWindow(BrowserWindow.fromWebContents(event.sender))) return;
-    voiceController.cancel();
+    voiceController.cancel("pet");
   });
 }

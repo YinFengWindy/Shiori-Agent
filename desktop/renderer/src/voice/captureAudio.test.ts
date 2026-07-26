@@ -13,3 +13,11 @@ test("resamples a mono chunk to 16kHz", () => {
   assert.equal(result[2], 1);
   assert.equal(result[4], 0);
 });
+
+test("attenuates frequencies above the 16kHz Nyquist limit when downsampling", () => {
+  const alternating = Float32Array.from({ length: 480 }, (_, index) => index % 2 === 0 ? 1 : -1);
+  const result = resampleToVoiceRate(alternating, 48_000);
+  const peak = Math.max(...result.map((sample) => Math.abs(sample)));
+
+  assert.ok(peak < 0.1);
+});

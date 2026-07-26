@@ -79,6 +79,20 @@ export class BrowserVoicePlayback {
     if (stoppedTurnId) this.callbacks.onDrained(stoppedTurnId);
   }
 
+  /** Immediately cancels playback and queued audio owned by one retired turn. */
+  cancelTurn(turnId: string): void {
+    if (!turnId || (turnId !== this.activeTurnId && this.current?.turnId !== turnId)) return;
+    this.queue = [];
+    this.current = null;
+    this.activeTurnId = "";
+    this.activeTurnFinished = false;
+    this.activeTurnDrained = false;
+    this.stoppedTurnId = "";
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send("desktop:voice-playback-command", { command: "cancel" } satisfies VoicePlaybackCommand);
+    }
+  }
+
   /** Cancels playback during app teardown and releases the hidden renderer. */
   dispose(): void {
     this.queue = [];
@@ -156,11 +170,13 @@ export class BrowserVoicePlayback {
       };
       window.webContents.send("desktop:voice-playback-command", command);
     } catch (error) {
-      const failed = this.queue.shift() ?? null;
+      const failed = this.current ?? this.queue.shift() ?? null;
+      this.current = null;
       this.queue = [];
       if (failed) {
         this.callbacks.onError(failed, error instanceof Error ? error.message : "语音播放窗口不可用");
       }
+      this.invalidateWindow();
       this.notifyActiveTurnDrained();
     } finally {
       this.pumping = false;
@@ -175,12 +191,25 @@ export class BrowserVoicePlayback {
     this.ready = surface.ready;
     window.once("closed", () => {
       if (this.window !== window) return;
+      const failed = this.current;
       this.window = null;
       this.ready = null;
       this.current = null;
       this.queue = [];
+      if (failed) this.callbacks.onError(failed, "语音播放窗口已关闭");
+      this.notifyActiveTurnDrained();
+    });
+    window.webContents.once("render-process-gone", () => {
+      if (!window.isDestroyed()) window.destroy();
     });
     return window;
+  }
+
+  private invalidateWindow(): void {
+    const window = this.window;
+    this.window = null;
+    this.ready = null;
+    if (window && !window.isDestroyed()) window.destroy();
   }
 
   private notifyActiveTurnDrained(): void {

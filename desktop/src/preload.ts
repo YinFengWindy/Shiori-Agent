@@ -86,6 +86,9 @@ const api: DesktopApi = {
   stopVoiceTest() {
     return ipcRenderer.invoke("desktop:voice-test-stop");
   },
+  cancelVoiceTest() {
+    return ipcRenderer.invoke("desktop:voice-test-cancel");
+  },
   cloneVoice() {
     return ipcRenderer.invoke("desktop:voice-clone") as Promise<VoiceCloneResult>;
   },

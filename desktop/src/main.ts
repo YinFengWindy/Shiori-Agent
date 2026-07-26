@@ -27,7 +27,7 @@ import { BrowserVoiceRecorder } from "./voice/recorder.js";
 import { DesktopVoiceController } from "./voice/controller.js";
 import { VoiceHotkeyController } from "./voice/hotkey.js";
 import { BrowserVoicePlayback } from "./voice/playback.js";
-import { createVoicePlaybackCallbacks, handleVoiceBridgeEvent, selectVoiceTurn } from "./voice/bridgeEvents.js";
+import { cancelVoiceTurn, createVoicePlaybackCallbacks, handleVoiceBridgeEvent, selectVoiceTurn } from "./voice/bridgeEvents.js";
 import { loadSettingsData } from "./settings.js";
 import type { SettingsFormData, VoiceStatePayload } from "./shared.js";
 
@@ -289,7 +289,12 @@ void app.whenReady().then(() => {
   const activeVoiceController = new DesktopVoiceController({
     recorder: activeVoiceRecorder,
     bridge,
-    isEnabled: () => Boolean(voiceSettings?.enabled && desktopPet?.isRunning && desktopPetSettings.visible),
+    isEnabled: () => Boolean(
+      voiceSettings?.enabled
+      && desktopPet?.isRunning
+      && desktopPetSettings.visible
+      && !activeVoiceRecorder.isBusy
+    ),
     roleId: () => desktopPetSettings?.roleId ?? null,
     microphoneDeviceId: () => voiceSettings?.microphoneDeviceId ?? "",
     publishState: publishVoiceState,
@@ -299,6 +304,16 @@ void app.whenReady().then(() => {
           scope: "main",
           event: "voice-turn.cancel.failed",
           payload: { error, previousTurnId, nextTurnId },
+        });
+      });
+    },
+    onCancelTurn: (turnId) => {
+      activeVoicePlayback.cancelTurn(turnId);
+      void cancelVoiceTurn(bridge, turnId).catch((error) => {
+        logDesktopDiagnostic({
+          scope: "main",
+          event: "voice-turn.cancel.failed",
+          payload: { error, turnId },
         });
       });
     },
@@ -312,7 +327,7 @@ void app.whenReady().then(() => {
   if (process.platform === "win32") {
     voiceHotkey = new VoiceHotkeyController({
       onPress: (source) => activeVoiceController.startPress(source),
-      onRelease: () => activeVoiceController.release(),
+      onRelease: (source) => activeVoiceController.release(source),
       onCancel: () => activeVoiceController.cancel(),
     });
     voiceHotkey.setHotkey(voiceSettings.hotkey);

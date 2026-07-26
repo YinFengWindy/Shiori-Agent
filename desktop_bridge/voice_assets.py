@@ -49,7 +49,7 @@ class VoiceAssetLifecycle:
         self._path = workspace / "voice_asset_cleanup.json"
         self._delete_managed_voice = delete_managed_voice
         self._lock = threading.RLock()
-        self._pending = self._load()
+        self._tracked, self._retired = self._load()
 
     def track_clone(self, result: Mapping[str, Any]) -> None:
         """Durably records a clone until a role save claims or discards it."""
@@ -59,11 +59,17 @@ class VoiceAssetLifecycle:
             voice_id=str(result.get("voice_id") or "").strip(),
             ownership=str(result.get("ownership") or "").strip(),
         )
-        if not asset.provider or not asset.voice_id or asset.ownership != "shiori_managed":
+        if (
+            not asset.provider
+            or not asset.voice_id
+            or asset.ownership != "shiori_managed"
+        ):
             raise ValueError("复刻结果缺少受管音色标识")
-        self._add(asset)
+        self._add_tracked(asset)
 
-    def reconcile_role_update(self, previous_runtime: object, current_runtime: object) -> None:
+    def reconcile_role_update(
+        self, previous_runtime: object, current_runtime: object
+    ) -> None:
         """Claims a saved clone and retires a replaced managed asset."""
 
         previous = managed_voice_asset(previous_runtime)
@@ -83,7 +89,11 @@ class VoiceAssetLifecycle:
     def abandon_clone(self, *, provider: str, voice_id: str, ownership: str) -> bool:
         """Deletes a still-unclaimed clone and retains it when deletion fails."""
 
-        asset = ManagedVoiceAsset(provider=provider.strip(), voice_id=voice_id.strip(), ownership=ownership.strip())
+        asset = ManagedVoiceAsset(
+            provider=provider.strip(),
+            voice_id=voice_id.strip(),
+            ownership=ownership.strip(),
+        )
         if not self._contains(asset):
             return False
         self._retire(asset)
@@ -96,6 +106,13 @@ class VoiceAssetLifecycle:
             asset = managed_voice_asset(runtime_config)
             if asset is not None:
                 self._remove(asset)
+        with self._lock:
+            if self._tracked:
+                for asset in self._tracked:
+                    if asset not in self._retired:
+                        self._retired.append(asset)
+                self._tracked = []
+                self._save()
         self.retry_pending()
 
     def retry_pending(self) -> None:
@@ -115,38 +132,63 @@ class VoiceAssetLifecycle:
     @property
     def pending_assets(self) -> tuple[ManagedVoiceAsset, ...]:
         with self._lock:
-            return tuple(self._pending)
+            return tuple(self._retired)
 
     def _retire(self, asset: ManagedVoiceAsset) -> None:
-        self._add(asset)
+        with self._lock:
+            changed = False
+            if asset in self._tracked:
+                self._tracked = [item for item in self._tracked if item != asset]
+                changed = True
+            if asset not in self._retired:
+                self._retired.append(asset)
+                changed = True
+            if changed:
+                self._save()
         self.retry_pending()
 
     def _contains(self, asset: ManagedVoiceAsset) -> bool:
         with self._lock:
-            return asset in self._pending
+            return asset in self._tracked or asset in self._retired
 
-    def _add(self, asset: ManagedVoiceAsset) -> None:
+    def _add_tracked(self, asset: ManagedVoiceAsset) -> None:
         with self._lock:
-            if asset in self._pending:
+            if asset in self._tracked or asset in self._retired:
                 return
-            self._pending.append(asset)
+            self._tracked.append(asset)
             self._save()
 
     def _remove(self, asset: ManagedVoiceAsset) -> None:
         with self._lock:
-            next_pending = [item for item in self._pending if item != asset]
-            if len(next_pending) == len(self._pending):
+            next_tracked = [item for item in self._tracked if item != asset]
+            next_retired = [item for item in self._retired if item != asset]
+            if len(next_tracked) == len(self._tracked) and len(next_retired) == len(
+                self._retired
+            ):
                 return
-            self._pending = next_pending
+            self._tracked = next_tracked
+            self._retired = next_retired
             self._save()
 
-    def _load(self) -> list[ManagedVoiceAsset]:
+    def _load(self) -> tuple[list[ManagedVoiceAsset], list[ManagedVoiceAsset]]:
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return []
-        if not isinstance(raw, list):
-            return []
+        except FileNotFoundError:
+            return [], []
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError("语音音色清理状态无法读取") from exc
+        if isinstance(raw, list):
+            return [], self._parse_assets(raw)
+        if not isinstance(raw, Mapping):
+            raise RuntimeError("语音音色清理状态格式无效")
+        tracked = raw.get("tracked", [])
+        retired = raw.get("retired", [])
+        if not isinstance(tracked, list) or not isinstance(retired, list):
+            raise RuntimeError("语音音色清理状态格式无效")
+        return self._parse_assets(tracked), self._parse_assets(retired)
+
+    @staticmethod
+    def _parse_assets(raw: list[object]) -> list[ManagedVoiceAsset]:
         assets: list[ManagedVoiceAsset] = []
         for value in raw:
             if not isinstance(value, Mapping):
@@ -156,7 +198,12 @@ class VoiceAssetLifecycle:
                 voice_id=str(value.get("voice_id") or "").strip(),
                 ownership=str(value.get("ownership") or "").strip(),
             )
-            if asset.provider and asset.voice_id and asset.ownership == "shiori_managed" and asset not in assets:
+            if (
+                asset.provider
+                and asset.voice_id
+                and asset.ownership == "shiori_managed"
+                and asset not in assets
+            ):
                 assets.append(asset)
         return assets
 
@@ -164,7 +211,13 @@ class VoiceAssetLifecycle:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self._path.with_suffix(".tmp")
         temporary.write_text(
-            json.dumps([asset.to_dict() for asset in self._pending], ensure_ascii=False),
+            json.dumps(
+                {
+                    "tracked": [asset.to_dict() for asset in self._tracked],
+                    "retired": [asset.to_dict() for asset in self._retired],
+                },
+                ensure_ascii=False,
+            ),
             encoding="utf-8",
         )
         temporary.replace(self._path)

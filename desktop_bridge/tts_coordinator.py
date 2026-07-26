@@ -47,6 +47,7 @@ class TtsTurnCoordinator:
         self._finished = False
         self._failed = False
         self._cancelled = False
+        self._terminal_emitted = False
         self._cancel_event = threading.Event()
         self._sequence = 0
 
@@ -58,7 +59,8 @@ class TtsTurnCoordinator:
             getattr(self._voice_service, "tts_provider", "") or ""
         ).strip()
         return (
-            self._settings.enabled
+            bool(getattr(self._voice_service, "tts_enabled", True))
+            and self._settings.enabled
             and bool(self._settings.voice_id)
             and self._settings.provider == configured_provider
         )
@@ -88,8 +90,8 @@ class TtsTurnCoordinator:
         if self.enabled:
             for sentence in self._buffer.finish():
                 self._queue.put_nowait((self._next_sequence(), sentence))
-            self._wake.set()
-            self._ensure_worker()
+        self._wake.set()
+        self._ensure_worker()
 
     async def wait(self) -> None:
         """Waits for queued synthesis, primarily for shutdown and deterministic tests."""
@@ -124,7 +126,9 @@ class TtsTurnCoordinator:
 
     def _ensure_worker(self) -> None:
         if self._worker is None:
-            self._worker = asyncio.create_task(self._run(), name=f"desktop-tts:{self._session_key}")
+            self._worker = asyncio.create_task(
+                self._run(), name=f"desktop-tts:{self._session_key}"
+            )
 
     async def _run(self) -> None:
         while not self._finished or not self._queue.empty():
@@ -209,7 +213,9 @@ class TtsTurnCoordinator:
                             "voice_turn_id": self._turn_id,
                             "sequence": sequence,
                             "text": sentence,
-                            "audio_base64": base64.b64encode(result.audio).decode("ascii"),
+                            "audio_base64": base64.b64encode(result.audio).decode(
+                                "ascii"
+                            ),
                             "format": "mp3",
                             "mood": self._settings.mood,
                             "metrics": result.metrics.to_dict(),
@@ -219,18 +225,30 @@ class TtsTurnCoordinator:
             finally:
                 self._queue.task_done()
         if not self._cancelled:
-            await self._emit(
-                BridgeEvent(
-                    id=self._request_id,
-                    type="event",
-                    method="voice.tts.finished",
-                    payload={
-                        "session_key": self._session_key,
-                        "request_id": self._request_id,
-                        "voice_turn_id": self._turn_id,
-                    },
-                ).to_dict()
-            )
+            await self._emit_finished()
+
+    async def terminate(self) -> None:
+        """Cancels synthesis and emits one terminal lifecycle event."""
+
+        self.cancel()
+        await self._emit_finished()
+
+    async def _emit_finished(self) -> None:
+        if self._terminal_emitted:
+            return
+        self._terminal_emitted = True
+        await self._emit(
+            BridgeEvent(
+                id=self._request_id,
+                type="event",
+                method="voice.tts.finished",
+                payload={
+                    "session_key": self._session_key,
+                    "request_id": self._request_id,
+                    "voice_turn_id": self._turn_id,
+                },
+            ).to_dict()
+        )
 
     async def _emit(self, payload: dict[str, Any]) -> None:
         result = self._emit_event(payload)

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import ipaddress
+import socket
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from collections.abc import Callable, Iterable, Iterator
@@ -16,6 +19,60 @@ MultipartRequester = Callable[
     dict[str, Any],
 ]
 BinaryRequester = Callable[[str], bytes]
+
+_ALLOWED_PREVIEW_HOST_SUFFIXES = ("minimaxi.com", "minimax.chat")
+
+
+def _validate_preview_url(url: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme != "https" or not host or parsed.username or parsed.password:
+        raise VoiceServiceError("语音试听地址无效", error_code="invalid_preview_url")
+    if parsed.port not in (None, 443):
+        raise VoiceServiceError(
+            "语音试听地址端口无效", error_code="invalid_preview_url"
+        )
+    try:
+        addresses = [ipaddress.ip_address(host)]
+    except ValueError:
+        try:
+            addresses = [
+                ipaddress.ip_address(sockaddr[4][0])
+                for sockaddr in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+            ]
+        except (OSError, ValueError) as exc:
+            raise VoiceServiceError(
+                "语音试听地址不可解析", error_code="invalid_preview_url"
+            ) from exc
+        if not addresses:
+            raise VoiceServiceError(
+                "语音试听地址不可解析", error_code="invalid_preview_url"
+            )
+    if any(
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_reserved
+        or address.is_unspecified
+        for address in addresses
+    ):
+        raise VoiceServiceError(
+            "语音试听地址不可访问", error_code="invalid_preview_url"
+        )
+    if not any(
+        host == suffix or host.endswith(f".{suffix}")
+        for suffix in _ALLOWED_PREVIEW_HOST_SUFFIXES
+    ):
+        raise VoiceServiceError(
+            "语音试听地址不受信任", error_code="invalid_preview_url"
+        )
+    return urllib.parse.urlunsplit(parsed)
+
+
+class _PreviewRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        safe_url = _validate_preview_url(urllib.parse.urljoin(req.full_url, newurl))
+        return super().redirect_request(req, fp, code, msg, headers, safe_url)
 
 
 def request_json(url: str, headers: dict[str, str], body: bytes) -> dict[str, Any]:
@@ -109,9 +166,10 @@ def request_multipart(
 def request_binary(url: str) -> bytes:
     """Downloads provider-generated preview audio without writing a local file."""
 
-    request = urllib.request.Request(url, method="GET")
+    request = urllib.request.Request(_validate_preview_url(url), method="GET")
+    opener = urllib.request.build_opener(_PreviewRedirectHandler())
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with opener.open(request, timeout=60) as response:
             return response.read()
     except urllib.error.HTTPError as exc:
         raise VoiceServiceError(

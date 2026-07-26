@@ -1,5 +1,5 @@
 import type { VoiceCaptureCommand } from "../../../src/shared.js";
-import { float32ToPcm16, resampleToVoiceRate } from "./captureAudio";
+import { capturedChunksToPcm16 } from "./captureAudio";
 
 /** Opens the configured microphone exactly once so a stale device id fails visibly. */
 export function openVoiceInputStream(
@@ -71,6 +71,7 @@ export class VoiceCaptureRenderer {
       this.mutedSink.connect(this.context.destination);
       window.miraDesktop.voiceCaptureReady();
     } catch (error) {
+      if (generation !== this.captureGeneration) return;
       window.miraDesktop.voiceCaptureError(error instanceof Error ? error.message : "没有可用的麦克风");
       await this.cancel();
     }
@@ -124,17 +125,6 @@ export class VoiceCaptureRenderer {
 
   private collectPcm16(): Int16Array {
     if (!this.context) throw new Error("麦克风尚未启动");
-    const length = this.chunks.reduce(
-      (total, chunk) => total + Math.round(chunk.length * 16_000 / this.context!.sampleRate),
-      0,
-    );
-    const output = new Int16Array(length);
-    let offset = 0;
-    for (const chunk of this.chunks) {
-      const pcm = float32ToPcm16(resampleToVoiceRate(chunk, this.context.sampleRate));
-      output.set(pcm, offset);
-      offset += pcm.length;
-    }
-    return output;
+    return capturedChunksToPcm16(this.chunks, this.context.sampleRate);
   }
 }

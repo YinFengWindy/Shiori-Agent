@@ -91,7 +91,8 @@ class TtsSentenceBuffer:
 
 
 def _strip_tts_markup(text: str) -> str:
-    cleaned = re.sub(r"```[\s\S]*?```", "", text)
+    cleaned = _strip_unclosed_code_block(text)
+    cleaned = re.sub(r"```[\s\S]*?```", "", cleaned)
     cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
     cleaned = re.sub(r"!\[[^]]*\]\([^)]*\)", "", cleaned)
     cleaned = re.sub(r"\[([^]]+)\]\([^)]*\)", r"\1", cleaned)
@@ -168,6 +169,30 @@ def _find_bounded_cut(text: str, max_length: int) -> int | None:
     normalized = _strip_tts_markup(text)
     if len(normalized) <= max_length:
         return None
-    prefix = text[:max_length]
-    comma = max(prefix.rfind("，"), prefix.rfind(","))
-    return (comma + 1) if comma >= 0 else max_length
+    depth = 0
+    inside_code = False
+    spoken = 0
+    last_comma: int | None = None
+    index = 0
+    while index < len(text):
+        if text.startswith("```", index):
+            inside_code = not inside_code
+            index += 3
+            continue
+        char = text[index]
+        if inside_code:
+            index += 1
+            continue
+        if char in {"(", "（"}:
+            depth += 1
+        elif char in {")", "）"} and depth:
+            depth -= 1
+        elif depth == 0:
+            if char in {"，", ","}:
+                last_comma = index + 1
+            if not unicodedata.category(char).startswith("S"):
+                spoken += 1
+        if depth == 0 and spoken >= max_length:
+            return last_comma or index + 1
+        index += 1
+    return None

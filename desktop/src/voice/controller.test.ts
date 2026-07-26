@@ -23,6 +23,16 @@ class FakeRecorder implements VoiceRecorder {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function response(payload: Record<string, unknown> = {}): BridgeResponse {
   return { id: "id", type: "response", method: "test", payload, error: null };
 }
@@ -228,6 +238,112 @@ test("a short click or drag does not retire the active voice turn", async () => 
 
   assert.equal(active.currentState.kind, "speaking");
   assert.deepEqual(turnChanges, [[null, "turn-1"]]);
+});
+
+test("cancelling after release retires a recorder start that is still pending", async () => {
+  const pendingStart = deferred<void>();
+  const recorder = new FakeRecorder();
+  recorder.startPromise = pendingStart.promise;
+  const requests: string[] = [];
+  const { controller, events } = createController({
+    recorder,
+    invoke: async (request) => {
+      requests.push(request.method);
+      return response({ text: "不应发送" });
+    },
+  });
+
+  controller.startPress("hotkey");
+  controller.release("hotkey");
+  controller.cancel();
+  pendingStart.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(recorder.calls, ["start", "cancel"]);
+  assert.deepEqual(requests, []);
+  assert.equal(controller.currentTurnId, null);
+  assert.equal(events.at(-1)?.status, "idle");
+});
+
+test("a startup failure after release remains the reported error", async () => {
+  const pendingStart = deferred<void>();
+  const recorder = new FakeRecorder();
+  recorder.startPromise = pendingStart.promise;
+  const { controller, events } = createController({ recorder });
+
+  controller.startPress("pet");
+  controller.release("pet");
+  pendingStart.reject(new Error("权限被拒绝"));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(recorder.calls, ["start"]);
+  assert.deepEqual(events.at(-1), { status: "error", message: "权限被拒绝" });
+});
+
+test("a cancelled ASR result cannot send a message for a later turn", async () => {
+  const asr = deferred<BridgeResponse>();
+  const requests: string[] = [];
+  const { controller } = createController({
+    invoke: async (request) => {
+      requests.push(request.method);
+      if (request.method === "voice.transcribe") return await asr.promise;
+      return response();
+    },
+  });
+
+  controller.startPress("hotkey");
+  controller.release("hotkey");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  controller.cancel();
+  asr.resolve(response({ text: "旧转写" }));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(requests, ["voice.transcribe"]);
+  assert.equal(controller.currentState.kind, "idle");
+});
+
+test("cancelling an active reply retires its backend and playback turn", async () => {
+  const cancelled: string[] = [];
+  const recorder = new FakeRecorder();
+  let schedules = 0;
+  const controller = new DesktopVoiceController({
+    recorder,
+    bridge: { invoke: async () => response({ text: "你好" }) },
+    isEnabled: () => true,
+    roleId: () => "role-a",
+    publishState: () => undefined,
+    createTurnId: () => "turn-a",
+    now: () => 300,
+    onCancelTurn: (turnId) => cancelled.push(turnId),
+    schedule: (callback) => {
+      schedules += 1;
+      if (schedules === 1) callback();
+      return schedules as unknown as ReturnType<typeof setTimeout>;
+    },
+    clearSchedule: () => undefined,
+  });
+
+  controller.startPress("hotkey", 0);
+  controller.release("hotkey");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(controller.currentState.kind, "waiting_reply");
+
+  controller.cancel();
+
+  assert.deepEqual(cancelled, ["turn-a"]);
+  assert.equal(controller.currentTurnId, null);
+  assert.equal(controller.currentState.kind, "idle");
+});
+
+test("pet follow-up events cannot mutate a hotkey-owned gesture", () => {
+  const { controller, recorder } = createController({ runScheduleImmediately: false });
+
+  assert.equal(controller.startPress("hotkey", 0), true);
+  controller.release("pet");
+  controller.cancel("pet");
+
+  assert.equal(controller.currentState.kind, "press_pending");
+  assert.deepEqual(recorder.calls, []);
 });
 
 test("releasing a pet drag returns the controller to idle", () => {

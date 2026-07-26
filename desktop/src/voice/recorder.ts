@@ -16,36 +16,57 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
   private devices: Deferred<VoiceInputDevice[]> | null = null;
   private sampleChunks: Int16Array[] = [];
   private captureGeneration = 0;
+  private captureActive = false;
+  private stopPromise: Promise<Uint8Array> | null = null;
+
+  get isBusy(): boolean {
+    return this.captureActive || this.stopPromise !== null;
+  }
 
   constructor(private readonly createWindow: VoiceCaptureWindowFactory) {}
 
   async start(deviceId = ""): Promise<void> {
+    if (this.isBusy) throw new Error("已有麦克风采集");
+    this.captureActive = true;
     const generation = ++this.captureGeneration;
-    const window = this.ensureWindow();
-    await this.waitUntilReady(window);
-    if (generation !== this.captureGeneration) {
-      throw new Error("麦克风采集已取消");
-    }
-    this.sampleChunks = [];
-    const started = createDeferred<void>();
-    this.started = started;
-    this.sendCommand({ command: "start", deviceId: deviceId.trim() || undefined });
     try {
-      await started.promise;
-    } finally {
-      if (this.started === started) this.started = null;
+      const window = this.ensureWindow();
+      await this.waitUntilReady(window);
+      if (generation !== this.captureGeneration) throw new Error("麦克风采集已取消");
+      this.sampleChunks = [];
+      const started = createDeferred<void>();
+      this.started = started;
+      this.sendCommand({ command: "start", deviceId: deviceId.trim() || undefined });
+      try {
+        await started.promise;
+      } finally {
+        if (this.started === started) this.started = null;
+      }
+    } catch (error) {
+      if (generation === this.captureGeneration) this.captureActive = false;
+      throw error;
     }
   }
 
   async stop(): Promise<Uint8Array> {
+    if (this.stopPromise) return this.stopPromise;
+    if (!this.captureActive) throw new Error("麦克风尚未启动");
     if (!this.window || this.window.isDestroyed()) {
       throw new Error("麦克风采集窗口不可用");
     }
     this.stopped = createDeferred<Uint8Array>();
-    this.sendCommand("stop");
-    const audio = await this.stopped.promise;
-    this.stopped = null;
-    return audio;
+    const stopped = this.stopped;
+    this.stopPromise = (async () => {
+      try {
+        this.sendCommand("stop");
+        return await stopped.promise;
+      } finally {
+        if (this.stopped === stopped) this.stopped = null;
+        this.stopPromise = null;
+        this.captureActive = false;
+      }
+    })();
+    return this.stopPromise;
   }
 
   async cancel(): Promise<void> {
@@ -55,6 +76,7 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.stopped?.reject(cancellation);
     this.started = null;
     this.stopped = null;
+    this.captureActive = false;
     this.sampleChunks = [];
     if (!this.window || this.window.isDestroyed()) return;
     this.sendCommand("cancel");
@@ -118,6 +140,8 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.devices?.reject(error);
     this.started = null;
     this.stopped = null;
+    this.stopPromise = null;
+    this.captureActive = false;
     this.devices = null;
     this.sampleChunks = [];
     return true;
@@ -161,15 +185,36 @@ export class BrowserVoiceRecorder implements VoiceRecorder {
     this.ready = surface.ready;
     window.once("closed", () => {
       if (this.window !== window) return;
+      this.handleWindowFailure(new Error("麦克风采集窗口已关闭"));
       this.window = null;
       this.ready = null;
+    });
+    window.webContents.once("render-process-gone", () => {
+      this.handleWindowFailure(new Error("麦克风采集渲染进程已退出"));
+      if (!window.isDestroyed()) window.destroy();
     });
     return window;
   }
 
   private async waitUntilReady(window: BrowserWindow): Promise<void> {
     if (window.isDestroyed()) throw new Error("麦克风采集窗口不可用");
-    await this.ready;
+    try {
+      await this.ready;
+    } catch (error) {
+      if (this.window === window && !window.isDestroyed()) window.destroy();
+      throw error;
+    }
+  }
+
+  private handleWindowFailure(error: Error): void {
+    this.captureActive = false;
+    this.started?.reject(error);
+    this.stopped?.reject(error);
+    this.devices?.reject(error);
+    this.started = null;
+    this.stopped = null;
+    this.devices = null;
+    this.sampleChunks = [];
   }
 
   private sendCommand(command: VoiceCaptureCommand): void {

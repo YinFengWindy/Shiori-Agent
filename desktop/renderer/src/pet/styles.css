@@ -68,6 +68,13 @@ body {
   display: flex;
   gap: 5px;
   align-items: flex-start;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.pet-bubble::-webkit-scrollbar {
+  display: none;
 }
 
 .pet-bubble-below .pet-drag-region {

@@ -33,6 +33,11 @@ base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 # 密钥可以直接填写，也可以使用 ${ENV_VAR}。
 # =============================================================================
 
+[voice]
+enabled = false
+hotkey = "Ctrl+Space"
+microphone_device_id = ""
+
 [voice.asr]
 enabled = false
 provider = "tencent"

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import base64
-import binascii
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
@@ -23,7 +21,12 @@ from core.integrations.novelai import (
 )
 from core.integrations.novelai.models import NovelAISettings
 from core.net.http import get_default_http_requester
-from core.roles import RoleAggregateService, RolePetPackageService, RoleRelationshipRuntimeService, RoleStore
+from core.roles import (
+    RoleAggregateService,
+    RolePetPackageService,
+    RoleRelationshipRuntimeService,
+    RoleStore,
+)
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.app_service import DesktopAppService
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
@@ -33,7 +36,7 @@ from agent.screen_observation.service import ScreenObservationService
 from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_presenter import DesktopSessionPresenter
-from desktop_bridge.voice_assets import VoiceAssetLifecycle
+from desktop_bridge.voice_handler import DesktopVoiceHandler
 from desktop_bridge.world_simulation_handler import WorldSimulationHandler
 from agent.voice_config import VoiceConfig
 from desktop_bridge.voice_service import VoiceService, VoiceServiceError
@@ -135,13 +138,8 @@ class DesktopBridgeService:
         )
         self.role_presenter = DesktopRolePresenter(role_store, relationship_runtime)
         self.pet_packages = RolePetPackageService(role_store)
-        self.voice_service = voice_service or VoiceService(getattr(config, "voice", None) or VoiceConfig())
-        self.voice_assets = VoiceAssetLifecycle(
-            workspace,
-            self.voice_service.delete_managed_voice,
-        )
-        self.voice_assets.recover_orphans(
-            role.runtime_config for role in self.role_service.repository.list_roles()
+        self.voice_service = voice_service or VoiceService(
+            getattr(config, "voice", None) or VoiceConfig()
         )
         self.chat_service = DesktopChatService(
             agent_loop=agent_loop,
@@ -153,6 +151,18 @@ class DesktopBridgeService:
             emit_session_updated=self._emit_session_updated,
             tts_service=self.voice_service,
         )
+        self.voice_handler = DesktopVoiceHandler(
+            workspace=workspace,
+            voice_service=self.voice_service,
+            active_runtime_configs=(
+                role.runtime_config
+                for role in self.role_service.repository.list_roles()
+            ),
+            cancel_voice_turn=lambda turn_id: self.chat_service.cancel_voice_turn(
+                turn_id
+            ),
+        )
+        self.voice_assets = self.voice_handler.assets
         self.novelai_store = novelai_store or NovelAIStore(workspace)
         self.prompt_tag_store = PromptTagStore(workspace)
         self.novelai_service = novelai_service or self._build_novelai_service()
@@ -238,7 +248,13 @@ class DesktopBridgeService:
         )
         self._event_listeners.clear()
         await self.chat_service.aclose()
+        await self.voice_handler.aclose()
         self.world_simulation.close()
+
+    def start_background_tasks(self) -> None:
+        """Starts bridge-owned background maintenance after an event loop exists."""
+
+        self.voice_handler.start()
 
     def register_desktop_push_channel(self, push_tool: MessagePushTool) -> None:
         """Registers the desktop proactive transport against the bridge event stream."""
@@ -318,6 +334,7 @@ class DesktopBridgeService:
         payload = (
             request.get("payload") if isinstance(request.get("payload"), dict) else {}
         )
+        self.start_background_tasks()
 
         try:
             if method == "observation.analyze":
@@ -345,91 +362,9 @@ class DesktopBridgeService:
                 return self._ok(request_id, method, world_result)
             if method == "health":
                 return self._ok(request_id, method, {"ok": True})
-            if method == "voice.turn.cancel":
-                voice_turn_id = str(payload.get("voice_turn_id") or "").strip()
-                if not voice_turn_id:
-                    raise ValueError("voice_turn_id 不能为空")
-                cancelled = self.chat_service.cancel_voice_turn(voice_turn_id)
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "cancelled": cancelled,
-                        "voice_turn_id": voice_turn_id,
-                    },
-                )
-            if method == "voice.transcribe":
-                audio_base64 = str(payload.get("audio_base64") or "")
-                if not audio_base64:
-                    raise ValueError("audio_base64 不能为空")
-                try:
-                    audio = base64.b64decode(audio_base64, validate=True)
-                except (binascii.Error, ValueError) as exc:
-                    raise ValueError("audio_base64 无效") from exc
-                result = self.voice_service.transcribe_result(audio)
-                return self._ok(
-                    request_id,
-                    method,
-                    {"text": result.text, "metrics": result.metrics.to_dict()},
-                )
-            if method == "voice.synthesize":
-                text = str(payload.get("text") or "").strip()
-                voice_id = str(payload.get("voice_id") or "").strip()
-                if not text or not voice_id:
-                    raise ValueError("text 和 voice_id 不能为空")
-                speed = float(payload.get("speed", 1.0))
-                emotion = str(payload.get("emotion") or "").strip()
-                audio = self.voice_service.synthesize(
-                    text,
-                    voice_id=voice_id,
-                    speed=speed,
-                    emotion=emotion,
-                )
-                return self._ok(
-                    request_id,
-                    method,
-                    {"audio_base64": base64.b64encode(audio).decode("ascii"), "format": "mp3"},
-                )
-            if method == "voice.clone":
-                audio_base64 = str(payload.get("audio_base64") or "")
-                file_name = str(payload.get("file_name") or "voice-clone.wav").strip()
-                if not audio_base64:
-                    raise ValueError("audio_base64 不能为空")
-                try:
-                    audio = base64.b64decode(audio_base64, validate=True)
-                except (binascii.Error, ValueError) as exc:
-                    raise ValueError("audio_base64 无效") from exc
-                result = self.voice_service.clone_voice(audio, file_name=file_name)
-                self.voice_assets.track_clone(result)
-                return self._ok(
-                    request_id,
-                    method,
-                    result,
-                )
-            if method == "voice.clone.abandon":
-                provider = str(payload.get("provider") or "").strip()
-                voice_id = str(payload.get("voice_id") or "").strip()
-                ownership = str(payload.get("ownership") or "").strip()
-                if not provider or not voice_id or not ownership:
-                    raise ValueError("provider、voice_id 和 ownership 不能为空")
-                abandoned = self.voice_assets.abandon_clone(
-                    provider=provider,
-                    voice_id=voice_id,
-                    ownership=ownership,
-                )
-                return self._ok(request_id, method, {"abandoned": abandoned})
-            if method == "voice.delete":
-                provider = str(payload.get("provider") or "").strip()
-                voice_id = str(payload.get("voice_id") or "").strip()
-                ownership = str(payload.get("ownership") or "").strip()
-                if not provider or not voice_id or not ownership:
-                    raise ValueError("provider、voice_id 和 ownership 不能为空")
-                self.voice_service.delete_managed_voice(
-                    provider=provider,
-                    voice_id=voice_id,
-                    ownership=ownership,
-                )
-                return self._ok(request_id, method, {"deleted": True})
+            voice_payload = await self.voice_handler.handle(method, payload)
+            if voice_payload is not None:
+                return self._ok(request_id, method, voice_payload)
             if method == "roles.list":
                 return self._ok(
                     request_id,
@@ -553,7 +488,7 @@ class DesktopBridgeService:
                         else None
                     ),
                 )
-                self.voice_assets.reconcile_role_update(
+                await self.voice_handler.reconcile_role_update(
                     previous_runtime_config,
                     aggregate.role.runtime_config,
                 )
@@ -567,7 +502,7 @@ class DesktopBridgeService:
                 role = self.role_service.repository.get_required(role_id)
                 deleted, session_deleted = self.role_service.delete_role(role_id)
                 if deleted:
-                    self.voice_assets.retire_deleted_role(role.runtime_config)
+                    await self.voice_handler.retire_deleted_role(role.runtime_config)
                 return self._ok(
                     request_id,
                     method,
@@ -586,7 +521,10 @@ class DesktopBridgeService:
                 return self._ok(
                     request_id,
                     method,
-                    {"package": package.to_dict(), "role": self.role_presenter.serialize(role)},
+                    {
+                        "package": package.to_dict(),
+                        "role": self.role_presenter.serialize(role),
+                    },
                 )
             if method == "roles.pets.remove":
                 role_id = str(payload.get("role_id") or "").strip()
@@ -747,10 +685,16 @@ class DesktopBridgeService:
                         if value:
                             metadata[key] = value
                     asr_duration_ms = payload.get("asr_duration_ms")
-                    if isinstance(asr_duration_ms, (int, float)) and asr_duration_ms >= 0:
+                    if (
+                        isinstance(asr_duration_ms, (int, float))
+                        and asr_duration_ms >= 0
+                    ):
                         metadata["asr_duration_ms"] = asr_duration_ms
                     audio_duration_ms = payload.get("audio_duration_ms")
-                    if isinstance(audio_duration_ms, (int, float)) and audio_duration_ms >= 0:
+                    if (
+                        isinstance(audio_duration_ms, (int, float))
+                        and audio_duration_ms >= 0
+                    ):
                         metadata["audio_duration_ms"] = audio_duration_ms
                 if reply_to_message_id:
                     metadata["reply_to_message_id"] = reply_to_message_id

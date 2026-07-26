@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import io
 import json
+import logging
 import time
 import threading
 import urllib.parse
@@ -32,6 +33,8 @@ from desktop_bridge.voice_models import (
     VoiceSynthesisResult,
     VoiceTranscriptionResult,
 )
+
+logger = logging.getLogger("desktop.bridge.voice.providers")
 
 
 def validate_wav_audio(audio: bytes, *, max_seconds: int = 60) -> None:
@@ -96,7 +99,9 @@ class TencentAsrClient:
             "Data": base64.b64encode(audio).decode("ascii"),
             "DataLen": len(audio),
         }
-        payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode(
+            "utf-8"
+        )
         headers = self._signed_headers(payload, timestamp)
         try:
             response = self._requester(self.config.base_url, headers, payload)
@@ -187,10 +192,7 @@ class TencentAsrClient:
         host = urllib.parse.urlparse(url).netloc or "asr.tencentcloudapi.com"
         date = datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d")
         content_type = "application/json; charset=utf-8"
-        canonical_headers = (
-            f"content-type:{content_type}\n"
-            f"host:{host}\n"
-        )
+        canonical_headers = f"content-type:{content_type}\n" f"host:{host}\n"
         signed_headers = "content-type;host"
         hashed_payload = hashlib.sha256(payload).hexdigest()
         canonical_request = "\n".join(
@@ -205,10 +207,18 @@ class TencentAsrClient:
                 hashlib.sha256(canonical_request.encode("utf-8")).hexdigest(),
             ]
         )
-        secret_date = hmac.new(b"TC3" + self.config.secret_key.encode(), date.encode(), hashlib.sha256).digest()
-        secret_service = hmac.new(secret_date, self.service.encode(), hashlib.sha256).digest()
-        secret_signing = hmac.new(secret_service, b"tc3_request", hashlib.sha256).digest()
-        signature = hmac.new(secret_signing, string_to_sign.encode(), hashlib.sha256).hexdigest()
+        secret_date = hmac.new(
+            b"TC3" + self.config.secret_key.encode(), date.encode(), hashlib.sha256
+        ).digest()
+        secret_service = hmac.new(
+            secret_date, self.service.encode(), hashlib.sha256
+        ).digest()
+        secret_signing = hmac.new(
+            secret_service, b"tc3_request", hashlib.sha256
+        ).digest()
+        signature = hmac.new(
+            secret_signing, string_to_sign.encode(), hashlib.sha256
+        ).hexdigest()
         authorization = (
             f"TC3-HMAC-SHA256 Credential={self.config.secret_id}/{credential_scope}, "
             f"SignedHeaders={signed_headers}, Signature={signature}"
@@ -326,15 +336,25 @@ class MiniMaxTtsClient:
         emotion: str = "",
     ) -> bytes:
         self._validate_request(text, voice_id, speed)
-        body = self._build_body(text, voice_id=voice_id, speed=speed, emotion=emotion, stream=False)
-        payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        body = self._build_body(
+            text, voice_id=voice_id, speed=speed, emotion=emotion, stream=False
+        )
+        payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode(
+            "utf-8"
+        )
         response = self._requester(
             self.config.base_url,
-            {"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json"},
+            {
+                "Authorization": f"Bearer {self.config.api_key}",
+                "Content-Type": "application/json",
+            },
             payload,
         )
         if response.get("base_resp", {}).get("status_code", 0) not in (0, None):
-            message = response.get("base_resp", {}).get("status_msg") or "MiniMax TTS 请求失败"
+            message = (
+                response.get("base_resp", {}).get("status_msg")
+                or "MiniMax TTS 请求失败"
+            )
             raise VoiceServiceError(str(message))
         raw_audio = response.get("data", {}).get("audio")
         if not isinstance(raw_audio, str) or not raw_audio:
@@ -373,10 +393,15 @@ class MiniMaxTtsClient:
         if cancel_event is not None and cancel_event.is_set():
             raise VoiceServiceError("语音合成已取消", error_code="cancelled")
         started_at = time.perf_counter()
-        body = self._build_body(text, voice_id=voice_id, speed=speed, emotion=emotion, stream=True)
+        body = self._build_body(
+            text, voice_id=voice_id, speed=speed, emotion=emotion, stream=True
+        )
         chunks = self._stream_requester(
             self.config.base_url,
-            {"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json"},
+            {
+                "Authorization": f"Bearer {self.config.api_key}",
+                "Content-Type": "application/json",
+            },
             json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
         request_id = ""
@@ -427,7 +452,9 @@ class MiniMaxTtsClient:
             ),
         )
 
-    def clone_voice(self, audio: bytes, *, file_name: str = "voice-clone.wav") -> dict[str, Any]:
+    def clone_voice(
+        self, audio: bytes, *, file_name: str = "voice-clone.wav"
+    ) -> dict[str, Any]:
         """Uploads a clone sample, creates a unique voice, and returns one preview."""
 
         if not self.config.enabled:
@@ -441,7 +468,11 @@ class MiniMaxTtsClient:
         if len(audio) > 20 * 1024 * 1024:
             raise VoiceServiceError("复刻录音不能超过 20MB")
         suffix = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else "wav"
-        content_type = {"wav": "audio/wav", "mp3": "audio/mpeg", "m4a": "audio/mp4"}.get(suffix)
+        content_type = {
+            "wav": "audio/wav",
+            "mp3": "audio/mpeg",
+            "m4a": "audio/mp4",
+        }.get(suffix)
         if content_type is None:
             raise VoiceServiceError("复刻录音必须是 WAV、MP3 或 M4A")
         headers = {"Authorization": f"Bearer {self.config.api_key}"}
@@ -455,7 +486,9 @@ class MiniMaxTtsClient:
         )
         self._raise_minimax_error(upload)
         file_payload = upload.get("file")
-        file_id = file_payload.get("file_id") if isinstance(file_payload, dict) else None
+        file_id = (
+            file_payload.get("file_id") if isinstance(file_payload, dict) else None
+        )
         if not isinstance(file_id, int):
             raise VoiceServiceError("MiniMax 上传复刻音频未返回 file_id")
         voice_id = f"Shiori_{uuid.uuid4().hex}"
@@ -475,12 +508,18 @@ class MiniMaxTtsClient:
         )
         self._raise_minimax_error(clone)
         demo_url = str(clone.get("demo_audio") or "").strip()
-        demo_audio = self._binary_requester(demo_url) if demo_url else b""
+        try:
+            demo_audio = self._binary_requester(demo_url) if demo_url else b""
+        except Exception as exc:
+            logger.warning("MiniMax voice clone preview unavailable: %s", exc)
+            demo_audio = b""
         return {
             "voice_id": voice_id,
             "provider": self.config.provider,
             "ownership": "shiori_managed",
-            "audio_base64": base64.b64encode(demo_audio).decode("ascii") if demo_audio else "",
+            "audio_base64": (
+                base64.b64encode(demo_audio).decode("ascii") if demo_audio else ""
+            ),
             "format": "mp3",
         }
 
@@ -527,7 +566,9 @@ class MiniMaxTtsClient:
         if not isinstance(base_resp, dict):
             raise VoiceServiceError("MiniMax 返回格式无效")
         if base_resp.get("status_code", 0) not in (0, None):
-            raise VoiceServiceError(str(base_resp.get("status_msg") or "MiniMax 请求失败"))
+            raise VoiceServiceError(
+                str(base_resp.get("status_msg") or "MiniMax 请求失败")
+            )
 
     def _validate_request(self, text: str, voice_id: str, speed: float) -> None:
         if not self.config.enabled:
@@ -562,7 +603,12 @@ class MiniMaxTtsClient:
                 "vol": self.config.volume,
                 "pitch": 0,
             },
-            "audio_setting": {"sample_rate": 32000, "bitrate": 128000, "format": "mp3", "channel": 1},
+            "audio_setting": {
+                "sample_rate": 32000,
+                "bitrate": 128000,
+                "format": "mp3",
+                "channel": 1,
+            },
         }
         if stream:
             body["stream_options"] = {"exclude_aggregated_audio": True}

@@ -28,7 +28,9 @@ class DesktopBridgeServer:
     def __init__(self, runtime: CoreRuntime) -> None:
         self.runtime = runtime
         self.role_store = RoleStore(runtime.session_manager.workspace)
-        spawn_tool = runtime.tools.get_tool("spawn") if getattr(runtime, "tools", None) else None
+        spawn_tool = (
+            runtime.tools.get_tool("spawn") if getattr(runtime, "tools", None) else None
+        )
         observation_service = getattr(runtime, "screen_observation", None)
         self.service = DesktopBridgeService(
             workspace=runtime.session_manager.workspace,
@@ -57,6 +59,7 @@ class DesktopBridgeServer:
     ) -> None:
         """Dispatches stream requests concurrently and serializes all output frames."""
 
+        self.service.start_background_tasks()
         writer = BridgeStreamWriter(write_payload)
         dispatcher = BridgeRequestDispatcher()
 

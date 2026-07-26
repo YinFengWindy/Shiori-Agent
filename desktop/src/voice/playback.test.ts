@@ -1,17 +1,27 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import test from "node:test";
 import { BrowserVoicePlayback, type VoicePlaybackItem } from "./playback.js";
 
-function createWindow(ready: Promise<void> = Promise.resolve()) {
+function createWindow(ready: Promise<void> = Promise.resolve(), sendError?: Error) {
   const sent: unknown[] = [];
-  const webContents = {
-    send: (_channel: string, value: unknown) => sent.push(value),
+  const webContents = new EventEmitter() as EventEmitter & { send(channel: string, value: unknown): void };
+  webContents.send = (_channel: string, value: unknown) => {
+    if (sendError) throw sendError;
+    sent.push(value);
   };
-  const window = {
-    webContents,
-    isDestroyed: () => false,
-    destroy: () => undefined,
-    once: () => undefined,
+  const window = new EventEmitter() as EventEmitter & {
+    webContents: typeof webContents;
+    isDestroyed(): boolean;
+    destroy(): void;
+  };
+  let destroyed = false;
+  window.webContents = webContents;
+  window.isDestroyed = () => destroyed;
+  window.destroy = () => {
+    if (destroyed) return;
+    destroyed = true;
+    window.emit("closed");
   };
   return { surface: { window, ready }, sent, webContents };
 }
@@ -192,4 +202,63 @@ test("reports a hidden window load failure instead of hanging the playback queue
 
   assert.deepEqual(surface.sent, []);
   assert.deepEqual(errors, ["语音窗口加载失败"]);
+});
+
+test("reports the dequeued item when sending its playback command fails", async () => {
+  const surface = createWindow(Promise.resolve(), new Error("send failed"));
+  const errors: string[] = [];
+  const playback = new BrowserVoicePlayback(() => surface.surface as never, {
+    onStarted: () => undefined,
+    onFinished: () => undefined,
+    onError: (failed) => errors.push(failed.id),
+    onDrained: () => undefined,
+  });
+
+  playback.beginTurn("turn");
+  playback.enqueue(item(0));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(errors, ["turn:0"]);
+});
+
+test("reports an active sentence when the hidden renderer closes unexpectedly", async () => {
+  const surface = createWindow();
+  const errors: string[] = [];
+  const playback = new BrowserVoicePlayback(() => surface.surface as never, {
+    onStarted: () => undefined,
+    onFinished: () => undefined,
+    onError: (failed) => errors.push(failed.id),
+    onDrained: () => undefined,
+  });
+
+  playback.beginTurn("turn");
+  playback.enqueue(item(0));
+  await Promise.resolve();
+  await Promise.resolve();
+  (surface.surface.window as never as EventEmitter).emit("closed");
+
+  assert.deepEqual(errors, ["turn:0"]);
+});
+
+test("recreates the hidden surface after a transient load failure", async () => {
+  const failed = createWindow(Promise.reject(new Error("load failed")));
+  const recovered = createWindow();
+  const surfaces = [failed.surface, recovered.surface];
+  const playback = new BrowserVoicePlayback(() => surfaces.shift() as never, {
+    onStarted: () => undefined,
+    onFinished: () => undefined,
+    onError: () => undefined,
+    onDrained: () => undefined,
+  });
+
+  playback.beginTurn("turn");
+  playback.enqueue(item(0));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  playback.enqueue(item(1));
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.deepEqual(recovered.sent, [
+    { command: "play", id: "turn:1", audioBase64: "AA==", format: "mp3" },
+  ]);
 });

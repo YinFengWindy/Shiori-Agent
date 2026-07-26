@@ -218,10 +218,19 @@ class DesktopChatService:
                 emit_event=emit_event,
             )
             return session, collected
+        except asyncio.CancelledError:
+            if tts is not None:
+                await self._terminate_voice_reply(
+                    tts,
+                    announce=_announce_voice_reply,
+                )
+            raise
         except Exception as exc:
             if tts is not None:
-                tts.cancel()
-                self._discard_tts_coordinator(tts)
+                await self._terminate_voice_reply(
+                    tts,
+                    announce=_announce_voice_reply,
+                )
             bridge_event = BridgeEvent(
                 id=request_id,
                 type="event",
@@ -317,8 +326,6 @@ class DesktopChatService:
     ) -> TtsTurnCoordinator | None:
         if self._tts_service is None or not isinstance(metadata, dict):
             return None
-        if not bool(getattr(self._tts_service, "tts_enabled", True)):
-            return None
         if metadata.get("input_method") != "voice":
             return None
         turn_id = str(metadata.get("voice_turn_id") or "").strip()
@@ -352,9 +359,6 @@ class DesktopChatService:
         return coordinator
 
     def _track_tts(self, coordinator: TtsTurnCoordinator) -> None:
-        if not coordinator.enabled:
-            self._discard_tts_coordinator(coordinator)
-            return
         task = asyncio.create_task(
             coordinator.wait(), name=f"desktop-tts-wait:{id(coordinator)}"
         )
@@ -378,6 +382,18 @@ class DesktopChatService:
     def _discard_tts_coordinator(self, coordinator: TtsTurnCoordinator) -> None:
         if self._tts_coordinators.get(coordinator.turn_id) is coordinator:
             _ = self._tts_coordinators.pop(coordinator.turn_id, None)
+
+    async def _terminate_voice_reply(
+        self,
+        coordinator: TtsTurnCoordinator,
+        *,
+        announce: Callable[[], Awaitable[None]],
+    ) -> None:
+        """Closes a voice lifecycle when the chat worker exits abnormally."""
+
+        await announce()
+        await coordinator.terminate()
+        self._discard_tts_coordinator(coordinator)
 
     def _discard_task(
         self,

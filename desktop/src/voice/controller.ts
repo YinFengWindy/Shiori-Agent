@@ -31,6 +31,8 @@ export type DesktopVoiceControllerOptions = {
   publishState: (payload: VoiceStatePayload) => void;
   /** Selects the new turn and retires queued speech owned by the previous turn. */
   onNewInput?: (previousTurnId: string | null, nextTurnId: string) => void;
+  /** Retires backend and playback work when the active reply is cancelled. */
+  onCancelTurn?: (turnId: string) => void;
   microphoneDeviceId?: () => string;
   createTurnId?: () => string;
   now?: () => number;
@@ -49,6 +51,8 @@ export class DesktopVoiceController {
   private recordingTimer: ReturnType<typeof setTimeout> | null = null;
   private recordingStart: Promise<void> | null = null;
   private activeTurnId: string | null = null;
+  private inputOwner: VoiceInputSource | null = null;
+  private operationGeneration = 0;
   private pendingTtsFailure = "";
   private disposed = false;
 
@@ -73,6 +77,7 @@ export class DesktopVoiceController {
     if (this.disposed || !this.options.isEnabled()) return false;
     if (["waiting_reply", "speaking_prepare", "speaking", "finish_current_sentence_then_idle"].includes(this.state.kind)) {
       if (this.pendingReplyPress) return false;
+      this.inputOwner = source;
       this.pendingReplyPress = { source, atMs };
       this.clearPressTimer();
       this.pressTimer = this.schedule(() => this.beginReplyInterruptPress(), VOICE_PRESS_THRESHOLD_MS);
@@ -80,6 +85,7 @@ export class DesktopVoiceController {
     }
     if (this.state.kind === "error") this.apply({ type: "reset" });
     if (this.state.kind !== "idle") return false;
+    this.inputOwner = source;
     this.apply({ type: "press_started", source, atMs });
     this.clearPressTimer();
     this.pressTimer = this.schedule(() => {
@@ -92,9 +98,11 @@ export class DesktopVoiceController {
   }
 
   /** Lets the pet drag recognizer win before the voice threshold expires. */
-  pointerMoved(): void {
+  pointerMoved(source?: VoiceInputSource): void {
+    if (source && source !== this.inputOwner) return;
     if (this.pendingReplyPress) {
       this.pendingReplyPress = null;
+      this.inputOwner = null;
       this.clearPressTimer();
       return;
     }
@@ -104,47 +112,62 @@ export class DesktopVoiceController {
   }
 
   /** Finishes a pending press or submits the current recording for ASR. */
-  release(): void {
+  release(source?: VoiceInputSource): void {
+    if (source && source !== this.inputOwner) return;
     if (this.pendingReplyPress) {
       this.pendingReplyPress = null;
+      this.inputOwner = null;
       this.clearPressTimer();
       return;
     }
     if (this.state.kind === "press_pending") {
       this.clearPressTimer();
+      this.inputOwner = null;
       this.apply({ type: "released" });
       return;
     }
     if (this.state.kind === "dragging") {
       this.apply({ type: "released" });
+      this.inputOwner = null;
       return;
     }
     if (this.state.kind !== "recording") return;
     this.clearRecordingTimer();
     this.apply({ type: "released" });
+    this.inputOwner = null;
     void this.finishRecording();
   }
 
   /** Cancels the current recording without contacting ASR or the chat Loop. */
-  cancel(): void {
+  cancel(source?: VoiceInputSource): void {
+    if (source && source !== this.inputOwner) return;
+    const retiredTurnId = this.activeTurnId;
+    this.operationGeneration += 1;
     this.pendingTtsFailure = "";
     this.pendingReplyPress = null;
+    this.inputOwner = null;
+    this.activeTurnId = null;
     this.clearPressTimer();
     this.clearRecordingTimer();
-    if (this.state.kind === "recording") {
+    if (this.state.kind === "recording" || this.state.kind === "transcribing") {
       void this.options.recorder.cancel();
     }
-    if (this.state.kind !== "idle") this.apply({ type: "escape" });
+    if (retiredTurnId) this.options.onCancelTurn?.(retiredTurnId);
+    if (this.state.kind !== "idle") this.apply({ type: "reset" });
   }
 
   /** Cancels timers and releases the recorder during app or pet shutdown. */
   dispose(): void {
     this.disposed = true;
+    this.operationGeneration += 1;
     this.pendingTtsFailure = "";
     this.pendingReplyPress = null;
     this.clearPressTimer();
     this.clearRecordingTimer();
-    if (this.state.kind === "recording") void this.options.recorder.cancel();
+    if (this.state.kind === "recording" || this.state.kind === "transcribing") void this.options.recorder.cancel();
+    if (this.activeTurnId) this.options.onCancelTurn?.(this.activeTurnId);
+    this.activeTurnId = null;
+    this.inputOwner = null;
     this.state = { kind: "idle" };
   }
 
@@ -169,6 +192,7 @@ export class DesktopVoiceController {
     const failure = this.pendingTtsFailure;
     this.pendingTtsFailure = "";
     this.apply({ type: "reply_finished" });
+    this.activeTurnId = null;
     if (failure) this.options.publishState({ status: "error", message: failure });
   }
 
@@ -178,9 +202,10 @@ export class DesktopVoiceController {
   }
 
   private beginRecording(): void {
+    const generation = ++this.operationGeneration;
     this.recordingStart = this.options.recorder.start(this.options.microphoneDeviceId?.() ?? "")
       .then(() => {
-        if (this.disposed || !["recording", "transcribing"].includes(this.state.kind)) return;
+        if (!this.isCurrentOperation(generation) || !["recording", "transcribing"].includes(this.state.kind)) return;
         this.pendingTtsFailure = "";
         const previousTurnId = this.activeTurnId;
         const nextTurnId = (this.options.createTurnId ?? randomUUID)();
@@ -188,6 +213,7 @@ export class DesktopVoiceController {
         this.options.onNewInput?.(previousTurnId, nextTurnId);
       })
       .catch((error: unknown) => {
+        if (!this.isCurrentOperation(generation)) return;
         this.apply({ type: "recording_failed", message: errorMessage(error, "没有可用的麦克风") });
       });
     this.recordingTimer = this.schedule(() => {
@@ -210,17 +236,21 @@ export class DesktopVoiceController {
   }
 
   private async finishRecording(): Promise<void> {
+    const generation = this.operationGeneration;
     const start = this.recordingStart;
     this.recordingStart = null;
     try {
       await start;
-      if (this.disposed || this.state.kind !== "transcribing") return;
+      if (!this.isCurrentOperation(generation) || this.state.kind !== "transcribing") return;
+      const turnId = this.activeTurnId;
+      if (!turnId) return;
       const audio = await this.options.recorder.stop();
-      if (this.disposed || this.state.kind !== "transcribing") return;
+      if (!this.isCurrentOperation(generation) || this.state.kind !== "transcribing") return;
       const transcribe = await this.options.bridge.invoke({
         method: "voice.transcribe",
         payload: { audio_base64: Buffer.from(audio).toString("base64") },
       });
+      if (!this.isCurrentOperation(generation) || this.state.kind !== "transcribing") return;
       if (transcribe.error) {
         this.apply({ type: "asr_failed", message: transcribe.error.message });
         return;
@@ -228,7 +258,7 @@ export class DesktopVoiceController {
       const text = String(transcribe.payload.text ?? "").trim();
       const asrMetrics = normalizeVoiceMetrics(transcribe.payload.metrics);
       this.apply({ type: "asr_succeeded", text });
-      if (this.currentState.kind !== "sending") return;
+      if (!this.isCurrentOperation(generation) || this.currentState.kind !== "sending") return;
       const roleId = this.options.roleId();
       if (!roleId) {
         this.apply({ type: "chat_failed", message: "当前没有可用角色" });
@@ -241,22 +271,28 @@ export class DesktopVoiceController {
           content: text,
           media: [],
           input_method: "voice",
-          voice_turn_id: this.activeTurnId,
+          voice_turn_id: turnId,
           asr_metrics: asrMetrics ?? undefined,
         },
       });
+      if (!this.isCurrentOperation(generation) || this.currentState.kind !== "sending") return;
       if (chat.error) {
         this.apply({ type: "chat_failed", message: chat.error.message });
         return;
       }
       this.apply({ type: "chat_accepted" });
     } catch (error: unknown) {
+      if (!this.isCurrentOperation(generation)) return;
       if (this.state.kind === "transcribing") {
         this.apply({ type: "asr_failed", message: errorMessage(error, "语音识别失败，请重试") });
       } else if (this.state.kind === "sending") {
         this.apply({ type: "chat_failed", message: errorMessage(error, "消息发送失败") });
       }
     }
+  }
+
+  private isCurrentOperation(generation: number): boolean {
+    return !this.disposed && generation === this.operationGeneration;
   }
 
   private apply(event: VoiceInteractionEvent): void {

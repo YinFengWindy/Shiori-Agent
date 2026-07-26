@@ -98,6 +98,9 @@ export function transitionVoiceInteraction(
       if (event.type === "asr_succeeded") {
         return event.text.trim() ? { kind: "sending" } : { kind: "error", message: "没有听清，请重试" };
       }
+      if (event.type === "recording_failed") {
+        return { kind: "error", message: event.message };
+      }
       if (event.type === "asr_failed") {
         return { kind: "error", message: event.message };
       }
@@ -136,7 +139,7 @@ export function transitionVoiceInteraction(
       if (event.type === "sentence_playback_finished" && event.sentenceId === state.sentenceId) {
         return event.nextSentenceId
           ? { kind: "speaking", sentenceId: event.nextSentenceId }
-          : { kind: "idle" };
+          : { kind: "speaking_prepare" };
       }
       if (event.type === "new_input") {
         return { kind: "finish_current_sentence_then_idle", sentenceId: state.sentenceId };

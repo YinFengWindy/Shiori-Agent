@@ -13,6 +13,7 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState("");
   const testTimer = useRef<number | null>(null);
+  const testActive = useRef(false);
 
   useEffect(() => {
     if (typeof window.miraDesktop.listVoiceInputDevices !== "function") return undefined;
@@ -22,6 +23,10 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
     return () => {
       if (testTimer.current !== null) window.clearTimeout(testTimer.current);
       testTimer.current = null;
+      if (testActive.current) {
+        testActive.current = false;
+        void window.miraDesktop.cancelVoiceTest();
+      }
     };
   }, []);
 
@@ -40,19 +45,23 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
       if (testing) {
         if (testTimer.current !== null) window.clearTimeout(testTimer.current);
         testTimer.current = null;
+        testActive.current = false;
         await window.miraDesktop.stopVoiceTest();
         setTesting(false);
         return;
       }
+      testActive.current = true;
       await window.miraDesktop.startVoiceTest(draft.voice.microphoneDeviceId || undefined);
       setTesting(true);
       testTimer.current = window.setTimeout(() => {
         testTimer.current = null;
+        testActive.current = false;
         void window.miraDesktop.stopVoiceTest()
           .catch((error) => setTestError(error instanceof Error ? error.message : String(error)))
           .finally(() => setTesting(false));
       }, 3000);
     } catch (error) {
+      testActive.current = false;
       setTesting(false);
       setTestError(error instanceof Error ? error.message : String(error));
     }

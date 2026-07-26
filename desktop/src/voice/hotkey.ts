@@ -58,7 +58,9 @@ export class VoiceHotkeyController {
 
   private restartHook(): void {
     const wasRegistered = this.registered;
+    const wasPressed = this.pressed;
     this.stop();
+    if (wasPressed) this.callbacks.onCancel();
     if (wasRegistered) this.start();
   }
 

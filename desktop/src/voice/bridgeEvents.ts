@@ -55,9 +55,14 @@ export async function selectVoiceTurn(
 ): Promise<void> {
   playback.beginTurn(nextTurnId);
   if (!previousTurnId) return;
+  await cancelVoiceTurn(bridge, previousTurnId);
+}
+
+/** Cancels one backend voice turn after its local playback ownership is retired. */
+export async function cancelVoiceTurn(bridge: VoiceBridge, turnId: string): Promise<void> {
   const response = await bridge.invoke({
     method: "voice.turn.cancel",
-    payload: { voice_turn_id: previousTurnId },
+    payload: { voice_turn_id: turnId },
   });
   if (response.error) {
     throw new Error(response.error.message);

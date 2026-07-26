@@ -82,3 +82,20 @@ test("changing the hotkey restarts a registered hook and an empty value disables
   assert.equal(hook.stopped, 2);
   assert.equal(controller.start(), false);
 });
+
+test("changing a held hotkey cancels its active gesture", () => {
+  const hook = new FakeHook();
+  const events: string[] = [];
+  const controller = new VoiceHotkeyController({
+    onPress: () => events.push("press"),
+    onRelease: () => events.push("release"),
+    onCancel: () => events.push("cancel"),
+  }, hook);
+  controller.setHotkey("Ctrl+Space");
+  controller.start();
+  hook.emit("keydown", UiohookKey.Space, { ctrlKey: true });
+
+  controller.setHotkey("Alt+V");
+
+  assert.deepEqual(events, ["press", "cancel"]);
+});

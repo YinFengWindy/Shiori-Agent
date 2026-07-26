@@ -116,10 +116,14 @@ export type SettingsFormData = {
     enabled: boolean;
     hotkey: string;
     microphoneDeviceId: string;
+    /** Preserved provider-level switch from config.toml. */
+    asrEnabled?: boolean;
     asrProvider: string;
     asrBaseUrl: string;
     asrSecretId: string;
     asrSecretKey: string;
+    /** Preserved provider-level switch from config.toml. */
+    ttsEnabled?: boolean;
     ttsProvider: string;
     ttsBaseUrl: string;
     ttsModel: string;
@@ -234,6 +238,8 @@ export type DesktopApi = {
   startVoiceTest(deviceId?: string): Promise<void>;
   /** Stops the local microphone test and plays it back locally. */
   stopVoiceTest(): Promise<void>;
+  /** Cancels an active or still-starting microphone test without playback. */
+  cancelVoiceTest(): Promise<void>;
   /** Opens the native picker and clones one transient voice sample through the bridge. */
   cloneVoice(): Promise<VoiceCloneResult>;
   /** Plays a provider-generated voice preview through the hidden audio surface. */

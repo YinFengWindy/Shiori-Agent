@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -67,7 +69,9 @@ async def test_novelai_regenerate_message_media_returns_updated_session(
 
 
 @pytest.mark.asyncio
-async def test_observation_bridge_routes_only_through_the_owned_service(tmp_path) -> None:
+async def test_observation_bridge_routes_only_through_the_owned_service(
+    tmp_path,
+) -> None:
     role_store = RoleStore(tmp_path)
     session_manager = SessionManager(tmp_path)
     observation = SimpleNamespace(
@@ -84,11 +88,19 @@ async def test_observation_bridge_routes_only_through_the_owned_service(tmp_path
     )
 
     analyzed = await service.handle(
-        {"id": "observe-1", "method": "observation.analyze", "payload": {"frame_id": "frame-1"}},
+        {
+            "id": "observe-1",
+            "method": "observation.analyze",
+            "payload": {"frame_id": "frame-1"},
+        },
         emit_event=Mock(),
     )
     remembered = await service.handle(
-        {"id": "observe-2", "method": "observation.remember", "payload": {"summary": "共同经历"}},
+        {
+            "id": "observe-2",
+            "method": "observation.remember",
+            "payload": {"summary": "共同经历"},
+        },
         emit_event=Mock(),
     )
 
@@ -101,7 +113,9 @@ async def test_observation_bridge_routes_only_through_the_owned_service(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_chat_send_returns_busy_before_persisting_second_message(tmp_path) -> None:
+async def test_chat_send_returns_busy_before_persisting_second_message(
+    tmp_path,
+) -> None:
     role_store = RoleStore(tmp_path)
     role_store.create_role(
         role_id="mira",
@@ -267,6 +281,53 @@ async def test_voice_transcribe_error_returns_structured_metrics(tmp_path) -> No
 
 
 @pytest.mark.asyncio
+async def test_voice_provider_call_does_not_block_bridge_event_loop(tmp_path) -> None:
+    started = threading.Event()
+    release = threading.Event()
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+
+    def transcribe(_audio: bytes) -> VoiceTranscriptionResult:
+        started.set()
+        release.wait(timeout=2)
+        return VoiceTranscriptionResult(
+            text="你好",
+            metrics=VoiceOperationMetrics(
+                provider="tencent",
+                request_id="asr-threaded",
+                elapsed_ms=10,
+                audio_duration_ms=100,
+                character_count=2,
+            ),
+        )
+
+    service.voice_service.transcribe_result = transcribe
+    task = asyncio.create_task(
+        service.handle(
+            {
+                "id": "request-asr-threaded",
+                "method": "voice.transcribe",
+                "payload": {"audio_base64": "AA=="},
+            },
+            emit_event=Mock(),
+        )
+    )
+    await asyncio.to_thread(started.wait, 1)
+    await asyncio.sleep(0)
+    assert not task.done()
+    release.set()
+    response = await task
+
+    assert response.error is None
+    assert response.payload["text"] == "你好"
+
+
+@pytest.mark.asyncio
 async def test_voice_turn_cancel_targets_only_the_requested_turn(tmp_path) -> None:
     service = DesktopBridgeService(
         workspace=tmp_path,
@@ -322,8 +383,6 @@ async def test_voice_delete_preserves_provider_and_ownership_guard(tmp_path) -> 
         voice_id="Shiori_voice123",
         ownership="shiori_managed",
     )
-
-
 
 
 @pytest.mark.asyncio
@@ -404,7 +463,9 @@ async def test_external_turn_committed_broadcasts_role_session_once(tmp_path) ->
 
 
 @pytest.mark.asyncio
-async def test_external_proactive_media_commit_broadcasts_role_session(tmp_path) -> None:
+async def test_external_proactive_media_commit_broadcasts_role_session(
+    tmp_path,
+) -> None:
     role_store = RoleStore(tmp_path)
     role_store.create_role(
         role_id="mira",

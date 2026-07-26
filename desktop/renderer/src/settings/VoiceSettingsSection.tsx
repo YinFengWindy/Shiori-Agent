@@ -15,7 +15,9 @@ export function VoiceSettingsSection({ draft, subsectionId, updateDraft }: Setti
   return (
     <SettingsSectionCard>
       <Field label="ASR Provider">
-        <input className={cx(inputClass, "bg-white")} value={draft.voice.asrProvider} onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, asrProvider: event.target.value } }))} />
+        <select className={cx(inputClass, "bg-white")} value={draft.voice.asrProvider} onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, asrProvider: event.target.value } }))}>
+          <option value="tencent">tencent</option>
+        </select>
       </Field>
       <Field label="腾讯云 ASR 地址">
         <input className={cx(inputClass, "bg-white")} value={draft.voice.asrBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, asrBaseUrl: event.target.value } }))} />
@@ -27,7 +29,9 @@ export function VoiceSettingsSection({ draft, subsectionId, updateDraft }: Setti
         <SettingsSecretInput value={draft.voice.asrSecretKey} onChange={(value) => updateDraft((current) => ({ ...current, voice: { ...current.voice, asrSecretKey: value } }))} />
       </Field>
       <Field label="TTS Provider">
-        <input className={cx(inputClass, "bg-white")} value={draft.voice.ttsProvider} onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, ttsProvider: event.target.value } }))} />
+        <select className={cx(inputClass, "bg-white")} value={draft.voice.ttsProvider} onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, ttsProvider: event.target.value } }))}>
+          <option value="minimax">minimax</option>
+        </select>
       </Field>
       <Field label="MiniMax TTS 地址">
         <input className={cx(inputClass, "bg-white")} value={draft.voice.ttsBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, ttsBaseUrl: event.target.value } }))} />

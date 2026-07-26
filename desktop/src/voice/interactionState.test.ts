@@ -102,8 +102,27 @@ test("recording startup failures and Esc leave no active voice task", () => {
     { kind: "idle" },
   );
   assert.deepEqual(
+    transitionVoiceInteraction({ kind: "transcribing" }, {
+      type: "recording_failed",
+      message: "麦克风权限被拒绝",
+    }),
+    { kind: "error", message: "麦克风权限被拒绝" },
+  );
+  assert.deepEqual(
     transitionVoiceInteraction({ kind: "sending" }, { type: "escape" }),
     { kind: "idle" },
+  );
+});
+
+test("a temporary playback gap waits for the producer to finish", () => {
+  const speaking = { kind: "speaking", sentenceId: "s1" } as const;
+
+  assert.deepEqual(
+    transitionVoiceInteraction(speaking, {
+      type: "sentence_playback_finished",
+      sentenceId: "s1",
+    }),
+    { kind: "speaking_prepare" },
   );
 });
 

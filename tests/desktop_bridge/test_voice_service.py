@@ -20,7 +20,9 @@ from desktop_bridge.voice_service import (
 )
 
 
-def make_wav(*, sample_rate: int = 16000, channels: int = 1, sample_width: int = 2) -> bytes:
+def make_wav(
+    *, sample_rate: int = 16000, channels: int = 1, sample_width: int = 2
+) -> bytes:
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as writer:
         writer.setframerate(sample_rate)
@@ -80,7 +82,10 @@ def test_tencent_asr_error_preserves_request_and_error_code() -> None:
         VoiceAsrConfig(enabled=True, secret_id="id", secret_key="key"),
         requester=lambda *_args: {
             "Response": {
-                "Error": {"Code": "FailedOperation.ServiceIsolate", "Message": "failed"},
+                "Error": {
+                    "Code": "FailedOperation.ServiceIsolate",
+                    "Message": "failed",
+                },
                 "AudioDuration": 750,
                 "RequestId": "tencent-request-error",
             }
@@ -128,7 +133,10 @@ def test_minimax_tts_decodes_hex_audio_and_preserves_emotion() -> None:
         requester=requester,
     )
 
-    assert client.synthesize("你好", voice_id="mira", speed=1.2, emotion="happy") == b"\x00\x01\xff"
+    assert (
+        client.synthesize("你好", voice_id="mira", speed=1.2, emotion="happy")
+        == b"\x00\x01\xff"
+    )
     assert calls[0]["voice_setting"] == {
         "voice_id": "mira",
         "speed": 1.2,
@@ -234,14 +242,33 @@ def test_minimax_voice_clone_uploads_transient_audio_and_returns_preview() -> No
     uploads: list[dict[str, object]] = []
     requests: list[dict] = []
 
-    def upload(url: str, headers: dict[str, str], fields: dict[str, str], file_name: str, content_type: str, content: bytes) -> dict:
-        uploads.append({"url": url, "headers": headers, "fields": fields, "file_name": file_name, "content_type": content_type, "content": content})
+    def upload(
+        url: str,
+        headers: dict[str, str],
+        fields: dict[str, str],
+        file_name: str,
+        content_type: str,
+        content: bytes,
+    ) -> dict:
+        uploads.append(
+            {
+                "url": url,
+                "headers": headers,
+                "fields": fields,
+                "file_name": file_name,
+                "content_type": content_type,
+                "content": content,
+            }
+        )
         return {"base_resp": {"status_code": 0}, "file": {"file_id": 123}}
 
     def requester(url: str, _headers: dict[str, str], body: bytes) -> dict:
         assert url == "https://api.minimaxi.com/v1/voice_clone"
         requests.append(json.loads(body))
-        return {"base_resp": {"status_code": 0}, "demo_audio": "https://demo.example/audio.mp3"}
+        return {
+            "base_resp": {"status_code": 0},
+            "demo_audio": "https://demo.example/audio.mp3",
+        }
 
     client = MiniMaxTtsClient(
         VoiceTtsConfig(enabled=True, api_key="key"),
@@ -258,6 +285,35 @@ def test_minimax_voice_clone_uploads_transient_audio_and_returns_preview() -> No
     assert requests[0]["file_id"] == 123
     assert requests[0]["voice_id"].startswith("Shiori_")
     assert result["audio_base64"] == base64.b64encode(b"preview").decode("ascii")
+
+
+def test_minimax_voice_clone_keeps_voice_when_preview_download_fails() -> None:
+    client = MiniMaxTtsClient(
+        VoiceTtsConfig(enabled=True, api_key="key"),
+        requester=lambda *_args: (
+            {
+                "base_resp": {"status_code": 0},
+                "file": {"file_id": 123},
+            }
+            if _args[0].endswith("files/upload")
+            else {
+                "base_resp": {"status_code": 0},
+                "demo_audio": "https://api.minimaxi.com/demo.mp3",
+            }
+        ),
+        upload_requester=lambda *_args: {
+            "base_resp": {"status_code": 0},
+            "file": {"file_id": 123},
+        },
+        binary_requester=lambda _url: (_ for _ in ()).throw(
+            RuntimeError("preview down")
+        ),
+    )
+
+    result = client.clone_voice(b"wav-bytes")
+
+    assert result["voice_id"].startswith("Shiori_")
+    assert result["audio_base64"] == ""
 
 
 def test_minimax_deletes_one_cloned_voice_by_id() -> None:

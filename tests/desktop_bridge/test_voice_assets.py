@@ -1,3 +1,5 @@
+import pytest
+
 from desktop_bridge.voice_assets import VoiceAssetLifecycle
 
 
@@ -25,7 +27,9 @@ def test_saved_role_claims_temporary_clone_and_retires_replaced_voice(tmp_path) 
         }
     )
 
-    lifecycle.reconcile_role_update(runtime_config("Shiori_old"), runtime_config("Shiori_new"))
+    lifecycle.reconcile_role_update(
+        runtime_config("Shiori_old"), runtime_config("Shiori_new")
+    )
 
     assert deleted == ["Shiori_old"]
     assert lifecycle.pending_assets == ()
@@ -63,3 +67,32 @@ def test_failed_cleanup_is_persisted_and_retried_after_restart(tmp_path) -> None
 
     assert retried == ["Shiori_abandoned"]
     assert recovered.pending_assets == ()
+
+
+def test_unclaimed_clone_is_not_deleted_when_another_voice_is_retired(tmp_path) -> None:
+    deleted: list[str] = []
+    lifecycle = VoiceAssetLifecycle(
+        tmp_path,
+        lambda *, voice_id, **_kwargs: deleted.append(voice_id),
+    )
+    lifecycle.track_clone(
+        {
+            "provider": "minimax",
+            "voice_id": "Shiori_unclaimed",
+            "ownership": "shiori_managed",
+        }
+    )
+
+    lifecycle.reconcile_role_update(
+        runtime_config("Shiori_old"), runtime_config("Shiori_new")
+    )
+
+    assert deleted == ["Shiori_old"]
+    assert lifecycle.pending_assets == ()
+
+
+def test_corrupt_cleanup_state_fails_fast(tmp_path) -> None:
+    (tmp_path / "voice_asset_cleanup.json").write_text("{broken", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="清理状态无法读取"):
+        VoiceAssetLifecycle(tmp_path, lambda **_kwargs: None)
