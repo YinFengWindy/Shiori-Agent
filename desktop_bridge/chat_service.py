@@ -120,27 +120,34 @@ class DesktopChatService:
             emit_event=emit_event,
         )
         reply_announced = False
+        tts_received_streamed_content = False
+
+        async def _announce_voice_reply() -> None:
+            nonlocal reply_announced
+            if tts is None or reply_announced:
+                return
+            reply_announced = True
+            await self._emit_payload(
+                emit_event,
+                BridgeEvent(
+                    id=request_id,
+                    type="event",
+                    method="voice.reply.started",
+                    payload={
+                        "session_key": session_key,
+                        "request_id": request_id,
+                        "voice_turn_id": tts.turn_id,
+                        "has_voice": tts.enabled,
+                    },
+                ).to_dict(),
+            )
 
         async def _on_delta(event: StreamDeltaReady) -> None:
-            nonlocal reply_announced
+            nonlocal tts_received_streamed_content
             if event.session_key != session_key:
                 return
-            if tts is not None and not reply_announced and event.content_delta:
-                reply_announced = True
-                await self._emit_payload(
-                    emit_event,
-                    BridgeEvent(
-                        id=request_id,
-                        type="event",
-                        method="voice.reply.started",
-                        payload={
-                            "session_key": session_key,
-                            "request_id": request_id,
-                            "voice_turn_id": tts.turn_id,
-                            "has_voice": tts.enabled,
-                        },
-                    ).to_dict(),
-                )
+            if tts is not None and event.content_delta:
+                await _announce_voice_reply()
             bridge_event = BridgeEvent(
                 id=request_id,
                 type="event",
@@ -153,7 +160,8 @@ class DesktopChatService:
             )
             collected.append(bridge_event)
             await self._emit_payload(emit_event, bridge_event.to_dict())
-            if tts is not None:
+            if tts is not None and event.content_delta:
+                tts_received_streamed_content = True
                 tts.push(event.content_delta)
 
         async def _on_done(event: TurnCommitted) -> None:
@@ -173,6 +181,14 @@ class DesktopChatService:
             )
             collected.append(bridge_event)
             await self._emit_payload(emit_event, bridge_event.to_dict())
+            if (
+                tts is not None
+                and not tts_received_streamed_content
+                and event.assistant_response
+            ):
+                # Some providers commit a complete reply without emitting text deltas.
+                await _announce_voice_reply()
+                tts.push(event.assistant_response)
 
         self._event_bus.on(StreamDeltaReady, _on_delta)
         self._event_bus.on(TurnCommitted, _on_done)
@@ -188,22 +204,7 @@ class DesktopChatService:
                 stream_events=True,
             )
             if tts is not None:
-                if not reply_announced:
-                    reply_announced = True
-                    await self._emit_payload(
-                        emit_event,
-                        BridgeEvent(
-                            id=request_id,
-                            type="event",
-                            method="voice.reply.started",
-                            payload={
-                                "session_key": session_key,
-                                "request_id": request_id,
-                                "voice_turn_id": tts.turn_id,
-                                "has_voice": tts.enabled,
-                            },
-                        ).to_dict(),
-                    )
+                await _announce_voice_reply()
                 tts.finish()
                 self._track_tts(tts)
             await asyncio.sleep(0)
@@ -325,8 +326,16 @@ class DesktopChatService:
             return None
         session = self._session_manager.get_or_create(session_key)
         session_metadata = getattr(session, "metadata", {})
-        runtime_config = session_metadata.get("role_runtime_config") if isinstance(session_metadata, dict) else {}
-        mood = session_metadata.get("current_mood") if isinstance(session_metadata, dict) else ""
+        runtime_config = (
+            session_metadata.get("role_runtime_config")
+            if isinstance(session_metadata, dict)
+            else {}
+        )
+        mood = (
+            session_metadata.get("current_mood")
+            if isinstance(session_metadata, dict)
+            else ""
+        )
 
         async def _emit(payload: dict[str, Any]) -> None:
             await self._emit_payload(emit_event, payload)
@@ -346,7 +355,9 @@ class DesktopChatService:
         if not coordinator.enabled:
             self._discard_tts_coordinator(coordinator)
             return
-        task = asyncio.create_task(coordinator.wait(), name=f"desktop-tts-wait:{id(coordinator)}")
+        task = asyncio.create_task(
+            coordinator.wait(), name=f"desktop-tts-wait:{id(coordinator)}"
+        )
         self._tts_tasks.add(task)
 
         def _discard(completed: asyncio.Task[None]) -> None:
