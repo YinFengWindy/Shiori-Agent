@@ -6,6 +6,7 @@ import type {
   SettingsFormData,
   SettingsSnapshot,
 } from "./shared.js";
+import { parseHotkey } from "./voice/hotkey.js";
 
 type BridgeRestarter = () => Promise<{
   ok: boolean;
@@ -144,6 +145,9 @@ export function loadSettingsData(): SettingsSnapshot {
   const agentContext = asRecord(agent.context);
   const agentTools = asRecord(agent.tools);
   const agentMaintenance = asRecord(agent.maintenance);
+  const voice = asRecord(parsed.voice);
+  const voiceAsr = asRecord(voice.asr);
+  const voiceTts = asRecord(voice.tts);
   const plugins = asRecord(parsed.plugins);
   const qqbot = asRecord(plugins.qqbot);
   return {
@@ -195,6 +199,22 @@ export function loadSettingsData(): SettingsSnapshot {
         novelaiAutoWritebackRoleAssets: Boolean(
           novelai.auto_writeback_role_assets,
         ),
+      },
+      voice: {
+        enabled: Boolean(voice.enabled),
+        hotkey: String(voice.hotkey ?? "Ctrl+Space"),
+        microphoneDeviceId: String(voice.microphone_device_id ?? ""),
+        asrEnabled: Boolean(voiceAsr.enabled ?? voice.enabled),
+        asrProvider: String(voiceAsr.provider ?? "tencent"),
+        asrBaseUrl: String(voiceAsr.base_url ?? "https://asr.tencentcloudapi.com/"),
+        asrSecretId: String(voiceAsr.secret_id ?? ""),
+        asrSecretKey: String(voiceAsr.secret_key ?? ""),
+        ttsEnabled: Boolean(voiceTts.enabled ?? voice.enabled),
+        ttsProvider: String(voiceTts.provider ?? "minimax"),
+        ttsBaseUrl: String(voiceTts.base_url ?? "https://api.minimaxi.com/v1/t2a_v2"),
+        ttsModel: String(voiceTts.model ?? "speech-2.8-turbo"),
+        ttsApiKey: String(voiceTts.api_key ?? ""),
+        ttsVolume: Number(voiceTts.volume ?? 2.0),
       },
       advanced: {
         systemPrompt: String(agent.system_prompt ?? ""),
@@ -323,6 +343,26 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "max_steps = 28",
     "default_samples = 1",
     "",
+    "[voice]",
+    `enabled = ${formData.voice.enabled ? "true" : "false"}`,
+    `hotkey = ${quote(formData.voice.hotkey.trim())}`,
+    `microphone_device_id = ${quote(formData.voice.microphoneDeviceId.trim())}`,
+    "",
+    "[voice.asr]",
+    `provider = ${quote(formData.voice.asrProvider.trim())}`,
+    `base_url = ${quote(formData.voice.asrBaseUrl.trim())}`,
+    `enabled = ${(formData.voice.asrEnabled ?? formData.voice.enabled) ? "true" : "false"}`,
+    `secret_id = ${quote(formData.voice.asrSecretId)}`,
+    `secret_key = ${quote(formData.voice.asrSecretKey)}`,
+    "",
+    "[voice.tts]",
+    `provider = ${quote(formData.voice.ttsProvider.trim())}`,
+    `base_url = ${quote(formData.voice.ttsBaseUrl.trim())}`,
+    `model = ${quote(formData.voice.ttsModel.trim())}`,
+    `enabled = ${(formData.voice.ttsEnabled ?? formData.voice.enabled) ? "true" : "false"}`,
+    `api_key = ${quote(formData.voice.ttsApiKey)}`,
+    `volume = ${formData.voice.ttsVolume}`,
+    "",
     formData.advanced.pluginsRawToml.trim(),
     "",
   ]
@@ -356,6 +396,18 @@ function validateSettings(formData: SettingsFormData): void {
     if (!Number.isInteger(value) || value <= 0) {
       throw new Error("embedding output_dimensionality 必须是正整数");
     }
+  }
+  if (formData.voice.enabled && !parseHotkey(formData.voice.hotkey)) {
+    throw new Error("语音快捷键格式无效");
+  }
+  if (!["tencent"].includes(formData.voice.asrProvider.trim())) {
+    throw new Error("ASR Provider 不受支持");
+  }
+  if (!["minimax"].includes(formData.voice.ttsProvider.trim())) {
+    throw new Error("TTS Provider 不受支持");
+  }
+  if (!Number.isFinite(formData.voice.ttsVolume) || formData.voice.ttsVolume < 0.1 || formData.voice.ttsVolume > 10) {
+    throw new Error("TTS 音量必须在 0.1 到 10.0 之间");
   }
 }
 

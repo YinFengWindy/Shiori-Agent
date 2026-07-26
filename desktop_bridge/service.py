@@ -21,7 +21,12 @@ from core.integrations.novelai import (
 )
 from core.integrations.novelai.models import NovelAISettings
 from core.net.http import get_default_http_requester
-from core.roles import RoleAggregateService, RolePetPackageService, RoleRelationshipRuntimeService, RoleStore
+from core.roles import (
+    RoleAggregateService,
+    RolePetPackageService,
+    RoleRelationshipRuntimeService,
+    RoleStore,
+)
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.app_service import DesktopAppService
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
@@ -31,11 +36,35 @@ from agent.screen_observation.service import ScreenObservationService
 from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_presenter import DesktopSessionPresenter
+from desktop_bridge.voice_handler import DesktopVoiceHandler
 from desktop_bridge.world_simulation_handler import WorldSimulationHandler
+from agent.voice_config import VoiceConfig
+from desktop_bridge.voice_service import VoiceService, VoiceServiceError
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 from session.manager import Session, SessionManager
 
 logger = logging.getLogger("desktop.bridge")
+
+
+def _sanitize_voice_metrics(value: object) -> dict[str, str | int] | None:
+    if not isinstance(value, dict):
+        return None
+    provider = str(value.get("provider") or "").strip()
+    if not provider:
+        return None
+
+    def _non_negative_int(key: str) -> int:
+        raw = value.get(key)
+        return int(raw) if isinstance(raw, (int, float)) and raw >= 0 else 0
+
+    return {
+        "provider": provider,
+        "request_id": str(value.get("request_id") or "").strip(),
+        "elapsed_ms": _non_negative_int("elapsed_ms"),
+        "audio_duration_ms": _non_negative_int("audio_duration_ms"),
+        "character_count": _non_negative_int("character_count"),
+        "error_code": str(value.get("error_code") or "").strip(),
+    }
 
 
 class DesktopBridgeService:
@@ -58,6 +87,7 @@ class DesktopBridgeService:
         subagent_manager: Any | None = None,
         memory_optimizer: Any | None = None,
         observation_service: ScreenObservationService | None = None,
+        voice_service: VoiceService | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -108,6 +138,9 @@ class DesktopBridgeService:
         )
         self.role_presenter = DesktopRolePresenter(role_store, relationship_runtime)
         self.pet_packages = RolePetPackageService(role_store)
+        self.voice_service = voice_service or VoiceService(
+            getattr(config, "voice", None) or VoiceConfig()
+        )
         self.chat_service = DesktopChatService(
             agent_loop=agent_loop,
             event_bus=event_bus,
@@ -116,7 +149,20 @@ class DesktopBridgeService:
             sync_desktop_session_thread=self._sync_desktop_session_thread,
             emit_payload=self._emit_event,
             emit_session_updated=self._emit_session_updated,
+            tts_service=self.voice_service,
         )
+        self.voice_handler = DesktopVoiceHandler(
+            workspace=workspace,
+            voice_service=self.voice_service,
+            active_runtime_configs=(
+                role.runtime_config
+                for role in self.role_service.repository.list_roles()
+            ),
+            cancel_voice_turn=lambda turn_id: self.chat_service.cancel_voice_turn(
+                turn_id
+            ),
+        )
+        self.voice_assets = self.voice_handler.assets
         self.novelai_store = novelai_store or NovelAIStore(workspace)
         self.prompt_tag_store = PromptTagStore(workspace)
         self.novelai_service = novelai_service or self._build_novelai_service()
@@ -202,7 +248,13 @@ class DesktopBridgeService:
         )
         self._event_listeners.clear()
         await self.chat_service.aclose()
+        await self.voice_handler.aclose()
         self.world_simulation.close()
+
+    def start_background_tasks(self) -> None:
+        """Starts bridge-owned background maintenance after an event loop exists."""
+
+        self.voice_handler.start()
 
     def register_desktop_push_channel(self, push_tool: MessagePushTool) -> None:
         """Registers the desktop proactive transport against the bridge event stream."""
@@ -282,6 +334,7 @@ class DesktopBridgeService:
         payload = (
             request.get("payload") if isinstance(request.get("payload"), dict) else {}
         )
+        self.start_background_tasks()
 
         try:
             if method == "observation.analyze":
@@ -309,6 +362,9 @@ class DesktopBridgeService:
                 return self._ok(request_id, method, world_result)
             if method == "health":
                 return self._ok(request_id, method, {"ok": True})
+            voice_payload = await self.voice_handler.handle(method, payload)
+            if voice_payload is not None:
+                return self._ok(request_id, method, voice_payload)
             if method == "roles.list":
                 return self._ok(
                     request_id,
@@ -388,8 +444,11 @@ class DesktopBridgeService:
                     if isinstance(raw_asset_category_bindings, dict)
                     else None
                 )
+                role_id = str(payload.get("role_id") or "")
+                previous = self.role_service.repository.get_required(role_id)
+                previous_runtime_config = dict(previous.runtime_config)
                 aggregate = await self.role_service.update_role_async(
-                    str(payload.get("role_id") or ""),
+                    role_id,
                     name=payload.get("name"),
                     description=payload.get("description"),
                     system_prompt=payload.get("system_prompt"),
@@ -429,6 +488,10 @@ class DesktopBridgeService:
                         else None
                     ),
                 )
+                await self.voice_handler.reconcile_role_update(
+                    previous_runtime_config,
+                    aggregate.role.runtime_config,
+                )
                 return self._ok(
                     request_id,
                     method,
@@ -436,7 +499,10 @@ class DesktopBridgeService:
                 )
             if method == "roles.delete":
                 role_id = str(payload.get("role_id") or "").strip()
+                role = self.role_service.repository.get_required(role_id)
                 deleted, session_deleted = self.role_service.delete_role(role_id)
+                if deleted:
+                    await self.voice_handler.retire_deleted_role(role.runtime_config)
                 return self._ok(
                     request_id,
                     method,
@@ -455,7 +521,10 @@ class DesktopBridgeService:
                 return self._ok(
                     request_id,
                     method,
-                    {"package": package.to_dict(), "role": self.role_presenter.serialize(role)},
+                    {
+                        "package": package.to_dict(),
+                        "role": self.role_presenter.serialize(role),
+                    },
                 )
             if method == "roles.pets.remove":
                 role_id = str(payload.get("role_id") or "").strip()
@@ -579,6 +648,7 @@ class DesktopBridgeService:
                 reply_to_content = str(payload.get("reply_to_content") or "").strip()
                 reply_to_sender = str(payload.get("reply_to_sender") or "").strip()
                 client_message_id = str(payload.get("client_message_id") or "").strip()
+                input_method = str(payload.get("input_method") or "").strip()
                 if not content and not media:
                     return self._error(
                         request_id,
@@ -602,6 +672,30 @@ class DesktopBridgeService:
                 metadata["delivery_key"] = request_id
                 if client_message_id:
                     metadata["client_message_id"] = client_message_id
+                if input_method == "voice":
+                    metadata["input_method"] = "voice"
+                    voice_turn_id = str(payload.get("voice_turn_id") or "").strip()
+                    if voice_turn_id:
+                        metadata["voice_turn_id"] = voice_turn_id
+                    asr_metrics = _sanitize_voice_metrics(payload.get("asr_metrics"))
+                    if asr_metrics is not None:
+                        metadata["asr_metrics"] = asr_metrics
+                    for key in ("asr_provider", "asr_request_id"):
+                        value = str(payload.get(key) or "").strip()
+                        if value:
+                            metadata[key] = value
+                    asr_duration_ms = payload.get("asr_duration_ms")
+                    if (
+                        isinstance(asr_duration_ms, (int, float))
+                        and asr_duration_ms >= 0
+                    ):
+                        metadata["asr_duration_ms"] = asr_duration_ms
+                    audio_duration_ms = payload.get("audio_duration_ms")
+                    if (
+                        isinstance(audio_duration_ms, (int, float))
+                        and audio_duration_ms >= 0
+                    ):
+                        metadata["audio_duration_ms"] = audio_duration_ms
                 if reply_to_message_id:
                     metadata["reply_to_message_id"] = reply_to_message_id
                 if reply_to_sender:
@@ -708,6 +802,27 @@ class DesktopBridgeService:
                 return self._ok(request_id, method, {})
         except KeyError as exc:
             return self._error(request_id, method, "role_not_found", str(exc))
+        except VoiceServiceError as exc:
+            metrics = getattr(exc, "metrics", None)
+            details = {"metrics": metrics.to_dict()} if metrics is not None else {}
+            if metrics is not None:
+                logger.warning(
+                    "voice request failed method=%s provider=%s request_id=%s error_code=%s elapsed_ms=%d audio_duration_ms=%d characters=%d",
+                    method,
+                    metrics.provider,
+                    metrics.request_id,
+                    metrics.error_code,
+                    metrics.elapsed_ms,
+                    metrics.audio_duration_ms,
+                    metrics.character_count,
+                )
+            return self._error(
+                request_id,
+                method,
+                "voice_service_error",
+                str(exc),
+                details=details,
+            )
         except ValueError as exc:
             return self._error(request_id, method, "invalid_request", str(exc))
         except ChatTurnBusyError as exc:
@@ -777,12 +892,14 @@ class DesktopBridgeService:
         method: str,
         code: str,
         message: str,
+        *,
+        details: dict[str, Any] | None = None,
     ) -> BridgeResponse:
         return BridgeResponse(
             id=request_id,
             type="response",
             method=method,
-            error=BridgeError(code=code, message=message),
+            error=BridgeError(code=code, message=message, details=details or {}),
         )
 
     async def _emit_event(self, emit_event, payload: dict[str, Any]) -> None:

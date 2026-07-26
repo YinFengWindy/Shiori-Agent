@@ -76,3 +76,18 @@ test("above observation bubbles render ahead of the sprite", () => {
   assert.match(styles, /\.pet-bubble-above\s*\{[^}]*flex-direction:\s*column;/s);
   assert.doesNotMatch(styles, /\.pet-bubble-above\s*\{[^}]*column-reverse/s);
 });
+
+test("oversized reply bubbles keep their full text in a scrollable surface", () => {
+  const markup = renderToStaticMarkup(
+    <CodexSpritePetRenderer
+      spritesheetUrl="mira-asset://pet"
+      state="idle"
+      observation={{ status: "observing", enabled: true, bubble: "很长的完整回复", persistent: false }}
+      bubbleLayout={{ placement: "above", height: 80 }}
+    />,
+  );
+  const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+
+  assert.match(styles, /\.pet-bubble\s*\{[^}]*overflow-y:\s*auto;/s);
+  assert.match(styles, /scrollbar-width:\s*none/);
+});

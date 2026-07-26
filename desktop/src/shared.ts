@@ -23,6 +23,54 @@ export type BridgeEvent = {
   payload: Record<string, unknown>;
 };
 
+/** Public desktop-pet voice state used by the pet and settings surfaces. */
+export type VoiceStatePayload = {
+  status:
+    | "idle"
+    | "press_pending"
+    | "dragging"
+    | "recording"
+    | "transcribing"
+    | "sending"
+    | "waiting_reply"
+    | "speaking_prepare"
+    | "speaking"
+    | "finish_current_sentence_then_idle"
+    | "error";
+  source?: "pet" | "hotkey";
+  message?: string;
+};
+
+/** Commands sent from the Electron main process to the hidden capture page. */
+export type VoiceInputDevice = {
+  deviceId: string;
+  label: string;
+};
+
+/** Result of creating a provider voice asset through the trusted main process. */
+export type VoiceCloneResult = {
+  ok: boolean;
+  canceled?: boolean;
+  provider?: string;
+  ownership?: "shiori_managed";
+  voiceId?: string;
+  audioBase64?: string;
+  format?: "mp3";
+  error?: string;
+};
+
+export type VoiceCaptureCommand =
+  | "stop"
+  | "cancel"
+  | { command: "start"; deviceId?: string }
+  | { command: "list-devices" }
+  | { command: "play-test"; audioBase64: string };
+
+/** Commands sent from the main process to the hidden voice playback surface. */
+export type VoicePlaybackCommand =
+  | { command: "play"; id: string; audioBase64: string; format: "mp3" }
+  | { command: "cancel" };
+
 export type SettingsFormData = {
   models: {
     provider: string;
@@ -63,6 +111,24 @@ export type SettingsFormData = {
     novelaiAddQualityTags: boolean;
     novelaiUndesiredContentPreset: number;
     novelaiAutoWritebackRoleAssets: boolean;
+  };
+  voice: {
+    enabled: boolean;
+    hotkey: string;
+    microphoneDeviceId: string;
+    /** Preserved provider-level switch from config.toml. */
+    asrEnabled?: boolean;
+    asrProvider: string;
+    asrBaseUrl: string;
+    asrSecretId: string;
+    asrSecretKey: string;
+    /** Preserved provider-level switch from config.toml. */
+    ttsEnabled?: boolean;
+    ttsProvider: string;
+    ttsBaseUrl: string;
+    ttsModel: string;
+    ttsApiKey: string;
+    ttsVolume: number;
   };
   advanced: {
     systemPrompt: string;
@@ -166,6 +232,18 @@ export type DesktopApi = {
   }>;
   readSettings(): Promise<SettingsSnapshot>;
   saveSettings(formData: SettingsFormData): Promise<SaveSettingsResult>;
+  /** Lists input devices exposed by the hidden capture renderer. */
+  listVoiceInputDevices(): Promise<VoiceInputDevice[]>;
+  /** Starts a short local microphone test without sending it to ASR. */
+  startVoiceTest(deviceId?: string): Promise<void>;
+  /** Stops the local microphone test and plays it back locally. */
+  stopVoiceTest(): Promise<void>;
+  /** Cancels an active or still-starting microphone test without playback. */
+  cancelVoiceTest(): Promise<void>;
+  /** Opens the native picker and clones one transient voice sample through the bridge. */
+  cloneVoice(): Promise<VoiceCloneResult>;
+  /** Plays a provider-generated voice preview through the hidden audio surface. */
+  playVoicePreview(audioBase64: string): Promise<void>;
   /** Controls the custom frameless Electron window chrome. */
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */
@@ -200,4 +278,34 @@ export type DesktopApi = {
   /** Subscribes to main-process placement updates for the current full-reply bubble. */
   onPetBubbleLayout(listener: (event: unknown, payload: unknown) => void): void;
   offPetBubbleLayout(listener: (event: unknown, payload: unknown) => void): void;
+  /** Subscribes to microphone commands issued by the main-process recorder. */
+  onVoiceCaptureCommand(listener: (command: VoiceCaptureCommand) => void): () => void;
+  /** Reports captured 16-bit PCM samples to the owning main-process recorder. */
+  voiceCaptureData(samples: ArrayBuffer): void;
+  /** Reports that microphone permission and capture initialization succeeded. */
+  voiceCaptureReady(): void;
+  /** Reports that the current capture stream has stopped. */
+  voiceCaptureStopped(): void;
+  /** Reports a microphone or Web Audio failure without exposing raw audio. */
+  voiceCaptureError(message: string): void;
+  /** Reports the sanitized input-device list from the hidden capture renderer. */
+  voiceInputDevices(devices: VoiceInputDevice[]): void;
+  /** Subscribes to audio playback commands issued by the main process. */
+  onVoicePlaybackCommand(listener: (command: VoicePlaybackCommand) => void): () => void;
+  /** Reports that one decoded audio item started playing. */
+  voicePlaybackStarted(id: string): void;
+  /** Reports that one audio item finished naturally. */
+  voicePlaybackFinished(id: string): void;
+  /** Reports a playback decode or device error. */
+  voicePlaybackError(id: string, message: string): void;
+  /** Starts the shared pet long-press voice gesture. */
+  startVoicePress(): void;
+  /** Lets pet dragging cancel a pending voice gesture. */
+  voicePointerMoved(): void;
+  /** Releases a pending or active pet voice gesture. */
+  voiceRelease(): void;
+  /** Cancels a pet voice gesture without submitting audio. */
+  voiceCancel(): void;
+  /** Subscribes to main-process voice state updates. */
+  onVoiceState(listener: (payload: VoiceStatePayload) => void): () => void;
 };

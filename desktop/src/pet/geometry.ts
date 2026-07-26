@@ -15,7 +15,7 @@ export function clampDesktopPetPosition(
   };
 }
 
-/** Resolves the largest on-screen bubble area, preferring the space below the pet. */
+/** Resolves a visible bubble height that stays inside the selected display side. */
 export function resolveDesktopPetBubbleLayout(
   position: DesktopPetPosition,
   workArea: { x: number; y: number; width: number; height: number },

@@ -1,0 +1,228 @@
+import type { BrowserWindow, WebContents } from "electron";
+import { encodeVoiceWav } from "./wav.js";
+import { createDeferred, type Deferred } from "./deferred.js";
+import type { VoiceRecorder } from "./controller.js";
+import type { VoiceCaptureCommand, VoiceInputDevice } from "../shared.js";
+import type { VoiceWindowSurface } from "./window.js";
+
+type VoiceCaptureWindowFactory = () => VoiceWindowSurface;
+
+/** Owns the hidden capture renderer and converts its samples to an ASR WAV. */
+export class BrowserVoiceRecorder implements VoiceRecorder {
+  private window: BrowserWindow | null = null;
+  private ready: Promise<void> | null = null;
+  private started: Deferred<void> | null = null;
+  private stopped: Deferred<Uint8Array> | null = null;
+  private devices: Deferred<VoiceInputDevice[]> | null = null;
+  private sampleChunks: Int16Array[] = [];
+  private captureGeneration = 0;
+  private captureActive = false;
+  private stopPromise: Promise<Uint8Array> | null = null;
+
+  get isBusy(): boolean {
+    return this.captureActive || this.stopPromise !== null;
+  }
+
+  constructor(private readonly createWindow: VoiceCaptureWindowFactory) {}
+
+  async start(deviceId = ""): Promise<void> {
+    if (this.isBusy) throw new Error("已有麦克风采集");
+    this.captureActive = true;
+    const generation = ++this.captureGeneration;
+    try {
+      const window = this.ensureWindow();
+      await this.waitUntilReady(window);
+      if (generation !== this.captureGeneration) throw new Error("麦克风采集已取消");
+      this.sampleChunks = [];
+      const started = createDeferred<void>();
+      this.started = started;
+      this.sendCommand({ command: "start", deviceId: deviceId.trim() || undefined });
+      try {
+        await started.promise;
+      } finally {
+        if (this.started === started) this.started = null;
+      }
+    } catch (error) {
+      if (generation === this.captureGeneration) this.captureActive = false;
+      throw error;
+    }
+  }
+
+  async stop(): Promise<Uint8Array> {
+    if (this.stopPromise) return this.stopPromise;
+    if (!this.captureActive) throw new Error("麦克风尚未启动");
+    if (!this.window || this.window.isDestroyed()) {
+      throw new Error("麦克风采集窗口不可用");
+    }
+    this.stopped = createDeferred<Uint8Array>();
+    const stopped = this.stopped;
+    this.stopPromise = (async () => {
+      try {
+        this.sendCommand("stop");
+        return await stopped.promise;
+      } finally {
+        if (this.stopped === stopped) this.stopped = null;
+        this.stopPromise = null;
+        this.captureActive = false;
+      }
+    })();
+    return this.stopPromise;
+  }
+
+  async cancel(): Promise<void> {
+    this.captureGeneration += 1;
+    const cancellation = new Error("麦克风采集已取消");
+    this.started?.reject(cancellation);
+    this.stopped?.reject(cancellation);
+    this.started = null;
+    this.stopped = null;
+    this.captureActive = false;
+    this.sampleChunks = [];
+    if (!this.window || this.window.isDestroyed()) return;
+    this.sendCommand("cancel");
+  }
+
+  /** Enumerates sanitized input devices from the browser-owned media surface. */
+  async listInputDevices(): Promise<VoiceInputDevice[]> {
+    const window = this.ensureWindow();
+    await this.waitUntilReady(window);
+    this.devices = createDeferred<VoiceInputDevice[]>();
+    this.sendCommand({ command: "list-devices" });
+    return await this.devices.promise;
+  }
+
+  /** Plays a local test recording without routing playback events to the voice controller. */
+  async playTestAudio(audio: Uint8Array): Promise<void> {
+    const window = this.ensureWindow();
+    await this.waitUntilReady(window);
+    this.sendCommand({ command: "play-test", audioBase64: Buffer.from(audio).toString("base64") });
+  }
+
+  /** Accepts a readiness signal from the authorized hidden capture renderer. */
+  handleReady(sender: WebContents): boolean {
+    if (!this.isCaptureSender(sender)) return false;
+    this.started?.resolve(undefined);
+    return true;
+  }
+
+  /** Accepts one PCM chunk without retaining it beyond this recording. */
+  handleData(sender: WebContents, samples: ArrayBuffer): boolean {
+    if (!this.isCaptureSender(sender)) return false;
+    if (samples.byteLength % 2 !== 0) {
+      this.handleError(sender, "麦克风返回了无效的 PCM 数据");
+      return true;
+    }
+    this.sampleChunks.push(new Int16Array(samples.slice(0)));
+    return true;
+  }
+
+  /** Finishes one recording and resolves the encoded WAV bytes. */
+  handleStopped(sender: WebContents): boolean {
+    if (!this.isCaptureSender(sender)) return false;
+    const length = this.sampleChunks.reduce((total, chunk) => total + chunk.length, 0);
+    const samples = new Int16Array(length);
+    let offset = 0;
+    for (const chunk of this.sampleChunks) {
+      samples.set(chunk, offset);
+      offset += chunk.length;
+    }
+    this.sampleChunks = [];
+    this.stopped?.resolve(encodeVoiceWav(samples));
+    return true;
+  }
+
+  /** Fails the active recorder operation with a user-safe microphone message. */
+  handleError(sender: WebContents, message: string): boolean {
+    if (!this.isCaptureSender(sender)) return false;
+    const error = new Error(message || "麦克风采集失败");
+    this.started?.reject(error);
+    this.stopped?.reject(error);
+    this.devices?.reject(error);
+    this.started = null;
+    this.stopped = null;
+    this.stopPromise = null;
+    this.captureActive = false;
+    this.devices = null;
+    this.sampleChunks = [];
+    return true;
+  }
+
+  /** Accepts the browser's input-device enumeration response. */
+  handleInputDevices(sender: WebContents, devices: unknown): boolean {
+    if (!this.isCaptureSender(sender)) return false;
+    const normalized = Array.isArray(devices)
+      ? devices.flatMap((value) => {
+        if (!value || typeof value !== "object") return [];
+        const item = value as { deviceId?: unknown; label?: unknown };
+        if (typeof item.deviceId !== "string") return [];
+        return [{ deviceId: item.deviceId, label: typeof item.label === "string" ? item.label : "" }];
+      })
+      : [];
+    this.devices?.resolve(normalized);
+    this.devices = null;
+    return true;
+  }
+
+  /** Releases the hidden renderer and every in-flight capture promise. */
+  dispose(): void {
+    this.sampleChunks = [];
+    this.started?.reject(new Error("麦克风采集已关闭"));
+    this.stopped?.reject(new Error("麦克风采集已关闭"));
+    this.started = null;
+    this.stopped = null;
+    this.devices?.reject(new Error("麦克风采集已关闭"));
+    this.devices = null;
+    this.ready = null;
+    this.window?.destroy();
+    this.window = null;
+  }
+
+  private ensureWindow(): BrowserWindow {
+    if (this.window && !this.window.isDestroyed()) return this.window;
+    const surface = this.createWindow();
+    const window = surface.window;
+    this.window = window;
+    this.ready = surface.ready;
+    window.once("closed", () => {
+      if (this.window !== window) return;
+      this.handleWindowFailure(new Error("麦克风采集窗口已关闭"));
+      this.window = null;
+      this.ready = null;
+    });
+    window.webContents.once("render-process-gone", () => {
+      this.handleWindowFailure(new Error("麦克风采集渲染进程已退出"));
+      if (!window.isDestroyed()) window.destroy();
+    });
+    return window;
+  }
+
+  private async waitUntilReady(window: BrowserWindow): Promise<void> {
+    if (window.isDestroyed()) throw new Error("麦克风采集窗口不可用");
+    try {
+      await this.ready;
+    } catch (error) {
+      if (this.window === window && !window.isDestroyed()) window.destroy();
+      throw error;
+    }
+  }
+
+  private handleWindowFailure(error: Error): void {
+    this.captureActive = false;
+    this.started?.reject(error);
+    this.stopped?.reject(error);
+    this.devices?.reject(error);
+    this.started = null;
+    this.stopped = null;
+    this.devices = null;
+    this.sampleChunks = [];
+  }
+
+  private sendCommand(command: VoiceCaptureCommand): void {
+    if (!this.window || this.window.isDestroyed()) throw new Error("麦克风采集窗口不可用");
+    this.window.webContents.send("desktop:voice-capture-command", command);
+  }
+
+  private isCaptureSender(sender: WebContents): boolean {
+    return Boolean(this.window && !this.window.isDestroyed() && sender === this.window.webContents);
+  }
+}

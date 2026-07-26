@@ -64,11 +64,17 @@ body {
   font-size: 11px;
   line-height: 1.35;
   overflow-wrap: anywhere;
-  overflow-y: auto;
   white-space: pre-wrap;
   display: flex;
   gap: 5px;
   align-items: flex-start;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.pet-bubble::-webkit-scrollbar {
+  display: none;
 }
 
 .pet-bubble-below .pet-drag-region {

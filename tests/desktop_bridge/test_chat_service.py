@@ -7,7 +7,39 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from bus.event_bus import EventBus
+from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
+from desktop_bridge.voice_service import VoiceOperationMetrics, VoiceSynthesisResult
+
+
+class _VoiceService:
+    tts_enabled = True
+    tts_provider = "minimax"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def stream_synthesize_result(
+        self,
+        text: str,
+        *,
+        voice_id: str,
+        speed: float,
+        emotion: str,
+        cancel_event=None,
+    ) -> VoiceSynthesisResult:
+        del voice_id, speed, emotion, cancel_event
+        self.calls.append(text)
+        return VoiceSynthesisResult(
+            audio=text.encode("utf-8"),
+            metrics=VoiceOperationMetrics(
+                provider="minimax",
+                request_id=f"tts-{len(self.calls)}",
+                elapsed_ms=10,
+                audio_duration_ms=500,
+                character_count=len(text),
+            ),
+        )
 
 
 @pytest.mark.asyncio
@@ -78,3 +110,317 @@ async def test_chat_service_close_awaits_task_listener_cleanup() -> None:
     await service.aclose()
 
     assert event_bus._handlers == {}
+
+
+@pytest.mark.asyncio
+async def test_cancel_voice_turn_rejects_late_tts_delta() -> None:
+    event_bus = EventBus()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    interrupt = Mock()
+    tts_service = SimpleNamespace(
+        tts_enabled=True,
+        tts_provider="minimax",
+        stream_synthesize_result=Mock(),
+    )
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        started.set()
+        await release.wait()
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(
+            process_direct=_process_direct,
+            request_interrupt=interrupt,
+        ),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(
+                return_value=SimpleNamespace(
+                    metadata={"role_runtime_config": {"tts": {"voice_id": "mira"}}}
+                )
+            )
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=AsyncMock(),
+        emit_session_updated=AsyncMock(),
+        tts_service=tts_service,
+    )
+    service.start_chat_turn(
+        request_id="request-voice-1",
+        session_key="role:role-1",
+        content="hello",
+        media=[],
+        metadata={"input_method": "voice", "voice_turn_id": "voice-turn-1"},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+    await started.wait()
+
+    assert service.cancel_voice_turn("voice-turn-1") is True
+    interrupt.assert_called_once_with(
+        "role:role-1",
+        sender="desktop",
+        command="/cancel",
+    )
+    await event_bus.observe(
+        StreamDeltaReady(
+            session_key="role:role-1",
+            channel="desktop",
+            chat_id="role:role-1",
+            content_delta="晚到的旧回复。",
+        )
+    )
+    assert tts_service.stream_synthesize_result.call_count == 0
+
+    release.set()
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_non_streamed_voice_reply_synthesizes_final_response() -> None:
+    event_bus = EventBus()
+    tts_service = _VoiceService()
+    emitted: list[dict] = []
+    session = SimpleNamespace(
+        metadata={"role_runtime_config": {"tts": {"voice_id": "mira"}}}
+    )
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        await event_bus.observe(
+            TurnCommitted(
+                session_key="role:role-1",
+                channel="desktop",
+                chat_id="role:role-1",
+                input_message="hello",
+                persisted_user_message=None,
+                assistant_response="完整回复。",
+                tools_used=[],
+            )
+        )
+
+    async def _emit_payload(_emit_event, payload: dict) -> None:
+        emitted.append(payload)
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(get_or_create=Mock(return_value=session)),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=_emit_payload,
+        emit_session_updated=AsyncMock(),
+        tts_service=tts_service,  # type: ignore[arg-type]
+    )
+
+    await service.run_chat_turn(
+        request_id="request-voice-final",
+        session_key="role:role-1",
+        content="hello",
+        media=[],
+        metadata={"input_method": "voice", "voice_turn_id": "voice-turn-final"},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+    await service.wait_for_tts()
+
+    assert tts_service.calls == ["完整回复。"]
+    assert [
+        event["method"] for event in emitted if event["method"].startswith("voice.")
+    ] == [
+        "voice.reply.started",
+        "voice.tts.audio",
+        "voice.tts.finished",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_streamed_voice_reply_does_not_synthesize_final_response_twice() -> None:
+    event_bus = EventBus()
+    tts_service = _VoiceService()
+    session = SimpleNamespace(
+        metadata={"role_runtime_config": {"tts": {"voice_id": "mira"}}}
+    )
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        await event_bus.observe(
+            StreamDeltaReady(
+                session_key="role:role-1",
+                channel="desktop",
+                chat_id="role:role-1",
+                content_delta="流式回复。",
+            )
+        )
+        await event_bus.observe(
+            TurnCommitted(
+                session_key="role:role-1",
+                channel="desktop",
+                chat_id="role:role-1",
+                input_message="hello",
+                persisted_user_message=None,
+                assistant_response="流式回复。",
+                tools_used=[],
+            )
+        )
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(get_or_create=Mock(return_value=session)),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=AsyncMock(),
+        emit_session_updated=AsyncMock(),
+        tts_service=tts_service,  # type: ignore[arg-type]
+    )
+
+    await service.run_chat_turn(
+        request_id="request-voice-stream",
+        session_key="role:role-1",
+        content="hello",
+        media=[],
+        metadata={"input_method": "voice", "voice_turn_id": "voice-turn-stream"},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+    await service.wait_for_tts()
+
+    assert tts_service.calls == ["流式回复。"]
+
+
+@pytest.mark.asyncio
+async def test_voice_reply_finishes_when_tts_is_disabled() -> None:
+    event_bus = EventBus()
+    tts_service = _VoiceService()
+    tts_service.tts_enabled = False
+    emitted: list[dict] = []
+
+    async def _emit_payload(_emit_event, payload: dict) -> None:
+        emitted.append(payload)
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=AsyncMock()),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(return_value=SimpleNamespace(metadata={}))
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=_emit_payload,
+        emit_session_updated=AsyncMock(),
+        tts_service=tts_service,  # type: ignore[arg-type]
+    )
+
+    await service.run_chat_turn(
+        request_id="request-voice-disabled",
+        session_key="role:role-1",
+        content="hello",
+        media=[],
+        metadata={"input_method": "voice", "voice_turn_id": "voice-turn-disabled"},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+    await service.wait_for_tts()
+
+    voice_events = [event for event in emitted if event["method"].startswith("voice.")]
+    assert [event["method"] for event in voice_events] == [
+        "voice.reply.started",
+        "voice.tts.finished",
+    ]
+    assert voice_events[0]["payload"]["has_voice"] is False
+
+
+@pytest.mark.asyncio
+async def test_chat_failure_terminates_voice_lifecycle() -> None:
+    emitted: list[dict] = []
+
+    async def _emit_payload(_emit_event, payload: dict) -> None:
+        emitted.append(payload)
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        raise RuntimeError("backend down")
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=EventBus(),
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(
+                return_value=SimpleNamespace(
+                    metadata={"role_runtime_config": {"tts": {"voice_id": "mira"}}}
+                )
+            )
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=_emit_payload,
+        emit_session_updated=AsyncMock(),
+        tts_service=_VoiceService(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RuntimeError, match="backend down"):
+        await service.run_chat_turn(
+            request_id="request-voice-error",
+            session_key="role:role-1",
+            content="hello",
+            media=[],
+            metadata={"input_method": "voice", "voice_turn_id": "voice-turn-error"},
+            omit_user_turn=True,
+            emit_event=AsyncMock(),
+        )
+
+    assert [
+        event["method"] for event in emitted if event["method"].startswith("voice.")
+    ] == ["voice.reply.started", "voice.tts.finished"]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_chat_task_terminates_voice_lifecycle() -> None:
+    started = asyncio.Event()
+    emitted: list[dict] = []
+
+    async def _emit_payload(_emit_event, payload: dict) -> None:
+        emitted.append(payload)
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=EventBus(),
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(
+                return_value=SimpleNamespace(
+                    metadata={"role_runtime_config": {"tts": {"voice_id": "mira"}}}
+                )
+            )
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=_emit_payload,
+        emit_session_updated=AsyncMock(),
+        tts_service=_VoiceService(),  # type: ignore[arg-type]
+    )
+    task = asyncio.create_task(
+        service.run_chat_turn(
+            request_id="request-voice-cancelled",
+            session_key="role:role-1",
+            content="hello",
+            media=[],
+            metadata={
+                "input_method": "voice",
+                "voice_turn_id": "voice-turn-cancelled",
+            },
+            omit_user_turn=True,
+            emit_event=AsyncMock(),
+        )
+    )
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert [
+        event["method"] for event in emitted if event["method"].startswith("voice.")
+    ] == ["voice.reply.started", "voice.tts.finished"]

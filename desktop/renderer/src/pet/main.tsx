@@ -4,6 +4,7 @@ import { CodexSpritePetRenderer } from "./CodexSpritePetRenderer";
 import { spriteAnimations, type SpriteState } from "./spriteContract";
 import { usePetActivityState } from "./usePetActivityState";
 import type { PetBubbleLayout, PetObservationPayload } from "../../../src/observation/types";
+import type { VoiceStatePayload } from "../../../src/shared";
 import "./styles.css";
 
 type PetPackagePayload = { spritesheetUrl: string };
@@ -15,6 +16,7 @@ const defaultObservation: PetObservationPayload = {
   persistent: false,
 };
 const defaultBubbleLayout: PetBubbleLayout = { placement: "below", height: 0 };
+const defaultVoice: VoiceStatePayload = { status: "idle" };
 
 function isSpriteState(value: unknown): value is SpriteState {
   return typeof value === "string" && value in spriteAnimations;
@@ -49,6 +51,7 @@ function DesktopPetSurface() {
   const [transientState, setTransientState] = useState<SpriteState | null>(null);
   const [observation, setObservation] = useState<PetObservationPayload>(defaultObservation);
   const [bubbleLayout, setBubbleLayout] = useState<PetBubbleLayout>(defaultBubbleLayout);
+  const [voice, setVoice] = useState<VoiceStatePayload>(defaultVoice);
   const activityState = usePetActivityState(state);
   const onTransientFinished = useCallback(() => setTransientState(null), []);
 
@@ -92,12 +95,16 @@ function DesktopPetSurface() {
       ));
     };
     window.miraDesktop.onPetBubbleLayout(onBubbleLayout);
+    const unsubscribeVoice = window.miraDesktop.onVoiceState((next) => {
+      if (isVoiceState(next)) setVoice(next);
+    });
     window.miraDesktop.petRendererReady();
     return () => {
       window.miraDesktop.offPetLoad(onLoad);
       window.miraDesktop.offPetPlay(onPlay);
       window.miraDesktop.offPetObservation(onObservation);
       window.miraDesktop.offPetBubbleLayout(onBubbleLayout);
+      unsubscribeVoice();
     };
   }, []);
 
@@ -110,8 +117,25 @@ function DesktopPetSurface() {
       onTransientFinished={onTransientFinished}
       observation={observation}
       bubbleLayout={bubbleLayout}
+      voice={voice}
     />
   );
+}
+
+function isVoiceState(value: unknown): value is VoiceStatePayload {
+  if (!value || typeof value !== "object") return false;
+  const status = (value as { status?: unknown }).status;
+  return status === "idle"
+    || status === "press_pending"
+    || status === "dragging"
+    || status === "recording"
+    || status === "transcribing"
+    || status === "sending"
+    || status === "waiting_reply"
+    || status === "speaking_prepare"
+    || status === "speaking"
+    || status === "finish_current_sentence_then_idle"
+    || status === "error";
 }
 
 createRoot(document.getElementById("root") as HTMLElement).render(<DesktopPetSurface />);
