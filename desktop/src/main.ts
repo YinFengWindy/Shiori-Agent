@@ -31,6 +31,9 @@ import { createVoicePlaybackCallbacks, handleVoiceBridgeEvent, selectVoiceTurn }
 import { loadSettingsData } from "./settings.js";
 import type { SettingsFormData, VoiceStatePayload } from "./shared.js";
 
+// Voice replies are played from a trusted hidden renderer without a DOM user gesture.
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+
 const bridge = new DesktopBridgeClient();
 const localAssets = new LocalAssetRegistry();
 const trayLifecycleEnabled = process.platform === "win32";

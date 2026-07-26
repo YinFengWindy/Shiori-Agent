@@ -17,6 +17,7 @@ export function createVoiceCaptureWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: false,
       spellcheck: false,
+      backgroundThrottling: false,
     },
   });
   attachDesktopWindowSecurity(window.webContents, {
