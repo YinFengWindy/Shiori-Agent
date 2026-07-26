@@ -18,9 +18,9 @@ test("desktop pet flips the full bubble above near the display bottom", () => {
   );
 });
 
-test("desktop pet keeps overflowing full replies scrollable within the larger available side", () => {
+test("desktop pet preserves the full reply height beyond the larger available side", () => {
   assert.deepEqual(
     resolveDesktopPetBubbleLayout({ x: 1200, y: 500 }, workArea, 2_000),
-    { placement: "above", height: 494 },
+    { placement: "above", height: 2_000 },
   );
 });

@@ -15,7 +15,7 @@ export function clampDesktopPetPosition(
   };
 }
 
-/** Resolves the largest on-screen bubble area, preferring the space below the pet. */
+/** Resolves the full-height bubble direction, preferring below when the available space is equal. */
 export function resolveDesktopPetBubbleLayout(
   position: DesktopPetPosition,
   workArea: { x: number; y: number; width: number; height: number },
@@ -30,7 +30,7 @@ export function resolveDesktopPetBubbleLayout(
   );
   const above = Math.max(0, position.y - workArea.y - desktopPetBubbleGap);
   if (height <= below || below >= above) {
-    return { placement: "below", height: Math.min(height, below) };
+    return { placement: "below", height };
   }
-  return { placement: "above", height: Math.min(height, above) };
+  return { placement: "above", height };
 }
