@@ -10,7 +10,6 @@ class VoiceAsrConfig:
     enabled: bool = False
     provider: str = "tencent"
     base_url: str = "https://asr.tencentcloudapi.com/"
-    model: str = "16k_zh"
     secret_id: str = ""
     secret_key: str = ""
 

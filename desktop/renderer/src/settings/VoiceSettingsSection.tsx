@@ -20,9 +20,6 @@ export function VoiceSettingsSection({ draft, subsectionId, updateDraft }: Setti
       <Field label="腾讯云 ASR 地址">
         <input className={cx(inputClass, "bg-white")} value={draft.voice.asrBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, asrBaseUrl: event.target.value } }))} />
       </Field>
-      <Field label="ASR 模型">
-        <input className={cx(inputClass, "bg-white")} value={draft.voice.asrModel} onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, asrModel: event.target.value } }))} />
-      </Field>
       <Field label="腾讯云 SecretId">
         <SettingsSecretInput value={draft.voice.asrSecretId} onChange={(value) => updateDraft((current) => ({ ...current, voice: { ...current.voice, asrSecretId: value } }))} />
       </Field>

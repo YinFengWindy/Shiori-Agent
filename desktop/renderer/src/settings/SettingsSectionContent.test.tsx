@@ -54,7 +54,6 @@ function createSettingsFormData(): SettingsFormData {
       microphoneDeviceId: "",
       asrProvider: "tencent",
       asrBaseUrl: "https://asr.tencentcloudapi.com/",
-      asrModel: "16k_zh",
       asrSecretId: "secret-id",
       asrSecretKey: "secret-key",
       ttsProvider: "minimax",

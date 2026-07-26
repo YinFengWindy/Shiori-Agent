@@ -24,7 +24,7 @@ def test_load_voice_config_reads_global_provider_and_input_settings() -> None:
                 "enabled": True,
                 "hotkey": "Alt+V",
                 "microphone_device_id": "device-1",
-                "asr": {"secret_id": "id", "secret_key": "key"},
+                "asr": {"secret_id": "id", "secret_key": "key", "model": "ignored"},
                 "tts": {"api_key": "tts-key"},
             }
         }
@@ -34,4 +34,5 @@ def test_load_voice_config_reads_global_provider_and_input_settings() -> None:
     assert loaded.hotkey == "Alt+V"
     assert loaded.microphone_device_id == "device-1"
     assert loaded.asr.secret_id == "id"
+    assert not hasattr(loaded.asr, "model")
     assert loaded.tts.api_key == "tts-key"

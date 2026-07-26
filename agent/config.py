@@ -247,7 +247,6 @@ def _load_voice_config(data: dict) -> VoiceConfig:
             enabled=bool(asr.get("enabled", False)),
             provider=str(asr.get("provider", "tencent") or "tencent"),
             base_url=str(asr.get("base_url", "https://asr.tencentcloudapi.com/") or "https://asr.tencentcloudapi.com/"),
-            model=str(asr.get("model", "16k_zh") or "16k_zh"),
             secret_id=_resolve(str(asr.get("secret_id", ""))),
             secret_key=_resolve(str(asr.get("secret_key", ""))),
         ),

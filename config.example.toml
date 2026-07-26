@@ -37,7 +37,6 @@ base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 enabled = false
 provider = "tencent"
 base_url = "https://asr.tencentcloudapi.com/"
-model = "16k_zh"
 secret_id = ""
 secret_key = ""
 

@@ -118,7 +118,6 @@ export type SettingsFormData = {
     microphoneDeviceId: string;
     asrProvider: string;
     asrBaseUrl: string;
-    asrModel: string;
     asrSecretId: string;
     asrSecretKey: string;
     ttsProvider: string;

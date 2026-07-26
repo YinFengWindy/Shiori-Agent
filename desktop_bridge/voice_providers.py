@@ -59,6 +59,7 @@ class TencentAsrClient:
     service = "asr"
     action = "SentenceRecognition"
     version = "2019-06-14"
+    engine_type = "16k_zh"
 
     def __init__(
         self,
@@ -89,7 +90,7 @@ class TencentAsrClient:
         started_at = time.perf_counter()
         timestamp = int(self._clock())
         body = {
-            "EngSerViceType": self.config.model or "16k_zh",
+            "EngSerViceType": self.engine_type,
             "SourceType": 1,
             "VoiceFormat": "wav",
             "Data": base64.b64encode(audio).decode("ascii"),

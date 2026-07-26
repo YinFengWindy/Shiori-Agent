@@ -69,6 +69,7 @@ def test_tencent_asr_sends_wav_and_returns_result() -> None:
     assert url == "https://asr.tencentcloudapi.com/"
     assert headers["Authorization"].startswith("TC3-HMAC-SHA256 Credential=id/")
     request = json.loads(body)
+    assert request["EngSerViceType"] == "16k_zh"
     assert request["VoiceFormat"] == "wav"
     assert request["DataLen"] == len(make_wav())
     assert base64.b64decode(request["Data"]) == make_wav()
