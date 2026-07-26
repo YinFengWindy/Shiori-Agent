@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 
 def split_tts_sentences(text: str, *, max_length: int = 80) -> list[str]:
@@ -16,6 +17,8 @@ def split_tts_sentences(text: str, *, max_length: int = 80) -> list[str]:
     ]
     result: list[str] = []
     for chunk in chunks:
+        if not _has_spoken_content(chunk):
+            continue
         while len(chunk) > max_length:
             split_at = max(
                 chunk.rfind("，", 0, max_length + 1),
@@ -94,7 +97,41 @@ def _strip_tts_markup(text: str) -> str:
     cleaned = re.sub(r"\[([^]]+)\]\([^)]*\)", r"\1", cleaned)
     cleaned = re.sub(r"(^|\n)\s{0,3}#+\s*", r"\1", cleaned)
     cleaned = re.sub(r"[*_~]", "", cleaned)
+    cleaned = _strip_parenthetical_content(cleaned)
+    cleaned = _strip_non_speech_symbols(cleaned)
     return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _strip_parenthetical_content(text: str) -> str:
+    """Removes inner descriptions enclosed by Chinese or ASCII parentheses."""
+
+    opening = {"(", "（"}
+    closing = {")", "）"}
+    depth = 0
+    visible: list[str] = []
+    for char in text:
+        if char in opening:
+            depth += 1
+        elif char in closing and depth:
+            depth -= 1
+        elif depth == 0:
+            visible.append(char)
+    return "".join(visible)
+
+
+def _strip_non_speech_symbols(text: str) -> str:
+    """Removes emoji and other Unicode symbol characters from spoken text."""
+
+    return "".join(
+        char
+        for char in text
+        if not unicodedata.category(char).startswith("S")
+        and char not in {"\u200d", "\ufe0f"}
+    )
+
+
+def _has_spoken_content(text: str) -> bool:
+    return any(char.isalnum() for char in text)
 
 
 def _strip_unclosed_code_block(text: str) -> str:
@@ -105,12 +142,25 @@ def _strip_unclosed_code_block(text: str) -> str:
 
 
 def _find_sentence_boundary(text: str) -> int | None:
-    fences = [match.start() for match in re.finditer(r"```", text)]
-    code_ranges = list(zip(fences[0::2], fences[1::2]))
-    for match in re.finditer(r"[。！？；!?;.\n]", text):
-        if any(start < match.start() < end for start, end in code_ranges):
+    parenthesis_depth = 0
+    inside_code_block = False
+    index = 0
+    while index < len(text):
+        if text.startswith("```", index):
+            inside_code_block = not inside_code_block
+            index += 3
             continue
-        return match.start()
+        if inside_code_block:
+            index += 1
+            continue
+        char = text[index]
+        if char in {"(", "（"}:
+            parenthesis_depth += 1
+        elif char in {")", "）"} and parenthesis_depth:
+            parenthesis_depth -= 1
+        elif not parenthesis_depth and char in "。！？；!?;.\n":
+            return index
+        index += 1
     return None
 
 

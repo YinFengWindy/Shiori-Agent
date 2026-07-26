@@ -23,3 +23,25 @@ def test_tts_sentence_buffer_drops_fenced_code_before_speaking() -> None:
     assert buffer.push("先说。```python\nprint('x')。\n```") == ["先说。"]
     assert buffer.push("然后说！") == ["然后说！"]
     assert buffer.finish() == []
+
+
+def test_split_tts_sentences_filters_parenthetical_details_and_emoji() -> None:
+    assert split_tts_sentences("（轻轻笑了笑）你好😊。😏") == ["你好。"]
+
+
+def test_split_tts_sentences_filters_ascii_parenthetical_details() -> None:
+    assert split_tts_sentences("Hello (thinking: wait. really?) world!") == [
+        "Hello world!"
+    ]
+
+
+def test_split_tts_sentences_drops_non_spoken_symbols() -> None:
+    assert split_tts_sentences("😏……！！！") == []
+
+
+def test_tts_sentence_buffer_ignores_boundaries_inside_parentheses() -> None:
+    buffer = TtsSentenceBuffer()
+
+    assert buffer.push("（轻声。") == []
+    assert buffer.push("）你好。") == ["你好。"]
+    assert buffer.finish() == []
