@@ -46,6 +46,11 @@ export function createVoiceInteractionState(): VoiceInteractionState {
   return { kind: "idle" };
 }
 
+/** Returns whether the state owns an active voice task that must exclude microphone tests. */
+export function isVoiceInteractionBusy(state: VoiceInteractionState): boolean {
+  return state.kind !== "idle" && state.kind !== "dragging" && state.kind !== "error";
+}
+
 /**
  * Applies one event to the voice state machine.
  *
@@ -74,7 +79,10 @@ export function transitionVoiceInteraction(
       }
       return state;
     case "dragging":
-      return event.type === "reset" ? { kind: "idle" } : state;
+      if (event.type === "released" || event.type === "escape" || event.type === "reset") {
+        return { kind: "idle" };
+      }
+      return state;
     case "recording":
       if (event.type === "released" || event.type === "recording_timed_out") {
         return { kind: "transcribing" };

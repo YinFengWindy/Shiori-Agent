@@ -31,6 +31,7 @@ function createController(overrides: {
   recorder?: FakeRecorder;
   invoke?: (request: { method: string; payload: Record<string, unknown> }) => Promise<BridgeResponse>;
   enabled?: boolean;
+  runScheduleImmediately?: boolean;
 } = {}) {
   const recorder = overrides.recorder ?? new FakeRecorder();
   const events: VoiceStatePayload[] = [];
@@ -46,7 +47,10 @@ function createController(overrides: {
     now: () => clock,
     schedule: (callback, delayMs) => {
       nextTimer += 1;
-      if (nextTimer === 1) {
+      const runImmediately = overrides.runScheduleImmediately === undefined
+        ? nextTimer === 1
+        : overrides.runScheduleImmediately;
+      if (runImmediately) {
         clock += delayMs;
         callback();
       }
@@ -224,6 +228,18 @@ test("a short click or drag does not retire the active voice turn", async () => 
 
   assert.equal(active.currentState.kind, "speaking");
   assert.deepEqual(turnChanges, [[null, "turn-1"]]);
+});
+
+test("releasing a pet drag returns the controller to idle", () => {
+  const { controller } = createController({ runScheduleImmediately: false });
+
+  assert.equal(controller.startPress("pet", 0), true);
+  controller.pointerMoved();
+  assert.deepEqual(controller.currentState, { kind: "dragging" });
+
+  controller.release();
+
+  assert.deepEqual(controller.currentState, { kind: "idle" });
 });
 
 test("waits for queued playback to drain before reporting a terminal TTS failure", async () => {

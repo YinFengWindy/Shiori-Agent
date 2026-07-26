@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   VOICE_PRESS_THRESHOLD_MS,
   createVoiceInteractionState,
+  isVoiceInteractionBusy,
   transitionVoiceInteraction,
 } from "./interactionState.js";
 
@@ -37,6 +38,34 @@ test("movement wins over a pending pet voice press", () => {
     transitionVoiceInteraction(pending, { type: "pointer_moved" }),
     { kind: "dragging" },
   );
+});
+
+test("releasing or cancelling a pet drag clears the interaction state", () => {
+  let state = transitionVoiceInteraction(createVoiceInteractionState(), {
+    type: "press_started",
+    source: "pet",
+    atMs: 0,
+  });
+  state = transitionVoiceInteraction(state, { type: "pointer_moved" });
+
+  assert.deepEqual(
+    transitionVoiceInteraction(state, { type: "released" }),
+    { kind: "idle" },
+  );
+  assert.deepEqual(
+    transitionVoiceInteraction(state, { type: "escape" }),
+    { kind: "idle" },
+  );
+});
+
+test("only active voice phases block a microphone test", () => {
+  assert.equal(isVoiceInteractionBusy({ kind: "idle" }), false);
+  assert.equal(isVoiceInteractionBusy({ kind: "dragging" }), false);
+  assert.equal(isVoiceInteractionBusy({ kind: "error", message: "ASR 失败" }), false);
+  assert.equal(isVoiceInteractionBusy({ kind: "press_pending", source: "pet", startedAtMs: 0 }), true);
+  assert.equal(isVoiceInteractionBusy({ kind: "recording", source: "pet", startedAtMs: 0 }), true);
+  assert.equal(isVoiceInteractionBusy({ kind: "waiting_reply" }), true);
+  assert.equal(isVoiceInteractionBusy({ kind: "speaking", sentenceId: "s1" }), true);
 });
 
 test("recording release, empty ASR and chat failure are fail-closed", () => {

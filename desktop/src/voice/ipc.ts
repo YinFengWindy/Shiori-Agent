@@ -5,6 +5,7 @@ import type { IpcMainInvokeEvent, OpenDialogOptions } from "electron";
 import type { DesktopBridgeClient } from "../bridgeClient.js";
 import type { DesktopPetController } from "../pet/controller.js";
 import type { DesktopVoiceController } from "./controller.js";
+import { isVoiceInteractionBusy } from "./interactionState.js";
 import type { BrowserVoicePlayback } from "./playback.js";
 import type { BrowserVoiceRecorder } from "./recorder.js";
 
@@ -54,7 +55,7 @@ export function registerVoiceIpc({
     return await voiceRecorder.listInputDevices();
   });
   ipcMain.handle("desktop:voice-test-start", async (_event: IpcMainInvokeEvent, deviceId?: unknown) => {
-    if (voiceTestActive || voiceController.currentState.kind !== "idle") {
+    if (voiceTestActive || isVoiceInteractionBusy(voiceController.currentState)) {
       throw new Error("当前已有语音任务正在进行");
     }
     voiceTestActive = true;

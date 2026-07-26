@@ -115,6 +115,10 @@ export class DesktopVoiceController {
       this.apply({ type: "released" });
       return;
     }
+    if (this.state.kind === "dragging") {
+      this.apply({ type: "released" });
+      return;
+    }
     if (this.state.kind !== "recording") return;
     this.clearRecordingTimer();
     this.apply({ type: "released" });
