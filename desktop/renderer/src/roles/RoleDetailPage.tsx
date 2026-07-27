@@ -72,19 +72,21 @@ export function RoleDetailPage({
 
   return (
     <section ref={pageRef} className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-[#17110f]" data-testid="role-detail-page" data-has-featured-image={chatBackgroundUrl ? "true" : "false"}>
-      {chatBackgroundUrl ? <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url("${chatBackgroundUrl}")` }} data-testid="role-illustration-hero" /> : <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#8f5138_0%,#39221c_46%,#17110f_100%)]" data-testid="role-illustration-hero" />}
-      <div className="absolute inset-0 bg-[linear-gradient(112deg,rgba(22,13,10,0.88)_0%,rgba(34,18,13,0.58)_46%,rgba(22,13,10,0.76)_100%)]" />
+      {chatBackgroundUrl ? <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url("${chatBackgroundUrl}")` }} data-testid="role-illustration-hero" /> : <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#f8d4bf_0%,#d89270_44%,#6d473e_100%)]" data-testid="role-illustration-hero" />}
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,245,238,0.12),rgba(255,245,238,0.02)_42%,rgba(255,245,238,0.16))]" />
       <div className="relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col gap-5 px-5 pb-8 pt-6 sm:px-8">
-        <header className="flex flex-wrap items-center justify-between gap-4">
+        <header className="flex items-center justify-between gap-4">
           <button className={cx(floatingActionClass, "hover:-translate-x-0.5")} data-testid="role-detail-back-button" type="button" onClick={onBackToList} aria-label="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
-          <div className="order-3 w-full sm:order-2 sm:w-auto sm:flex-1 sm:max-w-[520px]"><RoleDetailTabs activeTab={activeTab} onChange={setActiveTab} /></div>
-          <div className="order-2 flex items-center gap-2 sm:order-3">
+          <div className="flex items-center gap-2">
             <button className={floatingActionClass} type="button" onClick={onResetRoleForm} disabled={!roleFormDirty} aria-label="重置角色表单"><ResetIcon className="h-[18px] w-[18px] fill-current" /></button>
             <Magnet disabled={savingRole || !roleFormDirty || !bridgeReady} padding={52} strength={9}><button className={cx(floatingActionClass, "bg-[#fff7f0] hover:shadow-[0_10px_28px_rgba(255,217,184,0.32)]")} data-testid="save-role-button" type="button" onClick={onSaveRole} disabled={savingRole || !roleFormDirty || !bridgeReady} aria-label={savingRole ? "正在保存角色" : "保存角色"}><SaveIcon className="h-5 w-5 fill-current" /></button></Magnet>
           </div>
         </header>
-        <SpotlightCard className="rounded-[18px] border border-white/35 bg-[rgba(255,249,245,0.72)] p-4 shadow-[0_24px_70px_rgba(13,7,5,0.34)] backdrop-blur-xl sm:p-7" spotlightColor="rgba(255, 195, 148, 0.34)">
+        <SpotlightCard className="rounded-[18px] border border-white/80 bg-[rgba(255,252,249,0.94)] p-4 shadow-[0_18px_48px_rgba(70,38,25,0.2)] backdrop-blur-md sm:p-7" spotlightColor="rgba(237, 155, 111, 0.18)">
           <div data-testid="role-detail-info-card">
+            <div className="mb-6 border-b border-[#eaded6] pb-4">
+              <RoleDetailTabs activeTab={activeTab} onChange={setActiveTab} />
+            </div>
             <AnimatePresence mode="wait" initial={false}>
               <motion.div key={activeTab} initial={{ opacity: 0, y: 10, filter: "blur(4px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -6, filter: "blur(3px)" }} transition={{ duration: 0.2, ease: "easeOut" }}>
                 {content}
