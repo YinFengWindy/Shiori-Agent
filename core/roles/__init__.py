@@ -16,8 +16,14 @@ from .relationship_runtime import (
     RoleRelationshipRuntimeService,
 )
 from .scene_followup_runtime import SceneFollowupRuntime
-from .store import RoleAssetCategory, RolePetPackage, RoleRecord, RoleStore
-from .store import RoleChannelBindingConfig, RoleProactiveConfig
+from .models import (
+    RoleAssetCategory,
+    RoleChannelBindingConfig,
+    RolePetPackage,
+    RoleProactiveConfig,
+    RoleRecord,
+)
+from .store import RoleStore
 from .pet_packages import RolePetPackageService
 from .config_migration import RoleConfigMigrationSummary, RoleConfigMigrator
 from .world import RoleExecutionContext, RoleWorld, RoleWorldRegistry
