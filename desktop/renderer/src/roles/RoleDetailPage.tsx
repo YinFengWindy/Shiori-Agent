@@ -3,7 +3,6 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { BackIcon, ResetIcon, SaveIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 import { Magnet } from "../shared/ui/reactBits/Magnet";
-import { SpotlightCard } from "../shared/ui/reactBits/SpotlightCard";
 import type { RoleFormState, RoleRecord } from "../shared/types";
 import { RoleCapabilitiesPanel } from "./RoleCapabilitiesPanel";
 import { RoleChannelBindingsPanel } from "./RoleChannelBindingsPanel";
@@ -71,25 +70,22 @@ export function RoleDetailPage({
 
   return (
     <section ref={pageRef} className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-white" data-testid="role-detail-page" data-has-featured-image="false">
-      <div className="absolute inset-0 bg-white" data-testid="role-illustration-hero" />
       <div className="relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-5 pb-8 pt-6 sm:px-8">
-        <SpotlightCard className="rounded-[18px] border border-white/80 bg-[rgba(255,252,249,0.94)] p-4 shadow-[0_18px_48px_rgba(70,38,25,0.2)] backdrop-blur-md sm:p-7" spotlightColor="rgba(237, 155, 111, 0.18)">
-          <div data-testid="role-detail-info-card">
-            <div className="mb-6 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#eaded6] pb-4">
-              <button className={cx(floatingActionClass, "hover:-translate-x-0.5")} data-testid="role-detail-back-button" type="button" onClick={onBackToList} aria-label="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
-              <RoleDetailTabs activeTab={activeTab} onChange={setActiveTab} />
-              <div className="flex items-center gap-2">
-                <button className={floatingActionClass} type="button" onClick={onResetRoleForm} disabled={!roleFormDirty} aria-label="重置角色表单"><ResetIcon className="h-[18px] w-[18px] fill-current" /></button>
-                <Magnet disabled={savingRole || !roleFormDirty || !bridgeReady} padding={52} strength={9}><button className={cx(floatingActionClass, "bg-[#fff7f0] hover:shadow-[0_10px_28px_rgba(255,217,184,0.32)]")} data-testid="save-role-button" type="button" onClick={onSaveRole} disabled={savingRole || !roleFormDirty || !bridgeReady} aria-label={savingRole ? "正在保存角色" : "保存角色"}><SaveIcon className="h-5 w-5 fill-current" /></button></Magnet>
-              </div>
+        <div data-testid="role-detail-info-card">
+          <div className="mb-6 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#eaded6] pb-4">
+            <button className={cx(floatingActionClass, "hover:-translate-x-0.5")} data-testid="role-detail-back-button" type="button" onClick={onBackToList} aria-label="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
+            <RoleDetailTabs activeTab={activeTab} onChange={setActiveTab} />
+            <div className="flex items-center gap-2">
+              <button className={floatingActionClass} type="button" onClick={onResetRoleForm} disabled={!roleFormDirty} aria-label="重置角色表单"><ResetIcon className="h-[18px] w-[18px] fill-current" /></button>
+              <Magnet disabled={savingRole || !roleFormDirty || !bridgeReady} padding={52} strength={9}><button className={cx(floatingActionClass, "bg-[#fff7f0] hover:shadow-[0_10px_28px_rgba(255,217,184,0.32)]")} data-testid="save-role-button" type="button" onClick={onSaveRole} disabled={savingRole || !roleFormDirty || !bridgeReady} aria-label={savingRole ? "正在保存角色" : "保存角色"}><SaveIcon className="h-5 w-5 fill-current" /></button></Magnet>
             </div>
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div key={activeTab} initial={{ opacity: 0, y: 10, filter: "blur(4px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -6, filter: "blur(3px)" }} transition={{ duration: 0.2, ease: "easeOut" }}>
-                {content}
-              </motion.div>
-            </AnimatePresence>
           </div>
-        </SpotlightCard>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 10, filter: "blur(4px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -6, filter: "blur(3px)" }} transition={{ duration: 0.2, ease: "easeOut" }}>
+              {content}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
     </section>
   );
