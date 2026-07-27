@@ -49,12 +49,16 @@ async def test_memory_optimizer_loop_and_memory_port_cover_paths(tmp_path: Path)
     opt._STEP_DELAY_SECONDS = 0
     from unittest.mock import patch
 
-    with patch("proactive_v2.memory_optimizer.resolve_markdown_store", return_value=memory):
+    with patch(
+        "proactive_v2.memory_optimizer.resolve_markdown_store", return_value=memory
+    ):
         await opt.optimize(role_id="mira")
     memory.write_long_term.assert_called_once_with("merged")
     memory.write_self.assert_called_once()
 
-    loop = MemoryOptimizerLoop(opt, interval_seconds=10, _now_fn=lambda: datetime(2025, 1, 1, 0, 0, 1))
+    loop = MemoryOptimizerLoop(
+        opt, interval_seconds=10, _now_fn=lambda: datetime(2025, 1, 1, 0, 0, 1)
+    )
     assert loop._seconds_until_next_tick() >= 1.0
     loop.stop()
 
@@ -155,10 +159,15 @@ def test_sensor_prefers_role_target_and_binding_transport(tmp_path: Path):
         description="desktop role",
         system_prompt="you are mira",
     )
-    _ = role_service.bindings.bind("telegram", "42", "mira")
+    _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
 
     sensor = Sensor(
-        cfg=SimpleNamespace(default_role_id="mira", default_channel="telegram", default_chat_id="42", recent_chat_messages=5),
+        cfg=SimpleNamespace(
+            default_role_id="mira",
+            default_channel="telegram",
+            default_chat_id="42",
+            recent_chat_messages=5,
+        ),
         sessions=session_manager,
         state=SimpleNamespace(),
         memory=None,
@@ -171,7 +180,9 @@ def test_sensor_prefers_role_target_and_binding_transport(tmp_path: Path):
     assert sensor.target_transport() == ("telegram", "42")
 
 
-def test_sensor_role_target_prefers_configured_transport_when_multiple_bindings(tmp_path: Path):
+def test_sensor_role_target_prefers_configured_transport_when_multiple_bindings(
+    tmp_path: Path,
+):
     session_manager = SessionManager(tmp_path)
     role_service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
@@ -184,11 +195,16 @@ def test_sensor_role_target_prefers_configured_transport_when_multiple_bindings(
         description="desktop role",
         system_prompt="you are mira",
     )
-    _ = role_service.bindings.bind("telegram", "42", "mira")
-    _ = role_service.bindings.bind("qq", "group-7", "mira")
+    _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
+    _ = role_service.bindings.bind("qq", "group-7", "mira", contact_id="owner")
 
     sensor = Sensor(
-        cfg=SimpleNamespace(default_role_id="mira", default_channel="qq", default_chat_id="group-7", recent_chat_messages=5),
+        cfg=SimpleNamespace(
+            default_role_id="mira",
+            default_channel="qq",
+            default_chat_id="group-7",
+            recent_chat_messages=5,
+        ),
         sessions=session_manager,
         state=SimpleNamespace(),
         memory=None,
@@ -216,7 +232,12 @@ def test_sensor_role_target_requires_bound_transport(tmp_path: Path):
     )
 
     sensor = Sensor(
-        cfg=SimpleNamespace(default_role_id="mira", default_channel="telegram", default_chat_id="42", recent_chat_messages=5),
+        cfg=SimpleNamespace(
+            default_role_id="mira",
+            default_channel="telegram",
+            default_chat_id="42",
+            recent_chat_messages=5,
+        ),
         sessions=session_manager,
         state=SimpleNamespace(),
         memory=None,
@@ -242,10 +263,15 @@ def test_sensor_role_target_rejects_unmatched_configured_transport(tmp_path: Pat
         description="desktop role",
         system_prompt="you are mira",
     )
-    _ = role_service.bindings.bind("telegram", "42", "mira")
+    _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
 
     sensor = Sensor(
-        cfg=SimpleNamespace(default_role_id="mira", default_channel="qq", default_chat_id="group-7", recent_chat_messages=5),
+        cfg=SimpleNamespace(
+            default_role_id="mira",
+            default_channel="qq",
+            default_chat_id="group-7",
+            recent_chat_messages=5,
+        ),
         sessions=session_manager,
         state=SimpleNamespace(),
         memory=None,
@@ -254,11 +280,16 @@ def test_sensor_role_target_rejects_unmatched_configured_transport(tmp_path: Pat
         role_bindings=role_service.bindings,
     )
 
-    with pytest.raises(KeyError, match="default_role_id 配置的 target 未绑定到该角色: mira -> qq:group-7"):
+    with pytest.raises(
+        KeyError,
+        match="default_role_id 配置的 target 未绑定到该角色: mira -> qq:group-7",
+    ):
         _ = sensor.target_transport()
 
 
-def test_sensor_role_target_requires_explicit_transport_when_multiple_bindings_and_no_target(tmp_path: Path):
+def test_sensor_role_target_requires_explicit_transport_when_multiple_bindings_and_no_target(
+    tmp_path: Path,
+):
     session_manager = SessionManager(tmp_path)
     role_service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
@@ -271,11 +302,16 @@ def test_sensor_role_target_requires_explicit_transport_when_multiple_bindings_a
         description="desktop role",
         system_prompt="you are mira",
     )
-    _ = role_service.bindings.bind("telegram", "42", "mira")
-    _ = role_service.bindings.bind("qq", "group-7", "mira")
+    _ = role_service.bindings.bind("telegram", "42", "mira", contact_id="owner")
+    _ = role_service.bindings.bind("qq", "group-7", "mira", contact_id="owner")
 
     sensor = Sensor(
-        cfg=SimpleNamespace(default_role_id="mira", default_channel="", default_chat_id="", recent_chat_messages=5),
+        cfg=SimpleNamespace(
+            default_role_id="mira",
+            default_channel="",
+            default_chat_id="",
+            recent_chat_messages=5,
+        ),
         sessions=session_manager,
         state=SimpleNamespace(),
         memory=None,
@@ -284,7 +320,10 @@ def test_sensor_role_target_requires_explicit_transport_when_multiple_bindings_a
         role_bindings=role_service.bindings,
     )
 
-    with pytest.raises(RuntimeError, match="default_role_id 存在多个 transport 绑定，必须显式配置 target.channel/chat_id: mira"):
+    with pytest.raises(
+        RuntimeError,
+        match="default_role_id 存在多个 transport 绑定，必须显式配置 target.channel/chat_id: mira",
+    ):
         _ = sensor.target_transport()
 
 
@@ -303,7 +342,12 @@ def test_sensor_role_target_supports_desktop_without_binding(tmp_path: Path):
     )
 
     sensor = Sensor(
-        cfg=SimpleNamespace(default_role_id="mira", default_channel="desktop", default_chat_id="", recent_chat_messages=5),
+        cfg=SimpleNamespace(
+            default_role_id="mira",
+            default_channel="desktop",
+            default_chat_id="",
+            recent_chat_messages=5,
+        ),
         sessions=session_manager,
         state=SimpleNamespace(),
         memory=None,
@@ -324,7 +368,7 @@ def test_session_get_history_skips_cached_llm_frame_by_default():
     session.add_message(
         "user",
         "hello",
-        llm_context_frame="<system-reminder data-system-context-frame=\"true\">\n\n## retrieved_memory\n旧记忆",
+        llm_context_frame='<system-reminder data-system-context-frame="true">\n\n## retrieved_memory\n旧记忆',
         llm_user_content=user_content,
     )
     session.add_message("assistant", "world")
@@ -551,7 +595,9 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
         compute_interruptibility=lambda **kwargs: (0.5, {"x": 1}),
     )
     loop._rng = None
-    loop._memory = SimpleNamespace(read_long_term=lambda: "remember", get_memory_context=lambda: "ctx")
+    loop._memory = SimpleNamespace(
+        read_long_term=lambda: "remember", get_memory_context=lambda: "ctx"
+    )
     loop._sessions = SimpleNamespace(workspace=tmp_path)
     (tmp_path / "AGENTS.md").write_text("guide", encoding="utf-8")
     loop._sender = SimpleNamespace(send=AsyncMock(return_value=True))

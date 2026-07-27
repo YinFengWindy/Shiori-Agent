@@ -60,9 +60,9 @@ def test_conversation_migrator_merges_bound_channel_session_into_role_session(
 
     migrator = ConversationMigrator(
         manager,
-        binding_resolver=lambda channel, chat_id: "mira"
-        if (channel, chat_id) == ("telegram", "123")
-        else "",
+        binding_resolver=lambda channel, chat_id: (
+            "mira" if (channel, chat_id) == ("telegram", "123") else ""
+        ),
     )
     summary = migrator.migrate()
 
@@ -76,7 +76,9 @@ def test_conversation_migrator_merges_bound_channel_session_into_role_session(
     assert thread.thread_kind == "network"
     assert thread.channel == "telegram"
     assert thread.role_id == "mira"
-    assert any(item.external_id == "123" and item.role_id == "mira" for item in contacts)
+    assert any(
+        item.external_id == "123" and item.role_id == "mira" for item in contacts
+    )
     assert store.list_message_thread_ids("telegram:123") == [thread.id]
     role_session = manager.get_or_create("role:mira")
     assert [item["content"] for item in role_session.messages] == ["hello"]
@@ -150,9 +152,9 @@ def test_conversation_migrator_copies_network_history_to_role_session(
     manager.save(legacy)
     migrator = ConversationMigrator(
         manager,
-        binding_resolver=lambda channel, chat_id: "mira"
-        if (channel, chat_id) == ("telegram", "123")
-        else "",
+        binding_resolver=lambda channel, chat_id: (
+            "mira" if (channel, chat_id) == ("telegram", "123") else ""
+        ),
     )
 
     first = migrator.migrate()
@@ -160,7 +162,10 @@ def test_conversation_migrator_copies_network_history_to_role_session(
     second = migrator.migrate()
 
     assert first.migrated_session_keys == ["telegram:123"]
-    assert [item["content"] for item in legacy.messages] == ["old user", "old assistant"]
+    assert [item["content"] for item in legacy.messages] == [
+        "old user",
+        "old assistant",
+    ]
     assert [item["content"] for item in runtime.messages] == [
         "old user",
         "old assistant",
@@ -188,9 +193,9 @@ def test_conversation_migrator_upgrades_unresolved_thread_into_role_session(
     first = missing.migrate()
     resolved = ConversationMigrator(
         manager,
-        binding_resolver=lambda channel, chat_id: "mira"
-        if (channel, chat_id) == ("telegram", "123")
-        else "",
+        binding_resolver=lambda channel, chat_id: (
+            "mira" if (channel, chat_id) == ("telegram", "123") else ""
+        ),
     )
     second = resolved.migrate()
     thread = manager.conversation_store.get_thread_by_legacy_session_key("telegram:123")
@@ -204,7 +209,9 @@ def test_conversation_migrator_upgrades_unresolved_thread_into_role_session(
     assert [item["content"] for item in runtime.messages] == ["old user"]
 
 
-def test_conversation_migrator_merges_multiple_channels_in_time_order(tmp_path: Path) -> None:
+def test_conversation_migrator_merges_multiple_channels_in_time_order(
+    tmp_path: Path,
+) -> None:
     manager = SessionManager(tmp_path)
     telegram = manager.get_or_create("telegram:123")
     telegram.add_message("user", "telegram")
@@ -244,7 +251,7 @@ def test_conversation_migrator_does_not_restore_messages_cleared_from_role_sessi
         session_manager=manager,
     )
     roles.create_role(role_id="mira", name="Mira", system_prompt="test")
-    roles.bindings.bind("telegram", "123", "mira")
+    roles.bindings.bind("telegram", "123", "mira", contact_id="owner")
     legacy = manager.get_or_create("telegram:123")
     legacy.add_message("user", "old")
     manager.save(legacy)
@@ -268,13 +275,13 @@ def test_conversation_migrator_does_not_restore_messages_after_role_deletion(
         session_manager=manager,
     )
     roles.create_role(role_id="mira", name="Mira", system_prompt="test")
-    roles.bindings.bind("telegram", "123", "mira")
+    roles.bindings.bind("telegram", "123", "mira", contact_id="owner")
     legacy = manager.get_or_create("telegram:123")
     legacy.add_message("user", "before deletion")
     manager.save(legacy)
     roles.delete_role("mira")
     roles.create_role(role_id="mira", name="Mira 2", system_prompt="test")
-    roles.bindings.bind("telegram", "123", "mira")
+    roles.bindings.bind("telegram", "123", "mira", contact_id="owner")
 
     ConversationMigrator(
         manager,

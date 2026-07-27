@@ -27,14 +27,18 @@ def _normalize_rel_path(path: str | None) -> str | None:
 
 @dataclass(frozen=True)
 class RoleChannelBindingConfig:
-    """一个角色拥有的渠道会话与其入站白名单。"""
+    """One role-owned channel session and its sole external contact."""
 
     channel: str
     chat_id: str
     allow_from: list[str]
 
     def to_dict(self) -> dict[str, Any]:
-        return {"channel": self.channel, "chat_id": self.chat_id, "allow_from": list(self.allow_from)}
+        return {
+            "channel": self.channel,
+            "chat_id": self.chat_id,
+            "allow_from": list(self.allow_from),
+        }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "RoleChannelBindingConfig":
@@ -48,7 +52,9 @@ class RoleChannelBindingConfig:
         return cls(
             channel=channel,
             chat_id=chat_id,
-            allow_from=sorted({str(item).strip() for item in raw_allow_from if str(item).strip()}),
+            allow_from=sorted(
+                {str(item).strip() for item in raw_allow_from if str(item).strip()}
+            ),
         )
 
 
@@ -94,7 +100,9 @@ class RoleProactiveConfig:
             policy_configured=(
                 bool(data.get("policy_configured"))
                 if "policy_configured" in data
-                else any(key in data for key in ("profile", "overrides", "agent", "drift"))
+                else any(
+                    key in data for key in ("profile", "overrides", "agent", "drift")
+                )
             ),
         )
 
@@ -159,8 +167,15 @@ class RolePetPackage:
         package_id = str(payload.get("id") or "").strip()
         display_name = str(payload.get("display_name") or "").strip()
         manifest_path = _normalize_rel_path(str(payload.get("manifest_path") or ""))
-        spritesheet_path = _normalize_rel_path(str(payload.get("spritesheet_path") or ""))
-        if not package_id or not display_name or not manifest_path or not spritesheet_path:
+        spritesheet_path = _normalize_rel_path(
+            str(payload.get("spritesheet_path") or "")
+        )
+        if (
+            not package_id
+            or not display_name
+            or not manifest_path
+            or not spritesheet_path
+        ):
             raise ValueError("桌宠包元数据不完整")
         raw_actions = payload.get("actions", {})
         actions = (
@@ -249,8 +264,7 @@ class RoleRecord:
         bindings = {
             _normalize_rel_path(str(path)) or "": str(category_id).strip()
             for path, category_id in binding_items
-            if str(path).strip()
-            and str(category_id).strip() in category_ids
+            if str(path).strip() and str(category_id).strip() in category_ids
         }
         default_category_id = categories[0].id
         for path in illustrations:
@@ -526,12 +540,18 @@ class RoleStore:
                 if runtime_config is not None:
                     role.runtime_config = dict(runtime_config)
                 if channel_bindings is not None:
-                    role.channel_bindings = self._normalize_channel_bindings(channel_bindings)
+                    role.channel_bindings = self._normalize_channel_bindings(
+                        channel_bindings
+                    )
                     self._validate_desktop_bindings(role.id, role.channel_bindings)
                     self._ensure_bindings_unique(roles, role.id, role.channel_bindings)
                     if role.proactive.enabled and not any(
                         binding.channel == role.proactive.target_channel
-                        and chat_ids_equal(binding.channel, binding.chat_id, role.proactive.target_chat_id)
+                        and chat_ids_equal(
+                            binding.channel,
+                            binding.chat_id,
+                            role.proactive.target_chat_id,
+                        )
                         for binding in role.channel_bindings
                     ):
                         role.proactive = replace(
@@ -547,13 +567,22 @@ class RoleStore:
                         else RoleProactiveConfig.from_dict(proactive)
                     )
                     if next_proactive.enabled and (
-                        not next_proactive.target_channel or not next_proactive.target_chat_id
+                        not next_proactive.target_channel
+                        or not next_proactive.target_chat_id
                     ):
                         raise ValueError("启用主动推送时必须显式选择一个目标渠道")
-                    if next_proactive.target_channel and next_proactive.target_chat_id and not any(
-                        binding.channel == next_proactive.target_channel
-                        and chat_ids_equal(binding.channel, binding.chat_id, next_proactive.target_chat_id)
-                        for binding in role.channel_bindings
+                    if (
+                        next_proactive.target_channel
+                        and next_proactive.target_chat_id
+                        and not any(
+                            binding.channel == next_proactive.target_channel
+                            and chat_ids_equal(
+                                binding.channel,
+                                binding.chat_id,
+                                next_proactive.target_chat_id,
+                            )
+                            for binding in role.channel_bindings
+                        )
                     ):
                         raise ValueError("主动推送目标必须是当前角色已绑定的渠道")
                     role.proactive = next_proactive
@@ -649,7 +678,9 @@ class RoleStore:
                     category_id = str(illustration_category_id or "").strip()
                     if not category_id:
                         category_id = role.asset_categories[0].id
-                    if category_id not in {category.id for category in role.asset_categories}:
+                    if category_id not in {
+                        category.id for category in role.asset_categories
+                    }:
                         raise ValueError(f"角色素材分类不存在: {category_id}")
                     imported = [
                         self.import_asset(role.id, source, prefix="illustration")
@@ -711,7 +742,9 @@ class RoleStore:
                 if role.id != role_id:
                     continue
                 role.pet_packages = list(packages)
-                if role.selected_pet_package_id not in {package.id for package in packages}:
+                if role.selected_pet_package_id not in {
+                    package.id for package in packages
+                }:
                     role.selected_pet_package_id = None
                     role.desktop_pet_enabled = False
                 role.updated_at = _now_iso()
@@ -755,7 +788,11 @@ class RoleStore:
         bindings: list[RoleChannelBindingConfig | dict[str, Any]],
     ) -> list[RoleChannelBindingConfig]:
         next_bindings = [
-            item if isinstance(item, RoleChannelBindingConfig) else RoleChannelBindingConfig.from_dict(item)
+            (
+                item
+                if isinstance(item, RoleChannelBindingConfig)
+                else RoleChannelBindingConfig.from_dict(item)
+            )
             for item in bindings
         ]
         for index, item in enumerate(next_bindings):
@@ -765,14 +802,29 @@ class RoleStore:
                 for other in next_bindings[:index]
             ):
                 raise ValueError("同一角色不能重复绑定相同渠道会话")
+        self._validate_external_contact_bindings(next_bindings)
         return next_bindings
+
+    @staticmethod
+    def _validate_external_contact_bindings(
+        bindings: list[RoleChannelBindingConfig],
+    ) -> None:
+        for binding in bindings:
+            if binding.channel == "desktop":
+                continue
+            if len(binding.allow_from) != 1:
+                raise ValueError("外部渠道必须绑定且仅绑定一个联系人")
 
     def _normalize_asset_categories(
         self,
         categories: list[RoleAssetCategory | dict[str, Any]],
     ) -> list[RoleAssetCategory]:
         normalized = [
-            item if isinstance(item, RoleAssetCategory) else RoleAssetCategory.from_dict(item)
+            (
+                item
+                if isinstance(item, RoleAssetCategory)
+                else RoleAssetCategory.from_dict(item)
+            )
             for item in categories
         ]
         if not normalized:
@@ -847,5 +899,7 @@ class RoleStore:
             for binding in bindings
         ):
             raise ValueError(f"桌面端渠道必须绑定当前角色会话: {expected_chat_id}")
-        if any(binding.channel == "desktop" and binding.allow_from for binding in bindings):
+        if any(
+            binding.channel == "desktop" and binding.allow_from for binding in bindings
+        ):
             raise ValueError("桌面端渠道不支持允许对象")

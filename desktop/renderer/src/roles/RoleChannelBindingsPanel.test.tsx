@@ -9,7 +9,7 @@ describe("RoleChannelBindingsPanel", () => {
 
     assert.match(markup, /渠道绑定/);
     assert.match(markup, /已配置 1 个投递位置/);
-    assert.match(markup, /允许对象/);
+    assert.match(markup, /联系人 ID/);
     assert.doesNotMatch(markup, /shadow-\[0_12px_30px/);
   });
 });

@@ -124,7 +124,9 @@ def test_role_store_migrates_existing_assets_into_default_category(tmp_path: Pat
     assert payload["version"] == 2
 
 
-def test_role_store_assigns_uploaded_assets_and_moves_between_categories(tmp_path: Path):
+def test_role_store_assigns_uploaded_assets_and_moves_between_categories(
+    tmp_path: Path,
+):
     image = tmp_path / "reaction.png"
     image.write_bytes(b"reaction")
     store = RoleStore(tmp_path)
@@ -202,7 +204,9 @@ def test_role_store_accepts_category_removal_with_reassigned_bindings(tmp_path: 
     assert updated.asset_category_bindings[asset_path] == "default"
 
 
-def test_role_store_deletes_category_assets_when_paths_are_removed_together(tmp_path: Path):
+def test_role_store_deletes_category_assets_when_paths_are_removed_together(
+    tmp_path: Path,
+):
     image = tmp_path / "reaction.png"
     image.write_bytes(b"reaction")
     store = RoleStore(tmp_path)
@@ -297,7 +301,10 @@ def test_role_store_persists_runtime_config_updates(tmp_path: Path):
     assert reloaded is not None
     assert reloaded.runtime_config["nsfw_memory_enabled"] is True
 
-def test_role_store_keeps_channel_access_and_proactive_target_on_the_role(tmp_path: Path):
+
+def test_role_store_keeps_single_contact_channel_access_and_proactive_target_on_the_role(
+    tmp_path: Path,
+):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
     store.create_role(name="Luna", system_prompt="luna", role_id="luna")
@@ -305,13 +312,13 @@ def test_role_store_keeps_channel_access_and_proactive_target_on_the_role(tmp_pa
     updated = store.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "telegram", "chat_id": "42", "allow_from": ["alice", "42"]},
-            {"channel": "qq", "chat_id": "7", "allow_from": []},
+            {"channel": "telegram", "chat_id": "42", "allow_from": ["alice"]},
+            {"channel": "qq", "chat_id": "7", "allow_from": ["7"]},
         ],
         proactive={"enabled": True, "target_channel": "qq", "target_chat_id": "gqq:7"},
     )
 
-    assert updated.channel_bindings[0].allow_from == ["42", "alice"]
+    assert updated.channel_bindings[0].allow_from == ["alice"]
     assert updated.proactive.target_channel == "qq"
     luna = store.get_role("luna")
     assert luna is not None
@@ -326,8 +333,8 @@ def test_role_store_rejects_duplicate_qq_group_binding_formats(tmp_path: Path):
         store.update_role(
             "mira",
             channel_bindings=[
-                {"channel": "qq", "chat_id": "7", "allow_from": []},
-                {"channel": "qq", "chat_id": "gqq:7", "allow_from": []},
+                {"channel": "qq", "chat_id": "7", "allow_from": ["7"]},
+                {"channel": "qq", "chat_id": "gqq:7", "allow_from": ["7"]},
             ],
         )
     except ValueError as exc:
@@ -343,7 +350,11 @@ def test_role_store_rejects_proactive_target_outside_its_bindings(tmp_path: Path
     try:
         store.update_role(
             "mira",
-            proactive={"enabled": True, "target_channel": "telegram", "target_chat_id": "42"},
+            proactive={
+                "enabled": True,
+                "target_channel": "telegram",
+                "target_chat_id": "42",
+            },
         )
     except ValueError as exc:
         assert "当前角色已绑定" in str(exc)
@@ -351,13 +362,21 @@ def test_role_store_rejects_proactive_target_outside_its_bindings(tmp_path: Path
         raise AssertionError("主动推送目标必须属于当前角色")
 
 
-def test_role_store_disables_proactive_when_its_target_binding_is_removed(tmp_path: Path):
+def test_role_store_disables_proactive_when_its_target_binding_is_removed(
+    tmp_path: Path,
+):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
     store.update_role(
         "mira",
-        channel_bindings=[{"channel": "telegram", "chat_id": "42", "allow_from": []}],
-        proactive={"enabled": True, "target_channel": "telegram", "target_chat_id": "42"},
+        channel_bindings=[
+            {"channel": "telegram", "chat_id": "42", "allow_from": ["42"]}
+        ],
+        proactive={
+            "enabled": True,
+            "target_channel": "telegram",
+            "target_chat_id": "42",
+        },
     )
 
     updated = store.update_role("mira", channel_bindings=[])
@@ -373,7 +392,9 @@ def test_role_store_rejects_desktop_binding_for_another_role_session(tmp_path: P
     try:
         store.update_role(
             "mira",
-            channel_bindings=[{"channel": "desktop", "chat_id": "role:luna", "allow_from": []}],
+            channel_bindings=[
+                {"channel": "desktop", "chat_id": "role:luna", "allow_from": []}
+            ],
         )
     except ValueError as exc:
         assert "role:mira" in str(exc)
@@ -388,7 +409,9 @@ def test_role_store_rejects_allow_list_for_desktop_binding(tmp_path: Path):
     try:
         store.update_role(
             "mira",
-            channel_bindings=[{"channel": "desktop", "chat_id": "role:mira", "allow_from": ["alice"]}],
+            channel_bindings=[
+                {"channel": "desktop", "chat_id": "role:mira", "allow_from": ["alice"]}
+            ],
         )
     except ValueError as exc:
         assert "不支持允许对象" in str(exc)
@@ -396,30 +419,55 @@ def test_role_store_rejects_allow_list_for_desktop_binding(tmp_path: Path):
         raise AssertionError("桌面端没有外部 sender，不能配置允许对象")
 
 
-def test_role_config_migration_copies_legacy_file_once_without_runtime_fallback(tmp_path: Path):
+def test_role_config_migration_leaves_legacy_external_bindings_for_manual_contact_configuration(
+    tmp_path: Path,
+):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
     (tmp_path / "roles" / "channel_bindings.json").write_text(
-        json.dumps({"version": 1, "bindings": {"telegram:42": {"channel": "telegram", "chat_id": "42", "role_id": "mira"}}}),
+        json.dumps(
+            {
+                "version": 1,
+                "bindings": {
+                    "telegram:42": {
+                        "channel": "telegram",
+                        "chat_id": "42",
+                        "role_id": "mira",
+                    }
+                },
+            }
+        ),
         encoding="utf-8",
     )
-    proactive = type("LegacyProactive", (), {"enabled": True, "default_role_id": "mira", "default_channel": "telegram", "default_chat_id": "42"})()
+    proactive = type(
+        "LegacyProactive",
+        (),
+        {
+            "enabled": True,
+            "default_role_id": "mira",
+            "default_channel": "telegram",
+            "default_chat_id": "42",
+        },
+    )()
 
     migrator = RoleConfigMigrator(tmp_path, RoleRepository(store))
     first = migrator.migrate(proactive)
     second = migrator.migrate(proactive)
 
     role = store.get_role("mira")
-    assert first.bindings_migrated == 1
+    assert first.bindings_migrated == 0
     assert first.proactive_migrated == 1
+    assert first.unresolved_bindings == 1
     assert second.bindings_migrated == 0
     assert second.proactive_migrated == 0
     assert role is not None
-    assert role.channel_bindings[0].chat_id == "42"
-    assert role.proactive.enabled is True
+    assert role.channel_bindings == []
+    assert role.proactive.enabled is False
 
 
-def test_role_config_migration_does_not_restore_a_removed_legacy_binding(tmp_path: Path):
+def test_role_config_migration_does_not_restore_a_removed_legacy_binding(
+    tmp_path: Path,
+):
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
     (tmp_path / "roles" / "channel_bindings.json").write_text(
@@ -447,6 +495,26 @@ def test_role_config_migration_does_not_restore_a_removed_legacy_binding(tmp_pat
     assert second.bindings_migrated == 0
     assert role is not None
     assert role.channel_bindings == []
+
+
+@pytest.mark.parametrize(
+    "allow_from",
+    [[], ["alice", "bob"]],
+)
+def test_role_store_requires_exactly_one_external_contact(
+    tmp_path: Path,
+    allow_from: list[str],
+) -> None:
+    store = RoleStore(tmp_path)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+
+    with pytest.raises(ValueError, match="仅绑定一个联系人"):
+        store.update_role(
+            "mira",
+            channel_bindings=[
+                {"channel": "telegram", "chat_id": "42", "allow_from": allow_from}
+            ],
+        )
 
 
 def test_role_store_delete_role_removes_role_runtime_directory(tmp_path: Path):
@@ -817,7 +885,12 @@ def test_role_binding_service_requires_explicit_binding(tmp_path: Path):
     else:
         raise AssertionError("未绑定渠道必须失败")
 
-    binding = service.bindings.bind("telegram", "chat-1", aggregate.role.id)
+    binding = service.bindings.bind(
+        "telegram",
+        "chat-1",
+        aggregate.role.id,
+        contact_id="u1",
+    )
     opened = service.open_bound_channel(channel="telegram", chat_id="chat-1")
     assert binding.role_id == aggregate.role.id
     assert opened.role.id == aggregate.role.id
@@ -837,7 +910,12 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
         description="desktop role",
         system_prompt="you are mira",
     )
-    _ = service.bindings.bind("telegram", "chat-1", aggregate.role.id)
+    _ = service.bindings.bind(
+        "telegram",
+        "chat-1",
+        aggregate.role.id,
+        contact_id="u1",
+    )
 
     routed = route_inbound_by_role(
         service,
@@ -866,7 +944,9 @@ def test_route_inbound_by_role_rewrites_legacy_channel_to_role_session(tmp_path:
     routed_session = session_manager.get_or_create("role:mira")
     assert routed_session.metadata["role_name"] == "Mira"
     assert "thread_id" not in routed_session.metadata
-    assert session_manager._store.get_session_meta("thread:mira:telegram:chat-1") is None
+    assert (
+        session_manager._store.get_session_meta("thread:mira:telegram:chat-1") is None
+    )
 
 
 def test_route_inbound_by_role_rejects_unbound_channel(tmp_path: Path):

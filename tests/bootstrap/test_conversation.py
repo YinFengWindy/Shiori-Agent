@@ -21,7 +21,7 @@ def test_workspace_conversation_migration_uses_role_channel_bindings(
         name="Mira",
         system_prompt="You are Mira.",
     ).role
-    _ = roles.bindings.bind("telegram", "42", role.id)
+    _ = roles.bindings.bind("telegram", "42", role.id, contact_id="owner")
     legacy = manager.get_or_create("telegram:42")
     legacy.add_message("user", "hello")
     manager.save(legacy)
@@ -49,7 +49,7 @@ def test_qq_group_binding_accepts_bare_role_chat_id(tmp_path: Path) -> None:
     _ = roles.repository.update_role(
         role.id,
         channel_bindings=[
-            {"channel": "qq", "chat_id": "831907794", "allow_from": []}
+            {"channel": "qq", "chat_id": "831907794", "allow_from": ["owner"]}
         ],
     )
 
