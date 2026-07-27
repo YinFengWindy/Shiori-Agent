@@ -102,6 +102,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
                 没有匹配的设置项
               </div>
             ) : null}
+            {currentSection && currentSubsectionId ? <div className="mb-6 border-b border-[#E7ECF1] pb-5"><h1 className="text-base font-semibold text-[#182230]">{currentSection.label}</h1><p className="mt-1 text-xs text-[#7B8794]">{visibleSubsections.find((item) => item.id === currentSubsectionId)?.label ?? ""}</p></div> : null}
             {currentId && currentSubsectionId ? (
               <SettingsSectionContent
                 sectionId={currentId}

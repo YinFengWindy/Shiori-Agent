@@ -19,7 +19,7 @@ export function SettingsField({
   const stacked = layout === "stack";
   return (
     <div className={cx(
-      "grid gap-3 border-b border-[#ECEEF2] py-5 last:border-b-0",
+      "grid gap-3 border-b border-[#E7ECF1] py-5 first:pt-0 last:border-b-0 last:pb-0",
       stacked
         ? "grid-cols-[minmax(0,1fr)]"
         : cx(
@@ -28,8 +28,8 @@ export function SettingsField({
           ),
     )}>
       <div className="grid gap-1.5">
-        <div className="text-[15px] font-medium text-[#171717]">{label}</div>
-        {hint ? <div className="max-w-[680px] text-[13px] leading-6 text-[#7B7F87]">{hint}</div> : null}
+        <div className="text-sm font-medium text-[#182230]">{label}</div>
+        {hint ? <div className="max-w-[680px] text-xs leading-5 text-[#7B8794]">{hint}</div> : null}
       </div>
       <div className={cx("w-full", !stacked && "xl:justify-self-end")}>{children}</div>
     </div>

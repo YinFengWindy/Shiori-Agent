@@ -21,6 +21,6 @@ describe("SettingsPageToolbar", () => {
     );
 
     assert.match(markup, /aria-label="保存并重启"[^>]*disabled=""/);
-    assert.match(markup, /<option value="main" selected="">主模型<\/option>/);
+    assert.match(markup, /aria-current="page"[^>]*>主模型/);
   });
 });

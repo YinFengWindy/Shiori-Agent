@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { VoiceInputDevice } from "../../../src/shared.js";
-import { cx, inputClass } from "../shared/styles";
 import { SettingsField as Field } from "./SettingsField";
-import { SettingsSectionCard, SettingsToggleField } from "./SettingsFieldPrimitives";
+import { SettingsSectionCard, SettingsToggleField, settingsInputClass } from "./SettingsFieldPrimitives";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 
 type VoiceInputSettingsSectionProps = Pick<SettingsSectionEditorProps, "draft" | "updateDraft">;
@@ -76,7 +75,7 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
       />
       <Field label="全局快捷键">
         <input
-          className={cx(inputClass, "bg-white")}
+          className={settingsInputClass}
           value={draft.voice.hotkey}
           onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, hotkey: event.target.value } }))}
           placeholder="Ctrl+Space"
@@ -84,7 +83,7 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
       </Field>
       <Field label="麦克风设备">
         <select
-          className={cx(inputClass, "bg-white")}
+          className={settingsInputClass}
           value={draft.voice.microphoneDeviceId}
           onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, microphoneDeviceId: event.target.value } }))}
         >
