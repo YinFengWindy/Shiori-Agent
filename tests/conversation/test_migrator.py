@@ -273,6 +273,7 @@ def test_conversation_migrator_does_not_restore_messages_after_role_deletion(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
         session_manager=manager,
+        on_role_deleted=lambda _role_id: None,
     )
     roles.create_role(role_id="mira", name="Mira", system_prompt="test")
     roles.bindings.bind("telegram", "123", "mira", contact_id="owner")

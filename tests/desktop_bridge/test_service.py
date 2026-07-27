@@ -9,9 +9,10 @@ import pytest
 
 from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
-from bus.events_lifecycle import ProactiveMessageCommitted, TurnCommitted
+from bus.events_lifecycle import ProactiveMessageCommitted, RoleDeleted, TurnCommitted
 from conversation.push_sync import ExternalImageSyncService
 from core.roles import RoleStore
+from core.roles.services import RoleAggregateService
 from desktop_bridge.service import DesktopBridgeService
 from desktop_bridge.voice_service import (
     VoiceOperationMetrics,
@@ -19,6 +20,47 @@ from desktop_bridge.voice_service import (
     VoiceTranscriptionResult,
 )
 from session.manager import SessionManager
+
+
+@pytest.mark.asyncio
+async def test_injected_role_service_publishes_role_deleted(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    session_manager = SessionManager(tmp_path)
+    role_service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+    )
+    role_service.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="You are Mira.",
+    )
+    event_bus = EventBus()
+    deleted_role_ids: list[str] = []
+    event_bus.on(RoleDeleted, lambda event: deleted_role_ids.append(event.role_id))
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(),
+        event_bus=event_bus,
+        role_service=role_service,
+    )
+
+    response = await service.handle(
+        {
+            "id": "delete-role-1",
+            "method": "roles.delete",
+            "payload": {"role_id": "mira"},
+        },
+        emit_event=Mock(),
+    )
+    await event_bus.drain()
+
+    assert response.error is None
+    assert deleted_role_ids == ["mira"]
+    await service.aclose()
 
 
 @pytest.mark.asyncio

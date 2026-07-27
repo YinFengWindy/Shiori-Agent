@@ -26,8 +26,10 @@ _RECENT_PRESETS = {
     "recent_30d": 30,
 }
 
+
 class RecallMemoryTool(Tool):
     name = "recall_memory"
+    context_precedence = frozenset({"role_id", "session_key", "channel", "chat_id"})
     description = "由当前 memory engine 的 tool_profile 注入工具描述。"
     parameters = {
         "type": "object",
@@ -56,6 +58,7 @@ class RecallMemoryTool(Tool):
         role_id: str | None = None,
         channel: str | None = None,
         chat_id: str | None = None,
+        session_key: str | None = None,
         **extra: Any,
     ) -> str:
         text = (query or "").strip()
@@ -63,14 +66,20 @@ class RecallMemoryTool(Tool):
             return _render_records([], trace={})
         time_window = _parse_time_filter(time_filter)
         if time_filter and time_window is None:
-            return json.dumps({"count": 0, "items": [], "error": "invalid_time_filter"}, ensure_ascii=False)
+            return json.dumps(
+                {"count": 0, "items": [], "error": "invalid_time_filter"},
+                ensure_ascii=False,
+            )
+        resolved_session_key = str(session_key or "").strip()
+        if not resolved_session_key and channel and chat_id:
+            resolved_session_key = f"{channel}:{chat_id}"
         result = await self._memory.query(
             MemoryQuery(
                 text=text,
                 intent=_normalize_intent(intent),
                 scope=MemoryScope(
                     role_id=str(role_id or "").strip(),
-                    session_key=f"{channel}:{chat_id}" if channel and chat_id else "",
+                    session_key=resolved_session_key,
                     channel=channel or "",
                     chat_id=chat_id or "",
                 ),
@@ -104,7 +113,9 @@ def _render_records(records: list[MemoryRecord], *, trace: dict[str, object]) ->
         if source_ref:
             item["source_ref"] = source_ref
         items.append(item)
-    cited_item_ids = [str(item["id"]) for item in items if str(item.get("id", "")).strip()]
+    cited_item_ids = [
+        str(item["id"]) for item in items if str(item.get("id", "")).strip()
+    ]
     return json.dumps(
         {
             "count": len(items),

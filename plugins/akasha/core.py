@@ -276,6 +276,7 @@ class AkashaNode:
     last_resource_ts: float
     embedding: np.ndarray
     emb_count: int
+    role_id: str = ""
 
 
 @dataclass(frozen=True)

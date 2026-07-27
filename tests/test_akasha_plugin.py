@@ -13,7 +13,8 @@ from unittest.mock import AsyncMock
 import pytest
 import numpy as np
 
-from bus.events_lifecycle import TurnCommitted
+from bus.event_bus import EventBus
+from bus.events_lifecycle import RoleDeleted, TurnCommitted
 from core.memory.engine import MemoryQuery, MemoryQueryIntent, MemoryScope
 from agent.plugins.context import PluginContext, PluginKVStore
 from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
@@ -269,6 +270,230 @@ def test_store_merges_user_and_assistant_into_turn_node(tmp_path: Path) -> None:
     assert nodes[0].key == "s:0"
     assert nodes[0].anchor_id == "s:0"
     assert nodes[0].emb_count == 2
+
+
+def test_store_keeps_role_salience_and_node_ownership_isolated(tmp_path: Path) -> None:
+    store = AkashaStore(tmp_path / "akasha.db")
+    try:
+        for role_id, vector in (("mira", [1.0, 0.0]), ("luna", [0.0, 1.0])):
+            message = SourceMessage(
+                f"role:{role_id}:0",
+                f"role:{role_id}",
+                0,
+                "user",
+                f"{role_id} 的记忆",
+                "2026-01-01T00:00:00+00:00",
+            )
+            store.upsert_cached_embedding(message=message, model="m", embedding=vector)
+            store.upsert_message_node(message, vector)
+        nodes = {node.key: node for node in store.list_nodes()}
+        salience_keys = {
+            str(row[0])
+            for row in store.db.execute("SELECT key FROM akasha_salience_state")
+        }
+    finally:
+        store.close()
+
+    assert nodes["role:mira:0"].role_id == "mira"
+    assert nodes["role:luna:0"].role_id == "luna"
+    assert salience_keys == {"role:mira", "role:luna"}
+
+
+def test_store_migrates_legacy_role_sessions_before_creating_role_indexes(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "akasha.db"
+    with closing(sqlite3.connect(str(db_path))) as db:
+        db.executescript(
+            """
+            CREATE TABLE akasha_query_log (
+                query_id TEXT PRIMARY KEY,
+                session_key TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                ts TEXT NOT NULL
+            );
+            CREATE TABLE akasha_nodes (
+                key TEXT PRIMARY KEY,
+                session_key TEXT NOT NULL,
+                turn_seq INTEGER NOT NULL
+            );
+            CREATE TABLE akasha_embedding_cache (
+                message_id TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                model TEXT NOT NULL,
+                PRIMARY KEY (message_id, model)
+            );
+            INSERT INTO akasha_nodes VALUES ('role:mira:0', 'role:mira', 0);
+            INSERT INTO akasha_query_log VALUES ('role:mira:0:context', 'role:mira', 0, 'now');
+            INSERT INTO akasha_embedding_cache VALUES ('role:mira:0', 'hash', 'm');
+            """
+        )
+        db.commit()
+
+    store = AkashaStore(db_path)
+    try:
+        role_ids = {
+            table: store.db.execute(f"SELECT role_id FROM {table}").fetchone()[0]
+            for table in (
+                "akasha_nodes",
+                "akasha_query_log",
+                "akasha_embedding_cache",
+            )
+        }
+    finally:
+        store.close()
+
+    assert role_ids == {
+        "akasha_nodes": "mira",
+        "akasha_query_log": "mira",
+        "akasha_embedding_cache": "mira",
+    }
+
+
+def test_role_snapshot_excludes_other_roles_from_nodes_edges_and_dense_cache(
+    tmp_path: Path,
+) -> None:
+    store = AkashaStore(tmp_path / "akasha.db")
+    try:
+        for role_id, vector in (("mira", [1.0, 0.0]), ("luna", [0.0, 1.0])):
+            message = SourceMessage(
+                f"role:{role_id}:0",
+                f"role:{role_id}",
+                0,
+                "user",
+                f"{role_id} 的记忆",
+                "2026-01-01T00:00:00+00:00",
+            )
+            store.upsert_cached_embedding(message=message, model="m", embedding=vector)
+            store.upsert_message_node(message, vector)
+        store.upsert_edges([EdgeUpdate("role:mira:0", "role:luna:0", 1.0, 0.0)])
+
+        engine = cast(Any, AkashaMemoryEngine.__new__(AkashaMemoryEngine))
+        engine._store = store
+        engine._config = SimpleNamespace(
+            memory=SimpleNamespace(embedding=SimpleNamespace(model="m"))
+        )
+        engine._session_db_path = tmp_path / "sessions.db"
+        engine._graph_lock = threading.RLock()
+        engine._nodes = {}
+        engine._edges = {}
+        engine._edges_meta = {}
+        engine._edges_by_src = {}
+        engine._fan = {}
+        engine._message_embeddings = {}
+        engine._message_turn_keys = {
+            "role:mira:0": "role:mira:0",
+            "role:luna:0": "role:luna:0",
+        }
+        engine._message_index = build_dense_message_index({})
+        engine._load_graph_cache()
+        engine._message_turn_keys = {
+            "role:mira:0": "role:mira:0",
+            "role:luna:0": "role:luna:0",
+        }
+
+        snapshot = engine._graph_snapshot_for_role("mira")
+    finally:
+        store.close()
+
+    assert set(snapshot.nodes) == {"role:mira:0"}
+    assert snapshot.edges == {}
+    assert set(snapshot.message_embeddings) == {"role:mira:0"}
+
+
+@pytest.mark.asyncio
+async def test_role_session_query_requires_matching_role_scope() -> None:
+    engine = cast(Any, AkashaMemoryEngine.__new__(AkashaMemoryEngine))
+
+    with pytest.raises(ValueError, match="requires role_id"):
+        await engine.query(
+            MemoryQuery(
+                text="记忆",
+                scope=MemoryScope(session_key="role:mira"),
+                timestamp=QUERY_TS,
+            )
+        )
+
+    with pytest.raises(ValueError, match="does not match"):
+        await engine.query(
+            MemoryQuery(
+                text="记忆",
+                scope=MemoryScope(role_id="luna", session_key="role:mira"),
+                timestamp=QUERY_TS,
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_role_deleted_event_purges_only_that_roles_akasha_state(tmp_path: Path) -> None:
+    store = AkashaStore(tmp_path / "akasha.db")
+    try:
+        for role_id, vector in (("mira", [1.0, 0.0]), ("luna", [0.0, 1.0])):
+            message = SourceMessage(
+                f"role:{role_id}:0",
+                f"role:{role_id}",
+                0,
+                "user",
+                f"{role_id} 的记忆",
+                "2026-01-01T00:00:00+00:00",
+            )
+            store.upsert_cached_embedding(message=message, model="m", embedding=vector)
+            store.upsert_message_node(message, vector)
+            store.insert_query_log(
+                query_id=f"role:{role_id}:0:context",
+                session_key=f"role:{role_id}",
+                role_id=role_id,
+                seq=0,
+                query_text="记忆",
+                intent="context",
+                ts="2026-01-01T00:00:00+00:00",
+                seed_count=1,
+                pool_count=1,
+                activated_count=0,
+                activation_threshold=0.2,
+                dense_count=1,
+                ripple_count=0,
+                inject_chars=0,
+                source_ref_count=1,
+                activation_items_json="[]",
+                dense_items_json="[]",
+                ripple_items_json="[]",
+                text_block_preview="",
+            )
+
+        engine = cast(Any, AkashaMemoryEngine.__new__(AkashaMemoryEngine))
+        engine._store = store
+        engine._config = SimpleNamespace(
+            memory=SimpleNamespace(embedding=SimpleNamespace(model="m"))
+        )
+        engine._session_db_path = tmp_path / "sessions.db"
+        engine._graph_lock = threading.RLock()
+        engine._nodes = {}
+        engine._edges = {}
+        engine._edges_meta = {}
+        engine._edges_by_src = {}
+        engine._fan = {}
+        engine._message_embeddings = {}
+        engine._message_turn_keys = {}
+        engine._pending_by_session = {}
+        engine._load_graph_cache()
+        event_bus = EventBus()
+        engine._event_bus = event_bus
+        engine._wire_events()
+
+        await event_bus.observe(RoleDeleted("mira"))
+
+        nodes = {node.key for node in store.list_nodes()}
+        mira_logs = store.list_query_logs(session_key="role:mira", page=1, page_size=10)[1]
+        luna_logs = store.list_query_logs(session_key="role:luna", page=1, page_size=10)[1]
+    finally:
+        store.close()
+
+    assert nodes == {"role:luna:0"}
+    assert mira_logs == 0
+    assert luna_logs == 1
+    assert "role:mira:0" not in engine._nodes
+    assert "role:luna:0" in engine._nodes
 
 
 def test_reset_schema_keeps_embedding_cache(tmp_path: Path) -> None:

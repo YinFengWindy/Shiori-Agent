@@ -393,7 +393,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     role_store.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "telegram", "chat_id": "123", "allow_from": []}
+            {"channel": "telegram", "chat_id": "123", "allow_from": ["1"]}
         ],
     )
     interrupt_controller = MagicMock()
@@ -810,8 +810,8 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     role_store.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "qq", "chat_id": "1", "allow_from": []},
-            {"channel": "qq", "chat_id": "gqq:100", "allow_from": []},
+            {"channel": "qq", "chat_id": "1", "allow_from": ["1"]},
+            {"channel": "qq", "chat_id": "gqq:100", "allow_from": ["1"]},
         ],
     )
     async def _request_get(url, **kwargs):
@@ -965,7 +965,7 @@ async def test_telegram_channel_routes_bound_inbound_to_role_session(
     role_store.update_role(
         "mira",
         channel_bindings=[
-            {"channel": "telegram", "chat_id": "123", "allow_from": []}
+            {"channel": "telegram", "chat_id": "123", "allow_from": ["1"]}
         ],
     )
 
