@@ -35,7 +35,6 @@ export function RoleDetailPage({
   activeRoleId,
   bridgeReady,
   previewAvatar,
-  chatBackgroundUrl,
   roleForm,
   roleFormDirty,
   savingRole,
@@ -71,9 +70,8 @@ export function RoleDetailPage({
   );
 
   return (
-    <section ref={pageRef} className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-[#17110f]" data-testid="role-detail-page" data-has-featured-image={chatBackgroundUrl ? "true" : "false"}>
-      {chatBackgroundUrl ? <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url("${chatBackgroundUrl}")` }} data-testid="role-illustration-hero" /> : <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#f8d4bf_0%,#d89270_44%,#6d473e_100%)]" data-testid="role-illustration-hero" />}
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,245,238,0.12),rgba(255,245,238,0.02)_42%,rgba(255,245,238,0.16))]" />
+    <section ref={pageRef} className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-white" data-testid="role-detail-page" data-has-featured-image="false">
+      <div className="absolute inset-0 bg-white" data-testid="role-illustration-hero" />
       <div className="relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-5 pb-8 pt-6 sm:px-8">
         <SpotlightCard className="rounded-[18px] border border-white/80 bg-[rgba(255,252,249,0.94)] p-4 shadow-[0_18px_48px_rgba(70,38,25,0.2)] backdrop-blur-md sm:p-7" spotlightColor="rgba(237, 155, 111, 0.18)">
           <div data-testid="role-detail-info-card">

@@ -30,6 +30,8 @@ describe("RoleDetailPage", () => {
     assert.match(markup, /渠道与主动推送/);
     assert.match(markup, /aria-current="page"[^>]*>.*资料/);
     assert.match(markup, /data-testid="edit-role-prompt"/);
+    assert.match(markup, /data-has-featured-image="false"/);
+    assert.match(markup, /resize-none overflow-hidden/);
     assert.doesNotMatch(markup, /data-testid="role-channel-config"/);
     assert.match(markup, /data-testid="save-role-button"/);
   });
