@@ -31,22 +31,9 @@ export function SettingsPageToolbar({
     <div className="mx-auto flex w-full flex-col gap-4 sm:flex-row sm:items-center">
       <div className="min-w-0 flex-1">
         {subsections.length ? (
-          <div className="relative max-w-full sm:max-w-[260px]">
-            <select
-              className="h-10 w-full appearance-none rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-3.5 pr-10 text-sm leading-5 text-[#1f1f1f] transition focus:border-[#D8DCE2] focus:outline-none focus-visible:border-[#D8DCE2] focus-visible:outline-none"
-              value={currentSubsectionId ?? ""}
-              onChange={(event) => onSubsectionChange(event.target.value)}
-            >
-              {subsections.map((item) => (
-                <option key={item.id} value={item.id}>{item.label}</option>
-              ))}
-            </select>
-            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[#737781]" aria-hidden="true">
-              <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 fill-current">
-                <path d="M2.2 4.2 6 8l3.8-3.8.8.8L6 9.8 1.4 5z" />
-              </svg>
-            </span>
-          </div>
+          <nav className="scrollbar-soft flex max-w-full gap-1 overflow-x-auto" aria-label="设置子区">
+            {subsections.map((item) => <button className={cx("h-9 shrink-0 rounded-md px-3 text-sm transition focus:outline-none focus:ring-2 focus:ring-primary/20", item.id === currentSubsectionId ? "bg-[#EEF4FA] font-medium text-[#1D5F9E]" : "text-[#667085] hover:bg-[#F5F7FA] hover:text-[#182230]")} key={item.id} type="button" aria-current={item.id === currentSubsectionId ? "page" : undefined} onClick={() => onSubsectionChange(item.id)}>{item.label}</button>)}
+          </nav>
         ) : null}
       </div>
       <div className="flex items-center gap-2.5">

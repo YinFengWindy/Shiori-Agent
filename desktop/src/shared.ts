@@ -47,18 +47,6 @@ export type VoiceInputDevice = {
   label: string;
 };
 
-/** Result of creating a provider voice asset through the trusted main process. */
-export type VoiceCloneResult = {
-  ok: boolean;
-  canceled?: boolean;
-  provider?: string;
-  ownership?: "shiori_managed";
-  voiceId?: string;
-  audioBase64?: string;
-  format?: "mp3";
-  error?: string;
-};
-
 export type VoiceCaptureCommand =
   | "stop"
   | "cancel"
@@ -240,10 +228,6 @@ export type DesktopApi = {
   stopVoiceTest(): Promise<void>;
   /** Cancels an active or still-starting microphone test without playback. */
   cancelVoiceTest(): Promise<void>;
-  /** Opens the native picker and clones one transient voice sample through the bridge. */
-  cloneVoice(): Promise<VoiceCloneResult>;
-  /** Plays a provider-generated voice preview through the hidden audio surface. */
-  playVoicePreview(audioBase64: string): Promise<void>;
   /** Controls the custom frameless Electron window chrome. */
   windowControl(action: WindowControlAction): Promise<void>;
   /** Returns the current custom window state used by the frameless title bar. */

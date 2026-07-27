@@ -1,4 +1,5 @@
 import type React from "react";
+import { Brain, ChatCircleDots, GearSix, Microphone, PlugsConnected } from "@phosphor-icons/react";
 import { cx, inputClass, secondarySidebarSurfaceClass } from "../shared/styles";
 
 export type SettingsSectionId =
@@ -17,6 +18,8 @@ export const settingsSections: Array<{ id: SettingsSectionId; label: string }> =
   { id: "voice", label: "语音" },
   { id: "advanced", label: "高级" },
 ];
+
+const settingsSectionIcons = { models: Brain, channels: ChatCircleDots, memory: Brain, integrations: PlugsConnected, voice: Microphone, advanced: GearSix } as const;
 
 type SettingsSidebarProps = {
   activeSection: SettingsSectionId;
@@ -81,8 +84,9 @@ export function SettingsSidebar({
       />
       <nav className="scrollbar-soft grid min-h-0 content-start gap-4 overflow-y-auto pr-0">
         <div className="grid gap-1">
-          {visibleSections.map((section) => (
-            <button
+          {visibleSections.map((section) => {
+            const Icon = settingsSectionIcons[section.id];
+            return <button
               key={section.id}
               className={cx(
                 sidebarActionClass,
@@ -91,10 +95,10 @@ export function SettingsSidebar({
               type="button"
               onClick={() => onOpenSection(section.id)}
             >
-              <span>{section.label}</span>
+              <span className="inline-flex items-center gap-2"><Icon className="h-4 w-4 text-[#7B8794]" weight="duotone" aria-hidden="true" />{section.label}</span>
               {dirty && activeSection === section.id ? <span className="h-2.5 w-2.5 rounded-full bg-[#2176FF]" /> : null}
             </button>
-          ))}
+          })}
         </div>
       </nav>
       <div

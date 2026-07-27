@@ -296,7 +296,7 @@ export function registerDesktopIpc({
     const petWindow = BrowserWindow.fromWebContents(event.sender);
     if (petWindow && desktopPet.isPetWindow(petWindow)) onShowPetContextMenu(petWindow);
   });
-  registerVoiceIpc({ bridge, desktopPet, voiceRecorder, voiceController, voicePlayback });
+  registerVoiceIpc({ desktopPet, voiceRecorder, voiceController, voicePlayback });
   ipcMain.handle("desktop:pick-chat-attachments", async (_event: IpcMainInvokeEvent, options?: { multiple?: boolean }) => {
     const result = await dialog.showOpenDialog({
       properties: options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],

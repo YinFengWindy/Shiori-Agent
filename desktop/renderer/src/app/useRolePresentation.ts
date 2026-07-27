@@ -6,7 +6,6 @@ import type {
   RoleRecord,
   SessionPayload,
 } from "../shared/types";
-import { abandonTemporaryVoiceAsset } from "../roles/temporaryVoiceAsset";
 
 type MutableValue<T> = { current: T };
 
@@ -19,7 +18,6 @@ type UseRolePresentationArgs = {
   setSelectedAvatarAsset: React.Dispatch<React.SetStateAction<string>>;
   setSelectedChatBackground: React.Dispatch<React.SetStateAction<string>>;
   updateRoleForm: (next: React.SetStateAction<RoleFormState>) => void;
-  onTemporaryVoiceAbandonError?: (error: unknown) => void;
 };
 
 /** Selects a valid illustration using session, persisted fallback, then role background priority. */
@@ -50,7 +48,6 @@ export function useRolePresentation({
   setSelectedAvatarAsset,
   setSelectedChatBackground,
   updateRoleForm,
-  onTemporaryVoiceAbandonError,
 }: UseRolePresentationArgs) {
   function applyRoleSnapshot(role: RoleRecord, sessionOverride: SessionPayload | null = null): void {
     setActiveRoleId(role.id);
@@ -60,11 +57,6 @@ export function useRolePresentation({
       (currentView.kind === "role-detail" || currentView.kind === "role-assets")
       && currentView.roleId === role.id;
     if (!sameRoleWorkspace || !isRoleFormDirty(roleFormRef.current, role)) {
-      if (roleFormRef.current.temporaryVoiceAsset) {
-        void abandonTemporaryVoiceAsset(roleFormRef.current.temporaryVoiceAsset).catch((error) => {
-          onTemporaryVoiceAbandonError?.(error);
-        });
-      }
       updateRoleForm(createRoleFormFromRole(role));
     }
     setSelectedAvatarAsset(role.avatar ?? "");

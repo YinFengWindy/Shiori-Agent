@@ -9,7 +9,6 @@ import { writeRoleVoiceConfigToRuntimeConfig } from "../roles/roleVoiceConfig";
 
 type UseRoleManagementArgs = {
   activeRoleId: string;
-  roles: RoleRecord[];
   detailRoleId: string;
   detailRole: RoleRecord | null;
   activeIllustration: string;
@@ -62,7 +61,6 @@ async function waitForMinimumRoleCardBusy(startedAt: number): Promise<void> {
 /** Owns role CRUD and role asset operations so the root app only composes them. */
 export function useRoleManagement({
   activeRoleId,
-  roles,
   detailRoleId,
   detailRole,
   activeIllustration,
@@ -248,7 +246,6 @@ export function useRoleManagement({
       illustrationSources: [],
       removedIllustrations: [],
       pendingVoiceAssetDeletes: [],
-      temporaryVoiceAsset: null,
     }));
     await openRole(updated.id, resolvedRole, { recordHistory: false });
     setSavingRole(false);
