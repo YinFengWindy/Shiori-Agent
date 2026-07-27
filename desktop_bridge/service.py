@@ -29,18 +29,22 @@ from core.roles import (
 )
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.app_service import DesktopAppService
+from desktop_bridge.chat_requests import DesktopChatRequestHandler
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
+from desktop_bridge.image_requests import DesktopImageRequestHandler
 from desktop_bridge.image_service import DesktopImageService
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
+from desktop_bridge.request_router import DesktopBridgeRequestRouter
+from desktop_bridge.role_requests import DesktopRoleRequestHandler
 from agent.screen_observation.service import ScreenObservationService
 from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
+from desktop_bridge.session_task_requests import DesktopSessionTaskRequestHandler
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from desktop_bridge.voice_handler import DesktopVoiceHandler
 from desktop_bridge.world_simulation_handler import WorldSimulationHandler
 from agent.voice_config import VoiceConfig
 from desktop_bridge.voice_service import VoiceService, VoiceServiceError
-from infra.channels.reply_context import build_inbound_text_with_reply_context
 from session.manager import Session, SessionManager
 
 logger = logging.getLogger("desktop.bridge")
@@ -178,6 +182,41 @@ class DesktopBridgeService:
             role_store=role_store,
         )
         self.observation_service = observation_service
+        self.request_router = DesktopBridgeRequestRouter(
+            roles=DesktopRoleRequestHandler(
+                role_service=self.role_service,
+                role_store=role_store,
+                pet_packages=self.pet_packages,
+                role_presenter=self.role_presenter,
+                voice_handler=self.voice_handler,
+            ),
+            sessions_and_tasks=DesktopSessionTaskRequestHandler(
+                app_service=self.app_service,
+                role_service=self.role_service,
+                role_tasks=self.role_tasks,
+                session_presenter=self.session_presenter,
+                emit_session_updated=self._emit_session_updated,
+                emit_tasks_updated=self._emit_role_tasks_updated,
+                schedule_task_fields=self._schedule_task_fields,
+            ),
+            chat=DesktopChatRequestHandler(
+                role_service=self.role_service,
+                app_service=self.app_service,
+                chat_service=self.chat_service,
+                start_chat_turn=lambda **kwargs: self._start_chat_turn(**kwargs),
+                session_presenter=self.session_presenter,
+                agent_loop=agent_loop,
+                sanitize_voice_metrics=_sanitize_voice_metrics,
+            ),
+            images=DesktopImageRequestHandler(
+                image_service=self.image_service,
+                session_presenter=self.session_presenter,
+                emit_session_updated=self._emit_session_updated,
+            ),
+            voice=self.voice_handler,
+            worlds=self.world_simulation,
+            observation=observation_service,
+        )
         if push_tool is not None:
             self.register_desktop_push_channel(push_tool)
 
@@ -298,561 +337,6 @@ class DesktopBridgeService:
             chat_id,
             message=message,
             media=media,
-        )
-
-    def _build_desktop_user_message_metadata(
-        self,
-        metadata: dict[str, object] | None,
-    ) -> dict[str, object]:
-        return self.app_service.build_desktop_user_message_metadata(metadata)
-
-    async def _persist_desktop_user_message(
-        self,
-        *,
-        session: Session,
-        role_id: str,
-        content: str,
-        media: list[str],
-        metadata: dict[str, object] | None,
-    ) -> Session:
-        return await self.app_service.persist_desktop_user_message(
-            session=session,
-            role_id=role_id,
-            content=content,
-            media=media,
-            metadata=metadata,
-        )
-
-    async def handle(
-        self,
-        request: dict[str, Any],
-        *,
-        emit_event,
-    ) -> BridgeResponse:
-        request_id = str(request.get("id") or "").strip() or "bridge-request"
-        method = str(request.get("method") or "").strip()
-        payload = (
-            request.get("payload") if isinstance(request.get("payload"), dict) else {}
-        )
-        self.start_background_tasks()
-
-        try:
-            if method == "observation.analyze":
-                if self.observation_service is None:
-                    raise RuntimeError("desktop observation service unavailable")
-                return self._ok(
-                    request_id,
-                    method,
-                    await self.observation_service.analyze(payload),
-                )
-            if method == "observation.remember":
-                if self.observation_service is None:
-                    raise RuntimeError("desktop observation service unavailable")
-                return self._ok(
-                    request_id,
-                    method,
-                    await self.observation_service.remember(payload),
-                )
-            world_result = self.world_simulation.handle(
-                method,
-                payload,
-                request_id=request_id,
-            )
-            if world_result is not None:
-                return self._ok(request_id, method, world_result)
-            if method == "health":
-                return self._ok(request_id, method, {"ok": True})
-            voice_payload = await self.voice_handler.handle(method, payload)
-            if voice_payload is not None:
-                return self._ok(request_id, method, voice_payload)
-            if method == "roles.list":
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "roles": [
-                            self.role_presenter.serialize(role)
-                            for role in self.role_service.repository.list_roles()
-                        ]
-                    },
-                )
-            if method == "roles.create":
-                avatar_source = str(payload.get("avatar_source") or "").strip() or None
-                raw_illustrations = payload.get("illustration_sources")
-                illustration_sources = (
-                    [str(item) for item in raw_illustrations if str(item).strip()]
-                    if isinstance(raw_illustrations, list)
-                    else None
-                )
-                aggregate = await self.role_service.create_role_async(
-                    role_id=str(payload.get("role_id") or "").strip() or None,
-                    name=str(payload.get("name") or ""),
-                    description=str(payload.get("description") or ""),
-                    system_prompt=str(payload.get("system_prompt") or ""),
-                    background=str(payload.get("background") or ""),
-                    runtime_config=(
-                        dict(payload.get("runtime_config"))
-                        if isinstance(payload.get("runtime_config"), dict)
-                        else None
-                    ),
-                    avatar_source=avatar_source,
-                    illustration_sources=illustration_sources,
-                )
-                return self._ok(
-                    request_id,
-                    method,
-                    {"role": self.role_presenter.serialize(aggregate.role)},
-                )
-            if method == "roles.update":
-                avatar_source = str(payload.get("avatar_source") or "").strip() or None
-                avatar_asset = str(payload.get("avatar_asset") or "").strip() or None
-                raw_illustrations = payload.get("illustration_sources")
-                illustration_sources = (
-                    [str(item) for item in raw_illustrations if str(item).strip()]
-                    if isinstance(raw_illustrations, list)
-                    else None
-                )
-                raw_removed_illustrations = payload.get("removed_illustrations")
-                removed_illustrations = (
-                    [
-                        str(item)
-                        for item in raw_removed_illustrations
-                        if str(item).strip()
-                    ]
-                    if isinstance(raw_removed_illustrations, list)
-                    else None
-                )
-                chat_background = (
-                    str(payload.get("chat_background") or "").strip() or None
-                )
-                raw_asset_categories = payload.get("asset_categories")
-                asset_categories = (
-                    [
-                        dict(item)
-                        for item in raw_asset_categories
-                        if isinstance(item, dict)
-                    ]
-                    if isinstance(raw_asset_categories, list)
-                    else None
-                )
-                raw_asset_category_bindings = payload.get("asset_category_bindings")
-                asset_category_bindings = (
-                    {
-                        str(path): str(category_id)
-                        for path, category_id in raw_asset_category_bindings.items()
-                    }
-                    if isinstance(raw_asset_category_bindings, dict)
-                    else None
-                )
-                role_id = str(payload.get("role_id") or "")
-                previous = self.role_service.repository.get_required(role_id)
-                previous_runtime_config = dict(previous.runtime_config)
-                aggregate = await self.role_service.update_role_async(
-                    role_id,
-                    name=payload.get("name"),
-                    description=payload.get("description"),
-                    system_prompt=payload.get("system_prompt"),
-                    background=payload.get("background"),
-                    runtime_config=(
-                        dict(payload.get("runtime_config"))
-                        if isinstance(payload.get("runtime_config"), dict)
-                        else None
-                    ),
-                    channel_bindings=(
-                        list(payload.get("channel_bindings"))
-                        if isinstance(payload.get("channel_bindings"), list)
-                        else None
-                    ),
-                    proactive=(
-                        dict(payload.get("proactive"))
-                        if isinstance(payload.get("proactive"), dict)
-                        else None
-                    ),
-                    avatar_source=avatar_source,
-                    avatar_asset=avatar_asset,
-                    chat_background=chat_background,
-                    clear_chat_background=bool(payload.get("clear_chat_background")),
-                    clear_avatar=bool(payload.get("clear_avatar")),
-                    illustration_sources=illustration_sources,
-                    illustration_category_id=(
-                        str(payload.get("illustration_category_id") or "").strip()
-                        or None
-                    ),
-                    removed_illustrations=removed_illustrations,
-                    clear_illustrations=bool(payload.get("clear_illustrations")),
-                    asset_categories=asset_categories,
-                    asset_category_bindings=asset_category_bindings,
-                    desktop_pet_enabled=(
-                        bool(payload.get("desktop_pet_enabled"))
-                        if isinstance(payload.get("desktop_pet_enabled"), bool)
-                        else None
-                    ),
-                )
-                await self.voice_handler.reconcile_role_update(
-                    previous_runtime_config,
-                    aggregate.role.runtime_config,
-                )
-                return self._ok(
-                    request_id,
-                    method,
-                    {"role": self.role_presenter.serialize(aggregate.role)},
-                )
-            if method == "roles.delete":
-                role_id = str(payload.get("role_id") or "").strip()
-                role = self.role_service.repository.get_required(role_id)
-                deleted, session_deleted = self.role_service.delete_role(role_id)
-                if deleted:
-                    await self.voice_handler.retire_deleted_role(role.runtime_config)
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "deleted": deleted,
-                        "session_deleted": session_deleted,
-                    },
-                )
-            if method == "roles.pets.import":
-                role_id = str(payload.get("role_id") or "").strip()
-                source = str(payload.get("source") or "").strip()
-                package = self.pet_packages.import_package(role_id, source)
-                role = self.role_store.get_role(role_id)
-                if role is None:
-                    raise KeyError(f"role 不存在: {role_id}")
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "package": package.to_dict(),
-                        "role": self.role_presenter.serialize(role),
-                    },
-                )
-            if method == "roles.pets.remove":
-                role_id = str(payload.get("role_id") or "").strip()
-                package_id = str(payload.get("package_id") or "").strip()
-                self.pet_packages.remove_package(role_id, package_id)
-                role = self.role_store.get_role(role_id)
-                if role is None:
-                    raise KeyError(f"role 不存在: {role_id}")
-                return self._ok(
-                    request_id,
-                    method,
-                    {"role": self.role_presenter.serialize(role)},
-                )
-            if method == "roles.pets.select":
-                role_id = str(payload.get("role_id") or "").strip()
-                package_id = str(payload.get("package_id") or "").strip()
-                role = self.pet_packages.select_package(role_id, package_id)
-                return self._ok(
-                    request_id,
-                    method,
-                    {"role": self.role_presenter.serialize(role)},
-                )
-            if method == "session.openByRole":
-                role_id = str(payload.get("role_id") or "").strip()
-                aggregate = await self.app_service.open_role_session(role_id)
-                session = aggregate.session
-                await self._emit_session_updated(
-                    request_id=request_id,
-                    session=session,
-                    emit_event=emit_event,
-                )
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "session": self.session_presenter.serialize(session),
-                    },
-                )
-            if method == "session.updateDisplayState":
-                role_id = str(payload.get("role_id") or "").strip()
-                active_illustration = payload.get("active_illustration")
-                session = await self.app_service.update_display_state(
-                    role_id,
-                    active_illustration=(
-                        str(active_illustration) if active_illustration else None
-                    ),
-                )
-                await self._emit_session_updated(
-                    request_id=request_id,
-                    session=session,
-                    emit_event=emit_event,
-                )
-                return self._ok(
-                    request_id,
-                    method,
-                    {"session": self.session_presenter.serialize(session)},
-                )
-            if method == "roles.tasks.list":
-                role_id = str(payload.get("role_id") or "").strip()
-                self.role_service.repository.get_required(role_id)
-                return self._ok(
-                    request_id,
-                    method,
-                    {"tasks": self.role_tasks.list_tasks(role_id)},
-                )
-            if method == "roles.tasks.create":
-                role_id = str(payload.get("role_id") or "").strip()
-                self.role_service.repository.get_required(role_id)
-                task = self.role_tasks.create_schedule_task(
-                    role_id,
-                    **self._schedule_task_fields(payload),
-                )
-                await self._emit_role_tasks_updated(
-                    request_id=request_id,
-                    role_id=role_id,
-                    emit_event=emit_event,
-                )
-                return self._ok(request_id, method, {"task": task})
-            if method == "roles.tasks.update":
-                role_id = str(payload.get("role_id") or "").strip()
-                task_id = str(payload.get("task_id") or "").strip()
-                self.role_service.repository.get_required(role_id)
-                if not task_id:
-                    raise ValueError("task_id 不能为空")
-                task = self.role_tasks.update_schedule_task(
-                    role_id,
-                    task_id,
-                    **self._schedule_task_fields(payload),
-                )
-                await self._emit_role_tasks_updated(
-                    request_id=request_id,
-                    role_id=role_id,
-                    emit_event=emit_event,
-                )
-                return self._ok(request_id, method, {"task": task})
-            if method == "roles.tasks.cancel":
-                role_id = str(payload.get("role_id") or "").strip()
-                task_id = str(payload.get("task_id") or "").strip()
-                self.role_service.repository.get_required(role_id)
-                if not task_id:
-                    raise ValueError("task_id 不能为空")
-                tasks = await self.role_tasks.cancel_task(role_id, task_id)
-                await self._emit_role_tasks_updated(
-                    request_id=request_id,
-                    role_id=role_id,
-                    emit_event=emit_event,
-                )
-                return self._ok(request_id, method, {"tasks": tasks})
-            if method == "chat.send":
-                role_id = str(payload.get("role_id") or "").strip()
-                content = str(payload.get("content") or "").strip()
-                raw_media = payload.get("media")
-                media = (
-                    [str(item).strip() for item in raw_media if str(item).strip()]
-                    if isinstance(raw_media, list)
-                    else []
-                )
-                reply_to_message_id = str(
-                    payload.get("reply_to_message_id") or ""
-                ).strip()
-                reply_to_content = str(payload.get("reply_to_content") or "").strip()
-                reply_to_sender = str(payload.get("reply_to_sender") or "").strip()
-                client_message_id = str(payload.get("client_message_id") or "").strip()
-                input_method = str(payload.get("input_method") or "").strip()
-                if not content and not media:
-                    return self._error(
-                        request_id,
-                        method,
-                        "invalid_request",
-                        "content 和 media 不能同时为空",
-                    )
-                aggregate = await self.role_service.open_role_async(role_id)
-                session = aggregate.session
-                if self.chat_service.is_busy(session.key):
-                    return self._error(
-                        request_id,
-                        method,
-                        "chat_busy",
-                        "当前会话已有正在执行的聊天任务",
-                    )
-                inbound_content = content
-                persisted_user_content = content
-                metadata: dict[str, object] = {}
-                metadata["request_id"] = request_id
-                metadata["delivery_key"] = request_id
-                if client_message_id:
-                    metadata["client_message_id"] = client_message_id
-                if input_method == "voice":
-                    metadata["input_method"] = "voice"
-                    voice_turn_id = str(payload.get("voice_turn_id") or "").strip()
-                    if voice_turn_id:
-                        metadata["voice_turn_id"] = voice_turn_id
-                    asr_metrics = _sanitize_voice_metrics(payload.get("asr_metrics"))
-                    if asr_metrics is not None:
-                        metadata["asr_metrics"] = asr_metrics
-                    for key in ("asr_provider", "asr_request_id"):
-                        value = str(payload.get(key) or "").strip()
-                        if value:
-                            metadata[key] = value
-                    asr_duration_ms = payload.get("asr_duration_ms")
-                    if (
-                        isinstance(asr_duration_ms, (int, float))
-                        and asr_duration_ms >= 0
-                    ):
-                        metadata["asr_duration_ms"] = asr_duration_ms
-                    audio_duration_ms = payload.get("audio_duration_ms")
-                    if (
-                        isinstance(audio_duration_ms, (int, float))
-                        and audio_duration_ms >= 0
-                    ):
-                        metadata["audio_duration_ms"] = audio_duration_ms
-                if reply_to_message_id:
-                    metadata["reply_to_message_id"] = reply_to_message_id
-                if reply_to_sender:
-                    metadata["reply_to_sender"] = reply_to_sender
-                if reply_to_content:
-                    metadata["reply_to_content"] = reply_to_content
-                    metadata["persisted_user_content"] = content
-                    inbound_content = build_inbound_text_with_reply_context(
-                        user_text=content,
-                        reply_text=reply_to_content,
-                        reply_sender=reply_to_sender,
-                    )
-                metadata = self.app_service.build_desktop_user_message_metadata(
-                    metadata,
-                    role_id=aggregate.role.id,
-                    chat_id=session.key,
-                )
-                await self._persist_desktop_user_message(
-                    session=session,
-                    role_id=aggregate.role.id,
-                    content=persisted_user_content,
-                    media=media,
-                    metadata=metadata,
-                )
-                self._start_chat_turn(
-                    request_id=request_id,
-                    session_key=session.key,
-                    content=inbound_content,
-                    media=media,
-                    metadata=metadata,
-                    omit_user_turn=True,
-                    emit_event=emit_event,
-                )
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "session": self.session_presenter.serialize(session),
-                        "events": [],
-                    },
-                )
-            if method == "chat.cancel":
-                role_id = str(payload.get("role_id") or "").strip()
-                aggregate = await self.role_service.open_role_async(role_id)
-                result = self.agent_loop.request_interrupt(
-                    self.role_service.sessions.derive_session_key(aggregate.role.id),
-                    sender="desktop",
-                    command="/cancel",
-                )
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "status": result.status,
-                        "message": result.message,
-                        "session_key": result.session_key,
-                    },
-                )
-            if method == "novelai.generate":
-                result = await self.image_service.generate(payload)
-                return self._ok(
-                    request_id,
-                    method,
-                    {"result": result},
-                )
-            if method == "novelai.regenerateMessageMedia":
-                result, session = await self.image_service.regenerate_message_media(
-                    payload
-                )
-                await self._emit_session_updated(
-                    request_id=request_id,
-                    session=session,
-                    emit_event=emit_event,
-                )
-                return self._ok(
-                    request_id,
-                    method,
-                    {
-                        "result": result,
-                        "session": self.session_presenter.serialize(session),
-                    },
-                )
-            if method == "novelai.history":
-                records = self.image_service.history(payload)
-                return self._ok(
-                    request_id,
-                    method,
-                    {"records": records},
-                )
-            if method == "novelai.prompt_tags.list":
-                return self._ok(
-                    request_id,
-                    method,
-                    {"entries": self.image_service.prompt_tags_list()},
-                )
-            if method == "novelai.prompt_tags.upsert":
-                return self._ok(
-                    request_id,
-                    method,
-                    {"entry": self.image_service.prompt_tags_upsert(payload)},
-                )
-            if method == "novelai.prompt_tags.delete":
-                self.image_service.prompt_tags_delete(payload)
-                return self._ok(request_id, method, {})
-        except KeyError as exc:
-            return self._error(request_id, method, "role_not_found", str(exc))
-        except VoiceServiceError as exc:
-            metrics = getattr(exc, "metrics", None)
-            details = {"metrics": metrics.to_dict()} if metrics is not None else {}
-            if metrics is not None:
-                logger.warning(
-                    "voice request failed method=%s provider=%s request_id=%s error_code=%s elapsed_ms=%d audio_duration_ms=%d characters=%d",
-                    method,
-                    metrics.provider,
-                    metrics.request_id,
-                    metrics.error_code,
-                    metrics.elapsed_ms,
-                    metrics.audio_duration_ms,
-                    metrics.character_count,
-                )
-            return self._error(
-                request_id,
-                method,
-                "voice_service_error",
-                str(exc),
-                details=details,
-            )
-        except ValueError as exc:
-            return self._error(request_id, method, "invalid_request", str(exc))
-        except ChatTurnBusyError as exc:
-            return self._error(request_id, method, "chat_busy", str(exc))
-        except Exception as exc:
-            return self._error(request_id, method, "internal_error", str(exc))
-
-        return self._error(
-            request_id, method, "unknown_method", f"unknown method: {method}"
-        )
-
-    async def _run_chat_turn(
-        self,
-        *,
-        request_id: str,
-        session_key: str,
-        content: str,
-        media: list[str],
-        metadata: dict[str, object] | None,
-        omit_user_turn: bool,
-        emit_event,
-    ) -> tuple[Session, list[BridgeEvent]]:
-        return await self.chat_service.run_chat_turn(
-            request_id=request_id,
-            session_key=session_key,
-            content=content,
-            media=media,
-            metadata=metadata,
-            omit_user_turn=omit_user_turn,
-            emit_event=emit_event,
         )
 
     def _start_chat_turn(
@@ -1003,3 +487,59 @@ class DesktopBridgeService:
         except Exception:
             return None
         return LlmRoleSelfSeedGenerator(provider=provider, model=self.config.model)
+
+    async def handle(
+        self,
+        request: dict[str, Any],
+        *,
+        emit_event,
+    ) -> BridgeResponse:
+        """Runs one RPC through the domain router and preserves bridge error codes."""
+
+        request_id = str(request.get("id") or "").strip() or "bridge-request"
+        method = str(request.get("method") or "").strip()
+        payload = (
+            request.get("payload") if isinstance(request.get("payload"), dict) else {}
+        )
+        self.start_background_tasks()
+        try:
+            result = await self.request_router.dispatch(
+                method,
+                payload,
+                request_id=request_id,
+                emit_event=emit_event,
+            )
+            if result is not None:
+                return self._ok(request_id, method, result)
+        except KeyError as exc:
+            return self._error(request_id, method, "role_not_found", str(exc))
+        except VoiceServiceError as exc:
+            metrics = getattr(exc, "metrics", None)
+            details = {"metrics": metrics.to_dict()} if metrics is not None else {}
+            if metrics is not None:
+                logger.warning(
+                    "voice request failed method=%s provider=%s request_id=%s error_code=%s elapsed_ms=%d audio_duration_ms=%d characters=%d",
+                    method,
+                    metrics.provider,
+                    metrics.request_id,
+                    metrics.error_code,
+                    metrics.elapsed_ms,
+                    metrics.audio_duration_ms,
+                    metrics.character_count,
+                )
+            return self._error(
+                request_id,
+                method,
+                "voice_service_error",
+                str(exc),
+                details=details,
+            )
+        except ValueError as exc:
+            return self._error(request_id, method, "invalid_request", str(exc))
+        except ChatTurnBusyError as exc:
+            return self._error(request_id, method, "chat_busy", str(exc))
+        except Exception as exc:
+            return self._error(request_id, method, "internal_error", str(exc))
+        return self._error(
+            request_id, method, "unknown_method", f"unknown method: {method}"
+        )
