@@ -46,7 +46,7 @@ export function RoleDetailPage({
   const pageRef = useRef<HTMLElement | null>(null);
   const pendingScrollTopRef = useRef<number | null>(null);
   const [activeTab, setActiveTab] = useState<RoleDetailTabId>("profile");
-  const floatingActionClass = "grid h-10 w-10 place-items-center rounded-full border border-white/35 bg-white/88 text-[#36231b] shadow-[0_8px_24px_rgba(15,23,42,0.16)] transition hover:bg-white disabled:cursor-default disabled:border-white/20 disabled:bg-white/45 disabled:text-white/55 disabled:shadow-none";
+  const floatingActionClass = "grid h-10 w-10 place-items-center rounded-full border border-[#e2d7d0] bg-white text-[#36231b] shadow-[0_6px_16px_rgba(71,42,29,0.1)] transition hover:border-[#c9aca0] hover:bg-[#fffaf7] disabled:cursor-not-allowed disabled:border-[#d9d0cb] disabled:bg-[#f0ece9] disabled:text-[#aaa09b] disabled:opacity-100 disabled:shadow-none";
 
   useLayoutEffect(() => {
     pendingScrollTopRef.current = restoreRoleDetailScrollTop(pageRef.current, pendingScrollTopRef.current);

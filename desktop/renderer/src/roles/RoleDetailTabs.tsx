@@ -1,4 +1,3 @@
-import { motion } from "motion/react";
 import { cx } from "../shared/styles";
 
 export type RoleDetailTabId = "profile" | "capabilities" | "delivery";
@@ -18,22 +17,21 @@ export function RoleDetailTabs({
   onChange: (tab: RoleDetailTabId) => void;
 }) {
   return (
-    <nav className="flex w-full items-center gap-1 overflow-x-auto rounded-md bg-[#f4ebe5] p-1" aria-label="角色详情分区">
+    <nav className="flex min-w-0 items-center gap-6 overflow-x-auto" aria-label="角色详情分区">
       {tabs.map((tab) => {
         const selected = activeTab === tab.id;
         return (
           <button
             className={cx(
-              "relative min-h-9 shrink-0 rounded-md px-3.5 text-sm transition-colors focus:outline-none",
-              selected ? "text-[#38231a]" : "text-[#76665e] hover:bg-white/65 hover:text-[#38231a]",
+              "h-10 shrink-0 border-b-2 px-1 text-sm transition-colors focus:outline-none",
+              selected ? "border-[#a85d38] font-medium text-[#38231a]" : "border-transparent text-[#89766d] hover:text-[#38231a]",
             )}
             key={tab.id}
             type="button"
             aria-current={selected ? "page" : undefined}
             onClick={() => onChange(tab.id)}
           >
-            {selected ? <motion.span layoutId="role-detail-active-tab" className="absolute inset-0 rounded-md bg-white shadow-[0_1px_5px_rgba(77,44,29,0.12)]" transition={{ type: "spring", stiffness: 420, damping: 32 }} /> : null}
-            <span className="relative">{tab.label}</span>
+            {tab.label}
           </button>
         );
       })}
