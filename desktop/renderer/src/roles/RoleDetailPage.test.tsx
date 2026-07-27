@@ -59,6 +59,6 @@ describe("RoleDetailPage", () => {
     );
 
     assert.match(markup, /data-testid="save-role-button"[^>]*disabled=""/);
-    assert.match(markup, /disabled:bg-\[#f0ece9\]/);
+    assert.match(markup, /disabled:bg-\[#F3F4F6\]/);
   });
 });

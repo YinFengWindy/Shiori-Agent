@@ -46,7 +46,7 @@ export function RoleDetailPage({
   const pageRef = useRef<HTMLElement | null>(null);
   const pendingScrollTopRef = useRef<number | null>(null);
   const [activeTab, setActiveTab] = useState<RoleDetailTabId>("profile");
-  const floatingActionClass = "grid h-10 w-10 place-items-center rounded-full border border-[#e2d7d0] bg-white text-[#36231b] shadow-[0_6px_16px_rgba(71,42,29,0.1)] transition hover:border-[#c9aca0] hover:bg-[#fffaf7] disabled:cursor-not-allowed disabled:border-[#d9d0cb] disabled:bg-[#f0ece9] disabled:text-[#aaa09b] disabled:opacity-100 disabled:shadow-none";
+  const floatingActionClass = "grid h-10 w-10 place-items-center rounded-full border border-[#E5E7EB] bg-white text-[#1F2937] shadow-[0_6px_16px_rgba(15,23,42,0.08)] transition hover:border-[#CBD5E1] hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:border-[#E5E7EB] disabled:bg-[#F3F4F6] disabled:text-[#9CA3AF] disabled:opacity-100 disabled:shadow-none";
 
   useLayoutEffect(() => {
     pendingScrollTopRef.current = restoreRoleDetailScrollTop(pageRef.current, pendingScrollTopRef.current);
@@ -72,7 +72,7 @@ export function RoleDetailPage({
     <section ref={pageRef} className="role-detail-page scrollbar-soft scrollbar-soft-accent relative h-full overflow-y-auto bg-white" data-testid="role-detail-page" data-has-featured-image="false">
       <div className="relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col px-5 pb-8 pt-6 sm:px-8">
         <div data-testid="role-detail-info-card">
-          <div className="mb-6 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#eaded6] pb-4">
+          <div className="mb-6 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#E5E7EB] pb-4">
             <button className={cx(floatingActionClass, "hover:-translate-x-0.5")} data-testid="role-detail-back-button" type="button" onClick={onBackToList} aria-label="返回角色列表"><BackIcon className="h-5 w-5 fill-current" /></button>
             <RoleDetailTabs activeTab={activeTab} onChange={setActiveTab} />
             <div className="flex items-center gap-2">
