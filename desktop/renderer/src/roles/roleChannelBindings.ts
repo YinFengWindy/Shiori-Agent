@@ -78,16 +78,16 @@ export function roleBindingChannelLabel(channel: string): string {
   return channel;
 }
 
-/** Returns the channel-specific description for an inbound sender allow-list. */
+/** Returns the channel-specific label for the role's sole external contact. */
 export function roleBindingAllowFromLabel(channel: string): string {
   if (channel === "telegram") {
-    return "允许对象（Telegram 用户 ID 或用户名，逗号分隔；留空允许全部）";
+    return "联系人 ID（Telegram 用户 ID 或用户名）";
   }
   if (channel === "qq") {
-    return "允许对象（QQ 号，逗号分隔；留空允许全部）";
+    return "联系人 ID（QQ 号）";
   }
   if (channel === "qqbot") {
-    return "允许对象（QQBot OpenID，逗号分隔；留空允许全部）";
+    return "联系人 ID（QQBot OpenID）";
   }
-  return "允许对象（逗号分隔；留空允许全部）";
+  return "联系人 ID";
 }

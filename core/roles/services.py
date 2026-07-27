@@ -205,7 +205,11 @@ class RoleSessionService:
             role.id,
             active_illustration=active_illustration,
         )
-        return self.open_by_role(role) if session.metadata.get("role_name") != role.name else session
+        return (
+            self.open_by_role(role)
+            if session.metadata.get("role_name") != role.name
+            else session
+        )
 
     def delete(self, role_id: str) -> bool:
         clean_role_id = _clean_role_id(role_id)
@@ -252,7 +256,9 @@ class RoleMemoryService:
         changed = False
 
         self_path = root / "SELF.md"
-        self_text = self_path.read_text(encoding="utf-8").strip() if self_path.exists() else ""
+        self_text = (
+            self_path.read_text(encoding="utf-8").strip() if self_path.exists() else ""
+        )
         if not self_text and self._self_seed_generator is not None:
             seeded_self = str(self._self_seed_generator.generate(role) or "").strip()
             if seeded_self:
@@ -269,7 +275,9 @@ class RoleMemoryService:
         changed = False
 
         self_path = root / "SELF.md"
-        self_text = self_path.read_text(encoding="utf-8").strip() if self_path.exists() else ""
+        self_text = (
+            self_path.read_text(encoding="utf-8").strip() if self_path.exists() else ""
+        )
         if not self_text and self._self_seed_generator is not None:
             seeded_self = str(await self._generate_self_async(role) or "").strip()
             if seeded_self:
@@ -288,7 +296,11 @@ class RoleMemoryService:
     ) -> dict[str, Any]:
         background = role.background.strip()
         previous_background = str(state.get("seed_background_value") or "").strip()
-        if background and background != previous_background and not state.get("seed_self_ready"):
+        if (
+            background
+            and background != previous_background
+            and not state.get("seed_self_ready")
+        ):
             self._write_stable_background(root / "SELF.md", background)
             if previous_background:
                 self._append_once(
@@ -363,9 +375,9 @@ class RoleMemoryService:
                     f"系统建议: {clean_content}\n"
                 ),
             )
-            state["relationship_revision_count"] = int(
-                state.get("relationship_revision_count") or 0
-            ) + 1
+            state["relationship_revision_count"] = (
+                int(state.get("relationship_revision_count") or 0) + 1
+            )
             return state
 
         if clean_content == current_value and clean_source == current_source:
@@ -383,9 +395,9 @@ class RoleMemoryService:
                 ),
             )
             if normalized_source != "seed":
-                state["relationship_revision_count"] = int(
-                    state.get("relationship_revision_count") or 0
-                ) + 1
+                state["relationship_revision_count"] = (
+                    int(state.get("relationship_revision_count") or 0) + 1
+                )
         else:
             state.setdefault("relationship_revision_count", 0)
 
@@ -399,7 +411,10 @@ class RoleMemoryService:
     def _append_once(self, path: Path, text: str) -> None:
         current = path.read_text(encoding="utf-8") if path.exists() else ""
         if text.strip() and text.strip() not in current:
-            path.write_text((current.rstrip() + "\n\n" + text.strip() + "\n").lstrip(), encoding="utf-8")
+            path.write_text(
+                (current.rstrip() + "\n\n" + text.strip() + "\n").lstrip(),
+                encoding="utf-8",
+            )
 
     def _write_stable_background(self, path: Path, background: str) -> None:
         path.write_text(f"# 角色背景\n\n{background.strip()}\n", encoding="utf-8")
@@ -411,11 +426,7 @@ class RoleMemoryService:
         source: str,
     ) -> None:
         path.write_text(
-            (
-                "# 关系基线\n\n"
-                f"来源: {source}\n\n"
-                f"{content.strip()}\n"
-            ),
+            ("# 关系基线\n\n" f"来源: {source}\n\n" f"{content.strip()}\n"),
             encoding="utf-8",
         )
 
@@ -426,7 +437,9 @@ class RoleMemoryService:
         ]
         if role.description.strip():
             pieces.append(f"简介: {role.description.strip()}")
-        pieces.append("初始关系理解: 尚未与用户形成稳定互动，后续只能在此基线上增量修订。")
+        pieces.append(
+            "初始关系理解: 尚未与用户形成稳定互动，后续只能在此基线上增量修订。"
+        )
         return "\n".join(pieces)
 
 
@@ -447,8 +460,11 @@ class RoleBindingService:
                     for binding in role.channel_bindings
                 ):
                     return RoleChannelBinding(
-                        channel=str(channel).strip(), chat_id=str(chat_id).strip(), role_id=role.id,
-                        created_at=role.created_at, updated_at=role.updated_at,
+                        channel=str(channel).strip(),
+                        chat_id=str(chat_id).strip(),
+                        role_id=role.id,
+                        created_at=role.created_at,
+                        updated_at=role.updated_at,
                     )
         _ = key
         return None
@@ -460,10 +476,22 @@ class RoleBindingService:
         _ = self._repository.get_required(binding.role_id)
         return binding.role_id
 
-    def bind(self, channel: str, chat_id: str, role_id: str) -> RoleChannelBinding:
+    def bind(
+        self,
+        channel: str,
+        chat_id: str,
+        role_id: str,
+        *,
+        contact_id: str = "",
+    ) -> RoleChannelBinding:
+        """Bind one channel session to a role and authorize its sole contact."""
+
         role = self._repository.get_required(role_id)
         clean_channel = str(channel).strip()
         clean_chat_id = normalize_chat_id(clean_channel, chat_id)
+        clean_contact_id = str(contact_id).strip()
+        if clean_channel != "desktop" and not clean_contact_id:
+            raise ValueError("外部渠道绑定必须提供联系人 ID")
         _ = _binding_key(clean_channel, clean_chat_id)
         next_bindings = [
             binding.to_dict()
@@ -473,9 +501,21 @@ class RoleBindingService:
                 and chat_ids_equal(clean_channel, binding.chat_id, clean_chat_id)
             )
         ]
-        next_bindings.append({"channel": clean_channel, "chat_id": clean_chat_id, "allow_from": []})
+        next_bindings.append(
+            {
+                "channel": clean_channel,
+                "chat_id": clean_chat_id,
+                "allow_from": [] if clean_channel == "desktop" else [clean_contact_id],
+            }
+        )
         updated = self._repository.update_role(role.id, channel_bindings=next_bindings)
-        return RoleChannelBinding(clean_channel, clean_chat_id, updated.id, updated.created_at, updated.updated_at)
+        return RoleChannelBinding(
+            clean_channel,
+            clean_chat_id,
+            updated.id,
+            updated.created_at,
+            updated.updated_at,
+        )
 
     def unbind(self, channel: str, chat_id: str) -> bool:
         clean_channel = str(channel).strip()
@@ -488,7 +528,8 @@ class RoleBindingService:
         self._repository.update_role(
             role.id,
             channel_bindings=[
-                item.to_dict() for item in role.channel_bindings
+                item.to_dict()
+                for item in role.channel_bindings
                 if not (
                     item.channel == clean_channel
                     and chat_ids_equal(clean_channel, item.chat_id, clean_chat_id)
@@ -500,12 +541,16 @@ class RoleBindingService:
     def list_bindings(self) -> list[RoleChannelBinding]:
         return [
             RoleChannelBinding(
-                channel=binding.channel, chat_id=binding.chat_id, role_id=role.id,
-                created_at=role.created_at, updated_at=role.updated_at,
+                channel=binding.channel,
+                chat_id=binding.chat_id,
+                role_id=role.id,
+                created_at=role.created_at,
+                updated_at=role.updated_at,
             )
             for role in self._repository.list_roles()
             for binding in role.channel_bindings
         ]
+
 
 class RoleAggregateService:
     """角色聚合业务入口，供桌面、旧渠道和主动能力统一调用。"""
@@ -568,7 +613,9 @@ class RoleAggregateService:
         if memory_state != role.memory_init_state:
             role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
-        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+        return RoleAggregate(
+            role=role, session=session, memory_root=self.memory.memory_root(role.id)
+        )
 
     async def create_role_async(
         self,
@@ -597,7 +644,9 @@ class RoleAggregateService:
         if memory_state != role.memory_init_state:
             role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
-        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+        return RoleAggregate(
+            role=role, session=session, memory_root=self.memory.memory_root(role.id)
+        )
 
     def update_role(self, role_id: str, **updates: Any) -> RoleAggregate:
         role = self.repository.update_role(role_id, **updates)
@@ -605,7 +654,9 @@ class RoleAggregateService:
         if memory_state != role.memory_init_state:
             role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
-        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+        return RoleAggregate(
+            role=role, session=session, memory_root=self.memory.memory_root(role.id)
+        )
 
     async def update_role_async(self, role_id: str, **updates: Any) -> RoleAggregate:
         """异步更新角色，供运行中事件循环内的入口调用。"""
@@ -614,7 +665,9 @@ class RoleAggregateService:
         if memory_state != role.memory_init_state:
             role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
-        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+        return RoleAggregate(
+            role=role, session=session, memory_root=self.memory.memory_root(role.id)
+        )
 
     def delete_role(self, role_id: str) -> tuple[bool, bool]:
         clean_role_id = _clean_role_id(role_id)
@@ -628,7 +681,9 @@ class RoleAggregateService:
         if memory_state != role.memory_init_state:
             role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
-        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+        return RoleAggregate(
+            role=role, session=session, memory_root=self.memory.memory_root(role.id)
+        )
 
     async def open_role_async(self, role_id: str) -> RoleAggregate:
         """异步打开角色，供运行中事件循环内的入口调用。"""
@@ -637,7 +692,9 @@ class RoleAggregateService:
         if memory_state != role.memory_init_state:
             role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
-        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+        return RoleAggregate(
+            role=role, session=session, memory_root=self.memory.memory_root(role.id)
+        )
 
     def update_relationship_baseline(
         self,
@@ -654,7 +711,9 @@ class RoleAggregateService:
         )
         role = self.repository.update_role(role.id, memory_init_state=memory_state)
         session = self.sessions.open_by_role(role)
-        return RoleAggregate(role=role, session=session, memory_root=self.memory.memory_root(role.id))
+        return RoleAggregate(
+            role=role, session=session, memory_root=self.memory.memory_root(role.id)
+        )
 
     def open_bound_channel(self, *, channel: str, chat_id: str) -> RoleAggregate:
         role_id = self.bindings.resolve_role_id(channel, chat_id)

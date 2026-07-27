@@ -114,15 +114,16 @@ class ChannelHub:
             return False
         role = self._service.repository.get_required(binding.role_id)
         config = next(
-            item for item in role.channel_bindings
-            if item.channel == channel and chat_ids_equal(channel, item.chat_id, chat_id)
+            item
+            for item in role.channel_bindings
+            if item.channel == channel
+            and chat_ids_equal(channel, item.chat_id, chat_id)
         )
-        if not config.allow_from:
-            return True
-        allowed = set(config.allow_from)
-        return sender_id in allowed or bool(
-            sender_alias
-            and sender_alias.lower() in {item.lower() for item in allowed}
+        if len(config.allow_from) != 1:
+            return False
+        contact_id = config.allow_from[0]
+        return sender_id == contact_id or bool(
+            sender_alias and sender_alias.lower() == contact_id.lower()
         )
 
     def has_binding(self, channel: str, chat_id: str) -> bool:
@@ -164,7 +165,10 @@ class ChannelHub:
         thread = self._conversation.get_thread(thread_id)
         if thread is None or thread.role_id != role_id:
             raise ValueError("出站消息 thread_id 不属于当前角色")
-        if thread.channel != message.channel or thread.external_thread_id != message.chat_id:
+        if (
+            thread.channel != message.channel
+            or thread.external_thread_id != message.chat_id
+        ):
             raise ValueError("出站消息 transport target 与 thread_id 不匹配")
         return self._service.sessions.mark_latest_assistant_delivery(
             session_key,

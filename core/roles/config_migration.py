@@ -34,7 +34,9 @@ class RoleConfigMigrator:
     def migrate(self, proactive: Any | None = None) -> RoleConfigMigrationSummary:
         bindings_migrated, unresolved = self._migrate_bindings()
         proactive_migrated = self._migrate_proactive(proactive)
-        return RoleConfigMigrationSummary(bindings_migrated, proactive_migrated, unresolved)
+        return RoleConfigMigrationSummary(
+            bindings_migrated, proactive_migrated, unresolved
+        )
 
     def _migrate_bindings(self) -> tuple[int, int]:
         if self._bindings_imported():
@@ -64,7 +66,15 @@ class RoleConfigMigrator:
             if role is None or not channel or not chat_id:
                 unresolved += 1
                 continue
-            if any(item.channel == channel and item.chat_id == chat_id for item in role.channel_bindings):
+            # Legacy routing records do not identify the external contact, so
+            # importing them would reintroduce an unrestricted relationship.
+            if channel != "desktop":
+                unresolved += 1
+                continue
+            if any(
+                item.channel == channel and item.chat_id == chat_id
+                for item in role.channel_bindings
+            ):
                 continue
             self._repository.update_role(
                 role.id,
@@ -83,9 +93,7 @@ class RoleConfigMigrator:
             default={"version": _CONFIG_MIGRATION_STATE_VERSION},
             domain="role_config_migration",
         )
-        return bool(
-            isinstance(state, dict) and state.get("legacy_bindings_imported")
-        )
+        return bool(isinstance(state, dict) and state.get("legacy_bindings_imported"))
 
     def _mark_bindings_imported(self) -> None:
         atomic_save_json(
@@ -107,9 +115,17 @@ class RoleConfigMigrator:
         if not role_id or not channel or not chat_id:
             return len(migrated_role_ids)
         role = self._repository.store.get_role(role_id)
-        if role is None or role.proactive.enabled or role.proactive.target_channel or role.proactive.target_chat_id:
+        if (
+            role is None
+            or role.proactive.enabled
+            or role.proactive.target_channel
+            or role.proactive.target_chat_id
+        ):
             return len(migrated_role_ids)
-        if not any(item.channel == channel and item.chat_id == chat_id for item in role.channel_bindings):
+        if not any(
+            item.channel == channel and item.chat_id == chat_id
+            for item in role.channel_bindings
+        ):
             return len(migrated_role_ids)
         self._repository.update_role(
             role.id,
@@ -143,8 +159,12 @@ class RoleConfigMigrator:
                     overrides=dict(getattr(proactive, "overrides", {}) or {}),
                     agent={
                         "model": str(getattr(proactive, "agent_tick_model", "") or ""),
-                        "max_steps": int(getattr(proactive, "agent_tick_max_steps", 35)),
-                        "content_limit": int(getattr(proactive, "agent_tick_content_limit", 5)),
+                        "max_steps": int(
+                            getattr(proactive, "agent_tick_max_steps", 35)
+                        ),
+                        "content_limit": int(
+                            getattr(proactive, "agent_tick_content_limit", 5)
+                        ),
                         "web_fetch_max_chars": int(
                             getattr(proactive, "agent_tick_web_fetch_max_chars", 8_000)
                         ),
