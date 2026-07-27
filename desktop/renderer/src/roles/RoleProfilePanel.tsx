@@ -47,15 +47,11 @@ export function RoleProfilePanel({
                 {activeRole?.name.slice(0, 1).toUpperCase() || "R"}
               </div>
             )}
-            <span className="absolute inset-x-0 bottom-0 bg-black/45 px-3 py-2 text-xs text-white opacity-0 transition group-hover:opacity-100">管理素材</span>
           </button>
         </TiltedCard>
         <div className="grid content-start gap-4">
-          <div className="grid gap-1"><h1 className="text-xl font-semibold text-[#322019]">{roleForm.name || "未命名角色"}</h1><button className="w-fit text-xs text-[#9b5b3b] transition hover:text-[#69371f]" type="button" onClick={onOpenAssetsPage}>管理头像与素材</button></div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-xs font-medium text-[#66544b]"><span>名称</span><input className={cx(inputClass, "h-10 border-[#d9c8bf] !bg-white px-3 py-2 text-[#2d1d17] placeholder:text-[#a18e84] focus:border-[#a85d38] focus:ring-2 focus:ring-[#a85d38]/15")} data-testid="edit-role-name" value={roleForm.name} placeholder="输入角色名称" onChange={(event) => onUpdate((current) => ({ ...current, name: event.target.value }))} /></label>
-            <label className="grid gap-1.5 text-xs font-medium text-[#66544b]"><span>简介</span><input className={cx(inputClass, "h-10 border-[#d9c8bf] !bg-white px-3 py-2 text-[#2d1d17] placeholder:text-[#a18e84] focus:border-[#a85d38] focus:ring-2 focus:ring-[#a85d38]/15")} data-testid="edit-role-description" value={roleForm.description} placeholder="简短描述这个角色" onChange={(event) => onUpdate((current) => ({ ...current, description: event.target.value }))} /></label>
-          </div>
+          <input aria-label="角色名称" className="w-full border-0 border-b border-transparent bg-transparent px-0 py-1 text-2xl font-semibold text-[#322019] placeholder:text-[#aa988e] transition focus:border-[#a85d38] focus:outline-none" data-testid="edit-role-name" value={roleForm.name} placeholder="未命名角色" onChange={(event) => onUpdate((current) => ({ ...current, name: event.target.value }))} />
+          <input aria-label="角色简介" className="w-full border-0 border-b border-transparent bg-transparent px-0 py-1 text-sm leading-6 text-[#6f5b51] placeholder:text-[#aa988e] transition focus:border-[#a85d38] focus:outline-none" data-testid="edit-role-description" value={roleForm.description} placeholder="添加一行角色简介" onChange={(event) => onUpdate((current) => ({ ...current, description: event.target.value }))} />
         </div>
       </div>
       <label className="grid gap-2 text-sm text-[#3d2920]">
