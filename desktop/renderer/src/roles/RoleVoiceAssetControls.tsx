@@ -1,6 +1,6 @@
+import { Microphone, Play, SpinnerGap, Trash } from "@phosphor-icons/react";
 import type React from "react";
 import { useState } from "react";
-import { DeleteIcon } from "../shared/icons";
 import type { RoleFormState } from "../shared/types";
 import { abandonTemporaryVoiceAsset } from "./temporaryVoiceAsset";
 
@@ -9,6 +9,8 @@ type RoleVoiceAssetControlsProps = {
   roleForm: RoleFormState;
   onUpdate: (next: React.SetStateAction<RoleFormState>) => void;
 };
+
+const actionButtonClass = "grid h-9 w-9 place-items-center rounded-md border border-[#DDE5EC] bg-white text-[#52606D] transition hover:border-[#AAB7C4] hover:bg-[#F7F9FB] hover:text-[#182230] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:border-[#E7ECF1] disabled:bg-[#F7F9FB] disabled:text-[#B0BAC5]";
 
 /** Owns provider clone, preview, and managed-asset removal actions. */
 export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: RoleVoiceAssetControlsProps) {
@@ -27,20 +29,8 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
       if (!result.ok || !result.voiceId || !result.provider || result.ownership !== "shiori_managed") {
         throw new Error(result.error || "声音复刻结果缺少资产归属信息");
       }
-      const temporaryVoiceAsset = {
-        provider: result.provider,
-        voiceId: result.voiceId,
-        ownership: "shiori_managed",
-      } as const;
-      onUpdate((current) => ({
-        ...current,
-        voiceEnabled: true,
-        voiceProvider: result.provider || current.voiceProvider,
-        voiceOwnership: "shiori_managed",
-        voiceId: result.voiceId || current.voiceId,
-        pendingVoiceAssetDeletes: [],
-        temporaryVoiceAsset,
-      }));
+      const temporaryVoiceAsset = { provider: result.provider, voiceId: result.voiceId, ownership: "shiori_managed" } as const;
+      onUpdate((current) => ({ ...current, voiceEnabled: true, voiceProvider: result.provider || current.voiceProvider, voiceOwnership: "shiori_managed", voiceId: result.voiceId || current.voiceId, pendingVoiceAssetDeletes: [], temporaryVoiceAsset }));
       setPreviewAudio(result.audioBase64 || "");
       if (result.audioBase64) await window.miraDesktop.playVoicePreview(result.audioBase64);
     } catch (reason) {
@@ -57,14 +47,7 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
       setError(reason instanceof Error ? reason.message : String(reason));
       return;
     }
-    onUpdate((current) => ({
-      ...current,
-      voiceOwnership: "external",
-      voiceId: "",
-      voiceName: "",
-      pendingVoiceAssetDeletes: [],
-      temporaryVoiceAsset: null,
-    }));
+    onUpdate((current) => ({ ...current, voiceOwnership: "external", voiceId: "", voiceName: "", pendingVoiceAssetDeletes: [], temporaryVoiceAsset: null }));
     setPreviewAudio("");
   }
 
@@ -78,23 +61,19 @@ export function RoleVoiceAssetControls({ bridgeReady, roleForm, onUpdate }: Role
   }
 
   return (
-    <div className="grid gap-2 border-t border-[#E4EAF0] pt-3">
-      <span>声音复刻</span>
-      <label className="flex items-start gap-2">
-        <input className="mt-0.5 h-4 w-4 rounded border-[#D8DFE7]" type="checkbox" checked={authorized} onChange={(event) => setAuthorized(event.target.checked)} />
-        <span>我确认拥有这段录音的使用授权</span>
+    <div className="flex flex-wrap items-center justify-between gap-3" aria-live="polite">
+      <label className="flex min-w-0 items-center gap-2 text-xs text-[#667085]">
+        <input className="h-4 w-4 rounded border-[#C9D3DD] text-primary focus:ring-2 focus:ring-primary/20" type="checkbox" checked={authorized} onChange={(event) => setAuthorized(event.target.checked)} />
+        <span>我确认拥有录音的使用授权</span>
       </label>
-      <div className="flex flex-wrap gap-2">
-        <button className="rounded-md border border-[#D8DCE2] px-3 py-2 text-sm transition hover:border-primary disabled:cursor-default disabled:opacity-50" type="button" disabled={!bridgeReady || !authorized || cloning} onClick={() => void cloneVoice()}>{cloning ? "复刻中..." : "选择录音并复刻"}</button>
-        <button className="rounded-md border border-[#D8DCE2] px-3 py-2 text-sm transition hover:border-primary disabled:cursor-default disabled:opacity-50" type="button" disabled={!previewAudio || cloning} onClick={() => void playPreview()}>试听</button>
-        {roleForm.voiceOwnership === "shiori_managed" ? (
-          <button className="inline-flex items-center gap-1.5 rounded-md border border-[#D8DCE2] px-3 py-2 text-sm text-[#8f2d2d] transition hover:border-[#8f2d2d] disabled:cursor-default disabled:opacity-50" type="button" disabled={cloning} onClick={() => void discardManagedVoice()} title="移除复刻音色">
-            <DeleteIcon />
-            移除
-          </button>
-        ) : null}
+      <div className="flex items-center gap-2">
+        <button className={actionButtonClass} type="button" disabled={!bridgeReady || !authorized || cloning} onClick={() => void cloneVoice()} aria-label={cloning ? "正在复刻音色" : "选择录音并复刻"} title={cloning ? "正在复刻音色" : "选择录音并复刻"}>
+          {cloning ? <SpinnerGap className="h-4 w-4 animate-spin" weight="bold" /> : <Microphone className="h-4 w-4" weight="bold" />}
+        </button>
+        <button className={actionButtonClass} type="button" disabled={!previewAudio || cloning} onClick={() => void playPreview()} aria-label="试听复刻音色" title="试听复刻音色"><Play className="h-4 w-4" weight="fill" /></button>
+        {roleForm.voiceOwnership === "shiori_managed" ? <button className={actionButtonClass} type="button" disabled={cloning} onClick={() => void discardManagedVoice()} aria-label="移除复刻音色" title="移除复刻音色"><Trash className="h-4 w-4 text-[#B54747]" weight="bold" /></button> : null}
       </div>
-      {error ? <div className="text-xs text-[#8f2d2d]">{error}</div> : null}
+      {error ? <p className="w-full text-xs text-[#B54747]">{error}</p> : null}
     </div>
   );
 }
