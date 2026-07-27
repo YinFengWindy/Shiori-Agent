@@ -68,7 +68,7 @@ export function RoleCapabilitiesPanel({ activeRole, bridgeReady, roleForm, onUpd
           <CapabilitySettingRow icon={Monitor} label="桌宠" description="让角色以桌面宠物形式陪伴和互动。" checked={roleForm.desktopPetEnabled} disabled={desktopPetUnavailable} disabledStatus={!bridgeReady ? "桌面服务不可用" : "未配置桌宠"} onChange={(checked) => onUpdate((current) => ({ ...current, desktopPetEnabled: checked }))} />
         </div>
       </section>
-      <RoleVoiceSettingsPanel bridgeReady={bridgeReady} roleForm={roleForm} onUpdate={onUpdate} />
+      <RoleVoiceSettingsPanel roleForm={roleForm} onUpdate={onUpdate} />
     </div>
   );
 }
