@@ -250,15 +250,16 @@ class ToolRegistry:
         if tool is None:
             return f"工具 '{name}' 不存在"
         try:
+            execution_context = context if context is not None else self.get_context()
             # 将会话上下文（channel、chat_id）作为低优先级默认值合并进 kwargs，
             # 工具可按需读取，不感知此机制的工具会直接忽略多余的 key。
             merged: dict[str, Any] = {
-                **(context or self.get_context()),
+                **execution_context,
                 **arguments,
             }
             for key in getattr(tool, "context_precedence", frozenset()):
-                if context is not None and key in context:
-                    merged[key] = context[key]
+                if key in execution_context:
+                    merged[key] = execution_context[key]
             if not _tool_defines_parameter(tool, _PROGRESS_DESCRIPTION_FIELD):
                 merged.pop(_PROGRESS_DESCRIPTION_FIELD, None)
             return await tool.execute(**merged)
