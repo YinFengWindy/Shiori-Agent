@@ -107,13 +107,16 @@ class DesktopBridgeService:
             Callable[[dict[str, Any]], Awaitable[None] | None]
         ] = set()
         self._self_seed_generator = self._build_self_seed_generator()
+        self._role_deleted_listener = lambda role_id: event_bus.enqueue(
+            RoleDeleted(role_id)
+        )
         self.role_service = role_service or RoleAggregateService.from_runtime(
             workspace=workspace,
             role_store=role_store,
             session_manager=session_manager,
             self_seed_generator=self._self_seed_generator,
-            on_role_deleted=lambda role_id: event_bus.enqueue(RoleDeleted(role_id)),
         )
+        self.role_service.add_role_deleted_listener(self._role_deleted_listener)
         self.conversation_service = ConversationService(
             session_manager,
             binding_resolver=self.role_service.bindings.resolve_role_id,
@@ -248,6 +251,7 @@ class DesktopBridgeService:
             ProactiveMessageCommitted,
             self._proactive_message_listener,
         )
+        self.role_service.remove_role_deleted_listener(self._role_deleted_listener)
         self._event_listeners.clear()
         await self.chat_service.aclose()
         await self.voice_handler.aclose()

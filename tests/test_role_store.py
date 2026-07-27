@@ -522,6 +522,7 @@ def test_role_store_delete_role_removes_role_runtime_directory(tmp_path: Path):
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
         session_manager=SessionManager(tmp_path),
+        on_role_deleted=lambda _role_id: None,
     )
     aggregate = service.create_role(
         role_id="mira",
@@ -564,6 +565,7 @@ def test_role_store_delete_role_keeps_other_role_runtime_directories(tmp_path: P
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
         session_manager=SessionManager(tmp_path),
+        on_role_deleted=lambda _role_id: None,
     )
     first = service.create_role(
         role_id="mira",

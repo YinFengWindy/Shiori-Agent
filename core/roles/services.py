@@ -568,7 +568,23 @@ class RoleAggregateService:
         self.sessions = sessions
         self.memory = memory
         self.bindings = bindings
-        self._on_role_deleted = on_role_deleted
+        self._role_deleted_listeners: list[Callable[[str], None]] = []
+        if on_role_deleted is not None:
+            self.add_role_deleted_listener(on_role_deleted)
+
+    def add_role_deleted_listener(self, listener: Callable[[str], None]) -> None:
+        """Registers a runtime listener for successful role deletion."""
+
+        if listener not in self._role_deleted_listeners:
+            self._role_deleted_listeners.append(listener)
+
+    def remove_role_deleted_listener(self, listener: Callable[[str], None]) -> None:
+        """Removes a previously registered role-deletion listener."""
+
+        try:
+            self._role_deleted_listeners.remove(listener)
+        except ValueError:
+            return
 
     @classmethod
     def from_runtime(
@@ -675,10 +691,13 @@ class RoleAggregateService:
 
     def delete_role(self, role_id: str) -> tuple[bool, bool]:
         clean_role_id = _clean_role_id(role_id)
+        if not self._role_deleted_listeners:
+            raise RuntimeError("角色删除生命周期监听器未注册")
         deleted = self.repository.delete_role(clean_role_id)
         session_deleted = self.sessions.delete(clean_role_id) if deleted else False
-        if deleted and self._on_role_deleted is not None:
-            self._on_role_deleted(clean_role_id)
+        if deleted:
+            for listener in tuple(self._role_deleted_listeners):
+                listener(clean_role_id)
         return deleted, session_deleted
 
     def open_role(self, role_id: str) -> RoleAggregate:
