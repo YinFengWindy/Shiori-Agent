@@ -522,6 +522,7 @@ def test_role_store_delete_role_removes_role_runtime_directory(tmp_path: Path):
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
         session_manager=SessionManager(tmp_path),
+        on_role_deleted=lambda _role_id: None,
     )
     aggregate = service.create_role(
         role_id="mira",
@@ -538,11 +539,33 @@ def test_role_store_delete_role_removes_role_runtime_directory(tmp_path: Path):
     assert not role_dir.exists()
 
 
+def test_role_aggregate_service_notifies_role_deleted_after_cleanup(tmp_path: Path):
+    deleted_role_ids: list[str] = []
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        on_role_deleted=deleted_role_ids.append,
+    )
+    aggregate = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="assistant role",
+        system_prompt="you are mira",
+    )
+
+    deleted, _ = service.delete_role(aggregate.role.id)
+
+    assert deleted is True
+    assert deleted_role_ids == ["mira"]
+
+
 def test_role_store_delete_role_keeps_other_role_runtime_directories(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,
         role_store=RoleStore(tmp_path),
         session_manager=SessionManager(tmp_path),
+        on_role_deleted=lambda _role_id: None,
     )
     first = service.create_role(
         role_id="mira",

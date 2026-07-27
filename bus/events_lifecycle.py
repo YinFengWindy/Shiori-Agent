@@ -90,6 +90,13 @@ class TurnCommitted:
 
 
 @dataclass(frozen=True)
+class RoleDeleted:
+    """Signals that role-owned runtime sidecars must discard their state."""
+
+    role_id: str
+
+
+@dataclass(frozen=True)
 class ProactiveMessageCommitted:
     """Signals that a proactive role message is available in its shared session."""
 

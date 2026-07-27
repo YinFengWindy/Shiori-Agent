@@ -19,7 +19,7 @@ related:
 
 `infra/channels/contract.py` 定义 Channel 合约与上下文，`core/channels/hub.py` 汇总渠道，bootstrap 负责按配置启动。渠道适配器把外部消息转换为统一入站事件，并把统一出站消息渲染为平台格式。
 
-Telegram 实现在 `infra/channels/telegram_channel/`，拆分 lifecycle、inbound、outbound、media、streaming、commands 等职责。QQ 相关适配位于 `infra/channels/qq_channel.py` 与 `plugins/qqbot/`。
+Telegram 实现在 `infra/channels/telegram_channel/`，拆分 lifecycle、inbound、outbound、media、streaming、commands 等职责。NcatBot QQ 位于 `infra/channels/qq_channel/`：lifecycle 只装配 SDK 与订阅，inbound、outbound、trace、loop bridge 和兼容 helper 各自拥有单一边界。官方 QQBot 位于 `plugins/qqbot/`：`channel.py` 只保留组合与启停，Gateway、C2C 入站、HTTP/媒体出站和 live stream 分别由对应 mixin 负责。两套适配器共享 Channel 合约，但不隐藏协议差异。
 
 ## 标识与投递
 
@@ -33,4 +33,5 @@ Telegram 实现在 `infra/channels/telegram_channel/`，拆分 lifecycle、inbou
 - 修改聊天标识：检查角色绑定、Session/Conversation 键、群聊记忆域和推送目标。
 - 修改角色渠道绑定：检查配置校验、入站身份验证、旧配置迁移和角色编辑界面的联系人字段。
 - 修改附件模型：检查 Telegram 媒体、QQ 适配、桌面桥接、自动 CG 和历史消息展示。
+- 修改 QQ 渠道：NcatBot 需同步检查主 loop/bot loop 桥接、群聊过滤和 CQ 媒体；QQBot 需同步检查 Gateway intent、token/REST、C2C message id 和 live stream 状态。
 - 新增渠道：复用统一合约、会话解析和输出端口，不复制 Agent 回合逻辑。
