@@ -10,6 +10,7 @@ from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
     ProactiveMessageCommitted,
+    RoleDeleted,
     TurnCommitted,
 )
 from conversation.service import ConversationService
@@ -111,6 +112,7 @@ class DesktopBridgeService:
             role_store=role_store,
             session_manager=session_manager,
             self_seed_generator=self._self_seed_generator,
+            on_role_deleted=lambda role_id: event_bus.enqueue(RoleDeleted(role_id)),
         )
         self.conversation_service = ConversationService(
             session_manager,

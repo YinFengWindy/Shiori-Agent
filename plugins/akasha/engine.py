@@ -48,7 +48,7 @@ from plugins.akasha.core import (
     reinforce_boost_from_payload as _reinforce_boost_from_payload,
 )
 from agent.config_models import Config  # noqa: F401
-from bus.events_lifecycle import TurnCommitted
+from bus.events_lifecycle import RoleDeleted, TurnCommitted
 from core.memory.engine import (
     EngineProfile,
     EvidenceRef,
@@ -203,6 +203,7 @@ class AkashaMemoryEngine:
         # 1. Akasha 不接 consolidation，只关心每轮真实消息提交。
         if self._event_bus is not None:
             self._event_bus.on(TurnCommitted, self._on_turn_committed)
+            self._event_bus.on(RoleDeleted, self._on_role_deleted)
 
     # 返回 Akasha 工具描述。
     def tool_profile(self) -> MemoryToolProfile:
@@ -259,18 +260,21 @@ class AkashaMemoryEngine:
         self,
         request: MemoryQuery,
     ) -> MemoryQueryResult:
-        # 1. timeline 不是 Akasha MVP 范围，时间线事实仍应走 fetch/search messages。
+        # 1. role 会话必须显式、且一致地携带角色作用域。
+        role_id = _validate_role_scope(request.scope)
+
+        # 2. timeline 不是 Akasha MVP 范围，时间线事实仍应走 fetch/search messages。
         if request.intent == "timeline":
             return MemoryQueryResult(
                 trace={"engine": self.DESCRIPTOR.name, "intent": "timeline_unsupported"}
             )
 
-        # 2. 空 query 不触发状态更新。
+        # 3. 空 query 不触发状态更新。
         query_text = request.text.strip()
         if not query_text:
             return MemoryQueryResult(trace={"engine": self.DESCRIPTOR.name, "hit_count": 0})
 
-        # 3. 检索旧 turn 图，并在 context 入口记录本轮激活。
+        # 4. 检索旧 turn 图，并在 context 入口记录本轮激活。
         now_ts = _query_timestamp_unix(request)
         if now_ts is None:
             return MemoryQueryResult(
@@ -292,7 +296,7 @@ class AkashaMemoryEngine:
         if stateful and request.intent in {"context", "answer"}:
             self._remember_pending_activation(request, result.activation_items, query_vec, now_ts=now_ts)
 
-        # 4. context 注入按 Akasha 配置展示 topK；工具查询继续尊重调用方 limit。
+        # 5. context 注入按 Akasha 配置展示 topK；工具查询继续尊重调用方 limit。
         dense_limit = self._akasha_config.dense_top_k
         ripple_limit = self._akasha_config.ripple_top_k
         if request.intent != "context":
@@ -320,7 +324,7 @@ class AkashaMemoryEngine:
         )
         cards = [*dense_cards, *ripple_cards]
 
-        # 5. 记录检索诊断日志（context/answer intent 才有意义）。
+        # 6. 记录检索诊断日志（context/answer intent 才有意义）。
         if stateful and request.intent in {"context", "answer"} and request.scope.session_key:
             self._write_query_log(
                 request=request,
@@ -329,6 +333,7 @@ class AkashaMemoryEngine:
                 dense_cards=dense_cards,
                 ripple_cards=ripple_cards,
                 text_block=text_block,
+                role_id=role_id,
             )
 
         return MemoryQueryResult(
@@ -538,7 +543,8 @@ class AkashaMemoryEngine:
         update_state: bool,
     ) -> "_AkashaRetrieval":
         # 1. 准备内存图和当前查询所在的预测 seq。
-        snapshot = self._graph_snapshot()
+        role_id = _validate_role_scope(request.scope)
+        snapshot = self._graph_snapshot_for_role(role_id)
         seq = _current_query_seq(self._session_db_path, request.scope)
         source_db = (
             sqlite3.connect(str(self._session_db_path))
@@ -631,6 +637,7 @@ class AkashaMemoryEngine:
         # 1. 跳过不应进入记忆的系统轮次。
         if event.session_key.startswith("scheduler:") or bool((event.extra or {}).get("skip_post_memory")):
             return
+        event_role_id = _validate_role_event(event)
         messages = _load_committed_turn_messages(self._session_db_path, event)
         if not messages:
             return
@@ -643,8 +650,13 @@ class AkashaMemoryEngine:
                 message=message,
                 model=self._config.memory.embedding.model,
                 embedding=embedding,
+                role_id=event_role_id,
             )
-            current_key = self._store.upsert_message_node(message, embedding)
+            current_key = self._store.upsert_message_node(
+                message,
+                embedding,
+                role_id=event_role_id,
+            )
             self._refresh_cached_node(current_key)
             self._refresh_cached_message(message, embedding, current_key)
 
@@ -658,6 +670,25 @@ class AkashaMemoryEngine:
         pending = self._pending_by_session.pop(event.session_key, None)
         if current_key and pending is not None:
             self._commit_pending_activation(current_key, pending, reinforced=reinforced)
+
+    async def _on_role_deleted(self, event: RoleDeleted) -> None:
+        self.purge_role(event.role_id)
+
+    def purge_role(self, role_id: str) -> None:
+        """Purges one deleted role from the Akasha sidecar and in-memory graph."""
+
+        removed_node_keys = self._store.delete_role_data(role_id)
+        self._remove_cached_nodes(removed_node_keys)
+        clean_role_id = str(role_id).strip()
+        with self._graph_lock:
+            stale_message_ids = [
+                message_id
+                for message_id, turn_key_value in self._message_turn_keys.items()
+                if _role_id_for_turn_key(turn_key_value) == clean_role_id
+            ]
+        self._remove_cached_messages(stale_message_ids)
+        session_key = f"role:{clean_role_id}"
+        _ = self._pending_by_session.pop(session_key, None)
 
     # 把 pending activation 转成边和事件。
     def _commit_pending_activation(
@@ -744,6 +775,47 @@ class AkashaMemoryEngine:
                 message_index=self._message_index,
             )
 
+    def _graph_snapshot_for_role(self, role_id: str) -> AkashaActivationSnapshot:
+        snapshot = self._graph_snapshot()
+        if not role_id:
+            return snapshot
+        nodes = {
+            key: node
+            for key, node in snapshot.nodes.items()
+            if node.role_id == role_id
+        }
+        node_keys = set(nodes)
+        edges = {
+            edge: weight
+            for edge, weight in snapshot.edges.items()
+            if edge[0] in node_keys and edge[1] in node_keys
+        }
+        edges_meta = {
+            edge: timestamp
+            for edge, timestamp in snapshot.edges_meta.items()
+            if edge in edges
+        }
+        message_turn_keys = {
+            message_id: turn_key_value
+            for message_id, turn_key_value in snapshot.message_turn_keys.items()
+            if turn_key_value in node_keys
+        }
+        message_embeddings = {
+            message_id: embedding
+            for message_id, embedding in snapshot.message_embeddings.items()
+            if message_id in message_turn_keys
+        }
+        return AkashaActivationSnapshot(
+            nodes=nodes,
+            edges=edges,
+            edges_meta=edges_meta,
+            fan=_fan_counts(edges),
+            edges_by_src=_edges_by_src(edges),
+            message_embeddings=message_embeddings,
+            message_turn_keys=message_turn_keys,
+            message_index=build_dense_message_index(message_embeddings),
+        )
+
     # 把查询产生的状态更新同步进内存图。
     def _apply_activation_updates(self, updates: list[ActivationUpdate]) -> None:
         if not updates:
@@ -784,12 +856,21 @@ class AkashaMemoryEngine:
             self._message_index = build_dense_message_index(self._message_embeddings)
 
     # ν_turn = 1 − max_{j<i} cos(query, prior_j)²；当前 turn 自身排除。
-    def _compute_query_residual(self, query_vec: np.ndarray, current_key: str) -> float:
+    def _compute_query_residual(
+        self,
+        query_vec: np.ndarray,
+        current_key: str,
+    ) -> float:
         with self._graph_lock:
+            current_role_id = str(
+                getattr(self._nodes.get(current_key), "role_id", "")
+            ).strip()
             embeddings = [
                 node.embedding
                 for key, node in self._nodes.items()
-                if key != current_key and node.embedding.size > 0
+                if key != current_key
+                and node.role_id == current_role_id
+                and node.embedding.size > 0
             ]
         if not embeddings:
             return 1.0
@@ -921,6 +1002,7 @@ class AkashaMemoryEngine:
         dense_cards: list[AkashaCard],
         ripple_cards: list[AkashaCard],
         text_block: str,
+        role_id: str = "",
     ) -> None:
         # 1. 收集 source_ref 去重统计。
         all_source_refs: set[str] = set()
@@ -1015,6 +1097,7 @@ class AkashaMemoryEngine:
             dense_items_json=dense_items_json,
             ripple_items_json=ripple_items_json,
             text_block_preview=preview,
+            role_id=role_id,
         )
 
     # 格式化 agent 看到的 Dense/Ripple 双块。
@@ -1170,6 +1253,38 @@ def _current_query_seq(
     return int(row[0] if row else 0)
 
 
+def _role_id_for_session(session_key: str) -> str:
+    clean_session_key = str(session_key).strip()
+    if not clean_session_key.startswith("role:"):
+        return ""
+    return clean_session_key.removeprefix("role:").strip()
+
+
+def _role_id_for_turn_key(turn_key_value: str) -> str:
+    parsed = _parse_turn_key(turn_key_value)
+    if parsed is None:
+        return ""
+    return _role_id_for_session(parsed[0])
+
+
+def _validate_role_scope(scope: MemoryScope) -> str:
+    session_role_id = _role_id_for_session(scope.session_key)
+    requested_role_id = str(scope.role_id).strip()
+    if session_role_id and not requested_role_id:
+        raise ValueError("Akasha role session requires role_id")
+    if session_role_id and requested_role_id != session_role_id:
+        raise ValueError("Akasha role_id does not match session_key")
+    return requested_role_id
+
+
+def _validate_role_event(event: TurnCommitted) -> str:
+    session_role_id = _role_id_for_session(event.session_key)
+    event_role_id = str(event.role_id).strip()
+    if session_role_id and event_role_id and event_role_id != session_role_id:
+        raise ValueError("Akasha TurnCommitted role_id does not match session_key")
+    return session_role_id or event_role_id
+
+
 # 从 sessions.db 反查 after-turn 已经持久化的本轮消息。
 def _load_committed_turn_messages(
     session_db_path: Path,
@@ -1270,11 +1385,12 @@ def _load_turn_card(
     ]
     assistant_text = str(assistant_row["content"] or "") if assistant_row is not None else ""
     user_text = str(user_row["content"] or "") if user_row is not None else ""
-    happened_at = (
-        str(user_row["ts"] or "")
-        if user_row is not None
-        else str(assistant_row["ts"] or "")
-    )
+    if user_row is not None:
+        happened_at = str(user_row["ts"] or "")
+    elif assistant_row is not None:
+        happened_at = str(assistant_row["ts"] or "")
+    else:
+        happened_at = ""
     return AkashaCard(
         key=key,
         source_ref=json.dumps(source_ids, ensure_ascii=False),

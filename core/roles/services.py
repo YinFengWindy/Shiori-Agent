@@ -562,11 +562,13 @@ class RoleAggregateService:
         sessions: RoleSessionService,
         memory: RoleMemoryService,
         bindings: RoleBindingService,
+        on_role_deleted: Callable[[str], None] | None = None,
     ) -> None:
         self.repository = repository
         self.sessions = sessions
         self.memory = memory
         self.bindings = bindings
+        self._on_role_deleted = on_role_deleted
 
     @classmethod
     def from_runtime(
@@ -576,6 +578,7 @@ class RoleAggregateService:
         role_store: RoleStore,
         session_manager: SessionManager,
         self_seed_generator: RoleSelfSeedGenerator | None = None,
+        on_role_deleted: Callable[[str], None] | None = None,
     ) -> "RoleAggregateService":
         repository = RoleRepository(role_store)
         memory = RoleMemoryService(workspace, self_seed_generator=self_seed_generator)
@@ -585,6 +588,7 @@ class RoleAggregateService:
             sessions=RoleSessionService(session_manager),
             memory=memory,
             bindings=bindings,
+            on_role_deleted=on_role_deleted,
         )
 
     def create_role(
@@ -673,6 +677,8 @@ class RoleAggregateService:
         clean_role_id = _clean_role_id(role_id)
         deleted = self.repository.delete_role(clean_role_id)
         session_deleted = self.sessions.delete(clean_role_id) if deleted else False
+        if deleted and self._on_role_deleted is not None:
+            self._on_role_deleted(clean_role_id)
         return deleted, session_deleted
 
     def open_role(self, role_id: str) -> RoleAggregate:
