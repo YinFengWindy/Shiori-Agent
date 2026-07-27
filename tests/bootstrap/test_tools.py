@@ -19,7 +19,7 @@ def test_role_target_validation_uses_canonical_chat_id_comparison(
     store.update_role(
         role.id,
         channel_bindings=[
-            {"channel": "qq", "chat_id": "gqq:42", "allow_from": []}
+            {"channel": "qq", "chat_id": "gqq:42", "allow_from": ["user-1"]}
         ],
     )
 
@@ -44,7 +44,11 @@ def test_role_target_validation_explains_wrong_channel_for_bound_chat(
     store.update_role(
         role.id,
         channel_bindings=[
-            {"channel": "qqbot", "chat_id": "c2c:user-1", "allow_from": []}
+            {
+                "channel": "qqbot",
+                "chat_id": "c2c:user-1",
+                "allow_from": ["user-1"],
+            }
         ],
     )
 
