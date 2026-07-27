@@ -31,7 +31,6 @@ import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleSearch } from "./app/roleSearch";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
-import { abandonTemporaryVoiceAsset } from "./roles/temporaryVoiceAsset";
 import { useWorldWorkspacePresentation } from "./app/useWorldWorkspacePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
@@ -183,7 +182,6 @@ function App(): React.ReactElement {
     setSelectedAvatarAsset,
     setSelectedChatBackground,
     updateRoleForm,
-    onTemporaryVoiceAbandonError: (error) => setError(error instanceof Error ? error.message : String(error)),
   });
 
   const {
@@ -377,7 +375,6 @@ function App(): React.ReactElement {
     updateRoleAssetOrganization,
   } = useRoleManagement({
     activeRoleId,
-    roles,
     detailRoleId,
     detailRole,
     activeIllustration,
@@ -456,12 +453,6 @@ function App(): React.ReactElement {
 
   async function resetRoleForm(): Promise<void> {
     if (!detailRole) return;
-    try {
-      await abandonTemporaryVoiceAsset(roleFormRef.current.temporaryVoiceAsset);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
-      return;
-    }
     updateRoleForm(createRoleFormFromRole(detailRole));
     setNotice("角色表单已重置。");
   }

@@ -1,8 +1,5 @@
-import { readFile, stat } from "node:fs/promises";
-import { basename, extname } from "node:path";
-import { BrowserWindow, dialog, ipcMain } from "electron";
-import type { IpcMainInvokeEvent, OpenDialogOptions } from "electron";
-import type { DesktopBridgeClient } from "../bridgeClient.js";
+import { BrowserWindow, ipcMain } from "electron";
+import type { IpcMainInvokeEvent } from "electron";
 import type { DesktopPetController } from "../pet/controller.js";
 import type { DesktopVoiceController } from "./controller.js";
 import { isVoiceInteractionBusy } from "./interactionState.js";
@@ -11,16 +8,14 @@ import type { BrowserVoiceRecorder } from "./recorder.js";
 
 /** Main-process dependencies needed by the voice-specific IPC boundary. */
 export type RegisterVoiceIpcOptions = {
-  bridge: DesktopBridgeClient;
   desktopPet: DesktopPetController;
   voiceRecorder: BrowserVoiceRecorder;
   voiceController: DesktopVoiceController;
   voicePlayback: BrowserVoicePlayback;
 };
 
-/** Registers capture, testing, cloning, playback, and pet voice IPC handlers. */
+/** Registers capture, testing, playback, and pet voice IPC handlers. */
 export function registerVoiceIpc({
-  bridge,
   desktopPet,
   voiceRecorder,
   voiceController,
@@ -82,51 +77,6 @@ export function registerVoiceIpc({
   ipcMain.handle("desktop:voice-test-cancel", async () => {
     voiceTestActive = false;
     await voiceRecorder.cancel();
-  });
-  ipcMain.handle("desktop:voice-clone", async (event: IpcMainInvokeEvent) => {
-    const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-    const options: OpenDialogOptions = {
-      properties: ["openFile"],
-      filters: [{ name: "Voice sample", extensions: ["wav", "mp3", "m4a"] }],
-    };
-    const picked = parentWindow
-      ? await dialog.showOpenDialog(parentWindow, options)
-      : await dialog.showOpenDialog(options);
-    if (picked.canceled || !picked.filePaths[0]) return { ok: false, canceled: true };
-    const filePath = picked.filePaths[0];
-    const fileStats = await stat(filePath);
-    if (!fileStats.isFile() || fileStats.size > 20 * 1024 * 1024) {
-      return { ok: false, error: "复刻录音无效或超过 20MB" };
-    }
-    const extension = extname(filePath).slice(1).toLowerCase();
-    if (!["wav", "mp3", "m4a"].includes(extension)) {
-      return { ok: false, error: "复刻录音必须是 WAV、MP3 或 M4A" };
-    }
-    const audio = await readFile(filePath);
-    const response = await bridge.invoke({
-      method: "voice.clone",
-      payload: { audio_base64: audio.toString("base64"), file_name: basename(filePath) },
-    });
-    if (response.error) return { ok: false, error: response.error.message };
-    return {
-      ok: true,
-      provider: String(response.payload.provider || ""),
-      ownership: response.payload.ownership === "shiori_managed" ? "shiori_managed" : undefined,
-      voiceId: String(response.payload.voice_id || ""),
-      audioBase64: String(response.payload.audio_base64 || ""),
-      format: "mp3",
-    };
-  });
-  ipcMain.handle("desktop:voice-preview", async (_event: IpcMainInvokeEvent, audioBase64?: unknown) => {
-    const encoded = String(audioBase64 || "");
-    if (!encoded) throw new Error("试听音频为空");
-    let audio: Buffer;
-    try {
-      audio = Buffer.from(encoded, "base64");
-    } catch {
-      throw new Error("试听音频无效");
-    }
-    await voiceRecorder.playTestAudio(new Uint8Array(audio));
   });
   ipcMain.on("desktop:voice-playback-started", (event, id: unknown) => {
     voicePlayback.handleStarted(event.sender, String(id || ""));

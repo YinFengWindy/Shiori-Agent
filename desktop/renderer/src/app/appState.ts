@@ -113,7 +113,6 @@ export function createEmptyRoleForm(): RoleFormState {
     voiceSpeed: 1,
     voiceMoodEmotions: {},
     pendingVoiceAssetDeletes: [],
-    temporaryVoiceAsset: null,
   };
 }
 

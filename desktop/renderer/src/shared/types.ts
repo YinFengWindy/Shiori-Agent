@@ -220,7 +220,6 @@ export type RoleFormState = {
   voiceSpeed: number;
   voiceMoodEmotions: Record<string, string>;
   pendingVoiceAssetDeletes: ManagedVoiceAssetReference[];
-  temporaryVoiceAsset?: ManagedVoiceAssetReference | null;
 };
 
 /** New role composer form state. */

@@ -67,7 +67,6 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     voiceSpeed: voiceConfig.speed,
     voiceMoodEmotions: voiceConfig.moodTtsEmotions,
     pendingVoiceAssetDeletes: [],
-    temporaryVoiceAsset: null,
   };
 }
 
