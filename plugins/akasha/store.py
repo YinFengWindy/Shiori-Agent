@@ -26,6 +26,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS akasha_query_log (
     query_id              TEXT PRIMARY KEY,
     session_key           TEXT NOT NULL,
+    role_id               TEXT NOT NULL DEFAULT '',
     seq                   INTEGER NOT NULL,
     query_text            TEXT NOT NULL,
     intent                TEXT NOT NULL,
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS akasha_nodes (
     key                TEXT PRIMARY KEY,
     anchor_id          TEXT NOT NULL,
     session_key        TEXT NOT NULL,
+    role_id            TEXT NOT NULL DEFAULT '',
     turn_seq           INTEGER NOT NULL,
     first_ts_unix      REAL NOT NULL,
     salience           REAL NOT NULL,
@@ -96,6 +98,7 @@ CREATE INDEX IF NOT EXISTS ix_akasha_events_seq
     ON akasha_activation_events (seq);
 CREATE TABLE IF NOT EXISTS akasha_embedding_cache (
     message_id   TEXT NOT NULL,
+    role_id      TEXT NOT NULL DEFAULT '',
     content_hash TEXT NOT NULL,
     model        TEXT NOT NULL,
     embedding    BLOB NOT NULL,
@@ -203,7 +206,43 @@ class AkashaStore:
             if "message_count" not in _table_columns(self._db, "akasha_migration_runs"):
                 _ = self._db.execute("DROP TABLE IF EXISTS akasha_migration_runs")
             _ = self._db.executescript(SCHEMA)
+            self._ensure_role_scope_columns_locked()
             self._db.commit()
+
+    def _ensure_role_scope_columns_locked(self) -> None:
+        """Backfills role ownership from canonical role session keys."""
+
+        for table in ("akasha_nodes", "akasha_query_log", "akasha_embedding_cache"):
+            if "role_id" not in _table_columns(self._db, table):
+                _ = self._db.execute(
+                    f"ALTER TABLE {table} ADD COLUMN role_id TEXT NOT NULL DEFAULT ''"
+                )
+        _ = self._db.execute(
+            "CREATE INDEX IF NOT EXISTS ix_akasha_nodes_role_seq "
+            "ON akasha_nodes (role_id, turn_seq)"
+        )
+        _ = self._db.execute(
+            "CREATE INDEX IF NOT EXISTS ix_akasha_query_log_role "
+            "ON akasha_query_log (role_id, seq DESC)"
+        )
+        _ = self._db.execute(
+            "CREATE INDEX IF NOT EXISTS ix_akasha_embedding_cache_role "
+            "ON akasha_embedding_cache (role_id, model)"
+        )
+        for table, source in (
+            ("akasha_nodes", "session_key"),
+            ("akasha_query_log", "session_key"),
+        ):
+            _ = self._db.execute(
+                f"UPDATE {table} SET role_id = substr({source}, 6) "
+                f"WHERE role_id = '' AND {source} LIKE 'role:%'"
+            )
+        _ = self._db.execute(
+            "UPDATE akasha_embedding_cache SET role_id = "
+            "substr(message_id, 6, instr(substr(message_id, 6), ':') - 1) "
+            "WHERE role_id = '' AND message_id LIKE 'role:%' "
+            "AND instr(substr(message_id, 6), ':') > 0"
+        )
 
     # 清空并重建 Akasha 状态表。
     def reset_schema(self) -> None:
@@ -242,6 +281,7 @@ class AkashaStore:
         message: SourceMessage,
         model: str,
         embedding: list[float],
+        role_id: str | None = None,
     ) -> None:
         # 1. message 内容变更时覆盖同 model 的旧 embedding。
         vector = np.array(embedding, dtype=np.float32)
@@ -250,9 +290,10 @@ class AkashaStore:
             _ = self._db.execute(
                 """
                 INSERT INTO akasha_embedding_cache
-                    (message_id, content_hash, model, embedding, dim, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (message_id, role_id, content_hash, model, embedding, dim, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(message_id, model) DO UPDATE SET
+                    role_id = excluded.role_id,
                     content_hash = excluded.content_hash,
                     embedding = excluded.embedding,
                     dim = excluded.dim,
@@ -260,6 +301,7 @@ class AkashaStore:
                 """,
                 (
                     message.id,
+                    _role_id_for_session(message.session_key) if role_id is None else role_id,
                     content_hash(message.content),
                     model,
                     serialize_f32(vector),
@@ -400,6 +442,8 @@ class AkashaStore:
         self,
         message: SourceMessage,
         embedding: list[float],
+        *,
+        role_id: str | None = None,
     ) -> str:
         # 1. 按 cross CLI 规则把 user/assistant 映射到同一个 turn key。
         session_key, turn_seq, key = turn_key(
@@ -410,10 +454,11 @@ class AkashaStore:
         vector = _normalize(np.array(embedding, dtype=np.float32))
         ts_unix = parse_ts_unix(message.ts)
         now = _now_iso()
+        node_role_id = _role_id_for_session(session_key) if role_id is None else role_id
 
         # 2. 新 turn 直接写入；已有 turn 用均值更新 embedding，并保留 user 作为 anchor。
         with self._lock:
-            prior_sum, prior_count = self._load_salience_state_locked()
+            prior_sum, prior_count = self._load_salience_state_locked(node_role_id)
             salience = (
                 causal_salience(vector, prior_sum, prior_count)
                 if message.salience is None
@@ -432,16 +477,17 @@ class AkashaStore:
                 _ = self._db.execute(
                     """
                     INSERT INTO akasha_nodes
-                        (key, anchor_id, session_key, turn_seq, first_ts_unix,
+                        (key, anchor_id, session_key, role_id, turn_seq, first_ts_unix,
                          salience, strength, resource, recall_count,
                          last_activated_ts, last_strength_ts, last_resource_ts,
                          embedding, emb_count, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 1.0, 0, ?, ?, ?, ?, 1, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1.0, 0, ?, ?, ?, ?, 1, ?, ?)
                     """,
                     (
                         key,
                         message.id,
                         session_key,
+                        node_role_id,
                         turn_seq,
                         ts_unix,
                         salience,
@@ -454,7 +500,9 @@ class AkashaStore:
                         now,
                     ),
                 )
-                self._write_salience_state_locked(next_sum, next_count, now)
+                self._write_salience_state_locked(
+                    node_role_id, next_sum, next_count, now
+                )
                 self._db.commit()
                 return key
 
@@ -481,13 +529,15 @@ class AkashaStore:
                     key,
                 ),
             )
-            self._write_salience_state_locked(next_sum, next_count, now)
+            self._write_salience_state_locked(node_role_id, next_sum, next_count, now)
             self._db.commit()
         return key
 
-    def _load_salience_state_locked(self) -> tuple[np.ndarray | None, int]:
+    def _load_salience_state_locked(self, role_id: str) -> tuple[np.ndarray | None, int]:
+        state_key = _salience_state_key(role_id)
         row = self._db.execute(
-            "SELECT vector_sum, count FROM akasha_salience_state WHERE key = 'global'"
+            "SELECT vector_sum, count FROM akasha_salience_state WHERE key = ?",
+            (state_key,),
         ).fetchone()
         if row is None:
             return None, 0
@@ -497,6 +547,7 @@ class AkashaStore:
 
     def _write_salience_state_locked(
         self,
+        role_id: str,
         vector_sum: np.ndarray,
         count: int,
         now: str,
@@ -504,13 +555,13 @@ class AkashaStore:
         _ = self._db.execute(
             """
             INSERT INTO akasha_salience_state (key, vector_sum, count, updated_at)
-            VALUES ('global', ?, ?, ?)
+            VALUES (?, ?, ?, ?)
             ON CONFLICT(key) DO UPDATE SET
                 vector_sum = excluded.vector_sum,
                 count = excluded.count,
                 updated_at = excluded.updated_at
             """,
-            (serialize_f32(vector_sum), count, now),
+            (_salience_state_key(role_id), serialize_f32(vector_sum), count, now),
         )
 
     # 读取全部 turn 节点。
@@ -519,6 +570,52 @@ class AkashaStore:
         with self._lock:
             rows = self._db.execute("SELECT * FROM akasha_nodes").fetchall()
         return [node for row in rows if (node := _row_to_node(row)) is not None]
+
+    def delete_role_data(self, role_id: str) -> list[str]:
+        """Deletes every Akasha sidecar record owned by one removed role."""
+
+        clean_role_id = str(role_id).strip()
+        if not clean_role_id:
+            raise ValueError("role_id 不能为空")
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT key FROM akasha_nodes WHERE role_id = ?", (clean_role_id,)
+            ).fetchall()
+            node_keys = [str(row["key"]) for row in rows]
+            if node_keys:
+                placeholders = ",".join("?" for _ in node_keys)
+                _ = self._db.execute(
+                    f"DELETE FROM akasha_edges WHERE src_key IN ({placeholders}) "
+                    f"OR dst_key IN ({placeholders})",
+                    [*node_keys, *node_keys],
+                )
+                _ = self._db.execute(
+                    f"DELETE FROM akasha_activation_events WHERE activated_key IN ({placeholders})",
+                    node_keys,
+                )
+                _ = self._db.execute(
+                    f"DELETE FROM akasha_nodes WHERE key IN ({placeholders})", node_keys
+                )
+            _ = self._db.execute(
+                "DELETE FROM akasha_query_log WHERE role_id = ?", (clean_role_id,)
+            )
+            prefix = f"role:{clean_role_id}:"
+            _ = self._db.execute(
+                "DELETE FROM akasha_activation_events "
+                "WHERE substr(query_id, 1, length(?)) = ?",
+                (prefix, prefix),
+            )
+            _ = self._db.execute(
+                "DELETE FROM akasha_embedding_cache "
+                "WHERE role_id = ? OR substr(message_id, 1, length(?)) = ?",
+                (clean_role_id, prefix, prefix),
+            )
+            _ = self._db.execute(
+                "DELETE FROM akasha_salience_state WHERE key = ?",
+                (_salience_state_key(clean_role_id),),
+            )
+            self._db.commit()
+        return node_keys
 
     # 读取单个 turn 节点。
     def get_node(self, key: str) -> AkashaNode | None:
@@ -787,20 +884,21 @@ class AkashaStore:
         dense_items_json: str,
         ripple_items_json: str,
         text_block_preview: str,
+        role_id: str = "",
     ) -> None:
         # 1. 诊断日志是可验收状态，写失败要直接暴露。
         with self._lock:
             _ = self._db.execute(
                 """
                 INSERT OR REPLACE INTO akasha_query_log (
-                    query_id, session_key, seq, query_text, intent, ts,
+                    query_id, session_key, role_id, seq, query_text, intent, ts,
                     seed_count, pool_count, activated_count, activation_threshold,
                     dense_count, ripple_count, inject_chars, source_ref_count,
                     activation_items, dense_items, ripple_items, text_block_preview
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    query_id, session_key, seq, query_text, intent, ts,
+                    query_id, session_key, role_id, seq, query_text, intent, ts,
                     seed_count, pool_count, activated_count, activation_threshold,
                     dense_count, ripple_count, inject_chars, source_ref_count,
                     activation_items_json, dense_items_json, ripple_items_json,
@@ -921,6 +1019,7 @@ def _row_to_node(row: sqlite3.Row) -> AkashaNode | None:
         last_resource_ts=float(row["last_resource_ts"] or 0.0),
         embedding=embedding,
         emb_count=int(row["emb_count"] or 1),
+        role_id=str(row["role_id"] or ""),
     )
 
 
@@ -938,6 +1037,7 @@ def _node_row_to_admin(row: sqlite3.Row) -> dict[str, object]:
         "happened_at": str(row["first_ts_unix"] or ""),
         "extra_json": {
             "session_key": str(row["session_key"]),
+            "role_id": str(row["role_id"] or ""),
             "turn_seq": int(row["turn_seq"]),
             "strength": float(row["strength"] or 0.0),
             "resource": float(row["resource"] or 1.0),
@@ -947,3 +1047,15 @@ def _node_row_to_admin(row: sqlite3.Row) -> dict[str, object]:
         "has_embedding": True,
         "embedding_dim": len(deserialize_f32(row["embedding"])),
     }
+
+
+def _role_id_for_session(session_key: str) -> str:
+    clean_session_key = str(session_key).strip()
+    if not clean_session_key.startswith("role:"):
+        return ""
+    return clean_session_key.removeprefix("role:").strip()
+
+
+def _salience_state_key(role_id: str) -> str:
+    clean_role_id = str(role_id).strip()
+    return f"role:{clean_role_id}" if clean_role_id else "global"
