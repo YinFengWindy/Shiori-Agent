@@ -89,13 +89,89 @@ def test_action_catch_up_only_returns_committed_beats(tmp_path):
         {"world_id": world_id, "cursor": "0"},
         request_id="catch-up",
     )
+    repeated = handler.handle(
+        "worlds.events.catch_up",
+        {"world_id": world_id, "cursor": "0"},
+        request_id="catch-up-repeat",
+    )
 
     assert accepted is not None
     assert accepted["run_id"]
     assert replay is not None
+    assert repeated is not None
     assert [beat["content"] for beat in replay["beats"]][-1] == "推开灯塔的门。"
     assert replay["world"]["scene"]["beats"][-1]["content"] == "推开灯塔的门。"
+    assert [plan["planId"] for plan in replay["presentation"]["plans"]] == [
+        plan["planId"] for plan in repeated["presentation"]["plans"]
+    ]
     performance_plan = replay["beats"][-1]["performancePlan"]
     assert performance_plan["schemaVersion"] == 1
     assert performance_plan["cues"][0]["kind"] == "dialogue"
     handler.close()
+
+
+def test_presentation_session_checkpoints_pause_and_rebuilds_from_facts(tmp_path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(name="凛", system_prompt="保持冷静")
+    handler = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    draft = handler.handle(
+        "worlds.drafts.preview",
+        _creation_input(role.id),
+        request_id="preview-world",
+    )
+    assert draft is not None
+    confirmed = handler.handle(
+        "worlds.drafts.confirm",
+        {
+            "draft_id": draft["draft"]["id"],
+            "native_identities": draft["draft"]["nativeIdentities"],
+        },
+        request_id="confirm-world",
+    )
+    assert confirmed is not None
+    world = confirmed["world"]
+    initial = world["presentation"]
+    assert initial["session"]["status"] == "playing"
+    assert len(initial["plans"]) == 1
+    plan_id = initial["plans"][0]["planId"]
+
+    paused = handler.handle(
+        "worlds.presentation.pause",
+        {"world_id": world["id"]},
+        request_id="pause-presentation",
+    )
+    assert paused is not None
+    assert paused["presentation"]["session"]["status"] == "paused"
+    resumed = handler.handle(
+        "worlds.presentation.resume",
+        {"world_id": world["id"]},
+        request_id="resume-presentation",
+    )
+    assert resumed is not None
+    assert resumed["presentation"]["session"]["status"] == "playing"
+
+    checkpoint = handler.handle(
+        "worlds.presentation.checkpoint",
+        {"world_id": world["id"], "plan_id": plan_id, "cue_index": 0},
+        request_id="checkpoint-presentation",
+    )
+    assert checkpoint is not None
+    assert checkpoint["presentation"]["session"]["lastPresentedEventSequence"] == 1
+    assert checkpoint["presentation"]["plans"] == []
+    duplicate = handler.handle(
+        "worlds.presentation.checkpoint",
+        {"world_id": world["id"], "plan_id": plan_id, "cue_index": 0},
+        request_id="duplicate-checkpoint",
+    )
+    assert duplicate == checkpoint
+
+    handler._repository.delete_presentation_session(world["id"])
+    handler.close()
+    restarted = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    rebuilt = restarted.handle(
+        "worlds.get", {"world_id": world["id"]}, request_id="rebuild-session"
+    )
+    assert rebuilt is not None
+    assert rebuilt["world"]["presentation"]["session"]["lastPresentedEventSequence"] == 0
+    assert rebuilt["world"]["presentation"]["plans"]
+    restarted.close()

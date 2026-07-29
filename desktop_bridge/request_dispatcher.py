@@ -36,6 +36,9 @@ _BACKGROUND_WORLD_METHODS = frozenset(
         "worlds.advance",
         "worlds.barriers.resolve",
         "worlds.runs.cancel",
+        "worlds.presentation.pause",
+        "worlds.presentation.resume",
+        "worlds.presentation.checkpoint",
     }
 )
 

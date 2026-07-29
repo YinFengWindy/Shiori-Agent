@@ -9,6 +9,7 @@ export { WorldTimelineView } from "./WorldTimelineView";
 export { WorldWorkspace } from "./WorldWorkspace";
 export {
   parsePerformancePlan,
+  parsePresentationState,
   parseWorldCatchUpPerformance,
   parseWorldDetailsPerformance,
 } from "./presentationProtocol";
@@ -16,5 +17,7 @@ export type {
   PerformancePlan,
   PresentationCue,
   PresentationCueKind,
+  WorldPresentationSession,
+  WorldPresentationState,
 } from "./presentationProtocol";
 export * from "./types";

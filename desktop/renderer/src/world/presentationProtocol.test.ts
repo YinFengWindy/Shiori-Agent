@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parsePerformancePlan } from "./presentationProtocol";
+import { parsePerformancePlan, parsePresentationState } from "./presentationProtocol";
 
 const plan = {
   schemaVersion: 1,
@@ -40,5 +40,37 @@ describe("parsePerformancePlan", () => {
       ...plan,
       cues: [{ ...plan.cues[0], sequence: 1 }],
     }), /contiguous/);
+  });
+});
+
+describe("parsePresentationState", () => {
+  it("accepts a persisted cursor and keeps the stable plan identity", () => {
+    const state = parsePresentationState({
+      session: {
+        worldId: "world-1",
+        lastPresentedEventSequence: 0,
+        activePlanId: "plan-1",
+        activeCueIndex: 0,
+        status: "playing",
+        updatedAt: "2026-07-29T00:00:00+00:00",
+      },
+      plans: [plan],
+    });
+    assert.equal(state.session.activePlanId, "plan-1");
+    assert.equal(state.plans[0].planId, "plan-1");
+  });
+
+  it("rejects an unsupported session status", () => {
+    assert.throws(() => parsePresentationState({
+      session: {
+        worldId: "world-1",
+        lastPresentedEventSequence: 0,
+        activePlanId: null,
+        activeCueIndex: 0,
+        status: "stopped",
+        updatedAt: "2026-07-29T00:00:00+00:00",
+      },
+      plans: [],
+    }), /session status/);
   });
 });

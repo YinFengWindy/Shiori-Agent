@@ -13,12 +13,14 @@ from world_simulation.actors import AutonomyPolicy, PlayerOC
 from world_simulation.dependencies import DependencySet
 from world_simulation.errors import HistoricalConflictError
 from world_simulation.performance import compile_performance_plan
+from world_simulation.presentation_session import WorldPresentationSession
 from world_simulation.proposals import BeatProposal, ProposedEvent
 from world_simulation.repository import WorldRepository
 from world_simulation.scenes import DecisionBarrier
 from world_simulation.service import WorldSimulationService
 from world_simulation.timeline import TimelineEvent
 from world_simulation.world import NativeResident, RoleTemplateSnapshot, WorldDraft, WorldTemplate
+from world_simulation.world import utc_now
 
 
 class WorldSimulationHandler:
@@ -70,6 +72,12 @@ class WorldSimulationHandler:
             return {"world": self._cancel_run(payload)}
         if method == "worlds.events.catch_up":
             return self._catch_up(payload)
+        if method == "worlds.presentation.pause":
+            return {"presentation": self._pause_presentation(payload)}
+        if method == "worlds.presentation.resume":
+            return {"presentation": self._resume_presentation(payload)}
+        if method == "worlds.presentation.checkpoint":
+            return {"presentation": self._checkpoint_presentation(payload)}
         if method == "worlds.shots.redraw":
             return {"shot": self._redraw_shot(payload)}
         raise ValueError(f"unknown world method: {method}")
@@ -308,7 +316,155 @@ class WorldSimulationHandler:
         messages = self._repository.list_outbox(world_id, after_sequence=cursor)
         beats = [self._beat(message["payload"].get("event", {}), int(message["sequence"])) for message in messages]
         next_cursor = str(messages[-1]["sequence"] if messages else cursor)
-        return {"cursor": next_cursor, "beats": beats, "world": self._world_details(world_id)}
+        world = self._world_details(world_id)
+        return {
+            "cursor": next_cursor,
+            "beats": beats,
+            "world": world,
+            "presentation": world["presentation"],
+        }
+
+    def _pause_presentation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Pause queue consumption while retaining the current cue cursor."""
+
+        world_id = self._world_id(payload)
+        session = self._presentation_session(world_id)
+        if session.status != "paused":
+            session = replace(session, status="paused", updated_at=utc_now())
+            self._repository.save_presentation_session(session)
+        return self._presentation_state(world_id)
+
+    def _resume_presentation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Resume queue consumption without replaying completed plans."""
+
+        world_id = self._world_id(payload)
+        state = self._presentation_state(world_id)
+        session = state["session"]
+        if session["status"] == "paused":
+            status = "playing" if state["plans"] else self._waiting_status(world_id)
+            session = replace(
+                self._presentation_session(world_id),
+                status=status,
+                updated_at=utc_now(),
+            )
+            self._repository.save_presentation_session(session)
+        return self._presentation_state(world_id)
+
+    def _checkpoint_presentation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Persist one completed cue and advance only the derived playback cursor."""
+
+        world_id = self._world_id(payload)
+        plan_id = self._required(payload, "plan_id")
+        raw_cue_index = payload.get("cue_index")
+        try:
+            cue_index = int(str(raw_cue_index).strip()) if raw_cue_index is not None else -1
+        except ValueError as exc:
+            raise ValueError("cue_index 必须是非负整数") from exc
+        if cue_index < 0:
+            raise ValueError("cue_index 必须是非负整数")
+        events = self._repository.list_events(world_id)
+        target = next(
+            (
+                event
+                for event in events
+                if compile_performance_plan(event).id == plan_id
+            ),
+            None,
+        )
+        if target is None:
+            raise ValueError("找不到对应的演出计划")
+        plan = compile_performance_plan(target)
+        if cue_index >= len(plan.cues):
+            raise ValueError("cue_index 超出演出计划范围")
+        session = self._presentation_session(world_id)
+        if target.sequence <= session.last_presented_event_sequence:
+            return self._presentation_state(world_id)
+        if session.status == "paused":
+            raise ValueError("演出已暂停")
+        if target.sequence != session.last_presented_event_sequence + 1:
+            raise ValueError("演出计划必须按世界事件顺序完成")
+        if session.active_plan_id not in (None, plan.id):
+            raise ValueError("另一演出计划正在等待完成")
+        cue = plan.cues[cue_index]
+        if not cue.checkpoint and cue_index != len(plan.cues) - 1:
+            raise ValueError("只能提交阻塞 cue 或计划末尾 checkpoint")
+        if session.active_plan_id == plan.id and cue_index < session.active_cue_index:
+            return self._presentation_state(world_id)
+        if session.active_plan_id == plan.id and cue_index > session.active_cue_index:
+            raise ValueError("不能跳过当前演出 cue")
+        next_index = cue_index + 1
+        if next_index < len(plan.cues):
+            next_session = replace(
+                session,
+                active_plan_id=plan.id,
+                active_cue_index=next_index,
+                status="playing",
+                updated_at=utc_now(),
+            )
+        else:
+            next_session = replace(
+                session,
+                last_presented_event_sequence=target.sequence,
+                active_plan_id=None,
+                active_cue_index=0,
+                status="playing",
+                updated_at=utc_now(),
+            )
+        self._repository.save_presentation_session(next_session)
+        return self._presentation_state(world_id)
+
+    def _presentation_session(self, world_id: str) -> WorldPresentationSession:
+        """Load a session, rebuilding an empty cursor when its derived row is gone."""
+
+        session = self._repository.get_presentation_session(world_id)
+        if session is not None:
+            return session
+        events = self._repository.list_events(world_id)
+        session = WorldPresentationSession(
+            world_id=world_id,
+            status="playing" if events else self._waiting_status(world_id),
+        )
+        self._repository.save_presentation_session(session)
+        return session
+
+    def _presentation_state(self, world_id: str) -> dict[str, Any]:
+        """Derive idempotent plans from facts and expose the persisted cursor."""
+
+        events = self._repository.list_events(world_id)
+        barriers = self._repository.list_pending_barriers(world_id)
+        session = self._presentation_session(world_id)
+        plans = [
+            compile_performance_plan(event)
+            for event in events
+            if event.sequence > session.last_presented_event_sequence
+        ]
+        if session.active_plan_id and all(plan.id != session.active_plan_id for plan in plans):
+            session = replace(
+                session,
+                active_plan_id=None,
+                active_cue_index=0,
+                status="playing" if plans and session.status != "paused" else session.status,
+                updated_at=utc_now(),
+            )
+            self._repository.save_presentation_session(session)
+        elif session.status != "paused":
+            desired = "playing" if plans else self._waiting_status(world_id, barriers=barriers)
+            if session.status != desired:
+                session = replace(session, status=desired, updated_at=utc_now())
+                self._repository.save_presentation_session(session)
+        return {
+            "session": session.to_bridge_dict(),
+            "plans": [plan.to_bridge_dict() for plan in plans],
+        }
+
+    def _waiting_status(
+        self, world_id: str, *, barriers: list[DecisionBarrier] | None = None
+    ) -> str:
+        return "awaiting_barrier" if barriers is not None and barriers else (
+            "awaiting_barrier"
+            if self._repository.list_pending_barriers(world_id)
+            else "awaiting_action"
+        )
 
     def _redraw_shot(self, payload: dict[str, Any]) -> dict[str, Any]:
         world_id = self._world_id(payload)
@@ -341,6 +497,7 @@ class WorldSimulationHandler:
             },
             "relatedCharacters": [{"id": resident.id, "name": resident.name, "relationship": resident.occupation or "世界原住民", "avatarUrl": resident.visual_identity.get("avatar_path")} for resident in residents],
             "performance": {"active": bool(beats), "label": "观看现场演出", "canCancel": False},
+            "presentation": self._presentation_state(world_id),
         }
 
     def _summary(self, world: Any) -> dict[str, Any]:

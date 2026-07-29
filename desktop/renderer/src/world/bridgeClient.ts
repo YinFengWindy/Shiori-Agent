@@ -10,7 +10,12 @@ import type {
   WorldSummary,
   WorldTimelineEntry,
 } from "./types";
-import { parseWorldCatchUpPerformance, parseWorldDetailsPerformance } from "./presentationProtocol";
+import {
+  parsePresentationState,
+  parseWorldCatchUpPerformance,
+  parseWorldDetailsPerformance,
+  type WorldPresentationState,
+} from "./presentationProtocol";
 import { WorldBridgeError } from "./types";
 
 type DesktopInvoke = typeof window.miraDesktop.invoke;
@@ -40,6 +45,9 @@ export interface WorldBridgeClient {
   commitBackfill(worldId: string, preview: BackfillPreview): Promise<WorldDetails>;
   cancelRun(worldId: string): Promise<WorldDetails>;
   catchUp(worldId: string, cursor?: string): Promise<WorldCatchUp>;
+  pausePresentation(worldId: string): Promise<WorldPresentationState>;
+  resumePresentation(worldId: string): Promise<WorldPresentationState>;
+  checkpointPresentation(worldId: string, planId: string, cueIndex: number): Promise<WorldPresentationState>;
   redrawShot(worldId: string, shotId: string): Promise<SceneShot>;
 }
 
@@ -120,6 +128,19 @@ export function createWorldBridgeClient(invoke: DesktopInvoke = window.miraDeskt
     },
     async catchUp(worldId, cursor) {
       return parseWorldCatchUpPerformance(await invokePayload<WorldCatchUp>(invoke, "worlds.events.catch_up", { world_id: worldId, cursor }));
+    },
+    async pausePresentation(worldId) {
+      return parsePresentationState((await invokePayload<{ presentation: WorldPresentationState }>(invoke, "worlds.presentation.pause", { world_id: worldId })).presentation);
+    },
+    async resumePresentation(worldId) {
+      return parsePresentationState((await invokePayload<{ presentation: WorldPresentationState }>(invoke, "worlds.presentation.resume", { world_id: worldId })).presentation);
+    },
+    async checkpointPresentation(worldId, planId, cueIndex) {
+      return parsePresentationState((await invokePayload<{ presentation: WorldPresentationState }>(invoke, "worlds.presentation.checkpoint", {
+        world_id: worldId,
+        plan_id: planId,
+        cue_index: cueIndex,
+      })).presentation);
     },
     async redrawShot(worldId, shotId) {
       return (await invokePayload<{ shot: SceneShot }>(invoke, "worlds.shots.redraw", {

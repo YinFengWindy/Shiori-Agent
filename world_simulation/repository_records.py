@@ -87,6 +87,18 @@ class RepositoryRecords:
                 )
                 self._insert_event(connection, copied)
             self._upsert_projection(connection, projection)
+            connection.execute(
+                """INSERT INTO world_presentation_sessions
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    target.id,
+                    through_event.sequence,
+                    None,
+                    0,
+                    "awaiting_action",
+                    target.created_at,
+                ),
+            )
             self._save_idempotency(connection, request_id, target.id, result)
             self._insert_outbox(
                 connection,
