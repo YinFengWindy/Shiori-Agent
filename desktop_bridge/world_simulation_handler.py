@@ -10,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from core.roles import RoleStore
+from desktop_bridge.world_presentation_assets import WorldPresentationAssetResolver
 from world_simulation.actors import AutonomyPolicy, PlayerOC
 from world_simulation.dependencies import DependencySet
 from world_simulation.errors import HistoricalConflictError
@@ -454,9 +455,13 @@ class WorldSimulationHandler:
             if session.status != desired:
                 session = replace(session, status=desired, updated_at=utc_now())
                 self._repository.save_presentation_session(session)
+        asset_resolver = WorldPresentationAssetResolver(
+            snapshots=self._repository.list_role_snapshots(world_id),
+            residents=self._repository.list_residents(world_id),
+        )
         return {
             "session": session.to_bridge_dict(),
-            "plans": [plan.to_bridge_dict() for plan in plans],
+            "plans": [asset_resolver.to_bridge_dict(plan) for plan in plans],
         }
 
     def _waiting_status(

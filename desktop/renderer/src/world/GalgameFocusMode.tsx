@@ -2,6 +2,7 @@ import { ArrowClockwise, ArrowLeft, Pause, Play, SkipForward, X } from "@phospho
 import { useEffect, useMemo, useState } from "react";
 import type { PerformancePlan } from "./presentationProtocol";
 import type { SceneBeat } from "./types";
+import { hydrateWorldPresentationAssets } from "./worldPresentationAssets";
 import { WorldStage } from "./WorldStage";
 
 type GalgameFocusModeProps = {
@@ -46,7 +47,14 @@ function fallbackPlan(beat: SceneBeat): PerformancePlan {
 export function GalgameFocusMode({ worldName, beat, plan, preloadPlan, startCueIndex = 0, paused = false, onExit, onRedrawShot, onPause, onResume, onCheckpoint }: GalgameFocusModeProps) {
   const [locallyPaused, setLocallyPaused] = useState(paused);
   const [skipVersion, setSkipVersion] = useState(0);
-  const activePlan = useMemo(() => plan ?? beat.performancePlan ?? fallbackPlan(beat), [beat, plan]);
+  const activePlan = useMemo(
+    () => hydrateWorldPresentationAssets(plan ?? beat.performancePlan ?? fallbackPlan(beat)),
+    [beat, plan],
+  );
+  const hydratedPreloadPlan = useMemo(
+    () => preloadPlan ? hydrateWorldPresentationAssets(preloadPlan) : undefined,
+    [preloadPlan],
+  );
   const initialShot = useMemo(() => {
     const shot = beat.shot;
     if (!shot) return undefined;
@@ -60,7 +68,7 @@ export function GalgameFocusMode({ worldName, beat, plan, preloadPlan, startCueI
     <section className="fixed inset-0 z-[100] overflow-hidden bg-[#171A18] text-white" data-testid="galgame-focus-mode">
       <WorldStage
         plan={activePlan}
-        preloadPlan={preloadPlan}
+        preloadPlan={hydratedPreloadPlan}
         fallbackText={beat.content}
         initialVisual={initialShot}
         startCueIndex={startCueIndex}

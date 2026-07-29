@@ -223,3 +223,81 @@ def test_world_draft_freezes_role_visual_and_voice_snapshots(tmp_path):
     role_store.delete_role(role.id)
     assert all(Path(path).is_file() for path in copied_paths)
     handler.close()
+
+
+def test_world_read_model_resolves_snapshot_visuals_for_sprite_cues(tmp_path):
+    avatar_source = tmp_path / "avatar.png"
+    mood_source = tmp_path / "mood.png"
+    avatar_source.write_bytes(b"avatar")
+    mood_source.write_bytes(b"mood")
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        name="凛",
+        system_prompt="保持冷静",
+        avatar_source=avatar_source,
+        illustration_sources=[mood_source],
+    )
+    role = role_store.update_role(
+        role.id,
+        runtime_config={
+            "default_mood": "平静",
+            "mood_catalog": ["平静"],
+            "mood_illustration_bindings": {"平静": role.illustrations[0]},
+        },
+    )
+    handler = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    draft = handler.handle(
+        "worlds.drafts.preview",
+        _creation_input(role.id),
+        request_id="preview-visual-world",
+    )
+    assert draft is not None
+    confirmed = handler.handle(
+        "worlds.drafts.confirm",
+        {
+            "draft_id": draft["draft"]["id"],
+            "native_identities": draft["draft"]["nativeIdentities"],
+        },
+        request_id="confirm-visual-world",
+    )
+    assert confirmed is not None
+    world_id = confirmed["world"]["id"]
+    world = handler._repository.require_world(world_id)
+    resident = handler._repository.list_residents(world_id)[0]
+    run = handler._service.start_run(
+        world_id,
+        kind="action",
+        request_id="visual-action:run",
+        expected_revision=world.revision,
+        random_seed="visual-action",
+    )
+    proposal = handler._proposal(
+        world=world,
+        run_id=run.id,
+        random_seed=run.random_seed,
+        event_type="scene.action.committed",
+        effective_at=world.current_time,
+        participants=(resident.id,),
+        presentation={
+            "content": "她望向潮水。",
+            "sprites": [{"actor_id": resident.id, "mood": "平静"}],
+        },
+    )
+    handler._service.submit_action(proposal, request_id="visual-action")
+
+    result = handler.handle(
+        "worlds.get", {"world_id": world_id}, request_id="get-visual-world"
+    )
+
+    assert result is not None
+    sprite_cue = next(
+        cue
+        for plan in result["world"]["presentation"]["plans"]
+        for cue in plan["cues"]
+        if cue["kind"] == "sprites"
+    )
+    sprite = sprite_cue["payload"]["items"][0]
+    assert Path(sprite["image_path"]).read_bytes() == b"mood"
+    assert sprite["fallbackIds"] == [sprite["fallbackAssets"][0]["assetId"]]
+    assert Path(sprite["fallbackAssets"][0]["image_path"]).read_bytes() == b"avatar"
+    handler.close()

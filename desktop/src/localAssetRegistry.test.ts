@@ -64,12 +64,16 @@ describe("LocalAssetRegistry", () => {
     const references = registry.grantTrustedPayload({
       role: { avatar_abs: avatarPath, arbitrary: arbitraryPath },
       session: { media: [documentPath, launderedPath] },
+      presentation: { items: [{ image_path: arbitraryPath }] },
     });
 
-    assert.deepEqual(references.map((reference) => reference.path).sort(), [avatarPath, documentPath].sort());
+    assert.deepEqual(
+      references.map((reference) => reference.path).sort(),
+      [avatarPath, arbitraryPath, documentPath].sort(),
+    );
     assert.equal(registry.resolveReference(avatarPath)?.kind, "image");
+    assert.equal(registry.resolveReference(arbitraryPath)?.kind, "image");
     assert.equal(registry.resolveReference(documentPath)?.kind, "document");
-    assert.equal(registry.resolveReference(arbitraryPath), null);
     assert.equal(registry.resolveReference(launderedPath), null);
   });
 
