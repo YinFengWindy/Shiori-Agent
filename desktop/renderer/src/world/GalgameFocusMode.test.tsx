@@ -9,9 +9,11 @@ describe("GalgameFocusMode", () => {
   it("takes over the viewport with dialogue and always keeps an exit", () => {
     const markup = renderToStaticMarkup(<GalgameFocusMode worldName="雨港" beat={createSceneBeat({ isCritical: true })} onExit={() => undefined} onRedrawShot={() => undefined} />);
     assert.match(markup, /fixed inset-0/);
+    assert.match(markup, /data-testid="world-stage"/);
     assert.match(markup, />你终于来了。</);
+    assert.match(markup, /aria-label="暂停演出"/);
+    assert.match(markup, /aria-label="跳过当前演出"/);
     assert.match(markup, /aria-label="退出焦点模式"/);
     assert.match(markup, />返回工作台</);
-    assert.doesNotMatch(markup, />暂停演出</);
   });
 });

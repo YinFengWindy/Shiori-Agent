@@ -134,6 +134,39 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
     });
   }, [client, run, state.world]);
 
+  const pausePresentation = useCallback(async () => {
+    if (!state.world) return;
+    await run(
+      () => client.pausePresentation(state.world!.id),
+      (presentation) => setState((current) => current.world ? ({
+        ...current,
+        world: { ...current.world, presentation },
+      }) : current),
+    );
+  }, [client, run, state.world]);
+
+  const resumePresentation = useCallback(async () => {
+    if (!state.world) return;
+    await run(
+      () => client.resumePresentation(state.world!.id),
+      (presentation) => setState((current) => current.world ? ({
+        ...current,
+        world: { ...current.world, presentation },
+      }) : current),
+    );
+  }, [client, run, state.world]);
+
+  const checkpointPresentation = useCallback(async (planId: string, cueIndex: number) => {
+    if (!state.world) return;
+    await run(
+      () => client.checkpointPresentation(state.world!.id, planId, cueIndex),
+      (presentation) => setState((current) => current.world ? ({
+        ...current,
+        world: { ...current.world, presentation },
+      }) : current),
+    );
+  }, [client, run, state.world]);
+
   return useMemo(() => ({
     ...state,
     activeOc: selectActiveOc(state.world),
@@ -146,5 +179,8 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
     cancelRun,
     catchUp,
     redrawShot,
-  }), [advance, cancelRun, catchUp, loadWorld, redrawShot, reloadWorlds, resolveBarrier, state, submitAction, switchOc]);
+    pausePresentation,
+    resumePresentation,
+    checkpointPresentation,
+  }), [advance, cancelRun, catchUp, checkpointPresentation, loadWorld, pausePresentation, redrawShot, reloadWorlds, resolveBarrier, resumePresentation, state, submitAction, switchOc]);
 }

@@ -168,8 +168,27 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
       );
     }
     if (mode === "focus") {
-      const beat = [...world.scene.beats].reverse().find((item) => item.isCritical) ?? world.scene.beats.at(-1);
-      return beat ? <GalgameFocusMode worldName={world.name} beat={beat} onExit={() => setMode("workspace")} onRedrawShot={controller.redrawShot} /> : null;
+      const plan = world.presentation?.plans[0];
+      const beat = (plan ? world.scene.beats.find((item) => item.id === plan.eventId) : undefined)
+        ?? [...world.scene.beats].reverse().find((item) => item.isCritical)
+        ?? world.scene.beats.at(-1);
+      return beat ? (
+        <GalgameFocusMode
+          worldName={world.name}
+          beat={beat}
+          plan={plan}
+          preloadPlan={world.presentation?.plans[1]}
+          startCueIndex={world.presentation?.session.activePlanId === plan?.planId
+            ? world.presentation?.session.activeCueIndex ?? 0
+            : 0}
+          paused={world.presentation?.session.status === "paused"}
+          onExit={() => setMode("workspace")}
+          onRedrawShot={controller.redrawShot}
+          onPause={controller.pausePresentation}
+          onResume={controller.resumePresentation}
+          onCheckpoint={controller.checkpointPresentation}
+        />
+      ) : null;
     }
     return (
       <WorldWorkspace
