@@ -12,6 +12,7 @@ from core.roles import RoleStore
 from world_simulation.actors import AutonomyPolicy, PlayerOC
 from world_simulation.dependencies import DependencySet
 from world_simulation.errors import HistoricalConflictError
+from world_simulation.performance import compile_performance_plan
 from world_simulation.proposals import BeatProposal, ProposedEvent
 from world_simulation.repository import WorldRepository
 from world_simulation.scenes import DecisionBarrier
@@ -375,7 +376,7 @@ class WorldSimulationHandler:
         changes = event.get("changes", {}) if isinstance(event.get("changes"), dict) else {}
         presentation = changes.get("presentation", {}) if isinstance(changes.get("presentation"), dict) else {}
         event_type = str(event.get("event_type") or "world.event")
-        return {"id": str(event.get("id") or f"beat-{order}"), "order": order, "timeLabel": str(event.get("effective_at") or ""), "speakerName": presentation.get("speaker_name"), "kind": presentation.get("kind", "environment"), "content": presentation.get("content", self._event_summary(event_type)), "isCritical": event_type.startswith("decision.")}
+        return {"id": str(event.get("id") or f"beat-{order}"), "order": order, "timeLabel": str(event.get("effective_at") or ""), "speakerName": presentation.get("speaker_name"), "kind": presentation.get("kind", "environment"), "content": presentation.get("content", self._event_summary(event_type)), "isCritical": event_type.startswith("decision."), "performancePlan": compile_performance_plan(event).to_bridge_dict()}
 
     def _timeline_entry(self, event: TimelineEvent, *, visibility: str) -> dict[str, Any]:
         return {"id": event.id, "timeLabel": event.effective_at, "title": self._event_title(event.event_type), "summary": self._beat(event.to_dict(), event.sequence)["content"], "visibility": visibility, "involvedNames": self._participant_names(event.world_id, event.participants), "canCopy": True, "canEnter": True}

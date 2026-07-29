@@ -2,7 +2,14 @@
 
 from world_simulation.actors import AutonomyPolicy, PlayerOC
 from world_simulation.dependencies import DependencySet
-from world_simulation.performance import PerformancePlan
+from world_simulation.performance import (
+    PRESENTATION_PROTOCOL_VERSION,
+    PerformancePlan,
+    PresentationCue,
+    compile_performance_plan,
+    cue_id_for_plan,
+    plan_id_for_event,
+)
 from world_simulation.proposals import BeatProposal, ProposedEvent
 from world_simulation.repository import WorldRepository
 from world_simulation.runs import WorldRun
@@ -24,7 +31,9 @@ __all__ = [
     "DecisionBarrier",
     "DependencySet",
     "NativeResident",
+    "PRESENTATION_PROTOCOL_VERSION",
     "PerformancePlan",
+    "PresentationCue",
     "PlayerOC",
     "ProposedEvent",
     "RoleTemplateSnapshot",
@@ -38,4 +47,7 @@ __all__ = [
     "WorldSimulationService",
     "WorldStateProjection",
     "WorldTemplate",
+    "compile_performance_plan",
+    "cue_id_for_plan",
+    "plan_id_for_event",
 ]
