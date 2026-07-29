@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from core.roles import RoleStore
 from desktop_bridge.world_simulation_handler import WorldSimulationHandler
 
@@ -175,3 +177,49 @@ def test_presentation_session_checkpoints_pause_and_rebuilds_from_facts(tmp_path
     assert rebuilt["world"]["presentation"]["session"]["lastPresentedEventSequence"] == 0
     assert rebuilt["world"]["presentation"]["plans"]
     restarted.close()
+
+
+def test_world_draft_freezes_role_visual_and_voice_snapshots(tmp_path):
+    source = tmp_path / "portrait.png"
+    source.write_bytes(b"world-owned-image")
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        name="凛",
+        system_prompt="保持冷静",
+        avatar_source=source,
+        illustration_sources=[source],
+    )
+    role = role_store.update_role(
+        role.id,
+        runtime_config={
+            "default_mood": "平静",
+            "mood_catalog": ["平静"],
+            "mood_illustration_bindings": {"平静": role.illustrations[0]},
+            "tts": {
+                "provider": "minimax",
+                "voice_id": "rin-voice",
+                "speed": 1.2,
+                "secret_key": "must-not-be-copied",
+            },
+        },
+    )
+    handler = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    draft = handler.handle(
+        "worlds.drafts.preview",
+        _creation_input(role.id),
+        request_id="preview-world",
+    )
+    assert draft is not None
+    stored = handler._repository.get_draft(draft["draft"]["id"])
+    assert stored is not None
+    snapshot = stored.role_snapshots[0]
+    copied_paths = [item["path"] for item in snapshot.assets]
+    assert copied_paths and all(
+        (tmp_path / "world_assets") in Path(path).parents for path in copied_paths
+    )
+    assert all(Path(path).is_file() for path in copied_paths)
+    assert snapshot.voice_profile["voice_id"] == "rin-voice"
+    assert "secret_key" not in snapshot.voice_profile
+    role_store.delete_role(role.id)
+    assert all(Path(path).is_file() for path in copied_paths)
+    handler.close()

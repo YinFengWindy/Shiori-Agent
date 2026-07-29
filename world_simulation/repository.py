@@ -276,6 +276,16 @@ class WorldRepository(RepositoryRecords):
             ).fetchall()
         return [NativeResident(**_load(row["payload"], {})) for row in rows]
 
+    def list_role_snapshots(self, world_id: str) -> list[RoleTemplateSnapshot]:
+        """Return immutable role snapshots captured when the world was created."""
+
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT payload FROM role_snapshots WHERE world_id = ? ORDER BY id",
+                (world_id,),
+            ).fetchall()
+        return [RoleTemplateSnapshot(**_load(row["payload"], {})) for row in rows]
+
     def require_world(self, world_id: str) -> WorldInstance:
         """Load a world or fail with a stable domain error."""
 
