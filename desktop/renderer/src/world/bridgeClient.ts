@@ -20,6 +20,11 @@ import { WorldBridgeError } from "./types";
 
 type DesktopInvoke = typeof window.miraDesktop.invoke;
 
+export type WorldVoiceSynthesis = {
+  audioBase64: string;
+  format: "mp3";
+};
+
 async function invokePayload<T>(invoke: DesktopInvoke, method: string, payload: Record<string, unknown>) {
   const response = await invoke({ method, payload });
   if (response.error) {
@@ -48,6 +53,7 @@ export interface WorldBridgeClient {
   pausePresentation(worldId: string): Promise<WorldPresentationState>;
   resumePresentation(worldId: string): Promise<WorldPresentationState>;
   checkpointPresentation(worldId: string, planId: string, cueIndex: number): Promise<WorldPresentationState>;
+  synthesizeVoice(text: string, voiceProfile: Record<string, unknown>): Promise<WorldVoiceSynthesis>;
   redrawShot(worldId: string, shotId: string): Promise<SceneShot>;
 }
 
@@ -141,6 +147,18 @@ export function createWorldBridgeClient(invoke: DesktopInvoke = window.miraDeskt
         plan_id: planId,
         cue_index: cueIndex,
       })).presentation);
+    },
+    async synthesizeVoice(text, voiceProfile) {
+      const payload = await invokePayload<{ audio_base64: string; format: string }>(invoke, "voice.synthesize", {
+        text,
+        voice_id: voiceProfile.voiceId,
+        speed: voiceProfile.speed,
+        emotion: voiceProfile.emotion,
+      });
+      if (typeof payload.audio_base64 !== "string" || payload.format !== "mp3") {
+        throw new WorldBridgeError("语音服务返回格式无效", "invalid_voice_response");
+      }
+      return { audioBase64: payload.audio_base64, format: "mp3" };
     },
     async redrawShot(worldId, shotId) {
       return (await invokePayload<{ shot: SceneShot }>(invoke, "worlds.shots.redraw", {

@@ -20,6 +20,7 @@ function render(world = createWorldDetails()) {
       onPause={() => undefined}
       onResume={() => undefined}
       onCheckpoint={() => undefined}
+      synthesizeVoice={async () => ({ audioBase64: "", format: "mp3" })}
     />,
   );
 }

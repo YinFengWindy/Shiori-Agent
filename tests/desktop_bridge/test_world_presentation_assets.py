@@ -51,3 +51,100 @@ def test_resolver_enriches_semantic_mood_with_avatar_fallback():
             "image_path": "C:/world-assets/avatar.png",
         }
     ]
+
+
+def _dialogue_plan(payload: dict[str, object]):
+    return compile_performance_plan(
+        TimelineEvent(
+            id="event-dialogue",
+            world_id="world-1",
+            event_type="scene.dialogue.committed",
+            effective_at="2026-07-29T10:00:00+00:00",
+            sequence=1,
+            changes={"presentation": {"dialogue": payload}},
+        )
+    )
+
+
+def _voice_snapshot(**voice_profile: object) -> RoleTemplateSnapshot:
+    return RoleTemplateSnapshot(
+        id="snapshot-voice",
+        source_role_id="role-voice",
+        source_version="v1",
+        persona={},
+        voice_profile=voice_profile,
+    )
+
+
+def test_resolver_projects_safe_voice_profile_and_mood_emotion():
+    plan = _dialogue_plan(
+        {
+            "actor_id": "resident-voice",
+            "mood": "开心",
+            "content": "你好。",
+            "voiceProfile": {"secret_key": "must-not-pass"},
+        }
+    )
+    resolver = WorldPresentationAssetResolver(
+        snapshots=[
+            _voice_snapshot(
+                config_version=1,
+                enabled=True,
+                provider="minimax",
+                voice_id="rin-voice",
+                speed=1.2,
+                mood_tts_emotions={"开心": "happy", "悲伤": "sad"},
+                secret_key="must-not-pass",
+            )
+        ],
+        residents=[
+            NativeResident(id="resident-voice", snapshot_id="snapshot-voice", name="凛")
+        ],
+    )
+
+    dialogue = resolver.to_bridge_dict(plan)["cues"][0]["payload"]
+
+    assert dialogue["voiceProfile"] == {
+        "configVersion": 1,
+        "enabled": True,
+        "provider": "minimax",
+        "voiceId": "rin-voice",
+        "speed": 1.2,
+        "moodEmotions": {"开心": "happy", "悲伤": "sad"},
+        "emotion": "happy",
+    }
+    assert "secret_key" not in str(dialogue)
+
+
+def test_resolver_does_not_project_voice_profile_without_actor_or_voice_id():
+    resolver = WorldPresentationAssetResolver(
+        snapshots=[_voice_snapshot(enabled=True, voice_id="")],
+        residents=[
+            NativeResident(id="resident-voice", snapshot_id="snapshot-voice", name="凛")
+        ],
+    )
+
+    without_actor = resolver.to_bridge_dict(_dialogue_plan({"content": "无声线。"}))
+    without_voice_id = resolver.to_bridge_dict(
+        _dialogue_plan({"actorId": "resident-voice", "content": "无声线。"})
+    )
+
+    assert "voiceProfile" not in without_actor["cues"][0]["payload"]
+    assert "voiceProfile" not in without_voice_id["cues"][0]["payload"]
+
+
+def test_resolver_does_not_project_disabled_voice_profile():
+    plan = _dialogue_plan({"actorId": "resident-voice", "mood": "平静"})
+    resolver = WorldPresentationAssetResolver(
+        snapshots=[
+            _voice_snapshot(enabled=False, voice_id="rin-voice", secret_key="must-not-pass")
+        ],
+        residents=[
+            NativeResident(id="resident-voice", snapshot_id="snapshot-voice", name="凛")
+        ],
+    )
+
+    dialogue = resolver.to_bridge_dict(plan)["cues"][0]["payload"]
+
+    assert "voiceProfile" not in dialogue
+    assert "secret_key" not in str(dialogue)
