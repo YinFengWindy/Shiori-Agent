@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createWorldBridgeClient, type WorldBridgeClient } from "./bridgeClient";
-import { mergeCommittedBeats, selectActiveOc, selectWorld } from "./selectors";
+import { mergeCommittedBeats, selectActiveOc } from "./selectors";
 import type { DecisionBarrier, SceneShot, WorldDetails, WorldSummary } from "./types";
 
 type ControllerState = {
@@ -40,7 +40,7 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
   }, []);
 
   const loadWorld = useCallback(async (worldId: string) => {
-    await run(() => client.getWorld(worldId), (world) => {
+    return run(() => client.getWorld(worldId), (world) => {
       setState((current) => ({ ...current, world }));
     });
   }, [client, run]);
@@ -49,9 +49,7 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
       const worlds = await client.listWorlds();
-      const selected = selectWorld(worlds, state.world?.id ?? "");
-      const world = selected ? await client.getWorld(selected.id) : null;
-      setState((current) => ({ ...current, worlds, world, loading: false }));
+      setState((current) => ({ ...current, worlds, loading: false }));
     } catch (error) {
       setState((current) => ({
         ...current,
@@ -59,7 +57,7 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
         error: error instanceof Error ? error.message : "无法读取世界",
       }));
     }
-  }, [client, state.world?.id]);
+  }, [client]);
 
   useEffect(() => {
     void reloadWorlds();

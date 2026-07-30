@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import threading
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -26,6 +27,8 @@ class DesktopVoiceHandler:
         self._cancel_voice_turn = cancel_voice_turn
         self._active_runtime_configs = tuple(active_runtime_configs)
         self._recovery_task: asyncio.Task[None] | None = None
+        self._synthesis_cancel_events: dict[str, threading.Event] = {}
+        self._synthesis_lock = threading.Lock()
 
     def start(self) -> None:
         """Starts one background orphan-recovery task in the active event loop."""
@@ -53,6 +56,15 @@ class DesktopVoiceHandler:
                 "cancelled": self._cancel_voice_turn(voice_turn_id),
                 "voice_turn_id": voice_turn_id,
             }
+        if method == "voice.synthesize.cancel":
+            voice_request_id = str(payload.get("voice_request_id") or "").strip()
+            if not voice_request_id:
+                raise ValueError("voice_request_id 不能为空")
+            with self._synthesis_lock:
+                cancel_event = self._synthesis_cancel_events.get(voice_request_id)
+            if cancel_event is not None:
+                cancel_event.set()
+            return {"cancelled": cancel_event is not None, "voice_request_id": voice_request_id}
         if method == "voice.transcribe":
             audio = _decode_audio(payload)
             result = await asyncio.to_thread(
@@ -66,13 +78,24 @@ class DesktopVoiceHandler:
                 raise ValueError("text 和 voice_id 不能为空")
             speed = float(payload.get("speed", 1.0))
             emotion = str(payload.get("emotion") or "").strip()
-            audio = await asyncio.to_thread(
-                self.voice_service.synthesize,
-                text,
-                voice_id=voice_id,
-                speed=speed,
-                emotion=emotion,
-            )
+            voice_request_id = str(payload.get("voice_request_id") or "").strip()
+            if not voice_request_id:
+                raise ValueError("voice_request_id 不能为空")
+            cancel_event = threading.Event()
+            with self._synthesis_lock:
+                self._synthesis_cancel_events[voice_request_id] = cancel_event
+            try:
+                audio = await asyncio.to_thread(
+                    self.voice_service.synthesize,
+                    text,
+                    voice_id=voice_id,
+                    speed=speed,
+                    emotion=emotion,
+                    cancel_event=cancel_event,
+                )
+            finally:
+                with self._synthesis_lock:
+                    self._synthesis_cancel_events.pop(voice_request_id, None)
             return {
                 "audio_base64": base64.b64encode(audio).decode("ascii"),
                 "format": "mp3",
@@ -127,6 +150,10 @@ class DesktopVoiceHandler:
 
     async def aclose(self) -> None:
         """Waits for the one-time orphan recovery task."""
+
+        with self._synthesis_lock:
+            for cancel_event in self._synthesis_cancel_events.values():
+                cancel_event.set()
 
         if self._recovery_task is not None and not self._recovery_task.done():
             await self._recovery_task

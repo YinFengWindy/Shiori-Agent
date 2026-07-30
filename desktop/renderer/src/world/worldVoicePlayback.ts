@@ -23,6 +23,7 @@ export type WorldVoiceSynthesize = (
 export type WorldVoiceAudio = {
   onended: (() => void) | null;
   onerror: ((event: unknown) => void) | null;
+  volume?: number;
   play(): Promise<void> | void;
   pause(): void;
   src?: string;
@@ -49,6 +50,9 @@ export type WorldVoicePlaybackOutcome = {
 export type WorldVoicePlaybackOptions = {
   synthesize: WorldVoiceSynthesize;
   createAudio: WorldVoiceAudioFactory;
+  volume?: number;
+  onPlaybackStart?: () => void;
+  onPlaybackEnd?: () => void;
 };
 
 type NormalizedVoiceProfile = {
@@ -270,6 +274,7 @@ export class WorldVoicePlayback {
   private async playAudio(active: ActiveEntry, synthesized: WorldVoiceSynthesis): Promise<void> {
     const audio = this.options.createAudio(synthesized.audioBase64, synthesized.format);
     active.audio = audio;
+    if (typeof audio.volume === "number") audio.volume = normalizeVolume(this.options.volume ?? 100);
     const generation = active.generation;
     await new Promise<void>((resolve) => {
       let finished = false;
@@ -277,6 +282,7 @@ export class WorldVoicePlayback {
         if (finished || this.active !== active || active.generation !== generation) return;
         finished = true;
         active.resumePlayback = null;
+        this.options.onPlaybackEnd?.();
         this.settle(active, outcome);
         resolve();
       };
@@ -296,6 +302,7 @@ export class WorldVoicePlayback {
         }
       };
       active.resumePlayback = start;
+      this.options.onPlaybackStart?.();
       start();
     });
   }
@@ -322,6 +329,10 @@ export class WorldVoicePlayback {
       // Some test doubles and browsers reject load after an interrupted play.
     }
   }
+}
+
+function normalizeVolume(value: number): number {
+  return Math.min(1, Math.max(0, value / 100));
 }
 
 function normalizeText(value: string): string {

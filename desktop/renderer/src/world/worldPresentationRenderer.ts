@@ -12,7 +12,7 @@ export type WorldPresentationPrepareRequest = {
 export interface WorldPresentationRenderer {
   readonly kind: "pixi" | "text";
   initialize(host: HTMLElement): Promise<void>;
-  prepare(request: WorldPresentationPrepareRequest, signal?: AbortSignal): Promise<void>;
+  prepare(request: WorldPresentationPrepareRequest, signal?: AbortSignal, onProgress?: (loaded: number, total: number) => void): Promise<void>;
   recover(cues: readonly PresentationCue[], signal?: AbortSignal): Promise<void>;
   render(cue: PresentationCue, signal?: AbortSignal): Promise<void>;
   pause(): void;
@@ -46,9 +46,10 @@ export class TextWorldPresentationRenderer implements WorldPresentationRenderer 
     this.#assertActive();
   }
 
-  async prepare(request: WorldPresentationPrepareRequest): Promise<void> {
+  async prepare(request: WorldPresentationPrepareRequest, _signal?: AbortSignal, onProgress?: (loaded: number, total: number) => void): Promise<void> {
     this.#assertActive();
     this.#publish({ text: request.fallbackText, cueId: null });
+    onProgress?.(request.manifest.length, request.manifest.length);
   }
 
   async recover(cues: readonly PresentationCue[]): Promise<void> {
@@ -93,26 +94,41 @@ export async function playPresentationPlan(
   options: {
     signal?: AbortSignal;
     startCueIndex?: number;
+    onPrepareProgress?: (loaded: number, total: number) => void;
     onCueRendered?: (cue: PresentationCue) => Promise<void> | void;
     onCueComplete?: (cue: PresentationCue) => Promise<void> | void;
   } = {},
 ): Promise<void> {
-  await renderer.prepare(request, options.signal);
+  await renderer.prepare(request, options.signal, options.onPrepareProgress);
   const startCueIndex = Math.min(
     request.plan.cues.length,
     Math.max(0, options.startCueIndex ?? 0),
   );
   await renderer.recover(request.plan.cues.slice(0, startCueIndex), options.signal);
-  for (const [index, cue] of request.plan.cues.entries()) {
-    if (index < startCueIndex) continue;
+  let index = startCueIndex;
+  while (index < request.plan.cues.length) {
     if (options.signal?.aborted) {
       throw options.signal.reason ?? new DOMException("Aborted", "AbortError");
     }
-    await renderer.render(cue, options.signal);
-    await options.onCueRendered?.(cue);
-    if (cue.checkpoint || index === request.plan.cues.length - 1) {
-      await options.onCueComplete?.(cue);
+    const firstCue = request.plan.cues[index];
+    const group = firstCue.parallelGroup;
+    const cues = [firstCue];
+    if (group) {
+      while (index + cues.length < request.plan.cues.length && request.plan.cues[index + cues.length].parallelGroup === group) {
+        cues.push(request.plan.cues[index + cues.length]);
+      }
     }
+    await Promise.all(cues.map(async (cue) => {
+      await renderer.render(cue, options.signal);
+      await options.onCueRendered?.(cue);
+    }));
+    for (const [offset, cue] of cues.entries()) {
+      const cueIndex = index + offset;
+      if (cue.checkpoint || cueIndex === request.plan.cues.length - 1) {
+        await options.onCueComplete?.(cue);
+      }
+    }
+    index += cues.length;
   }
 }
 

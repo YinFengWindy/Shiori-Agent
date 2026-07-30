@@ -69,6 +69,7 @@ function WorldRoute({ roles, onExit }: WorldRouteProps): React.ReactElement {
     roles,
     client: worldBridgeClient,
     controller: worldController,
+    onExit,
   });
 
   return <WorldAppSurface onExit={onExit}>{worldPresentation.content}</WorldAppSurface>;

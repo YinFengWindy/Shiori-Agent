@@ -27,7 +27,7 @@ function errorResponse(message: string, status: number): Response {
   });
 }
 
-/** Reads one previously authorized image and returns a stable protocol response. */
+/** Reads one previously authorized renderer asset and returns a stable protocol response. */
 export async function loadGrantedLocalAsset(
   registry: LocalAssetRegistry,
   requestUrl: string,
@@ -36,7 +36,7 @@ export async function loadGrantedLocalAsset(
   if (!grant) {
     return errorResponse("asset is not authorized", 403);
   }
-  if (grant.kind !== "image") {
+  if (grant.kind !== "image" && grant.kind !== "audio") {
     return errorResponse("asset type cannot be rendered", 415);
   }
 

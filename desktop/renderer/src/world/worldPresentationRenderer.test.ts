@@ -79,6 +79,34 @@ describe("worldPresentationRenderer", () => {
     assert.deepEqual(rendered, ["cue-2"]);
   });
 
+  it("renders cues in one parallel group concurrently", async () => {
+    const events: string[] = [];
+    let releaseFirst = (): void => undefined;
+    const firstFinished = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const renderer: WorldPresentationRenderer = {
+      kind: "pixi",
+      initialize: async () => undefined,
+      prepare: async () => undefined,
+      recover: async () => undefined,
+      render: async (item) => {
+        events.push(`start:${item.cueId}`);
+        if (item.cueId === "cue-0") await firstFinished;
+        events.push(`end:${item.cueId}`);
+      },
+      pause: () => undefined,
+      resume: () => undefined,
+      skip: () => undefined,
+      dispose: () => undefined,
+    };
+    const parallelCue = (sequence: number, cueId: string): PresentationCue => ({ ...cue(sequence, "background", {}), cueId, parallelGroup: "stage-1" });
+    const playback = playPresentationPlan(renderer, { plan: plan([parallelCue(0, "cue-0"), parallelCue(1, "cue-1")]), manifest: [], fallbackText: "fallback" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(events, ["start:cue-0", "start:cue-1", "end:cue-1"]);
+    releaseFirst?.();
+    await playback;
+    assert.deepEqual(events, ["start:cue-0", "start:cue-1", "end:cue-1", "end:cue-0"]);
+  });
+
   it("keeps the latest readable dialogue in the text adapter", async () => {
     const snapshots: string[] = [];
     const renderer = new TextWorldPresentationRenderer((snapshot) => snapshots.push(snapshot.text));

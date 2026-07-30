@@ -53,7 +53,7 @@ export interface WorldBridgeClient {
   pausePresentation(worldId: string): Promise<WorldPresentationState>;
   resumePresentation(worldId: string): Promise<WorldPresentationState>;
   checkpointPresentation(worldId: string, planId: string, cueIndex: number): Promise<WorldPresentationState>;
-  synthesizeVoice(text: string, voiceProfile: Record<string, unknown>): Promise<WorldVoiceSynthesis>;
+  synthesizeVoice(text: string, voiceProfile: Record<string, unknown>, signal?: AbortSignal): Promise<WorldVoiceSynthesis>;
   redrawShot(worldId: string, shotId: string): Promise<SceneShot>;
 }
 
@@ -148,17 +148,28 @@ export function createWorldBridgeClient(invoke: DesktopInvoke = window.miraDeskt
         cue_index: cueIndex,
       })).presentation);
     },
-    async synthesizeVoice(text, voiceProfile) {
-      const payload = await invokePayload<{ audio_base64: string; format: string }>(invoke, "voice.synthesize", {
-        text,
-        voice_id: voiceProfile.voiceId,
-        speed: voiceProfile.speed,
-        emotion: voiceProfile.emotion,
-      });
-      if (typeof payload.audio_base64 !== "string" || payload.format !== "mp3") {
-        throw new WorldBridgeError("语音服务返回格式无效", "invalid_voice_response");
+    async synthesizeVoice(text, voiceProfile, signal) {
+      const voiceRequestId = globalThis.crypto?.randomUUID?.() ?? `world-voice-${Date.now().toString(36)}`;
+      if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
+      const cancel = () => {
+        void invokePayload(invoke, "voice.synthesize.cancel", { voice_request_id: voiceRequestId });
+      };
+      signal?.addEventListener("abort", cancel, { once: true });
+      try {
+        const payload = await invokePayload<{ audio_base64: string; format: string }>(invoke, "voice.synthesize", {
+          text,
+          voice_id: voiceProfile.voiceId,
+          speed: voiceProfile.speed,
+          emotion: voiceProfile.emotion,
+          voice_request_id: voiceRequestId,
+        });
+        if (typeof payload.audio_base64 !== "string" || payload.format !== "mp3") {
+          throw new WorldBridgeError("语音服务返回格式无效", "invalid_voice_response");
+        }
+        return { audioBase64: payload.audio_base64, format: "mp3" };
+      } finally {
+        signal?.removeEventListener("abort", cancel);
       }
-      return { audioBase64: payload.audio_base64, format: "mp3" };
     },
     async redrawShot(worldId, shotId) {
       return (await invokePayload<{ shot: SceneShot }>(invoke, "worlds.shots.redraw", {

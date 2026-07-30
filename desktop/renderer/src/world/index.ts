@@ -9,6 +9,13 @@ export { useWorldWorkspaceController } from "./useWorldWorkspaceController";
 export { WorldCreateFlow } from "./WorldCreateFlow";
 export { WorldTimelineView } from "./WorldTimelineView";
 export { WorldWorkspace } from "./WorldWorkspace";
+export { WorldLauncher } from "./WorldLauncher";
+export { WorldLoadingScreen } from "./WorldLoadingScreen";
+export { WorldGameSettings } from "./WorldGameSettings";
+export { defaultWorldGameSettings, readWorldGameSettings, writeWorldGameSettings } from "./worldGameSettingsStore";
+export type { WorldGameSettings as WorldGameSettingsModel } from "./worldGameSettingsStore";
+export { WorldAudioMixer } from "./worldAudioMixer";
+export type { WorldAudioChannel, WorldAudioElement, WorldAudioFactory } from "./worldAudioMixer";
 export {
   parsePerformancePlan,
   parsePresentationState,

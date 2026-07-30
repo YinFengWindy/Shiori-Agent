@@ -18,6 +18,12 @@ function hydrateValue(value: unknown, resolveLocalAssetUrl: LocalAssetUrlResolve
       hydrated.imageUrl = imageUrl;
     }
   }
+  if (typeof source.audio_path === "string") {
+    const audioUrl = resolveLocalAssetUrl(source.audio_path);
+    if (audioUrl !== unavailableLocalAssetUrl && typeof hydrated.audioUrl !== "string") {
+      hydrated.audioUrl = audioUrl;
+    }
+  }
   return hydrated;
 }
 

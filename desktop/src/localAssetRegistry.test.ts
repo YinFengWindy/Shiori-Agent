@@ -51,10 +51,12 @@ describe("LocalAssetRegistry", () => {
     await mkdir(managedDirectory);
     await mkdir(externalDirectory);
     const avatarPath = join(managedDirectory, "avatar.png");
+    const audioPath = join(managedDirectory, "rain.mp3");
     const arbitraryPath = join(managedDirectory, "arbitrary.png");
     const documentPath = join(managedDirectory, "note.md");
     const launderedPath = join(externalDirectory, "laundered.txt");
     await writeFile(avatarPath, Buffer.from("avatar"));
+    await writeFile(audioPath, Buffer.from("audio"));
     await writeFile(arbitraryPath, Buffer.from("arbitrary"));
     await writeFile(documentPath, "note", "utf-8");
     await writeFile(launderedPath, "secret", "utf-8");
@@ -65,15 +67,17 @@ describe("LocalAssetRegistry", () => {
       role: { avatar_abs: avatarPath, arbitrary: arbitraryPath },
       session: { media: [documentPath, launderedPath] },
       presentation: { items: [{ image_path: arbitraryPath }] },
+      world: { audio_path: audioPath },
     });
 
     assert.deepEqual(
       references.map((reference) => reference.path).sort(),
-      [avatarPath, arbitraryPath, documentPath].sort(),
+      [avatarPath, arbitraryPath, audioPath, documentPath].sort(),
     );
     assert.equal(registry.resolveReference(avatarPath)?.kind, "image");
     assert.equal(registry.resolveReference(arbitraryPath)?.kind, "image");
     assert.equal(registry.resolveReference(documentPath)?.kind, "document");
+    assert.equal(registry.resolveReference(audioPath)?.kind, "audio");
     assert.equal(registry.resolveReference(launderedPath), null);
   });
 

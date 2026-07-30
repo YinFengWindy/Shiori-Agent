@@ -111,15 +111,20 @@ export class PixiWorldPresentationRenderer implements WorldPresentationRenderer 
     app.canvas.addEventListener("webglcontextlost", this.#contextLossHandler);
   }
 
-  async prepare(request: WorldPresentationPrepareRequest, signal?: AbortSignal): Promise<void> {
+  async prepare(request: WorldPresentationPrepareRequest, signal?: AbortSignal, onProgress?: (loaded: number, total: number) => void): Promise<void> {
     this.#assertReady();
     this.#assets.registerManifest(request.manifest);
     request.manifest.forEach((entry) => this.#manifest.set(entry.id, entry));
+    let loaded = 0;
+    onProgress?.(loaded, request.manifest.length);
     await Promise.all(request.manifest.map(async (entry) => {
       try {
         await this.#assets.preload([entry.id], { signal });
       } catch {
         // Each cue owns its documented visual fallback; one bad asset cannot block the plan.
+      } finally {
+        loaded += 1;
+        onProgress?.(loaded, request.manifest.length);
       }
     }));
     if (request.initialAssetId) await this.#showBackground(request.initialAssetId, signal, 0);

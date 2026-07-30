@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLatestRef } from "../shared/useLatestRef";
 import type { PerformancePlan, PresentationCue } from "./presentationProtocol";
 import { WorldVoicePlayback, type WorldVoiceCue, type WorldVoiceProfile } from "./worldVoicePlayback";
+import { WorldAudioMixer, type WorldAudioElement } from "./worldAudioMixer";
+import { readWorldGameSettings } from "./worldGameSettingsStore";
 import {
   createWorldAssetManifest,
   playPresentationPlan,
@@ -25,7 +27,7 @@ type WorldStageProps = {
 };
 
 type PixiRendererModule = {
-  createPixiWorldPresentationRenderer(options: { onContextLoss: () => void }): WorldPresentationRenderer;
+  createPixiWorldPresentationRenderer(options: { onContextLoss: () => void; reducedMotion?: boolean }): WorldPresentationRenderer;
 };
 
 export type WorldStagePlaybackCoordinatorOptions = {
@@ -36,6 +38,7 @@ export type WorldStagePlaybackCoordinatorOptions = {
   textRenderer: WorldPresentationRenderer;
   onCueComplete?: (cue: PresentationCue) => Promise<void> | void;
   onCueRendered?: (cue: PresentationCue) => Promise<void> | void;
+  onPrepareProgress?: (loaded: number, total: number) => void;
   onFallback?: () => Promise<void> | void;
 };
 
@@ -75,6 +78,7 @@ export function createWorldStagePlaybackCoordinator(options: WorldStagePlaybackC
   const play = (renderer: WorldPresentationRenderer, signal: AbortSignal) => playPresentationPlan(renderer, options.request, {
     signal,
     startCueIndex: nextCueIndex,
+    onPrepareProgress: options.onPrepareProgress,
     onCueRendered: options.onCueRendered,
     onCueComplete: checkpoint,
   });
@@ -160,6 +164,12 @@ function createBrowserVoiceAudio(audioBase64: string, _format: "mp3"): WorldVoic
     set onerror(handler) {
       onerror = handler;
     },
+    get volume() {
+      return audio.volume;
+    },
+    set volume(value) {
+      audio.volume = value;
+    },
     get src() {
       return audio.src;
     },
@@ -169,6 +179,55 @@ function createBrowserVoiceAudio(audioBase64: string, _format: "mp3"): WorldVoic
     play: () => audio.play(),
     pause: () => audio.pause(),
     load: () => audio.load(),
+  };
+}
+
+function createBrowserWorldAudio(url: string): WorldAudioElement {
+  const audio = new Audio(url);
+  let onended: (() => void) | null = null;
+  let onerror: ((event: unknown) => void) | null = null;
+  audio.onended = () => onended?.();
+  audio.onerror = (event) => onerror?.(event);
+  return {
+    get currentTime() {
+      return audio.currentTime;
+    },
+    set currentTime(value) {
+      audio.currentTime = value;
+    },
+    get loop() {
+      return audio.loop;
+    },
+    set loop(value) {
+      audio.loop = value;
+    },
+    get volume() {
+      return audio.volume;
+    },
+    set volume(value) {
+      audio.volume = value;
+    },
+    get onended() {
+      return onended;
+    },
+    set onended(handler) {
+      onended = handler;
+    },
+    get onerror() {
+      return onerror;
+    },
+    set onerror(handler) {
+      onerror = handler;
+    },
+    play: () => audio.play(),
+    pause: () => audio.pause(),
+    load: () => audio.load(),
+    get src() {
+      return audio.src;
+    },
+    set src(value) {
+      audio.src = value;
+    },
   };
 }
 
@@ -182,6 +241,8 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
   const voicePlaybackRef = useRef<WorldVoicePlayback | null>(null);
   const [fallback, setFallback] = useState<TextPresentationSnapshot | null>(null);
   const [presentationError, setPresentationError] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [assetProgress, setAssetProgress] = useState({ loaded: 0, total: 0 });
   const initialVisualId = initialVisual?.id;
   const initialVisualUrl = initialVisual?.url;
   const request = useMemo(
@@ -203,12 +264,24 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
     let coordinator: ReturnType<typeof createWorldStagePlaybackCoordinator> | null = null;
     setFallback(null);
     setPresentationError(null);
+    setPreparing(true);
+    setAssetProgress({ loaded: 0, total: request.manifest.length });
     const textRenderer = new TextWorldPresentationRenderer((snapshot) => {
       if (active) setFallback(snapshot);
+    });
+    const settings = readWorldGameSettings();
+    const audioMixer = new WorldAudioMixer({
+      createAudio: createBrowserWorldAudio,
+      musicVolume: settings.musicVolume,
+      ambienceVolume: settings.ambienceVolume,
+      effectsVolume: settings.effectsVolume,
     });
     const voicePlayback = synthesizeVoice ? new WorldVoicePlayback({
       synthesize: (text, profile, signal) => synthesizeVoice(text, profile as Record<string, unknown>, signal),
       createAudio: createBrowserVoiceAudio,
+      volume: settings.voiceVolume,
+      onPlaybackStart: () => audioMixer.voiceStarted(),
+      onPlaybackEnd: () => audioMixer.voiceEnded(),
     }) : null;
     voicePlaybackRef.current = voicePlayback;
 
@@ -235,6 +308,7 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
             const fallbackPromise = coordinator?.activateTextFallback();
             if (fallbackPromise) void fallbackPromise.catch(reportFailure);
           },
+          reducedMotion: settings.reducedMotion,
         });
         rendererRef.current = renderer;
         coordinator = createWorldStagePlaybackCoordinator({
@@ -244,9 +318,13 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
           pixiRenderer: renderer,
           textRenderer,
           onCueComplete: (cue) => active ? checkpointRef.current?.(cue) : undefined,
-          onCueRendered: (cue) => {
+          onPrepareProgress: (loaded, total) => {
+            if (active) setAssetProgress({ loaded, total });
+          },
+          onCueRendered: async (cue) => {
+            audioMixer.playCue(cue);
             const voiceCue = voiceCueForPresentation(cue, request.plan.worldId);
-            if (voiceCue) void voicePlayback?.playCue(voiceCue);
+            if (voiceCue) await voicePlayback?.playCue(voiceCue);
           },
           onFallback: activateTextRenderer,
         });
@@ -254,6 +332,7 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
         if (!active) return;
         if (pausedRef.current) renderer.pause();
         await coordinator.playPixi();
+        if (active) setPreparing(false);
       } catch (error) {
         if (!active || controller.signal.aborted) return;
         if (coordinator?.hasCheckpointFailure()) {
@@ -268,15 +347,21 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
             await playPresentationPlan(textRenderer, request, {
               signal: controller.signal,
               startCueIndex,
-              onCueRendered: (cue) => {
+              onPrepareProgress: (loaded, total) => {
+                if (active) setAssetProgress({ loaded, total });
+              },
+              onCueRendered: async (cue) => {
+                audioMixer.playCue(cue);
                 const voiceCue = voiceCueForPresentation(cue, request.plan.worldId);
-                if (voiceCue) void voicePlayback?.playCue(voiceCue);
+                if (voiceCue) await voicePlayback?.playCue(voiceCue);
               },
               onCueComplete: (cue) => active ? checkpointRef.current?.(cue) : undefined,
             });
           }
         } catch (fallbackError) {
           reportFailure(fallbackError);
+        } finally {
+          if (active) setPreparing(false);
         }
       }
     })();
@@ -285,6 +370,7 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
       active = false;
       controller.abort();
       voicePlayback?.dispose();
+      audioMixer.dispose();
       voicePlaybackRef.current = null;
       renderer?.dispose();
       textRenderer.dispose();
@@ -311,6 +397,18 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#151816]" data-testid="world-stage">
       <div ref={hostRef} className="absolute inset-0" data-testid="world-stage-canvas-host" />
+      {preparing ? (
+        <div className="absolute inset-0 z-10 grid place-items-center bg-[#151816]/90 px-8 text-center" data-testid="world-stage-loading" aria-busy="true">
+          <div className="w-[min(420px,100%)]">
+            <p className="m-0 font-serif text-2xl text-white/90">正在显影</p>
+            <p className="m-0 mt-2 text-sm text-white/55">准备当前世界的舞台</p>
+            <div className="mt-7 h-1 overflow-hidden bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={assetProgress.total || 1} aria-valuenow={assetProgress.total ? assetProgress.loaded : 0}>
+              <div className="h-full bg-[#C98B65] transition-[width] duration-300" style={{ width: `${assetProgress.total ? (assetProgress.loaded / assetProgress.total) * 100 : 35}%` }} />
+            </div>
+            {assetProgress.total ? <p className="m-0 mt-3 text-xs text-white/45">{assetProgress.loaded} / {assetProgress.total}</p> : null}
+          </div>
+        </div>
+      ) : null}
       {fallback ? (
         <div className="absolute inset-0 grid place-items-center bg-[#151816] px-[max(10vw,32px)] text-center" data-testid="world-stage-text-fallback">
           <p className="m-0 max-w-3xl font-serif text-xl leading-9 text-white/75">{fallback.text}</p>

@@ -3,7 +3,10 @@ import { toFileUrl } from "../shared/format";
 import type { RoleRecord } from "../shared/types";
 import {
   WorldCreateFlow,
+  WorldGameSettings as WorldGameSettingsPanel,
   WorldGameSurface,
+  WorldLauncher,
+  WorldLoadingScreen,
   WorldTimelineView,
   WorldWorkspace,
   type BackfillPreview,
@@ -13,13 +16,14 @@ import {
 import type { WorldBridgeClient } from "../world/bridgeClient";
 import type { useWorldWorkspaceController } from "../world/useWorldWorkspaceController";
 
-type WorldPresentationMode = "game" | "workspace" | "create" | "timeline";
+type WorldPresentationMode = "launcher" | "game" | "workspace" | "create" | "timeline" | "settings" | "loading";
 type TimelineReturnMode = "game" | "workspace";
 
 type UseWorldWorkspacePresentationArgs = {
   roles: RoleRecord[];
   client: WorldBridgeClient;
   controller: ReturnType<typeof useWorldWorkspaceController>;
+  onExit: () => void;
 };
 
 function createWorldSeed(): string {
@@ -27,8 +31,8 @@ function createWorldSeed(): string {
 }
 
 /** Coordinates world-only presentation modes around the persistent workspace controller. */
-export function useWorldWorkspacePresentation({ roles, client, controller }: UseWorldWorkspacePresentationArgs) {
-  const [mode, setMode] = useState<WorldPresentationMode>("game");
+export function useWorldWorkspacePresentation({ roles, client, controller, onExit }: UseWorldWorkspacePresentationArgs) {
+  const [mode, setMode] = useState<WorldPresentationMode>("launcher");
   const [timelineReturnMode, setTimelineReturnMode] = useState<TimelineReturnMode>("game");
   const [seed, setSeed] = useState(createWorldSeed);
   const [draft, setDraft] = useState<Awaited<ReturnType<WorldBridgeClient["previewDraft"]>> | null>(null);
@@ -37,6 +41,7 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
   const [backfillPreview, setBackfillPreview] = useState<BackfillPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [presentationError, setPresentationError] = useState("");
+  const [loadingWorldId, setLoadingWorldId] = useState("");
 
   const worldRoles = useMemo(() => roles.map((role) => ({
     id: role.id,
@@ -85,17 +90,30 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
     void runPresentation(() => client.previewDraft(input), setDraft);
   }, [client, runPresentation]);
 
+  const loadWorldForPlay = useCallback(async (worldId: string) => {
+    setLoadingWorldId(worldId);
+    setPresentationError("");
+    setMode("loading");
+    const loaded = await controller.loadWorld(worldId);
+    if (loaded) {
+      setMode("game");
+      return;
+    }
+    setPresentationError("无法加载这个世界，请稍后重试。");
+    setMode("launcher");
+  }, [controller]);
+
   const confirmDraft = useCallback((draftId: string, identities: NativeIdentityDraft[]) => {
     void runPresentation(
       () => client.confirmDraft(draftId, identities),
       async (createdWorld) => {
+        setMode("loading");
         await controller.reloadWorlds();
-        await controller.loadWorld(createdWorld.id);
+        await loadWorldForPlay(createdWorld.id);
         setDraft(null);
-        setMode("game");
       },
     );
-  }, [client, controller, runPresentation]);
+  }, [client, controller, loadWorldForPlay, runPresentation]);
 
   const copyWorld = useCallback((anchorId: string) => {
     if (!world) return;
@@ -103,11 +121,10 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
       () => client.copyWorld(world.id, anchorId),
       async (copiedWorld) => {
         await controller.reloadWorlds();
-        await controller.loadWorld(copiedWorld.id);
-        setMode("game");
+        await loadWorldForPlay(copiedWorld.id);
       },
     );
-  }, [client, controller, runPresentation, world]);
+  }, [client, controller, loadWorldForPlay, runPresentation, world]);
 
   const previewBackfill = useCallback((anchorId: string, oc: WorldCreationInput["firstOc"]) => {
     if (!world) return;
@@ -120,12 +137,11 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
       () => client.commitBackfill(world.id, preview),
       async (updatedWorld) => {
         await controller.reloadWorlds();
-        await controller.loadWorld(updatedWorld.id);
+        await loadWorldForPlay(updatedWorld.id);
         setBackfillPreview(null);
-        setMode("game");
       },
     );
-  }, [client, controller, runPresentation, world]);
+  }, [client, controller, loadWorldForPlay, runPresentation, world]);
 
   const openGame = useCallback(() => {
     if (!world?.scene.beats.length) {
@@ -137,8 +153,17 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
 
   const content = useMemo(() => {
     const error = presentationError || controller.error;
-    if (controller.loading && !world) {
-      return <div className="grid h-full place-items-center bg-[#151816] text-sm text-white/70" aria-busy="true">正在载入世界</div>;
+    if (mode === "launcher" && controller.loading) {
+      return <WorldLoadingScreen mode="listing" error={error} onRetry={() => void controller.reloadWorlds()} onBack={onExit} />;
+    }
+    if (mode === "launcher") {
+      return <WorldLauncher worlds={controller.worlds} busy={busy || controller.busy} error={error} onCreateWorld={() => { setPresentationError(""); setDraft(null); setMode("create"); }} onLoadWorld={(worldId) => void loadWorldForPlay(worldId)} onOpenSettings={() => { setPresentationError(""); setMode("settings"); }} onExit={onExit} />;
+    }
+    if (mode === "loading") {
+      return <WorldLoadingScreen mode="world" busy={busy || controller.busy} error={error} onRetry={loadingWorldId ? () => void loadWorldForPlay(loadingWorldId) : undefined} onBack={() => setMode("launcher")} />;
+    }
+    if (mode === "settings") {
+      return <WorldGameSettingsPanel onBack={() => setMode("launcher")} />;
     }
     if (mode === "create" || !world) {
       return (
@@ -212,7 +237,7 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
         onRedrawShot={controller.redrawShot}
       />
     );
-  }, [backfillPreview, busy, changePerspective, commitBackfill, confirmDraft, controller, copyWorld, draft, mode, openGame, openTimeline, perspective, presentationError, previewBackfill, previewDraft, seed, timeline, timelineReturnMode, world, worldRoles]);
+  }, [backfillPreview, busy, changePerspective, commitBackfill, confirmDraft, controller, copyWorld, draft, loadWorldForPlay, loadingWorldId, mode, onExit, openGame, openTimeline, perspective, presentationError, previewBackfill, previewDraft, seed, timeline, timelineReturnMode, world, worldRoles]);
 
   return { content };
 }
