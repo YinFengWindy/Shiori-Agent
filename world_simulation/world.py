@@ -45,6 +45,7 @@ class RoleTemplateSnapshot:
     persona: dict[str, Any]
     system_constraints: tuple[str, ...] = ()
     visual_profile: dict[str, Any] = field(default_factory=dict)
+    voice_profile: dict[str, Any] = field(default_factory=dict)
     assets: tuple[dict[str, Any], ...] = ()
     schema_version: int = 1
     created_at: str = field(default_factory=utc_now)

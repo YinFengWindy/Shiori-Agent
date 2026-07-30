@@ -11,6 +11,9 @@ export type WorldSummary = {
 /** Player-facing lifecycle state for a world run. */
 export type WorldRunStatus = "idle" | "running" | "action_required" | "barrier" | "stopped" | "resumable";
 
+/** Persisted playback lifecycle for one world's derived presentation queue. */
+export type WorldPresentationSessionStatus = "playing" | "paused" | "awaiting_action" | "awaiting_barrier";
+
 /** A player-created character living on the shared world timeline. */
 export type WorldOc = {
   id: string;
@@ -88,6 +91,7 @@ export type WorldDetails = WorldSummary & {
   scene: WorldScene;
   relatedCharacters: Array<{ id: string; name: string; relationship: string; avatarUrl?: string }>;
   performance: { active: boolean; label: string; canCancel: boolean };
+  presentation?: import("./presentationProtocol").WorldPresentationState;
 };
 
 /** A role template that can be adapted as a native identity. */
@@ -159,6 +163,7 @@ export type WorldCatchUp = {
   cursor: string;
   beats: SceneBeat[];
   world?: WorldDetails;
+  presentation?: import("./presentationProtocol").WorldPresentationState;
 };
 
 /** Stable error exposed by the renderer bridge client. */

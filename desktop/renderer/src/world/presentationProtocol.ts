@@ -1,4 +1,9 @@
-import type { SceneBeat, WorldDetails, WorldCatchUp } from "./types";
+import type {
+  SceneBeat,
+  WorldCatchUp,
+  WorldDetails,
+  WorldPresentationSessionStatus,
+} from "./types";
 
 export const presentationProtocolVersion = 1 as const;
 
@@ -27,6 +32,22 @@ export type PerformancePlan = {
   eventId: string;
   sourceSequence: number;
   cues: PresentationCue[];
+};
+
+/** Renderer-side validated persisted presentation session. */
+export type WorldPresentationSession = {
+  worldId: string;
+  lastPresentedEventSequence: number;
+  activePlanId: string | null;
+  activeCueIndex: number;
+  status: WorldPresentationSessionStatus;
+  updatedAt: string;
+};
+
+/** Queue snapshot used by reconnect, pause/resume, and checkpoint calls. */
+export type WorldPresentationState = {
+  session: WorldPresentationSession;
+  plans: PerformancePlan[];
 };
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -87,10 +108,38 @@ export function parsePerformancePlan(value: unknown): PerformancePlan {
   };
 }
 
+/** Validate a persisted presentation cursor and its derived plan queue. */
+export function parsePresentationState(value: unknown): WorldPresentationState {
+  const state = record(value, "presentation state");
+  const sessionValue = record(state.session, "presentation session");
+  const status = sessionValue.status;
+  if (!["playing", "paused", "awaiting_action", "awaiting_barrier"].includes(String(status))) {
+    throw new Error("unsupported presentation session status");
+  }
+  const activePlanId = sessionValue.activePlanId;
+  if (activePlanId !== null && typeof activePlanId !== "string") {
+    throw new Error("activePlanId must be a string or null");
+  }
+  const session = {
+    worldId: text(sessionValue.worldId, "session worldId"),
+    lastPresentedEventSequence: integer(sessionValue.lastPresentedEventSequence, "lastPresentedEventSequence"),
+    activePlanId: activePlanId as string | null,
+    activeCueIndex: integer(sessionValue.activeCueIndex, "activeCueIndex"),
+    status: status as WorldPresentationSessionStatus,
+    updatedAt: text(sessionValue.updatedAt, "session updatedAt"),
+  };
+  if (!Array.isArray(state.plans)) throw new Error("presentation plans must be an array");
+  return {
+    session,
+    plans: state.plans.map(parsePerformancePlan),
+  };
+}
+
 /** Validate presentation plans embedded in a world detail response. */
 export function parseWorldDetailsPerformance(world: WorldDetails): WorldDetails {
   return {
     ...world,
+    presentation: world.presentation ? parsePresentationState(world.presentation) : undefined,
     scene: {
       ...world.scene,
       beats: world.scene.beats.map((beat: SceneBeat) => beat.performancePlan ? { ...beat, performancePlan: parsePerformancePlan(beat.performancePlan) } : beat),
@@ -102,6 +151,7 @@ export function parseWorldDetailsPerformance(world: WorldDetails): WorldDetails 
 export function parseWorldCatchUpPerformance(update: WorldCatchUp): WorldCatchUp {
   return {
     ...update,
+    presentation: update.presentation ? parsePresentationState(update.presentation) : undefined,
     beats: update.beats.map((beat: SceneBeat) => beat.performancePlan ? { ...beat, performancePlan: parsePerformancePlan(beat.performancePlan) } : beat),
     world: update.world ? parseWorldDetailsPerformance(update.world) : undefined,
   };

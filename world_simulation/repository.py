@@ -15,6 +15,7 @@ from world_simulation.repository_records import RepositoryRecords, _dump, _load
 from world_simulation.runs import WorldRun
 from world_simulation.scenes import DecisionBarrier, SceneThread
 from world_simulation.timeline import TimelineEvent, WorldStateProjection
+from world_simulation.presentation_session import WorldPresentationSession
 from world_simulation.world import (
     NativeResident,
     RoleTemplateSnapshot,
@@ -171,6 +172,11 @@ class WorldRepository(RepositoryRecords):
             self._insert_event(connection, initial_event)
             self._upsert_projection(connection, projection)
             connection.execute(
+                """INSERT INTO world_presentation_sessions
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (world.id, 0, None, 0, "playing", world.created_at),
+            )
+            connection.execute(
                 "UPDATE world_drafts SET status = 'confirmed' WHERE id = ?",
                 (draft.id,),
             )
@@ -192,6 +198,65 @@ class WorldRepository(RepositoryRecords):
             ).fetchone()
         return self._row_to_world(row) if row is not None else None
 
+    def get_presentation_session(
+        self, world_id: str
+    ) -> WorldPresentationSession | None:
+        """Load the derived playback cursor for one world."""
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM world_presentation_sessions WHERE world_id = ?",
+                (world_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return WorldPresentationSession(
+            world_id=row["world_id"],
+            last_presented_event_sequence=int(row["last_presented_event_sequence"]),
+            active_plan_id=row["active_plan_id"],
+            active_cue_index=int(row["active_cue_index"]),
+            status=row["status"],
+            updated_at=row["updated_at"],
+        )
+
+    def save_presentation_session(self, session: WorldPresentationSession) -> None:
+        """Upsert playback progress without touching timeline facts."""
+
+        session.validate()
+        with self.transaction() as connection:
+            world = connection.execute(
+                "SELECT 1 FROM worlds WHERE id = ?", (session.world_id,)
+            ).fetchone()
+            if world is None:
+                raise WorldNotFoundError(f"world not found: {session.world_id}")
+            connection.execute(
+                """INSERT INTO world_presentation_sessions
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(world_id) DO UPDATE SET
+                last_presented_event_sequence = excluded.last_presented_event_sequence,
+                active_plan_id = excluded.active_plan_id,
+                active_cue_index = excluded.active_cue_index,
+                status = excluded.status,
+                updated_at = excluded.updated_at""",
+                (
+                    session.world_id,
+                    session.last_presented_event_sequence,
+                    session.active_plan_id,
+                    session.active_cue_index,
+                    session.status,
+                    session.updated_at,
+                ),
+            )
+
+    def delete_presentation_session(self, world_id: str) -> None:
+        """Delete only derived playback progress so it can be rebuilt."""
+
+        with self.transaction() as connection:
+            connection.execute(
+                "DELETE FROM world_presentation_sessions WHERE world_id = ?",
+                (world_id,),
+            )
+
     def list_worlds(self) -> list[WorldInstance]:
         """Return worlds in creation order without exposing repository internals."""
 
@@ -210,6 +275,16 @@ class WorldRepository(RepositoryRecords):
                 (world_id,),
             ).fetchall()
         return [NativeResident(**_load(row["payload"], {})) for row in rows]
+
+    def list_role_snapshots(self, world_id: str) -> list[RoleTemplateSnapshot]:
+        """Return immutable role snapshots captured when the world was created."""
+
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT payload FROM role_snapshots WHERE world_id = ? ORDER BY id",
+                (world_id,),
+            ).fetchall()
+        return [RoleTemplateSnapshot(**_load(row["payload"], {})) for row in rows]
 
     def require_world(self, world_id: str) -> WorldInstance:
         """Load a world or fail with a stable domain error."""
