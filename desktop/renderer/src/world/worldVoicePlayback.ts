@@ -90,8 +90,19 @@ export class WorldVoicePlayback {
   private pumping = false;
   private disposed = false;
   private generation = 0;
+  private volume: number;
 
-  constructor(private readonly options: WorldVoicePlaybackOptions) {}
+  constructor(private readonly options: WorldVoicePlaybackOptions) {
+    this.volume = options.volume ?? 100;
+  }
+
+  /** Applies the current voice level without invalidating synthesized audio. */
+  setVolume(volume: number): void {
+    this.volume = Math.min(100, Math.max(0, volume));
+    if (typeof this.active?.audio?.volume === "number") {
+      this.active.audio.volume = normalizeVolume(this.volume);
+    }
+  }
 
   /** Queues one dialogue cue and resolves when audio or text fallback finishes. */
   playCue(cue: WorldVoiceCue): Promise<WorldVoicePlaybackOutcome> {
@@ -274,7 +285,7 @@ export class WorldVoicePlayback {
   private async playAudio(active: ActiveEntry, synthesized: WorldVoiceSynthesis): Promise<void> {
     const audio = this.options.createAudio(synthesized.audioBase64, synthesized.format);
     active.audio = audio;
-    if (typeof audio.volume === "number") audio.volume = normalizeVolume(this.options.volume ?? 100);
+    if (typeof audio.volume === "number") audio.volume = normalizeVolume(this.volume);
     const generation = active.generation;
     await new Promise<void>((resolve) => {
       let finished = false;

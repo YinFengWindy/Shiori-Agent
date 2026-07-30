@@ -6,7 +6,7 @@ import type { PerformancePlan, PresentationCue } from "./presentationProtocol";
 import {
   createWorldStagePlaybackCoordinator,
   type WorldStagePlaybackCoordinatorOptions,
-} from "./WorldStage";
+} from "./worldStagePlaybackCoordinator";
 import type {
   WorldPresentationPrepareRequest,
   WorldPresentationRenderer,

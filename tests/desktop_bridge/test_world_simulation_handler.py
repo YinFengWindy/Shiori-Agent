@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PIL import Image
+
 from core.roles import RoleStore
 from desktop_bridge.world_simulation_handler import WorldSimulationHandler
 
@@ -222,6 +224,39 @@ def test_world_draft_freezes_role_visual_and_voice_snapshots(tmp_path):
     assert "secret_key" not in snapshot.voice_profile
     role_store.delete_role(role.id)
     assert all(Path(path).is_file() for path in copied_paths)
+    handler.close()
+
+
+def test_world_snapshot_normalizes_character_canvas_and_foot_baseline(tmp_path):
+    source = tmp_path / "legacy-character.png"
+    image = Image.new("RGBA", (320, 480), (0, 0, 0, 0))
+    image.paste((210, 90, 120, 255), (230, 80, 290, 440))
+    image.save(source)
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(
+        name="凛",
+        system_prompt="保持冷静",
+        avatar_source=source,
+    )
+    handler = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+
+    draft = handler.handle(
+        "worlds.drafts.preview",
+        _creation_input(role.id),
+        request_id="preview-normalized-character",
+    )
+
+    assert draft is not None
+    stored = handler._repository.get_draft(draft["draft"]["id"])
+    assert stored is not None
+    normalized_path = Path(stored.role_snapshots[0].assets[0]["path"])
+    with Image.open(normalized_path) as normalized:
+        assert normalized.mode == "RGBA"
+        assert normalized.size == (1200, 1600)
+        bounds = normalized.getchannel("A").getbbox()
+        assert bounds is not None
+        assert abs((bounds[0] + bounds[2]) - 1200) <= 1
+        assert bounds[3] == 1520
     handler.close()
 
 

@@ -122,6 +122,9 @@ export async function playPresentationPlan(
       await renderer.render(cue, options.signal);
       await options.onCueRendered?.(cue);
     }));
+    if (options.signal?.aborted) {
+      throw options.signal.reason ?? new DOMException("Aborted", "AbortError");
+    }
     for (const [offset, cue] of cues.entries()) {
       const cueIndex = index + offset;
       if (cue.checkpoint || cueIndex === request.plan.cues.length - 1) {

@@ -28,6 +28,8 @@ type ActiveAnimation = { finish: () => void };
 type PixiWorldPresentationRendererOptions = {
   onContextLoss: () => void;
   reducedMotion?: boolean;
+  motionIntensity?: "reduced" | "standard" | "cinematic";
+  assets?: WorldAssetManager<Texture>;
 };
 
 /** PixiJS implementation of the presentation renderer boundary. */
@@ -35,7 +37,9 @@ export class PixiWorldPresentationRenderer implements WorldPresentationRenderer 
   readonly kind = "pixi" as const;
   readonly #onContextLoss: () => void;
   readonly #reducedMotion: boolean;
+  readonly #motionScale: number;
   readonly #assets: WorldAssetManager<Texture>;
+  readonly #ownsAssets: boolean;
   readonly #manifest = new Map<string, WorldAssetManifestEntry>();
   readonly #layers = new Map<StageLayerName, Container>();
   readonly #characters = new Map<string, ActiveDisplay>();
@@ -56,13 +60,9 @@ export class PixiWorldPresentationRenderer implements WorldPresentationRenderer 
     this.#reducedMotion = options.reducedMotion
       ?? globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches
       ?? false;
-    this.#assets = new WorldAssetManager<Texture>({
-      loader: loadPixiWorldTexture,
-      destroy: (texture) => texture.destroy(true),
-      softBudgetBytes: 256 * 1024 * 1024,
-      maxEntries: 64,
-      timeoutMs: 10_000,
-    });
+    this.#motionScale = options.motionIntensity === "cinematic" ? 1.25 : 1;
+    this.#assets = options.assets ?? createPixiWorldAssetManager();
+    this.#ownsAssets = !options.assets;
   }
 
   async initialize(host: HTMLElement): Promise<void> {
@@ -155,7 +155,7 @@ export class PixiWorldPresentationRenderer implements WorldPresentationRenderer 
       return;
     }
     if (cue.kind === "sprites") {
-      await this.#showCharacters(cuePayloadItems(cue, "items"), signal, recovering ? 0 : 220);
+      await this.#showCharacters(cuePayloadItems(cue, "items"), signal, recovering ? 0 : this.#scaledDuration(220));
       return;
     }
     if (cue.kind === "cg") {
@@ -198,7 +198,7 @@ export class PixiWorldPresentationRenderer implements WorldPresentationRenderer 
     this.#background = null;
     this.#cg = null;
     this.#curtain = null;
-    this.#assets.dispose();
+    if (this.#ownsAssets) this.#assets.dispose();
     this.#app?.destroy({ removeView: true }, { children: true, texture: false, textureSource: false, context: true });
     this.#app = null;
     this.#host = null;
@@ -390,7 +390,11 @@ export class PixiWorldPresentationRenderer implements WorldPresentationRenderer 
 
   #duration(payload: Record<string, unknown>, fallback: number): number {
     if (this.#reducedMotion) return 0;
-    return Math.max(0, numericCueValue(payload, "durationMs", "duration_ms") ?? fallback);
+    return this.#scaledDuration(numericCueValue(payload, "durationMs", "duration_ms") ?? fallback);
+  }
+
+  #scaledDuration(durationMs: number): number {
+    return Math.max(0, durationMs * this.#motionScale);
   }
 
   #resize(): void {
@@ -422,6 +426,17 @@ export class PixiWorldPresentationRenderer implements WorldPresentationRenderer 
   #assertActive(): void {
     if (this.#disposed) throw new Error("Pixi world renderer is disposed");
   }
+}
+
+/** Creates the texture cache retained by the World route runtime. */
+export function createPixiWorldAssetManager() {
+  return new WorldAssetManager<Texture>({
+    loader: loadPixiWorldTexture,
+    destroy: (texture) => texture.destroy(true),
+    softBudgetBytes: 256 * 1024 * 1024,
+    maxEntries: 64,
+    timeoutMs: 10_000,
+  });
 }
 
 /** Creates the graphical adapter without exposing PixiJS to React callers. */

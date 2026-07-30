@@ -9,6 +9,8 @@ import shutil
 from typing import Any
 from uuid import uuid4
 
+from PIL import Image, ImageOps, UnidentifiedImageError
+
 from core.roles import RoleStore
 from desktop_bridge.world_presentation_assets import WorldPresentationAssetResolver
 from world_simulation.actors import AutonomyPolicy, PlayerOC
@@ -23,6 +25,11 @@ from world_simulation.service import WorldSimulationService
 from world_simulation.timeline import TimelineEvent
 from world_simulation.world import NativeResident, RoleTemplateSnapshot, WorldDraft, WorldTemplate
 from world_simulation.world import utc_now
+
+
+_SNAPSHOT_CHARACTER_CANVAS = (1200, 1600)
+_SNAPSHOT_CHARACTER_BASELINE = 1520
+_SNAPSHOT_CHARACTER_MARGIN = 60
 
 
 class WorldSimulationHandler:
@@ -653,10 +660,43 @@ class WorldSimulationHandler:
             return None
         if not source.is_file():
             return None
-        destination = self._world_assets_dir / snapshot_id / f"{uuid4().hex}{source.suffix}"
+        destination_dir = self._world_assets_dir / snapshot_id
+        destination = destination_dir / f"{uuid4().hex}.png"
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
+        try:
+            self._normalize_snapshot_character(source, destination)
+        except (UnidentifiedImageError, OSError):
+            destination = destination_dir / f"{uuid4().hex}{source.suffix}"
+            shutil.copy2(source, destination)
         return str(destination.resolve())
+
+    @staticmethod
+    def _normalize_snapshot_character(source: Path, destination: Path) -> None:
+        """Place visible character pixels on one transparent canvas and foot baseline."""
+
+        with Image.open(source) as opened:
+            image = ImageOps.exif_transpose(opened).convert("RGBA")
+            bounds = image.getchannel("A").getbbox()
+            canvas = Image.new("RGBA", _SNAPSHOT_CHARACTER_CANVAS, (0, 0, 0, 0))
+            if bounds is None:
+                canvas.save(destination, format="PNG")
+                return
+            character = image.crop(bounds)
+            max_width = _SNAPSHOT_CHARACTER_CANVAS[0] - 2 * _SNAPSHOT_CHARACTER_MARGIN
+            max_height = _SNAPSHOT_CHARACTER_BASELINE - _SNAPSHOT_CHARACTER_MARGIN
+            scale = min(1.0, max_width / character.width, max_height / character.height)
+            if scale < 1.0:
+                character = character.resize(
+                    (
+                        max(1, round(character.width * scale)),
+                        max(1, round(character.height * scale)),
+                    ),
+                    Image.Resampling.LANCZOS,
+                )
+            x = (_SNAPSHOT_CHARACTER_CANVAS[0] - character.width) // 2
+            y = _SNAPSHOT_CHARACTER_BASELINE - character.height
+            canvas.alpha_composite(character, (x, y))
+            canvas.save(destination, format="PNG")
 
     @staticmethod
     def _voice_profile(runtime: dict[str, Any]) -> dict[str, Any]:

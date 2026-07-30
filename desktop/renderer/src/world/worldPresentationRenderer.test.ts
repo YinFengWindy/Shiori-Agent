@@ -107,6 +107,31 @@ describe("worldPresentationRenderer", () => {
     assert.deepEqual(events, ["start:cue-0", "start:cue-1", "end:cue-1", "end:cue-0"]);
   });
 
+  it("does not checkpoint a cue when playback aborts after its render hook", async () => {
+    const controller = new AbortController();
+    const checkpoints: string[] = [];
+    const renderer: WorldPresentationRenderer = {
+      kind: "pixi",
+      initialize: async () => undefined,
+      prepare: async () => undefined,
+      recover: async () => undefined,
+      render: async () => undefined,
+      pause: () => undefined,
+      resume: () => undefined,
+      skip: () => undefined,
+      dispose: () => undefined,
+    };
+    const value = plan([cue(0, "dialogue", { content: "等等。" })]);
+
+    await assert.rejects(() => playPresentationPlan(renderer, { plan: value, manifest: [], fallbackText: "fallback" }, {
+      signal: controller.signal,
+      onCueRendered: () => controller.abort(new Error("left world view")),
+      onCueComplete: (cue) => { checkpoints.push(cue.cueId); },
+    }), /left world view/);
+
+    assert.deepEqual(checkpoints, []);
+  });
+
   it("keeps the latest readable dialogue in the text adapter", async () => {
     const snapshots: string[] = [];
     const renderer = new TextWorldPresentationRenderer((snapshot) => snapshots.push(snapshot.text));

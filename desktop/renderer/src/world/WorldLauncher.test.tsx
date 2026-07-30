@@ -6,17 +6,70 @@ import { WorldLauncher } from "./WorldLauncher";
 import { createWorldDetails, createWorldSummary } from "./testFixtures";
 
 describe("WorldLauncher", () => {
-  it("puts create first and exposes load, settings, and exit without an auto-continue action", () => {
-    const markup = renderToStaticMarkup(<WorldLauncher worlds={[createWorldSummary()]} onCreateWorld={() => undefined} onLoadWorld={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
-    assert.ok(markup.indexOf(">创建世界<") < markup.indexOf(">加载世界<"));
-    assert.ok(markup.indexOf(">加载世界<") < markup.indexOf(">设置<"));
-    assert.ok(markup.indexOf(">设置<") < markup.indexOf(">退出<"));
+  it("renders Galgame-style menu with create, load, settings, and exit", () => {
+    const markup = renderToStaticMarkup(
+      <WorldLauncher
+        worlds={[createWorldSummary()]}
+        onCreateWorld={() => undefined}
+        onLoadWorld={() => undefined}
+        onOpenSettings={() => undefined}
+        onExit={() => undefined}
+      />
+    );
+    // Check menu items exist
+    assert.ok(markup.includes("创建世界"));
+    assert.ok(markup.includes("加载世界"));
+    assert.ok(markup.includes("设置"));
+    assert.ok(markup.includes("退出"));
+    // Check logo
+    assert.ok(markup.includes("Shiori"));
+    // Check background
+    assert.ok(markup.includes("default-galgame-bg.png"));
+    // Check no old "继续世界" text
     assert.doesNotMatch(markup, /继续世界/);
   });
 
-  it("renders saved worlds only after the load menu is opened", () => {
-    const markup = renderToStaticMarkup(<WorldLauncher worlds={[createWorldSummary(createWorldDetails({ name: "雨港" }))]} onCreateWorld={() => undefined} onLoadWorld={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+  it("renders world list only after load menu is opened", () => {
+    const markup = renderToStaticMarkup(
+      <WorldLauncher
+        worlds={[createWorldSummary(createWorldDetails({ name: "雨港" }))]}
+        onCreateWorld={() => undefined}
+        onLoadWorld={() => undefined}
+        onOpenSettings={() => undefined}
+        onExit={() => undefined}
+      />
+    );
+    // World list should not be visible initially
     assert.doesNotMatch(markup, /data-testid="world-load-list"/);
     assert.match(markup, />加载世界</);
+  });
+
+  it("uses a readable compact menu surface", () => {
+    const markup = renderToStaticMarkup(
+      <WorldLauncher
+        worlds={[]}
+        onCreateWorld={() => undefined}
+        onLoadWorld={() => undefined}
+        onOpenSettings={() => undefined}
+        onExit={() => undefined}
+      />
+    );
+    assert.ok(markup.includes("bg-[#111512]/85"));
+    assert.ok(markup.includes("overflow-y-auto"));
+    assert.ok(markup.includes("calc(100%-32px)"));
+    assert.doesNotMatch(markup, /rounded-(?:xl|2xl)/);
+  });
+
+  it("does not inject a bounce animation that bypasses motion settings", () => {
+    const markup = renderToStaticMarkup(
+      <WorldLauncher
+        worlds={[]}
+        onCreateWorld={() => undefined}
+        onLoadWorld={() => undefined}
+        onOpenSettings={() => undefined}
+        onExit={() => undefined}
+      />
+    );
+    assert.doesNotMatch(markup, /slideUpBounce|<style/);
   });
 });

@@ -92,6 +92,16 @@ export class WorldAudioMixer {
     this.refreshVolumes();
   }
 
+  /** Applies persisted channel levels to active and future audio. */
+  setVolumes(levels: Partial<Record<WorldAudioChannel, number>>): void {
+    if (this.disposed) return;
+    for (const channel of ["music", "ambience", "effects"] as const) {
+      const level = levels[channel];
+      if (typeof level === "number") this.channels[channel] = normalizeVolume(level);
+    }
+    this.refreshVolumes();
+  }
+
   pause(): void {
     this.active.forEach(({ audio }) => audio.pause());
   }

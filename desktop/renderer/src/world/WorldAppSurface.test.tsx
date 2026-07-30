@@ -6,11 +6,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { WorldAppSurface } from "./WorldAppSurface";
 
 describe("WorldAppSurface", () => {
-  it("owns a full-window surface with a return route outside the desktop shell", () => {
-    const markup = renderToStaticMarkup(<WorldAppSurface onExit={() => undefined}><div>世界内容</div></WorldAppSurface>);
+  it("owns a full-window surface without a shared navigation header", () => {
+    const markup = renderToStaticMarkup(<WorldAppSurface><div>世界内容</div></WorldAppSurface>);
 
     assert.match(markup, /world-app-surface/);
-    assert.match(markup, /返回 Shiori/);
     assert.match(markup, /h-screen/);
+    assert.doesNotMatch(markup, /返回 Shiori|grid-rows-\[48px/);
   });
 });

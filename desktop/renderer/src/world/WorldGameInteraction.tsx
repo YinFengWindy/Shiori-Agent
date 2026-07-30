@@ -1,8 +1,9 @@
-import { ArrowRight, PaperPlaneTilt, Play } from "@phosphor-icons/react";
+import { ArrowRight, CaretDown, PaperPlaneTilt, Play } from "@phosphor-icons/react";
 import { useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { canSubmitWorldAction } from "./selectors";
 import type { DecisionBarrier, SceneBeat, WorldDetails } from "./types";
+import type { WorldDialogueSnapshot } from "./worldDialogueGate";
 
 type WorldGameInteractionProps = {
   world: WorldDetails;
@@ -10,16 +11,21 @@ type WorldGameInteractionProps = {
   paused: boolean;
   performing: boolean;
   busy: boolean;
+  dialogue: WorldDialogueSnapshot;
+  onContinueDialogue: () => void;
   onSubmitAction: (content: string) => Promise<boolean>;
   onAdvance: () => void;
   onResolveBarrier: (barrier: DecisionBarrier, choiceId: string) => void;
 };
 
 /** Renders dialogue and swaps the bottom area to action or barrier input. */
-export function WorldGameInteraction({ world, beat, paused, performing, busy, onSubmitAction, onAdvance, onResolveBarrier }: WorldGameInteractionProps) {
+export function WorldGameInteraction({ world, beat, paused, performing, busy, dialogue, onContinueDialogue, onSubmitAction, onAdvance, onResolveBarrier }: WorldGameInteractionProps) {
   const [action, setAction] = useState("");
   const barrier = world.scene.barriers[0] ?? null;
   const canAct = !paused && !performing && canSubmitWorldAction(world);
+  const hasDialogue = dialogue.cueId !== null;
+  const speakerName = hasDialogue ? dialogue.speakerName : beat?.speakerName ?? "";
+  const visibleText = hasDialogue ? dialogue.visibleText : performing ? "" : beat?.content ?? "";
 
   async function submit() {
     if (!canAct || !action.trim()) return;
@@ -29,8 +35,9 @@ export function WorldGameInteraction({ world, beat, paused, performing, busy, on
   return (
     <section className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-[clamp(20px,8vw,120px)] pb-[clamp(24px,6vh,64px)]">
       <div className="pointer-events-auto mx-auto max-w-5xl border-l-2 border-[#E59A70] bg-black/55 px-6 py-5 backdrop-blur-md">
-        {beat?.speakerName ? <h1 className="m-0 mb-2 font-serif text-lg font-semibold text-[#F3B18B]">{beat.speakerName}</h1> : null}
-        <p className="m-0 min-h-8 whitespace-pre-wrap font-serif text-lg leading-8 text-white">{beat?.content ?? ""}</p>
+        {speakerName ? <h1 className="m-0 mb-2 font-serif text-lg font-semibold text-[#F3B18B]">{speakerName}</h1> : null}
+        <p className="m-0 min-h-8 whitespace-pre-wrap font-serif text-lg leading-8 text-white">{visibleText}</p>
+        {hasDialogue && !paused ? <button className="ml-auto mt-2 grid h-9 w-9 place-items-center rounded-md text-white/70 hover:bg-white/10 hover:text-white" type="button" aria-label={dialogue.fullyRevealed ? "继续对话" : "显示完整对话"} title={dialogue.fullyRevealed ? "继续对话" : "显示完整对话"} onClick={onContinueDialogue}><CaretDown /></button> : null}
         {paused ? <p className="m-0 mt-3 text-xs text-white/60">演出已暂停</p> : null}
         {!paused && barrier ? (
           <section className="mt-5 grid gap-3" aria-label="待决事件">

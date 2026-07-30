@@ -72,7 +72,7 @@ function WorldRoute({ roles, onExit }: WorldRouteProps): React.ReactElement {
     onExit,
   });
 
-  return <WorldAppSurface onExit={onExit}>{worldPresentation.content}</WorldAppSurface>;
+  return <WorldAppSurface>{worldPresentation.content}</WorldAppSurface>;
 }
 
 function App(): React.ReactElement {

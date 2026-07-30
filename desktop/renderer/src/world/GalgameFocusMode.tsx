@@ -4,6 +4,7 @@ import type { PerformancePlan } from "./presentationProtocol";
 import type { SceneBeat } from "./types";
 import { hydrateWorldPresentationAssets } from "./worldPresentationAssets";
 import { WorldStage } from "./WorldStage";
+import { WorldPresentationRuntime } from "./worldPresentationRuntime";
 
 type GalgameFocusModeProps = {
   worldName: string;
@@ -45,6 +46,7 @@ function fallbackPlan(beat: SceneBeat): PerformancePlan {
 
 /** Owns React presentation controls without coupling the stage to world simulation. */
 export function GalgameFocusMode({ worldName, beat, plan, preloadPlan, startCueIndex = 0, paused = false, onExit, onRedrawShot, onPause, onResume, onCheckpoint }: GalgameFocusModeProps) {
+  const runtime = useMemo(() => new WorldPresentationRuntime(), []);
   const [locallyPaused, setLocallyPaused] = useState(paused);
   const [skipVersion, setSkipVersion] = useState(0);
   const activePlan = useMemo(
@@ -63,6 +65,7 @@ export function GalgameFocusMode({ worldName, beat, plan, preloadPlan, startCueI
   }, [beat.shot]);
 
   useEffect(() => setLocallyPaused(paused), [paused]);
+  useEffect(() => () => runtime.dispose(), [runtime]);
 
   return (
     <section className="fixed inset-0 z-[100] overflow-hidden bg-[#171A18] text-white" data-testid="galgame-focus-mode">
@@ -70,6 +73,7 @@ export function GalgameFocusMode({ worldName, beat, plan, preloadPlan, startCueI
         plan={activePlan}
         preloadPlan={hydratedPreloadPlan}
         fallbackText={beat.content}
+        runtime={runtime}
         initialVisual={initialShot}
         startCueIndex={startCueIndex}
         paused={locallyPaused}

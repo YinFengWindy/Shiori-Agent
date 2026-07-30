@@ -6,11 +6,14 @@ import { describe, it } from "node:test";
 import { WorldGameSurface } from "./WorldGameSurface";
 import { createWorldDetails } from "./testFixtures";
 import { selectWorldGamePresentation } from "./worldGamePresentation";
+import { WorldPresentationRuntime } from "./worldPresentationRuntime";
 
 function render(world = createWorldDetails()) {
-  return renderToStaticMarkup(
+  const runtime = new WorldPresentationRuntime();
+  const markup = renderToStaticMarkup(
     <WorldGameSurface
       world={world}
+      runtime={runtime}
       onOpenTimeline={() => undefined}
       onExitWorkspace={() => undefined}
       onSubmitAction={async () => true}
@@ -20,9 +23,10 @@ function render(world = createWorldDetails()) {
       onPause={() => undefined}
       onResume={() => undefined}
       onCheckpoint={() => undefined}
-      synthesizeVoice={async () => ({ audioBase64: "", format: "mp3" })}
     />,
   );
+  runtime.dispose();
+  return markup;
 }
 
 describe("WorldGameSurface", () => {
@@ -67,7 +71,8 @@ describe("WorldGameSurface", () => {
     assert.match(markup, /aria-label="暂停演出"/);
     assert.match(markup, /aria-label="跳过当前演出"/);
     assert.match(markup, /aria-label="打开演出菜单"/);
-    assert.match(markup, />你终于来了。</);
+    assert.doesNotMatch(markup, /<header/);
+    assert.doesNotMatch(markup, />你终于来了。</);
     assert.doesNotMatch(markup, /aria-label="提交行动"/);
   });
 
