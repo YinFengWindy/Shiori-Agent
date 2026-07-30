@@ -41,6 +41,7 @@ export type SceneBeat = {
   kind: "dialogue" | "action" | "environment";
   content: string;
   shot?: SceneShot;
+  performancePlan?: import("./presentationProtocol").PerformancePlan;
   isCritical?: boolean;
 };
 

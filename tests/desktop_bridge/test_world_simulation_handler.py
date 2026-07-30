@@ -95,4 +95,7 @@ def test_action_catch_up_only_returns_committed_beats(tmp_path):
     assert replay is not None
     assert [beat["content"] for beat in replay["beats"]][-1] == "推开灯塔的门。"
     assert replay["world"]["scene"]["beats"][-1]["content"] == "推开灯塔的门。"
+    performance_plan = replay["beats"][-1]["performancePlan"]
+    assert performance_plan["schemaVersion"] == 1
+    assert performance_plan["cues"][0]["kind"] == "dialogue"
     handler.close()

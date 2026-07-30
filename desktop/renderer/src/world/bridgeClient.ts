@@ -10,6 +10,7 @@ import type {
   WorldSummary,
   WorldTimelineEntry,
 } from "./types";
+import { parseWorldCatchUpPerformance, parseWorldDetailsPerformance } from "./presentationProtocol";
 import { WorldBridgeError } from "./types";
 
 type DesktopInvoke = typeof window.miraDesktop.invoke;
@@ -50,29 +51,29 @@ export function createWorldBridgeClient(invoke: DesktopInvoke = window.miraDeskt
       return payload.worlds;
     },
     async getWorld(worldId) {
-      return (await invokePayload<{ world: WorldDetails }>(invoke, "worlds.get", { world_id: worldId })).world;
+      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.get", { world_id: worldId })).world);
     },
     async previewDraft(input) {
       return (await invokePayload<{ draft: WorldCreationDraft }>(invoke, "worlds.drafts.preview", input)).draft;
     },
     async confirmDraft(draftId, identities) {
-      return (await invokePayload<{ world: WorldDetails }>(invoke, "worlds.drafts.confirm", {
+      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.drafts.confirm", {
         draft_id: draftId,
         native_identities: identities,
-      })).world;
+      })).world);
     },
     async addOc(worldId, oc, anchorId) {
-      return (await invokePayload<{ world: WorldDetails }>(invoke, "worlds.ocs.add", {
+      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.ocs.add", {
         world_id: worldId,
         oc,
         anchor_id: anchorId,
-      })).world;
+      })).world);
     },
     async switchOc(worldId, ocId) {
-      return (await invokePayload<{ world: WorldDetails }>(invoke, "worlds.ocs.switch", {
+      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.ocs.switch", {
         world_id: worldId,
         oc_id: ocId,
-      })).world;
+      })).world);
     },
     async submitAction(worldId, content) {
       await invokePayload(invoke, "worlds.actions.submit", { world_id: worldId, content });
@@ -81,11 +82,11 @@ export function createWorldBridgeClient(invoke: DesktopInvoke = window.miraDeskt
       await invokePayload(invoke, "worlds.advance", { world_id: worldId });
     },
     async resolveBarrier(worldId, barrier, choiceId) {
-      return (await invokePayload<{ world: WorldDetails }>(invoke, "worlds.barriers.resolve", {
+      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.barriers.resolve", {
         world_id: worldId,
         barrier_id: barrier.id,
         choice_id: choiceId,
-      })).world;
+      })).world);
     },
     async getTimeline(worldId, perspective, ocId) {
       const payload = await invokePayload<{ entries: WorldTimelineEntry[] }>(invoke, "worlds.timeline", {
@@ -96,10 +97,10 @@ export function createWorldBridgeClient(invoke: DesktopInvoke = window.miraDeskt
       return payload.entries;
     },
     async copyWorld(worldId, anchorId) {
-      return (await invokePayload<{ world: WorldDetails }>(invoke, "worlds.copy", {
+      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.copy", {
         world_id: worldId,
         anchor_id: anchorId,
-      })).world;
+      })).world);
     },
     async previewBackfill(worldId, anchorId, oc) {
       return (await invokePayload<{ preview: BackfillPreview }>(invoke, "worlds.backfill.preview", {
@@ -109,16 +110,16 @@ export function createWorldBridgeClient(invoke: DesktopInvoke = window.miraDeskt
       })).preview;
     },
     async commitBackfill(worldId, preview) {
-      return (await invokePayload<{ world: WorldDetails }>(invoke, "worlds.backfill.commit", {
+      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.backfill.commit", {
         world_id: worldId,
         preview,
-      })).world;
+      })).world);
     },
     async cancelRun(worldId) {
-      return (await invokePayload<{ world: WorldDetails }>(invoke, "worlds.runs.cancel", { world_id: worldId })).world;
+      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.runs.cancel", { world_id: worldId })).world);
     },
     async catchUp(worldId, cursor) {
-      return invokePayload<WorldCatchUp>(invoke, "worlds.events.catch_up", { world_id: worldId, cursor });
+      return parseWorldCatchUpPerformance(await invokePayload<WorldCatchUp>(invoke, "worlds.events.catch_up", { world_id: worldId, cursor }));
     },
     async redrawShot(worldId, shotId) {
       return (await invokePayload<{ shot: SceneShot }>(invoke, "worlds.shots.redraw", {

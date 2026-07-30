@@ -7,4 +7,14 @@ export { useWorldWorkspaceController } from "./useWorldWorkspaceController";
 export { WorldCreateFlow } from "./WorldCreateFlow";
 export { WorldTimelineView } from "./WorldTimelineView";
 export { WorldWorkspace } from "./WorldWorkspace";
+export {
+  parsePerformancePlan,
+  parseWorldCatchUpPerformance,
+  parseWorldDetailsPerformance,
+} from "./presentationProtocol";
+export type {
+  PerformancePlan,
+  PresentationCue,
+  PresentationCueKind,
+} from "./presentationProtocol";
 export * from "./types";
