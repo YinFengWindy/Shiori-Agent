@@ -2,7 +2,7 @@
 title: 持久世界与演出
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 12f37fe5
+last_verified_commit: 9896f304
 source_paths:
   - world_simulation/
   - desktop_bridge/world_simulation_handler.py
@@ -28,6 +28,8 @@ related:
 
 React 在进入 `WorldStage` 前用 `hydrateWorldPresentationAssets()` 将 bridge 路径替换为 opaque URL 并移除原始路径。Pixi adapter 只接收 `PerformancePlan` 与 `WorldAssetManifestEntry`，不读取 bridge、store 或世界数据库；WebGL 失效时切换文本 adapter。
 
+World 入口在独立的 `WorldRoute` 中挂载 bridge/controller，进入后由 `WorldGameSurface` 按持久化 `activePlanId` 和 `activeCueIndex` 选择当前计划；空队列切换到自由行动，待决屏障阻止陈旧计划继续播放。`WorldStage` 的 Pixi 失败降级从最近一次成功 checkpoint 的下一个 cue 恢复，checkpoint 或 bridge 失败则保留错误状态，不以文本重播掩盖持久化问题。
+
 ## 修改影响
 
 - 修改世界事实或结算：检查 repository transaction、timeline projection、idempotency、outbox、复制世界和 backfill 因果约束。
@@ -41,3 +43,5 @@ React 在进入 `WorldStage` 前用 `hydrateWorldPresentationAssets()` 将 bridg
 - 已有世界只读取自己的角色快照，不回读可变角色定义。
 - Pixi 不接触本地路径；本地图片只能通过 opaque asset transport 加载。
 - 恢复已完成 cue 时不得重复业务 checkpoint。
+- 非 World 路由不得初始化 World bridge、controller 或演出舞台。
+- 表现 renderer 失败可以降级为文本，但不得重复提交已经成功的 checkpoint；checkpoint 失败必须原样暴露给界面。
