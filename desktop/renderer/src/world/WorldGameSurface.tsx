@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { WorldGameControls } from "./WorldGameControls";
 import { WorldGameInteraction } from "./WorldGameInteraction";
 import type { DecisionBarrier, SceneBeat, WorldDetails } from "./types";
@@ -36,6 +36,10 @@ export function WorldGameSurface({ world, busy = false, onOpenTimeline, onExitWo
   const performing = canPlay && !isPaused;
   const hydratedPlan = useMemo(() => plan ? hydrateWorldPresentationAssets(plan) : null, [plan]);
   const hydratedPreloadPlan = useMemo(() => preloadPlan ? hydrateWorldPresentationAssets(preloadPlan) : undefined, [preloadPlan]);
+
+  useEffect(() => {
+    setPaused(session?.status === "paused");
+  }, [session?.status]);
 
   const pause = useCallback(() => {
     if (!canPlay || isPaused) return;

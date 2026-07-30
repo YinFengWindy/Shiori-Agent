@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState } from "react";
 import { toFileUrl } from "../shared/format";
 import type { RoleRecord } from "../shared/types";
 import {
-  GalgameFocusMode,
   WorldCreateFlow,
+  WorldGameSurface,
   WorldTimelineView,
   WorldWorkspace,
   type BackfillPreview,
@@ -13,7 +13,8 @@ import {
 import type { WorldBridgeClient } from "../world/bridgeClient";
 import type { useWorldWorkspaceController } from "../world/useWorldWorkspaceController";
 
-type WorldPresentationMode = "workspace" | "create" | "timeline" | "focus";
+type WorldPresentationMode = "game" | "workspace" | "create" | "timeline";
+type TimelineReturnMode = "game" | "workspace";
 
 type UseWorldWorkspacePresentationArgs = {
   roles: RoleRecord[];
@@ -27,7 +28,8 @@ function createWorldSeed(): string {
 
 /** Coordinates world-only presentation modes around the persistent workspace controller. */
 export function useWorldWorkspacePresentation({ roles, client, controller }: UseWorldWorkspacePresentationArgs) {
-  const [mode, setMode] = useState<WorldPresentationMode>("workspace");
+  const [mode, setMode] = useState<WorldPresentationMode>("game");
+  const [timelineReturnMode, setTimelineReturnMode] = useState<TimelineReturnMode>("game");
   const [seed, setSeed] = useState(createWorldSeed);
   const [draft, setDraft] = useState<Awaited<ReturnType<WorldBridgeClient["previewDraft"]>> | null>(null);
   const [timeline, setTimeline] = useState<Awaited<ReturnType<WorldBridgeClient["getTimeline"]>>>([]);
@@ -57,8 +59,9 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
     }
   }, []);
 
-  const openTimeline = useCallback(() => {
+  const openTimeline = useCallback((returnMode: TimelineReturnMode) => {
     if (!world) return;
+    setTimelineReturnMode(returnMode);
     void runPresentation(
       () => client.getTimeline(world.id, perspective, perspective === "known" ? world.activeOcId ?? undefined : undefined),
       (entries) => {
@@ -89,7 +92,7 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
         await controller.reloadWorlds();
         await controller.loadWorld(createdWorld.id);
         setDraft(null);
-        setMode("workspace");
+        setMode("game");
       },
     );
   }, [client, controller, runPresentation]);
@@ -101,7 +104,7 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
       async (copiedWorld) => {
         await controller.reloadWorlds();
         await controller.loadWorld(copiedWorld.id);
-        setMode("workspace");
+        setMode("game");
       },
     );
   }, [client, controller, runPresentation, world]);
@@ -119,21 +122,24 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
         await controller.reloadWorlds();
         await controller.loadWorld(updatedWorld.id);
         setBackfillPreview(null);
-        setMode("workspace");
+        setMode("game");
       },
     );
   }, [client, controller, runPresentation, world]);
 
-  const openFocus = useCallback(() => {
+  const openGame = useCallback(() => {
     if (!world?.scene.beats.length) {
       setPresentationError("当前场景尚无可播放的剧情。");
       return;
     }
-    setMode("focus");
+    setMode("game");
   }, [world]);
 
   const content = useMemo(() => {
     const error = presentationError || controller.error;
+    if (controller.loading && !world) {
+      return <div className="grid h-full place-items-center bg-[#151816] text-sm text-white/70" aria-busy="true">正在载入世界</div>;
+    }
     if (mode === "create" || !world) {
       return (
         <WorldCreateFlow
@@ -159,7 +165,7 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
           entries={timeline}
           perspective={perspective}
           backfillPreview={backfillPreview}
-          onBack={() => setMode("workspace")}
+          onBack={() => setMode(timelineReturnMode)}
           onPerspectiveChange={changePerspective}
           onCopyWorld={copyWorld}
           onPreviewBackfill={previewBackfill}
@@ -167,28 +173,22 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
         />
       );
     }
-    if (mode === "focus") {
-      const plan = world.presentation?.plans[0];
-      const beat = (plan ? world.scene.beats.find((item) => item.id === plan.eventId) : undefined)
-        ?? [...world.scene.beats].reverse().find((item) => item.isCritical)
-        ?? world.scene.beats.at(-1);
-      return beat ? (
-        <GalgameFocusMode
-          worldName={world.name}
-          beat={beat}
-          plan={plan}
-          preloadPlan={world.presentation?.plans[1]}
-          startCueIndex={world.presentation?.session.activePlanId === plan?.planId
-            ? world.presentation?.session.activeCueIndex ?? 0
-            : 0}
-          paused={world.presentation?.session.status === "paused"}
-          onExit={() => setMode("workspace")}
+    if (mode === "game") {
+      return (
+        <WorldGameSurface
+          world={world}
+          busy={busy || controller.busy}
+          onOpenTimeline={() => openTimeline("game")}
+          onExitWorkspace={() => setMode("workspace")}
+          onSubmitAction={controller.submitAction}
+          onAdvance={controller.advance}
+          onResolveBarrier={controller.resolveBarrier}
           onRedrawShot={controller.redrawShot}
           onPause={controller.pausePresentation}
           onResume={controller.resumePresentation}
           onCheckpoint={controller.checkpointPresentation}
         />
-      ) : null;
+      );
     }
     return (
       <WorldWorkspace
@@ -202,8 +202,8 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
           setDraft(null);
           setMode("create");
         }}
-        onOpenTimeline={openTimeline}
-        onOpenFocus={openFocus}
+        onOpenTimeline={() => openTimeline("workspace")}
+        onOpenFocus={openGame}
         onSubmitAction={controller.submitAction}
         onAdvance={controller.advance}
         onResolveBarrier={controller.resolveBarrier}
@@ -211,7 +211,7 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
         onRedrawShot={controller.redrawShot}
       />
     );
-  }, [backfillPreview, busy, changePerspective, commitBackfill, confirmDraft, controller, copyWorld, draft, mode, openFocus, openTimeline, perspective, presentationError, previewBackfill, previewDraft, seed, timeline, world, worldRoles]);
+  }, [backfillPreview, busy, changePerspective, commitBackfill, confirmDraft, controller, copyWorld, draft, mode, openGame, openTimeline, perspective, presentationError, previewBackfill, previewDraft, seed, timeline, timelineReturnMode, world, worldRoles]);
 
   return { content };
 }
