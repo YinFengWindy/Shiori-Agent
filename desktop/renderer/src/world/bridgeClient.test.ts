@@ -54,4 +54,30 @@ describe("createWorldBridgeClient", () => {
       payload: { world_id: "world-1", plan_id: "plan-1", cue_index: 0 },
     }]);
   });
+
+  it("maps dialogue voice synthesis to the MiniMax voice bridge contract", async () => {
+    const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
+    const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> => {
+      requests.push(request);
+      return {
+        id: "response",
+        type: "response",
+        method: request.method,
+        payload: { audio_base64: "encoded-mp3", format: "mp3" },
+        error: null,
+      };
+    };
+
+    const result = await createWorldBridgeClient(invoke).synthesizeVoice("你好", {
+      voiceId: "voice-1",
+      speed: 1.2,
+      emotion: "calm",
+    });
+
+    assert.deepEqual(result, { audioBase64: "encoded-mp3", format: "mp3" });
+    assert.deepEqual(requests, [{
+      method: "voice.synthesize",
+      payload: { text: "你好", voice_id: "voice-1", speed: 1.2, emotion: "calm" },
+    }]);
+  });
 });

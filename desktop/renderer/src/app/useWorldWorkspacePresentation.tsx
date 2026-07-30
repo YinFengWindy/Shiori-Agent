@@ -187,6 +187,7 @@ export function useWorldWorkspacePresentation({ roles, client, controller }: Use
           onPause={controller.pausePresentation}
           onResume={controller.resumePresentation}
           onCheckpoint={controller.checkpointPresentation}
+          synthesizeVoice={client.synthesizeVoice}
         />
       );
     }

@@ -2,7 +2,7 @@
 title: 持久世界与演出
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 9896f304
+last_verified_commit: f9a11714
 source_paths:
   - world_simulation/
   - desktop_bridge/world_simulation_handler.py

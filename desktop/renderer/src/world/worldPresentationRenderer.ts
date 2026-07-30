@@ -93,6 +93,7 @@ export async function playPresentationPlan(
   options: {
     signal?: AbortSignal;
     startCueIndex?: number;
+    onCueRendered?: (cue: PresentationCue) => Promise<void> | void;
     onCueComplete?: (cue: PresentationCue) => Promise<void> | void;
   } = {},
 ): Promise<void> {
@@ -108,6 +109,7 @@ export async function playPresentationPlan(
       throw options.signal.reason ?? new DOMException("Aborted", "AbortError");
     }
     await renderer.render(cue, options.signal);
+    await options.onCueRendered?.(cue);
     if (cue.checkpoint || index === request.plan.cues.length - 1) {
       await options.onCueComplete?.(cue);
     }

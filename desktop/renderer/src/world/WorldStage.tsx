@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLatestRef } from "../shared/useLatestRef";
 import type { PerformancePlan, PresentationCue } from "./presentationProtocol";
+import { WorldVoicePlayback, type WorldVoiceCue, type WorldVoiceProfile } from "./worldVoicePlayback";
 import {
   createWorldAssetManifest,
   playPresentationPlan,
@@ -9,6 +10,7 @@ import {
   type WorldPresentationPrepareRequest,
   type WorldPresentationRenderer,
 } from "./worldPresentationRenderer";
+import type { WorldVoiceAudio } from "./worldVoicePlayback";
 
 type WorldStageProps = {
   plan: PerformancePlan;
@@ -18,6 +20,7 @@ type WorldStageProps = {
   startCueIndex?: number;
   paused?: boolean;
   skipVersion?: number;
+  synthesizeVoice?: (text: string, voiceProfile: Record<string, unknown>, signal: AbortSignal) => Promise<{ audioBase64: string; format: "mp3" }>;
   onCueComplete?: (cue: PresentationCue) => Promise<void> | void;
 };
 
@@ -32,6 +35,7 @@ export type WorldStagePlaybackCoordinatorOptions = {
   pixiRenderer: WorldPresentationRenderer;
   textRenderer: WorldPresentationRenderer;
   onCueComplete?: (cue: PresentationCue) => Promise<void> | void;
+  onCueRendered?: (cue: PresentationCue) => Promise<void> | void;
   onFallback?: () => Promise<void> | void;
 };
 
@@ -71,6 +75,7 @@ export function createWorldStagePlaybackCoordinator(options: WorldStagePlaybackC
   const play = (renderer: WorldPresentationRenderer, signal: AbortSignal) => playPresentationPlan(renderer, options.request, {
     signal,
     startCueIndex: nextCueIndex,
+    onCueRendered: options.onCueRendered,
     onCueComplete: checkpoint,
   });
 
@@ -121,13 +126,60 @@ function initialRequest(
   return { plan, manifest, initialAssetId: initialVisual?.id, fallbackText };
 }
 
+function voiceCueForPresentation(cue: PresentationCue, worldId: string): WorldVoiceCue | null {
+  if (cue.kind !== "dialogue") return null;
+  const text = cue.payload.content ?? cue.payload.text;
+  if (typeof text !== "string") return null;
+  const profile = cue.payload.voiceProfile;
+  return {
+    cueId: cue.cueId,
+    worldId,
+    text,
+    voiceProfile: typeof profile === "object" && profile !== null && !Array.isArray(profile)
+      ? profile as WorldVoiceProfile
+      : null,
+  };
+}
+
+function createBrowserVoiceAudio(audioBase64: string, _format: "mp3"): WorldVoiceAudio {
+  const audio = new Audio(`data:audio/mpeg;base64,${audioBase64}`);
+  let onended: (() => void) | null = null;
+  let onerror: ((event: unknown) => void) | null = null;
+  audio.onended = () => onended?.();
+  audio.onerror = (event) => onerror?.(event);
+  return {
+    get onended() {
+      return onended;
+    },
+    set onended(handler) {
+      onended = handler;
+    },
+    get onerror() {
+      return onerror;
+    },
+    set onerror(handler) {
+      onerror = handler;
+    },
+    get src() {
+      return audio.src;
+    },
+    set src(value) {
+      audio.src = value;
+    },
+    play: () => audio.play(),
+    pause: () => audio.pause(),
+    load: () => audio.load(),
+  };
+}
+
 /** Thin React host that owns playback controls while adapters own rendering details. */
-export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, startCueIndex = 0, paused = false, skipVersion = 0, onCueComplete }: WorldStageProps) {
+export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, startCueIndex = 0, paused = false, skipVersion = 0, synthesizeVoice, onCueComplete }: WorldStageProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<WorldPresentationRenderer | null>(null);
   const checkpointRef = useLatestRef(onCueComplete);
   const skipVersionRef = useRef(skipVersion);
   const pausedRef = useLatestRef(paused);
+  const voicePlaybackRef = useRef<WorldVoicePlayback | null>(null);
   const [fallback, setFallback] = useState<TextPresentationSnapshot | null>(null);
   const [presentationError, setPresentationError] = useState<string | null>(null);
   const initialVisualId = initialVisual?.id;
@@ -154,6 +206,11 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
     const textRenderer = new TextWorldPresentationRenderer((snapshot) => {
       if (active) setFallback(snapshot);
     });
+    const voicePlayback = synthesizeVoice ? new WorldVoicePlayback({
+      synthesize: (text, profile, signal) => synthesizeVoice(text, profile as Record<string, unknown>, signal),
+      createAudio: createBrowserVoiceAudio,
+    }) : null;
+    voicePlaybackRef.current = voicePlayback;
 
     const reportFailure = (error: unknown) => {
       if (active && !controller.signal.aborted) {
@@ -187,6 +244,10 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
           pixiRenderer: renderer,
           textRenderer,
           onCueComplete: (cue) => active ? checkpointRef.current?.(cue) : undefined,
+          onCueRendered: (cue) => {
+            const voiceCue = voiceCueForPresentation(cue, request.plan.worldId);
+            if (voiceCue) void voicePlayback?.playCue(voiceCue);
+          },
           onFallback: activateTextRenderer,
         });
         await renderer.initialize(host);
@@ -207,6 +268,10 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
             await playPresentationPlan(textRenderer, request, {
               signal: controller.signal,
               startCueIndex,
+              onCueRendered: (cue) => {
+                const voiceCue = voiceCueForPresentation(cue, request.plan.worldId);
+                if (voiceCue) void voicePlayback?.playCue(voiceCue);
+              },
               onCueComplete: (cue) => active ? checkpointRef.current?.(cue) : undefined,
             });
           }
@@ -219,19 +284,27 @@ export function WorldStage({ plan, preloadPlan, fallbackText, initialVisual, sta
     return () => {
       active = false;
       controller.abort();
+      voicePlayback?.dispose();
+      voicePlaybackRef.current = null;
       renderer?.dispose();
       textRenderer.dispose();
       rendererRef.current = null;
     };
-  }, [checkpointRef, pausedRef, request, startCueIndex]);
+  }, [checkpointRef, pausedRef, request, startCueIndex, synthesizeVoice]);
 
   useEffect(() => {
-    if (paused) rendererRef.current?.pause();
-    else rendererRef.current?.resume();
+    if (paused) {
+      rendererRef.current?.pause();
+      voicePlaybackRef.current?.pause();
+    } else {
+      rendererRef.current?.resume();
+      voicePlaybackRef.current?.resume();
+    }
   }, [paused]);
 
   useEffect(() => {
     if (skipVersion !== skipVersionRef.current) rendererRef.current?.skip();
+    if (skipVersion !== skipVersionRef.current) voicePlaybackRef.current?.skip();
     skipVersionRef.current = skipVersion;
   }, [skipVersion]);
 
