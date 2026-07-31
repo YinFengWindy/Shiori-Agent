@@ -94,12 +94,17 @@ class WorldSimulationService:
             effective_at=draft.initial_time,
             sequence=1,
             participants=tuple(
-                [*(item.id for item in draft.residents), *([initial_oc.id] if initial_oc else [])]
+                [
+                    *(item.id for item in draft.residents),
+                    *([initial_oc.id] if initial_oc else []),
+                ]
             ),
             changes={
                 "residents": {item.id: item.to_dict() for item in draft.residents},
                 "player_ocs": (
-                    {initial_oc.id: initial_oc.to_dict()} if initial_oc is not None else {}
+                    {initial_oc.id: initial_oc.to_dict()}
+                    if initial_oc is not None
+                    else {}
                 ),
             },
             random_ref=random_seed,
@@ -118,7 +123,9 @@ class WorldSimulationService:
             state={
                 "residents": {item.id: item.to_dict() for item in draft.residents},
                 "player_ocs": (
-                    {initial_oc.id: initial_oc.to_dict()} if initial_oc is not None else {}
+                    {initial_oc.id: initial_oc.to_dict()}
+                    if initial_oc is not None
+                    else {}
                 ),
             },
             cognition={initial_oc.id: dict(initial_oc.cognition)} if initial_oc else {},
@@ -160,12 +167,22 @@ class WorldSimulationService:
         if backfill:
             self._validate_backfill(world_id, entry_time, dependency_set)
         revision = expected_revision + 1
+        existing_events = self.repository.list_events(world_id)
+        day_index = max(
+            (
+                item.day_index
+                for item in existing_events
+                if not backfill or item.effective_at <= entry_time
+            ),
+            default=1,
+        )
         event = TimelineEvent(
             id=f"event-{uuid4().hex}",
             world_id=world_id,
             event_type="player_oc.backfilled" if backfill else "player_oc.joined",
             effective_at=entry_time,
             sequence=self.repository.next_event_sequence(world_id),
+            day_index=day_index,
             participants=(oc.id,),
             changes={"player_ocs": {oc.id: oc.to_dict()}},
             is_backfill=backfill,

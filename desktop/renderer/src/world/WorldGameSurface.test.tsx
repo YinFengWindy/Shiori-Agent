@@ -1,9 +1,11 @@
 /// <reference types="node" />
 
 import assert from "node:assert/strict";
+import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it } from "node:test";
-import { WorldGameSurface } from "./WorldGameSurface";
+import type { PerformancePlan } from "./presentationProtocol";
+import { useHydratedWorldPlans, WorldGameSurface } from "./WorldGameSurface";
 import { createWorldDetails } from "./testFixtures";
 import { selectWorldGamePresentation } from "./worldGamePresentation";
 import { WorldPresentationRuntime } from "./worldPresentationRuntime";
@@ -16,13 +18,12 @@ function render(world = createWorldDetails()) {
       runtime={runtime}
       onOpenTimeline={() => undefined}
       onExitWorkspace={() => undefined}
-      onSubmitAction={async () => true}
-      onAdvance={() => undefined}
+      onSceneComplete={() => undefined}
       onResolveBarrier={() => undefined}
       onRedrawShot={() => undefined}
       onPause={() => undefined}
       onResume={() => undefined}
-      onCheckpoint={() => undefined}
+      onCheckpoint={() => false}
     />,
   );
   runtime.dispose();
@@ -30,6 +31,32 @@ function render(world = createWorldDetails()) {
 }
 
 describe("WorldGameSurface", () => {
+  it("keeps hydrated plan identity stable when presentation state refreshes the same plan", () => {
+    const plan: PerformancePlan = {
+      schemaVersion: 1,
+      planId: "plan-stable",
+      worldId: "world-1",
+      eventId: "beat-1",
+      sourceSequence: 1,
+      cues: [],
+    };
+    const seen: Array<PerformancePlan | null> = [];
+
+    function Probe() {
+      const [renderCount, setRenderCount] = useState(0);
+      const refreshedPlan = renderCount === 0 ? plan : { ...plan, cues: [...plan.cues] };
+      const hydrated = useHydratedWorldPlans(refreshedPlan);
+      seen.push(hydrated.plan);
+      if (renderCount === 0) setRenderCount(1);
+      return null;
+    }
+
+    renderToStaticMarkup(<Probe />);
+
+    assert.equal(seen.length, 2);
+    assert.equal(seen[0], seen[1]);
+  });
+
   it("renders the stage and performance controls for a queued plan", () => {
     const base = createWorldDetails();
     const markup = render({
@@ -76,12 +103,12 @@ describe("WorldGameSurface", () => {
     assert.doesNotMatch(markup, /aria-label="提交行动"/);
   });
 
-  it("shows action input after the presentation queue is empty", () => {
+  it("does not expose Day actions after the presentation queue is empty", () => {
     const markup = render(createWorldDetails({ presentation: undefined }));
 
     assert.doesNotMatch(markup, /data-testid="world-stage"/);
-    assert.match(markup, /aria-label="提交行动"/);
-    assert.match(markup, /岚准备怎么做？/);
+    assert.doesNotMatch(markup, /aria-label="提交行动"/);
+    assert.doesNotMatch(markup, /进入下一天|继续世界/);
   });
 
   it("shows a decision barrier instead of the action composer", () => {

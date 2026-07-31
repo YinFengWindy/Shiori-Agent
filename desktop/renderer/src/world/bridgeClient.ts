@@ -42,6 +42,7 @@ export interface WorldBridgeClient {
   addOc(worldId: string, oc: WorldCreationInput["firstOc"], anchorId?: string): Promise<WorldDetails>;
   switchOc(worldId: string, ocId: string): Promise<WorldDetails>;
   submitAction(worldId: string, content: string): Promise<void>;
+  completeDay(worldId: string, content: string): Promise<void>;
   advance(worldId: string): Promise<void>;
   resolveBarrier(worldId: string, barrier: DecisionBarrier, choiceId: string): Promise<WorldDetails>;
   getTimeline(worldId: string, perspective: "known" | "omniscient", ocId?: string): Promise<WorldTimelineEntry[]>;
@@ -91,6 +92,9 @@ export function createWorldBridgeClient(invoke: DesktopInvoke = window.miraDeskt
     },
     async submitAction(worldId, content) {
       await invokePayload(invoke, "worlds.actions.submit", { world_id: worldId, content });
+    },
+    async completeDay(worldId, content) {
+      await invokePayload(invoke, "worlds.days.complete", { world_id: worldId, content });
     },
     async advance(worldId) {
       await invokePayload(invoke, "worlds.advance", { world_id: worldId });

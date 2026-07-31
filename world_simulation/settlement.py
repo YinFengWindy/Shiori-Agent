@@ -54,9 +54,13 @@ class WorldSettlement:
             )
         if run is not None:
             if run.id != proposal.run_id or run.world_id != world.id:
-                raise InvalidWorldProposalError("proposal does not belong to the supplied run")
+                raise InvalidWorldProposalError(
+                    "proposal does not belong to the supplied run"
+                )
             if run.random_seed != proposal.random_seed:
-                raise InvalidWorldProposalError("proposal random seed differs from its run")
+                raise InvalidWorldProposalError(
+                    "proposal random seed differs from its run"
+                )
 
         pending = self._repository.list_pending_barriers(world.id)
         unresolved = [
@@ -80,6 +84,7 @@ class WorldSettlement:
                 event_type=item.event_type,
                 effective_at=item.effective_at,
                 sequence=next_sequence + index,
+                day_index=item.day_index,
                 participants=item.participants,
                 location=item.location,
                 scope=item.scope,
@@ -133,7 +138,9 @@ class WorldSettlement:
             request_id=request_id,
             events=events,
             projection=projection,
-            current_time=max(world.current_time, *(item.effective_at for item in events)),
+            current_time=max(
+                world.current_time, *(item.effective_at for item in events)
+            ),
             result=result,
             run=committed_run,
             barrier=barrier,
@@ -142,15 +149,15 @@ class WorldSettlement:
         )
 
     @staticmethod
-    def _barrier_from(
-        proposal: BeatProposal, world_id: str
-    ) -> DecisionBarrier | None:
+    def _barrier_from(proposal: BeatProposal, world_id: str) -> DecisionBarrier | None:
         if proposal.barrier is None:
             return None
         value = proposal.barrier
         required = ("effective_at", "oc_id", "reason")
         if any(not str(value.get(name, "")).strip() for name in required):
-            raise InvalidWorldProposalError("decision barrier is missing required fields")
+            raise InvalidWorldProposalError(
+                "decision barrier is missing required fields"
+            )
         return DecisionBarrier(
             id=str(value.get("id") or f"barrier-{uuid4().hex}"),
             world_id=world_id,

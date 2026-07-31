@@ -95,7 +95,7 @@ export function GalgameFocusMode({ worldName, beat, plan, preloadPlan, startCueI
           <button className="pointer-events-auto grid h-10 w-10 place-items-center rounded-md bg-black/35 text-white backdrop-blur-sm hover:bg-black/55" type="button" aria-label="退出焦点模式" title="退出焦点模式" onClick={onExit}><X /></button>
         </div>
       </header>
-      <div className="absolute inset-x-0 bottom-0 z-10 px-[clamp(24px,8vw,120px)] pb-[clamp(28px,7vh,72px)]"><div className="max-w-4xl border-l-2 border-[#E59A70] bg-black/45 px-6 py-5 backdrop-blur-md">{beat.speakerName ? <h1 className="m-0 mb-2 font-serif text-lg font-semibold text-[#F3B18B]">{beat.speakerName}</h1> : null}<p className="m-0 whitespace-pre-wrap font-serif text-lg leading-8 text-white">{beat.content}</p></div><button className="pointer-events-auto mt-3 inline-flex h-9 items-center gap-2 rounded-md bg-black/35 px-3 text-xs text-white/80 hover:bg-black/55" type="button" onClick={onExit}><ArrowLeft />返回工作台</button></div>
+      <div className="absolute inset-x-0 bottom-0 z-10 px-[clamp(24px,8vw,120px)] pb-[clamp(28px,7vh,72px)]"><div className="max-w-4xl border-l-2 border-[#E59A70] bg-black/45 px-6 py-5 backdrop-blur-md">{beat.speakerName ? <h1 className="m-0 mb-2 font-serif text-lg font-semibold text-[#F3B18B]">{beat.speakerName}</h1> : null}<p className="m-0 whitespace-pre-wrap font-serif text-lg leading-8 text-white">{beat.content}</p></div><button className="pointer-events-auto mt-3 inline-flex h-9 items-center gap-2 rounded-md bg-black/35 px-3 text-xs text-white/80 hover:bg-black/55" type="button" onClick={onExit}><ArrowLeft />返回当前 Day</button></div>
     </section>
   );
 }

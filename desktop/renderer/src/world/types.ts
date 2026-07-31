@@ -4,6 +4,7 @@ export type WorldSummary = {
   name: string;
   premise: string;
   currentTimeLabel: string;
+  currentDayIndex: number;
   activeOcId: string | null;
   status: WorldRunStatus;
 };
@@ -39,13 +40,23 @@ export type SceneParticipant = {
 export type SceneBeat = {
   id: string;
   order: number;
+  dayIndex: number;
   timeLabel: string;
   speakerName?: string;
   kind: "dialogue" | "action" | "environment";
   content: string;
+  presentationMode: "narrative" | "scene";
   shot?: SceneShot;
   performancePlan?: import("./presentationProtocol").PerformancePlan;
   isCritical?: boolean;
+};
+
+/** One Day chapter projected from committed timeline events. */
+export type WorldDay = {
+  dayIndex: number;
+  title: string;
+  status: "completed" | "current";
+  events: SceneBeat[];
 };
 
 /** One visual shot and all retained presentation alternatives. */
@@ -87,6 +98,7 @@ export type WorldScene = {
 
 /** Complete renderer read model for a world. */
 export type WorldDetails = WorldSummary & {
+  days: WorldDay[];
   ocs: WorldOc[];
   scene: WorldScene;
   relatedCharacters: Array<{ id: string; name: string; relationship: string; avatarUrl?: string }>;
@@ -140,6 +152,7 @@ export type WorldCreationDraft = {
 /** An immutable world-history entry. */
 export type WorldTimelineEntry = {
   id: string;
+  dayIndex: number;
   timeLabel: string;
   title: string;
   summary: string;

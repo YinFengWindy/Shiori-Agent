@@ -1,6 +1,7 @@
 import { ArrowLeft, FolderOpen, GearSix, Plus, SignOut } from "@phosphor-icons/react";
 import { useState } from "react";
 import type { WorldSummary } from "./types";
+import { WORLD_MENU_BACKGROUND_URL } from "./worldStaticAssets";
 
 type WorldLauncherProps = {
   worlds: WorldSummary[];
@@ -20,7 +21,7 @@ export function WorldLauncher({ worlds, busy = false, error = "", onCreateWorld,
 
   return (
     <section className="relative h-full min-h-0 overflow-hidden" data-testid="world-launcher">
-      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "url('/assets/backgrounds/default-galgame-bg.png')" }} />
+      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url(${WORLD_MENU_BACKGROUND_URL})` }} />
       <div className="absolute inset-0 bg-gradient-to-r from-white/20 via-transparent to-black/25" />
 
       <div className="absolute left-[clamp(16px,4vw,32px)] top-[clamp(16px,4vh,32px)] z-10">

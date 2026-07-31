@@ -137,12 +137,16 @@ export function parsePresentationState(value: unknown): WorldPresentationState {
 
 /** Validate presentation plans embedded in a world detail response. */
 export function parseWorldDetailsPerformance(world: WorldDetails): WorldDetails {
+  const parseBeat = (beat: SceneBeat) => beat.performancePlan
+    ? { ...beat, performancePlan: parsePerformancePlan(beat.performancePlan) }
+    : beat;
   return {
     ...world,
     presentation: world.presentation ? parsePresentationState(world.presentation) : undefined,
+    days: world.days.map((day) => ({ ...day, events: day.events.map(parseBeat) })),
     scene: {
       ...world.scene,
-      beats: world.scene.beats.map((beat: SceneBeat) => beat.performancePlan ? { ...beat, performancePlan: parsePerformancePlan(beat.performancePlan) } : beat),
+      beats: world.scene.beats.map(parseBeat),
     },
   };
 }

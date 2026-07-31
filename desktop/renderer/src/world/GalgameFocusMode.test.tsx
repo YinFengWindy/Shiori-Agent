@@ -14,6 +14,6 @@ describe("GalgameFocusMode", () => {
     assert.match(markup, /aria-label="暂停演出"/);
     assert.match(markup, /aria-label="跳过当前演出"/);
     assert.match(markup, /aria-label="退出焦点模式"/);
-    assert.match(markup, />返回工作台</);
+    assert.match(markup, />返回当前 Day</);
   });
 });

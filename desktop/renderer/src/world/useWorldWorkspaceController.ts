@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createWorldBridgeClient, type WorldBridgeClient } from "./bridgeClient";
-import { mergeCommittedBeats, selectActiveOc } from "./selectors";
+import { mergeCommittedBeats, replaceWorldSummary, selectActiveOc } from "./selectors";
 import type { DecisionBarrier, SceneShot, WorldDetails, WorldSummary } from "./types";
 
 type ControllerState = {
@@ -61,7 +61,7 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
 
   useEffect(() => {
     void reloadWorlds();
-  }, []); // The client is stable for the lifetime of the workspace.
+  }, [reloadWorlds]);
 
   const catchUp = useCallback(async () => {
     if (!state.world) return;
@@ -73,6 +73,7 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
       return {
         ...current,
         cursor: update.cursor,
+        worlds: replaceWorldSummary(current.worlds, baseWorld),
         world: {
           ...baseWorld,
           scene: {
@@ -101,6 +102,14 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
     if (!state.world) return;
     const result = await run(() => client.advance(state.world!.id));
     if (result !== null) await catchUp();
+  }, [catchUp, client, run, state.world]);
+
+  const completeDay = useCallback(async (content: string) => {
+    if (!state.world || !content.trim()) return false;
+    const result = await run(() => client.completeDay(state.world!.id, content.trim()));
+    if (result === null) return false;
+    await catchUp();
+    return true;
   }, [catchUp, client, run, state.world]);
 
   const resolveBarrier = useCallback(async (barrier: DecisionBarrier, choiceId: string) => {
@@ -155,14 +164,15 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
   }, [client, run, state.world]);
 
   const checkpointPresentation = useCallback(async (planId: string, cueIndex: number) => {
-    if (!state.world) return;
-    await run(
+    if (!state.world) return false;
+    const result = await run(
       () => client.checkpointPresentation(state.world!.id, planId, cueIndex),
       (presentation) => setState((current) => current.world ? ({
         ...current,
         world: { ...current.world, presentation },
       }) : current),
     );
+    return Boolean(result && result.plans.length === 0);
   }, [client, run, state.world]);
 
   return useMemo(() => ({
@@ -173,6 +183,7 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
     switchOc,
     submitAction,
     advance,
+    completeDay,
     resolveBarrier,
     cancelRun,
     catchUp,
@@ -180,5 +191,5 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
     pausePresentation,
     resumePresentation,
     checkpointPresentation,
-  }), [advance, cancelRun, catchUp, checkpointPresentation, loadWorld, pausePresentation, redrawShot, reloadWorlds, resolveBarrier, resumePresentation, state, submitAction, switchOc]);
+  }), [advance, cancelRun, catchUp, checkpointPresentation, completeDay, loadWorld, pausePresentation, redrawShot, reloadWorlds, resolveBarrier, resumePresentation, state, submitAction, switchOc]);
 }
