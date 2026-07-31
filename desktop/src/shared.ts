@@ -166,7 +166,7 @@ export type StartAttachmentDragRequest = {
 export type LocalAssetReference = {
   path: string;
   url: string;
-  kind: "image" | "document";
+  kind: "image" | "audio" | "document";
 };
 
 /** Fixed non-sensitive URL used when no local asset capability is available. */

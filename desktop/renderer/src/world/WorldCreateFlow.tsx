@@ -1,4 +1,4 @@
-import { Check, Copy, DiceFive, Sparkle, UserCircle } from "@phosphor-icons/react";
+import { ArrowLeft, Check, Copy, DiceFive, Sparkle, UserCircle } from "@phosphor-icons/react";
 import { useState } from "react";
 import { cx, inputClass, primaryButtonClass } from "../shared/styles";
 import type { NativeIdentityDraft, WorldCreationDraft, WorldCreationInput, WorldRoleChoice } from "./types";
@@ -8,6 +8,7 @@ type WorldCreateFlowProps = {
   initialSeed: string;
   busy?: boolean;
   draft?: WorldCreationDraft | null;
+  onBack: () => void;
   onRerollSeed: () => string;
   onPreview: (input: WorldCreationInput) => void;
   onConfirm: (draftId: string, identities: NativeIdentityDraft[]) => void;
@@ -18,7 +19,7 @@ function initialInput(seed: string): WorldCreationInput {
 }
 
 /** Renders semantic world creation, native-identity review, and first-OC entry. */
-export function WorldCreateFlow({ roles, initialSeed, busy = false, draft, onRerollSeed, onPreview, onConfirm }: WorldCreateFlowProps) {
+export function WorldCreateFlow({ roles, initialSeed, busy = false, draft, onBack, onRerollSeed, onPreview, onConfirm }: WorldCreateFlowProps) {
   const [input, setInput] = useState(() => initialInput(initialSeed));
   const [identities, setIdentities] = useState<NativeIdentityDraft[] | null>(null);
   const reviewed = identities ?? draft?.nativeIdentities ?? [];
@@ -28,7 +29,7 @@ export function WorldCreateFlow({ roles, initialSeed, busy = false, draft, onRer
 
   return (
     <section className="grid h-full min-h-0 grid-cols-[220px_minmax(420px,1fr)_300px] overflow-hidden bg-[#F8F8F6]" data-testid="world-create-flow">
-      <aside className="border-r border-[#DFE5EA] bg-[#EFF4F9] p-4"><h1 className="m-0 font-serif text-lg font-semibold">新世界</h1><ol className="mt-5 grid gap-3 p-0 text-sm text-[#626B71]"><li className="list-none text-[#A75F41]">01 世界轮廓</li><li className="list-none">02 原住民</li><li className="list-none">03 首位 OC</li></ol></aside>
+      <aside className="border-r border-[#DFE5EA] bg-[#EFF4F9] p-4"><div className="flex items-center gap-2"><button className="grid h-9 w-9 place-items-center rounded-md text-[#59615C] hover:bg-white" type="button" aria-label="返回 World 主菜单" title="返回 World 主菜单" onClick={onBack}><ArrowLeft /></button><h1 className="m-0 font-serif text-lg font-semibold">新世界</h1></div><ol className="mt-5 grid gap-3 p-0 text-sm text-[#626B71]"><li className="list-none text-[#A75F41]">01 世界轮廓</li><li className="list-none">02 原住民</li><li className="list-none">03 首位 OC</li></ol></aside>
       <main className="min-h-0 overflow-y-auto px-8 py-7">
         <div className="mx-auto grid max-w-2xl gap-8">
           <section className="grid gap-4"><h2 className="m-0 font-serif text-xl font-semibold">世界轮廓</h2><label className="grid gap-1.5 text-xs text-[#687078]">世界名称<input className={inputClass} value={input.name} onChange={(event) => setInput({ ...input, name: event.target.value })} /></label><label className="grid gap-1.5 text-xs text-[#687078]">核心前提<textarea className={cx(inputClass, "min-h-24 resize-none")} value={input.premise} onChange={(event) => setInput({ ...input, premise: event.target.value })} /></label><div className="grid grid-cols-2 gap-3"><label className="grid gap-1.5 text-xs text-[#687078]">演化规则<input className={inputClass} value={input.rules} onChange={(event) => setInput({ ...input, rules: event.target.value })} /></label><label className="grid gap-1.5 text-xs text-[#687078]">叙事基调<input className={inputClass} value={input.tone} onChange={(event) => setInput({ ...input, tone: event.target.value })} /></label></div></section>

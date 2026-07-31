@@ -56,6 +56,25 @@ import type {
 } from "./shared/types";
 import "./styles.css";
 
+type WorldRouteProps = {
+  roles: RoleRecord[];
+  onExit: () => void;
+};
+
+/** Mounts World-only bridge and presentation state only while the World route is active. */
+function WorldRoute({ roles, onExit }: WorldRouteProps): React.ReactElement {
+  const worldBridgeClient = useMemo(() => createWorldBridgeClient(), []);
+  const worldController = useWorldWorkspaceController(worldBridgeClient);
+  const worldPresentation = useWorldWorkspacePresentation({
+    roles,
+    client: worldBridgeClient,
+    controller: worldController,
+    onExit,
+  });
+
+  return <WorldAppSurface>{worldPresentation.content}</WorldAppSurface>;
+}
+
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
   const [promptTagWorkspaceSection, setPromptTagWorkspaceSection] = useState<PromptTagWorkspaceSectionId>("list");
@@ -150,14 +169,6 @@ function App(): React.ReactElement {
     activeRole: roles.find((role) => role.id === activeRoleId) ?? null,
     roles,
   });
-  const worldBridgeClient = useMemo(() => createWorldBridgeClient(), []);
-  const worldController = useWorldWorkspaceController(worldBridgeClient);
-  const worldWorkspace = useWorldWorkspacePresentation({
-    roles,
-    client: worldBridgeClient,
-    controller: worldController,
-  });
-
   const { updateRoleForm, updateNewRoleForm } = useRoleFormAdapters({
     roleFormRef,
     newRoleFormRef,
@@ -463,7 +474,7 @@ function App(): React.ReactElement {
   }
 
   if (mainView.kind === "world") {
-    return <WorldAppSurface onExit={() => openChatView()}>{worldWorkspace.content}</WorldAppSurface>;
+    return <WorldRoute roles={roles} onExit={() => openChatView()} />;
   }
 
   return (

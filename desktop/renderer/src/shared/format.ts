@@ -1,6 +1,7 @@
 import { unavailableLocalAssetUrl } from "../../../src/shared";
 
-type LocalAssetUrlResolver = (path: string) => string;
+/** Converts one trusted bridge path into its renderer-safe opaque URL. */
+export type LocalAssetUrlResolver = (path: string) => string;
 
 function resolveDesktopLocalAssetUrl(path: string): string {
   if (typeof window === "undefined") {

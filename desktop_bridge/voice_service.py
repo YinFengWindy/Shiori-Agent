@@ -69,7 +69,23 @@ class VoiceService:
             raise VoiceServiceError("语音未启用")
         return self.asr.transcribe_result(audio)
 
-    def synthesize(self, text: str, *, voice_id: str, speed: float, emotion: str = "") -> bytes:
+    def synthesize(
+        self,
+        text: str,
+        *,
+        voice_id: str,
+        speed: float,
+        emotion: str = "",
+        cancel_event: threading.Event | None = None,
+    ) -> bytes:
+        if cancel_event is not None:
+            return self.tts.stream_synthesize_result(
+                text,
+                voice_id=voice_id,
+                speed=speed,
+                emotion=emotion,
+                cancel_event=cancel_event,
+            ).audio
         return self.tts.synthesize(text, voice_id=voice_id, speed=speed, emotion=emotion)
 
     def stream_synthesize(self, text: str, *, voice_id: str, speed: float, emotion: str = "") -> bytes:

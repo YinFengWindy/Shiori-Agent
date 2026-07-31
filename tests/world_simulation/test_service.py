@@ -166,6 +166,11 @@ def test_copy_uses_committed_node_and_evolves_independently(
     }
     assert repository.require_world(world.id).revision == 2
     assert repository.require_world(copy.id).revision == 3
+    copied_session = repository.get_presentation_session(copy.id)
+    assert copied_session is not None
+    joined_event = repository.get_event(world.id, joined["event_id"])
+    assert joined_event is not None
+    assert copied_session.last_presented_event_sequence == joined_event.sequence
 
 
 def test_cancel_queued_run_is_persistent_and_idempotent(

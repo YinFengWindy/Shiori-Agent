@@ -2,7 +2,7 @@ import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, normalize, relative } from "node:path";
 import { getLocalAssetMimeType } from "./assetMime.js";
 
-export type LocalAssetKind = "image" | "document";
+export type LocalAssetKind = "image" | "audio" | "document";
 
 export type LocalAssetCandidate = {
   requestedPath: string;
@@ -12,6 +12,8 @@ export type LocalAssetCandidate = {
 };
 
 const trustedSinglePathFields = new Set([
+  "audio_path",
+  "audio_abs",
   "avatar_abs",
   "base_image_path",
   "chat_background_abs",
@@ -39,6 +41,8 @@ export function resolveLocalAssetCandidate(path: string): LocalAssetCandidate | 
   const mimeType = getLocalAssetMimeType(requestedPath);
   const kind = mimeType?.startsWith("image/")
     ? "image"
+    : mimeType?.startsWith("audio/")
+      ? "audio"
     : mimeType?.startsWith("text/")
       ? "document"
       : null;

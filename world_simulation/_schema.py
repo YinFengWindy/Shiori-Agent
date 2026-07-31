@@ -138,4 +138,13 @@ CREATE TABLE IF NOT EXISTS outbox_consumers (
     acknowledged_sequence INTEGER NOT NULL,
     PRIMARY KEY (consumer_id, world_id)
 );
+
+CREATE TABLE IF NOT EXISTS world_presentation_sessions (
+    world_id TEXT PRIMARY KEY REFERENCES worlds(id) ON DELETE CASCADE,
+    last_presented_event_sequence INTEGER NOT NULL,
+    active_plan_id TEXT,
+    active_cue_index INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """

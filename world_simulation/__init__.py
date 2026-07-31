@@ -10,6 +10,11 @@ from world_simulation.performance import (
     cue_id_for_plan,
     plan_id_for_event,
 )
+from world_simulation.presentation_session import (
+    PresentationSessionStatus,
+    WorldPresentationSession,
+)
+from world_simulation.visuals import ResolvedWorldVisual, WorldVisualResolver
 from world_simulation.proposals import BeatProposal, ProposedEvent
 from world_simulation.repository import WorldRepository
 from world_simulation.runs import WorldRun
@@ -33,6 +38,7 @@ __all__ = [
     "NativeResident",
     "PRESENTATION_PROTOCOL_VERSION",
     "PerformancePlan",
+    "PresentationSessionStatus",
     "PresentationCue",
     "PlayerOC",
     "ProposedEvent",
@@ -47,7 +53,10 @@ __all__ = [
     "WorldSimulationService",
     "WorldStateProjection",
     "WorldTemplate",
+    "WorldPresentationSession",
+    "WorldVisualResolver",
     "compile_performance_plan",
     "cue_id_for_plan",
     "plan_id_for_event",
+    "ResolvedWorldVisual",
 ]
