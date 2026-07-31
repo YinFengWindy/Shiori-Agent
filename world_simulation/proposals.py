@@ -15,6 +15,7 @@ class ProposedEvent:
 
     event_type: str
     effective_at: str
+    day_index: int = 1
     participants: tuple[str, ...] = ()
     location: str = ""
     scope: str = "world"
@@ -23,6 +24,12 @@ class ProposedEvent:
     changes: dict[str, Any] = field(default_factory=dict)
     dependencies: DependencySet = field(default_factory=DependencySet)
     is_backfill: bool = False
+
+    def __post_init__(self) -> None:
+        """Reject invalid Day placement before deterministic settlement."""
+
+        if self.day_index < 1:
+            raise InvalidWorldProposalError("event day_index must be positive")
 
 
 @dataclass(frozen=True)

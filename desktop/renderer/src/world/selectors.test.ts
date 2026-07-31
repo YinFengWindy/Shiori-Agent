@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { canSubmitWorldAction, mergeCommittedBeats, selectActiveOc, selectTimelineEntries } from "./selectors";
+import { canSubmitWorldAction, mergeCommittedBeats, replaceWorldSummary, selectActiveOc, selectTimelineEntries } from "./selectors";
 import { createSceneBeat, createWorldDetails } from "./testFixtures";
 
 describe("world selectors", () => {
@@ -20,9 +20,17 @@ describe("world selectors", () => {
   it("selects the controlled OC and filters private history in cognitive view", () => {
     assert.equal(selectActiveOc(createWorldDetails())?.name, "岚");
     const entries = [
-      { id: "known", timeLabel: "清晨", title: "抵达", summary: "看见港口", visibility: "known" as const, involvedNames: [], canCopy: true, canEnter: true },
-      { id: "hidden", timeLabel: "清晨", title: "密谈", summary: "未被看见", visibility: "omniscient" as const, involvedNames: [], canCopy: true, canEnter: false },
+      { id: "known", dayIndex: 1, timeLabel: "清晨", title: "抵达", summary: "看见港口", visibility: "known" as const, involvedNames: [], canCopy: true, canEnter: true },
+      { id: "hidden", dayIndex: 1, timeLabel: "清晨", title: "密谈", summary: "未被看见", visibility: "omniscient" as const, involvedNames: [], canCopy: true, canEnter: false },
     ];
     assert.deepEqual(selectTimelineEntries(entries, "known").map((entry) => entry.id), ["known"]);
+  });
+
+  it("refreshes the launcher summary after a Day changes", () => {
+    const current = createWorldDetails({ currentDayIndex: 4, status: "barrier" });
+    const updated = replaceWorldSummary([{ ...createWorldDetails(), currentDayIndex: 3 }], current);
+
+    assert.equal(updated[0].currentDayIndex, 4);
+    assert.equal(updated[0].status, "barrier");
   });
 });

@@ -18,6 +18,7 @@ class TimelineEvent:
     event_type: str
     effective_at: str
     sequence: int
+    day_index: int = 1
     participants: tuple[str, ...] = ()
     location: str = ""
     scope: str = "world"
@@ -30,6 +31,12 @@ class TimelineEvent:
     committed_revision: int = 0
     dependencies: DependencySet = field(default_factory=DependencySet)
     recorded_at: str = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        """Reject invalid narrative-day placement before persistence."""
+
+        if self.day_index < 1:
+            raise ValueError("timeline event day_index must be positive")
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the event including dependency metadata."""

@@ -167,6 +167,27 @@ def _as_mapping_tuple(value: Any) -> tuple[dict[str, Any], ...]:
     return tuple(dict(item) for item in value if isinstance(item, Mapping))
 
 
+def presentation_mode_for_event(
+    event: TimelineEvent | Mapping[str, Any],
+) -> Literal["narrative", "scene"]:
+    """Classify a committed event without turning ordinary prose into a scene."""
+
+    value = event.to_dict() if isinstance(event, TimelineEvent) else dict(event)
+    changes = _as_mapping(value.get("changes"))
+    presentation = _as_mapping(changes.get("presentation"))
+    explicit = str(presentation.get("mode") or "").strip()
+    if explicit == "scene":
+        return "scene"
+    if explicit == "narrative":
+        return "narrative"
+    staged_fields = ("dialogue", "sprites", "background", "camera", "audio", "cg_tasks")
+    return (
+        "scene"
+        if any(presentation.get(field) for field in staged_fields)
+        else "narrative"
+    )
+
+
 def _cue(
     *,
     plan_id: str,

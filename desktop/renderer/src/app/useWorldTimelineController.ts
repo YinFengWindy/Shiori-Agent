@@ -16,7 +16,7 @@ type Args = {
 
 /** Owns timeline perspective, copy, and historical-backfill operations. */
 export function useWorldTimelineController({ client, controller, world, loadWorldForPlay, run, setMode }: Args) {
-  const [returnMode, setReturnMode] = useState<TimelineReturnMode>("game");
+  const [returnMode, setReturnMode] = useState<TimelineReturnMode>("day");
   const [timeline, setTimeline] = useState<Awaited<ReturnType<WorldBridgeClient["getTimeline"]>>>([]);
   const [perspective, setPerspective] = useState<"known" | "omniscient">("known");
   const [backfillPreview, setBackfillPreview] = useState<BackfillPreview | null>(null);

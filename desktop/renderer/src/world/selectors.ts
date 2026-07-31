@@ -5,6 +5,23 @@ export function selectWorld(worlds: WorldSummary[], worldId: string) {
   return worlds.find((world) => world.id === worldId) ?? worlds[0] ?? null;
 }
 
+/** Replace one cached launcher summary from the latest complete read model. */
+export function replaceWorldSummary(worlds: WorldSummary[], world: WorldDetails) {
+  const summary: WorldSummary = {
+    id: world.id,
+    name: world.name,
+    premise: world.premise,
+    currentTimeLabel: world.currentTimeLabel,
+    currentDayIndex: world.currentDayIndex,
+    activeOcId: world.activeOcId,
+    status: world.status,
+  };
+  const index = worlds.findIndex((candidate) => candidate.id === world.id);
+  if (index < 0) return [...worlds, summary];
+  if (worlds[index].currentDayIndex === summary.currentDayIndex && worlds[index].status === summary.status && worlds[index].activeOcId === summary.activeOcId) return worlds;
+  return worlds.map((candidate, candidateIndex) => candidateIndex === index ? summary : candidate);
+}
+
 /** Selects the currently controlled OC. */
 export function selectActiveOc(world: WorldDetails | null): WorldOc | null {
   if (!world) return null;

@@ -35,6 +35,7 @@ _INTEGRATION_METHODS = frozenset(
 _BACKGROUND_WORLD_METHODS = frozenset(
     {
         "worlds.actions.submit",
+        "worlds.days.complete",
         "worlds.advance",
         "worlds.barriers.resolve",
         "worlds.runs.cancel",

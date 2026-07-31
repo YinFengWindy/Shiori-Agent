@@ -1,2 +1,2 @@
-export type WorldPresentationMode = "launcher" | "game" | "workspace" | "create" | "timeline" | "settings" | "loading";
-export type TimelineReturnMode = "game" | "workspace";
+export type WorldPresentationMode = "launcher" | "day" | "scene" | "create" | "timeline" | "settings" | "loading";
+export type TimelineReturnMode = "day" | "scene";

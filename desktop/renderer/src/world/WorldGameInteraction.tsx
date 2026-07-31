@@ -12,6 +12,7 @@ type WorldGameInteractionProps = {
   performing: boolean;
   busy: boolean;
   dialogue: WorldDialogueSnapshot;
+  allowFreeAction?: boolean;
   onContinueDialogue: () => void;
   onSubmitAction: (content: string) => Promise<boolean>;
   onAdvance: () => void;
@@ -19,10 +20,10 @@ type WorldGameInteractionProps = {
 };
 
 /** Renders dialogue and swaps the bottom area to action or barrier input. */
-export function WorldGameInteraction({ world, beat, paused, performing, busy, dialogue, onContinueDialogue, onSubmitAction, onAdvance, onResolveBarrier }: WorldGameInteractionProps) {
+export function WorldGameInteraction({ world, beat, paused, performing, busy, dialogue, allowFreeAction = true, onContinueDialogue, onSubmitAction, onAdvance, onResolveBarrier }: WorldGameInteractionProps) {
   const [action, setAction] = useState("");
   const barrier = world.scene.barriers[0] ?? null;
-  const canAct = !paused && !performing && canSubmitWorldAction(world);
+  const canAct = allowFreeAction && !paused && !performing && canSubmitWorldAction(world);
   const hasDialogue = dialogue.cueId !== null;
   const speakerName = hasDialogue ? dialogue.speakerName : beat?.speakerName ?? "";
   const visibleText = hasDialogue ? dialogue.visibleText : performing ? "" : beat?.content ?? "";
@@ -53,7 +54,7 @@ export function WorldGameInteraction({ world, beat, paused, performing, busy, di
             <button className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-[#A75F41] text-white disabled:opacity-40" type="button" aria-label="提交行动" disabled={busy || !action.trim()} onClick={() => void submit()}><PaperPlaneTilt weight="fill" /></button>
           </div>
         ) : null}
-        {!paused && !performing && !barrier && !canAct ? <button className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-white/15 px-4 text-sm text-white hover:bg-white/20 disabled:opacity-50" type="button" disabled={busy} onClick={onAdvance}><Play weight="fill" />继续世界</button> : null}
+        {allowFreeAction && !paused && !performing && !barrier && !canAct ? <button className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-white/15 px-4 text-sm text-white hover:bg-white/20 disabled:opacity-50" type="button" disabled={busy} onClick={onAdvance}><Play weight="fill" />继续世界</button> : null}
       </div>
     </section>
   );

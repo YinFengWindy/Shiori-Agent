@@ -105,12 +105,11 @@ def test_action_catch_up_only_returns_committed_beats(tmp_path):
     assert repeated is not None
     assert [beat["content"] for beat in replay["beats"]][-1] == "推开灯塔的门。"
     assert replay["world"]["scene"]["beats"][-1]["content"] == "推开灯塔的门。"
-    assert [plan["planId"] for plan in replay["presentation"]["plans"]] == [
-        plan["planId"] for plan in repeated["presentation"]["plans"]
-    ]
-    performance_plan = replay["beats"][-1]["performancePlan"]
-    assert performance_plan["schemaVersion"] == 1
-    assert performance_plan["cues"][0]["kind"] == "dialogue"
+    assert replay["world"]["currentDayIndex"] == 1
+    assert replay["world"]["days"][0]["status"] == "current"
+    assert replay["world"]["days"][0]["events"][-1]["presentationMode"] == "narrative"
+    assert "performancePlan" not in replay["beats"][-1]
+    assert replay["presentation"]["plans"] == repeated["presentation"]["plans"] == []
     handler.close()
 
 
@@ -134,9 +133,36 @@ def test_presentation_session_checkpoints_pause_and_rebuilds_from_facts(tmp_path
     )
     assert confirmed is not None
     world = confirmed["world"]
-    initial = world["presentation"]
+    stored_world = handler._repository.require_world(world["id"])
+    run = handler._service.start_run(
+        world["id"],
+        kind="scene",
+        request_id="scene-presentation:run",
+        expected_revision=stored_world.revision,
+        random_seed="scene-presentation",
+    )
+    proposal = handler._proposal(
+        world=stored_world,
+        run_id=run.id,
+        random_seed=run.random_seed,
+        event_type="scene.encounter.committed",
+        effective_at=stored_world.current_time,
+        participants=(world["activeOcId"],),
+        presentation={
+            "mode": "scene",
+            "kind": "dialogue",
+            "content": "潮声里有人叫住了岚。",
+        },
+    )
+    handler._service.submit_action(proposal, request_id="scene-presentation")
+    refreshed = handler.handle(
+        "worlds.get", {"world_id": world["id"]}, request_id="refresh-scene"
+    )
+    assert refreshed is not None
+    initial = refreshed["world"]["presentation"]
     assert initial["session"]["status"] == "playing"
     assert len(initial["plans"]) == 1
+    assert refreshed["world"]["days"][0]["events"][-1]["presentationMode"] == "scene"
     plan_id = initial["plans"][0]["planId"]
 
     paused = handler.handle(
@@ -160,7 +186,7 @@ def test_presentation_session_checkpoints_pause_and_rebuilds_from_facts(tmp_path
         request_id="checkpoint-presentation",
     )
     assert checkpoint is not None
-    assert checkpoint["presentation"]["session"]["lastPresentedEventSequence"] == 1
+    assert checkpoint["presentation"]["session"]["lastPresentedEventSequence"] == 2
     assert checkpoint["presentation"]["plans"] == []
     duplicate = handler.handle(
         "worlds.presentation.checkpoint",
@@ -176,9 +202,59 @@ def test_presentation_session_checkpoints_pause_and_rebuilds_from_facts(tmp_path
         "worlds.get", {"world_id": world["id"]}, request_id="rebuild-session"
     )
     assert rebuilt is not None
-    assert rebuilt["world"]["presentation"]["session"]["lastPresentedEventSequence"] == 0
+    assert (
+        rebuilt["world"]["presentation"]["session"]["lastPresentedEventSequence"] == 1
+    )
     assert rebuilt["world"]["presentation"]["plans"]
     restarted.close()
+
+
+def test_completing_a_day_commits_action_and_advances_one_day_atomically(tmp_path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(name="凛", system_prompt="保持冷静")
+    handler = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    draft = handler.handle(
+        "worlds.drafts.preview",
+        _creation_input(role.id),
+        request_id="preview-day-world",
+    )
+    assert draft is not None
+    confirmed = handler.handle(
+        "worlds.drafts.confirm",
+        {
+            "draft_id": draft["draft"]["id"],
+            "native_identities": draft["draft"]["nativeIdentities"],
+        },
+        request_id="confirm-day-world",
+    )
+    assert confirmed is not None
+    world_id = confirmed["world"]["id"]
+
+    first = handler.handle(
+        "worlds.days.complete",
+        {"world_id": world_id, "content": "去旧港寻找失踪者。"},
+        request_id="complete-day-1",
+    )
+    repeated = handler.handle(
+        "worlds.days.complete",
+        {"world_id": world_id, "content": "去旧港寻找失踪者。"},
+        request_id="complete-day-1",
+    )
+    result = handler.handle(
+        "worlds.get", {"world_id": world_id}, request_id="get-day-2"
+    )
+
+    assert first == repeated
+    assert result is not None
+    world = result["world"]
+    assert world["currentDayIndex"] == 2
+    assert [day["status"] for day in world["days"]] == ["completed", "current"]
+    assert [event["content"] for event in world["days"][0]["events"]][
+        -1
+    ] == "去旧港寻找失踪者。"
+    assert world["days"][1]["events"][0]["content"] == "新的一天开始了。"
+    assert len(handler._repository.list_events(world_id)) == 3
+    handler.close()
 
 
 def test_world_draft_freezes_role_visual_and_voice_snapshots(tmp_path):

@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { WorldTimelineView } from "./WorldTimelineView";
 
-const entries = [{ id: "anchor-1", timeLabel: "第一日", title: "潮水退去", summary: "旧港露出了石阶。", visibility: "known" as const, involvedNames: ["澪"], canCopy: true, canEnter: true }];
+const entries = [{ id: "anchor-1", dayIndex: 1, timeLabel: "第一日", title: "潮水退去", summary: "旧港露出了石阶。", visibility: "known" as const, involvedNames: ["澪"], canCopy: true, canEnter: true }];
 
 describe("WorldTimelineView", () => {
   it("renders a full history with cognitive and omniscient controls", () => {

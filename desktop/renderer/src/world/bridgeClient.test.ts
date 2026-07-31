@@ -55,6 +55,21 @@ describe("createWorldBridgeClient", () => {
     }]);
   });
 
+  it("completes one Day through one atomic bridge command", async () => {
+    const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
+    const client = createWorldBridgeClient(async (request): Promise<BridgeResponse> => {
+      requests.push(request);
+      return { id: "response", type: "response", method: request.method, payload: { run_id: "run-day-1" }, error: null };
+    });
+
+    await client.completeDay("world-1", "去旧港寻找失踪者。");
+
+    assert.deepEqual(requests, [{
+      method: "worlds.days.complete",
+      payload: { world_id: "world-1", content: "去旧港寻找失踪者。" },
+    }]);
+  });
+
   it("maps dialogue voice synthesis to the MiniMax voice bridge contract", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
     const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> => {
