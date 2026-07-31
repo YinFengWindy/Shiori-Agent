@@ -19,6 +19,7 @@ class WorldDatabaseManager:
     def __init__(self, workspace: Path, catalog: WorldCatalog) -> None:
         self.root = workspace / "worlds"
         self.root.mkdir(parents=True, exist_ok=True)
+        self._remove_legacy_database()
         self.catalog = catalog
         self._repositories: dict[str, WorldRepository] = {}
         self._lock = threading.RLock()
@@ -95,3 +96,11 @@ class WorldDatabaseManager:
         if not candidate.is_file():
             raise FileNotFoundError(f"world database is missing: {candidate}")
         return candidate
+
+    def _remove_legacy_database(self) -> None:
+        """Remove the retired monolithic database and SQLite sidecars."""
+
+        legacy_root = self.root.parent / "worlds.db"
+        for suffix in ("", "-wal", "-shm"):
+            path = legacy_root.parent / f"{legacy_root.name}{suffix}"
+            path.unlink(missing_ok=True)
