@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowClockwise, GlobeHemisphereEast } from "@phosphor-icons/react";
 import { resolveWorldLoadingPresentation } from "./worldLoadingPolicy";
+import { WORLD_MENU_BACKGROUND_URL } from "./worldStaticAssets";
 
 type WorldLoadingScreenProps = {
   mode: "listing" | "world";
@@ -21,7 +22,7 @@ export function WorldLoadingScreen({ mode, busy = true, error = "", elapsedMs = 
   return (
     <section className="relative grid h-full min-h-0 place-items-center overflow-hidden text-[#F6F0E8]" data-testid="world-loading-screen" aria-busy={busy}>
       {/* Full-screen background */}
-      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "url('/assets/backgrounds/default-galgame-bg.png')" }} />
+      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url(${WORLD_MENU_BACKGROUND_URL})` }} />
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div className="relative z-10 w-[min(520px,calc(100%-48px))]">
         <div className="flex items-center gap-2 text-xs uppercase tracking-[0.28em] text-[#D49A76]"><GlobeHemisphereEast weight="duotone" />World</div>

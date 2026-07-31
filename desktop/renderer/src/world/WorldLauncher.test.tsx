@@ -23,8 +23,9 @@ describe("WorldLauncher", () => {
     assert.ok(markup.includes("退出"));
     // Check logo
     assert.ok(markup.includes("Shiori"));
-    // Check background
-    assert.ok(markup.includes("default-galgame-bg.png"));
+    // The relative URL must resolve beside renderer-dist/index.html under Electron loadFile().
+    assert.ok(markup.includes("url(./assets/backgrounds/default-galgame-bg.png)"));
+    assert.doesNotMatch(markup, /url\(['\"]?\/assets\//);
     // Check no old "继续世界" text
     assert.doesNotMatch(markup, /继续世界/);
   });

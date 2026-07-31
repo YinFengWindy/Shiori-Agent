@@ -8,6 +8,8 @@ describe("WorldLoadingScreen", () => {
   it("renders staged progress for initial World entry", () => {
     const markup = renderToStaticMarkup(<WorldLoadingScreen mode="listing" />);
     assert.match(markup, /data-testid="world-loading-screen"/);
+    assert.match(markup, /url\(\.\/assets\/backgrounds\/default-galgame-bg\.png\)/);
+    assert.doesNotMatch(markup, /url\(['\"]?\/assets\//);
     assert.match(markup, />读取世界</);
     assert.match(markup, />恢复演出</);
     assert.match(markup, />准备舞台</);
