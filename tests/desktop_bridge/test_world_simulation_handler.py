@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from PIL import Image
+import pytest
 
 from core.roles import RoleStore
 from desktop_bridge.world_simulation_handler import WorldSimulationHandler
+from world_simulation.errors import WorldNotFoundError
 
 
 def _creation_input(role_id: str) -> dict[str, object]:
@@ -24,6 +27,119 @@ def _creation_input(role_id: str) -> dict[str, object]:
             "primaryGoal": "找到失踪的姐姐",
         },
     }
+
+
+def _create_world(
+    handler: WorldSimulationHandler,
+    role_id: str,
+    *,
+    name: str,
+    request_prefix: str,
+) -> dict[str, object]:
+    input_data = _creation_input(role_id)
+    input_data["name"] = name
+    draft = handler.handle(
+        "worlds.drafts.preview", input_data, request_id=f"{request_prefix}:preview"
+    )
+    assert draft is not None
+    confirmed = handler.handle(
+        "worlds.drafts.confirm",
+        {
+            "draft_id": draft["draft"]["id"],
+            "native_identities": draft["draft"]["nativeIdentities"],
+        },
+        request_id=f"{request_prefix}:confirm",
+    )
+    assert confirmed is not None
+    return confirmed["world"]
+
+
+def test_each_world_uses_its_own_database_and_catalog_survives_restart(tmp_path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(name="凛", system_prompt="保持冷静")
+    handler = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    first = _create_world(handler, role.id, name="雨港", request_prefix="rain-harbor")
+    second = _create_world(handler, role.id, name="雪原", request_prefix="snowfield")
+
+    handler.handle(
+        "worlds.actions.submit",
+        {"world_id": first["id"], "content": "点亮旧港的灯。"},
+        request_id="rain-harbor:action",
+    )
+    first_db = tmp_path / "worlds" / str(first["id"]) / "world.db"
+    second_db = tmp_path / "worlds" / str(second["id"]) / "world.db"
+    assert first_db.is_file()
+    assert second_db.is_file()
+    assert not (tmp_path / "worlds.db").exists()
+
+    with sqlite3.connect(first_db) as connection:
+        first_count = connection.execute(
+            "SELECT COUNT(*) FROM timeline_events"
+        ).fetchone()[0]
+        first_world_ids = connection.execute("SELECT id FROM worlds").fetchall()
+    with sqlite3.connect(second_db) as connection:
+        second_count = connection.execute(
+            "SELECT COUNT(*) FROM timeline_events"
+        ).fetchone()[0]
+        second_world_ids = connection.execute("SELECT id FROM worlds").fetchall()
+    assert first_count == 2
+    assert second_count == 1
+    assert first_world_ids == [(first["id"],)]
+    assert second_world_ids == [(second["id"],)]
+
+    handler.close()
+    restarted = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    listed = restarted.handle("worlds.list", {}, request_id="list-worlds")
+    assert listed is not None
+    assert {item["id"] for item in listed["worlds"]} == {
+        first["id"],
+        second["id"],
+    }
+    refreshed = restarted.handle(
+        "worlds.get", {"world_id": second["id"]}, request_id="get-second"
+    )
+    assert refreshed is not None
+    assert refreshed["world"]["name"] == "雪原"
+    with pytest.raises(WorldNotFoundError):
+        restarted.handle(
+            "worlds.get", {"world_id": "world-does-not-exist"}, request_id="missing"
+        )
+    assert not (tmp_path / "worlds" / "world-does-not-exist").exists()
+    restarted.close()
+
+
+def test_copy_world_writes_a_prefix_into_a_new_database(tmp_path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(name="凛", system_prompt="保持冷静")
+    handler = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    source = _create_world(
+        handler, role.id, name="原始世界", request_prefix="copy-source"
+    )
+    action = handler.handle(
+        "worlds.actions.submit",
+        {"world_id": source["id"], "content": "走进灯塔。"},
+        request_id="copy-source:action",
+    )
+    assert action is not None
+    source_events = handler._context(source["id"]).repository.list_events(source["id"])
+    copied = handler.handle(
+        "worlds.copy",
+        {"world_id": source["id"], "anchor_id": source_events[-1].id},
+        request_id="copy-world",
+    )
+    assert copied is not None
+    copied_world = copied["world"]
+    assert copied_world["id"] != source["id"]
+    copied_db = tmp_path / "worlds" / str(copied_world["id"]) / "world.db"
+    assert copied_db.is_file()
+    with sqlite3.connect(copied_db) as connection:
+        world_ids = connection.execute("SELECT id FROM worlds").fetchall()
+        event_world_ids = connection.execute(
+            "SELECT DISTINCT world_id FROM timeline_events"
+        ).fetchall()
+    assert world_ids == [(copied_world["id"],)]
+    assert event_world_ids == [(copied_world["id"],)]
+    handler.close()
 
 
 def test_creation_draft_survives_handler_restart_and_freezes_role_snapshot(tmp_path):
@@ -133,8 +249,9 @@ def test_presentation_session_checkpoints_pause_and_rebuilds_from_facts(tmp_path
     )
     assert confirmed is not None
     world = confirmed["world"]
-    stored_world = handler._repository.require_world(world["id"])
-    run = handler._service.start_run(
+    context = handler._context(world["id"])
+    stored_world = context.repository.require_world(world["id"])
+    run = context.service.start_run(
         world["id"],
         kind="scene",
         request_id="scene-presentation:run",
@@ -142,6 +259,7 @@ def test_presentation_session_checkpoints_pause_and_rebuilds_from_facts(tmp_path
         random_seed="scene-presentation",
     )
     proposal = handler._proposal(
+        context=context,
         world=stored_world,
         run_id=run.id,
         random_seed=run.random_seed,
@@ -154,7 +272,7 @@ def test_presentation_session_checkpoints_pause_and_rebuilds_from_facts(tmp_path
             "content": "潮声里有人叫住了岚。",
         },
     )
-    handler._service.submit_action(proposal, request_id="scene-presentation")
+    context.service.submit_action(proposal, request_id="scene-presentation")
     refreshed = handler.handle(
         "worlds.get", {"world_id": world["id"]}, request_id="refresh-scene"
     )
@@ -195,7 +313,7 @@ def test_presentation_session_checkpoints_pause_and_rebuilds_from_facts(tmp_path
     )
     assert duplicate == checkpoint
 
-    handler._repository.delete_presentation_session(world["id"])
+    context.repository.delete_presentation_session(world["id"])
     handler.close()
     restarted = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
     rebuilt = restarted.handle(
@@ -253,7 +371,7 @@ def test_completing_a_day_commits_action_and_advances_one_day_atomically(tmp_pat
         -1
     ] == "去旧港寻找失踪者。"
     assert world["days"][1]["events"][0]["content"] == "新的一天开始了。"
-    assert len(handler._repository.list_events(world_id)) == 3
+    assert len(handler._context(world_id).repository.list_events(world_id)) == 3
     handler.close()
 
 
@@ -288,7 +406,7 @@ def test_world_draft_freezes_role_visual_and_voice_snapshots(tmp_path):
         request_id="preview-world",
     )
     assert draft is not None
-    stored = handler._repository.get_draft(draft["draft"]["id"])
+    stored = handler._catalog.get_draft(draft["draft"]["id"])
     assert stored is not None
     snapshot = stored.role_snapshots[0]
     copied_paths = [item["path"] for item in snapshot.assets]
@@ -323,7 +441,7 @@ def test_world_snapshot_normalizes_character_canvas_and_foot_baseline(tmp_path):
     )
 
     assert draft is not None
-    stored = handler._repository.get_draft(draft["draft"]["id"])
+    stored = handler._catalog.get_draft(draft["draft"]["id"])
     assert stored is not None
     normalized_path = Path(stored.role_snapshots[0].assets[0]["path"])
     with Image.open(normalized_path) as normalized:
@@ -373,9 +491,10 @@ def test_world_read_model_resolves_snapshot_visuals_for_sprite_cues(tmp_path):
     )
     assert confirmed is not None
     world_id = confirmed["world"]["id"]
-    world = handler._repository.require_world(world_id)
-    resident = handler._repository.list_residents(world_id)[0]
-    run = handler._service.start_run(
+    context = handler._context(world_id)
+    world = context.repository.require_world(world_id)
+    resident = context.repository.list_residents(world_id)[0]
+    run = context.service.start_run(
         world_id,
         kind="action",
         request_id="visual-action:run",
@@ -383,6 +502,7 @@ def test_world_read_model_resolves_snapshot_visuals_for_sprite_cues(tmp_path):
         random_seed="visual-action",
     )
     proposal = handler._proposal(
+        context=context,
         world=world,
         run_id=run.id,
         random_seed=run.random_seed,
@@ -394,7 +514,7 @@ def test_world_read_model_resolves_snapshot_visuals_for_sprite_cues(tmp_path):
             "sprites": [{"actor_id": resident.id, "mood": "平静"}],
         },
     )
-    handler._service.submit_action(proposal, request_id="visual-action")
+    context.service.submit_action(proposal, request_id="visual-action")
 
     result = handler.handle(
         "worlds.get", {"world_id": world_id}, request_id="get-visual-world"

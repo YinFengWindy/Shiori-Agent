@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from world_simulation.dependencies import DependencySet
 from world_simulation.errors import StaleWorldRevisionError, WorldNotFoundError
 from world_simulation.runs import WorldRun
 from world_simulation.timeline import TimelineEvent, WorldStateProjection
 from world_simulation.world import WorldInstance, utc_now
+
+if TYPE_CHECKING:
+    from world_simulation.repository import WorldRepository
 
 
 def _dump(value: Any) -> str:
@@ -78,6 +81,104 @@ class RepositoryRecords:
             ).fetchall()
             for row in rows:
                 event = self._row_to_event(row)
+                copied = TimelineEvent(
+                    **{
+                        **event.to_dict(),
+                        "world_id": target.id,
+                        "dependencies": event.dependencies,
+                    }
+                )
+                self._insert_event(connection, copied)
+            self._upsert_projection(connection, projection)
+            connection.execute(
+                """INSERT INTO world_presentation_sessions
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    target.id,
+                    through_event.sequence,
+                    None,
+                    0,
+                    "awaiting_action",
+                    target.created_at,
+                ),
+            )
+            self._save_idempotency(connection, request_id, target.id, result)
+            self._insert_outbox(
+                connection,
+                event_id=f"outbox:world-copied:{target.id}",
+                world_id=target.id,
+                event_type="WorldCopied",
+                payload=result,
+            )
+            return result
+
+    def copy_world_prefix_from(
+        self,
+        source_repository: WorldRepository,
+        *,
+        source_world_id: str,
+        through_event: TimelineEvent,
+        target: WorldInstance,
+        projection: WorldStateProjection,
+        request_id: str,
+        result: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Copy a stable source prefix into this repository's target database."""
+
+        if source_repository is self:
+            return self.copy_world_prefix(
+                source_world_id=source_world_id,
+                through_event=through_event,
+                target=target,
+                projection=projection,
+                request_id=request_id,
+                result=result,
+            )
+        source_repository.require_world(source_world_id)
+        snapshots = source_repository.list_role_snapshots(source_world_id)
+        residents = source_repository.list_residents(source_world_id)
+        memberships = source_repository.list_oc_memberships(
+            source_world_id, through_time=through_event.effective_at
+        )
+        events = source_repository.list_events(
+            source_world_id, through_sequence=through_event.sequence
+        )
+
+        with self.transaction() as connection:
+            existing = self._idempotency_in(connection, request_id)
+            if existing is not None:
+                return existing
+            connection.execute(
+                "INSERT INTO worlds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    target.id,
+                    target.owner_id,
+                    _dump(target.template_snapshot),
+                    target.current_time,
+                    target.revision,
+                    target.active_oc_id,
+                    target.parent_world_id,
+                    target.fork_event_id,
+                    target.random_state,
+                    target.created_at,
+                ),
+            )
+            connection.executemany(
+                "INSERT INTO role_snapshots VALUES (?, ?, ?)",
+                [(item.id, target.id, _dump(item.to_dict())) for item in snapshots],
+            )
+            connection.executemany(
+                "INSERT INTO residents VALUES (?, ?, ?)",
+                [(item.id, target.id, _dump(item.to_dict())) for item in residents],
+            )
+            connection.executemany(
+                "INSERT INTO player_ocs VALUES (?, ?, ?, ?)",
+                [
+                    (oc.id, target.id, _dump(oc.to_dict()), joined_at)
+                    for oc, joined_at in memberships
+                ],
+            )
+            for event in events:
                 copied = TimelineEvent(
                     **{
                         **event.to_dict(),

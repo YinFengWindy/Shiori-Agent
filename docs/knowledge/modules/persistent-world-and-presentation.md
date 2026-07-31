@@ -18,7 +18,7 @@ related:
 
 ## 模块边界
 
-`world_simulation/` 拥有世界实例、共享时间线、事件结算、决策屏障、角色模板快照和演出协议。`WorldRepository` 将权威事实与派生的播放游标保存到独立 `worlds.db`；React 世界工作台只消费 bridge read model，不直接读数据库。
+`world_simulation/` 拥有世界实例、共享时间线、事件结算、决策屏障、角色模板快照和演出协议。桌面端的 `WorldCatalog` 只保存草案、数据库路径和列表摘要；每个世界的 `WorldRepository` 将权威事实与派生的播放游标保存到 `worlds/<world_id>/world.db`，世界之间不共享事实数据库。React 世界工作台只消费 bridge read model，不直接读数据库。
 
 角色进入世界时会冻结为 `RoleTemplateSnapshot`，角色素材复制到世界私有目录。后续角色修改或删除不能改变已有世界中的 persona、心情立绘、avatar 或声音配置。`WorldVisualResolver` 按“当前 mood、默认 mood、avatar、剪影”解析冻结素材。
 
