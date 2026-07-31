@@ -41,6 +41,16 @@ CREATE TABLE IF NOT EXISTS catalog_idempotency (
     request_id TEXT PRIMARY KEY,
     world_id TEXT NOT NULL REFERENCES world_entries(world_id)
 );
+
+CREATE TABLE IF NOT EXISTS world_creation_intents (
+    request_id TEXT PRIMARY KEY,
+    world_id TEXT NOT NULL UNIQUE,
+    draft_id TEXT,
+    relative_db_path TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    completed_at TEXT
+);
 """
 
 
@@ -100,6 +110,81 @@ class WorldCatalog:
         if updated.rowcount != 1:
             raise WorldNotFoundError(f"world draft is not editable: {draft.id}")
 
+    def register_creation_intent(
+        self,
+        *,
+        request_id: str,
+        world_id: str,
+        draft_id: str | None,
+        relative_db_path: str,
+    ) -> dict[str, Any]:
+        """Record a world creation before its dedicated database is opened."""
+
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._connection.execute(
+                    "SELECT * FROM world_creation_intents WHERE request_id = ?",
+                    (request_id,),
+                ).fetchone()
+                if row is None:
+                    self._connection.execute(
+                        """INSERT INTO world_creation_intents
+                        VALUES (?, ?, ?, ?, 'pending', ?, NULL)""",
+                        (
+                            request_id,
+                            world_id,
+                            draft_id,
+                            relative_db_path,
+                            utc_now(),
+                        ),
+                    )
+                    row = self._connection.execute(
+                        "SELECT * FROM world_creation_intents WHERE request_id = ?",
+                        (request_id,),
+                    ).fetchone()
+                elif row["world_id"] != world_id:
+                    raise ValueError(
+                        f"creation request already belongs to world: {request_id}"
+                    )
+            except BaseException:
+                self._connection.rollback()
+                raise
+            else:
+                self._connection.commit()
+        return self._row_to_creation_intent(row)
+
+    def pending_creation_intents(self) -> list[dict[str, Any]]:
+        """List creation intents that still need catalog recovery."""
+
+        with self._lock:
+            rows = self._connection.execute(
+                """SELECT * FROM world_creation_intents
+                WHERE status = 'pending' ORDER BY created_at, request_id"""
+            ).fetchall()
+        return [self._row_to_creation_intent(row) for row in rows]
+
+    def creation_intent_for_request(self, request_id: str) -> dict[str, Any] | None:
+        """Load one pending creation intent for same-request recovery."""
+
+        with self._lock:
+            row = self._connection.execute(
+                """SELECT * FROM world_creation_intents
+                WHERE request_id = ? AND status = 'pending'""",
+                (request_id,),
+            ).fetchone()
+        return self._row_to_creation_intent(row) if row is not None else None
+
+    def discard_creation_intent(self, request_id: str) -> None:
+        """Remove an intent whose database was never committed."""
+
+        with self._lock:
+            self._connection.execute(
+                """DELETE FROM world_creation_intents
+                WHERE request_id = ? AND status = 'pending'""",
+                (request_id,),
+            )
+
     def complete_world(
         self,
         *,
@@ -114,24 +199,51 @@ class WorldCatalog:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                self._connection.execute(
-                    "INSERT INTO world_entries VALUES (?, ?, ?, ?)",
-                    (world_id, relative_db_path, _dump(summary), utc_now()),
-                )
-                self._connection.execute(
-                    "INSERT INTO catalog_idempotency VALUES (?, ?)",
-                    (request_id, world_id),
-                )
+                entry = self._connection.execute(
+                    "SELECT relative_db_path FROM world_entries WHERE world_id = ?",
+                    (world_id,),
+                ).fetchone()
+                if entry is None:
+                    self._connection.execute(
+                        "INSERT INTO world_entries VALUES (?, ?, ?, ?)",
+                        (world_id, relative_db_path, _dump(summary), utc_now()),
+                    )
+                elif entry["relative_db_path"] != relative_db_path:
+                    raise ValueError(f"world path changed: {world_id}")
+                else:
+                    self._connection.execute(
+                        "UPDATE world_entries SET summary = ? WHERE world_id = ?",
+                        (_dump(summary), world_id),
+                    )
+                request = self._connection.execute(
+                    "SELECT world_id FROM catalog_idempotency WHERE request_id = ?",
+                    (request_id,),
+                ).fetchone()
+                if request is None:
+                    self._connection.execute(
+                        "INSERT INTO catalog_idempotency VALUES (?, ?)",
+                        (request_id, world_id),
+                    )
+                elif request["world_id"] != world_id:
+                    raise ValueError(
+                        f"catalog request already belongs to world: {request_id}"
+                    )
                 if draft_id is not None:
                     updated = self._connection.execute(
                         """UPDATE world_drafts SET status = 'confirmed'
-                        WHERE id = ? AND status = 'draft'""",
+                        WHERE id = ? AND status IN ('draft', 'confirmed')""",
                         (draft_id,),
                     )
                     if updated.rowcount != 1:
                         raise WorldNotFoundError(
                             f"world draft is not confirmable: {draft_id}"
                         )
+                self._connection.execute(
+                    """UPDATE world_creation_intents
+                    SET status = 'completed', completed_at = ?
+                    WHERE request_id = ? AND world_id = ?""",
+                    (utc_now(), request_id, world_id),
+                )
             except BaseException:
                 self._connection.rollback()
                 raise
@@ -179,6 +291,18 @@ class WorldCatalog:
             )
         if updated.rowcount != 1:
             raise WorldNotFoundError(f"world not found: {world_id}")
+
+    @staticmethod
+    def _row_to_creation_intent(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "request_id": row["request_id"],
+            "world_id": row["world_id"],
+            "draft_id": row["draft_id"],
+            "relative_db_path": row["relative_db_path"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "completed_at": row["completed_at"],
+        }
 
     @staticmethod
     def _draft_payload(draft: WorldDraft) -> dict[str, Any]:

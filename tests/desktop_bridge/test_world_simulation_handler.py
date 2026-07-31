@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from dataclasses import replace
 
 from PIL import Image
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from core.roles import RoleStore
 from desktop_bridge.world_simulation_handler import WorldSimulationHandler
 from world_simulation.errors import WorldNotFoundError
+from world_simulation.service import WorldSimulationService
 
 
 def _creation_input(role_id: str) -> dict[str, object]:
@@ -176,6 +178,135 @@ def test_creation_draft_survives_handler_restart_and_freezes_role_snapshot(tmp_p
     assert world["ocs"][0]["name"] == "岚"
     assert world["relatedCharacters"][0]["relationship"] == "沉默的向导"
     second_handler.close()
+
+
+def test_committed_world_is_recovered_after_catalog_registration_interruption(tmp_path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(name="凛", system_prompt="保持冷静")
+    first_handler = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    draft_response = first_handler.handle(
+        "worlds.drafts.preview",
+        _creation_input(role.id),
+        request_id="recovery-preview",
+    )
+    assert draft_response is not None
+    draft = first_handler._catalog.get_draft(draft_response["draft"]["id"])
+    assert draft is not None
+
+    world_id = "world-recovered"
+    first_handler._catalog.register_creation_intent(
+        request_id="recovery-confirm",
+        world_id=world_id,
+        draft_id=draft.id,
+        relative_db_path=first_handler._databases.relative_path(world_id),
+    )
+    repository = first_handler._databases.create(world_id)
+    repository.save_draft(draft)
+    WorldSimulationService(repository).confirm_world(
+        draft.id,
+        request_id="recovery-confirm",
+        world_id=world_id,
+        random_seed="recovery-seed",
+    )
+    first_handler.close()
+
+    restarted = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    listed = restarted.handle("worlds.list", {}, request_id="recovery-list")
+
+    assert listed is not None
+    assert [item["id"] for item in listed["worlds"]] == [world_id]
+    assert restarted._catalog.pending_creation_intents() == []
+    recovered = restarted.handle(
+        "worlds.get", {"world_id": world_id}, request_id="recovery-get"
+    )
+    assert recovered is not None
+    assert recovered["world"]["name"] == "雨港"
+    restarted.close()
+
+
+def test_incomplete_creation_intent_removes_empty_world_database(tmp_path):
+    role_store = RoleStore(tmp_path)
+    catalog_handler = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    world_id = "world-incomplete"
+    catalog_handler._catalog.register_creation_intent(
+        request_id="incomplete-confirm",
+        world_id=world_id,
+        draft_id=None,
+        relative_db_path=catalog_handler._databases.relative_path(world_id),
+    )
+    repository = catalog_handler._databases.create(world_id)
+    repository.close()
+    catalog_handler.close()
+
+    restarted = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+
+    assert restarted._catalog.pending_creation_intents() == []
+    assert not (tmp_path / "worlds" / world_id).exists()
+    restarted.close()
+
+
+def test_copy_world_preserves_cross_database_scene_state_at_anchor(tmp_path):
+    role_store = RoleStore(tmp_path)
+    role = role_store.create_role(name="凛", system_prompt="保持冷静")
+    handler = WorldSimulationHandler(workspace=tmp_path, role_store=role_store)
+    source = _create_world(handler, role.id, name="原始世界", request_prefix="state-source")
+    context = handler._context(source["id"])
+    world = context.repository.require_world(source["id"])
+    run = context.service.start_run(
+        source["id"],
+        kind="scene",
+        request_id="state-scene:run",
+        expected_revision=world.revision,
+        random_seed="state-scene",
+    )
+    proposal = handler._proposal(
+        context=context,
+        world=world,
+        run_id=run.id,
+        random_seed=run.random_seed,
+        event_type="scene.choice.committed",
+        effective_at=world.current_time,
+        participants=(world.active_oc_id,),
+        presentation={"mode": "scene", "kind": "dialogue", "content": "选择"},
+    )
+    proposal = replace(
+        proposal,
+        barrier={
+            "id": "barrier-copy",
+            "effective_at": world.current_time,
+            "oc_id": world.active_oc_id,
+            "reason": "需要选择方向",
+        },
+        scene_thread={
+            "id": "scene-copy",
+            "world_time": world.current_time,
+            "location": "旧港",
+            "participants": {world.active_oc_id: "岚"},
+            "status": "active",
+            "messages": ({"content": "选择"},),
+        },
+    )
+    context.service.submit_action(proposal, request_id="state-scene")
+    anchor = context.repository.list_events(source["id"])[-1]
+
+    copied = handler.handle(
+        "worlds.copy",
+        {"world_id": source["id"], "anchor_id": anchor.id},
+        request_id="state-copy",
+    )
+
+    assert copied is not None
+    target_id = copied["world"]["id"]
+    target = handler._context(target_id).repository
+    barriers = target.list_pending_barriers(target_id)
+    threads = target.list_scene_threads(target_id)
+    session = target.get_presentation_session(target_id)
+    assert [item.id for item in barriers] == ["barrier-copy"]
+    assert [item.id for item in threads] == ["scene-copy"]
+    assert threads[0].world_id == target_id
+    assert session is not None
+    assert session.status == "playing"
+    handler.close()
 
 
 def test_action_catch_up_only_returns_committed_beats(tmp_path):

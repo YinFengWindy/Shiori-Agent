@@ -490,11 +490,27 @@ class WorldRepository(RepositoryRecords):
     def list_pending_barriers(self, world_id: str) -> list[DecisionBarrier]:
         """List unresolved barriers in deterministic world-time order."""
 
+        return [
+            item
+            for item in self.list_barriers(world_id)
+            if item.status == "pending"
+        ]
+
+    def list_barriers(
+        self, world_id: str, *, through_time: str | None = None
+    ) -> list[DecisionBarrier]:
+        """List barrier state through one world-time boundary."""
+
         with self._lock:
+            query = "SELECT payload FROM barriers WHERE world_id = ?"
+            params: list[Any] = [world_id]
+            if through_time is not None:
+                query += " AND effective_at <= ?"
+                params.append(through_time)
+            query += " ORDER BY effective_at, id"
             rows = self._connection.execute(
-                """SELECT payload FROM barriers WHERE world_id = ? AND status = 'pending'
-                ORDER BY effective_at, id""",
-                (world_id,),
+                query,
+                params,
             ).fetchall()
         return [DecisionBarrier(**_load(row["payload"], {})) for row in rows]
 
@@ -507,6 +523,29 @@ class WorldRepository(RepositoryRecords):
                 (world_id, barrier_id),
             ).fetchone()
         return DecisionBarrier(**_load(row["payload"], {})) if row else None
+
+    def list_scene_threads(
+        self,
+        world_id: str,
+        *,
+        through_time: str | None = None,
+        through_sequence: int | None = None,
+    ) -> list[SceneThread]:
+        """List scene thread state through one world-time and sequence boundary."""
+
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT payload FROM scene_threads WHERE world_id = ?",
+                (world_id,),
+            ).fetchall()
+        threads = [SceneThread(**_load(row["payload"], {})) for row in rows]
+        if through_time is not None:
+            threads = [item for item in threads if item.world_time <= through_time]
+        if through_sequence is not None:
+            threads = [
+                item for item in threads if item.beat_sequence <= through_sequence
+            ]
+        return sorted(threads, key=lambda item: (item.world_time, item.id))
 
     def save_run(self, run: WorldRun) -> None:
         """Persist or update a recoverable run state."""

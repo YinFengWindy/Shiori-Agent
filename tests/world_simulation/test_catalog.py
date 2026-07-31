@@ -57,3 +57,28 @@ def test_catalog_persists_drafts_world_summaries_and_idempotency(tmp_path):
     catalog.update_summary("world-1", updated)
     assert catalog.list_summaries() == [updated]
     catalog.close()
+
+
+def test_catalog_creation_intent_is_completed_with_world_registration(tmp_path):
+    catalog = WorldCatalog(tmp_path / "worlds" / "catalog.db")
+
+    intent = catalog.register_creation_intent(
+        request_id="confirm-1",
+        world_id="world-1",
+        draft_id=None,
+        relative_db_path="world-1/world.db",
+    )
+
+    assert intent["status"] == "pending"
+    assert catalog.creation_intent_for_request("confirm-1") == intent
+    catalog.complete_world(
+        draft_id=None,
+        world_id="world-1",
+        relative_db_path="world-1/world.db",
+        summary={"id": "world-1"},
+        request_id="confirm-1",
+    )
+
+    assert catalog.pending_creation_intents() == []
+    assert catalog.creation_intent_for_request("confirm-1") is None
+    catalog.close()

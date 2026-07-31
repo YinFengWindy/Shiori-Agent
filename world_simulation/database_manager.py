@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 
 from world_simulation.catalog import WorldCatalog
+from world_simulation.errors import WorldNotFoundError
 from world_simulation.repository import WorldRepository
 
 
@@ -39,6 +40,32 @@ class WorldDatabaseManager:
             except BaseException:
                 repository.close()
                 raise
+            self._repositories[world_id] = repository
+            return repository
+
+    def open_for_recovery(
+        self, world_id: str, relative_db_path: str
+    ) -> WorldRepository | None:
+        """Open a pending creation database only when it contains its world row."""
+
+        if not _WORLD_ID_PATTERN.fullmatch(world_id):
+            raise ValueError(f"invalid world id: {world_id}")
+        if relative_db_path != self.relative_path(world_id):
+            raise ValueError(f"invalid recovery database path: {relative_db_path}")
+        with self._lock:
+            existing = self._repositories.get(world_id)
+            if existing is not None:
+                existing.require_world(world_id)
+                return existing
+            db_path = self.root / relative_db_path
+            if not db_path.is_file():
+                return None
+            repository = WorldRepository(db_path)
+            try:
+                repository.require_world(world_id)
+            except WorldNotFoundError:
+                repository.close()
+                return None
             self._repositories[world_id] = repository
             return repository
 

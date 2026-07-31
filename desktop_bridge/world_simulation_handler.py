@@ -53,6 +53,7 @@ class WorldSimulationHandler:
         self._contexts: dict[str, _WorldContext] = {}
         self._snapshots = WorldSnapshotBuilder(role_store, workspace / "world_assets")
         self._shots: dict[tuple[str, str], dict[str, Any]] = {}
+        self._recover_creation_intents()
 
     def close(self) -> None:
         """Release the dedicated world transaction store."""
@@ -196,6 +197,9 @@ class WorldSimulationHandler:
         existing_world_id = self._catalog.world_id_for_request(request_id)
         if existing_world_id is not None:
             return self._world_details(existing_world_id)
+        pending_intent = self._catalog.creation_intent_for_request(request_id)
+        if pending_intent is not None and self._recover_creation_intent(pending_intent):
+            return self._world_details(str(pending_intent["world_id"]))
         draft_id = self._required(payload, "draft_id")
         draft = self._catalog.get_draft(draft_id)
         if draft is None:
@@ -207,6 +211,12 @@ class WorldSimulationHandler:
         self._catalog.replace_draft(edited_draft)
         input_data = self._draft_input(edited_draft)
         world_id = f"world-{uuid4().hex}"
+        self._catalog.register_creation_intent(
+            request_id=request_id,
+            world_id=world_id,
+            draft_id=edited_draft.id,
+            relative_db_path=self._databases.relative_path(world_id),
+        )
         context = self._create_context(world_id)
         try:
             context.repository.save_draft(edited_draft)
@@ -225,7 +235,8 @@ class WorldSimulationHandler:
                 request_id=request_id,
             )
         except BaseException:
-            self._discard_context(world_id)
+            if context.repository.get_world(world_id) is None:
+                self._discard_context(world_id)
             raise
         return self._world_details(world.id)
 
@@ -367,9 +378,18 @@ class WorldSimulationHandler:
         existing_world_id = self._catalog.world_id_for_request(request_id)
         if existing_world_id is not None:
             return self._world_details(existing_world_id)
+        pending_intent = self._catalog.creation_intent_for_request(request_id)
+        if pending_intent is not None and self._recover_creation_intent(pending_intent):
+            return self._world_details(str(pending_intent["world_id"]))
         source_world_id = self._world_id(payload)
         source_context = self._context(source_world_id)
         target_world_id = f"world-{uuid4().hex}"
+        self._catalog.register_creation_intent(
+            request_id=request_id,
+            world_id=target_world_id,
+            draft_id=None,
+            relative_db_path=self._databases.relative_path(target_world_id),
+        )
         target_context = self._create_context(target_world_id)
         try:
             world = source_context.service.copy_world(
@@ -387,7 +407,8 @@ class WorldSimulationHandler:
                 request_id=request_id,
             )
         except BaseException:
-            self._discard_context(target_world_id)
+            if target_context.repository.get_world(target_world_id) is None:
+                self._discard_context(target_world_id)
             raise
         return self._world_details(world.id)
 
@@ -841,6 +862,34 @@ class WorldSimulationHandler:
         if context is not None:
             return context
         return self._bind_context(world_id, self._databases.open(world_id))
+
+    def _recover_creation_intents(self) -> None:
+        """Reconcile committed world databases left behind by a crashed catalog write."""
+
+        for intent in self._catalog.pending_creation_intents():
+            self._recover_creation_intent(intent)
+
+    def _recover_creation_intent(self, intent: dict[str, Any]) -> bool:
+        world_id = str(intent["world_id"])
+        repository = self._databases.open_for_recovery(
+            world_id, str(intent["relative_db_path"])
+        )
+        if repository is None:
+            self._catalog.discard_creation_intent(str(intent["request_id"]))
+            self._databases.discard_unregistered(world_id)
+            return False
+        self._bind_context(world_id, repository)
+        self._catalog.complete_world(
+            draft_id=(
+                str(intent["draft_id"]) if intent.get("draft_id") is not None else None
+            ),
+            world_id=world_id,
+            relative_db_path=str(intent["relative_db_path"]),
+            summary={},
+            request_id=str(intent["request_id"]),
+        )
+        self._refresh_summary(world_id)
+        return True
 
     def _create_context(self, world_id: str) -> _WorldContext:
         return self._bind_context(world_id, self._databases.create(world_id))
