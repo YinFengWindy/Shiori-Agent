@@ -16,6 +16,12 @@ related:
 
 Shiori（Mira-Agent）是基于 Akashic 的角色型 Agent 助手。项目的核心不是单一聊天界面，而是围绕角色、关系、会话、记忆、主动行为、多渠道和桌面端组成的持续运行系统。
 
+## 领域语言
+
+**已提交 Story 节拍（Committed Story Beat）**：
+Story 中已经正式发生的最小叙事单位。只有完成提交的 Story 节拍属于故事记录；模型生成草稿和待玩家确认的结果都不属于已发生剧情。
+_避免使用_：把模型输出、生成草稿称为已发生剧情
+
 ## 开始工作前
 
 1. 先读 [知识库入口](docs/knowledge/index.md) 和 [能力地图](docs/knowledge/map.md)。
