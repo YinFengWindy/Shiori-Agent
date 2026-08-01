@@ -22,6 +22,13 @@ Shiori（Mira-Agent）是基于 Akashic 的角色型 Agent 助手。项目的核
 Story 中已经正式发生的最小叙事单位。只有完成提交的 Story 节拍属于故事记录；模型生成草稿和待玩家确认的结果都不属于已发生剧情。
 _避免使用_：把模型输出、生成草稿称为已发生剧情
 
+**Story 段（Story Segment）**：
+同一个 Story 中，从创建或继续开始，到下一次归档为止的一段活动经历。同一 Story 同时只能有一个活动 Story 段。
+
+**Story 归档（Story Archive）**：
+一个 Story 段结束时产生的不可变记录，也是向普通模式提交角色故事回忆的边界。继续会在原 Story 中开始新段，分支才会创建新的 Story。
+_避免使用_：把归档称为整个 Story 的终止
+
 ## 开始工作前
 
 1. 先读 [知识库入口](docs/knowledge/index.md) 和 [能力地图](docs/knowledge/map.md)。
