@@ -1,6 +1,8 @@
 """Persistent shared-world simulation bounded context."""
 
 from world_simulation.actors import AutonomyPolicy, PlayerOC
+from world_simulation.catalog import WorldCatalog
+from world_simulation.database_manager import WorldDatabaseManager
 from world_simulation.dependencies import DependencySet
 from world_simulation.performance import (
     PRESENTATION_PROTOCOL_VERSION,
@@ -46,6 +48,8 @@ __all__ = [
     "SceneThread",
     "TimelineEvent",
     "WorldDraft",
+    "WorldCatalog",
+    "WorldDatabaseManager",
     "WorldInstance",
     "WorldRepository",
     "WorldRun",

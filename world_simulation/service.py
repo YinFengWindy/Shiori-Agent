@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from world_simulation.actors import PlayerOC
 from world_simulation.dependencies import DependencySet
+from world_simulation.drafts import create_world_draft
 from world_simulation.errors import HistoricalConflictError, WorldNotFoundError
 from world_simulation.proposals import BeatProposal
 from world_simulation.repository import WorldRepository
@@ -43,17 +44,14 @@ class WorldSimulationService:
     ) -> WorldDraft:
         """Persist a reviewable draft without creating any world timeline facts."""
 
-        snapshot_ids = {item.id for item in role_snapshots}
-        if any(item.snapshot_id not in snapshot_ids for item in residents):
-            raise ValueError("every resident must reference a snapshot in the draft")
-        draft = WorldDraft(
-            id=draft_id or f"draft-{uuid4().hex}",
+        draft = create_world_draft(
             owner_id=owner_id,
             template=template,
             role_snapshots=role_snapshots,
             residents=residents,
             initial_time=initial_time,
-            creation_metadata=dict(creation_metadata or {}),
+            creation_metadata=creation_metadata,
+            draft_id=draft_id,
         )
         self.repository.save_draft(draft)
         return draft
@@ -309,12 +307,14 @@ class WorldSimulationService:
         *,
         request_id: str,
         new_world_id: str | None = None,
+        target_repository: WorldRepository | None = None,
     ) -> WorldInstance:
         """Copy a committed timeline prefix into an independently evolving world."""
 
-        existing = self.repository.get_idempotency_result(request_id)
+        target_store = target_repository or self.repository
+        existing = target_store.get_idempotency_result(request_id)
         if existing is not None:
-            return self.repository.require_world(str(existing["world_id"]))
+            return target_store.require_world(str(existing["world_id"]))
         source = self.repository.require_world(source_world_id)
         event = self.repository.get_event(source_world_id, event_id)
         if event is None:
@@ -345,7 +345,8 @@ class WorldSimulationService:
             "fork_event_id": event_id,
             "world_revision": event.committed_revision,
         }
-        self.repository.copy_world_prefix(
+        target_store.copy_world_prefix_from(
+            self.repository,
             source_world_id=source_world_id,
             through_event=event,
             target=target,
@@ -353,7 +354,7 @@ class WorldSimulationService:
             request_id=request_id,
             result=result,
         )
-        return self.repository.require_world(target_id)
+        return target_store.require_world(target_id)
 
     def cancel_run(self, run_id: str) -> WorldRun:
         """Prevent a run from starting another beat while preserving committed facts."""

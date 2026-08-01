@@ -1,4 +1,4 @@
-﻿"""Transactional SQLite persistence for the persistent world bounded context."""
+"""Transactional SQLite persistence for the persistent world bounded context."""
 
 from __future__ import annotations
 
@@ -72,7 +72,13 @@ class WorldRepository(RepositoryRecords):
         with self.transaction() as connection:
             connection.execute(
                 "INSERT INTO world_drafts VALUES (?, ?, ?, ?, ?)",
-                (draft.id, draft.owner_id, _dump(payload), draft.status, draft.created_at),
+                (
+                    draft.id,
+                    draft.owner_id,
+                    _dump(payload),
+                    draft.status,
+                    draft.created_at,
+                ),
             )
 
     def get_draft(self, draft_id: str) -> WorldDraft | None:
@@ -153,11 +159,17 @@ class WorldRepository(RepositoryRecords):
             )
             connection.executemany(
                 "INSERT INTO role_snapshots VALUES (?, ?, ?)",
-                [(item.id, world.id, _dump(item.to_dict())) for item in draft.role_snapshots],
+                [
+                    (item.id, world.id, _dump(item.to_dict()))
+                    for item in draft.role_snapshots
+                ],
             )
             connection.executemany(
                 "INSERT INTO residents VALUES (?, ?, ?)",
-                [(item.id, world.id, _dump(item.to_dict())) for item in draft.residents],
+                [
+                    (item.id, world.id, _dump(item.to_dict()))
+                    for item in draft.residents
+                ],
             )
             if initial_oc is not None:
                 connection.execute(
@@ -185,7 +197,10 @@ class WorldRepository(RepositoryRecords):
                 event_id=f"outbox:{initial_event.id}",
                 world_id=world.id,
                 event_type="SceneBeatCommitted",
-                payload={"event": initial_event.to_dict(), "world_revision": world.revision},
+                payload={
+                    "event": initial_event.to_dict(),
+                    "world_revision": world.revision,
+                },
             )
             self._save_idempotency(connection, request_id, world.id, result)
 
@@ -347,7 +362,10 @@ class WorldRepository(RepositoryRecords):
                 event_id=f"outbox:{event.id}",
                 world_id=world_id,
                 event_type="SceneBeatCommitted",
-                payload={"event": event.to_dict(), "world_revision": event.committed_revision},
+                payload={
+                    "event": event.to_dict(),
+                    "world_revision": event.committed_revision,
+                },
             )
             self._save_idempotency(connection, request_id, world_id, result)
             return result
@@ -357,14 +375,31 @@ class WorldRepository(RepositoryRecords):
 
         with self._lock:
             rows = self._connection.execute(
-                "SELECT payload FROM player_ocs WHERE world_id = ? ORDER BY id", (world_id,)
+                "SELECT payload FROM player_ocs WHERE world_id = ? ORDER BY id",
+                (world_id,),
             ).fetchall()
-        values = []
-        for row in rows:
-            payload = _load(row["payload"], {})
-            payload["autonomy"] = AutonomyPolicy(**payload.get("autonomy", {}))
-            values.append(PlayerOC(**payload))
-        return values
+        return [self._row_to_oc(row) for row in rows]
+
+    def list_oc_memberships(
+        self, world_id: str, *, through_time: str | None = None
+    ) -> list[tuple[PlayerOC, str]]:
+        """Return OC records with their join time for deterministic world copies."""
+
+        query = "SELECT payload, joined_at FROM player_ocs WHERE world_id = ?"
+        params: list[Any] = [world_id]
+        if through_time is not None:
+            query += " AND joined_at <= ?"
+            params.append(through_time)
+        query += " ORDER BY id"
+        with self._lock:
+            rows = self._connection.execute(query, params).fetchall()
+        return [(self._row_to_oc(row), row["joined_at"]) for row in rows]
+
+    @staticmethod
+    def _row_to_oc(row: sqlite3.Row) -> PlayerOC:
+        payload = _load(row["payload"], {})
+        payload["autonomy"] = AutonomyPolicy(**payload.get("autonomy", {}))
+        return PlayerOC(**payload)
 
     def get_projection(self, world_id: str) -> WorldStateProjection:
         """Load the rebuildable current projection."""
@@ -455,11 +490,27 @@ class WorldRepository(RepositoryRecords):
     def list_pending_barriers(self, world_id: str) -> list[DecisionBarrier]:
         """List unresolved barriers in deterministic world-time order."""
 
+        return [
+            item
+            for item in self.list_barriers(world_id)
+            if item.status == "pending"
+        ]
+
+    def list_barriers(
+        self, world_id: str, *, through_time: str | None = None
+    ) -> list[DecisionBarrier]:
+        """List barrier state through one world-time boundary."""
+
         with self._lock:
+            query = "SELECT payload FROM barriers WHERE world_id = ?"
+            params: list[Any] = [world_id]
+            if through_time is not None:
+                query += " AND effective_at <= ?"
+                params.append(through_time)
+            query += " ORDER BY effective_at, id"
             rows = self._connection.execute(
-                """SELECT payload FROM barriers WHERE world_id = ? AND status = 'pending'
-                ORDER BY effective_at, id""",
-                (world_id,),
+                query,
+                params,
             ).fetchall()
         return [DecisionBarrier(**_load(row["payload"], {})) for row in rows]
 
@@ -472,6 +523,29 @@ class WorldRepository(RepositoryRecords):
                 (world_id, barrier_id),
             ).fetchone()
         return DecisionBarrier(**_load(row["payload"], {})) if row else None
+
+    def list_scene_threads(
+        self,
+        world_id: str,
+        *,
+        through_time: str | None = None,
+        through_sequence: int | None = None,
+    ) -> list[SceneThread]:
+        """List scene thread state through one world-time and sequence boundary."""
+
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT payload FROM scene_threads WHERE world_id = ?",
+                (world_id,),
+            ).fetchall()
+        threads = [SceneThread(**_load(row["payload"], {})) for row in rows]
+        if through_time is not None:
+            threads = [item for item in threads if item.world_time <= through_time]
+        if through_sequence is not None:
+            threads = [
+                item for item in threads if item.beat_sequence <= through_sequence
+            ]
+        return sorted(threads, key=lambda item: (item.world_time, item.id))
 
     def save_run(self, run: WorldRun) -> None:
         """Persist or update a recoverable run state."""
@@ -578,7 +652,10 @@ class WorldRepository(RepositoryRecords):
                     event_id=f"outbox:{event.id}",
                     world_id=world_id,
                     event_type="SceneBeatCommitted",
-                    payload={"event": event.to_dict(), "world_revision": projection.revision},
+                    payload={
+                        "event": event.to_dict(),
+                        "world_revision": projection.revision,
+                    },
                 )
             self._save_idempotency(connection, request_id, world_id, result)
             return result

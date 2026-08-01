@@ -4,13 +4,25 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any
+from dataclasses import replace
+from typing import TYPE_CHECKING, Any, Sequence
 
 from world_simulation.dependencies import DependencySet
 from world_simulation.errors import StaleWorldRevisionError, WorldNotFoundError
+from world_simulation.performance import compile_performance_plan, presentation_mode_for_event
+from world_simulation.presentation_session import WorldPresentationSession
 from world_simulation.runs import WorldRun
+from world_simulation.scenes import DecisionBarrier, SceneThread
 from world_simulation.timeline import TimelineEvent, WorldStateProjection
-from world_simulation.world import WorldInstance, utc_now
+from world_simulation.world import (
+    NativeResident,
+    RoleTemplateSnapshot,
+    WorldInstance,
+    utc_now,
+)
+
+if TYPE_CHECKING:
+    from world_simulation.repository import WorldRepository
 
 
 def _dump(value: Any) -> str:
@@ -45,69 +57,319 @@ class RepositoryRecords:
             ).fetchone()
             if source is None:
                 raise WorldNotFoundError(f"world not found: {source_world_id}")
-            connection.execute(
-                "INSERT INTO worlds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            snapshots = [
+                RoleTemplateSnapshot(**_load(row["payload"], {}))
+                for row in connection.execute(
+                    "SELECT payload FROM role_snapshots WHERE world_id = ? ORDER BY id",
+                    (source_world_id,),
+                ).fetchall()
+            ]
+            residents = [
+                NativeResident(**_load(row["payload"], {}))
+                for row in connection.execute(
+                    "SELECT payload FROM residents WHERE world_id = ? ORDER BY id",
+                    (source_world_id,),
+                ).fetchall()
+            ]
+            memberships = [
                 (
-                    target.id,
-                    target.owner_id,
-                    _dump(target.template_snapshot),
-                    target.current_time,
-                    target.revision,
-                    target.active_oc_id,
-                    target.parent_world_id,
-                    target.fork_event_id,
-                    target.random_state,
-                    target.created_at,
-                ),
-            )
-            for table in ("role_snapshots", "residents"):
-                connection.execute(
-                    f"INSERT INTO {table} SELECT id, ?, payload FROM {table} WHERE world_id = ?",
-                    (target.id, source_world_id),
+                    self._row_to_oc(row),
+                    row["joined_at"],
                 )
-            connection.execute(
-                """INSERT INTO player_ocs
-                SELECT id, ?, payload, joined_at FROM player_ocs
-                WHERE world_id = ? AND joined_at <= ?""",
-                (target.id, source_world_id, through_event.effective_at),
-            )
-            rows = connection.execute(
+                for row in connection.execute(
+                    """SELECT payload, joined_at FROM player_ocs
+                    WHERE world_id = ? AND joined_at <= ? ORDER BY id""",
+                    (source_world_id, through_event.effective_at),
+                ).fetchall()
+            ]
+            events = connection.execute(
                 """SELECT * FROM timeline_events WHERE world_id = ? AND sequence <= ?
                 ORDER BY sequence""",
                 (source_world_id, through_event.sequence),
             ).fetchall()
-            for row in rows:
-                event = self._row_to_event(row)
-                copied = TimelineEvent(
-                    **{
-                        **event.to_dict(),
-                        "world_id": target.id,
-                        "dependencies": event.dependencies,
-                    }
+            barriers = [
+                DecisionBarrier(**_load(row["payload"], {}))
+                for row in connection.execute(
+                    """SELECT payload FROM barriers
+                    WHERE world_id = ? AND effective_at <= ?
+                    ORDER BY effective_at, id""",
+                    (source_world_id, through_event.effective_at),
+                ).fetchall()
+            ]
+            scene_threads = [
+                thread
+                for thread in (
+                    SceneThread(**_load(row["payload"], {}))
+                    for row in connection.execute(
+                        "SELECT payload FROM scene_threads WHERE world_id = ?",
+                        (source_world_id,),
+                    ).fetchall()
                 )
-                self._insert_event(connection, copied)
-            self._upsert_projection(connection, projection)
+                if (
+                    thread.world_time <= through_event.effective_at
+                    and thread.beat_sequence <= through_event.sequence
+                )
+            ]
+            presentation_session = self.get_presentation_session(source_world_id)
+            return self._copy_world_prefix_in(
+                connection,
+                source_world_id=source_world_id,
+                through_event=through_event,
+                target=target,
+                projection=projection,
+                request_id=request_id,
+                result=result,
+                snapshots=snapshots,
+                residents=residents,
+                memberships=memberships,
+                events=[self._row_to_event(row) for row in events],
+                barriers=barriers,
+                scene_threads=scene_threads,
+                presentation_session=presentation_session,
+            )
+
+    def copy_world_prefix_from(
+        self,
+        source_repository: WorldRepository,
+        *,
+        source_world_id: str,
+        through_event: TimelineEvent,
+        target: WorldInstance,
+        projection: WorldStateProjection,
+        request_id: str,
+        result: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Copy a stable source prefix into this repository's target database."""
+
+        if source_repository is self:
+            return self.copy_world_prefix(
+                source_world_id=source_world_id,
+                through_event=through_event,
+                target=target,
+                projection=projection,
+                request_id=request_id,
+                result=result,
+            )
+        source_repository.require_world(source_world_id)
+        snapshots = source_repository.list_role_snapshots(source_world_id)
+        residents = source_repository.list_residents(source_world_id)
+        memberships = source_repository.list_oc_memberships(
+            source_world_id, through_time=through_event.effective_at
+        )
+        events = source_repository.list_events(
+            source_world_id, through_sequence=through_event.sequence
+        )
+        barriers = source_repository.list_barriers(
+            source_world_id, through_time=through_event.effective_at
+        )
+        scene_threads = source_repository.list_scene_threads(
+            source_world_id,
+            through_time=through_event.effective_at,
+            through_sequence=through_event.sequence,
+        )
+        presentation_session = source_repository.get_presentation_session(
+            source_world_id
+        )
+
+        with self.transaction() as connection:
+            existing = self._idempotency_in(connection, request_id)
+            if existing is not None:
+                return existing
+            return self._copy_world_prefix_in(
+                connection,
+                source_world_id=source_world_id,
+                through_event=through_event,
+                target=target,
+                projection=projection,
+                request_id=request_id,
+                result=result,
+                snapshots=snapshots,
+                residents=residents,
+                memberships=memberships,
+                events=events,
+                barriers=barriers,
+                scene_threads=scene_threads,
+                presentation_session=presentation_session,
+            )
+
+    def _copy_world_prefix_in(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        source_world_id: str,
+        through_event: TimelineEvent,
+        target: WorldInstance,
+        projection: WorldStateProjection,
+        request_id: str,
+        result: dict[str, Any],
+        snapshots: Sequence[RoleTemplateSnapshot],
+        residents: Sequence[NativeResident],
+        memberships: Sequence[tuple[Any, str]],
+        events: Sequence[TimelineEvent],
+        barriers: Sequence[DecisionBarrier],
+        scene_threads: Sequence[SceneThread],
+        presentation_session: WorldPresentationSession | None,
+    ) -> dict[str, Any]:
+        """Write one copied prefix while the caller owns the target transaction."""
+
+        connection.execute(
+            "INSERT INTO worlds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                target.id,
+                target.owner_id,
+                _dump(target.template_snapshot),
+                target.current_time,
+                target.revision,
+                target.active_oc_id,
+                target.parent_world_id,
+                target.fork_event_id,
+                target.random_state,
+                target.created_at,
+            ),
+        )
+        connection.executemany(
+            "INSERT INTO role_snapshots VALUES (?, ?, ?)",
+            [(item.id, target.id, _dump(item.to_dict())) for item in snapshots],
+        )
+        connection.executemany(
+            "INSERT INTO residents VALUES (?, ?, ?)",
+            [(item.id, target.id, _dump(item.to_dict())) for item in residents],
+        )
+        connection.executemany(
+            "INSERT INTO player_ocs VALUES (?, ?, ?, ?)",
+            [
+                (oc.id, target.id, _dump(oc.to_dict()), joined_at)
+                for oc, joined_at in memberships
+            ],
+        )
+        copied_events = [
+            TimelineEvent(
+                **{
+                    **event.to_dict(),
+                    "world_id": target.id,
+                    "dependencies": event.dependencies,
+                }
+            )
+            for event in events
+        ]
+        for event in copied_events:
+            self._insert_event(connection, event)
+        for barrier in barriers:
+            copied = replace(barrier, world_id=target.id)
             connection.execute(
-                """INSERT INTO world_presentation_sessions
-                VALUES (?, ?, ?, ?, ?, ?)""",
+                "INSERT INTO barriers VALUES (?, ?, ?, ?, ?)",
                 (
+                    copied.id,
                     target.id,
-                    through_event.sequence,
-                    None,
-                    0,
-                    "awaiting_action",
-                    target.created_at,
+                    copied.effective_at,
+                    copied.status,
+                    _dump(copied.to_dict()),
                 ),
             )
-            self._save_idempotency(connection, request_id, target.id, result)
-            self._insert_outbox(
-                connection,
-                event_id=f"outbox:world-copied:{target.id}",
-                world_id=target.id,
-                event_type="WorldCopied",
-                payload=result,
+        for thread in scene_threads:
+            copied = replace(thread, world_id=target.id)
+            connection.execute(
+                "INSERT INTO scene_threads VALUES (?, ?, ?)",
+                (copied.id, target.id, _dump(copied.to_dict())),
             )
-            return result
+        self._upsert_projection(connection, projection)
+        copied_session = self._copy_presentation_session(
+            presentation_session,
+            target.id,
+            through_event.sequence,
+            events,
+            copied_events,
+            barriers,
+        )
+        connection.execute(
+            """INSERT INTO world_presentation_sessions
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                copied_session.world_id,
+                copied_session.last_presented_event_sequence,
+                copied_session.active_plan_id,
+                copied_session.active_cue_index,
+                copied_session.status,
+                copied_session.updated_at,
+            ),
+        )
+        self._save_idempotency(connection, request_id, target.id, result)
+        self._insert_outbox(
+            connection,
+            event_id=f"outbox:world-copied:{target.id}",
+            world_id=target.id,
+            event_type="WorldCopied",
+            payload=result,
+        )
+        return result
+
+    @staticmethod
+    def _copy_presentation_session(
+        source: WorldPresentationSession | None,
+        target_world_id: str,
+        anchor_sequence: int,
+        source_events: Sequence[TimelineEvent],
+        target_events: Sequence[TimelineEvent],
+        barriers: Sequence[DecisionBarrier],
+    ) -> WorldPresentationSession:
+        """Clamp and remap a derived presentation cursor to the copied prefix."""
+
+        source_missing = source is None
+        source = source or WorldPresentationSession(world_id=target_world_id)
+        use_anchor_baseline = (
+            source_missing
+            or source.last_presented_event_sequence == 0
+            and source.active_plan_id is None
+            and source.status == "playing"
+        )
+        active_plan_id = None
+        active_cue_index = 0
+        if source.active_plan_id and not use_anchor_baseline:
+            source_event = next(
+                (
+                    event
+                    for event in source_events
+                    if event.sequence <= anchor_sequence
+                    and presentation_mode_for_event(event) == "scene"
+                    and compile_performance_plan(event).id == source.active_plan_id
+                ),
+                None,
+            )
+            if source_event is not None:
+                target_event = next(
+                    event
+                    for event in target_events
+                    if event.sequence == source_event.sequence
+                )
+                active_plan_id = compile_performance_plan(target_event).id
+                active_cue_index = source.active_cue_index
+        last_presented = (
+            anchor_sequence
+            if use_anchor_baseline
+            else min(source.last_presented_event_sequence, anchor_sequence)
+        )
+        has_unpresented_scene = any(
+            event.sequence > last_presented
+            and event.sequence <= anchor_sequence
+            and presentation_mode_for_event(event) == "scene"
+            for event in target_events
+        )
+        if source.status == "paused":
+            status = "paused"
+        elif active_plan_id or has_unpresented_scene:
+            status = "playing"
+        elif any(item.status == "pending" for item in barriers):
+            status = "awaiting_barrier"
+        else:
+            status = "awaiting_action"
+        return replace(
+            source,
+            world_id=target_world_id,
+            last_presented_event_sequence=last_presented,
+            active_plan_id=active_plan_id,
+            active_cue_index=active_cue_index,
+            status=status,
+        )
 
     def _assert_revision(
         self, connection: sqlite3.Connection, world_id: str, expected: int
