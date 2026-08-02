@@ -18,7 +18,7 @@ type StoryLoadListProps = Pick<LauncherActions, "busy" | "reducedMotion"> & {
 };
 
 const commandClass = "flex min-h-16 w-full items-center justify-end border-b border-[#3D2546]/45 py-3 text-right font-serif text-[1.7rem] font-semibold italic leading-none text-[#7A2356] [-webkit-text-stroke:0.5px_rgba(255,255,255,0.55)] [text-shadow:0_1px_0_rgba(255,255,255,0.72),0_5px_12px_rgba(93,21,51,0.28)] transition-[color,border-color,transform] hover:border-[#C65B85] hover:text-[#B12868] focus:outline-none focus-visible:border-[#A23E69] disabled:cursor-default disabled:opacity-40";
-const panelTransition = { duration: 0.28, ease: "easeOut" } as const;
+const panelTransition = { duration: 0.32, ease: "easeOut" } as const;
 
 function commandHover(reducedMotion: boolean) {
   return reducedMotion ? undefined : { x: -8 };
@@ -36,24 +36,19 @@ export function StoryMainMenu({ busy, reducedMotion, onCreateWorld, onOpenLoad, 
   );
 }
 
-/** Renders saved Stories as a romance visual-novel album. */
+/** Renders saved Stories as a full-page archive, not a menu-adjacent utility list. */
 export function StoryLoadList({ worlds, busy, reducedMotion, onBack, onLoadWorld }: StoryLoadListProps) {
   return (
-    <motion.section className="w-full text-[#4A2738]" data-testid="world-load-list" initial={{ opacity: 0, x: reducedMotion ? 0 : -24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reducedMotion ? 0 : 20 }} transition={panelTransition}>
-      <div className="mb-6 flex items-center gap-3">
-        <button className="grid h-9 w-9 place-items-center rounded-md border border-[#C785A0]/55 bg-[#FFF8FC]/55 text-[#8F355C] transition-colors hover:border-[#B64B75] hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="Back to Story menu" onClick={onBack}><ArrowLeft /></button>
-        <h2 className="m-0 font-serif text-2xl font-semibold italic text-[#7A2356] [-webkit-text-stroke:0.4px_rgba(255,255,255,0.65)] [text-shadow:0_1px_0_rgba(255,255,255,0.8),0_4px_10px_rgba(93,21,51,0.2)]">STORY ALBUM</h2>
-      </div>
-      {worlds.length ? (
-        <div className="grid max-h-[min(22rem,calc(100vh-184px))] gap-0 overflow-y-auto border-y border-[#DDA9BE]/65 pr-1">
-          {worlds.map((world) => (
-            <motion.button key={world.id} className="flex min-h-20 items-center gap-3 border-b border-[#E8BED0]/75 bg-[#FFF8FC]/55 px-4 py-3 text-left transition-colors hover:bg-white/75 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] disabled:opacity-40" type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={() => onLoadWorld(world.id)}>
-              <span className="min-w-0 flex-1"><strong className="block truncate font-serif text-base text-[#5E2841]">{world.name}</strong><span className="mt-1 block truncate text-xs text-[#8B6676]">{world.currentTimeLabel}</span></span>
-              <ArrowRight className="shrink-0 text-[#B64B75]" />
-            </motion.button>
-          ))}
-        </div>
-      ) : <p className="m-0 border-y border-[#DDA9BE]/65 py-5 text-sm text-[#8B6676]">No saved stories yet.</p>}
+    <motion.section className="overflow-hidden border border-[#D8C7A9] bg-[#F6EEDC]/95 text-[#35424C] shadow-[0_18px_56px_rgba(25,31,37,0.24)]" data-testid="world-load-list" initial={{ opacity: 0, y: reducedMotion ? 0 : 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reducedMotion ? 0 : 18 }} transition={panelTransition}>
+      <header className="flex items-start justify-between gap-5 border-b border-[#D8C7A9] px-[clamp(20px,4vw,44px)] py-7">
+        <div><p className="m-0 text-[11px] font-semibold tracking-[0.2em] text-[#75858B]">RECORDS OF THE STORY</p><h2 className="m-0 mt-2 font-serif text-[clamp(2rem,5vw,3.5rem)] font-semibold leading-none text-[#354653]">Story Archive</h2></div>
+        <button className="grid h-9 w-9 shrink-0 place-items-center border border-[#AFA188] text-[#3D5361] transition-colors hover:bg-[#E9DECA] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8EB0BE]" type="button" aria-label="Back to Story menu" title="Back to Story menu" onClick={onBack}><ArrowLeft /></button>
+      </header>
+      {worlds.length ? <div className="max-h-[min(60vh,38rem)] overflow-y-auto" aria-label="存档列表">{worlds.map((world, index) => (
+        <motion.button key={world.id} className="group grid min-h-[104px] w-full grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-4 border-b border-[#DDCFB7] px-[clamp(20px,4vw,44px)] py-5 text-left transition-colors hover:bg-[#EDE2CE] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#8EB0BE] disabled:opacity-40" type="button" disabled={busy} whileHover={reducedMotion ? undefined : { x: 5 }} whileTap={reducedMotion ? undefined : { scale: 0.99 }} onClick={() => onLoadWorld(world.id)}>
+          <span className="font-serif text-2xl italic text-[#92A1A1]">{String(index + 1).padStart(2, "0")}</span><span className="min-w-0"><strong className="block truncate font-serif text-xl font-semibold text-[#354653]">{world.name}</strong><span className="mt-2 block truncate text-xs text-[#70746D]">{world.currentTimeLabel}</span></span><ArrowRight className="shrink-0 text-[#526E7A] transition-transform group-hover:translate-x-1" />
+        </motion.button>
+      ))}</div> : <div className="grid min-h-52 place-items-center px-7 text-center"><p className="m-0 font-serif text-lg italic text-[#788078]">No story has been written yet.</p></div>}
     </motion.section>
   );
 }
