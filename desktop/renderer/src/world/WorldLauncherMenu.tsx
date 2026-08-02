@@ -17,7 +17,7 @@ type StoryLoadListProps = Pick<LauncherActions, "busy" | "reducedMotion"> & {
   onLoadWorld: (worldId: string) => void;
 };
 
-const commandClass = "flex min-h-14 w-full items-center justify-end border-b border-[#3D2546]/45 py-3 text-right font-serif text-2xl text-[#2C1E34] transition-[color,border-color,transform] hover:border-[#C65B85] hover:text-[#A23E69] focus:outline-none focus-visible:border-[#A23E69] disabled:cursor-default disabled:opacity-40";
+const commandClass = "flex min-h-16 w-full items-center justify-end border-b border-[#3D2546]/45 py-3 text-right font-serif text-[1.7rem] font-semibold italic leading-none text-[#7A2356] [-webkit-text-stroke:0.5px_rgba(255,255,255,0.55)] [text-shadow:0_1px_0_rgba(255,255,255,0.72),0_5px_12px_rgba(93,21,51,0.28)] transition-[color,border-color,transform] hover:border-[#C65B85] hover:text-[#B12868] focus:outline-none focus-visible:border-[#A23E69] disabled:cursor-default disabled:opacity-40";
 const panelTransition = { duration: 0.28, ease: "easeOut" } as const;
 
 function commandHover(reducedMotion: boolean) {
@@ -28,7 +28,7 @@ function commandHover(reducedMotion: boolean) {
 export function StoryMainMenu({ busy, reducedMotion, onCreateWorld, onOpenLoad, onOpenSettings, onExit }: LauncherActions) {
   return (
     <motion.nav
-      aria-label="剧情主菜单"
+      aria-label="Story menu"
       className="grid gap-2"
       data-testid="world-launcher-command-rail"
       initial={{ opacity: 0, x: reducedMotion ? 0 : 28 }}
@@ -36,10 +36,10 @@ export function StoryMainMenu({ busy, reducedMotion, onCreateWorld, onOpenLoad, 
       exit={{ opacity: 0, x: reducedMotion ? 0 : 20 }}
       transition={panelTransition}
     >
-      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onCreateWorld}>创建剧情</motion.button>
-      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenLoad}>加载剧情</motion.button>
-      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenSettings}>设置</motion.button>
-      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onExit}>退出</motion.button>
+      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onCreateWorld}>NEW STORY</motion.button>
+      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenLoad}>LOAD STORY</motion.button>
+      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenSettings}>SETTINGS</motion.button>
+      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onExit}>EXIT</motion.button>
     </motion.nav>
   );
 }

@@ -17,17 +17,17 @@ describe("WorldLauncher", () => {
       />
     );
     // Check menu items exist
-    assert.ok(markup.includes("创建剧情"));
-    assert.ok(markup.includes("加载剧情"));
-    assert.ok(markup.includes("设置"));
-    assert.ok(markup.includes("退出"));
+    assert.ok(markup.includes("NEW STORY"));
+    assert.ok(markup.includes("LOAD STORY"));
+    assert.ok(markup.includes("SETTINGS"));
+    assert.ok(markup.includes("EXIT"));
     // Check bilingual title wordmark and its bundled path.
     assert.ok(markup.includes("栞 / SHIORI"));
     assert.ok(markup.includes("./assets/branding/shiori-title-logo.png"));
     // The relative URL must resolve beside renderer-dist/index.html under Electron loadFile().
     assert.ok(markup.includes("url(./assets/backgrounds/default-galgame-bg.png)"));
     assert.doesNotMatch(markup, /url\(['\"]?\/assets\//);
-    assert.doesNotMatch(markup, /创建世界|加载世界/);
+    assert.doesNotMatch(markup, /创建剧情|加载剧情|创建世界|加载世界/);
   });
 
   it("renders the Story list only after load menu is opened", () => {
@@ -41,7 +41,7 @@ describe("WorldLauncher", () => {
       />
     );
     assert.doesNotMatch(markup, /data-testid="world-load-list"/);
-    assert.match(markup, />加载剧情</);
+    assert.match(markup, />LOAD STORY</);
   });
 
   it("uses a text-led command rail instead of a boxed utility menu", () => {
@@ -59,6 +59,8 @@ describe("WorldLauncher", () => {
     assert.match(markup, /data-testid="world-launcher-command-rail"/);
     assert.match(markup, /justify-end/);
     assert.match(markup, /border-b/);
+    assert.match(markup, /italic/);
+    assert.match(markup, /text-shadow/);
     assert.doesNotMatch(markup, /border-l-2/);
     assert.doesNotMatch(markup, /border-l border-white\/30 pl-5/);
     assert.doesNotMatch(markup, /bg-\[#111512\]\/85/);
