@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import type { WorldBridgeClient } from "../world/bridgeClient";
-import type { NativeIdentityDraft, WorldCreationInput } from "../world/types";
+import type { WorldCreationInput } from "../world/types";
 import type { useWorldWorkspaceController } from "../world/useWorldWorkspaceController";
 import type { RunWorldPresentation } from "./useWorldPresentationOperation";
 
@@ -15,36 +15,25 @@ function createWorldSeed(): string {
   return globalThis.crypto?.randomUUID?.() ?? `seed-${Date.now().toString(36)}`;
 }
 
-/** Owns draft preview and confirmation state for the World creation route. */
+/** Owns the bridge-only draft lifecycle behind the Story creation route. */
 export function useWorldCreationFlowController({ client, controller, loadWorldForPlay, run }: Args) {
-  const [seed, setSeed] = useState(createWorldSeed);
-  const [draft, setDraft] = useState<Awaited<ReturnType<WorldBridgeClient["previewDraft"]>> | null>(null);
+  const [seed] = useState(createWorldSeed);
 
-  const previewDraft = useCallback((input: WorldCreationInput) => {
-    void run(() => client.previewDraft(input), setDraft);
-  }, [client, run]);
-
-  const confirmDraft = useCallback((draftId: string, identities: NativeIdentityDraft[]) => {
+  const createStory = useCallback((input: WorldCreationInput) => {
     void run(
-      () => client.confirmDraft(draftId, identities),
+      async () => {
+        const draft = await client.previewDraft(input);
+        return client.confirmDraft(draft.id, draft.nativeIdentities);
+      },
       async (createdWorld) => {
         await controller.reloadWorlds();
         await loadWorldForPlay(createdWorld.id);
-        setDraft(null);
       },
     );
   }, [client, controller, loadWorldForPlay, run]);
 
   return {
     seed,
-    draft,
-    resetDraft: () => setDraft(null),
-    rerollSeed: () => {
-      const nextSeed = createWorldSeed();
-      setSeed(nextSeed);
-      return nextSeed;
-    },
-    previewDraft,
-    confirmDraft,
+    createStory,
   };
 }
