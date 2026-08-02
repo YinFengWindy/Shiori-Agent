@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, FolderOpen, GearSix, Plus, SignOut } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import type { WorldSummary } from "./types";
 
@@ -17,11 +17,11 @@ type StoryLoadListProps = Pick<LauncherActions, "busy" | "reducedMotion"> & {
   onLoadWorld: (worldId: string) => void;
 };
 
-const commandClass = "group flex min-h-14 w-full items-center gap-4 border-l-2 border-white/20 px-4 py-3 text-left text-[#FFF5F1] transition-colors hover:border-[#F3AEC6] hover:bg-white/10 focus:outline-none focus-visible:border-[#F3AEC6] disabled:cursor-default disabled:opacity-40";
+const commandClass = "flex min-h-14 w-full items-center justify-end border-b border-[#3D2546]/45 py-3 text-right font-serif text-2xl text-[#2C1E34] transition-[color,border-color,transform] hover:border-[#C65B85] hover:text-[#A23E69] focus:outline-none focus-visible:border-[#A23E69] disabled:cursor-default disabled:opacity-40";
 const panelTransition = { duration: 0.28, ease: "easeOut" } as const;
 
 function commandHover(reducedMotion: boolean) {
-  return reducedMotion ? undefined : { x: 8 };
+  return reducedMotion ? undefined : { x: -8 };
 }
 
 /** Renders the Story launch commands as a cinematic, keyboard-accessible rail. */
@@ -36,18 +36,10 @@ export function StoryMainMenu({ busy, reducedMotion, onCreateWorld, onOpenLoad, 
       exit={{ opacity: 0, x: reducedMotion ? 0 : 20 }}
       transition={panelTransition}
     >
-      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onCreateWorld}>
-        <Plus className="text-[#F3AEC6]" size={22} weight="bold" /><span className="font-serif text-lg">创建剧情</span><ArrowRight className="ml-auto opacity-0 transition-opacity group-hover:opacity-100" />
-      </motion.button>
-      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenLoad}>
-        <FolderOpen className="text-[#F3AEC6]" size={22} weight="bold" /><span className="font-serif text-lg">加载剧情</span><ArrowRight className="ml-auto opacity-0 transition-opacity group-hover:opacity-100" />
-      </motion.button>
-      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenSettings}>
-        <GearSix className="text-[#F3AEC6]" size={22} weight="bold" /><span className="font-serif text-lg">设置</span><ArrowRight className="ml-auto opacity-0 transition-opacity group-hover:opacity-100" />
-      </motion.button>
-      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onExit}>
-        <SignOut className="text-[#F3AEC6]" size={22} weight="bold" /><span className="font-serif text-lg">退出</span><ArrowRight className="ml-auto opacity-0 transition-opacity group-hover:opacity-100" />
-      </motion.button>
+      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onCreateWorld}>创建剧情</motion.button>
+      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenLoad}>加载剧情</motion.button>
+      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenSettings}>设置</motion.button>
+      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onExit}>退出</motion.button>
     </motion.nav>
   );
 }

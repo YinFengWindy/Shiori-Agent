@@ -22,12 +22,10 @@ export function WorldLauncher({ worlds, busy = false, error = "", onCreateWorld,
   return (
     <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="world-launcher">
       <motion.div className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-menu-backdrop" initial={{ opacity: 0, scale: reducedMotion ? 1 : 1.06 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: reducedMotion ? 0 : 1.4, ease: "easeOut" }} style={{ backgroundImage: `url(${WORLD_MENU_BACKGROUND_URL})` }} />
-      <div className="absolute inset-y-0 right-0 w-[min(47%,38rem)] bg-[#2A1827]/35" />
-      <div className="absolute inset-0 bg-[#130E18]/68" />
 
       <motion.header className="absolute left-[clamp(12px,2vw,28px)] top-[clamp(12px,2vh,28px)] z-10 w-[min(18rem,calc(100vw-24px))]" data-testid="story-menu-title" initial={{ opacity: 0, y: reducedMotion ? 0 : 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: reducedMotion ? 0 : 0.18, duration: reducedMotion ? 0 : 0.6, ease: "easeOut" }}><h1 className="sr-only">栞 / SHIORI</h1><div className="relative overflow-hidden"><img className="block w-full" src={STORY_TITLE_LOGO_URL} alt="" />{reducedMotion ? null : <motion.span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-white/35 blur-md" initial={{ x: "-150%" }} animate={{ x: "850%" }} transition={{ delay: 0.95, duration: 0.9, ease: "easeInOut" }} />}</div></motion.header>
 
-      <div className="absolute right-[clamp(20px,5vw,72px)] top-1/2 z-10 w-[min(22rem,calc(100%-40px))] -translate-y-1/2 border-l border-white/30 pl-5">
+      <div className="absolute right-[clamp(20px,5vw,72px)] top-1/2 z-10 w-[min(18rem,calc(100%-40px))] -translate-y-1/2">
         <AnimatePresence initial={false} mode="wait">
           {loadOpen ? <StoryLoadList key="load" worlds={worlds} busy={busy} reducedMotion={reducedMotion} onBack={() => setLoadOpen(false)} onLoadWorld={onLoadWorld} /> : <StoryMainMenu key="menu" busy={busy} reducedMotion={reducedMotion} onCreateWorld={onCreateWorld} onOpenLoad={() => setLoadOpen(true)} onOpenSettings={onOpenSettings} onExit={onExit} />}
         </AnimatePresence>

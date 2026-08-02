@@ -44,7 +44,7 @@ describe("WorldLauncher", () => {
     assert.match(markup, />加载剧情</);
   });
 
-  it("uses a cinematic command rail instead of a boxed utility menu", () => {
+  it("uses a text-led command rail instead of a boxed utility menu", () => {
     const markup = renderToStaticMarkup(
       <WorldLauncher
         worlds={[]}
@@ -57,11 +57,14 @@ describe("WorldLauncher", () => {
     assert.match(markup, /data-testid="story-menu-backdrop"/);
     assert.match(markup, /data-testid="story-menu-title"/);
     assert.match(markup, /data-testid="world-launcher-command-rail"/);
-    assert.match(markup, /border-l-2/);
+    assert.match(markup, /justify-end/);
+    assert.match(markup, /border-b/);
+    assert.doesNotMatch(markup, /border-l-2/);
+    assert.doesNotMatch(markup, /border-l border-white\/30 pl-5/);
     assert.doesNotMatch(markup, /bg-\[#111512\]\/85/);
   });
 
-  it("keeps the wordmark tight to the upper left and dims the bright backdrop", () => {
+  it("keeps the wordmark tight to the upper left without dimming the backdrop", () => {
     const markup = renderToStaticMarkup(
       <WorldLauncher
         worlds={[]}
@@ -75,7 +78,7 @@ describe("WorldLauncher", () => {
     assert.match(markup, /left-\[clamp\(12px,2vw,28px\)\]/);
     assert.match(markup, /top-\[clamp\(12px,2vh,28px\)\]/);
     assert.match(markup, /w-\[min\(18rem,calc\(100vw-24px\)\)\]/);
-    assert.match(markup, /bg-\[#130E18\]\/68/);
+    assert.doesNotMatch(markup, /bg-\[#130E18\]\/68/);
     assert.doesNotMatch(markup, /bg-black\/10/);
   });
 
