@@ -6,7 +6,7 @@ import { StoryLoadList } from "./WorldLauncherMenu";
 import { createWorldSummary } from "./testFixtures";
 
 describe("StoryLoadList", () => {
-  it("uses a story archive page instead of a utility list", () => {
+  it("uses a romance-story album treatment instead of a utility list", () => {
     const markup = renderToStaticMarkup(
       <StoryLoadList
         worlds={[createWorldSummary()]}
@@ -17,10 +17,9 @@ describe("StoryLoadList", () => {
       />
     );
 
-    assert.match(markup, />Story Archive</);
-    assert.match(markup, />RECORDS OF THE STORY</);
+    assert.match(markup, />STORY ALBUM</);
     assert.match(markup, /border-b/);
-    assert.match(markup, /bg-\[#F6EEDC\]\/95/);
+    assert.match(markup, /bg-\[#FFF8FC\]\/55/);
     assert.doesNotMatch(markup, /border-l-2/);
   });
 });
