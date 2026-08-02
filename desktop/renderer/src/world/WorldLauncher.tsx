@@ -2,7 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import type { WorldSummary } from "./types";
 import { StoryLoadList, StoryMainMenu } from "./WorldLauncherMenu";
-import { WORLD_MENU_BACKGROUND_URL } from "./worldStaticAssets";
+import { STORY_TITLE_LOGO_URL, WORLD_MENU_BACKGROUND_URL } from "./worldStaticAssets";
 
 type WorldLauncherProps = {
   worlds: WorldSummary[];
@@ -25,7 +25,7 @@ export function WorldLauncher({ worlds, busy = false, error = "", onCreateWorld,
       <div className="absolute inset-y-0 right-0 w-[min(47%,38rem)] bg-[#2A1827]/35" />
       <div className="absolute inset-0 bg-black/10" />
 
-      <motion.header className="absolute left-[clamp(20px,5vw,64px)] top-[clamp(24px,6vh,72px)] z-10" data-testid="story-menu-title" initial={{ opacity: 0, y: reducedMotion ? 0 : 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: reducedMotion ? 0 : 0.18, duration: reducedMotion ? 0 : 0.6, ease: "easeOut" }}><p className="m-0 font-serif text-sm text-[#894562]">故事</p><h1 className="mt-1 font-serif text-5xl font-bold text-[#352431] drop-shadow-[0_1px_0_rgba(255,255,255,0.8)]">Shiori</h1></motion.header>
+      <motion.header className="absolute left-[clamp(20px,5vw,64px)] top-[clamp(24px,6vh,72px)] z-10 w-[min(23rem,calc(100vw-40px))]" data-testid="story-menu-title" initial={{ opacity: 0, y: reducedMotion ? 0 : 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: reducedMotion ? 0 : 0.18, duration: reducedMotion ? 0 : 0.6, ease: "easeOut" }}><h1 className="sr-only">栞 / SHIORI</h1><div className="relative overflow-hidden"><img className="block w-full" src={STORY_TITLE_LOGO_URL} alt="" />{reducedMotion ? null : <motion.span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-white/35 blur-md" initial={{ x: "-150%" }} animate={{ x: "850%" }} transition={{ delay: 0.95, duration: 0.9, ease: "easeInOut" }} />}</div></motion.header>
 
       <div className="absolute right-[clamp(20px,5vw,72px)] top-1/2 z-10 w-[min(22rem,calc(100%-40px))] -translate-y-1/2 border-l border-white/30 pl-5">
         <AnimatePresence initial={false} mode="wait">

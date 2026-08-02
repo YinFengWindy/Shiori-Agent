@@ -21,8 +21,9 @@ describe("WorldLauncher", () => {
     assert.ok(markup.includes("加载剧情"));
     assert.ok(markup.includes("设置"));
     assert.ok(markup.includes("退出"));
-    // Check logo
-    assert.ok(markup.includes("Shiori"));
+    // Check bilingual title wordmark and its bundled path.
+    assert.ok(markup.includes("栞 / SHIORI"));
+    assert.ok(markup.includes("./assets/branding/shiori-title-logo.png"));
     // The relative URL must resolve beside renderer-dist/index.html under Electron loadFile().
     assert.ok(markup.includes("url(./assets/backgrounds/default-galgame-bg.png)"));
     assert.doesNotMatch(markup, /url\(['\"]?\/assets\//);
