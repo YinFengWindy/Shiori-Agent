@@ -20,6 +20,8 @@ _READ_ONLY_METHODS = frozenset(
         "worlds.get",
         "worlds.timeline",
         "worlds.events.catch_up",
+        "stories.list",
+        "stories.get",
     }
 )
 _INTEGRATION_METHODS = frozenset(
@@ -27,6 +29,9 @@ _INTEGRATION_METHODS = frozenset(
         "novelai.generate",
         "novelai.regenerateMessageMedia",
         "worlds.drafts.preview",
+        "stories.create",
+        "stories.input",
+        "stories.continue",
         "observation.analyze",
         "voice.synthesize",
         "voice.synthesize.cancel",

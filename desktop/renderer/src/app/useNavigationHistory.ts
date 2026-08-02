@@ -138,6 +138,17 @@ export function useNavigationHistory({
     }
   }
 
+  /** Opens the independent Story workspace without selecting a chat session. */
+  function openStoryWorkspace(options?: { recordHistory?: boolean }): void {
+    const nextView: AppMainView = { kind: "story" };
+    setSidebarAnimating(true);
+    setSidebarCollapsed(false);
+    setMainView(nextView);
+    if (options?.recordHistory !== false) {
+      pushNavigationEntry(buildNavigationEntry(nextView));
+    }
+  }
+
   function openImageStudio(options?: { recordHistory?: boolean }): void {
     if (!roles.length) {
       setError("请先创建至少一个角色，再进入生图。");
@@ -212,6 +223,10 @@ export function useNavigationHistory({
       openWorldWorkspace({ recordHistory: false });
       return;
     }
+    if (nextEntry.view.kind === "story") {
+      openStoryWorkspace({ recordHistory: false });
+      return;
+    }
     if (nextEntry.view.kind === "roles-list" || nextEntry.view.kind === "role-create") {
       openRoleWorkspaceView(nextEntry.view);
       return;
@@ -256,6 +271,7 @@ export function useNavigationHistory({
     replaceNavigationEntry,
     openChatView,
     openWorldWorkspace,
+    openStoryWorkspace,
     openImageStudio,
     openPromptTagLibrary,
     openSettingsWorkspace,

@@ -88,6 +88,7 @@ type DesktopAppFrameProps = {
   onOpenSearch: () => void;
   onOpenRolesWorkspace: () => void;
   onOpenWorld: () => void;
+  onOpenStory: () => void;
   onOpenRole: (roleId: string) => void;
   onOpenImageStudio: () => void;
   onOpenPromptTagLibrary: () => void;
@@ -221,6 +222,7 @@ export function DesktopAppFrame({
   onOpenSearch,
   onOpenRolesWorkspace,
   onOpenWorld,
+  onOpenStory,
   onOpenRole,
   onOpenImageStudio,
   onOpenPromptTagLibrary,
@@ -407,6 +409,7 @@ export function DesktopAppFrame({
               onOpenSearch={onOpenSearch}
               onOpenRolesWorkspace={onOpenRolesWorkspace}
               onOpenWorld={onOpenWorld}
+              onOpenStory={onOpenStory}
               onOpenRole={onOpenRole}
               onOpenImageStudio={onOpenImageStudio}
               onOpenPromptTagLibrary={onOpenPromptTagLibrary}

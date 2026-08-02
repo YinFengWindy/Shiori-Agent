@@ -10,6 +10,7 @@ from .image_requests import DesktopImageRequestHandler
 from .role_requests import DesktopRoleRequestHandler
 from .session_task_requests import DesktopSessionTaskRequestHandler
 from .voice_handler import DesktopVoiceHandler
+from .story_simulation_handler import StorySimulationHandler
 from .world_simulation_handler import WorldSimulationHandler
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
@@ -27,6 +28,7 @@ class DesktopBridgeRequestRouter:
         images: DesktopImageRequestHandler,
         voice: DesktopVoiceHandler,
         worlds: WorldSimulationHandler,
+        stories: StorySimulationHandler,
         observation: ScreenObservationService | None,
     ) -> None:
         self._roles = roles
@@ -35,6 +37,7 @@ class DesktopBridgeRequestRouter:
         self._images = images
         self._voice = voice
         self._worlds = worlds
+        self._stories = stories
         self._observation = observation
 
     async def dispatch(
@@ -51,6 +54,14 @@ class DesktopBridgeRequestRouter:
             if method == "observation.analyze":
                 return await self._observation.analyze(payload)
             return await self._observation.remember(payload)
+        story_result = await self._stories.handle(
+            method,
+            payload,
+            request_id=request_id,
+            emit_event=emit_event,
+        )
+        if story_result is not None:
+            return story_result
         world_result = self._worlds.handle(method, payload, request_id=request_id)
         if world_result is not None:
             return world_result

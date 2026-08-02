@@ -47,6 +47,7 @@ class DesktopBridgeServer:
             subagent_manager=getattr(spawn_tool, "manager", None),
             memory_optimizer=getattr(runtime, "memory_optimizer", None),
             observation_service=observation_service,
+            provider=runtime.provider,
         )
         self._pet_action_handler = self._handle_pet_action
         runtime.event_bus.on(DesktopPetActionRequested, self._pet_action_handler)

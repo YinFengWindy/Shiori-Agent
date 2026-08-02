@@ -6,7 +6,7 @@ import pytest
 from desktop_bridge.request_router import DesktopBridgeRequestRouter
 
 
-def _router(*, role_result=None, world_result=None):
+def _router(*, role_result=None, story_result=None, world_result=None):
     return DesktopBridgeRequestRouter(
         roles=SimpleNamespace(handle=AsyncMock(return_value=role_result)),
         sessions_and_tasks=SimpleNamespace(handle=AsyncMock(return_value=None)),
@@ -14,6 +14,7 @@ def _router(*, role_result=None, world_result=None):
         images=SimpleNamespace(handle=AsyncMock(return_value=None)),
         voice=SimpleNamespace(handle=AsyncMock(return_value=None)),
         worlds=SimpleNamespace(handle=Mock(return_value=world_result)),
+        stories=SimpleNamespace(handle=AsyncMock(return_value=story_result)),
         observation=None,
     )
 
@@ -54,3 +55,19 @@ async def test_request_router_stops_after_the_owning_handler_matches() -> None:
     router._sessions_and_tasks.handle.assert_not_awaited()
     router._chat.handle.assert_not_awaited()
     router._images.handle.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_request_router_stops_after_story_handler_matches() -> None:
+    router = _router(story_result={"stories": []})
+
+    result = await router.dispatch(
+        "stories.list",
+        {},
+        request_id="request-3",
+        emit_event=Mock(),
+    )
+
+    assert result == {"stories": []}
+    router._stories.handle.assert_awaited_once()
+    router._worlds.handle.assert_not_called()
