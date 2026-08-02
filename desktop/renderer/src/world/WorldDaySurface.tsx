@@ -28,17 +28,11 @@ export function WorldDaySurface({ world, busy, error, onCompleteDay, onOpenSetti
   }
 
   return (
-    <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-[#F1F4F2] text-[#252A27]" data-testid="world-day-surface">
-      <header className="flex min-h-16 items-center justify-between gap-4 border-b border-[#D9DEDA] bg-white px-5">
-        <div className="min-w-0">
-          <h1 className="m-0 truncate font-serif text-lg font-semibold">{world.name}</h1>
-          <p className="m-0 truncate text-xs text-[#707873]">{world.premise}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button className="grid h-9 w-9 place-items-center rounded-md hover:bg-[#EEF1EF]" type="button" aria-label="剧情设置" title="剧情设置" onClick={onOpenSettings}><Gear /></button>
-          <button className="grid h-9 w-9 place-items-center rounded-md hover:bg-[#EEF1EF]" type="button" aria-label="返回剧情列表" title="返回剧情列表" onClick={onExit}><SignOut /></button>
-        </div>
-      </header>
+    <section className="relative grid h-full min-h-0 grid-rows-[minmax(0,1fr)] bg-[#F1F4F2] text-[#252A27]" data-testid="world-day-surface">
+      <div className="pointer-events-none absolute right-5 top-5 z-10 flex gap-2">
+        <button className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md text-[#5D6C63] transition-colors hover:bg-white/75 hover:text-[#35433A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C8D82]/35" type="button" aria-label="剧情设置" title="剧情设置" onClick={onOpenSettings}><Gear /></button>
+        <button className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md text-[#5D6C63] transition-colors hover:bg-white/75 hover:text-[#35433A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C8D82]/35" type="button" aria-label="返回剧情列表" title="返回剧情列表" onClick={onExit}><SignOut /></button>
+      </div>
       <div className="min-h-0 overflow-y-auto px-5 py-8">
         <main className="mx-auto grid max-w-3xl gap-12">
           {world.days.map((day) => (

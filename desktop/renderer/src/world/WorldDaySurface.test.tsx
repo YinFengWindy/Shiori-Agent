@@ -28,7 +28,17 @@ describe("WorldDaySurface", () => {
     assert.match(markup, /你终于来了。/);
     assert.match(markup, /aria-label="提交剧情行动"/);
     assert.match(markup, /data-current-day="true"/);
+    assert.match(markup, /aria-label="剧情设置"/);
+    assert.match(markup, /aria-label="返回剧情列表"/);
     assert.doesNotMatch(markup, /属性|好感度|world-workspace/);
+  });
+
+  it("keeps story metadata out of a persistent top bar", () => {
+    const markup = render({ name: "回家的诱惑", premise: "深夜归家的开场。" });
+
+    assert.doesNotMatch(markup, />回家的诱惑</);
+    assert.doesNotMatch(markup, />深夜归家的开场。</);
+    assert.doesNotMatch(markup, /<header/);
   });
 
   it("keeps committed beats visible in chronological order", () => {
