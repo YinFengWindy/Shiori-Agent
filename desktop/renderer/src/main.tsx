@@ -47,9 +47,6 @@ import { useRightSidebarState } from "./shared/useRightSidebarState";
 import { createWorldBridgeClient } from "./world/bridgeClient";
 import { useWorldWorkspaceController } from "./world/useWorldWorkspaceController";
 import { WorldAppSurface } from "./world/WorldAppSurface";
-import { createStoryBridgeClient } from "./story/bridgeClient";
-import { StoryAppSurface } from "./story/StoryAppSurface";
-import { StoryWorkspace } from "./story/StoryWorkspace";
 import type {
   AppMainView,
   EventLog,
@@ -64,7 +61,7 @@ type WorldRouteProps = {
   onExit: () => void;
 };
 
-/** Mounts World-only bridge and presentation state only while the World route is active. */
+/** Mounts Story bridge and presentation state only while its route is active. */
 function WorldRoute({ roles, onExit }: WorldRouteProps): React.ReactElement {
   const worldBridgeClient = useMemo(() => createWorldBridgeClient(), []);
   const worldController = useWorldWorkspaceController(worldBridgeClient);
@@ -76,18 +73,6 @@ function WorldRoute({ roles, onExit }: WorldRouteProps): React.ReactElement {
   });
 
   return <WorldAppSurface>{worldPresentation.content}</WorldAppSurface>;
-}
-
-type StoryRouteProps = {
-  roles: RoleRecord[];
-  onExit: () => void;
-};
-
-/** Mounts Story-owned bridge and presentation state only while its route is active. */
-function StoryRoute({ roles, onExit }: StoryRouteProps): React.ReactElement {
-  const storyBridgeClient = useMemo(() => createStoryBridgeClient(), []);
-
-  return <StoryAppSurface><StoryWorkspace client={storyBridgeClient} roles={roles} onExit={onExit} /></StoryAppSurface>;
 }
 
 function App(): React.ReactElement {
@@ -217,7 +202,6 @@ function App(): React.ReactElement {
     replaceNavigationEntry,
     openChatView,
     openWorldWorkspace,
-    openStoryWorkspace,
     openImageStudio,
     openPromptTagLibrary,
     openSettingsWorkspace,
@@ -492,9 +476,6 @@ function App(): React.ReactElement {
   if (mainView.kind === "world") {
     return <WorldRoute roles={roles} onExit={() => openChatView()} />;
   }
-  if (mainView.kind === "story") {
-    return <StoryRoute roles={roles} onExit={() => openChatView()} />;
-  }
 
   return (
     <DesktopAppFrame
@@ -548,7 +529,6 @@ function App(): React.ReactElement {
       onOpenSearch={() => setShowSearchDialog(true)}
       onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
       onOpenWorld={() => openWorldWorkspace()}
-      onOpenStory={() => openStoryWorkspace()}
       onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
       onOpenImageStudio={() => openImageStudio()}
       onOpenPromptTagLibrary={() => { setPromptTagWorkspaceSection("list"); openPromptTagLibrary(); }}

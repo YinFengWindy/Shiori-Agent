@@ -6,21 +6,20 @@ import pytest
 from desktop_bridge.request_router import DesktopBridgeRequestRouter
 
 
-def _router(*, role_result=None, story_result=None, world_result=None):
+def _router(*, role_result=None, story_result=None):
     return DesktopBridgeRequestRouter(
         roles=SimpleNamespace(handle=AsyncMock(return_value=role_result)),
         sessions_and_tasks=SimpleNamespace(handle=AsyncMock(return_value=None)),
         chat=SimpleNamespace(handle=AsyncMock(return_value=None)),
         images=SimpleNamespace(handle=AsyncMock(return_value=None)),
         voice=SimpleNamespace(handle=AsyncMock(return_value=None)),
-        worlds=SimpleNamespace(handle=Mock(return_value=world_result)),
         stories=SimpleNamespace(handle=AsyncMock(return_value=story_result)),
         observation=None,
     )
 
 
 @pytest.mark.asyncio
-async def test_request_router_preserves_world_before_health_routing() -> None:
+async def test_request_router_routes_health_without_a_story_handler_match() -> None:
     router = _router()
 
     result = await router.dispatch(
@@ -31,11 +30,7 @@ async def test_request_router_preserves_world_before_health_routing() -> None:
     )
 
     assert result == {"ok": True}
-    router._worlds.handle.assert_called_once_with(
-        "health",
-        {},
-        request_id="request-1",
-    )
+    router._stories.handle.assert_awaited_once()
     router._voice.handle.assert_not_awaited()
 
 
@@ -70,4 +65,3 @@ async def test_request_router_stops_after_story_handler_matches() -> None:
 
     assert result == {"stories": []}
     router._stories.handle.assert_awaited_once()
-    router._worlds.handle.assert_not_called()

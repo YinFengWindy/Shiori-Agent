@@ -251,7 +251,6 @@ export type RoleSearchResult = {
 export type AppMainView =
   | { kind: "chat" }
   | { kind: "world" }
-  | { kind: "story" }
   | { kind: "image-studio" }
   | { kind: "image-prompt-tags" }
   | { kind: "roles-list" }

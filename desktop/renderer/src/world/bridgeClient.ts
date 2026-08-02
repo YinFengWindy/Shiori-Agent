@@ -1,185 +1,195 @@
 import type {
-  BackfillPreview,
-  DecisionBarrier,
   NativeIdentityDraft,
-  SceneShot,
-  WorldCatchUp,
+  SceneBeat,
   WorldCreationDraft,
   WorldCreationInput,
   WorldDetails,
   WorldSummary,
-  WorldTimelineEntry,
 } from "./types";
-import {
-  parsePresentationState,
-  parseWorldCatchUpPerformance,
-  parseWorldDetailsPerformance,
-  type WorldPresentationState,
-} from "./presentationProtocol";
 import { WorldBridgeError } from "./types";
 
 type DesktopInvoke = typeof window.miraDesktop.invoke;
 
-export type WorldVoiceSynthesis = {
-  audioBase64: string;
-  format: "mp3";
+type StorySummaryPayload = {
+  story_id: string;
+  title: string;
+  status: string;
+  created_at: string;
+};
+
+type StoryBeatPayload = {
+  id: string;
+  sequence: number;
+  effective_at: string;
+  text: string;
+  kind: "dialogue" | "action" | "narration";
+  speaker?: string | null;
+};
+
+type StoryPayload = {
+  id: string;
+  title: string;
+  background: string;
+  status: string;
+  revision: number;
+  roleSnapshot: { id?: string; name?: string; avatar?: string | null };
+  playerProfile: { display_name?: string; appearance?: string; identity?: string };
+  segment: { startsAt: string; operation: string };
+  beats: StoryBeatPayload[];
 };
 
 async function invokePayload<T>(invoke: DesktopInvoke, method: string, payload: Record<string, unknown>) {
   const response = await invoke({ method, payload });
-  if (response.error) {
-    throw new WorldBridgeError(response.error.message, response.error.code);
-  }
+  if (response.error) throw new WorldBridgeError(response.error.message, response.error.code);
   return response.payload as T;
 }
 
-/** Typed renderer contract for the persistent-world desktop bridge. */
+function toWorldSummary(story: StorySummaryPayload): WorldSummary {
+  return {
+    id: story.story_id,
+    name: story.title,
+    premise: "",
+    currentTimeLabel: story.created_at,
+    currentDayIndex: 1,
+    activeOcId: "player",
+    status: story.status === "archived" ? "stopped" : "action_required",
+  };
+}
+
+function toSceneBeat(beat: StoryBeatPayload): SceneBeat {
+  return {
+    id: beat.id,
+    order: beat.sequence,
+    dayIndex: 1,
+    timeLabel: beat.effective_at,
+    speakerName: beat.speaker ?? undefined,
+    kind: beat.kind === "narration" ? "environment" : beat.kind,
+    content: beat.text,
+    presentationMode: "narrative",
+  };
+}
+
+function toWorldDetails(story: StoryPayload): WorldDetails {
+  const beats = story.beats.map(toSceneBeat);
+  const playerName = story.playerProfile.display_name?.trim() || "玩家";
+  const roleName = story.roleSnapshot.name?.trim() || "角色";
+  const status = story.segment.operation === "generating" ? "running" : "action_required";
+  return {
+    id: story.id,
+    name: story.title,
+    premise: story.background,
+    currentTimeLabel: story.segment.startsAt,
+    currentDayIndex: 1,
+    activeOcId: "player",
+    status,
+    days: [{ dayIndex: 1, title: "剧情", status: "current", events: beats }],
+    ocs: [{
+      id: "player",
+      name: playerName,
+      identity: story.playerProfile.identity?.trim() || "",
+      location: story.playerProfile.appearance?.trim() || "",
+      primaryGoal: "推进剧情",
+      constraints: [],
+      autonomy: "manual",
+      isActive: true,
+    }],
+    scene: {
+      title: story.title,
+      location: "",
+      timeLabel: story.segment.startsAt,
+      participants: [{ id: "player", name: playerName, role: "controlled_oc" }, { id: story.roleSnapshot.id || "role", name: roleName, role: "actor" }],
+      beats,
+      actionPrompt: story.segment.operation === "generating" ? "剧情正在生成..." : "写下你的行动或回应...",
+      opportunities: [],
+      barriers: [],
+    },
+    relatedCharacters: [{ id: story.roleSnapshot.id || "role", name: roleName, relationship: "故事角色" }],
+    performance: { active: false, label: "", canCancel: false },
+  };
+}
+
+function startsAtChina(entryTime: string): string {
+  if (/([+-]\d{2}:\d{2}|Z)$/i.test(entryTime)) return entryTime;
+  return `${entryTime}:00+08:00`;
+}
+
+/** Adapter that keeps the existing workspace UI on top of the Story bridge contract. */
 export interface WorldBridgeClient {
   listWorlds(): Promise<WorldSummary[]>;
   getWorld(worldId: string): Promise<WorldDetails>;
   previewDraft(input: WorldCreationInput): Promise<WorldCreationDraft>;
   confirmDraft(draftId: string, identities: NativeIdentityDraft[]): Promise<WorldDetails>;
-  addOc(worldId: string, oc: WorldCreationInput["firstOc"], anchorId?: string): Promise<WorldDetails>;
-  switchOc(worldId: string, ocId: string): Promise<WorldDetails>;
-  submitAction(worldId: string, content: string): Promise<void>;
   completeDay(worldId: string, content: string): Promise<void>;
   advance(worldId: string): Promise<void>;
-  resolveBarrier(worldId: string, barrier: DecisionBarrier, choiceId: string): Promise<WorldDetails>;
-  getTimeline(worldId: string, perspective: "known" | "omniscient", ocId?: string): Promise<WorldTimelineEntry[]>;
-  copyWorld(worldId: string, anchorId: string): Promise<WorldDetails>;
-  previewBackfill(worldId: string, anchorId: string, oc: WorldCreationInput["firstOc"]): Promise<BackfillPreview>;
-  commitBackfill(worldId: string, preview: BackfillPreview): Promise<WorldDetails>;
-  cancelRun(worldId: string): Promise<WorldDetails>;
-  catchUp(worldId: string, cursor?: string): Promise<WorldCatchUp>;
-  pausePresentation(worldId: string): Promise<WorldPresentationState>;
-  resumePresentation(worldId: string): Promise<WorldPresentationState>;
-  checkpointPresentation(worldId: string, planId: string, cueIndex: number): Promise<WorldPresentationState>;
-  synthesizeVoice(text: string, voiceProfile: Record<string, unknown>, signal?: AbortSignal): Promise<WorldVoiceSynthesis>;
-  redrawShot(worldId: string, shotId: string): Promise<SceneShot>;
 }
 
-/** Creates a world client over the preload API without exposing bridge payloads to views. */
+/** Creates the Story-backed client used by the retained desktop workspace. */
 export function createWorldBridgeClient(invoke: DesktopInvoke = window.miraDesktop.invoke): WorldBridgeClient {
+  const revisions = new Map<string, number>();
+  const drafts = new Map<string, WorldCreationInput>();
+
+  async function getStory(worldId: string) {
+    const story = (await invokePayload<{ story: StoryPayload }>(invoke, "stories.get", { story_id: worldId })).story;
+    revisions.set(story.id, story.revision);
+    return toWorldDetails(story);
+  }
+
   return {
     async listWorlds() {
-      const payload = await invokePayload<{ worlds: WorldSummary[] }>(invoke, "worlds.list", {});
-      return payload.worlds;
+      const payload = await invokePayload<{ stories: StorySummaryPayload[] }>(invoke, "stories.list", {});
+      return payload.stories.map(toWorldSummary);
     },
-    async getWorld(worldId) {
-      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.get", { world_id: worldId })).world);
-    },
+    getWorld: getStory,
     async previewDraft(input) {
-      return (await invokePayload<{ draft: WorldCreationDraft }>(invoke, "worlds.drafts.preview", input)).draft;
+      if (input.selectedRoleIds.length !== 1) throw new WorldBridgeError("请选择一位角色", "role_required");
+      const id = globalThis.crypto?.randomUUID?.() ?? `story-draft-${Date.now().toString(36)}`;
+      drafts.set(id, input);
+      return {
+        id,
+        input,
+        nativeIdentities: [{
+          roleId: input.selectedRoleIds[0],
+          roleName: "选定角色",
+          nativeName: "",
+          identity: "",
+          history: "",
+          relationships: "",
+          accepted: true,
+        }],
+      };
     },
-    async confirmDraft(draftId, identities) {
-      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.drafts.confirm", {
-        draft_id: draftId,
-        native_identities: identities,
-      })).world);
-    },
-    async addOc(worldId, oc, anchorId) {
-      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.ocs.add", {
-        world_id: worldId,
-        oc,
-        anchor_id: anchorId,
-      })).world);
-    },
-    async switchOc(worldId, ocId) {
-      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.ocs.switch", {
-        world_id: worldId,
-        oc_id: ocId,
-      })).world);
-    },
-    async submitAction(worldId, content) {
-      await invokePayload(invoke, "worlds.actions.submit", { world_id: worldId, content });
+    async confirmDraft(draftId) {
+      const draft = drafts.get(draftId);
+      if (!draft) throw new WorldBridgeError("创建草案已失效，请重新填写", "draft_not_found");
+      const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.create", {
+        title: draft.name,
+        background: draft.premise,
+        starts_at: startsAtChina(draft.firstOc.entryTime),
+        role_id: draft.selectedRoleIds[0],
+        player_profile: {
+          display_name: draft.firstOc.name,
+          appearance: draft.firstOc.entryLocation,
+          identity: draft.firstOc.identity,
+        },
+      });
+      drafts.delete(draftId);
+      revisions.set(payload.story.id, payload.story.revision);
+      return toWorldDetails(payload.story);
     },
     async completeDay(worldId, content) {
-      await invokePayload(invoke, "worlds.days.complete", { world_id: worldId, content });
+      const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.input", {
+        story_id: worldId,
+        input: content,
+        expected_revision: revisions.get(worldId) ?? 0,
+      });
+      revisions.set(payload.story.id, payload.story.revision);
     },
     async advance(worldId) {
-      await invokePayload(invoke, "worlds.advance", { world_id: worldId });
-    },
-    async resolveBarrier(worldId, barrier, choiceId) {
-      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.barriers.resolve", {
-        world_id: worldId,
-        barrier_id: barrier.id,
-        choice_id: choiceId,
-      })).world);
-    },
-    async getTimeline(worldId, perspective, ocId) {
-      const payload = await invokePayload<{ entries: WorldTimelineEntry[] }>(invoke, "worlds.timeline", {
-        world_id: worldId,
-        perspective,
-        oc_id: ocId,
+      const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.continue", {
+        story_id: worldId,
+        expected_revision: revisions.get(worldId) ?? 0,
       });
-      return payload.entries;
-    },
-    async copyWorld(worldId, anchorId) {
-      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.copy", {
-        world_id: worldId,
-        anchor_id: anchorId,
-      })).world);
-    },
-    async previewBackfill(worldId, anchorId, oc) {
-      return (await invokePayload<{ preview: BackfillPreview }>(invoke, "worlds.backfill.preview", {
-        world_id: worldId,
-        anchor_id: anchorId,
-        oc,
-      })).preview;
-    },
-    async commitBackfill(worldId, preview) {
-      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.backfill.commit", {
-        world_id: worldId,
-        preview,
-      })).world);
-    },
-    async cancelRun(worldId) {
-      return parseWorldDetailsPerformance((await invokePayload<{ world: WorldDetails }>(invoke, "worlds.runs.cancel", { world_id: worldId })).world);
-    },
-    async catchUp(worldId, cursor) {
-      return parseWorldCatchUpPerformance(await invokePayload<WorldCatchUp>(invoke, "worlds.events.catch_up", { world_id: worldId, cursor }));
-    },
-    async pausePresentation(worldId) {
-      return parsePresentationState((await invokePayload<{ presentation: WorldPresentationState }>(invoke, "worlds.presentation.pause", { world_id: worldId })).presentation);
-    },
-    async resumePresentation(worldId) {
-      return parsePresentationState((await invokePayload<{ presentation: WorldPresentationState }>(invoke, "worlds.presentation.resume", { world_id: worldId })).presentation);
-    },
-    async checkpointPresentation(worldId, planId, cueIndex) {
-      return parsePresentationState((await invokePayload<{ presentation: WorldPresentationState }>(invoke, "worlds.presentation.checkpoint", {
-        world_id: worldId,
-        plan_id: planId,
-        cue_index: cueIndex,
-      })).presentation);
-    },
-    async synthesizeVoice(text, voiceProfile, signal) {
-      const voiceRequestId = globalThis.crypto?.randomUUID?.() ?? `world-voice-${Date.now().toString(36)}`;
-      if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
-      const cancel = () => {
-        void invokePayload(invoke, "voice.synthesize.cancel", { voice_request_id: voiceRequestId });
-      };
-      signal?.addEventListener("abort", cancel, { once: true });
-      try {
-        const payload = await invokePayload<{ audio_base64: string; format: string }>(invoke, "voice.synthesize", {
-          text,
-          voice_id: voiceProfile.voiceId,
-          speed: voiceProfile.speed,
-          emotion: voiceProfile.emotion,
-          voice_request_id: voiceRequestId,
-        });
-        if (typeof payload.audio_base64 !== "string" || payload.format !== "mp3") {
-          throw new WorldBridgeError("语音服务返回格式无效", "invalid_voice_response");
-        }
-        return { audioBase64: payload.audio_base64, format: "mp3" };
-      } finally {
-        signal?.removeEventListener("abort", cancel);
-      }
-    },
-    async redrawShot(worldId, shotId) {
-      return (await invokePayload<{ shot: SceneShot }>(invoke, "worlds.shots.redraw", {
-        world_id: worldId,
-        shot_id: shotId,
-      })).shot;
+      revisions.set(payload.story.id, payload.story.revision);
     },
   };
 }

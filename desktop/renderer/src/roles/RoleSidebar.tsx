@@ -2,7 +2,7 @@ import type React from "react";
 import novelAiLogoDark from "../assets/novelai-logo-dark.svg";
 import { toFileUrl } from "../shared/format";
 import { bodyTextClass, cx } from "../shared/styles";
-import { BookOpenText, GlobeHemisphereEast } from "@phosphor-icons/react";
+import { BookOpenText } from "@phosphor-icons/react";
 import { PromptLibraryIcon } from "../shared/icons";
 import type { RoleRecord } from "../shared/types";
 
@@ -17,7 +17,6 @@ type RoleSidebarProps = {
   onOpenSearch: () => void;
   onOpenRolesWorkspace: () => void;
   onOpenWorld: () => void;
-  onOpenStory: () => void;
   onOpenRole: (roleId: string) => void;
   onOpenImageStudio: () => void;
   onOpenPromptTagLibrary: () => void;
@@ -37,7 +36,6 @@ export function RoleSidebar({
   onOpenSearch,
   onOpenRolesWorkspace,
   onOpenWorld,
-  onOpenStory,
   onOpenRole,
   onOpenImageStudio,
   onOpenPromptTagLibrary,
@@ -80,12 +78,6 @@ export function RoleSidebar({
           <span>角色</span>
         </button>
         <button data-testid="open-world-button" className={sidebarTopEntryClass} type="button" onClick={onOpenWorld}>
-          <span className="sidebar-entry-icon grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
-            <GlobeHemisphereEast className="h-4 w-4" />
-          </span>
-          <span>世界</span>
-        </button>
-        <button data-testid="open-story-button" className={sidebarTopEntryClass} type="button" onClick={onOpenStory}>
           <span className="sidebar-entry-icon grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
             <BookOpenText className="h-4 w-4" />
           </span>

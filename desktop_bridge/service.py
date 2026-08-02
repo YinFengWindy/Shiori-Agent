@@ -44,7 +44,6 @@ from desktop_bridge.session_task_requests import DesktopSessionTaskRequestHandle
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from desktop_bridge.voice_handler import DesktopVoiceHandler
 from desktop_bridge.story_simulation_handler import StorySimulationHandler
-from desktop_bridge.world_simulation_handler import WorldSimulationHandler
 from story_simulation.errors import StorySimulationError
 from agent.voice_config import VoiceConfig
 from desktop_bridge.voice_service import VoiceService, VoiceServiceError
@@ -186,10 +185,6 @@ class DesktopBridgeService:
             novelai_store=self.novelai_store,
             prompt_tag_store=self.prompt_tag_store,
         )
-        self.world_simulation = WorldSimulationHandler(
-            workspace=workspace,
-            role_store=role_store,
-        )
         self.story_simulation = StorySimulationHandler(
             workspace=workspace,
             role_store=role_store,
@@ -230,7 +225,6 @@ class DesktopBridgeService:
                 emit_session_updated=self._emit_session_updated,
             ),
             voice=self.voice_handler,
-            worlds=self.world_simulation,
             stories=self.story_simulation,
             observation=observation_service,
         )
@@ -307,7 +301,6 @@ class DesktopBridgeService:
         await self.chat_service.aclose()
         await self.voice_handler.aclose()
         await self.story_simulation.aclose()
-        self.world_simulation.close()
 
     def start_background_tasks(self) -> None:
         """Starts bridge-owned background maintenance after an event loop exists."""

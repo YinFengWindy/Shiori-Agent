@@ -16,10 +16,6 @@ _READ_ONLY_METHODS = frozenset(
         "roles.tasks.list",
         "novelai.history",
         "novelai.prompt_tags.list",
-        "worlds.list",
-        "worlds.get",
-        "worlds.timeline",
-        "worlds.events.catch_up",
         "stories.list",
         "stories.get",
     }
@@ -28,7 +24,6 @@ _INTEGRATION_METHODS = frozenset(
     {
         "novelai.generate",
         "novelai.regenerateMessageMedia",
-        "worlds.drafts.preview",
         "stories.create",
         "stories.input",
         "stories.continue",
@@ -37,20 +32,6 @@ _INTEGRATION_METHODS = frozenset(
         "voice.synthesize.cancel",
     }
 )
-_BACKGROUND_WORLD_METHODS = frozenset(
-    {
-        "worlds.actions.submit",
-        "worlds.days.complete",
-        "worlds.advance",
-        "worlds.barriers.resolve",
-        "worlds.runs.cancel",
-        "worlds.presentation.pause",
-        "worlds.presentation.resume",
-        "worlds.presentation.checkpoint",
-    }
-)
-
-
 class BridgeRequestDispatcher:
     """Runs bridge requests with bounded concurrency and one conservative write lane."""
 
@@ -99,7 +80,7 @@ class BridgeRequestDispatcher:
         self._tasks.clear()
 
     async def _run(self, method: str, operation: RequestOperation) -> None:
-        if method in _INTEGRATION_METHODS or method in _BACKGROUND_WORLD_METHODS:
+        if method in _INTEGRATION_METHODS:
             async with self._integration_semaphore:
                 async with self._semaphore:
                     await operation()

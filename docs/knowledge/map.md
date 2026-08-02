@@ -36,7 +36,7 @@ related:
 | 调度任务 | `agent/scheduler.py`、`agent/tools/schedule.py`、`desktop_bridge/schedule_role_task_service.py` | 主动触发、角色任务、桌面展示 |
 | 桌面桥接 | `desktop_bridge/` | Electron 主进程、React renderer、后端服务 |
 | 桌面界面 | `desktop/src/`、`desktop/renderer/src/` | 角色管理、聊天、设置、图片、任务 |
-| 持久世界 | `world_simulation/`、`desktop_bridge/world_simulation_handler.py`、`desktop/renderer/src/world/` | 世界事实、角色快照、演出计划、Pixi 舞台 |
+| 单角色剧情 | `story_simulation/`、`desktop_bridge/story_simulation_handler.py`、`desktop/renderer/src/world/` | 剧情事实、角色/玩家快照、提交事件、桌面剧情界面 |
 | 桌宠语音 | `desktop/src/voice/`、`desktop/renderer/src/voice/`、`desktop_bridge/voice_service.py`、`desktop_bridge/tts_coordinator.py` | 录音、ASR、角色 Loop、按句 TTS、播放与中断 |
 
 ```mermaid

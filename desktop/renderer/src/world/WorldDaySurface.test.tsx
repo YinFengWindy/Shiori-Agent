@@ -13,10 +13,7 @@ function render(overrides: Parameters<typeof createWorldDetails>[0] = {}) {
       busy={false}
       error=""
       onCompleteDay={async () => true}
-      onReplayScene={() => undefined}
-      onOpenTimeline={() => undefined}
       onOpenSettings={() => undefined}
-      onSwitchOc={() => undefined}
       onExit={() => undefined}
     />,
   );
@@ -29,12 +26,12 @@ describe("WorldDaySurface", () => {
     assert.match(markup, /data-testid="world-day-surface"/);
     assert.match(markup, />Day 3</);
     assert.match(markup, /你终于来了。/);
-    assert.match(markup, /aria-label="结束当前 Day"/);
+    assert.match(markup, /aria-label="提交剧情行动"/);
     assert.match(markup, /data-current-day="true"/);
     assert.doesNotMatch(markup, /属性|好感度|world-workspace/);
   });
 
-  it("keeps completed days read-only and exposes completed scenes for replay", () => {
+  it("keeps committed beats visible in chronological order", () => {
     const markup = render({
       days: [
         { dayIndex: 2, title: "Day 2", status: "completed", events: [createSceneBeat({ id: "old-scene", presentationMode: "scene" })] },
@@ -42,22 +39,17 @@ describe("WorldDaySurface", () => {
       ],
     });
 
-    assert.match(markup, /aria-label="回看场景：你终于来了。"/);
-    assert.equal((markup.match(/aria-label="结束当前 Day"/g) ?? []).length, 1);
+    assert.match(markup, /你终于来了。/);
+    assert.equal((markup.match(/aria-label="提交剧情行动"/g) ?? []).length, 1);
   });
 
-  it("requires a pending concrete scene to finish before the Day can advance", () => {
-    const base = createWorldDetails();
+  it("disables input while the Story is generating", () => {
     const scene = createSceneBeat({ id: "pending-scene", presentationMode: "scene" });
     const markup = render({
       days: [{ dayIndex: 3, title: "Day 3", status: "current", events: [scene] }],
-      presentation: {
-        session: { worldId: base.id, lastPresentedEventSequence: 0, activePlanId: null, activeCueIndex: 0, status: "playing", updatedAt: "2026-07-31T00:00:00+00:00" },
-        plans: [{ schemaVersion: 1, planId: "plan-pending", worldId: base.id, eventId: scene.id, sourceSequence: 1, cues: [] }],
-      },
+      status: "running",
     });
 
-    assert.match(markup, /aria-label="继续场景：你终于来了。"/);
-    assert.match(markup, /aria-label="结束当前 Day" disabled=""/);
+    assert.match(markup, /aria-label="提交剧情行动" disabled=""/);
   });
 });
