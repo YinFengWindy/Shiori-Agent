@@ -19,7 +19,7 @@ export function useWorldWorkspacePresentation({ roles, client, controller, onExi
   const [mode, setMode] = useState<WorldPresentationMode>("launcher");
   const [loadingWorldId, setLoadingWorldId] = useState("");
   const [loadingElapsedMs, setLoadingElapsedMs] = useState(0);
-  const [settingsReturnMode, setSettingsReturnMode] = useState<"launcher" | "day">("launcher");
+  const [settingsReturnMode, setSettingsReturnMode] = useState<"launcher" | "game" | "day">("launcher");
   const operation = useWorldPresentationOperation();
   const { clearError, reportError, run } = operation;
   const { loadWorld } = controller;
@@ -35,7 +35,7 @@ export function useWorldWorkspacePresentation({ roles, client, controller, onExi
     const progressTimer = setTimeout(() => setLoadingElapsedMs(2_000), 2_000);
     try {
       if (await loadWorld(worldId)) {
-        setMode("day");
+        setMode("game");
         return;
       }
       reportError("无法加载这段剧情，请稍后重试。");
@@ -52,7 +52,7 @@ export function useWorldWorkspacePresentation({ roles, client, controller, onExi
     loadWorldForPlay,
     run,
   });
-  const openSettings = useCallback((returnMode: "launcher" | "day") => {
+  const openSettings = useCallback((returnMode: "launcher" | "game" | "day") => {
     setSettingsReturnMode(returnMode);
     setMode("settings");
   }, []);

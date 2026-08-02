@@ -6,23 +6,33 @@ import {
   WorldGameSettings,
   WorldLauncher,
   WorldLoadingScreen,
+  StoryGameSurface,
 } from "../world";
 import type { useWorldWorkspaceController } from "../world/useWorldWorkspaceController";
 import type { useWorldCreationFlowController } from "./useWorldCreationFlowController";
 import type { useWorldPresentationOperation } from "./useWorldPresentationOperation";
 import type { WorldPresentationMode } from "./worldPresentationModes";
 
+/** World state required to select and render the active Story presentation. */
+export type StoryWorkspacePresentationController = Pick<ReturnType<typeof useWorldWorkspaceController>, "world" | "worlds" | "loading" | "error" | "busy" | "reloadWorlds" | "completeDay">;
+
+/** Presentation operation state required by the Story routes. */
+export type StoryOperationPresentationController = Pick<ReturnType<typeof useWorldPresentationOperation>, "error" | "busy" | "clearError">;
+
+/** Creation state consumed by the Story launcher route. */
+export type StoryCreationPresentationController = Pick<ReturnType<typeof useWorldCreationFlowController>, "seed" | "createStory">;
+
 type Props = {
   roles: RoleRecord[];
   mode: WorldPresentationMode;
   loadingWorldId: string;
   loadingElapsedMs: number;
-  controller: ReturnType<typeof useWorldWorkspaceController>;
-  operation: ReturnType<typeof useWorldPresentationOperation>;
-  creation: ReturnType<typeof useWorldCreationFlowController>;
+  controller: StoryWorkspacePresentationController;
+  operation: StoryOperationPresentationController;
+  creation: StoryCreationPresentationController;
   setMode: (mode: WorldPresentationMode) => void;
   loadWorldForPlay: (worldId: string) => Promise<void>;
-  onOpenSettings: (returnMode: "launcher" | "day") => void;
+  onOpenSettings: (returnMode: "launcher" | "game" | "day") => void;
   onCloseSettings: () => void;
   onExit: () => void;
 };
@@ -54,5 +64,9 @@ export function WorldWorkspacePresentationView({ roles, mode, loadingWorldId, lo
   if (mode === "create" || !world) {
     return <WorldCreateFlow roles={worldRoles} initialSeed={creation.seed} busy={operation.busy} error={error} onBack={() => setMode("launcher")} onCreate={creation.createStory} />;
   }
-  return <WorldDaySurface world={world} busy={busy} error={error} onCompleteDay={controller.completeDay} onOpenSettings={() => onOpenSettings("day")} onExit={() => setMode("launcher")} />;
+  if (mode === "day") {
+    return <WorldDaySurface world={world} busy={busy} error={error} onCompleteDay={controller.completeDay} onOpenSettings={() => onOpenSettings("day")} onExit={() => setMode("launcher")} />;
+  }
+  const storyCharacter = roles.find((role) => role.id === world.relatedCharacters[0]?.id);
+  return <StoryGameSurface world={world} busy={busy} error={error} characterAvatarUrl={storyCharacter?.avatar_abs ? toFileUrl(storyCharacter.avatar_abs) : undefined} onSubmitAction={controller.completeDay} onOpenArchive={() => setMode("day")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
 }
