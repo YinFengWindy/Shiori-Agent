@@ -61,6 +61,24 @@ describe("WorldLauncher", () => {
     assert.doesNotMatch(markup, /bg-\[#111512\]\/85/);
   });
 
+  it("keeps the wordmark tight to the upper left and dims the bright backdrop", () => {
+    const markup = renderToStaticMarkup(
+      <WorldLauncher
+        worlds={[]}
+        onCreateWorld={() => undefined}
+        onLoadWorld={() => undefined}
+        onOpenSettings={() => undefined}
+        onExit={() => undefined}
+      />
+    );
+
+    assert.match(markup, /left-\[clamp\(12px,2vw,28px\)\]/);
+    assert.match(markup, /top-\[clamp\(12px,2vh,28px\)\]/);
+    assert.match(markup, /w-\[min\(18rem,calc\(100vw-24px\)\)\]/);
+    assert.match(markup, /bg-\[#130E18\]\/68/);
+    assert.doesNotMatch(markup, /bg-black\/10/);
+  });
+
   it("keeps the main menu in the renderer without injected animation styles", () => {
     const markup = renderToStaticMarkup(
       <WorldLauncher
