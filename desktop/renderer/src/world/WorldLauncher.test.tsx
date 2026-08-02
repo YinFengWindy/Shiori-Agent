@@ -43,7 +43,7 @@ describe("WorldLauncher", () => {
     assert.match(markup, />加载剧情</);
   });
 
-  it("uses a readable compact menu surface", () => {
+  it("uses a cinematic command rail instead of a boxed utility menu", () => {
     const markup = renderToStaticMarkup(
       <WorldLauncher
         worlds={[]}
@@ -53,13 +53,14 @@ describe("WorldLauncher", () => {
         onExit={() => undefined}
       />
     );
-    assert.ok(markup.includes("bg-[#111512]/85"));
-    assert.ok(markup.includes("overflow-y-auto"));
-    assert.ok(markup.includes("calc(100%-32px)"));
-    assert.doesNotMatch(markup, /rounded-(?:xl|2xl)/);
+    assert.match(markup, /data-testid="story-menu-backdrop"/);
+    assert.match(markup, /data-testid="story-menu-title"/);
+    assert.match(markup, /data-testid="world-launcher-command-rail"/);
+    assert.match(markup, /border-l-2/);
+    assert.doesNotMatch(markup, /bg-\[#111512\]\/85/);
   });
 
-  it("does not inject a bounce animation that bypasses motion settings", () => {
+  it("keeps the main menu in the renderer without injected animation styles", () => {
     const markup = renderToStaticMarkup(
       <WorldLauncher
         worlds={[]}
