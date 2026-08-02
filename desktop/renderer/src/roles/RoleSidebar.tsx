@@ -81,7 +81,7 @@ export function RoleSidebar({
           <span className="sidebar-entry-icon grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
             <BookOpenText className="h-4 w-4" />
           </span>
-          <span>Story</span>
+          <span>故事</span>
         </button>
         <div className="grid grid-cols-[minmax(0,1fr)_34px] gap-1">
           <button className={sidebarTopEntryClass} type="button" onClick={onOpenImageStudio}>
