@@ -1,0 +1,202 @@
+"""Story application service that coordinates Director drafts and commits."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable
+from typing import Any
+from uuid import uuid4
+
+from core.roles.models import RoleRecord
+
+from .continuity import ContinuityGuard
+from .director import StoryDirector
+from .errors import StoryInvalidOutputError, StorySimulationError
+from .models import StoryPlayerProfile
+from .repository import StoryRepository, payload_hash
+
+EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
+
+
+class StorySimulationService:
+    """Commit Story facts only after a Director draft passes the guard."""
+
+    def __init__(
+        self,
+        *,
+        repository: StoryRepository,
+        director: StoryDirector,
+        continuity_guard: ContinuityGuard | None = None,
+    ) -> None:
+        self.repository = repository
+        self._director = director
+        self._continuity_guard = continuity_guard or ContinuityGuard()
+
+    def create_story(
+        self,
+        *,
+        story_id: str,
+        title: str,
+        background: str,
+        role: RoleRecord,
+        player_profile: StoryPlayerProfile,
+        starts_at: str,
+        opening_context: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Freeze the selected role and create the initial Story segment."""
+
+        return self.repository.create_story(
+            story_id=story_id,
+            title=title,
+            background=background,
+            role_snapshot=role.to_dict(),
+            player_profile=player_profile,
+            starts_at=starts_at,
+            opening_context=opening_context,
+        )
+
+    def create_opening_turn(
+        self, *, story_id: str, request_id: str
+    ) -> dict[str, Any]:
+        """Persist the non-player opening Turn before generation starts."""
+
+        story = self.repository.story_read_model(story_id)
+        return self.repository.create_turn(
+            story_id=story_id,
+            input_text="",
+            request_id=request_id,
+            expected_revision=int(story["revision"]),
+            request_payload_hash=payload_hash(
+                {"story_id": story_id, "kind": "opening", "request_id": request_id}
+            ),
+            kind="opening",
+        )
+
+    def create_player_turn(
+        self,
+        *,
+        story_id: str,
+        input_text: str,
+        request_id: str,
+        expected_revision: int,
+        request_payload_hash: str,
+        kind: str = "player",
+    ) -> dict[str, Any]:
+        """Persist one player/continue Turn before generation starts."""
+
+        return self.repository.create_turn(
+            story_id=story_id,
+            input_text=input_text,
+            request_id=request_id,
+            expected_revision=expected_revision,
+            request_payload_hash=request_payload_hash,
+            kind=kind,
+        )
+
+    async def generate_turn(self, turn: dict[str, Any], emit_event: EventEmitter) -> None:
+        """Run the bounded Director attempt and emit only committed Beat events."""
+
+        turn_id = str(turn["id"])
+        opening = turn["kind"] == "opening"
+        attempt = self.repository.start_attempt(turn_id)
+        attempt_id = str(attempt["attempt_id"])
+        for attempt_index in range(2):
+            try:
+                context = self.repository.build_context(
+                    self.repository.story_id_for_turn(turn_id)
+                )
+                draft = await asyncio.wait_for(
+                    self._director.generate(
+                        context=context,
+                        input_text=str(turn["input"]),
+                        opening=opening,
+                    ),
+                    timeout=30,
+                )
+                self.repository.mark_validating(turn_id, attempt_id)
+                self._continuity_guard.validate(draft, context)
+                committed, story = self.repository.commit_draft(
+                    turn_id=turn_id,
+                    attempt_id=attempt_id,
+                    draft=draft,
+                    default_effective_at=context.segment["startsAt"],
+                )
+                for _, _, payload in committed:
+                    await self._emit(emit_event, "stories.beat.committed", payload)
+                await self._emit(
+                    emit_event,
+                    "stories.operation.changed",
+                    {
+                        "event_type": "operation.changed",
+                        "story_id": story["id"],
+                        "story_revision": story["revision"],
+                        "state": story["segment"],
+                        "turn_id": turn_id,
+                    },
+                )
+                return
+            except asyncio.CancelledError:
+                try:
+                    self.repository.cancel_turn(turn_id, attempt_id)
+                except StorySimulationError:
+                    # The draft may have committed immediately before shutdown.
+                    pass
+                return
+            except Exception as exc:
+                code = self._failure_code(exc)
+                if attempt_index == 0 and self._is_retryable(exc):
+                    replacement = self.repository.retry_attempt(
+                        turn_id, attempt_id, failure_category=code
+                    )
+                    attempt_id = str(replacement["attempt_id"])
+                    continue
+                story = self.repository.fail_turn(
+                    turn_id,
+                    attempt_id,
+                    code=code,
+                    message=str(exc),
+                )
+                await self._emit(
+                    emit_event,
+                    "stories.failed",
+                    {
+                        "event_type": "story.failed",
+                        "story_id": story["id"],
+                        "story_revision": story["revision"],
+                        "turn_id": turn_id,
+                        "attempt_id": attempt_id,
+                        "code": code,
+                        "retryable": False,
+                        "message": "剧情生成暂时失败，可以手动重试。",
+                    },
+                )
+                return
+
+    @staticmethod
+    def _failure_code(error: Exception) -> str:
+        if isinstance(error, asyncio.TimeoutError):
+            return "generation_timeout"
+        if isinstance(error, StorySimulationError):
+            return error.code
+        return "provider_unavailable"
+
+    @staticmethod
+    def _is_retryable(error: Exception) -> bool:
+        return isinstance(error, (asyncio.TimeoutError, StoryInvalidOutputError)) or not isinstance(
+            error, StorySimulationError
+        )
+
+    @staticmethod
+    async def _emit(
+        emit_event: EventEmitter, method: str, payload: dict[str, Any]
+    ) -> None:
+        result = emit_event(
+            {
+                "id": f"story-event:{uuid4().hex}",
+                "type": "event",
+                "method": method,
+                "payload": payload,
+            }
+        )
+        if hasattr(result, "__await__"):
+            await result

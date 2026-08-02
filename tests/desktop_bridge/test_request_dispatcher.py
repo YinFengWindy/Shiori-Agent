@@ -80,20 +80,20 @@ async def test_regeneration_uses_the_bounded_integration_lane() -> None:
 
 
 @pytest.mark.asyncio
-async def test_world_run_submission_does_not_hold_global_mutation_lane() -> None:
+async def test_story_submission_uses_the_bounded_integration_lane() -> None:
     dispatcher = BridgeRequestDispatcher(max_concurrency=2)
     run_started = asyncio.Event()
     release_run = asyncio.Event()
     role_update_completed = asyncio.Event()
 
-    async def _run_world() -> None:
+    async def _generate_story() -> None:
         run_started.set()
         await release_run.wait()
 
     async def _update_role() -> None:
         role_update_completed.set()
 
-    dispatcher.submit({"method": "worlds.advance"}, _run_world)
+    dispatcher.submit({"method": "stories.continue"}, _generate_story)
     await run_started.wait()
     dispatcher.submit({"method": "roles.update"}, _update_role)
 

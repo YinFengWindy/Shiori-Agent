@@ -5,14 +5,14 @@ import { describe, it } from "node:test";
 import { WorldLoadingScreen } from "./WorldLoadingScreen";
 
 describe("WorldLoadingScreen", () => {
-  it("renders staged progress for initial World entry", () => {
+  it("renders staged progress for initial Story entry", () => {
     const markup = renderToStaticMarkup(<WorldLoadingScreen mode="listing" />);
     assert.match(markup, /data-testid="world-loading-screen"/);
     assert.match(markup, /url\(\.\/assets\/backgrounds\/default-galgame-bg\.png\)/);
     assert.doesNotMatch(markup, /url\(['\"]?\/assets\//);
-    assert.match(markup, />读取世界</);
-    assert.match(markup, />恢复演出</);
-    assert.match(markup, />准备舞台</);
+    assert.match(markup, />读取剧情</);
+    assert.match(markup, />恢复进度</);
+    assert.match(markup, />准备开场</);
     assert.doesNotMatch(markup, /spinner|圆形/);
     assert.doesNotMatch(markup, /animate-pulse|width:66/);
   });
@@ -25,7 +25,7 @@ describe("WorldLoadingScreen", () => {
     assert.match(markup, /width:50%/);
   });
 
-  it("offers retry and back actions after a world load failure", () => {
+  it("offers retry and back actions after a Story load failure", () => {
     const markup = renderToStaticMarkup(<WorldLoadingScreen mode="world" error="加载失败" onRetry={() => undefined} onBack={() => undefined} />);
     assert.match(markup, /role="alert"/);
     assert.match(markup, />重试</);

@@ -43,7 +43,8 @@ from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_task_requests import DesktopSessionTaskRequestHandler
 from desktop_bridge.session_presenter import DesktopSessionPresenter
 from desktop_bridge.voice_handler import DesktopVoiceHandler
-from desktop_bridge.world_simulation_handler import WorldSimulationHandler
+from desktop_bridge.story_simulation_handler import StorySimulationHandler
+from story_simulation.errors import StorySimulationError
 from agent.voice_config import VoiceConfig
 from desktop_bridge.voice_service import VoiceService, VoiceServiceError
 from session.manager import Session, SessionManager
@@ -93,6 +94,8 @@ class DesktopBridgeService:
         memory_optimizer: Any | None = None,
         observation_service: ScreenObservationService | None = None,
         voice_service: VoiceService | None = None,
+        provider: Any | None = None,
+        story_director: Any | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -182,9 +185,12 @@ class DesktopBridgeService:
             novelai_store=self.novelai_store,
             prompt_tag_store=self.prompt_tag_store,
         )
-        self.world_simulation = WorldSimulationHandler(
+        self.story_simulation = StorySimulationHandler(
             workspace=workspace,
             role_store=role_store,
+            director=story_director,
+            provider=provider,
+            model=str(getattr(config, "model", "") or ""),
         )
         self.observation_service = observation_service
         self.request_router = DesktopBridgeRequestRouter(
@@ -219,7 +225,7 @@ class DesktopBridgeService:
                 emit_session_updated=self._emit_session_updated,
             ),
             voice=self.voice_handler,
-            worlds=self.world_simulation,
+            stories=self.story_simulation,
             observation=observation_service,
         )
         if push_tool is not None:
@@ -294,7 +300,7 @@ class DesktopBridgeService:
         self._event_listeners.clear()
         await self.chat_service.aclose()
         await self.voice_handler.aclose()
-        self.world_simulation.close()
+        await self.story_simulation.aclose()
 
     def start_background_tasks(self) -> None:
         """Starts bridge-owned background maintenance after an event loop exists."""
@@ -544,6 +550,8 @@ class DesktopBridgeService:
             return self._error(request_id, method, "invalid_request", str(exc))
         except ChatTurnBusyError as exc:
             return self._error(request_id, method, "chat_busy", str(exc))
+        except StorySimulationError as exc:
+            return self._error(request_id, method, exc.code, str(exc))
         except Exception as exc:
             return self._error(request_id, method, "internal_error", str(exc))
         return self._error(

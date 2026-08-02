@@ -2,7 +2,7 @@ import type React from "react";
 import novelAiLogoDark from "../assets/novelai-logo-dark.svg";
 import { toFileUrl } from "../shared/format";
 import { bodyTextClass, cx } from "../shared/styles";
-import { GlobeHemisphereEast } from "@phosphor-icons/react";
+import { BookOpenText } from "@phosphor-icons/react";
 import { PromptLibraryIcon } from "../shared/icons";
 import type { RoleRecord } from "../shared/types";
 
@@ -79,9 +79,9 @@ export function RoleSidebar({
         </button>
         <button data-testid="open-world-button" className={sidebarTopEntryClass} type="button" onClick={onOpenWorld}>
           <span className="sidebar-entry-icon grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
-            <GlobeHemisphereEast className="h-4 w-4" />
+            <BookOpenText className="h-4 w-4" />
           </span>
-          <span>世界</span>
+          <span>Story</span>
         </button>
         <div className="grid grid-cols-[minmax(0,1fr)_34px] gap-1">
           <button className={sidebarTopEntryClass} type="button" onClick={onOpenImageStudio}>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createWorldBridgeClient, type WorldBridgeClient } from "./bridgeClient";
-import { mergeCommittedBeats, replaceWorldSummary, selectActiveOc } from "./selectors";
-import type { DecisionBarrier, SceneShot, WorldDetails, WorldSummary } from "./types";
+import { replaceWorldSummary, selectActiveOc } from "./selectors";
+import type { WorldDetails, WorldSummary } from "./types";
 
 type ControllerState = {
   worlds: WorldSummary[];
@@ -9,19 +9,11 @@ type ControllerState = {
   loading: boolean;
   busy: boolean;
   error: string;
-  cursor: string;
 };
 
-const initialState: ControllerState = {
-  worlds: [],
-  world: null,
-  loading: true,
-  busy: false,
-  error: "",
-  cursor: "",
-};
+const initialState: ControllerState = { worlds: [], world: null, loading: true, busy: false, error: "" };
 
-/** Owns world loading and all workspace commands while views remain declarative. */
+/** Owns Story loading and input while the retained workspace remains declarative. */
 export function useWorldWorkspaceController(client: WorldBridgeClient = createWorldBridgeClient()) {
   const [state, setState] = useState(initialState);
 
@@ -32,18 +24,18 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
       apply?.(result);
       return result;
     } catch (error) {
-      setState((current) => ({ ...current, error: error instanceof Error ? error.message : "世界暂时无法响应" }));
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : "剧情暂时无法响应" }));
       return null;
     } finally {
       setState((current) => ({ ...current, busy: false }));
     }
   }, []);
 
-  const loadWorld = useCallback(async (worldId: string) => {
-    return run(() => client.getWorld(worldId), (world) => {
-      setState((current) => ({ ...current, world }));
-    });
-  }, [client, run]);
+  const applyWorld = useCallback((world: WorldDetails) => {
+    setState((current) => ({ ...current, world, worlds: replaceWorldSummary(current.worlds, world) }));
+  }, []);
+
+  const loadWorld = useCallback((worldId: string) => run(() => client.getWorld(worldId), applyWorld), [applyWorld, client, run]);
 
   const reloadWorlds = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: "" }));
@@ -51,58 +43,31 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
       const worlds = await client.listWorlds();
       setState((current) => ({ ...current, worlds, loading: false }));
     } catch (error) {
-      setState((current) => ({
-        ...current,
-        loading: false,
-        error: error instanceof Error ? error.message : "无法读取世界",
-      }));
+      setState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "无法读取剧情列表" }));
     }
+  }, [client]);
+
+  const refreshActiveStory = useCallback((storyId: string) => {
+    void client.getWorld(storyId).then((world) => {
+      setState((current) => current.world?.id === storyId ? { ...current, world, worlds: replaceWorldSummary(current.worlds, world) } : current);
+    }).catch((error: unknown) => {
+      setState((current) => current.world?.id === storyId ? { ...current, error: error instanceof Error ? error.message : "无法刷新剧情" } : current);
+    });
   }, [client]);
 
   useEffect(() => {
     void reloadWorlds();
   }, [reloadWorlds]);
 
+  useEffect(() => window.miraDesktop.onEvent((event) => {
+    if (!new Set(["stories.beat.committed", "stories.operation.changed", "stories.failed"]).has(event.method)) return;
+    const storyId = typeof event.payload.story_id === "string" ? event.payload.story_id : "";
+    if (storyId) refreshActiveStory(storyId);
+  }), [refreshActiveStory]);
+
   const catchUp = useCallback(async () => {
-    if (!state.world) return;
-    const update = await run(() => client.catchUp(state.world!.id, state.cursor));
-    if (!update) return;
-    setState((current) => {
-      const baseWorld = update.world ?? current.world;
-      if (!baseWorld) return current;
-      return {
-        ...current,
-        cursor: update.cursor,
-        worlds: replaceWorldSummary(current.worlds, baseWorld),
-        world: {
-          ...baseWorld,
-          scene: {
-            ...baseWorld.scene,
-            beats: mergeCommittedBeats(baseWorld.scene.beats, update.beats),
-          },
-        },
-      };
-    });
-  }, [client, run, state.cursor, state.world]);
-
-  const switchOc = useCallback(async (ocId: string) => {
-    if (!state.world || state.world.activeOcId === ocId) return;
-    await run(() => client.switchOc(state.world!.id, ocId), (world) => setState((current) => ({ ...current, world })));
-  }, [client, run, state.world]);
-
-  const submitAction = useCallback(async (content: string) => {
-    if (!state.world || !content.trim()) return false;
-    const result = await run(() => client.submitAction(state.world!.id, content.trim()));
-    if (result === null) return false;
-    await catchUp();
-    return true;
-  }, [catchUp, client, run, state.world]);
-
-  const advance = useCallback(async () => {
-    if (!state.world) return;
-    const result = await run(() => client.advance(state.world!.id));
-    if (result !== null) await catchUp();
-  }, [catchUp, client, run, state.world]);
+    if (state.world) await loadWorld(state.world.id);
+  }, [loadWorld, state.world]);
 
   const completeDay = useCallback(async (content: string) => {
     if (!state.world || !content.trim()) return false;
@@ -112,84 +77,5 @@ export function useWorldWorkspaceController(client: WorldBridgeClient = createWo
     return true;
   }, [catchUp, client, run, state.world]);
 
-  const resolveBarrier = useCallback(async (barrier: DecisionBarrier, choiceId: string) => {
-    if (!state.world) return;
-    await run(
-      () => client.resolveBarrier(state.world!.id, barrier, choiceId),
-      (world) => setState((current) => ({ ...current, world })),
-    );
-  }, [client, run, state.world]);
-
-  const cancelRun = useCallback(async () => {
-    if (!state.world) return;
-    await run(() => client.cancelRun(state.world!.id), (world) => setState((current) => ({ ...current, world })));
-  }, [client, run, state.world]);
-
-  const redrawShot = useCallback(async (shotId: string) => {
-    if (!state.world) return;
-    await run(() => client.redrawShot(state.world!.id, shotId), (shot: SceneShot) => {
-      setState((current) => current.world ? ({
-        ...current,
-        world: {
-          ...current.world,
-          scene: {
-            ...current.world.scene,
-            beats: current.world.scene.beats.map((beat) => beat.shot?.id === shotId ? { ...beat, shot } : beat),
-          },
-        },
-      }) : current);
-    });
-  }, [client, run, state.world]);
-
-  const pausePresentation = useCallback(async () => {
-    if (!state.world) return;
-    await run(
-      () => client.pausePresentation(state.world!.id),
-      (presentation) => setState((current) => current.world ? ({
-        ...current,
-        world: { ...current.world, presentation },
-      }) : current),
-    );
-  }, [client, run, state.world]);
-
-  const resumePresentation = useCallback(async () => {
-    if (!state.world) return;
-    await run(
-      () => client.resumePresentation(state.world!.id),
-      (presentation) => setState((current) => current.world ? ({
-        ...current,
-        world: { ...current.world, presentation },
-      }) : current),
-    );
-  }, [client, run, state.world]);
-
-  const checkpointPresentation = useCallback(async (planId: string, cueIndex: number) => {
-    if (!state.world) return false;
-    const result = await run(
-      () => client.checkpointPresentation(state.world!.id, planId, cueIndex),
-      (presentation) => setState((current) => current.world ? ({
-        ...current,
-        world: { ...current.world, presentation },
-      }) : current),
-    );
-    return Boolean(result && result.plans.length === 0);
-  }, [client, run, state.world]);
-
-  return useMemo(() => ({
-    ...state,
-    activeOc: selectActiveOc(state.world),
-    reloadWorlds,
-    loadWorld,
-    switchOc,
-    submitAction,
-    advance,
-    completeDay,
-    resolveBarrier,
-    cancelRun,
-    catchUp,
-    redrawShot,
-    pausePresentation,
-    resumePresentation,
-    checkpointPresentation,
-  }), [advance, cancelRun, catchUp, checkpointPresentation, completeDay, loadWorld, pausePresentation, redrawShot, reloadWorlds, resolveBarrier, resumePresentation, state, submitAction, switchOc]);
+  return useMemo(() => ({ ...state, activeOc: selectActiveOc(state.world), reloadWorlds, loadWorld, completeDay, catchUp }), [catchUp, completeDay, loadWorld, reloadWorlds, state]);
 }

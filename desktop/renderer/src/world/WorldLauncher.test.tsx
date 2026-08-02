@@ -17,8 +17,8 @@ describe("WorldLauncher", () => {
       />
     );
     // Check menu items exist
-    assert.ok(markup.includes("创建世界"));
-    assert.ok(markup.includes("加载世界"));
+    assert.ok(markup.includes("创建剧情"));
+    assert.ok(markup.includes("加载剧情"));
     assert.ok(markup.includes("设置"));
     assert.ok(markup.includes("退出"));
     // Check logo
@@ -26,11 +26,10 @@ describe("WorldLauncher", () => {
     // The relative URL must resolve beside renderer-dist/index.html under Electron loadFile().
     assert.ok(markup.includes("url(./assets/backgrounds/default-galgame-bg.png)"));
     assert.doesNotMatch(markup, /url\(['\"]?\/assets\//);
-    // Check no old "继续世界" text
-    assert.doesNotMatch(markup, /继续世界/);
+    assert.doesNotMatch(markup, /创建世界|加载世界/);
   });
 
-  it("renders world list only after load menu is opened", () => {
+  it("renders the Story list only after load menu is opened", () => {
     const markup = renderToStaticMarkup(
       <WorldLauncher
         worlds={[createWorldSummary(createWorldDetails({ name: "雨港" }))]}
@@ -40,9 +39,8 @@ describe("WorldLauncher", () => {
         onExit={() => undefined}
       />
     );
-    // World list should not be visible initially
     assert.doesNotMatch(markup, /data-testid="world-load-list"/);
-    assert.match(markup, />加载世界</);
+    assert.match(markup, />加载剧情</);
   });
 
   it("uses a readable compact menu surface", () => {

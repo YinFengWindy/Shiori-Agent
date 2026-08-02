@@ -38,7 +38,7 @@ related:
 | Bridge API | dispatcher、service、presenter、Electron client、renderer hook | `DesktopBridgeService request_dispatcher DesktopBridgeClient` |
 | ASR / TTS / 声音资产 | 全局与角色 provider、turn 归属、播放队列、取消、指标、ownership 与供应商清理 | `DesktopVoiceController TtsTurnCoordinator VoiceService` |
 | 调度任务 | scheduler、工具、持久化、主动投递、角色删除、桌面表单 | `ScheduleRoleTaskService compute_fire_at` |
-| 持久世界 / 演出 | timeline、settlement、角色快照、presentation protocol、asset transport、Pixi adapter | `WorldInstance RoleTemplateSnapshot PerformancePlan PixiWorldPresentationRenderer` |
+| 单角色剧情 | Story repository、Director、角色/玩家快照、bridge 事件、桌面剧情适配层 | `StorySimulationService StoryRepository StorySimulationHandler stories.beat.committed` |
 
 ## 判断顺序
 

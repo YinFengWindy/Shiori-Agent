@@ -61,7 +61,7 @@ type WorldRouteProps = {
   onExit: () => void;
 };
 
-/** Mounts World-only bridge and presentation state only while the World route is active. */
+/** Mounts Story bridge and presentation state only while its route is active. */
 function WorldRoute({ roles, onExit }: WorldRouteProps): React.ReactElement {
   const worldBridgeClient = useMemo(() => createWorldBridgeClient(), []);
   const worldController = useWorldWorkspaceController(worldBridgeClient);

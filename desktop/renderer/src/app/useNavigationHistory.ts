@@ -127,7 +127,7 @@ export function useNavigationHistory({
     }
   }
 
-  /** Opens the independent persistent-world workspace without selecting a chat session. */
+  /** Opens the independent Story workspace without selecting a chat session. */
   function openWorldWorkspace(options?: { recordHistory?: boolean }): void {
     const nextView: AppMainView = { kind: "world" };
     setSidebarAnimating(true);
