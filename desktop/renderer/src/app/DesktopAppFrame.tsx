@@ -87,7 +87,7 @@ type DesktopAppFrameProps = {
   bridgeReady: boolean;
   onOpenSearch: () => void;
   onOpenRolesWorkspace: () => void;
-  onOpenWorld: () => void;
+  onOpenStory: () => void;
   onOpenRole: (roleId: string) => void;
   onOpenImageStudio: () => void;
   onOpenPromptTagLibrary: () => void;
@@ -220,7 +220,7 @@ export function DesktopAppFrame({
   bridgeReady,
   onOpenSearch,
   onOpenRolesWorkspace,
-  onOpenWorld,
+  onOpenStory,
   onOpenRole,
   onOpenImageStudio,
   onOpenPromptTagLibrary,
@@ -406,7 +406,7 @@ export function DesktopAppFrame({
               width={sidebarState.width}
               onOpenSearch={onOpenSearch}
               onOpenRolesWorkspace={onOpenRolesWorkspace}
-              onOpenWorld={onOpenWorld}
+              onOpenStory={onOpenStory}
               onOpenRole={onOpenRole}
               onOpenImageStudio={onOpenImageStudio}
               onOpenPromptTagLibrary={onOpenPromptTagLibrary}

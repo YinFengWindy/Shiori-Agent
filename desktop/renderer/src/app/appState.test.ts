@@ -47,17 +47,17 @@ describe("appState", () => {
     }), false);
   });
 
-  it("treats the world workspace as a distinct history destination", () => {
-    const worldEntry: NavigationEntry = {
-      view: { kind: "world" },
+  it("treats the Story workspace as a distinct history destination", () => {
+    const storyEntry: NavigationEntry = {
+      view: { kind: "story" },
       activeRoleId: "mira",
       settingsSection: "models",
     };
 
-    assert.equal(navigationEntriesEqual(worldEntry, { ...worldEntry, view: { kind: "world" } }), true);
-    assert.equal(navigationEntriesEqual(worldEntry, { ...worldEntry, view: { kind: "chat" } }), false);
-    assert.deepEqual(cloneView(worldEntry.view), { kind: "world" });
-    assert.equal(viewsEqual(worldEntry.view, { kind: "chat" }), false);
+    assert.equal(navigationEntriesEqual(storyEntry, { ...storyEntry, view: { kind: "story" } }), true);
+    assert.equal(navigationEntriesEqual(storyEntry, { ...storyEntry, view: { kind: "chat" } }), false);
+    assert.deepEqual(cloneView(storyEntry.view), { kind: "story" });
+    assert.equal(viewsEqual(storyEntry.view, { kind: "chat" }), false);
   });
 
   it("recognizes proactive assistant pushes from the latest assistant message", () => {

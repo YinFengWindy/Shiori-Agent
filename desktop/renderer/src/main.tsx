@@ -31,7 +31,7 @@ import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleSearch } from "./app/roleSearch";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
-import { useWorldWorkspacePresentation } from "./app/useWorldWorkspacePresentation";
+import { useStoryWorkspacePresentation } from "./app/useStoryWorkspacePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalDiagnostics";
@@ -44,9 +44,9 @@ import { type SettingsSectionId } from "./settings/SettingsSidebar";
 import { useLatestRef } from "./shared/useLatestRef";
 import { useLeftSidebarState } from "./shared/useLeftSidebarState";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
-import { createWorldBridgeClient } from "./world/bridgeClient";
-import { useWorldWorkspaceController } from "./world/useWorldWorkspaceController";
-import { WorldAppSurface } from "./world/WorldAppSurface";
+import { createStoryBridgeClient } from "./story/storyBridgeClient";
+import { useStoryController } from "./story/useStoryController";
+import { StoryAppSurface } from "./story/StoryAppSurface";
 import type {
   AppMainView,
   EventLog,
@@ -56,23 +56,23 @@ import type {
 } from "./shared/types";
 import "./styles.css";
 
-type WorldRouteProps = {
+type StoryRouteProps = {
   roles: RoleRecord[];
   onExit: () => void;
 };
 
 /** Mounts Story bridge and presentation state only while its route is active. */
-function WorldRoute({ roles, onExit }: WorldRouteProps): React.ReactElement {
-  const worldBridgeClient = useMemo(() => createWorldBridgeClient(), []);
-  const worldController = useWorldWorkspaceController(worldBridgeClient);
-  const worldPresentation = useWorldWorkspacePresentation({
+function StoryRoute({ roles, onExit }: StoryRouteProps): React.ReactElement {
+  const storyBridgeClient = useMemo(() => createStoryBridgeClient(), []);
+  const storyController = useStoryController(storyBridgeClient);
+  const storyPresentation = useStoryWorkspacePresentation({
     roles,
-    client: worldBridgeClient,
-    controller: worldController,
+    client: storyBridgeClient,
+    controller: storyController,
     onExit,
   });
 
-  return <WorldAppSurface>{worldPresentation.content}</WorldAppSurface>;
+  return <StoryAppSurface>{storyPresentation.content}</StoryAppSurface>;
 }
 
 function App(): React.ReactElement {
@@ -201,7 +201,7 @@ function App(): React.ReactElement {
     buildNavigationEntry,
     replaceNavigationEntry,
     openChatView,
-    openWorldWorkspace,
+    openStoryWorkspace,
     openImageStudio,
     openPromptTagLibrary,
     openSettingsWorkspace,
@@ -473,8 +473,8 @@ function App(): React.ReactElement {
     setWorkspaceFeedback({ tone: "success", message: "新建角色表单已重置。" });
   }
 
-  if (mainView.kind === "world") {
-    return <WorldRoute roles={roles} onExit={() => openChatView()} />;
+  if (mainView.kind === "story") {
+    return <StoryRoute roles={roles} onExit={() => openChatView()} />;
   }
 
   return (
@@ -528,7 +528,7 @@ function App(): React.ReactElement {
       bridgeReady={bridgeReady}
       onOpenSearch={() => setShowSearchDialog(true)}
       onOpenRolesWorkspace={() => openRoleWorkspace({ kind: "roles-list" })}
-      onOpenWorld={() => openWorldWorkspace()}
+      onOpenStory={() => openStoryWorkspace()}
       onOpenRole={(roleId) => void openRole(roleId, null, { recordHistory: true })}
       onOpenImageStudio={() => openImageStudio()}
       onOpenPromptTagLibrary={() => { setPromptTagWorkspaceSection("list"); openPromptTagLibrary(); }}

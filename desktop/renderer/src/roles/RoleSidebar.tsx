@@ -16,7 +16,7 @@ type RoleSidebarProps = {
   width: number;
   onOpenSearch: () => void;
   onOpenRolesWorkspace: () => void;
-  onOpenWorld: () => void;
+  onOpenStory: () => void;
   onOpenRole: (roleId: string) => void;
   onOpenImageStudio: () => void;
   onOpenPromptTagLibrary: () => void;
@@ -35,7 +35,7 @@ export function RoleSidebar({
   width,
   onOpenSearch,
   onOpenRolesWorkspace,
-  onOpenWorld,
+  onOpenStory,
   onOpenRole,
   onOpenImageStudio,
   onOpenPromptTagLibrary,
@@ -77,7 +77,7 @@ export function RoleSidebar({
           </span>
           <span>角色</span>
         </button>
-        <button data-testid="open-world-button" className={sidebarTopEntryClass} type="button" onClick={onOpenWorld}>
+        <button data-testid="open-story-button" className={sidebarTopEntryClass} type="button" onClick={onOpenStory}>
           <span className="sidebar-entry-icon grid h-5 w-5 place-items-center text-[#2c2c2c]" aria-hidden="true">
             <BookOpenText className="h-4 w-4" />
           </span>
