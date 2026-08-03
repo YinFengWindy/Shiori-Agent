@@ -16,6 +16,7 @@ describe("StoryCreateFlow", () => {
     assert.match(markup, /aria-label="返回剧情主菜单"/);
     assert.match(markup, /data-testid="story-create-step"/);
     assert.doesNotMatch(markup, /确认开始/);
+    assert.doesNotMatch(markup, /inset-\[clamp\(12px,2vw,28px\)\]/);
     assert.doesNotMatch(markup, /grid-cols-\[220px/);
     assert.doesNotMatch(markup, /<aside/);
   });

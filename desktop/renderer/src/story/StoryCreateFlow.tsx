@@ -43,7 +43,6 @@ export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCre
 
   return (
     <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[#FFF8FC] text-[#4A2738]" data-testid="story-create-flow">
-      <div aria-hidden="true" className="pointer-events-none absolute inset-[clamp(12px,2vw,28px)] border border-[#E9C4D5]/70" />
       <header className="relative z-10 border-b border-[#E9C4D5] bg-white/60 px-5 py-4 sm:px-8">
         <div className="mx-auto max-w-3xl">
           <div className="flex items-center gap-4">
