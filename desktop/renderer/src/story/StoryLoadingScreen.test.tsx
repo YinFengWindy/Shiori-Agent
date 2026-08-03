@@ -60,4 +60,13 @@ describe("StoryLoadingScreen", () => {
     assert.match(markup, /data-testid="story-loading-stage-0-check"/);
     assert.match(markup, /data-testid="story-loading-stage-1-check"/);
   });
+
+  it("checks every gameplay stage before entering the Story", () => {
+    const markup = renderToStaticMarkup(<StoryLoadingScreen mode="story" phase="opening-ready" />);
+    assert.match(markup, /data-testid="story-loading-current-stage">开场已准备好/);
+    assert.match(markup, /data-testid="story-loading-stage-0-check"/);
+    assert.match(markup, /data-testid="story-loading-stage-1-check"/);
+    assert.match(markup, /data-testid="story-loading-stage-2-check"/);
+    assert.doesNotMatch(markup, /story-loading-spinner/);
+  });
 });
