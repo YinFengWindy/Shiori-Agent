@@ -63,7 +63,7 @@ export function StoryCreateStep({ step, roles, input, selectedRole, reducedMotio
       <section className="grid gap-5 border-y border-[#E9C4D5] py-5" data-testid="story-create-step">
         <label className="grid gap-1.5 text-xs text-[#8B6676]">剧情名称<input className={storyInputClass} value={input.title} onChange={(event) => onChangeSetting("title", event.target.value)} /></label>
         <label className="grid gap-1.5 text-xs text-[#8B6676]">开场背景<textarea ref={backgroundRef} className={cx(storyInputClass, "min-h-32 resize-none overflow-hidden")} value={input.background} onChange={(event) => onChangeSetting("background", event.target.value)} /></label>
-        <label className="grid gap-1.5 text-xs text-[#8B6676]">开始时间（北京时间）<input className={storyInputClass} type="datetime-local" value={input.startsAt} onChange={(event) => onChangeSetting("startsAt", event.target.value)} /></label>
+        <label className="grid gap-1.5 text-xs text-[#8B6676]">开始时间<input className={storyInputClass} type="datetime-local" value={input.startsAt} onChange={(event) => onChangeSetting("startsAt", event.target.value)} /></label>
       </section>
     );
   }

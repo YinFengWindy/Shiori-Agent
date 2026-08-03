@@ -12,6 +12,8 @@ describe("StoryCreateStep", () => {
     const markup = renderToStaticMarkup(<StoryCreateStep step="setting" roles={[]} input={input} reducedMotion onSelectRole={() => undefined} onChangeSetting={() => undefined} onChangeProfile={() => undefined} />);
 
     assert.match(markup, /开场背景/);
+    assert.match(markup, /开始时间/);
+    assert.doesNotMatch(markup, /北京时间/);
     assert.match(markup, /resize-none/);
     assert.match(markup, /overflow-hidden/);
     assert.doesNotMatch(markup, /resize-y/);
