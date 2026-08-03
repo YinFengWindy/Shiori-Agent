@@ -7,23 +7,23 @@ import { resolveStoryLoadingCopy, resolveStoryLoadingPresentation, storyLoadingC
 describe("resolveStoryLoadingCopy", () => {
   it("uses menu semantics while loading the Story launcher", () => {
     assert.deepEqual(resolveStoryLoadingCopy("listing", "reading-list"), {
-      heading: "准备故事主菜单",
-      currentStage: "读取故事列表",
-      stageLabel: "主菜单加载阶段",
-      stages: ["读取故事列表", "准备菜单"],
-      progressLabel: "读取故事列表",
-      railLabel: "故事主菜单加载",
+      heading: "Preparing Story Menu",
+      currentStage: "Read story list",
+      stageLabel: "Story menu loading stages",
+      stages: ["Read story list", "Prepare menu"],
+      progressLabel: "Read story list",
+      railLabel: "Story menu loading",
       activeStage: 0,
     });
   });
 
   it("keeps gameplay-entry semantics for saved Story loading", () => {
     const copy = resolveStoryLoadingCopy("story", "preparing-opening");
-    assert.equal(copy.heading, "进入剧情");
-    assert.equal(copy.currentStage, "准备开场");
+    assert.equal(copy.heading, "Enter Story");
+    assert.equal(copy.currentStage, "Prepare opening");
     assert.equal(copy.activeStage, 2);
-    assert.deepEqual(copy.stages, ["读取剧情", "恢复进度", "准备开场"]);
-    assert.equal(copy.railLabel, "剧情加载");
+    assert.deepEqual(copy.stages, ["Read story", "Restore progress", "Prepare opening"]);
+    assert.equal(copy.railLabel, "Story loading");
   });
 
   it("marks the final menu phase after all loading stages", () => {

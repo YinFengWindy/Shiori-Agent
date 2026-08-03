@@ -56,7 +56,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
         setMode("game");
         return;
       }
-      reportError("无法加载这段剧情，请稍后重试。");
+      reportError("Unable to load this Story. Please try again.");
       setMode("launcher");
     } finally {
       clearTimeout(transitionTimer);

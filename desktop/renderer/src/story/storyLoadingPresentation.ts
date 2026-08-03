@@ -24,27 +24,27 @@ export type StoryLoadingCopy = {
 
 const storyLoadingCopy: Record<StoryLoadingMode, Omit<StoryLoadingCopy, "heading" | "currentStage" | "activeStage">> = {
     listing: {
-    stageLabel: "主菜单加载阶段",
-    stages: ["读取故事列表", "准备菜单"],
-    progressLabel: "读取故事列表",
-    railLabel: "故事主菜单加载",
+    stageLabel: "Story menu loading stages",
+    stages: ["Read story list", "Prepare menu"],
+    progressLabel: "Read story list",
+    railLabel: "Story menu loading",
   },
   story: {
-    stageLabel: "剧情加载阶段",
-    stages: ["读取剧情", "恢复进度", "准备开场"],
-    progressLabel: "准备素材",
-    railLabel: "剧情加载",
+    stageLabel: "Story loading stages",
+    stages: ["Read story", "Restore progress", "Prepare opening"],
+    progressLabel: "Prepare assets",
+    railLabel: "Story loading",
   },
 };
 
 const storyLoadingPhaseCopy: Record<StoryLoadingPhase, Pick<StoryLoadingCopy, "heading" | "currentStage" | "activeStage">> = {
-  "reading-list": { heading: "准备故事主菜单", currentStage: "读取故事列表", activeStage: 0 },
-  "preparing-menu": { heading: "准备故事主菜单", currentStage: "准备菜单", activeStage: 1 },
-  "menu-ready": { heading: "准备故事主菜单", currentStage: "主菜单已准备好", activeStage: 2 },
-  "reading-story": { heading: "进入剧情", currentStage: "读取剧情", activeStage: 0 },
-  "restoring-progress": { heading: "进入剧情", currentStage: "恢复进度", activeStage: 1 },
-  "preparing-opening": { heading: "进入剧情", currentStage: "准备开场", activeStage: 2 },
-  "opening-ready": { heading: "进入剧情", currentStage: "开场已准备好", activeStage: 3 },
+  "reading-list": { heading: "Preparing Story Menu", currentStage: "Read story list", activeStage: 0 },
+  "preparing-menu": { heading: "Preparing Story Menu", currentStage: "Prepare menu", activeStage: 1 },
+  "menu-ready": { heading: "Preparing Story Menu", currentStage: "Story menu ready", activeStage: 2 },
+  "reading-story": { heading: "Enter Story", currentStage: "Read story", activeStage: 0 },
+  "restoring-progress": { heading: "Enter Story", currentStage: "Restore progress", activeStage: 1 },
+  "preparing-opening": { heading: "Enter Story", currentStage: "Prepare opening", activeStage: 2 },
+  "opening-ready": { heading: "Enter Story", currentStage: "Opening ready", activeStage: 3 },
 };
 
 /** Returns the copy contract for one Story loading route. */

@@ -66,7 +66,7 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
       await waitForStoryLoadingCompletion();
       setState((current) => ({ ...current, stories, loading: false }));
     } catch (error) {
-      setState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "无法读取剧情列表" }));
+      setState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "Unable to load the Story list" }));
     }
   }, [client]);
 
