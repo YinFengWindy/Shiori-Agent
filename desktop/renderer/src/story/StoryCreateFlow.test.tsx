@@ -8,7 +8,7 @@ import { StoryCreateFlow } from "./StoryCreateFlow";
 describe("StoryCreateFlow", () => {
   it("starts with a focused role-selection step", () => {
     const markup = renderToStaticMarkup(<StoryCreateFlow roles={[{ id: "role-1", name: "澪", description: "沉默的守灯人" }]} onBack={() => undefined} onCreate={() => undefined} />);
-    assert.match(markup, />CREATE A STORY</);
+    assert.doesNotMatch(markup, /CREATE A STORY/);
     assert.match(markup, /bg-\[#FFF8FC\]/);
     assert.match(markup, /data-testid="story-create-flow-backdrop"/);
     assert.match(markup, /data-testid="story-create-panel"/);

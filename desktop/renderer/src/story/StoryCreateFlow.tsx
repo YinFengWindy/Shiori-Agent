@@ -48,7 +48,7 @@ export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCre
         <div className="border-b border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5">
           <div className="flex items-center gap-4">
             <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[#C785A0]/55 bg-[#FFF8FC]/55 text-[#8F355C] transition-colors hover:border-[#B64B75] hover:bg-white hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}><ArrowLeft className="h-5 w-5" weight="bold" /></button>
-            <div className="min-w-0 flex-1"><p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#B64B75]">CREATE A STORY</p><h1 className="m-0 mt-1 font-serif text-2xl font-semibold italic text-[#7A2356]">新剧情</h1></div>
+            <div className="min-w-0 flex-1"><h1 className="m-0 font-serif text-2xl font-semibold italic text-[#7A2356]">新剧情</h1></div>
           </div>
         </div>
         <div className="px-[clamp(18px,4vw,40px)] py-4">

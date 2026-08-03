@@ -48,8 +48,7 @@ export function StorySettings({ onBack }: StorySettingsProps) {
           <ArrowLeft className="h-5 w-5" weight="bold" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#B64B75]">Settings</p>
-          <h1 className="m-0 mt-1 font-serif text-2xl font-semibold italic text-[#7A2356]">设置</h1>
+          <h1 className="m-0 font-serif text-2xl font-semibold italic text-[#7A2356]">设置</h1>
         </div>
       </header>
 

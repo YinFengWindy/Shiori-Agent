@@ -12,6 +12,7 @@ describe("StoryLoadList", () => {
     assert.match(markup, /data-testid="story-load"/);
     assert.match(markup, /data-testid="story-load-panel"/);
     assert.match(markup, />载入剧情</);
+    assert.doesNotMatch(markup, />LOAD STORY</);
     assert.match(markup, /data-testid="story-load-list"/);
     assert.match(markup, /bg-\[#FFF8FC\]\/45/);
     assert.doesNotMatch(markup, /World|world/);
