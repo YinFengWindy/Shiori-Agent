@@ -14,5 +14,8 @@ describe("StorySurface", () => {
     assert.match(markup, /data-testid="story-test-panel"/);
     assert.match(markup, /min-h-full w-full/);
     assert.match(markup, /border-y border-\[#DDA9BE\]\/75/);
+    assert.match(markup, /bg-\[#FFF8FC\]\/72/);
+    assert.match(markup, /backdrop-blur-xl/);
+    assert.match(markup, /backdrop-saturate-150/);
   });
 });

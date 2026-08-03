@@ -37,7 +37,7 @@ export function StorySurface({ dataTestId, panelTestId, children, reducedMotion 
         animate={{ opacity: 1, x: 0 }}
         transition={transition}
       >
-        <section className="flex min-h-full w-full flex-col border-y border-[#DDA9BE]/75 bg-[#FFF8FC]/90 shadow-[0_18px_48px_rgba(49,17,35,0.3)] backdrop-blur-md" data-testid={panelTestId}>
+        <section className="flex min-h-full w-full flex-col border-y border-[#DDA9BE]/75 bg-[#FFF8FC]/72 shadow-[0_18px_48px_rgba(49,17,35,0.3)] backdrop-blur-xl backdrop-saturate-150" data-testid={panelTestId}>
           {children}
         </section>
       </motion.main>
