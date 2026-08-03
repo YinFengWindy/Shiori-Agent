@@ -1,5 +1,4 @@
 import type { StoryBeat, StoryDetails, StorySummary } from "./types";
-import { getStoryCurrentAt } from "./storyTime";
 
 /** Creates a committed Story beat for renderer tests. */
 export function createStoryBeat(overrides: Partial<StoryBeat> = {}): StoryBeat {
@@ -9,7 +8,7 @@ export function createStoryBeat(overrides: Partial<StoryBeat> = {}): StoryBeat {
     segmentId: overrides.segmentId ?? "segment-1",
     turnId: overrides.turnId ?? "turn-1",
     sequence: overrides.sequence ?? 1,
-    effectiveAt: overrides.effectiveAt ?? "2026-08-02T10:00:00+08:00",
+    timeBand: overrides.timeBand ?? "上午",
     text: overrides.text ?? "你终于来了。",
     kind: overrides.kind ?? "dialogue",
     speaker: overrides.speaker ?? "澪",
@@ -30,7 +29,7 @@ export function createStoryDetails(overrides: Partial<StoryDetails> = {}): Story
     segment: overrides.segment ?? {
       id: "segment-1",
       sequence: 1,
-      startsAt: "2026-08-02T10:00:00+08:00",
+      timeBand: "上午",
       status: "active",
       mode: "plot",
       operation: "awaiting_player",
@@ -40,18 +39,18 @@ export function createStoryDetails(overrides: Partial<StoryDetails> = {}): Story
     beats: overrides.beats ?? [createStoryBeat()],
     cues: overrides.cues ?? [],
     turns: overrides.turns ?? [],
+    currentTimeBand: overrides.currentTimeBand ?? "上午",
   };
 }
 
 /** Creates the catalog summary form of a Story. */
 export function createStorySummary(story = createStoryDetails()): StorySummary {
-  const currentAt = getStoryCurrentAt(story);
   return {
     storyId: story.id,
     relativeDbPath: `${story.id}/story.db`,
     title: story.title,
     status: story.status,
     createdAt: "2026-08-02T10:00:00+08:00",
-    currentAt,
+    currentTimeBand: story.currentTimeBand,
   };
 }

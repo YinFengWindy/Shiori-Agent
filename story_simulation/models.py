@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from .story_time import normalize_story_time_band
+
 
 def utc_now() -> str:
     """Return an RFC 3339 timestamp used for audit fields."""
@@ -44,7 +46,7 @@ class StoryBeatDraft:
     text: str
     kind: str = "narration"
     speaker: str | None = None
-    effective_at: str | None = None
+    time_band: str | None = None
     fact_changes: tuple[dict[str, Any], ...] = ()
 
     def validate(self) -> None:
@@ -54,13 +56,15 @@ class StoryBeatDraft:
             raise ValueError("beat.kind 无效")
         if len(self.text) > 400:
             raise ValueError("单个 Beat 文本不能超过 400 字符")
+        if self.time_band is not None:
+            normalize_story_time_band(self.time_band)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "text": self.text,
             "kind": self.kind,
             "speaker": self.speaker,
-            "effective_at": self.effective_at,
+            "time_band": self.time_band,
             "fact_changes": list(self.fact_changes),
         }
 
@@ -92,7 +96,7 @@ class StoryBeat:
     segment_id: str
     turn_id: str
     sequence: int
-    effective_at: str
+    time_band: str
     text: str
     kind: str
     speaker: str | None
@@ -105,7 +109,7 @@ class StoryBeat:
             "segment_id": self.segment_id,
             "turn_id": self.turn_id,
             "sequence": self.sequence,
-            "effective_at": self.effective_at,
+            "time_band": self.time_band,
             "text": self.text,
             "kind": self.kind,
             "speaker": self.speaker,

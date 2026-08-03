@@ -30,7 +30,7 @@ export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCre
   const step = creationSteps[stepIndex];
   const selectedRole = roles.find((role) => role.id === input.roleId);
   const stepComplete = isCreationStepComplete(step, input);
-  const updateSetting = (field: "title" | "background" | "startsAt", value: string) => setInput((current) => ({ ...current, [field]: value }));
+  const updateSetting = (field: "title" | "background" | "timeBand", value: string) => setInput((current) => ({ ...current, [field]: value }));
   const updateProfile = (field: keyof StoryCreationInput["playerProfile"], value: string) => setInput((current) => ({ ...current, playerProfile: { ...current.playerProfile, [field]: value } }));
   const goToStep = (nextIndex: number) => {
     setDirection(nextIndex > stepIndex ? 1 : -1);

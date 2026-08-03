@@ -26,7 +26,8 @@ from .models import (
     StoryPlayerProfile,
     utc_now,
 )
-from .story_time import next_story_time
+from .schema_migrations import migrate_legacy_story_time
+from .story_time import next_story_time_band, normalize_story_time_band
 
 
 class StoryRepository:
@@ -42,6 +43,7 @@ class StoryRepository:
         self._lock = threading.RLock()
         with self._lock:
             self._connection.executescript(SCHEMA)
+            migrate_legacy_story_time(self._connection)
 
     def close(self) -> None:
         """Close this Story database connection."""
@@ -71,7 +73,7 @@ class StoryRepository:
         background: str,
         role_snapshot: dict[str, Any],
         player_profile: StoryPlayerProfile,
-        starts_at: str,
+        time_band: str,
         opening_context: dict[str, Any],
     ) -> dict[str, Any]:
         """Create the Story and its first awaiting-opening segment atomically."""
@@ -81,6 +83,7 @@ class StoryRepository:
             raise ValueError("title 不能为空")
         if not background.strip():
             raise ValueError("background 不能为空")
+        normalized_time_band = normalize_story_time_band(time_band)
         segment_id = f"segment-{uuid4().hex}"
         now = utc_now()
         with self.transaction() as connection:
@@ -99,7 +102,7 @@ class StoryRepository:
             connection.execute(
                 """INSERT INTO segments
                 VALUES (?, ?, 1, ?, 'awaiting_opening', 'plot', 'idle', ?, ?)""",
-                (segment_id, story_id, starts_at, dump(opening_context), dump({})),
+                (segment_id, story_id, normalized_time_band, dump(opening_context), dump({})),
             )
         return self.story_read_model(story_id)
 
@@ -139,21 +142,18 @@ class StoryRepository:
             "beats": [self._beat_dict(row) for row in beats],
             "cues": [load(row["payload"], {}) for row in cues],
             "turns": [self._turn_dict(row) for row in turns],
+            "currentTimeBand": str(segment["time_band"]),
         }
 
-    def current_effective_at(self, story_id: str) -> str:
-        """Return the current in-story time without exposing Story internals."""
+    def current_time_band(self, story_id: str) -> str:
+        """Return the current player-facing Story period."""
 
         with self._lock:
             segment = self._require_row(
-                "SELECT starts_at FROM segments WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
+                "SELECT time_band FROM segments WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
                 (story_id,),
             )
-            beat = self._connection.execute(
-                "SELECT effective_at FROM beats WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
-                (story_id,),
-            ).fetchone()
-        return str(beat["effective_at"] if beat is not None else segment["starts_at"])
+        return str(segment["time_band"])
 
     def story_id_for_turn(self, turn_id: str) -> str:
         """Resolve a persisted Turn owner without loading unrelated Story state."""
@@ -292,7 +292,7 @@ class StoryRepository:
         turn_id: str,
         attempt_id: str,
         draft: DirectorDraft,
-        default_effective_at: str,
+        default_time_band: str,
     ) -> tuple[list[tuple[StoryBeat, PresentationCue, dict[str, Any]]], dict[str, Any]]:
         """Atomically commit one validated Director draft and release the input lane."""
 
@@ -310,30 +310,25 @@ class StoryRepository:
             recorded_at = utc_now()
             committed_ids = load(turn["committed_beat_ids"], [])
             revision = int(story["revision"])
-            previous_beat = connection.execute(
-                "SELECT effective_at FROM beats WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
-                (story["id"],),
-            ).fetchone()
-            current_effective_at = str(
-                previous_beat["effective_at"] if previous_beat is not None else default_effective_at
+            segment = self._require_row(
+                "SELECT time_band FROM segments WHERE id = ?",
+                (turn["segment_id"],),
+                connection,
             )
+            current_time_band = str(segment["time_band"] or default_time_band)
             committed: list[tuple[StoryBeat, PresentationCue, dict[str, Any]]] = []
             for offset, item in enumerate(draft.beats):
                 beat_id = f"beat-{uuid4().hex}"
                 cue_id = f"cue-{uuid4().hex}"
-                effective_at = next_story_time(
-                    current_effective_at,
-                    item.effective_at,
-                    initial=previous_beat is None and offset == 0,
-                )
-                current_effective_at = effective_at
+                time_band = next_story_time_band(current_time_band, item.time_band)
+                current_time_band = time_band
                 beat = StoryBeat(
                     id=beat_id,
                     story_id=story["id"],
                     segment_id=turn["segment_id"],
                     turn_id=turn_id,
                     sequence=next_sequence + offset,
-                    effective_at=effective_at,
+                    time_band=time_band,
                     text=item.text,
                     kind=item.kind,
                     speaker=item.speaker,
@@ -348,14 +343,13 @@ class StoryRepository:
                     speaker=item.speaker,
                 )
                 connection.execute(
-                    "INSERT INTO beats VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO beats VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         beat.id,
                         beat.story_id,
                         beat.segment_id,
                         beat.turn_id,
                         beat.sequence,
-                        beat.effective_at,
                         dump(beat.to_dict()),
                         beat.recorded_at,
                     ),
@@ -381,6 +375,10 @@ class StoryRepository:
                     (event_id, story["id"], "beat.committed", dump(payload), recorded_at),
                 )
                 committed.append((beat, cue, payload))
+            connection.execute(
+                """UPDATE segments SET time_band = ? WHERE id = ?""",
+                (current_time_band, turn["segment_id"]),
+            )
             connection.execute(
                 """UPDATE stories SET revision = ? WHERE id = ?""",
                 (revision, story["id"]),
@@ -554,7 +552,7 @@ class StoryRepository:
         return {
             "id": row["id"],
             "sequence": int(row["sequence"]),
-            "startsAt": row["starts_at"],
+            "timeBand": row["time_band"],
             "status": row["status"],
             "mode": row["mode"],
             "operation": row["operation"],
@@ -578,7 +576,19 @@ class StoryRepository:
 
     @staticmethod
     def _beat_dict(row: sqlite3.Row) -> dict[str, Any]:
-        return load(row["payload"], {})
+        payload = load(row["payload"], {})
+        return {
+            "id": payload["id"],
+            "storyId": payload["story_id"],
+            "segmentId": payload["segment_id"],
+            "turnId": payload["turn_id"],
+            "sequence": int(payload["sequence"]),
+            "timeBand": payload["time_band"],
+            "text": payload["text"],
+            "kind": payload["kind"],
+            "speaker": payload.get("speaker"),
+            "recordedAt": payload["recorded_at"],
+        }
 
 
 def payload_hash(payload: dict[str, Any]) -> str:

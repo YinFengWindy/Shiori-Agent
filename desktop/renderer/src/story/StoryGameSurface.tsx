@@ -2,7 +2,6 @@ import { ArrowRight, BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
 import { useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { canSubmitStoryInput } from "./selectors";
-import { getStoryCurrentAt, getStoryTimeBand } from "./storyTime";
 import type { StoryDetails } from "./types";
 import { STORY_MENU_BACKGROUND_URL } from "./storyStaticAssets";
 
@@ -36,7 +35,7 @@ export function StoryGameSurface({ story, busy, error, characterAvatarUrl, onSub
       <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-2/3 bg-[linear-gradient(0deg,rgba(13,20,25,0.9),rgba(13,20,25,0.35)_44%,transparent)]" />
       {characterAvatarUrl ? <img className="pointer-events-none absolute bottom-[clamp(10rem,20vh,15rem)] right-[clamp(4vw,10vw,12rem)] z-10 h-[min(64vh,42rem)] max-w-[42vw] object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]" src={characterAvatarUrl} alt="" /> : null}
 
-      <div className="absolute left-5 top-5 z-30 text-white/75" data-testid="story-current-time"><span className="mr-2 text-xs">当前时间</span><strong className="font-serif text-lg font-semibold text-[#F4C29F]">{getStoryTimeBand(getStoryCurrentAt(story))}</strong></div>
+      <div className="absolute left-5 top-5 z-30 text-white/75" data-testid="story-current-time"><span className="mr-2 text-xs">当前时段</span><strong className="font-serif text-lg font-semibold text-[#F4C29F]">{story.currentTimeBand}</strong></div>
       <div className="absolute right-5 top-5 z-30 flex gap-2">
         <button className="grid h-10 w-10 place-items-center rounded-md bg-black/20 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60" type="button" aria-label="查看剧情记录" title="查看剧情记录" onClick={onOpenArchive}><BookOpenText /></button>
         <button className="grid h-10 w-10 place-items-center rounded-md bg-black/20 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60" type="button" aria-label="剧情设置" title="剧情设置" onClick={onOpenSettings}><Gear /></button>

@@ -1,3 +1,5 @@
+import type { StoryTimeBand } from "./storyTime";
+
 /** A Story entry shown in the launcher. */
 export type StorySummary = {
   storyId: string;
@@ -5,7 +7,7 @@ export type StorySummary = {
   title: string;
   status: "active" | "archived" | "deleting";
   createdAt: string;
-  currentAt: string;
+  currentTimeBand: StoryTimeBand;
 };
 
 /** Story operation state owned by the current segment. */
@@ -15,7 +17,7 @@ export type StoryOperation = "idle" | "awaiting_player" | "generating";
 export type StorySegment = {
   id: string;
   sequence: number;
-  startsAt: string;
+  timeBand: StoryTimeBand;
   status: string;
   mode: string;
   operation: StoryOperation;
@@ -30,7 +32,7 @@ export type StoryBeat = {
   segmentId: string;
   turnId: string;
   sequence: number;
-  effectiveAt: string;
+  timeBand: StoryTimeBand;
   text: string;
   kind: "dialogue" | "action" | "narration";
   speaker: string | null;
@@ -72,6 +74,7 @@ export type StoryDetails = {
   beats: StoryBeat[];
   cues: Array<Record<string, unknown>>;
   turns: StoryTurn[];
+  currentTimeBand: StoryTimeBand;
 };
 
 /** A role that can be attached to a new Story. */
@@ -86,7 +89,7 @@ export type StoryRoleChoice = {
 export type StoryCreationInput = {
   title: string;
   background: string;
-  startsAt: string;
+  timeBand: StoryTimeBand | "";
   roleId: string;
   playerProfile: {
     displayName: string;

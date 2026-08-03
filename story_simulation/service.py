@@ -40,7 +40,7 @@ class StorySimulationService:
         background: str,
         role: RoleRecord,
         player_profile: StoryPlayerProfile,
-        starts_at: str,
+        time_band: str,
         opening_context: dict[str, Any],
     ) -> dict[str, Any]:
         """Freeze the selected role and create the initial Story segment."""
@@ -51,7 +51,7 @@ class StorySimulationService:
             background=background,
             role_snapshot=role.to_dict(),
             player_profile=player_profile,
-            starts_at=starts_at,
+            time_band=time_band,
             opening_context=opening_context,
         )
 
@@ -119,7 +119,7 @@ class StorySimulationService:
                     turn_id=turn_id,
                     attempt_id=attempt_id,
                     draft=draft,
-                    default_effective_at=context.segment["startsAt"],
+                    default_time_band=context.segment["timeBand"],
                 )
                 for _, _, payload in committed:
                     await self._emit(emit_event, "stories.beat.committed", payload)

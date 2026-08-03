@@ -14,7 +14,7 @@ describe("storyCreationWizard", () => {
     input.roleId = "role-1";
     input.title = "雨港";
     input.background = "潮汐带回名字";
-    input.startsAt = "2026-08-02T10:00";
+    input.timeBand = "上午";
     input.playerProfile = { displayName: "岚", identity: "抄写员", appearance: "短发" };
 
     assert.equal(isCreationStepComplete("role", input), true);

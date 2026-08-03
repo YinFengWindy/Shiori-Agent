@@ -31,7 +31,7 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
     payload = {
         "title": "夏日来信",
         "background": "午后的旧校舍",
-        "starts_at": "2026-08-01T09:00:00+08:00",
+        "time_band": "上午",
         "role_id": "role-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }
@@ -45,25 +45,25 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
 
     assert replay["turn_id"] == created["turn_id"]
     assert story["cues"][0]["text"] == "雨后的铃声响起。"
-    assert summaries["stories"][0]["current_at"] == "2026-08-01T09:00:00+08:00"
+    assert summaries["stories"][0]["current_time_band"] == "上午"
     await handler.aclose()
 
 
 @pytest.mark.asyncio
-async def test_create_story_requires_china_timezone(tmp_path) -> None:
+async def test_create_story_rejects_exact_time_as_a_story_period(tmp_path) -> None:
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: None),
         director=OpeningDirector(),
     )
 
-    with pytest.raises(ValueError, match="Asia/Shanghai"):
+    with pytest.raises(ValueError, match="time_band"):
         await handler.handle(
             "stories.create",
             {
                 "title": "夏日来信",
                 "background": "午后的旧校舍",
-                "starts_at": "2026-08-01T09:00:00+00:00",
+                "time_band": "2026-08-01T09:00:00+08:00",
                 "role_id": "role-1",
                 "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
             },
@@ -92,7 +92,7 @@ async def test_create_story_recovers_from_an_interrupted_initialization(tmp_path
     payload = {
         "title": "夏日来信",
         "background": "午后的旧校舍",
-        "starts_at": "2026-08-01T09:00:00+08:00",
+        "time_band": "上午",
         "role_id": "role-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }

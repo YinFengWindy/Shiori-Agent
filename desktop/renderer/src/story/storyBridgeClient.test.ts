@@ -15,8 +15,9 @@ function storyPayload(revision = 4, operation: "awaiting_player" | "generating" 
     revision,
     roleSnapshot: { id: "role-1", name: "澪" },
     playerProfile: { display_name: "岚", appearance: "短发", identity: "抄写员" },
-    segment: { id: "segment-1", sequence: 1, startsAt: "2026-08-02T10:00:00+08:00", status: "active", mode: "plot", operation, openingContext: {}, runtimeSnapshot: {} },
-    beats: [{ id: "beat-1", storyId: "story-1", segmentId: "segment-1", turnId: "turn-1", sequence: 1, effectiveAt: "2026-08-02T10:00:00+08:00", text: "风从走廊尽头吹来。", kind: "narration" as const, speaker: null, recordedAt: "2026-08-02T10:00:00+08:00" }],
+    currentTimeBand: "上午" as const,
+    segment: { id: "segment-1", sequence: 1, timeBand: "上午" as const, status: "active", mode: "plot", operation, openingContext: {}, runtimeSnapshot: {} },
+    beats: [{ id: "beat-1", storyId: "story-1", segmentId: "segment-1", turnId: "turn-1", sequence: 1, timeBand: "上午" as const, text: "风从走廊尽头吹来。", kind: "narration" as const, speaker: null, recordedAt: "2026-08-02T10:00:00+08:00" }],
     cues: [],
     turns: [],
   };
@@ -27,10 +28,10 @@ describe("createStoryBridgeClient", () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
     const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> => {
       requests.push(request);
-      return { id: "response", type: "response", method: request.method, payload: { stories: [{ story_id: "story-1", relative_db_path: "story-1/story.db", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", current_at: "2026-08-02T10:00:00+08:00" }] }, error: null };
+      return { id: "response", type: "response", method: request.method, payload: { stories: [{ story_id: "story-1", relative_db_path: "story-1/story.db", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", current_time_band: "上午" }] }, error: null };
     };
 
-    assert.deepEqual(await createStoryBridgeClient(invoke).listStories(), [{ storyId: "story-1", relativeDbPath: "story-1/story.db", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", currentAt: "2026-08-02T10:00:00+08:00" }]);
+    assert.deepEqual(await createStoryBridgeClient(invoke).listStories(), [{ storyId: "story-1", relativeDbPath: "story-1/story.db", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", currentTimeBand: "上午" }]);
     assert.deepEqual(requests, [{ method: "stories.list", payload: {} }]);
   });
 
@@ -43,14 +44,14 @@ describe("createStoryBridgeClient", () => {
     assert.equal(result.segment.operation, "awaiting_player");
   });
 
-  it("creates a Story with one selected role and China time", async () => {
+  it("creates a Story with one selected role and one time period", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
     const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => {
       requests.push(request);
       return { id: "response", type: "response", method: request.method, payload: { story: storyPayload(0, "generating") }, error: null };
     });
-    await client.createStory({ title: "雨港", background: "潮汐", startsAt: "2026-08-02T10:00", roleId: "role-1", playerProfile: { displayName: "岚", appearance: "短发", identity: "抄写员" } });
-    assert.deepEqual(requests[0], { method: "stories.create", payload: { title: "雨港", background: "潮汐", starts_at: "2026-08-02T10:00:00+08:00", role_id: "role-1", player_profile: { display_name: "岚", appearance: "短发", identity: "抄写员" } } });
+    await client.createStory({ title: "雨港", background: "潮汐", timeBand: "上午", roleId: "role-1", playerProfile: { displayName: "岚", appearance: "短发", identity: "抄写员" } });
+    assert.deepEqual(requests[0], { method: "stories.create", payload: { title: "雨港", background: "潮汐", time_band: "上午", role_id: "role-1", player_profile: { display_name: "岚", appearance: "短发", identity: "抄写员" } } });
   });
 
   it("submits player input with the latest Story revision", async () => {

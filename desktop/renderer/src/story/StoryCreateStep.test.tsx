@@ -12,7 +12,13 @@ describe("StoryCreateStep", () => {
     const markup = renderToStaticMarkup(<StoryCreateStep step="setting" roles={[]} input={input} reducedMotion onSelectRole={() => undefined} onChangeSetting={() => undefined} onChangeProfile={() => undefined} />);
 
     assert.match(markup, /开场背景/);
-    assert.match(markup, /开始时间/);
+    assert.match(markup, /开始时段/);
+    assert.match(markup, /清晨/);
+    assert.match(markup, /上午/);
+    assert.match(markup, /下午/);
+    assert.match(markup, /夜晚/);
+    assert.match(markup, /深夜/);
+    assert.doesNotMatch(markup, /datetime-local/);
     assert.doesNotMatch(markup, /北京时间/);
     assert.match(markup, /resize-none/);
     assert.match(markup, /overflow-hidden/);
@@ -23,7 +29,7 @@ describe("StoryCreateStep", () => {
     const input = createInitialStoryCreationInput();
     input.title = "雨港";
     input.background = "潮汐带回名字";
-    input.startsAt = "2026-08-02T10:00";
+    input.timeBand = "上午";
     input.playerProfile = { displayName: "岚", identity: "抄写员", appearance: "短发" };
     const markup = renderToStaticMarkup(<StoryCreateStep step="player" roles={[]} input={input} selectedRole={{ id: "role-1", name: "澪", description: "沉默的守灯人" }} reducedMotion onSelectRole={() => undefined} onChangeSetting={() => undefined} onChangeProfile={() => undefined} />);
 
@@ -38,7 +44,7 @@ describe("StoryCreateStep", () => {
     input.roleId = "role-1";
     input.title = "雨港";
     input.background = "潮汐带回名字";
-    input.startsAt = "2026-08-02T10:00";
+    input.timeBand = "上午";
     input.playerProfile = { displayName: "岚", identity: "抄写员", appearance: "短发" };
     const markup = renderToStaticMarkup(<StoryCreateStep step="review" roles={[]} input={input} selectedRole={{ id: "role-1", name: "澪", description: "沉默的守灯人" }} reducedMotion onSelectRole={() => undefined} onChangeSetting={() => undefined} onChangeProfile={() => undefined} />);
 

@@ -5,11 +5,9 @@ from __future__ import annotations
 import asyncio
 import shutil
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
-from zoneinfo import ZoneInfo
 
 from core.roles import RoleStore
 
@@ -19,6 +17,7 @@ from story_simulation.errors import StoryNotFoundError
 from story_simulation.models import StoryPlayerProfile
 from story_simulation.repository import StoryRepository, payload_hash
 from story_simulation.service import StorySimulationService
+from story_simulation.story_time import normalize_story_time_band
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 
@@ -75,7 +74,7 @@ class StorySimulationHandler:
                 "stories": [
                     {
                         **summary,
-                        "current_at": self._repository(summary["story_id"]).current_effective_at(summary["story_id"]),
+                        "current_time_band": self._repository(summary["story_id"]).current_time_band(summary["story_id"]),
                     }
                     for summary in summaries
                 ]
@@ -112,7 +111,7 @@ class StorySimulationHandler:
                 }
         title = self._required(payload, "title")
         background = self._required(payload, "background")
-        starts_at = self._china_time(self._required(payload, "starts_at"))
+        time_band = normalize_story_time_band(self._required(payload, "time_band"))
         role = self._require_role(self._required(payload, "role_id"))
         profile_payload = payload.get("player_profile")
         if not isinstance(profile_payload, dict):
@@ -138,7 +137,7 @@ class StorySimulationHandler:
                 background=background,
                 role=role,
                 player_profile=profile,
-                starts_at=starts_at,
+                time_band=time_band,
                 opening_context={"background": background, "role_id": role.id},
             )
             opening_turn = service.create_opening_turn(
@@ -299,21 +298,6 @@ class StorySimulationHandler:
         if value < 0:
             raise ValueError("expected_revision 必须是非负整数")
         return value
-
-    @staticmethod
-    def _china_time(value: str) -> str:
-        """Require an explicit Asia/Shanghai opening timestamp."""
-
-        try:
-            parsed = datetime.fromisoformat(value)
-        except ValueError as exc:
-            raise ValueError("starts_at 必须是 RFC3339 时间") from exc
-        if parsed.tzinfo is None:
-            raise ValueError("starts_at 必须带 Asia/Shanghai 时区")
-        china_time = parsed.astimezone(ZoneInfo("Asia/Shanghai"))
-        if china_time.utcoffset() != parsed.utcoffset():
-            raise ValueError("starts_at 必须使用 Asia/Shanghai 时区")
-        return china_time.isoformat()
 
     @staticmethod
     async def _emit(

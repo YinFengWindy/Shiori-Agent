@@ -58,8 +58,11 @@ class ProviderStoryDirector:
         return (
             "你是视觉小说 Story Director。只输出 JSON，不要 Markdown。"
             "输出格式为 {\"beats\":[{\"text\":string,\"kind\":\"dialogue|action|narration\","
-            "\"speaker\":string|null,\"fact_changes\":[]}],\"stop_reason\":\"awaiting_player\"}。"
+            "\"speaker\":string|null,\"time_band\":\"清晨|上午|下午|夜晚|深夜\"|null,"
+            "\"fact_changes\":[]}],\"stop_reason\":\"awaiting_player\"}。"
             "一次最多 3 个 beat，所有 text 合计最多 1200 个中文字符，单个 beat 最多 400 字符。"
+            "剧情时间只使用清晨、上午、下午、夜晚、深夜五档；具体年月日和时分不属于 Story。"
+            "只有剧情明确进入另一个时段时才填写 time_band，否则必须填写 null。"
             "只描述当前角色可知的内容，不能泄露隐藏连续性或来源。"
         )
 
@@ -73,7 +76,7 @@ class ProviderStoryDirector:
             "story": {
                 "title": context.story["title"],
                 "background": context.story["background"],
-                "starts_at": context.segment["startsAt"],
+                "time_band": context.segment["timeBand"],
             },
             "role": {
                 "name": role.get("name"),
@@ -108,6 +111,8 @@ class ProviderStoryDirector:
             fact_changes = item.get("fact_changes") or []
             if not isinstance(fact_changes, list):
                 raise StoryInvalidOutputError("fact_changes 必须是数组")
+            raw_time_band = item.get("time_band")
+            time_band = str(raw_time_band).strip() if raw_time_band is not None else None
             beats.append(
                 StoryBeatDraft(
                     text=str(item.get("text") or ""),
@@ -117,11 +122,7 @@ class ProviderStoryDirector:
                         if item.get("speaker") is not None
                         else None
                     ),
-                    effective_at=(
-                        str(item["effective_at"]).strip()
-                        if item.get("effective_at") is not None
-                        else None
-                    ),
+                    time_band=time_band or None,
                     fact_changes=tuple(
                         change for change in fact_changes if isinstance(change, dict)
                     ),

@@ -2,7 +2,6 @@ import { ArrowRight, Gear, SignOut } from "@phosphor-icons/react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { canSubmitStoryInput } from "./selectors";
-import { getStoryCurrentAt, getStoryTimeBand } from "./storyTime";
 import type { StoryDetails } from "./types";
 
 type StoryArchiveSurfaceProps = {
@@ -37,12 +36,12 @@ export function StoryArchiveSurface({ story, busy, error, onSubmitInput, onOpenS
       </div>
       <div className="min-h-0 overflow-y-auto px-5 py-8">
         <main className="mx-auto grid max-w-3xl gap-8">
-          <header className="border-b border-[#CCD3CE] pb-4"><p className="m-0 text-xs text-[#727A75]">剧情记录</p><h1 className="m-0 mt-1 font-serif text-2xl font-semibold">{story.title}</h1><p className="m-0 mt-2 whitespace-pre-wrap text-sm leading-6 text-[#5D6C63]">{story.background}</p><p className="m-0 mt-3 text-xs text-[#727A75]" data-testid="story-current-time">当前时间：<strong className="font-medium text-[#53675B]">{getStoryTimeBand(getStoryCurrentAt(story))}</strong></p></header>
+          <header className="border-b border-[#CCD3CE] pb-4"><p className="m-0 text-xs text-[#727A75]">剧情记录</p><h1 className="m-0 mt-1 font-serif text-2xl font-semibold">{story.title}</h1><p className="m-0 mt-2 whitespace-pre-wrap text-sm leading-6 text-[#5D6C63]">{story.background}</p><p className="m-0 mt-3 text-xs text-[#727A75]" data-testid="story-current-time">当前时段：<strong className="font-medium text-[#53675B]">{story.currentTimeBand}</strong></p></header>
           <ol className="m-0 grid list-none gap-0 border-l border-[#B9C3BC] pl-7">
             {story.beats.map((beat, index) => (
               <li key={beat.id} ref={index === story.beats.length - 1 ? latestBeatRef : undefined} className="relative pb-7">
                 <span className={`absolute -left-[33px] top-1 h-3 w-3 rounded-full border-2 border-[#F1F4F2] ${beat.kind === "dialogue" ? "bg-[#A75F41]" : "bg-[#66766C]"}`} />
-                <p className="m-0 mb-1 text-xs text-[#727A75]">{getStoryTimeBand(beat.effectiveAt)}{beat.speaker ? ` · ${beat.speaker}` : ""}</p>
+                <p className="m-0 mb-1 text-xs text-[#727A75]">{beat.timeBand}{beat.speaker ? ` · ${beat.speaker}` : ""}</p>
                 <p className="m-0 whitespace-pre-wrap font-serif text-base leading-7 text-[#3B423E]">{beat.text}</p>
               </li>
             ))}

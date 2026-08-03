@@ -13,7 +13,7 @@ def _create_story(repository: StoryRepository) -> None:
         background="午后的旧校舍",
         role_snapshot={"id": "role-1", "name": "澪"},
         player_profile=StoryPlayerProfile("悠", "短发", "转学生"),
-        starts_at="2026-08-01T09:00:00+08:00",
+        time_band="上午",
         opening_context={"background": "午后的旧校舍"},
     )
 
@@ -45,6 +45,8 @@ def test_story_repository_freezes_opening_profile_and_replays_same_turn(tmp_path
         "identity": "转学生",
     }
     assert story["roleSnapshot"] == {"id": "role-1", "name": "澪"}
+    assert story["currentTimeBand"] == "上午"
+    assert story["segment"]["timeBand"] == "上午"
     assert replay["id"] == turn["id"]
 
     with pytest.raises(ValueError, match="不同的请求"):

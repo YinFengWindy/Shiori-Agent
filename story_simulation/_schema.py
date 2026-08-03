@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS segments (
     id TEXT PRIMARY KEY,
     story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
     sequence INTEGER NOT NULL,
-    starts_at TEXT NOT NULL,
+    time_band TEXT NOT NULL,
     status TEXT NOT NULL,
     mode TEXT NOT NULL,
     operation TEXT NOT NULL,
@@ -65,7 +65,6 @@ CREATE TABLE IF NOT EXISTS beats (
     segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
     turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
     sequence INTEGER NOT NULL,
-    effective_at TEXT NOT NULL,
     payload TEXT NOT NULL,
     recorded_at TEXT NOT NULL,
     UNIQUE(story_id, sequence)

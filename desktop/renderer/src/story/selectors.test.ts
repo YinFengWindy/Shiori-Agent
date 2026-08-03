@@ -19,11 +19,11 @@ describe("Story selectors", () => {
 
   it("refreshes a launcher summary from a Story read model", () => {
     const summary = createStorySummary();
-    const story = createStoryDetails({ title: "新标题", status: "archived", beats: [createStoryBeat({ effectiveAt: "2026-08-02T18:00:00+08:00" })] });
+    const story = createStoryDetails({ title: "新标题", status: "archived", currentTimeBand: "夜晚", beats: [createStoryBeat({ timeBand: "夜晚" })] });
     const updated = replaceStorySummary([summary], story);
     assert.equal(updated[0].title, "新标题");
     assert.equal(updated[0].status, "archived");
-    assert.equal(updated[0].currentAt, "2026-08-02T18:00:00+08:00");
+    assert.equal(updated[0].currentTimeBand, "夜晚");
     assert.equal(getStoryStatusLabel("awaiting_player"), "轮到你了");
   });
 });

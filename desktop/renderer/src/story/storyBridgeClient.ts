@@ -9,7 +9,7 @@ type StorySummaryPayload = {
   title: string;
   status: "active" | "archived" | "deleting";
   created_at: string;
-  current_at: string;
+  current_time_band: StorySummary["currentTimeBand"];
 };
 
 type StoryPayload = StoryDetails;
@@ -27,13 +27,8 @@ function toStorySummary(story: StorySummaryPayload): StorySummary {
     title: story.title,
     status: story.status,
     createdAt: story.created_at,
-    currentAt: story.current_at,
+    currentTimeBand: story.current_time_band,
   };
-}
-
-function startsAtChina(entryTime: string): string {
-  if (/([+-]\d{2}:\d{2}|Z)$/i.test(entryTime)) return entryTime;
-  return `${entryTime}:00+08:00`;
 }
 
 /** Calls the direct stories.* bridge contract used by the Story surface. */
@@ -71,7 +66,7 @@ export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDeskt
       const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.create", {
         title: input.title,
         background: input.background,
-        starts_at: startsAtChina(input.startsAt),
+        time_band: input.timeBand,
         role_id: input.roleId,
         player_profile: {
           display_name: input.playerProfile.displayName,
