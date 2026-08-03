@@ -13,6 +13,7 @@ const controller: StoryWorkspacePresentationController = {
   story,
   stories: [createStorySummary()],
   loading: false,
+  loadingPhase: "reading-list",
   error: "",
   busy: false,
   reloadStories: async () => undefined,
@@ -23,7 +24,7 @@ const operation: StoryOperationPresentationController = { error: "", busy: false
 const creation: StoryCreationPresentationController = { createStory: () => undefined };
 
 function render(mode: StoryPresentationMode) {
-  return renderToStaticMarkup(<StoryWorkspacePresentationView roles={[]} mode={mode} loadingStoryId="" loadingElapsedMs={0} cgGallery={[]} cgGalleryLoading={false} controller={controller} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
+  return renderToStaticMarkup(<StoryWorkspacePresentationView roles={[]} mode={mode} loadingStoryId="" loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false} controller={controller} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
 }
 
 describe("StoryWorkspacePresentationView", () => {

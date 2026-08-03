@@ -8,9 +8,10 @@ import type { useStoryCreationFlowController } from "./useStoryCreationFlowContr
 import type { useStoryPresentationOperation } from "./useStoryPresentationOperation";
 import type { StoryPresentationMode } from "./storyPresentationModes";
 import type { StoryCgGallery } from "../story/types";
+import type { StoryGameplayLoadingPhase } from "../story/storyLoadingPresentation";
 
 /** Story state required by the presentation router. */
-export type StoryWorkspacePresentationController = Pick<ReturnType<typeof useStoryController>, "story" | "stories" | "loading" | "error" | "busy" | "reloadStories" | "submitInput">;
+export type StoryWorkspacePresentationController = Pick<ReturnType<typeof useStoryController>, "story" | "stories" | "loading" | "loadingPhase" | "error" | "busy" | "reloadStories" | "submitInput">;
 
 /** Operation state required by Story routes. */
 export type StoryOperationPresentationController = Pick<ReturnType<typeof useStoryPresentationOperation>, "error" | "busy" | "clearError">;
@@ -23,6 +24,7 @@ type Props = {
   mode: StoryPresentationMode;
   loadingStoryId: string;
   loadingElapsedMs: number;
+  loadingPhase: StoryGameplayLoadingPhase;
   cgGallery: StoryCgGallery[];
   cgGalleryLoading: boolean;
   controller: StoryWorkspacePresentationController;
@@ -38,7 +40,7 @@ type Props = {
 };
 
 /** Routes launcher, Story creation, play, archive, and preferences surfaces. */
-export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, loadingElapsedMs, cgGallery, cgGalleryLoading, controller, operation, creation, setMode, loadStoryForPlay, onOpenCg, onRetryCg, onOpenSettings, onCloseSettings, onExit }: Props) {
+export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, loadingElapsedMs, loadingPhase, cgGallery, cgGalleryLoading, controller, operation, creation, setMode, loadStoryForPlay, onOpenCg, onRetryCg, onOpenSettings, onCloseSettings, onExit }: Props) {
   const story = controller.story;
   const error = operation.error || controller.error;
   const busy = operation.busy || controller.busy;
@@ -51,7 +53,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   }));
 
   if (mode === "launcher" && controller.loading) {
-    return <StoryLoadingScreen background={storyMenuBackground} mode="listing" error={error} onRetry={() => void controller.reloadStories()} onBack={onExit} />;
+    return <StoryLoadingScreen background={storyMenuBackground} mode="listing" phase={controller.loadingPhase} error={error} onRetry={() => void controller.reloadStories()} onBack={onExit} />;
   }
   if (mode === "launcher") {
     return <StoryLauncher background={storyMenuBackground} busy={busy} error={error} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenCg={onOpenCg} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
@@ -61,7 +63,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   }
   if (mode === "loading") {
     const backgroundReady = story?.id === loadingStoryId && story.backgroundResource?.status !== "generating";
-    return <StoryLoadingScreen background={storyMenuBackground} mode="story" busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} onBack={() => setMode("launcher")} />;
+    return <StoryLoadingScreen background={storyMenuBackground} mode="story" phase={loadingPhase} busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} onBack={() => setMode("launcher")} />;
   }
   if (mode === "gallery") {
     return <StoryCgGallerySurface stories={cgGallery} busy={cgGalleryLoading || busy} error={error} onRetry={onRetryCg} onBack={() => setMode("launcher")} />;

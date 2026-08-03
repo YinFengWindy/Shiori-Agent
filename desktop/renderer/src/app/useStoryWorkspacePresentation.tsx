@@ -8,6 +8,7 @@ import { useStoryCreationFlowController } from "./useStoryCreationFlowController
 import { useStoryPresentationOperation } from "./useStoryPresentationOperation";
 import { StoryWorkspacePresentationView } from "./StoryWorkspacePresentationView";
 import type { StoryPresentationMode } from "./storyPresentationModes";
+import type { StoryGameplayLoadingPhase } from "../story/storyLoadingPresentation";
 
 type Args = {
   roles: RoleRecord[];
@@ -21,6 +22,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
   const [mode, setMode] = useState<StoryPresentationMode>("launcher");
   const [loadingStoryId, setLoadingStoryId] = useState("");
   const [loadingElapsedMs, setLoadingElapsedMs] = useState(0);
+  const [loadingPhase, setLoadingPhase] = useState<StoryGameplayLoadingPhase>("reading-story");
   const [cgGallery, setCgGallery] = useState<StoryCgGallery[]>([]);
   const [cgGalleryLoading, setCgGalleryLoading] = useState(false);
   const [settingsReturnMode, setSettingsReturnMode] = useState<"launcher" | "game" | "archive">("launcher");
@@ -33,6 +35,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
     setLoadingStoryId(storyId);
     clearError();
     setLoadingElapsedMs(0);
+    setLoadingPhase("reading-story");
     const transitionTimer = setTimeout(() => {
       setLoadingElapsedMs(250);
       setMode("loading");
@@ -41,7 +44,9 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
     try {
       const loadedStory = await loadStory(storyId);
       if (loadedStory) {
+        setLoadingPhase("restoring-progress");
         await waitForStoryReady(storyId, loadedStory);
+        setLoadingPhase("preparing-opening");
         await waitForMinimumStoryLoading(startedAt);
         setMode("game");
         return;
@@ -85,6 +90,6 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
   }, [client, refreshCgGallery, run]);
 
   return {
-    content: <StoryWorkspacePresentationView roles={roles} mode={mode} loadingStoryId={loadingStoryId} loadingElapsedMs={loadingElapsedMs} cgGallery={cgGallery} cgGalleryLoading={cgGalleryLoading} controller={controller} operation={operation} creation={creation} setMode={setMode} loadStoryForPlay={loadStoryForPlay} onOpenCg={openCgGallery} onRetryCg={retryCg} onOpenSettings={openSettings} onCloseSettings={closeSettings} onExit={onExit} />,
+    content: <StoryWorkspacePresentationView roles={roles} mode={mode} loadingStoryId={loadingStoryId} loadingElapsedMs={loadingElapsedMs} loadingPhase={loadingPhase} cgGallery={cgGallery} cgGalleryLoading={cgGalleryLoading} controller={controller} operation={operation} creation={creation} setMode={setMode} loadStoryForPlay={loadStoryForPlay} onOpenCg={openCgGallery} onRetryCg={retryCg} onOpenSettings={openSettings} onCloseSettings={closeSettings} onExit={onExit} />,
   };
 }

@@ -1,11 +1,12 @@
-import { ArrowClockwise, ArrowLeft, BookOpenText, Check } from "@phosphor-icons/react";
-import { resolveStoryLoadingCopy, resolveStoryLoadingPresentation, type StoryLoadingMode } from "./storyLoadingPresentation";
+import { ArrowClockwise, ArrowLeft, Check } from "@phosphor-icons/react";
+import { resolveStoryLoadingCopy, resolveStoryLoadingPresentation, type StoryLoadingMode, type StoryLoadingPhase } from "./storyLoadingPresentation";
 import { DEFAULT_STORY_MENU_BACKGROUND, StoryMenuScene } from "./StoryMenuScene";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StoryLoadingScreenProps = {
   background?: StoryMenuBackground;
   mode: StoryLoadingMode;
+  phase: StoryLoadingPhase;
   busy?: boolean;
   error?: string;
   elapsedMs?: number;
@@ -16,17 +17,16 @@ type StoryLoadingScreenProps = {
 };
 
 /** Renders the Story entry and save-loading transition without a spinner. */
-export function StoryLoadingScreen({ background = DEFAULT_STORY_MENU_BACKGROUND, mode, busy = true, error = "", elapsedMs = 250, loaded = 0, total = 0, onRetry, onBack }: StoryLoadingScreenProps) {
-  const copy = resolveStoryLoadingCopy(mode);
+export function StoryLoadingScreen({ background = DEFAULT_STORY_MENU_BACKGROUND, mode, phase, busy = true, error = "", elapsedMs = 250, loaded = 0, total = 0, onRetry, onBack }: StoryLoadingScreenProps) {
+  const copy = resolveStoryLoadingCopy(mode, phase);
   const presentation = resolveStoryLoadingPresentation({ elapsedMs, loaded, total });
 
   return <StoryMenuScene background={background} dataTestId="story-loading-screen" ariaBusy={busy} showTitle={false} animateEntrance={false}>{({ theme }) => <>
     <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02)_48%,rgba(40,20,33,0.16))]" />
     <main className="absolute right-[clamp(20px,5vw,72px)] top-1/2 z-10 w-[min(22rem,calc(100%-40px))] -translate-y-1/2" aria-label={copy.railLabel} data-testid="story-loading-rail">
       <div style={{ filter: theme.commandFilter }}>
-        <div className="flex items-center justify-end gap-2 text-[0.68rem] uppercase tracking-[0.3em] text-[#7A2356]"><BookOpenText className="h-4 w-4" weight="duotone" /><span>{copy.eyebrow}</span></div>
-        <h2 className="mt-4 text-right font-serif text-3xl font-semibold italic leading-none text-[#7A2356] [-webkit-text-stroke:0.5px_rgba(255,255,255,0.55)] [text-shadow:0_1px_0_rgba(255,255,255,0.72),0_5px_12px_rgba(93,21,51,0.28)]">{copy.heading}</h2>
-        <p className="mt-3 text-right text-xs tracking-[0.18em] text-[#7A2356]/70">{copy.currentStage}<span className="px-2">·</span>{busy ? "进行中" : "即将开始"}</p>
+        <h2 className="mt-0 text-right font-serif text-3xl font-semibold italic leading-none text-[#7A2356] [-webkit-text-stroke:0.5px_rgba(255,255,255,0.55)] [text-shadow:0_1px_0_rgba(255,255,255,0.72),0_5px_12px_rgba(93,21,51,0.28)]">{copy.heading}</h2>
+        <p className="mt-3 text-right text-xs tracking-[0.18em] text-[#7A2356]/70" aria-live="polite" data-testid="story-loading-current-stage">{copy.currentStage}<span className="px-2">·</span>{busy ? "进行中" : "即将开始"}</p>
 
         <div className="mt-8 border-t border-[#7A2356]/35" aria-label={copy.stageLabel}>
           {copy.stages.map((stage, index) => {

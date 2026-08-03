@@ -2,17 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createStoryBridgeClient, type StoryBridgeClient } from "./storyBridgeClient";
 import { replaceStorySummary } from "./selectors";
 import { waitForMinimumStoryLoading } from "./storyLoadingPresentation";
+import type { StoryListingLoadingPhase } from "./storyLoadingPresentation";
 import type { StoryDetails, StorySummary } from "./types";
 
 type ControllerState = {
   stories: StorySummary[];
   story: StoryDetails | null;
   loading: boolean;
+  loadingPhase: StoryListingLoadingPhase;
   busy: boolean;
   error: string;
 };
 
-const initialState: ControllerState = { stories: [], story: null, loading: true, busy: false, error: "" };
+const initialState: ControllerState = { stories: [], story: null, loading: true, loadingPhase: "reading-list", busy: false, error: "" };
 const storyResourcePollMs = 350;
 const storyResourcePollLimit = 240;
 
@@ -56,9 +58,10 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
   const reloadStories = useCallback(async () => {
     const isInitialListLoad = initialListLoadRef.current;
     const startedAt = Date.now();
-    setState((current) => ({ ...current, loading: true, error: "" }));
+    setState((current) => ({ ...current, loading: true, loadingPhase: "reading-list", error: "" }));
     try {
       const stories = await client.listStories();
+      setState((current) => ({ ...current, loadingPhase: "preparing-menu" }));
       if (isInitialListLoad) await waitForMinimumStoryLoading(startedAt);
       setState((current) => ({ ...current, stories, loading: false }));
     } catch (error) {
