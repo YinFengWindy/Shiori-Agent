@@ -59,10 +59,13 @@ class ProviderStoryDirector:
             "你是视觉小说 Story Director。只输出 JSON，不要 Markdown。"
             "输出格式为 {\"beats\":[{\"text\":string,\"kind\":\"dialogue|action|narration\","
             "\"speaker\":string|null,\"time_band\":\"清晨|上午|下午|夜晚|深夜\"|null,"
-            "\"fact_changes\":[]}],\"stop_reason\":\"awaiting_player\"}。"
+            "\"fact_changes\":[]}],\"stop_reason\":\"awaiting_player\","
+            "\"visual_prompt\":string}。"
             "一次最多 3 个 beat，所有 text 合计最多 1200 个中文字符，单个 beat 最多 400 字符。"
             "剧情时间只使用清晨、上午、下午、夜晚、深夜五档；具体年月日和时分不属于 Story。"
             "只有剧情明确进入另一个时段时才填写 time_band，否则必须填写 null。"
+            "仅 opening 模式填写 visual_prompt；它必须是描述本次开场场景的英文 NovelAI tags，"
+            "使用逗号分隔，不要中文、自然语言句子、文字、logo 或水印；非 opening 模式填写空字符串。"
             "只描述当前角色可知的内容，不能泄露隐藏连续性或来源。"
         )
 
@@ -131,4 +134,5 @@ class ProviderStoryDirector:
         return DirectorDraft(
             beats=tuple(beats),
             stop_reason=str(payload.get("stop_reason") or "awaiting_player"),
+            visual_prompt=str(payload.get("visual_prompt") or "").strip(),
         )

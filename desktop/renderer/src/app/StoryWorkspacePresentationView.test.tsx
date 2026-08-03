@@ -23,7 +23,7 @@ const operation: StoryOperationPresentationController = { error: "", busy: false
 const creation: StoryCreationPresentationController = { createStory: () => undefined };
 
 function render(mode: StoryPresentationMode) {
-  return renderToStaticMarkup(<StoryWorkspacePresentationView roles={[]} mode={mode} loadingStoryId="" loadingElapsedMs={0} controller={controller} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
+  return renderToStaticMarkup(<StoryWorkspacePresentationView roles={[]} mode={mode} loadingStoryId="" loadingElapsedMs={0} cgGallery={[]} cgGalleryLoading={false} controller={controller} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
 }
 
 describe("StoryWorkspacePresentationView", () => {

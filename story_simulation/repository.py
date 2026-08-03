@@ -24,9 +24,10 @@ from .models import (
     StoryBeat,
     StoryContext,
     StoryPlayerProfile,
+    StoryResource,
     utc_now,
 )
-from .schema_migrations import migrate_legacy_story_time
+from .schema_migrations import migrate_legacy_story_time, migrate_story_resources
 from .story_time import next_story_time_band, normalize_story_time_band
 
 
@@ -44,6 +45,7 @@ class StoryRepository:
         with self._lock:
             self._connection.executescript(SCHEMA)
             migrate_legacy_story_time(self._connection)
+            migrate_story_resources(self._connection)
 
     def close(self) -> None:
         """Close this Story database connection."""
@@ -104,6 +106,12 @@ class StoryRepository:
                 VALUES (?, ?, 1, ?, 'awaiting_opening', 'plot', 'idle', ?, ?)""",
                 (segment_id, story_id, normalized_time_band, dump(opening_context), dump({})),
             )
+            resource_id = f"resource-{uuid4().hex}"
+            connection.execute(
+                """INSERT INTO story_resources
+                VALUES (?, ?, 'background', 'generating', NULL, '', NULL, 1, NULL, ?, ?)""",
+                (resource_id, story_id, now, now),
+            )
         return self.story_read_model(story_id)
 
     def story_read_model(self, story_id: str) -> dict[str, Any]:
@@ -130,6 +138,16 @@ class StoryRepository:
                 FROM turns WHERE story_id = ? ORDER BY created_at, id""",
                 (story_id,),
             ).fetchall()
+            resources = self._connection.execute(
+                """SELECT * FROM story_resources
+                WHERE story_id = ? ORDER BY sequence, created_at, id""",
+                (story_id,),
+            ).fetchall()
+        resource_models = [self._resource_dict(row) for row in resources]
+        background_resource = next(
+            (resource for resource in resource_models if resource["kind"] == "background"),
+            None,
+        )
         return {
             "id": story["id"],
             "title": story["title"],
@@ -142,8 +160,100 @@ class StoryRepository:
             "beats": [self._beat_dict(row) for row in beats],
             "cues": [load(row["payload"], {}) for row in cues],
             "turns": [self._turn_dict(row) for row in turns],
+            "backgroundResource": background_resource,
+            "cgGallery": resource_models,
             "currentTimeBand": str(segment["time_band"]),
         }
+
+    def story_resources(self, story_id: str) -> list[dict[str, Any]]:
+        """Return the Story-owned visual resources in creation order."""
+
+        with self._lock:
+            self._require_row("SELECT id FROM stories WHERE id = ?", (story_id,))
+            rows = self._connection.execute(
+                """SELECT * FROM story_resources
+                WHERE story_id = ? ORDER BY sequence, created_at, id""",
+                (story_id,),
+            ).fetchall()
+        return [self._resource_dict(row) for row in rows]
+
+    def resource(self, resource_id: str) -> dict[str, Any]:
+        """Return one Story-owned resource by its stable identifier."""
+
+        with self._lock:
+            row = self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,)
+            )
+        return self._resource_dict(row)
+
+    def prepare_resource(
+        self,
+        resource_id: str,
+        *,
+        prompt: str,
+        source_turn_id: str | None,
+    ) -> dict[str, Any]:
+        """Attach the immutable generation inputs before a resource request."""
+
+        clean_prompt = prompt.strip()
+        with self.transaction() as connection:
+            self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+            now = utc_now()
+            connection.execute(
+                """UPDATE story_resources
+                SET prompt = ?, source_turn_id = ?, status = 'generating',
+                    path = NULL, error_code = NULL, updated_at = ?
+                WHERE id = ?""",
+                (clean_prompt, source_turn_id, now, resource_id),
+            )
+            row = self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+        return self._resource_dict(row)
+
+    def complete_resource(self, resource_id: str, path: str) -> dict[str, Any]:
+        """Persist a successfully generated local asset path."""
+
+        clean_path = path.strip()
+        if not clean_path:
+            raise ValueError("资源路径不能为空")
+        with self.transaction() as connection:
+            self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+            now = utc_now()
+            connection.execute(
+                """UPDATE story_resources
+                SET status = 'ready', path = ?, error_code = NULL, updated_at = ?
+                WHERE id = ?""",
+                (clean_path, now, resource_id),
+            )
+            row = self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+        return self._resource_dict(row)
+
+    def fail_resource(self, resource_id: str, error_code: str) -> dict[str, Any]:
+        """Persist a safe, stable failure state without exposing provider details."""
+
+        clean_code = error_code.strip() or "resource_generation_failed"
+        with self.transaction() as connection:
+            self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+            now = utc_now()
+            connection.execute(
+                """UPDATE story_resources
+                SET status = 'failed', error_code = ?, updated_at = ?
+                WHERE id = ?""",
+                (clean_code, now, resource_id),
+            )
+            row = self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+        return self._resource_dict(row)
 
     def current_time_band(self, story_id: str) -> str:
         """Return the current player-facing Story period."""
@@ -589,6 +699,23 @@ class StoryRepository:
             "speaker": payload.get("speaker"),
             "recordedAt": payload["recorded_at"],
         }
+
+    @staticmethod
+    def _resource_dict(row: sqlite3.Row) -> dict[str, Any]:
+        resource = StoryResource(
+            id=str(row["id"]),
+            story_id=str(row["story_id"]),
+            kind=str(row["kind"]),  # type: ignore[arg-type]
+            status=str(row["status"]),  # type: ignore[arg-type]
+            path=str(row["path"]) if row["path"] else None,
+            prompt=str(row["prompt"] or ""),
+            source_turn_id=(str(row["source_turn_id"]) if row["source_turn_id"] else None),
+            sequence=int(row["sequence"]),
+            error_code=str(row["error_code"]) if row["error_code"] else None,
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
+        return resource.to_dict()
 
 
 def payload_hash(payload: dict[str, Any]) -> str:

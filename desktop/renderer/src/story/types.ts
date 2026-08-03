@@ -13,6 +13,33 @@ export type StorySummary = {
 /** Story operation state owned by the current segment. */
 export type StoryOperation = "idle" | "awaiting_player" | "generating";
 
+/** Lifecycle state of a Story-owned image resource. */
+export type StoryResourceStatus = "generating" | "ready" | "failed";
+
+/** One image owned by a Story and shown by its CG collection. */
+export type StoryResource = {
+  id: string;
+  storyId: string;
+  kind: "background" | "cg";
+  status: StoryResourceStatus;
+  path: string | null;
+  prompt: string;
+  sourceTurnId: string | null;
+  sequence: number;
+  errorCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Story grouping returned by the main-menu CG collection. */
+export type StoryCgGallery = {
+  storyId: string;
+  title: string;
+  status: "active" | "archived" | "deleting";
+  createdAt: string;
+  items: StoryResource[];
+};
+
 /** Persisted Story segment read model. */
 export type StorySegment = {
   id: string;
@@ -74,6 +101,8 @@ export type StoryDetails = {
   beats: StoryBeat[];
   cues: Array<Record<string, unknown>>;
   turns: StoryTurn[];
+  backgroundResource: StoryResource | null;
+  cgGallery: StoryResource[];
   currentTimeBand: StoryTimeBand;
 };
 

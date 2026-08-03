@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from uuid import uuid4
 
 from ._json import dump, load
 from .story_time import legacy_story_time_band
@@ -66,6 +67,29 @@ def migrate_legacy_story_time(connection: sqlite3.Connection) -> None:
         raise
     finally:
         connection.execute("PRAGMA foreign_keys = ON")
+
+
+def migrate_story_resources(connection: sqlite3.Connection) -> None:
+    """Give pre-resource Stories a safe, explicit background fallback state."""
+
+    stories = connection.execute("SELECT id FROM stories").fetchall()
+    if not stories:
+        return
+    now = "1970-01-01T00:00:00+00:00"
+    connection.executemany(
+        """INSERT INTO story_resources
+        (id, story_id, kind, status, path, prompt, source_turn_id, sequence,
+         error_code, created_at, updated_at)
+        SELECT ?, ?, 'background', 'failed', NULL, '', NULL, 1,
+               'legacy_story_no_background', ?, ?
+        WHERE NOT EXISTS (
+            SELECT 1 FROM story_resources WHERE story_id = ? AND kind = 'background'
+        )""",
+        [
+            (f"resource-{uuid4().hex}", str(row[0]), now, now, str(row[0]))
+            for row in stories
+        ],
+    )
 
 
 def _table_columns(connection: sqlite3.Connection, table: str) -> set[str]:

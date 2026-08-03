@@ -18,6 +18,7 @@ _READ_ONLY_METHODS = frozenset(
         "novelai.prompt_tags.list",
         "stories.list",
         "stories.get",
+        "stories.cg.list",
     }
 )
 _INTEGRATION_METHODS = frozenset(
@@ -27,6 +28,7 @@ _INTEGRATION_METHODS = frozenset(
         "stories.create",
         "stories.input",
         "stories.continue",
+        "stories.cg.retry",
         "observation.analyze",
         "voice.synthesize",
         "voice.synthesize.cancel",

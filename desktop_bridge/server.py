@@ -31,6 +31,11 @@ class DesktopBridgeServer:
         spawn_tool = (
             runtime.tools.get_tool("spawn") if getattr(runtime, "tools", None) else None
         )
+        image_tool = (
+            runtime.tools.get_tool("generate_image")
+            if getattr(runtime, "tools", None)
+            else None
+        )
         observation_service = getattr(runtime, "screen_observation", None)
         self.service = DesktopBridgeService(
             workspace=runtime.session_manager.workspace,
@@ -48,6 +53,7 @@ class DesktopBridgeServer:
             memory_optimizer=getattr(runtime, "memory_optimizer", None),
             observation_service=observation_service,
             provider=runtime.provider,
+            image_tool=image_tool,
         )
         self._pet_action_handler = self._handle_pet_action
         runtime.event_bus.on(DesktopPetActionRequested, self._pet_action_handler)

@@ -76,6 +76,21 @@ CREATE TABLE IF NOT EXISTS cues (
     payload TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS story_resources (
+    id TEXT PRIMARY KEY,
+    story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL,
+    path TEXT,
+    prompt TEXT NOT NULL,
+    source_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL,
+    sequence INTEGER NOT NULL,
+    error_code TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(story_id, sequence)
+);
+
 CREATE TABLE IF NOT EXISTS idempotency (
     request_id TEXT PRIMARY KEY,
     payload_hash TEXT NOT NULL,
@@ -97,4 +112,7 @@ ON turns(story_id, created_at, id);
 
 CREATE INDEX IF NOT EXISTS ix_story_beats_sequence
 ON beats(story_id, sequence);
+
+CREATE INDEX IF NOT EXISTS ix_story_resources_story_sequence
+ON story_resources(story_id, sequence);
 """

@@ -13,6 +13,8 @@ type ControllerState = {
 };
 
 const initialState: ControllerState = { stories: [], story: null, loading: true, busy: false, error: "" };
+const storyResourcePollMs = 350;
+const storyResourcePollLimit = 240;
 
 /** Owns Story list, read-model refresh, and player input state. */
 export function useStoryController(client: StoryBridgeClient = createStoryBridgeClient()) {
@@ -38,6 +40,18 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
   }, []);
 
   const loadStory = useCallback((storyId: string) => run(() => client.getStory(storyId), applyStory), [applyStory, client, run]);
+
+  const waitForStoryReady = useCallback(async (storyId: string, initialStory: StoryDetails) => {
+    let current = initialStory;
+    for (let attempt = 0; attempt < storyResourcePollLimit; attempt += 1) {
+      if (current.backgroundResource?.status !== "generating") return current;
+      await new Promise<void>((resolve) => window.setTimeout(resolve, storyResourcePollMs));
+      const next = await client.getStory(storyId);
+      applyStory(next);
+      current = next;
+    }
+    return current;
+  }, [applyStory, client]);
 
   const reloadStories = useCallback(async () => {
     const isInitialListLoad = initialListLoadRef.current;
@@ -67,7 +81,7 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
   }, [reloadStories]);
 
   useEffect(() => window.miraDesktop.onEvent((event) => {
-    if (!new Set(["stories.beat.committed", "stories.operation.changed", "stories.failed"]).has(event.method)) return;
+    if (!new Set(["stories.beat.committed", "stories.operation.changed", "stories.resource.changed", "stories.failed"]).has(event.method)) return;
     const storyId = typeof event.payload.story_id === "string" ? event.payload.story_id : "";
     if (storyId) refreshStory(storyId);
   }), [refreshStory]);
@@ -88,7 +102,8 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
     ...state,
     reloadStories,
     loadStory,
+    waitForStoryReady,
     submitInput,
     continueStory,
-  }), [continueStory, loadStory, reloadStories, state, submitInput]);
+  }), [continueStory, loadStory, reloadStories, state, submitInput, waitForStoryReady]);
 }

@@ -8,6 +8,7 @@ type LauncherActions = {
   reducedMotion: boolean;
   onCreateStory: () => void;
   onOpenLoad: () => void;
+  onOpenCg: () => void;
   onOpenSettings: () => void;
   onExit: () => void;
 };
@@ -28,11 +29,12 @@ function commandHover(reducedMotion: boolean) {
 }
 
 /** Renders the Story launch commands as a cinematic, keyboard-accessible rail. */
-export function StoryMainMenu({ busy, reducedMotion, onCreateStory, onOpenLoad, onOpenSettings, onExit }: LauncherActions) {
+export function StoryMainMenu({ busy, reducedMotion, onCreateStory, onOpenLoad, onOpenCg, onOpenSettings, onExit }: LauncherActions) {
   return (
     <motion.nav aria-label="Story menu" className="grid gap-2" data-testid="story-launcher-command-rail" initial={{ opacity: 0, x: reducedMotion ? 0 : 28 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reducedMotion ? 0 : 20 }} transition={panelTransition}>
       <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onCreateStory}>NEW STORY</motion.button>
       <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenLoad}>LOAD STORY</motion.button>
+      <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenCg}>CG GALLERY</motion.button>
       <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onOpenSettings}>SETTINGS</motion.button>
       <motion.button className={commandClass} type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={onExit}>EXIT</motion.button>
     </motion.nav>

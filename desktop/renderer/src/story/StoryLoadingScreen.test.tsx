@@ -4,6 +4,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StoryLoadingScreen } from "./StoryLoadingScreen";
+import type { StoryMenuBackground } from "./useStoryMenuBackground";
+
+const resolvedBackground: StoryMenuBackground = {
+  url: "shiori-asset://local/story-menu-random.webp",
+  theme: {
+    commandFilter: "hue-rotate(18deg) saturate(1.12)",
+    titleHighlight: "rgba(224,96,160,0.35)",
+  },
+};
 
 describe("StoryLoadingScreen", () => {
   it("renders staged progress for initial Story entry", () => {
@@ -22,5 +31,12 @@ describe("StoryLoadingScreen", () => {
     assert.match(markup, /aria-valuenow="2"/);
     assert.match(markup, /2 \/ 4/);
     assert.match(markup, /width:50%/);
+  });
+
+  it("uses the resolved random backdrop and sampled menu theme", () => {
+    const markup = renderToStaticMarkup(<StoryLoadingScreen background={resolvedBackground} mode="listing" />);
+    assert.match(markup, /url\(shiori-asset:\/\/local\/story-menu-random\.webp\)/);
+    assert.match(markup, /hue-rotate\(18deg\) saturate\(1\.12\)/);
+    assert.match(markup, /data-testid="story-loading-rail"/);
   });
 });

@@ -1,4 +1,4 @@
-import type { StoryCreationInput, StoryDetails, StorySummary } from "./types";
+import type { StoryCgGallery, StoryCreationInput, StoryDetails, StoryResource, StorySummary } from "./types";
 import { StoryBridgeError } from "./types";
 
 type DesktopInvoke = typeof window.miraDesktop.invoke;
@@ -13,6 +13,16 @@ type StorySummaryPayload = {
 };
 
 type StoryPayload = StoryDetails;
+
+type StoryResourcePayload = StoryResource;
+
+type StoryCgGalleryPayload = {
+  story_id: string;
+  title: string;
+  status: StoryCgGallery["status"];
+  created_at: string;
+  items: StoryResourcePayload[];
+};
 
 async function invokePayload<T>(invoke: DesktopInvoke, method: string, payload: Record<string, unknown>) {
   const response = await invoke({ method, payload });
@@ -38,6 +48,8 @@ export interface StoryBridgeClient {
   createStory(input: StoryCreationInput): Promise<StoryDetails>;
   submitInput(storyId: string, input: string): Promise<StoryDetails>;
   continueStory(storyId: string): Promise<StoryDetails>;
+  listCgGallery(): Promise<StoryCgGallery[]>;
+  retryCg(storyId: string, resourceId: string): Promise<StoryDetails>;
 }
 
 /** Creates the renderer client for the Story simulation bounded context. */
@@ -88,6 +100,23 @@ export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDeskt
       const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.continue", {
         story_id: storyId,
         expected_revision: revisions.get(storyId) ?? 0,
+      });
+      return rememberStory(payload.story);
+    },
+    async listCgGallery() {
+      const payload = await invokePayload<{ stories: StoryCgGalleryPayload[] }>(invoke, "stories.cg.list", {});
+      return payload.stories.map((story) => ({
+        storyId: story.story_id,
+        title: story.title,
+        status: story.status,
+        createdAt: story.created_at,
+        items: story.items,
+      }));
+    },
+    async retryCg(storyId, resourceId) {
+      const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.cg.retry", {
+        story_id: storyId,
+        resource_id: resourceId,
       });
       return rememberStory(payload.story);
     },

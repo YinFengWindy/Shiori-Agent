@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { RoleRecord } from "../shared/types";
 import type { StoryBridgeClient } from "../story/storyBridgeClient";
+import type { StoryCgGallery } from "../story/types";
 import type { useStoryController } from "../story/useStoryController";
 import { waitForMinimumStoryLoading } from "../story/storyLoadingPresentation";
 import { useStoryCreationFlowController } from "./useStoryCreationFlowController";
@@ -20,10 +21,12 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
   const [mode, setMode] = useState<StoryPresentationMode>("launcher");
   const [loadingStoryId, setLoadingStoryId] = useState("");
   const [loadingElapsedMs, setLoadingElapsedMs] = useState(0);
+  const [cgGallery, setCgGallery] = useState<StoryCgGallery[]>([]);
+  const [cgGalleryLoading, setCgGalleryLoading] = useState(false);
   const [settingsReturnMode, setSettingsReturnMode] = useState<"launcher" | "game" | "archive">("launcher");
   const operation = useStoryPresentationOperation();
   const { clearError, reportError, run } = operation;
-  const { loadStory } = controller;
+  const { loadStory, waitForStoryReady } = controller;
 
   const loadStoryForPlay = useCallback(async (storyId: string) => {
     const startedAt = Date.now();
@@ -36,7 +39,9 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
     }, 250);
     const progressTimer = setTimeout(() => setLoadingElapsedMs(2_000), 2_000);
     try {
-      if (await loadStory(storyId)) {
+      const loadedStory = await loadStory(storyId);
+      if (loadedStory) {
+        await waitForStoryReady(storyId, loadedStory);
         await waitForMinimumStoryLoading(startedAt);
         setMode("game");
         return;
@@ -47,7 +52,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
       clearTimeout(transitionTimer);
       clearTimeout(progressTimer);
     }
-  }, [clearError, loadStory, reportError]);
+  }, [clearError, loadStory, reportError, waitForStoryReady]);
 
   const creation = useStoryCreationFlowController({ client, controller, loadStoryForPlay, run });
   const openSettings = useCallback((returnMode: "launcher" | "game" | "archive") => {
@@ -55,8 +60,31 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
     setMode("settings");
   }, []);
   const closeSettings = useCallback(() => setMode(settingsReturnMode), [settingsReturnMode]);
+  const refreshCgGallery = useCallback(async () => {
+    setCgGallery(await client.listCgGallery());
+  }, [client]);
+  useEffect(() => window.miraDesktop.onEvent((event) => {
+    if (mode !== "gallery" || event.method !== "stories.resource.changed") return;
+    void refreshCgGallery().catch((error: unknown) => {
+      reportError(error instanceof Error ? error.message : "无法刷新 CG 集");
+    });
+  }), [mode, refreshCgGallery, reportError]);
+  const openCgGallery = useCallback(() => {
+    clearError();
+    setMode("gallery");
+    setCgGalleryLoading(true);
+    void refreshCgGallery().catch((error: unknown) => {
+      reportError(error instanceof Error ? error.message : "无法读取 CG 集");
+    }).finally(() => setCgGalleryLoading(false));
+  }, [clearError, refreshCgGallery, reportError]);
+  const retryCg = useCallback((storyId: string, resourceId: string) => {
+    void run(
+      () => client.retryCg(storyId, resourceId),
+      refreshCgGallery,
+    );
+  }, [client, refreshCgGallery, run]);
 
   return {
-    content: <StoryWorkspacePresentationView roles={roles} mode={mode} loadingStoryId={loadingStoryId} loadingElapsedMs={loadingElapsedMs} controller={controller} operation={operation} creation={creation} setMode={setMode} loadStoryForPlay={loadStoryForPlay} onOpenSettings={openSettings} onCloseSettings={closeSettings} onExit={onExit} />,
+    content: <StoryWorkspacePresentationView roles={roles} mode={mode} loadingStoryId={loadingStoryId} loadingElapsedMs={loadingElapsedMs} cgGallery={cgGallery} cgGalleryLoading={cgGalleryLoading} controller={controller} operation={operation} creation={creation} setMode={setMode} loadStoryForPlay={loadStoryForPlay} onOpenCg={openCgGallery} onRetryCg={retryCg} onOpenSettings={openSettings} onCloseSettings={closeSettings} onExit={onExit} />,
   };
 }

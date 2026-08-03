@@ -8,6 +8,7 @@ import { StoryLauncher } from "./StoryLauncher";
 const props = {
   onCreateStory: () => undefined,
   onOpenLoad: () => undefined,
+  onOpenCg: () => undefined,
   onOpenSettings: () => undefined,
   onExit: () => undefined,
 };
@@ -17,6 +18,7 @@ describe("StoryLauncher", () => {
     const markup = renderToStaticMarkup(<StoryLauncher {...props} />);
     assert.ok(markup.includes("NEW STORY"));
     assert.ok(markup.includes("LOAD STORY"));
+    assert.ok(markup.includes("CG GALLERY"));
     assert.ok(markup.includes("SETTINGS"));
     assert.ok(markup.includes("EXIT"));
     assert.ok(markup.includes("栞 / SHIORI"));

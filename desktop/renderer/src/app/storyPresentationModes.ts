@@ -1,1 +1,1 @@
-export type StoryPresentationMode = "launcher" | "load" | "game" | "archive" | "create" | "settings" | "loading";
+export type StoryPresentationMode = "launcher" | "load" | "gallery" | "game" | "archive" | "create" | "settings" | "loading";

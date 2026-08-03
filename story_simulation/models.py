@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from .story_time import normalize_story_time_band
+
+StoryResourceKind = Literal["background", "cg"]
+StoryResourceStatus = Literal["generating", "ready", "failed"]
 
 
 def utc_now() -> str:
@@ -75,6 +78,7 @@ class DirectorDraft:
 
     beats: tuple[StoryBeatDraft, ...]
     stop_reason: str = "awaiting_player"
+    visual_prompt: str = ""
 
     def validate(self) -> None:
         if not self.beats:
@@ -85,6 +89,38 @@ class DirectorDraft:
             raise ValueError("一次输入可见文本不能超过 1200 字符")
         for beat in self.beats:
             beat.validate()
+
+
+@dataclass(frozen=True)
+class StoryResource:
+    """One Story-owned visual resource and its generation lifecycle."""
+
+    id: str
+    story_id: str
+    kind: StoryResourceKind
+    status: StoryResourceStatus
+    path: str | None
+    prompt: str
+    source_turn_id: str | None
+    sequence: int
+    error_code: str | None
+    created_at: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "storyId": self.story_id,
+            "kind": self.kind,
+            "status": self.status,
+            "path": self.path,
+            "prompt": self.prompt,
+            "sourceTurnId": self.source_turn_id,
+            "sequence": self.sequence,
+            "errorCode": self.error_code,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+        }
 
 
 @dataclass(frozen=True)

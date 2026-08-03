@@ -19,6 +19,8 @@ from story_simulation.repository import StoryRepository, payload_hash
 from story_simulation.service import StorySimulationService
 from story_simulation.story_time import normalize_story_time_band
 
+from .story_image_generator import StoryImageGenerator
+
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 
@@ -33,23 +35,28 @@ class StorySimulationHandler:
         director: StoryDirector | None = None,
         provider: Any | None = None,
         model: str = "",
+        image_tool: Any | None = None,
     ) -> None:
         self._roles = role_store
         self._catalog = StoryCatalog(workspace)
         self._repositories: dict[str, StoryRepository] = {}
         self._director = director or ProviderStoryDirector(provider=provider, model=model)
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._resource_tasks: dict[str, asyncio.Task[None]] = {}
+        self._image_generator = StoryImageGenerator(image_tool)
 
     async def aclose(self) -> None:
         """Cancel uncommitted Director tasks and release Story connections."""
 
         tasks = list(self._tasks.values())
+        tasks.extend(self._resource_tasks.values())
         for task in tasks:
             if not task.done():
                 task.cancel()
         if tasks:
             _ = await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
+        self._resource_tasks.clear()
         for repository in self._repositories.values():
             repository.close()
         self._repositories.clear()
@@ -81,6 +88,10 @@ class StorySimulationHandler:
             }
         if method == "stories.get":
             return {"story": self._repository(self._story_id(payload)).story_read_model(self._story_id(payload))}
+        if method == "stories.cg.list":
+            return self._cg_gallery()
+        if method == "stories.cg.retry":
+            return await self._retry_cg(payload, emit_event=emit_event)
         if method == "stories.create":
             return await self._create(payload, request_id=request_id, emit_event=emit_event)
         if method == "stories.input":
@@ -218,6 +229,58 @@ class StorySimulationHandler:
         )
         return {"story": story, "turn_id": turn["id"], "state": story["segment"]}
 
+    def _cg_gallery(self) -> dict[str, Any]:
+        """Return Story-owned CG resources grouped by Story for the main menu."""
+
+        groups: list[dict[str, Any]] = []
+        for summary in self._catalog.list_summaries(include_archived=True):
+            if summary["status"] == "deleting":
+                continue
+            story_id = str(summary["story_id"])
+            groups.append(
+                {
+                    "story_id": story_id,
+                    "title": summary["title"],
+                    "status": summary["status"],
+                    "created_at": summary["created_at"],
+                    "items": self._repository(story_id).story_resources(story_id),
+                }
+            )
+        return {"stories": groups}
+
+    async def _retry_cg(
+        self, payload: dict[str, Any], *, emit_event: EventEmitter
+    ) -> dict[str, Any]:
+        """Retry one failed resource while keeping the Story transcript unchanged."""
+
+        story_id = self._story_id(payload)
+        resource_id = self._required(payload, "resource_id")
+        repository = self._repository(story_id)
+        resource = repository.resource(resource_id)
+        if resource["storyId"] != story_id:
+            raise StoryNotFoundError("Story resource 不属于当前 Story")
+        if resource["status"] != "failed":
+            raise ValueError("资源当前不可重试")
+        prepared = repository.prepare_resource(
+            resource_id,
+            prompt=str(resource.get("prompt") or ""),
+            source_turn_id=resource.get("sourceTurnId"),
+        )
+        service = self._service(repository)
+        existing = self._resource_tasks.get(resource_id)
+        if existing is None or existing.done():
+            task = asyncio.create_task(
+                service.generate_resource(prepared, emit_event),
+                name=f"story-resource:{resource_id}",
+            )
+            self._resource_tasks[resource_id] = task
+            task.add_done_callback(
+                lambda _task, resource_id=resource_id: self._resource_tasks.pop(
+                    resource_id, None
+                )
+            )
+        return {"story": repository.story_read_model(story_id), "resource_id": resource_id}
+
     def _start_generation(
         self, service: StorySimulationService, turn: dict[str, Any], emit_event: EventEmitter
     ) -> None:
@@ -267,7 +330,11 @@ class StorySimulationHandler:
             shutil.rmtree(story_path)
 
     def _service(self, repository: StoryRepository) -> StorySimulationService:
-        return StorySimulationService(repository=repository, director=self._director)
+        return StorySimulationService(
+            repository=repository,
+            director=self._director,
+            image_generator=self._image_generator,
+        )
 
     def _require_role(self, role_id: str):
         role = self._roles.get_role(role_id)

@@ -35,6 +35,17 @@ describe("createStoryBridgeClient", () => {
     assert.deepEqual(requests, [{ method: "stories.list", payload: {} }]);
   });
 
+  it("loads CG collections grouped by Story", async () => {
+    const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
+    const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> => {
+      requests.push(request);
+      return { id: "response", type: "response", method: request.method, payload: { stories: [{ story_id: "story-1", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", items: [] }] }, error: null };
+    };
+
+    assert.deepEqual(await createStoryBridgeClient(invoke).listCgGallery(), [{ storyId: "story-1", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", items: [] }]);
+    assert.deepEqual(requests, [{ method: "stories.cg.list", payload: {} }]);
+  });
+
   it("returns the repository Story read model without a compatibility projection", async () => {
     const story = storyPayload();
     const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => ({ id: "response", type: "response", method: request.method, payload: { story }, error: null }));

@@ -1,6 +1,7 @@
 import { ArrowRight, BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
 import { useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
+import { toFileUrl } from "../shared/format";
 import { canSubmitStoryInput } from "./selectors";
 import type { StoryDetails } from "./types";
 import { STORY_MENU_BACKGROUND_URL } from "./storyStaticAssets";
@@ -20,6 +21,9 @@ type StoryGameSurfaceProps = {
 export function StoryGameSurface({ story, busy, error, characterAvatarUrl, onSubmitInput, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
   const [action, setAction] = useState("");
   const latestBeat = story.beats[story.beats.length - 1] ?? null;
+  const backgroundUrl = story.backgroundResource?.status === "ready" && story.backgroundResource.path
+    ? toFileUrl(story.backgroundResource.path)
+    : STORY_MENU_BACKGROUND_URL;
   const speakerName = latestBeat?.speaker ?? "";
   const visibleText = latestBeat?.text || story.background;
   const canSubmit = canSubmitStoryInput(story) && !busy && Boolean(action.trim());
@@ -31,7 +35,7 @@ export function StoryGameSurface({ story, busy, error, characterAvatarUrl, onSub
 
   return (
     <section className="relative h-full min-h-0 overflow-hidden bg-[#172128] text-white" data-testid="story-game-surface">
-      <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url(${STORY_MENU_BACKGROUND_URL})` }} />
+      <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-game-backdrop" style={{ backgroundImage: `url(${backgroundUrl})` }} />
       <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-2/3 bg-[linear-gradient(0deg,rgba(13,20,25,0.9),rgba(13,20,25,0.35)_44%,transparent)]" />
       {characterAvatarUrl ? <img className="pointer-events-none absolute bottom-[clamp(10rem,20vh,15rem)] right-[clamp(4vw,10vw,12rem)] z-10 h-[min(64vh,42rem)] max-w-[42vw] object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]" src={characterAvatarUrl} alt="" /> : null}
 

@@ -2,6 +2,7 @@ export { StoryArchiveSurface } from "./StoryArchiveSurface";
 export { StoryAppSurface } from "./StoryAppSurface";
 export { StoryCreateFlow } from "./StoryCreateFlow";
 export { StoryGameSurface } from "./StoryGameSurface";
+export { StoryCgGallerySurface } from "./StoryCgGallerySurface";
 export { StoryLauncher } from "./StoryLauncher";
 export { StoryLoadList } from "./StoryMenu";
 export { StoryLoadingScreen } from "./StoryLoadingScreen";

@@ -96,6 +96,7 @@ class DesktopBridgeService:
         voice_service: VoiceService | None = None,
         provider: Any | None = None,
         story_director: Any | None = None,
+        image_tool: Any | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -191,6 +192,7 @@ class DesktopBridgeService:
             director=story_director,
             provider=provider,
             model=str(getattr(config, "model", "") or ""),
+            image_tool=image_tool,
         )
         self.observation_service = observation_service
         self.request_router = DesktopBridgeRequestRouter(
