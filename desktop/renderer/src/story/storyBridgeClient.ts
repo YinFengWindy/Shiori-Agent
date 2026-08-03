@@ -9,6 +9,7 @@ type StorySummaryPayload = {
   title: string;
   status: "active" | "archived" | "deleting";
   created_at: string;
+  current_at: string;
 };
 
 type StoryPayload = StoryDetails;
@@ -26,6 +27,7 @@ function toStorySummary(story: StorySummaryPayload): StorySummary {
     title: story.title,
     status: story.status,
     createdAt: story.created_at,
+    currentAt: story.current_at,
   };
 }
 

@@ -70,7 +70,16 @@ class StorySimulationHandler:
             return None
         if method == "stories.list":
             include_archived = bool(payload.get("include_archived", False))
-            return {"stories": self._catalog.list_summaries(include_archived=include_archived)}
+            summaries = self._catalog.list_summaries(include_archived=include_archived)
+            return {
+                "stories": [
+                    {
+                        **summary,
+                        "current_at": self._repository(summary["story_id"]).current_effective_at(summary["story_id"]),
+                    }
+                    for summary in summaries
+                ]
+            }
         if method == "stories.get":
             return {"story": self._repository(self._story_id(payload)).story_read_model(self._story_id(payload))}
         if method == "stories.create":

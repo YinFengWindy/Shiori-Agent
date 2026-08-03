@@ -26,6 +26,7 @@ from .models import (
     StoryPlayerProfile,
     utc_now,
 )
+from .story_time import next_story_time
 
 
 class StoryRepository:
@@ -139,6 +140,20 @@ class StoryRepository:
             "cues": [load(row["payload"], {}) for row in cues],
             "turns": [self._turn_dict(row) for row in turns],
         }
+
+    def current_effective_at(self, story_id: str) -> str:
+        """Return the current in-story time without exposing Story internals."""
+
+        with self._lock:
+            segment = self._require_row(
+                "SELECT starts_at FROM segments WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
+                (story_id,),
+            )
+            beat = self._connection.execute(
+                "SELECT effective_at FROM beats WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
+                (story_id,),
+            ).fetchone()
+        return str(beat["effective_at"] if beat is not None else segment["starts_at"])
 
     def story_id_for_turn(self, turn_id: str) -> str:
         """Resolve a persisted Turn owner without loading unrelated Story state."""
@@ -295,17 +310,30 @@ class StoryRepository:
             recorded_at = utc_now()
             committed_ids = load(turn["committed_beat_ids"], [])
             revision = int(story["revision"])
+            previous_beat = connection.execute(
+                "SELECT effective_at FROM beats WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
+                (story["id"],),
+            ).fetchone()
+            current_effective_at = str(
+                previous_beat["effective_at"] if previous_beat is not None else default_effective_at
+            )
             committed: list[tuple[StoryBeat, PresentationCue, dict[str, Any]]] = []
             for offset, item in enumerate(draft.beats):
                 beat_id = f"beat-{uuid4().hex}"
                 cue_id = f"cue-{uuid4().hex}"
+                effective_at = next_story_time(
+                    current_effective_at,
+                    item.effective_at,
+                    initial=previous_beat is None and offset == 0,
+                )
+                current_effective_at = effective_at
                 beat = StoryBeat(
                     id=beat_id,
                     story_id=story["id"],
                     segment_id=turn["segment_id"],
                     turn_id=turn_id,
                     sequence=next_sequence + offset,
-                    effective_at=item.effective_at or default_effective_at,
+                    effective_at=effective_at,
                     text=item.text,
                     kind=item.kind,
                     speaker=item.speaker,

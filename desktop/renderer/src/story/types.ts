@@ -5,6 +5,7 @@ export type StorySummary = {
   title: string;
   status: "active" | "archived" | "deleting";
   createdAt: string;
+  currentAt: string;
 };
 
 /** Story operation state owned by the current segment. */

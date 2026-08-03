@@ -13,6 +13,8 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /url\(\.\/assets\/backgrounds\/default-galgame-bg\.png\)/);
     assert.match(markup, /shiori-asset:\/\/local\/role/);
     assert.match(markup, />你终于来了。</);
+    assert.match(markup, /data-testid="story-current-time"/);
+    assert.match(markup, />上午</);
     assert.match(markup, /aria-label="提交剧情行动"/);
     assert.match(markup, /aria-label="查看剧情记录"/);
   });

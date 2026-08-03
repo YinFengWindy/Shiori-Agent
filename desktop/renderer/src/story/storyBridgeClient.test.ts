@@ -27,10 +27,10 @@ describe("createStoryBridgeClient", () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
     const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> => {
       requests.push(request);
-      return { id: "response", type: "response", method: request.method, payload: { stories: [{ story_id: "story-1", relative_db_path: "story-1/story.db", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00" }] }, error: null };
+      return { id: "response", type: "response", method: request.method, payload: { stories: [{ story_id: "story-1", relative_db_path: "story-1/story.db", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", current_at: "2026-08-02T10:00:00+08:00" }] }, error: null };
     };
 
-    assert.deepEqual(await createStoryBridgeClient(invoke).listStories(), [{ storyId: "story-1", relativeDbPath: "story-1/story.db", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00" }]);
+    assert.deepEqual(await createStoryBridgeClient(invoke).listStories(), [{ storyId: "story-1", relativeDbPath: "story-1/story.db", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", currentAt: "2026-08-02T10:00:00+08:00" }]);
     assert.deepEqual(requests, [{ method: "stories.list", payload: {} }]);
   });
 

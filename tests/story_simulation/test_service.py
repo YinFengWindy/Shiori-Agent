@@ -65,6 +65,10 @@ async def test_service_retries_invalid_draft_once_before_committing(tmp_path) ->
     assert director.calls == 2
     assert story["turns"][0]["status"] == "committed"
     assert [cue["text"] for cue in story["cues"]] == ["风从走廊尽头吹来。", "澪抬眼看向你。"]
+    assert [beat["effective_at"] for beat in story["beats"]] == [
+        "2026-08-01T09:00:00+08:00",
+        "2026-08-01T09:30:00+08:00",
+    ]
     assert [event["method"] for event in events] == [
         "stories.beat.committed",
         "stories.beat.committed",

@@ -12,6 +12,8 @@ describe("StoryArchiveSurface", () => {
     assert.match(markup, /data-testid="story-archive-surface"/);
     assert.match(markup, /剧情记录/);
     assert.match(markup, /你终于来了。/);
+    assert.match(markup, /data-testid="story-current-time"/);
+    assert.match(markup, /上午/);
     assert.match(markup, /aria-label="提交剧情输入"/);
     assert.doesNotMatch(markup, /Day|OC|world-workspace|属性|好感度/);
   });

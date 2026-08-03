@@ -41,9 +41,11 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
     await asyncio.sleep(0)
     replay = await handler.handle("stories.create", payload, request_id="create-1", emit_event=events.append)
     story = (await handler.handle("stories.get", {"story_id": created["story"]["id"]}, request_id="get-1", emit_event=events.append))["story"]
+    summaries = await handler.handle("stories.list", {}, request_id="list-1", emit_event=events.append)
 
     assert replay["turn_id"] == created["turn_id"]
     assert story["cues"][0]["text"] == "雨后的铃声响起。"
+    assert summaries["stories"][0]["current_at"] == "2026-08-01T09:00:00+08:00"
     await handler.aclose()
 
 

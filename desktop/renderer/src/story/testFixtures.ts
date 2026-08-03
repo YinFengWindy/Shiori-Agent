@@ -1,4 +1,5 @@
 import type { StoryBeat, StoryDetails, StorySummary } from "./types";
+import { getStoryCurrentAt } from "./storyTime";
 
 /** Creates a committed Story beat for renderer tests. */
 export function createStoryBeat(overrides: Partial<StoryBeat> = {}): StoryBeat {
@@ -44,11 +45,13 @@ export function createStoryDetails(overrides: Partial<StoryDetails> = {}): Story
 
 /** Creates the catalog summary form of a Story. */
 export function createStorySummary(story = createStoryDetails()): StorySummary {
+  const currentAt = getStoryCurrentAt(story);
   return {
     storyId: story.id,
     relativeDbPath: `${story.id}/story.db`,
     title: story.title,
     status: story.status,
     createdAt: "2026-08-02T10:00:00+08:00",
+    currentAt,
   };
 }

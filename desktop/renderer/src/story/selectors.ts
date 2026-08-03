@@ -1,4 +1,5 @@
 import type { StoryBeat, StoryDetails, StoryOperation, StorySummary } from "./types";
+import { getStoryCurrentAt } from "./storyTime";
 
 /** Returns a launcher Story by id without creating a synthetic fallback. */
 export function selectStory(stories: StorySummary[], storyId: string) {
@@ -10,9 +11,10 @@ export function replaceStorySummary(stories: StorySummary[], story: StoryDetails
   const index = stories.findIndex((candidate) => candidate.storyId === story.id);
   if (index < 0) return stories;
   const current = stories[index];
-  if (current.title === story.title && current.status === story.status) return stories;
+  const currentAt = getStoryCurrentAt(story);
+  if (current.title === story.title && current.status === story.status && current.currentAt === currentAt) return stories;
   return stories.map((candidate, candidateIndex) => candidateIndex === index
-    ? { ...candidate, title: story.title, status: story.status }
+    ? { ...candidate, title: story.title, status: story.status, currentAt }
     : candidate);
 }
 
