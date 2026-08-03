@@ -1,4 +1,4 @@
-import { ArrowClockwise, ArrowLeft, Check } from "@phosphor-icons/react";
+import { ArrowClockwise, Check } from "@phosphor-icons/react";
 import { resolveStoryLoadingCopy, resolveStoryLoadingPresentation, type StoryLoadingMode, type StoryLoadingPhase } from "./storyLoadingPresentation";
 import { DEFAULT_STORY_MENU_BACKGROUND, StoryMenuScene } from "./StoryMenuScene";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
@@ -13,11 +13,10 @@ type StoryLoadingScreenProps = {
   loaded?: number;
   total?: number;
   onRetry?: () => void;
-  onBack?: () => void;
 };
 
 /** Renders the Story entry and save-loading transition without a spinner. */
-export function StoryLoadingScreen({ background = DEFAULT_STORY_MENU_BACKGROUND, mode, phase, busy = true, error = "", elapsedMs = 250, loaded = 0, total = 0, onRetry, onBack }: StoryLoadingScreenProps) {
+export function StoryLoadingScreen({ background = DEFAULT_STORY_MENU_BACKGROUND, mode, phase, busy = true, error = "", elapsedMs = 250, loaded = 0, total = 0, onRetry }: StoryLoadingScreenProps) {
   const copy = resolveStoryLoadingCopy(mode, phase);
   const presentation = resolveStoryLoadingPresentation({ elapsedMs, loaded, total });
   const complete = copy.activeStage >= copy.stages.length;
@@ -47,7 +46,7 @@ export function StoryLoadingScreen({ background = DEFAULT_STORY_MENU_BACKGROUND,
       </div>
 
       {error ? <div className="mt-6 border-l-2 border-[#A23E69] bg-white/55 px-3 py-2 text-sm text-[#6F2749]" role="alert">{error}</div> : null}
-      {(error && onRetry) || onBack ? <div className="mt-5 flex items-center justify-end gap-3">{error && onRetry ? <button className="inline-flex h-9 items-center gap-2 rounded-md border border-[#7A2356]/35 bg-white/40 px-3 text-sm text-[#7A2356] transition-colors hover:bg-white/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" onClick={onRetry}><ArrowClockwise className="h-4 w-4" weight="bold" />重试</button> : null}{onBack ? <button className="grid h-9 w-9 place-items-center rounded-md text-[#7A2356]/65 transition-colors hover:bg-white/35 hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}><ArrowLeft className="h-5 w-5" weight="bold" /></button> : null}</div> : null}
+      {error && onRetry ? <div className="mt-5 flex items-center justify-end gap-3"><button className="inline-flex h-9 items-center gap-2 rounded-md border border-[#7A2356]/35 bg-white/40 px-3 text-sm text-[#7A2356] transition-colors hover:bg-white/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" onClick={onRetry}><ArrowClockwise className="h-4 w-4" weight="bold" />重试</button></div> : null}
     </main>
   </>}</StoryMenuScene>;
 }

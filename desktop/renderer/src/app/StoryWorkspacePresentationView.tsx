@@ -53,7 +53,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   }));
 
   if (mode === "launcher" && controller.loading) {
-    return <StoryLoadingScreen background={storyMenuBackground} mode="listing" phase={controller.loadingPhase} error={error} onRetry={() => void controller.reloadStories()} onBack={onExit} />;
+    return <StoryLoadingScreen background={storyMenuBackground} mode="listing" phase={controller.loadingPhase} error={error} onRetry={() => void controller.reloadStories()} />;
   }
   if (mode === "launcher") {
     return <StoryLauncher background={storyMenuBackground} busy={busy} error={error} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenCg={onOpenCg} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
@@ -63,7 +63,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   }
   if (mode === "loading") {
     const backgroundReady = story?.id === loadingStoryId && story.backgroundResource?.status !== "generating";
-    return <StoryLoadingScreen background={storyMenuBackground} mode="story" phase={loadingPhase} busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} onBack={() => setMode("launcher")} />;
+    return <StoryLoadingScreen background={storyMenuBackground} mode="story" phase={loadingPhase} busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} />;
   }
   if (mode === "gallery") {
     return <StoryCgGallerySurface stories={cgGallery} busy={cgGalleryLoading || busy} error={error} onRetry={onRetryCg} onBack={() => setMode("launcher")} />;
