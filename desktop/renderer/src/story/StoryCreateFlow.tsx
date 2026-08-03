@@ -16,8 +16,9 @@ type StoryCreateFlowProps = {
 };
 
 const stepLabels: Record<CreationStep, string> = { role: "选择角色", setting: "开场设定", player: "玩家资料" };
-const storyPrimaryButtonClass = "inline-flex min-h-10 min-w-28 items-center justify-center gap-2 rounded-md border border-[#B64B75]/55 bg-[#B64B75]/90 px-4 py-2.5 text-sm font-medium text-white shadow-[0_8px_20px_rgba(166,57,104,0.18)] transition-[background-color,box-shadow,transform] hover:bg-[#96325F] hover:shadow-[0_10px_24px_rgba(166,57,104,0.24)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] active:scale-[0.98] disabled:cursor-default disabled:opacity-50";
-const storySecondaryButtonClass = "inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[#D5A9BB]/55 bg-[#FFF8FC]/45 px-3.5 py-2.5 text-sm font-medium text-[#6C3E52] shadow-[0_6px_16px_rgba(109,53,80,0.08)] transition-[background-color,box-shadow,color] hover:bg-white/75 hover:text-[#7A2356] hover:shadow-[0_8px_18px_rgba(109,53,80,0.12)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] disabled:cursor-default disabled:opacity-50";
+const storyActionButtonBase = "inline-flex min-h-10 min-w-28 items-center justify-center gap-2 whitespace-nowrap rounded-md border-0 px-4 py-2.5 text-sm font-medium transition-[background-color,box-shadow,color,transform] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] disabled:cursor-default disabled:opacity-50";
+const storyPrimaryButtonClass = cx(storyActionButtonBase, "bg-[#B64B75]/90 text-white shadow-[0_8px_20px_rgba(166,57,104,0.18)] hover:bg-[#96325F] hover:shadow-[0_10px_24px_rgba(166,57,104,0.24)] active:scale-[0.98]");
+const storySecondaryButtonClass = cx(storyActionButtonBase, "bg-[#FFF8FC]/45 text-[#6C3E52] shadow-[0_6px_16px_rgba(109,53,80,0.08)] hover:bg-white/75 hover:text-[#7A2356] hover:shadow-[0_8px_18px_rgba(109,53,80,0.12)]");
 const stepTransition = { duration: 0.22, ease: "easeOut" } as const;
 
 /** Renders the compact animated form that creates one Story database entry. */
