@@ -9,7 +9,7 @@ describe("StoryCreateFlow", () => {
   it("starts with a focused role-selection step", () => {
     const markup = renderToStaticMarkup(<StoryCreateFlow roles={[{ id: "role-1", name: "澪", description: "沉默的守灯人" }]} onBack={() => undefined} onCreate={() => undefined} />);
     assert.doesNotMatch(markup, /CREATE A STORY/);
-    assert.match(markup, /bg-\[#FFF8FC\]/);
+    assert.doesNotMatch(markup, /bg-\[#FFF8FC\]\/55/);
     assert.match(markup, /data-testid="story-create-flow-backdrop"/);
     assert.match(markup, /data-testid="story-create-panel"/);
     assert.doesNotMatch(markup, /01 \/ 03/);

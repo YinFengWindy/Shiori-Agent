@@ -15,6 +15,7 @@ describe("StoryLoadList", () => {
     assert.doesNotMatch(markup, />LOAD STORY</);
     assert.match(markup, /data-testid="story-load-list"/);
     assert.match(markup, /bg-\[#FFF8FC\]\/45/);
+    assert.doesNotMatch(markup, /bg-\[#FFF8FC\]\/55/);
     assert.doesNotMatch(markup, /World|world/);
   });
 });
