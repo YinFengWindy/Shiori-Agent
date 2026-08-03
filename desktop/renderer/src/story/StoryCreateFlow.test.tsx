@@ -10,6 +10,8 @@ describe("StoryCreateFlow", () => {
     const markup = renderToStaticMarkup(<StoryCreateFlow roles={[{ id: "role-1", name: "澪", description: "沉默的守灯人" }]} onBack={() => undefined} onCreate={() => undefined} />);
     assert.match(markup, />CREATE A STORY</);
     assert.match(markup, /bg-\[#FFF8FC\]/);
+    assert.match(markup, /data-testid="story-create-flow-backdrop"/);
+    assert.match(markup, /data-testid="story-create-panel"/);
     assert.match(markup, />选择角色</);
     assert.match(markup, /01 \/ 03/);
     assert.match(markup, /aria-label="创建步骤"/);
