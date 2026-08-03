@@ -19,14 +19,20 @@ describe("StoryLoadingScreen", () => {
     const markup = renderToStaticMarkup(<StoryLoadingScreen mode="listing" />);
     assert.match(markup, /data-testid="story-loading-screen"/);
     assert.match(markup, /url\(\.\/assets\/backgrounds\/default-galgame-bg\.png\)/);
-    assert.match(markup, />读取剧情</);
-    assert.match(markup, />恢复进度</);
-    assert.match(markup, />准备开场</);
+    assert.match(markup, /aria-label="故事主菜单加载"/);
+    assert.match(markup, />准备故事主菜单</);
+    assert.match(markup, />读取故事列表</);
+    assert.match(markup, />准备菜单</);
+    assert.match(markup, />完成</);
+    assert.doesNotMatch(markup, /进入剧情|恢复进度|准备开场/);
     assert.doesNotMatch(markup, /spinner|animate-pulse/);
   });
 
   it("shows measured progress after a long load", () => {
     const markup = renderToStaticMarkup(<StoryLoadingScreen mode="story" elapsedMs={2_100} loaded={2} total={4} />);
+    assert.match(markup, /aria-label="剧情加载"/);
+    assert.match(markup, />进入剧情</);
+    assert.match(markup, />准备素材</);
     assert.match(markup, /role="progressbar"/);
     assert.match(markup, /aria-valuenow="2"/);
     assert.match(markup, /2 \/ 4/);

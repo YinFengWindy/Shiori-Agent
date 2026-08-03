@@ -2,7 +2,29 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { minStoryLoadingMs, resolveStoryLoadingPresentation, waitForMinimumStoryLoading } from "./storyLoadingPresentation";
+import { minStoryLoadingMs, resolveStoryLoadingCopy, resolveStoryLoadingPresentation, waitForMinimumStoryLoading } from "./storyLoadingPresentation";
+
+describe("resolveStoryLoadingCopy", () => {
+  it("uses menu semantics while loading the Story launcher", () => {
+    assert.deepEqual(resolveStoryLoadingCopy("listing"), {
+      eyebrow: "Story / Menu",
+      heading: "准备故事主菜单",
+      currentStage: "读取故事列表",
+      stageLabel: "主菜单加载阶段",
+      stages: ["读取故事列表", "准备菜单", "完成"],
+      progressLabel: "读取故事列表",
+      railLabel: "故事主菜单加载",
+      activeStage: 0,
+    });
+  });
+
+  it("keeps gameplay-entry semantics for saved Story loading", () => {
+    const copy = resolveStoryLoadingCopy("story");
+    assert.equal(copy.heading, "进入剧情");
+    assert.deepEqual(copy.stages, ["读取剧情", "恢复进度", "准备开场"]);
+    assert.equal(copy.railLabel, "剧情加载");
+  });
+});
 
 describe("waitForMinimumStoryLoading", () => {
   it("waits for the remaining duration when loading finishes quickly", async () => {
