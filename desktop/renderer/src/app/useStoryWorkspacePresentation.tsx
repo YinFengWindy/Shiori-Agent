@@ -3,7 +3,7 @@ import type { RoleRecord } from "../shared/types";
 import type { StoryBridgeClient } from "../story/storyBridgeClient";
 import type { StoryCgGallery } from "../story/types";
 import type { useStoryController } from "../story/useStoryController";
-import { waitForMinimumStoryLoading, waitForStoryLoadingCompletion } from "../story/storyLoadingPresentation";
+import { waitForMinimumStoryLoadingStage, waitForStoryLoadingCompletion } from "../story/storyLoadingPresentation";
 import { useStoryCreationFlowController } from "./useStoryCreationFlowController";
 import { useStoryPresentationOperation } from "./useStoryPresentationOperation";
 import { StoryWorkspacePresentationView } from "./StoryWorkspacePresentationView";
@@ -44,10 +44,13 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
     try {
       const loadedStory = await loadStory(storyId);
       if (loadedStory) {
+        await waitForMinimumStoryLoadingStage(startedAt);
         setLoadingPhase("restoring-progress");
+        const restoringStartedAt = Date.now();
         await waitForStoryReady(storyId, loadedStory);
+        await waitForMinimumStoryLoadingStage(restoringStartedAt);
         setLoadingPhase("preparing-opening");
-        await waitForMinimumStoryLoading(startedAt);
+        await waitForMinimumStoryLoadingStage(Date.now());
         setLoadingPhase("opening-ready");
         await waitForStoryLoadingCompletion();
         setMode("game");

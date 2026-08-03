@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { minStoryLoadingMs, resolveStoryLoadingCopy, resolveStoryLoadingPresentation, storyLoadingCompletionHoldMs, waitForMinimumStoryLoading, waitForStoryLoadingCompletion } from "./storyLoadingPresentation";
+import { resolveStoryLoadingCopy, resolveStoryLoadingPresentation, storyLoadingCompletionHoldMs, storyLoadingStageMinMs, waitForMinimumStoryLoadingStage, waitForStoryLoadingCompletion } from "./storyLoadingPresentation";
 
 describe("resolveStoryLoadingCopy", () => {
   it("uses menu semantics while loading the Story launcher", () => {
@@ -33,20 +33,20 @@ describe("resolveStoryLoadingCopy", () => {
   });
 });
 
-describe("waitForMinimumStoryLoading", () => {
-  it("keeps the transition visible long enough to read its active stage", () => {
-    assert.ok(minStoryLoadingMs >= 2_000);
+describe("waitForMinimumStoryLoadingStage", () => {
+  it("keeps each active stage visible long enough to read", () => {
+    assert.ok(storyLoadingStageMinMs >= 800);
   });
 
-  it("waits for the remaining duration when loading finishes quickly", async () => {
+  it("waits for the remaining stage duration when work finishes quickly", async () => {
     const delays: number[] = [];
-    await waitForMinimumStoryLoading(1_000, 1_200, async (delayMs) => { delays.push(delayMs); });
-    assert.deepEqual(delays, [minStoryLoadingMs - 200]);
+    await waitForMinimumStoryLoadingStage(1_000, 1_200, async (delayMs) => { delays.push(delayMs); });
+    assert.deepEqual(delays, [storyLoadingStageMinMs - 200]);
   });
 
-  it("does not add a delay after the minimum duration has elapsed", async () => {
+  it("does not add a delay after the stage duration has elapsed", async () => {
     let slept = false;
-    await waitForMinimumStoryLoading(1_000, 4_000, async () => { slept = true; });
+    await waitForMinimumStoryLoadingStage(1_000, 4_000, async () => { slept = true; });
     assert.equal(slept, false);
   });
 });

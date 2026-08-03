@@ -61,19 +61,19 @@ type StoryLoadingInput = {
   total: number;
 };
 
-/** Minimum time a successful Story entry spends in the loading transition. */
-export const minStoryLoadingMs = 2_200;
+/** Minimum time each real Story loading stage remains active before it completes. */
+export const storyLoadingStageMinMs = 900;
 /** Keeps the all-complete state visible before the next Story surface replaces it. */
 export const storyLoadingCompletionHoldMs = 420;
 
-/** Waits for the remaining minimum loading duration without delaying slow loads. */
-export async function waitForMinimumStoryLoading(
+/** Waits for the remaining stage duration without delaying slow bridge operations. */
+export async function waitForMinimumStoryLoadingStage(
   startedAt: number,
   now = Date.now(),
   sleep = (delayMs: number) => new Promise<void>((resolve) => window.setTimeout(resolve, delayMs)),
 ) {
   const elapsedMs = Math.max(0, now - startedAt);
-  const remainingMs = minStoryLoadingMs - elapsedMs;
+  const remainingMs = storyLoadingStageMinMs - elapsedMs;
   if (remainingMs <= 0) return;
   await sleep(remainingMs);
 }
