@@ -81,31 +81,6 @@
   }
 }
 
-/* Keeps the active Story loading stage visibly alive while real work is pending. */
-@keyframes story-loading-dots {
-  0%,
-  20% {
-    opacity: 0.18;
-  }
-
-  45%,
-  70% {
-    opacity: 1;
-  }
-
-  95%,
-  100% {
-    opacity: 0.18;
-  }
-}
-
-.story-loading-dots {
-  display: inline-block;
-  width: 1.5em;
-  text-align: left;
-  animation: story-loading-dots 1.2s steps(3, end) infinite;
-}
-
 *:focus,
 *:focus-visible {
   outline: none !important;

@@ -36,7 +36,7 @@ export function StoryLoadingScreen({ background = DEFAULT_STORY_MENU_BACKGROUND,
               <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${complete ? "border-[#7A2356] bg-[#7A2356] text-white" : active ? "border-[#7A2356]" : "border-[#7A2356]/35"}`}>{complete ? <Check className="h-3 w-3" weight="bold" /> : <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-[#7A2356]" : "bg-[#7A2356]/25"}`} />}</span>
               <span className={`text-sm ${active || complete ? "text-[#7A2356]" : "text-[#7A2356]/45"}`}>{stage}</span>
               <span className="ml-auto text-[0.68rem] tracking-[0.12em] text-[#7A2356]/55">
-                {complete ? "完成" : active ? <><span>进行中</span><span aria-hidden="true" className="story-loading-dots">...</span></> : "等待"}
+                {complete ? "完成" : active ? <span className="inline-flex items-center gap-1.5"><ArrowClockwise aria-hidden="true" className="h-3.5 w-3.5 animate-spin" weight="bold" data-testid="story-loading-spinner" /><span>进行中</span></span> : "等待"}
               </span>
             </div>;
           })}
