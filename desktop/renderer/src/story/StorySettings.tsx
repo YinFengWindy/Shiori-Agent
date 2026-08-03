@@ -44,7 +44,7 @@ export function StorySettings({ onBack }: StorySettingsProps) {
   return (
     <StorySurface dataTestId="story-settings" panelTestId="story-settings-panel" reducedMotion={settings.reducedMotion}>
       <header className="flex items-center gap-4 border-b border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5">
-        <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[#C785A0]/55 bg-[#FFF8FC]/55 text-[#8F355C] transition-colors hover:border-[#B64B75] hover:bg-white hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}>
+        <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-[#FFF8FC]/55 text-[#8F355C] transition-colors hover:bg-white hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}>
           <ArrowLeft className="h-5 w-5" weight="bold" />
         </button>
         <div className="min-w-0 flex-1">
