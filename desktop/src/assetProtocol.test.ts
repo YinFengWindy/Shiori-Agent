@@ -48,6 +48,7 @@ describe("local asset protocol", () => {
     assert.equal(legacyResponse.status, 403);
     assert.equal(tokenWithLegacyQuery.status, 403);
     assert.equal(response.headers.get("Content-Type"), "image/png");
+    assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
     assert.equal(response.headers.get("Cache-Control"), "no-store");
     assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
     assert.equal(await response.text(), "image-bytes");
