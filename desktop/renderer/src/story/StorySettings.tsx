@@ -20,7 +20,7 @@ const textSpeedOptions = [
 const motionOptions = [
   { value: "reduced", label: "轻" },
   { value: "standard", label: "标准" },
-  { value: "cinematic", label: "电影感" },
+  { value: "cinematic", label: "强" },
 ] as const satisfies readonly { value: StoryPreferences["motionIntensity"]; label: string }[];
 
 const volumeFields = [
@@ -84,9 +84,8 @@ export function StorySettings({ onBack }: StorySettingsProps) {
               </div>
               <div className="grid gap-4">
                 <div className="grid gap-2 border-b border-[#DDA9BE]/55 pb-4">
-                  <div className="flex items-center justify-between gap-4 text-sm">
+                  <div className="text-sm">
                     <span className="font-medium text-[#5E2841]">文字速度</span>
-                    <span className="text-xs text-[#8B6676]">{settings.textSpeed === "slow" ? "慢" : settings.textSpeed === "fast" ? "快" : "标准"}</span>
                   </div>
                   <StorySegmentedControl value={settings.textSpeed} options={textSpeedOptions} ariaLabel="文字速度" onChange={(value) => update("textSpeed", value)} />
                 </div>
@@ -98,9 +97,8 @@ export function StorySettings({ onBack }: StorySettingsProps) {
                   <span className="flex items-center gap-3 text-xs text-[#8B6676]">{settings.showFullText ? "开启" : "关闭"}<StoryToggle checked={settings.showFullText} label="立即显示全文" onChange={(value) => update("showFullText", value)} /></span>
                 </div>
                 <div className="grid gap-2 border-b border-[#DDA9BE]/55 pb-4">
-                  <div className="flex items-center justify-between gap-4 text-sm">
+                  <div className="text-sm">
                     <span className="font-medium text-[#5E2841]">动效强度</span>
-                    <span className="text-xs text-[#8B6676]">{settings.motionIntensity === "reduced" ? "轻" : settings.motionIntensity === "cinematic" ? "电影感" : "标准"}</span>
                   </div>
                   <StorySegmentedControl value={settings.motionIntensity} options={motionOptions} ariaLabel="动效强度" onChange={(value) => update("motionIntensity", value)} />
                 </div>

@@ -18,6 +18,8 @@ describe("StorySettings", () => {
     assert.doesNotMatch(markup, /已保存/);
     assert.match(markup, /aria-label="文字速度"/);
     assert.match(markup, /aria-label="动效强度"/);
+    assert.match(markup, />强</);
+    assert.doesNotMatch(markup, /电影感/);
     assert.match(markup, /role="switch"/);
     assert.match(markup, /aria-checked="false"/);
     assert.match(markup, /type="range"/);
