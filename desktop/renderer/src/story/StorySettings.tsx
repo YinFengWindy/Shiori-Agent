@@ -6,7 +6,7 @@ import {
   StoryToggle,
   StoryVolumeControl,
 } from "./StorySettingsControls";
-import { STORY_MENU_BACKGROUND_URL, STORY_TITLE_LOGO_URL } from "./storyStaticAssets";
+import { STORY_MENU_BACKGROUND_URL } from "./storyStaticAssets";
 import { readStoryPreferences, writeStoryPreferences, type StoryPreferences } from "./storyPreferences";
 
 type StorySettingsProps = { onBack: () => void };
@@ -59,17 +59,8 @@ export function StorySettings({ onBack }: StorySettingsProps) {
       <div aria-hidden="true" className="absolute inset-0 bg-[#281421]/42" />
       <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(120deg,rgba(40,20,33,0.2),rgba(40,20,33,0.05)_52%,rgba(104,31,68,0.22))]" />
 
-      <motion.header
-        className="absolute left-[clamp(12px,2vw,28px)] top-[clamp(12px,2vh,28px)] z-10 w-[min(18rem,calc(100vw-24px))]"
-        initial={{ opacity: 0, y: reduceEffects ? 0 : 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: reduceEffects ? 0 : 0.18, duration: reduceEffects ? 0 : 0.6, ease: "easeOut" }}
-      >
-        <img className="block w-full" src={STORY_TITLE_LOGO_URL} alt="栞 / SHIORI" />
-      </motion.header>
-
       <motion.main
-        className="relative z-10 flex h-full min-h-0 flex-col overflow-y-auto pt-[clamp(76px,10vh,104px)]"
+        className="relative z-10 flex h-full min-h-0 flex-col overflow-y-auto pt-0"
         initial={{ opacity: 0, x: reduceEffects ? 0 : 28 }}
         animate={{ opacity: 1, x: 0 }}
         transition={transition}
