@@ -2,7 +2,21 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveStoryLoadingPresentation } from "./storyLoadingPresentation";
+import { minStoryLoadingMs, resolveStoryLoadingPresentation, waitForMinimumStoryLoading } from "./storyLoadingPresentation";
+
+describe("waitForMinimumStoryLoading", () => {
+  it("waits for the remaining duration when loading finishes quickly", async () => {
+    const delays: number[] = [];
+    await waitForMinimumStoryLoading(1_000, 1_200, async (delayMs) => { delays.push(delayMs); });
+    assert.deepEqual(delays, [minStoryLoadingMs - 200]);
+  });
+
+  it("does not add a delay after the minimum duration has elapsed", async () => {
+    let slept = false;
+    await waitForMinimumStoryLoading(1_000, 2_600, async () => { slept = true; });
+    assert.equal(slept, false);
+  });
+});
 
 describe("resolveStoryLoadingPresentation", () => {
   it("keeps sub-250ms loads invisible", () => {

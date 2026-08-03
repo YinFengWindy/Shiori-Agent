@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import type { RoleRecord } from "../shared/types";
 import type { StoryBridgeClient } from "../story/storyBridgeClient";
 import type { useStoryController } from "../story/useStoryController";
+import { waitForMinimumStoryLoading } from "../story/storyLoadingPresentation";
 import { useStoryCreationFlowController } from "./useStoryCreationFlowController";
 import { useStoryPresentationOperation } from "./useStoryPresentationOperation";
 import { StoryWorkspacePresentationView } from "./StoryWorkspacePresentationView";
@@ -25,6 +26,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
   const { loadStory } = controller;
 
   const loadStoryForPlay = useCallback(async (storyId: string) => {
+    const startedAt = Date.now();
     setLoadingStoryId(storyId);
     clearError();
     setLoadingElapsedMs(0);
@@ -35,6 +37,7 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
     const progressTimer = setTimeout(() => setLoadingElapsedMs(2_000), 2_000);
     try {
       if (await loadStory(storyId)) {
+        await waitForMinimumStoryLoading(startedAt);
         setMode("game");
         return;
       }
