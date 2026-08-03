@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowLeft, ArrowRight, Check, CircleNotch, Sparkle } from "@phosphor-icons/react";
 import { useState } from "react";
-import { cx, ghostButtonClass } from "../shared/styles";
+import { cx } from "../shared/styles";
 import type { StoryCreationInput, StoryRoleChoice } from "./types";
 import { createInitialStoryCreationInput, creationSteps, isCreationStepComplete, type CreationStep } from "./storyCreationWizard";
 import { StoryCreateStep } from "./StoryCreateStep";
@@ -16,7 +16,8 @@ type StoryCreateFlowProps = {
 };
 
 const stepLabels: Record<CreationStep, string> = { role: "选择角色", setting: "开场设定", player: "玩家资料" };
-const storyPrimaryButtonClass = "inline-flex min-w-32 items-center justify-center rounded-md border border-[#A93E6A] bg-[#A93E6A] px-[18px] py-3 text-white transition-[background-color,transform] hover:bg-[#902B57] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] active:scale-[0.98] disabled:cursor-default disabled:opacity-50";
+const storyPrimaryButtonClass = "inline-flex min-h-11 min-w-32 items-center justify-center rounded-md border border-[#A93E6A] bg-[#A93E6A] px-[18px] py-3 text-white transition-[background-color,transform] hover:bg-[#902B57] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] active:scale-[0.98] disabled:cursor-default disabled:opacity-50";
+const storySecondaryButtonClass = "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3.5 py-3 text-[#6C3E52] transition-colors hover:bg-[#FFF8FC]/70 hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] disabled:cursor-default disabled:opacity-50";
 const stepTransition = { duration: 0.22, ease: "easeOut" } as const;
 
 /** Renders the compact animated form that creates one Story database entry. */
@@ -73,7 +74,7 @@ export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCre
         </div>
       </main>
 
-      <footer className="border-t border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5"><div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3"><div className="min-w-24 text-xs text-[#7D6470]">{busy ? "正在创建剧情" : ""}</div>{stepIndex ? <button className={cx(ghostButtonClass, "inline-flex items-center gap-1.5 border-[#C785A0]/55 bg-[#FFF8FC]/55 text-[#6C3E52] hover:border-[#B64B75] hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]")} type="button" disabled={busy} onClick={previous}><ArrowLeft />上一步</button> : <span className="min-w-24" aria-hidden="true" />}{step === "player" ? <button className={storyPrimaryButtonClass} type="button" disabled={busy || !stepComplete} onClick={() => onCreate(input)}>{busy ? <span className="inline-flex items-center gap-2"><CircleNotch className="animate-spin" />创建中</span> : <span className="inline-flex items-center gap-2"><Sparkle weight="fill" />开始剧情</span>}</button> : <button className={storyPrimaryButtonClass} type="button" disabled={!stepComplete} onClick={next}><span className="inline-flex items-center gap-2">下一步<ArrowRight /></span></button>}</div></footer>
+      <footer className="border-t border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5"><div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4"><div className="min-w-0 flex-1">{stepIndex ? <button className={storySecondaryButtonClass} type="button" disabled={busy} onClick={previous}><ArrowLeft />上一步</button> : null}</div><div className="flex shrink-0 items-center justify-end gap-3">{busy ? <span className="max-w-24 text-right text-xs text-[#7D6470]">正在创建剧情</span> : null}{step === "player" ? <button className={storyPrimaryButtonClass} type="button" disabled={busy || !stepComplete} onClick={() => onCreate(input)}>{busy ? <span className="inline-flex items-center gap-2"><CircleNotch className="animate-spin" />创建中</span> : <span className="inline-flex items-center gap-2"><Sparkle weight="fill" />开始剧情</span>}</button> : <button className={storyPrimaryButtonClass} type="button" disabled={!stepComplete} onClick={next}><span className="inline-flex items-center gap-2">下一步<ArrowRight /></span></button>}</div></div></footer>
     </StorySurface>
   );
 }
