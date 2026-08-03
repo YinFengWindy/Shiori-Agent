@@ -20,7 +20,7 @@ describe("StoryLoadingScreen", () => {
     assert.match(markup, /data-testid="story-loading-screen"/);
     assert.match(markup, /url\(\.\/assets\/backgrounds\/default-galgame-bg\.png\)/);
     assert.match(markup, /aria-label="Story menu loading"/);
-    assert.match(markup, />Preparing Story Menu</);
+    assert.match(markup, />Preparing</);
     assert.match(markup, />Read story list</);
     assert.match(markup, />Prepare menu</);
     assert.doesNotMatch(markup, />Complete</);
@@ -35,7 +35,7 @@ describe("StoryLoadingScreen", () => {
   it("shows measured progress after a long load", () => {
     const markup = renderToStaticMarkup(<StoryLoadingScreen mode="story" phase="preparing-opening" elapsedMs={2_100} loaded={2} total={4} />);
     assert.match(markup, /aria-label="Story loading"/);
-    assert.match(markup, />Enter Story</);
+    assert.match(markup, />Preparing</);
     assert.match(markup, />Prepare opening</);
     assert.match(markup, />Prepare assets</);
     assert.match(markup, /role="progressbar"/);

@@ -38,13 +38,13 @@ const storyLoadingCopy: Record<StoryLoadingMode, Omit<StoryLoadingCopy, "heading
 };
 
 const storyLoadingPhaseCopy: Record<StoryLoadingPhase, Pick<StoryLoadingCopy, "heading" | "currentStage" | "activeStage">> = {
-  "reading-list": { heading: "Preparing Story Menu", currentStage: "Read story list", activeStage: 0 },
-  "preparing-menu": { heading: "Preparing Story Menu", currentStage: "Prepare menu", activeStage: 1 },
-  "menu-ready": { heading: "Preparing Story Menu", currentStage: "Story menu ready", activeStage: 2 },
-  "reading-story": { heading: "Enter Story", currentStage: "Read story", activeStage: 0 },
-  "restoring-progress": { heading: "Enter Story", currentStage: "Restore progress", activeStage: 1 },
-  "preparing-opening": { heading: "Enter Story", currentStage: "Prepare opening", activeStage: 2 },
-  "opening-ready": { heading: "Enter Story", currentStage: "Opening ready", activeStage: 3 },
+  "reading-list": { heading: "Preparing", currentStage: "Read story list", activeStage: 0 },
+  "preparing-menu": { heading: "Preparing", currentStage: "Prepare menu", activeStage: 1 },
+  "menu-ready": { heading: "Preparing", currentStage: "Story menu ready", activeStage: 2 },
+  "reading-story": { heading: "Preparing", currentStage: "Read story", activeStage: 0 },
+  "restoring-progress": { heading: "Preparing", currentStage: "Restore progress", activeStage: 1 },
+  "preparing-opening": { heading: "Preparing", currentStage: "Prepare opening", activeStage: 2 },
+  "opening-ready": { heading: "Preparing", currentStage: "Opening ready", activeStage: 3 },
 };
 
 /** Returns the copy contract for one Story loading route. */
