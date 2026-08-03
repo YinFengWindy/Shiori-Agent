@@ -15,7 +15,7 @@ describe("StorySettings", () => {
     assert.match(markup, /min-h-full w-full/);
     assert.match(markup, /url\(\.\/assets\/backgrounds\/default-galgame-bg\.png\)/);
     assert.match(markup, />设置</);
-    assert.match(markup, /已保存/);
+    assert.doesNotMatch(markup, /已保存/);
     assert.match(markup, /aria-label="文字速度"/);
     assert.match(markup, /aria-label="动效强度"/);
     assert.match(markup, /role="switch"/);

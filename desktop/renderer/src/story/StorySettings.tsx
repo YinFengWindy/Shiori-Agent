@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, MusicNotes, SlidersHorizontal, SpeakerHigh, Waveform } from "@phosphor-icons/react";
+import { ArrowLeft, MusicNotes, SlidersHorizontal, SpeakerHigh, Waveform } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import {
@@ -74,10 +74,6 @@ export function StorySettings({ onBack }: StorySettingsProps) {
               <p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#B64B75]">Settings</p>
               <h1 className="m-0 mt-1 font-serif text-2xl font-semibold italic text-[#7A2356]">设置</h1>
             </div>
-            <span className="flex shrink-0 items-center gap-1.5 text-xs text-[#7D6470]" aria-live="polite">
-              <Check className="h-4 w-4 text-[#9A3D63]" weight="bold" />
-              已保存
-            </span>
           </header>
 
           <div className="grid gap-8 px-[clamp(18px,4vw,40px)] py-7 lg:grid-cols-2 lg:gap-10">
