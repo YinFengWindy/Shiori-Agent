@@ -44,19 +44,22 @@ export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCre
 
   return (
     <StorySurface dataTestId="story-create-flow" panelTestId="story-create-panel" contentClassName="overflow-hidden">
-      <header className="border-b border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5">
-        <div className="flex items-center gap-4">
-          <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[#C785A0]/55 bg-[#FFF8FC]/55 text-[#8F355C] transition-colors hover:border-[#B64B75] hover:bg-white hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}><ArrowLeft className="h-5 w-5" weight="bold" /></button>
-          <div className="min-w-0 flex-1"><p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#B64B75]">CREATE A STORY</p><h1 className="m-0 mt-1 font-serif text-2xl font-semibold italic text-[#7A2356]">新剧情</h1></div>
-          <span className="shrink-0 text-xs text-[#7D6470]">{String(stepIndex + 1).padStart(2, "0")} / {String(creationSteps.length).padStart(2, "0")}</span>
+      <header>
+        <div className="border-b border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5">
+          <div className="flex items-center gap-4">
+            <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[#C785A0]/55 bg-[#FFF8FC]/55 text-[#8F355C] transition-colors hover:border-[#B64B75] hover:bg-white hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}><ArrowLeft className="h-5 w-5" weight="bold" /></button>
+            <div className="min-w-0 flex-1"><p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#B64B75]">CREATE A STORY</p><h1 className="m-0 mt-1 font-serif text-2xl font-semibold italic text-[#7A2356]">新剧情</h1></div>
+          </div>
         </div>
-        <ol className="mt-4 grid grid-cols-3 gap-2" aria-label="创建步骤">
-          {creationSteps.map((item, index) => {
-            const active = index === stepIndex;
-            const complete = index < stepIndex;
-            return <li key={item} aria-current={active ? "step" : undefined} className={cx("min-w-0 text-xs transition-colors", active || complete ? "text-[#8F355C]" : "text-[#A48090]")}><div className="mb-1 flex items-center gap-1.5"><span className={cx("grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px]", active || complete ? "border-[#B64B75] bg-[#FFF0F6]" : "border-[#E9C4D5] bg-white/60")}>{complete ? <Check weight="bold" /> : index + 1}</span><span className="truncate">{stepLabels[item]}</span></div><div className="h-0.5 overflow-hidden bg-[#E9C4D5]/65"><motion.span className="block h-full origin-left bg-[#B64B75]" initial={false} animate={{ scaleX: active || complete ? 1 : 0 }} transition={stepTransition} /></div></li>;
-          })}
-        </ol>
+        <div className="px-[clamp(18px,4vw,40px)] py-4">
+          <ol className="grid grid-cols-3 gap-2" aria-label="创建步骤">
+            {creationSteps.map((item, index) => {
+              const active = index === stepIndex;
+              const complete = index < stepIndex;
+              return <li key={item} aria-current={active ? "step" : undefined} className={cx("min-w-0 text-xs transition-colors", active || complete ? "text-[#8F355C]" : "text-[#A48090]")}><div className="mb-1 flex items-center gap-1.5"><span className={cx("grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px]", active || complete ? "border-[#B64B75] bg-[#FFF0F6]" : "border-[#E9C4D5] bg-white/60")}>{complete ? <Check weight="bold" /> : index + 1}</span><span className="truncate">{stepLabels[item]}</span></div><div className="h-0.5 overflow-hidden bg-[#E9C4D5]/65"><motion.span className="block h-full origin-left bg-[#B64B75]" initial={false} animate={{ scaleX: active || complete ? 1 : 0 }} transition={stepTransition} /></div></li>;
+            })}
+          </ol>
+        </div>
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-[clamp(18px,4vw,40px)] py-7">
