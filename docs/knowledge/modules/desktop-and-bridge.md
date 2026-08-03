@@ -2,7 +2,7 @@
 title: 桌面端与桥接
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 03054931
+last_verified_commit: 60aedb1d
 source_paths:
   - desktop/src/
   - desktop/renderer/src/
@@ -31,7 +31,7 @@ related:
 
 renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatcher.py`，再由 `DesktopBridgeRequestRouter` 交给单一领域 handler；handler 调用 owning service，presenter 将结果转换为共享类型。后端事件沿反方向更新 renderer state。图片等本地资产通过专门的 registry/transport 暴露，不直接把任意文件路径交给视图。
 
-Story 进入独立路由时才挂载 `StoryRoute`、`useStoryController` 和 `useStoryWorkspacePresentation`；首次读取故事列表的过程直接呈现主菜单加载页，不额外再发起一次主菜单加载。主菜单阶段依次使用“读取故事列表”和“准备菜单”，进入已保存剧情时依次使用“读取剧情”“恢复进度”和“准备开场”。成功过渡至少保持 2.2 秒，活动阶段通过循环点号提供持续的进行中反馈；阶段仍由真实 bridge 操作推进，而不是用展示层计时器伪造完成状态。
+Story 进入独立路由时才挂载 `StoryRoute`、`useStoryController` 和 `useStoryWorkspacePresentation`；首次读取故事列表的过程直接呈现主菜单加载页，不额外再发起一次主菜单加载。主菜单阶段依次使用“读取故事列表”和“准备菜单”，进入已保存剧情时依次使用“读取剧情”“恢复进度”和“准备开场”。成功过渡至少保持 2.2 秒，当前真实进行中的阶段显示旋转箭头，完成阶段显示勾选，等待阶段保持静止；阶段仍由真实 bridge 操作推进，而不是用展示层计时器伪造完成状态。
 
 桌宠拖拽不经过 renderer IPC 或 Python bridge：桌宠主体是 Electron 原生拖拽区域，由系统直接移动独立窗口；主进程用窗口移动的左右位移驱动 Codex 图集的 `running-left` / `running-right` 行，在 220ms 静默后回到 `idle`，保存位置，并接管右键菜单与去重后的原生双击恢复主窗口。
 
