@@ -34,11 +34,17 @@ describe("StoryCgGallerySurface", () => {
     assert.match(markup, />CG 鉴赏</);
     assert.match(markup, />雨港</);
     assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.doesNotMatch(markup, />1 张</);
+    assert.doesNotMatch(markup, />1 \/ 1</);
+    assert.doesNotMatch(markup, /text-\[#B64B75\]/);
   });
 
   it("shows a retry command for failed resources", () => {
     const failed = [{ ...stories[0], items: [{ ...stories[0].items[0], status: "failed" as const, path: null, errorCode: "provider_not_configured" }] }];
     const markup = renderToStaticMarkup(<StoryCgGallerySurface stories={failed} busy={false} error="" onRetry={() => undefined} onBack={() => undefined} />);
+    assert.match(markup, /data-testid="story-cg-resource-failed"/);
+    assert.match(markup, /aria-label="生成失败"/);
+    assert.doesNotMatch(markup, />生成失败</);
     assert.match(markup, />重试</);
   });
 });

@@ -1,4 +1,4 @@
-import { ArrowClockwise, ArrowLeft, Images, X } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowLeft, ImageBroken, X } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import type { StoryCgGallery, StoryResource } from "./types";
 import { StorySurface } from "./StorySurface";
@@ -35,17 +35,15 @@ export function StoryCgGallerySurface({ stories, busy, error, onRetry, onBack }:
         <div className="min-w-0 flex-1">
           <h1 className="m-0 font-serif text-2xl font-semibold italic text-[#7A2356]">CG 鉴赏</h1>
         </div>
-        <Images className="h-6 w-6 text-[#B64B75]" weight="duotone" aria-hidden="true" />
       </header>
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <nav className="min-h-0 overflow-y-auto border-b border-[#DDA9BE]/65 lg:border-b-0 lg:border-r lg:border-[#DDA9BE]/65" aria-label="故事 CG 集">
           {busy && !stories.length ? <p className="m-0 px-5 py-5 text-sm text-[#8B6676]">正在读取 CG 集</p> : stories.length ? stories.map((story) => {
-            const readyCount = story.items.filter((item) => item.status === "ready").length;
             const active = selectedStory?.storyId === story.storyId;
             return (
               <button key={story.storyId} className={`flex w-full items-center justify-between gap-3 border-b border-[#DDA9BE]/55 px-5 py-4 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] ${active ? "bg-[#7A2356]/10 text-[#7A2356]" : "text-[#765667] hover:bg-white/55"}`} type="button" onClick={() => { setSelectedStoryId(story.storyId); setPreview(null); }}>
-                <span className="min-w-0"><strong className="block truncate font-serif text-base">{story.title}</strong><span className="mt-1 block text-xs text-[#A48090]">{readyCount} 张</span></span>
+                <strong className="block min-w-0 truncate font-serif text-base">{story.title}</strong>
               </button>
             );
           }) : <p className="m-0 px-5 py-5 text-sm text-[#8B6676]">还没有故事 CG</p>}
@@ -54,16 +52,15 @@ export function StoryCgGallerySurface({ stories, busy, error, onRetry, onBack }:
         <main className="min-h-0 overflow-y-auto px-[clamp(18px,4vw,40px)] py-7">
           <div className="mx-auto w-full max-w-5xl">
             {selectedStory ? <>
-              <div className="flex items-baseline justify-between gap-4 border-b border-[#DDA9BE]/65 pb-4">
+              <div className="flex items-baseline border-b border-[#DDA9BE]/65 pb-4">
                 <h2 className="m-0 font-serif text-xl font-semibold italic text-[#7A2356]">{selectedStory.title}</h2>
-                <span className="text-xs text-[#A48090]">{selectedStory.items.filter((item) => item.status === "ready").length} / {selectedStory.items.length}</span>
               </div>
               {selectedStory.items.length ? <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {selectedStory.items.map((resource, index) => {
                   const canPreview = resource.status === "ready" && Boolean(resource.path);
                   return <figure key={resource.id} className="m-0 overflow-hidden border border-[#DDA9BE]/55 bg-[#FFF8FC]/55">
                     <button className="group relative aspect-video w-full overflow-hidden bg-[#5E2841]/10 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#E5A9C0]" type="button" disabled={busy || !canPreview} onClick={() => canPreview ? setPreview(resource) : undefined}>
-                      {canPreview ? <img className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" src={toFileUrl(resource.path || "")} alt={`${selectedStory.title} ${resourceLabel(resource, index)}`} /> : <span className="grid h-full place-items-center gap-2 text-sm text-[#8B6676]">{resource.status === "generating" ? "正在生成" : "生成失败"}</span>}
+                      {canPreview ? <img className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" src={toFileUrl(resource.path || "")} alt={`${selectedStory.title} ${resourceLabel(resource, index)}`} /> : resource.status === "generating" ? <span className="grid h-full place-items-center gap-2 text-sm text-[#8B6676]">正在生成</span> : <span className="grid h-full place-items-center text-[#A23E69]" data-testid="story-cg-resource-failed" role="img" aria-label="生成失败" title="生成失败"><ImageBroken className="h-8 w-8" weight="duotone" /></span>}
                       {resource.status === "generating" ? <span className="absolute inset-x-0 bottom-0 bg-[#4A2738]/75 px-3 py-2 text-xs text-white">正在生成</span> : null}
                     </button>
                     <figcaption className="flex items-center justify-between gap-3 border-t border-[#DDA9BE]/45 px-3 py-2 text-xs text-[#765667]">
