@@ -9,6 +9,7 @@ describe("storyCreationWizard", () => {
     const input = createInitialStoryCreationInput();
     assert.equal(isCreationStepComplete("role", input), false);
     assert.equal(isCreationStepComplete("player", input), false);
+    assert.equal(isCreationStepComplete("review", input), false);
 
     input.roleId = "role-1";
     input.title = "雨港";
@@ -19,5 +20,6 @@ describe("storyCreationWizard", () => {
     assert.equal(isCreationStepComplete("role", input), true);
     assert.equal(isCreationStepComplete("setting", input), true);
     assert.equal(isCreationStepComplete("player", input), true);
+    assert.equal(isCreationStepComplete("review", input), true);
   });
 });

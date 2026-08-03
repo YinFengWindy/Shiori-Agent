@@ -15,7 +15,7 @@ type StoryCreateFlowProps = {
   onCreate: (input: StoryCreationInput) => void;
 };
 
-const stepLabels: Record<CreationStep, string> = { role: "选择角色", setting: "开场设定", player: "玩家资料" };
+const stepLabels: Record<CreationStep, string> = { role: "选择角色", setting: "开场设定", player: "玩家资料", review: "总览" };
 const storyActionButtonBase = "grid h-10 w-10 shrink-0 place-items-center rounded-md border-0 p-0 transition-[color,transform] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] disabled:cursor-default disabled:opacity-50";
 const storyPrimaryButtonClass = cx(storyActionButtonBase, "text-[#B64B75] hover:text-[#96325F] active:scale-[0.94]");
 const storySecondaryButtonClass = cx(storyActionButtonBase, "text-[#6C3E52] hover:text-[#7A2356]");
@@ -54,7 +54,7 @@ export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCre
           </div>
         </div>
         <div className="px-[clamp(18px,4vw,40px)] py-4">
-          <ol className="grid grid-cols-3 gap-2" aria-label="创建步骤">
+          <ol className="grid grid-cols-4 gap-2" aria-label="创建步骤">
             {creationSteps.map((item, index) => {
               const active = index === stepIndex;
               const complete = index < stepIndex;
@@ -75,7 +75,7 @@ export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCre
         </div>
       </main>
 
-      <footer className="border-t border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5"><div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4"><div className="min-w-0 flex-1">{stepIndex ? <button className={storySecondaryButtonClass} type="button" aria-label="上一步" title="上一步" disabled={busy} onClick={previous}><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button> : null}</div><div className="flex shrink-0 items-center justify-end gap-3">{busy ? <span className="max-w-24 text-right text-xs text-[#7D6470]">正在创建剧情</span> : null}{step === "player" ? <button className={storyPrimaryButtonClass} type="button" aria-label={busy ? "创建中" : "开始剧情"} title={busy ? "创建中" : "开始剧情"} disabled={busy || !stepComplete} onClick={() => onCreate(input)}>{busy ? <CircleNotch className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Sparkle className="h-5 w-5" weight="fill" aria-hidden="true" />}</button> : <button className={storyPrimaryButtonClass} type="button" aria-label="下一步" title="下一步" disabled={!stepComplete} onClick={next}><ArrowRight className="h-5 w-5" aria-hidden="true" /></button>}</div></div></footer>
+      <footer className="border-t border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5"><div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4"><div className="min-w-0 flex-1">{stepIndex ? <button className={storySecondaryButtonClass} type="button" aria-label="上一步" title="上一步" disabled={busy} onClick={previous}><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button> : null}</div><div className="flex shrink-0 items-center justify-end gap-3">{busy ? <span className="max-w-24 text-right text-xs text-[#7D6470]">正在创建剧情</span> : null}{step === "review" ? <button className={storyPrimaryButtonClass} type="button" aria-label={busy ? "创建中" : "开始剧情"} title={busy ? "创建中" : "开始剧情"} disabled={busy || !stepComplete} onClick={() => onCreate(input)}>{busy ? <CircleNotch className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Sparkle className="h-5 w-5" weight="fill" aria-hidden="true" />}</button> : <button className={storyPrimaryButtonClass} type="button" aria-label="下一步" title="下一步" disabled={!stepComplete} onClick={next}><ArrowRight className="h-5 w-5" aria-hidden="true" /></button>}</div></div></footer>
     </StorySurface>
   );
 }

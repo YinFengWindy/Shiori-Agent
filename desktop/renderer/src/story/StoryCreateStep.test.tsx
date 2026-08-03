@@ -19,7 +19,7 @@ describe("StoryCreateStep", () => {
     assert.doesNotMatch(markup, /resize-y/);
   });
 
-  it("keeps the final player step focused and shows its inline summary", () => {
+  it("keeps the player step focused without showing the review", () => {
     const input = createInitialStoryCreationInput();
     input.title = "雨港";
     input.background = "潮汐带回名字";
@@ -28,9 +28,24 @@ describe("StoryCreateStep", () => {
     const markup = renderToStaticMarkup(<StoryCreateStep step="player" roles={[]} input={input} selectedRole={{ id: "role-1", name: "澪", description: "沉默的守灯人" }} reducedMotion onSelectRole={() => undefined} onChangeSetting={() => undefined} onChangeProfile={() => undefined} />);
 
     assert.match(markup, /data-testid="story-create-step"/);
-    assert.match(markup, /aria-label="剧情摘要"/);
+    assert.match(markup, /名称/);
+    assert.doesNotMatch(markup, /aria-label="剧情总览"/);
+    assert.doesNotMatch(markup, /剧情摘要|雨港|澪/);
+  });
+
+  it("shows the completed creation review as its own step", () => {
+    const input = createInitialStoryCreationInput();
+    input.roleId = "role-1";
+    input.title = "雨港";
+    input.background = "潮汐带回名字";
+    input.startsAt = "2026-08-02T10:00";
+    input.playerProfile = { displayName: "岚", identity: "抄写员", appearance: "短发" };
+    const markup = renderToStaticMarkup(<StoryCreateStep step="review" roles={[]} input={input} selectedRole={{ id: "role-1", name: "澪", description: "沉默的守灯人" }} reducedMotion onSelectRole={() => undefined} onChangeSetting={() => undefined} onChangeProfile={() => undefined} />);
+
+    assert.match(markup, /aria-label="剧情总览"/);
     assert.match(markup, /雨港/);
+    assert.match(markup, /潮汐带回名字/);
     assert.match(markup, /澪/);
-    assert.match(markup, /玩家/);
+    assert.match(markup, /岚/);
   });
 });

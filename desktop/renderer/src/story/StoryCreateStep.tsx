@@ -20,7 +20,7 @@ const storyInputClass = cx(inputClass, "border-[#E5B8C9] !bg-white/85 text-[#4A2
 const roleCardClass = "flex min-h-20 items-center gap-3 rounded-md border bg-white/70 p-4 text-left transition-[border-color,background-color,box-shadow,transform] hover:border-[#CF7898] hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]";
 const stepItemTransition = { duration: 0.22, ease: "easeOut" } as const;
 
-/** Renders the focused fields and inline summary for the active creation step. */
+/** Renders the focused fields or the final creation review for the active step. */
 export function StoryCreateStep({ step, roles, input, selectedRole, reducedMotion, onSelectRole, onChangeSetting, onChangeProfile }: StoryCreateStepProps) {
   const backgroundRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -68,18 +68,23 @@ export function StoryCreateStep({ step, roles, input, selectedRole, reducedMotio
     );
   }
 
+  if (step === "player") {
+    return (
+      <section data-testid="story-create-step">
+        <div className="grid gap-4 border-y border-[#E9C4D5] py-5 sm:grid-cols-2">
+          <label className="grid gap-1.5 text-xs text-[#8B6676]">名称<input className={storyInputClass} value={input.playerProfile.displayName} onChange={(event) => onChangeProfile("displayName", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-xs text-[#8B6676]">身份<input className={storyInputClass} value={input.playerProfile.identity} onChange={(event) => onChangeProfile("identity", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-xs text-[#8B6676] sm:col-span-2">外貌<input className={storyInputClass} value={input.playerProfile.appearance} onChange={(event) => onChangeProfile("appearance", event.target.value)} /></label>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section data-testid="story-create-step">
-      <div className="grid gap-4 border-y border-[#E9C4D5] py-5 sm:grid-cols-2">
-        <label className="grid gap-1.5 text-xs text-[#8B6676]">名称<input className={storyInputClass} value={input.playerProfile.displayName} onChange={(event) => onChangeProfile("displayName", event.target.value)} /></label>
-        <label className="grid gap-1.5 text-xs text-[#8B6676]">身份<input className={storyInputClass} value={input.playerProfile.identity} onChange={(event) => onChangeProfile("identity", event.target.value)} /></label>
-        <label className="grid gap-1.5 text-xs text-[#8B6676] sm:col-span-2">外貌<input className={storyInputClass} value={input.playerProfile.appearance} onChange={(event) => onChangeProfile("appearance", event.target.value)} /></label>
-      </div>
-      <div className="mt-6 divide-y divide-[#E9C4D5] border-y border-[#E9C4D5]" aria-label="剧情摘要">
-        <div className="grid gap-1 py-3"><span className="text-xs text-[#A48090]">角色</span><strong className="font-serif text-[#5E2841]">{selectedRole?.name || "未选择"}</strong></div>
-        <div className="grid gap-1 py-3"><span className="text-xs text-[#A48090]">剧情</span><strong className="font-serif text-[#5E2841]">{input.title}</strong><span className="text-sm text-[#765667]">{input.background}</span></div>
-        <div className="grid gap-1 py-3"><span className="text-xs text-[#A48090]">玩家</span><strong className="font-serif text-[#5E2841]">{input.playerProfile.displayName}，{input.playerProfile.identity}</strong><span className="text-sm text-[#765667]">{input.playerProfile.appearance} · {input.startsAt}</span></div>
-      </div>
+    <section className="divide-y divide-[#E9C4D5] border-y border-[#E9C4D5]" data-testid="story-create-step" aria-label="剧情总览">
+      <div className="grid gap-1 py-4"><span className="text-xs text-[#A48090]">角色</span><strong className="font-serif text-[#5E2841]">{selectedRole?.name || "未选择"}</strong></div>
+      <div className="grid gap-1 py-4"><span className="text-xs text-[#A48090]">剧情</span><strong className="font-serif text-[#5E2841]">{input.title}</strong><span className="whitespace-pre-wrap text-sm text-[#765667]">{input.background}</span><span className="text-xs text-[#8B6676]">开始时间：{input.startsAt}</span></div>
+      <div className="grid gap-1 py-4"><span className="text-xs text-[#A48090]">玩家</span><strong className="font-serif text-[#5E2841]">{input.playerProfile.displayName}，{input.playerProfile.identity}</strong><span className="text-sm text-[#765667]">{input.playerProfile.appearance}</span></div>
     </section>
   );
 }

@@ -13,6 +13,8 @@ describe("StoryCreateFlow", () => {
     assert.match(markup, /data-testid="story-create-flow-backdrop"/);
     assert.match(markup, /data-testid="story-create-panel"/);
     assert.doesNotMatch(markup, /01 \/ 03/);
+    assert.match(markup, /grid-cols-4/);
+    assert.match(markup, />总览</);
     assert.doesNotMatch(markup, /<h2[^>]*>选择角色<\/h2>/);
     assert.match(markup, /aria-label="创建步骤"/);
     assert.match(markup, /aria-label="返回剧情主菜单"/);
