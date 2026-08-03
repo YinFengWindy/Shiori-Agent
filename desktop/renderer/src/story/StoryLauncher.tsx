@@ -1,22 +1,18 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
-import type { StorySummary } from "./types";
-import { StoryLoadList, StoryMainMenu } from "./StoryMenu";
+import { StoryMainMenu } from "./StoryMenu";
 import { STORY_MENU_BACKGROUND_URL, STORY_TITLE_LOGO_URL } from "./storyStaticAssets";
 
 type StoryLauncherProps = {
-  stories: StorySummary[];
   busy?: boolean;
   error?: string;
   onCreateStory: () => void;
-  onLoadStory: (storyId: string) => void;
+  onOpenLoad: () => void;
   onOpenSettings: () => void;
   onExit: () => void;
 };
 
-/** Renders the cinematic Story title screen and switches between its two menu states. */
-export function StoryLauncher({ stories, busy = false, error = "", onCreateStory, onLoadStory, onOpenSettings, onExit }: StoryLauncherProps) {
-  const [loadOpen, setLoadOpen] = useState(false);
+/** Renders the cinematic Story title screen and its command rail. */
+export function StoryLauncher({ busy = false, error = "", onCreateStory, onOpenLoad, onOpenSettings, onExit }: StoryLauncherProps) {
   const reducedMotion = useReducedMotion() ?? false;
 
   return (
@@ -26,9 +22,7 @@ export function StoryLauncher({ stories, busy = false, error = "", onCreateStory
       <motion.header className="absolute left-[clamp(12px,2vw,28px)] top-[clamp(12px,2vh,28px)] z-10 w-[min(18rem,calc(100vw-24px))]" data-testid="story-menu-title" initial={{ opacity: 0, y: reducedMotion ? 0 : 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: reducedMotion ? 0 : 0.18, duration: reducedMotion ? 0 : 0.6, ease: "easeOut" }}><h1 className="sr-only">栞 / SHIORI</h1><div className="relative overflow-hidden"><img className="block w-full" src={STORY_TITLE_LOGO_URL} alt="" />{reducedMotion ? null : <motion.span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-white/35 blur-md" initial={{ x: "-150%" }} animate={{ x: "850%" }} transition={{ delay: 0.95, duration: 0.9, ease: "easeInOut" }} />}</div></motion.header>
 
       <div className="absolute right-[clamp(20px,5vw,72px)] top-1/2 z-10 w-[min(18rem,calc(100%-40px))] -translate-y-1/2">
-        <AnimatePresence initial={false} mode="wait">
-          {loadOpen ? <StoryLoadList key="load" stories={stories} busy={busy} reducedMotion={reducedMotion} onBack={() => setLoadOpen(false)} onLoadStory={onLoadStory} /> : <StoryMainMenu key="menu" busy={busy} reducedMotion={reducedMotion} onCreateStory={onCreateStory} onOpenLoad={() => setLoadOpen(true)} onOpenSettings={onOpenSettings} onExit={onExit} />}
-        </AnimatePresence>
+        <StoryMainMenu busy={busy} reducedMotion={reducedMotion} onCreateStory={onCreateStory} onOpenLoad={onOpenLoad} onOpenSettings={onOpenSettings} onExit={onExit} />
         <AnimatePresence>{error ? <motion.div className="mt-5 border-l-2 border-[#F1A998] bg-[#4B2730]/80 px-3 py-2 text-sm text-[#FFE0D9]" role="alert" initial={{ opacity: 0, y: reducedMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.2 }}>{error}</motion.div> : null}</AnimatePresence>
       </div>
     </section>

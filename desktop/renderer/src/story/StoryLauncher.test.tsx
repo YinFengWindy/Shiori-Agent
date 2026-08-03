@@ -4,18 +4,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StoryLauncher } from "./StoryLauncher";
-import { createStorySummary } from "./testFixtures";
 
 const props = {
   onCreateStory: () => undefined,
-  onLoadStory: () => undefined,
+  onOpenLoad: () => undefined,
   onOpenSettings: () => undefined,
   onExit: () => undefined,
 };
 
 describe("StoryLauncher", () => {
   it("renders create, load, settings, and exit commands", () => {
-    const markup = renderToStaticMarkup(<StoryLauncher stories={[createStorySummary()]} {...props} />);
+    const markup = renderToStaticMarkup(<StoryLauncher {...props} />);
     assert.ok(markup.includes("NEW STORY"));
     assert.ok(markup.includes("LOAD STORY"));
     assert.ok(markup.includes("SETTINGS"));
@@ -26,8 +25,8 @@ describe("StoryLauncher", () => {
     assert.doesNotMatch(markup, /创建世界|加载世界/);
   });
 
-  it("keeps the Story album closed until load is selected", () => {
-    const markup = renderToStaticMarkup(<StoryLauncher stories={[createStorySummary()]} {...props} />);
+  it("keeps the saved-story page out of the launcher surface", () => {
+    const markup = renderToStaticMarkup(<StoryLauncher {...props} />);
     assert.doesNotMatch(markup, /data-testid="story-load-list"/);
     assert.match(markup, />LOAD STORY</);
   });

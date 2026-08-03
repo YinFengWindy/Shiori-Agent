@@ -5,13 +5,13 @@ import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { StoryPresentationMode } from "./storyPresentationModes";
 import { StoryWorkspacePresentationView, type StoryCreationPresentationController, type StoryOperationPresentationController, type StoryWorkspacePresentationController } from "./StoryWorkspacePresentationView";
-import { createStoryDetails } from "../story/testFixtures";
+import { createStoryDetails, createStorySummary } from "../story/testFixtures";
 
 const story = createStoryDetails();
 
 const controller: StoryWorkspacePresentationController = {
   story,
-  stories: [],
+  stories: [createStorySummary()],
   loading: false,
   error: "",
   busy: false,
@@ -36,5 +36,12 @@ describe("StoryWorkspacePresentationView", () => {
   it("uses the direct Story archive for history", () => {
     const markup = render("archive");
     assert.match(markup, /data-testid="story-archive-surface"/);
+  });
+
+  it("uses a full-screen Story surface for saved Stories", () => {
+    const markup = render("load");
+    assert.match(markup, /data-testid="story-load"/);
+    assert.match(markup, /data-testid="story-load-panel"/);
+    assert.match(markup, /data-testid="story-load-list"/);
   });
 });

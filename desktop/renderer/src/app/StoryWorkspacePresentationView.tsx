@@ -1,6 +1,6 @@
 import type { RoleRecord } from "../shared/types";
 import { toFileUrl } from "../shared/format";
-import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadingScreen, StorySettings } from "../story";
+import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadList, StoryLoadingScreen, StorySettings } from "../story";
 import type { useStoryController } from "../story/useStoryController";
 import type { useStoryCreationFlowController } from "./useStoryCreationFlowController";
 import type { useStoryPresentationOperation } from "./useStoryPresentationOperation";
@@ -46,7 +46,10 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
     return <StoryLoadingScreen mode="listing" error={error} onRetry={() => void controller.reloadStories()} onBack={onExit} />;
   }
   if (mode === "launcher") {
-    return <StoryLauncher stories={controller.stories} busy={busy} error={error} onCreateStory={() => { operation.clearError(); setMode("create"); }} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
+    return <StoryLauncher busy={busy} error={error} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
+  }
+  if (mode === "load") {
+    return <StoryLoadList stories={controller.stories} busy={busy} error={error} onBack={() => setMode("launcher")} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} />;
   }
   if (mode === "loading") {
     return <StoryLoadingScreen mode="story" busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} onBack={() => setMode("launcher")} />;
