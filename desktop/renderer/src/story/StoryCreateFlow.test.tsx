@@ -18,6 +18,8 @@ describe("StoryCreateFlow", () => {
     assert.match(markup, /aria-label="返回剧情主菜单"/);
     assert.match(markup, /data-testid="story-create-step"/);
     assert.match(markup, /border-0/);
+    assert.match(markup, /aria-label="下一步"/);
+    assert.match(markup, /title="下一步"/);
     assert.doesNotMatch(markup, /border-\[#B64B75\]\/55|border-\[#D5A9BB\]\/55/);
     assert.doesNotMatch(markup, /确认开始/);
     assert.doesNotMatch(markup, /inset-\[clamp\(12px,2vw,28px\)\]/);
@@ -27,7 +29,7 @@ describe("StoryCreateFlow", () => {
 
   it("shows the first step action without a draft confirmation stage", () => {
     const markup = renderToStaticMarkup(<StoryCreateFlow roles={[]} onBack={() => undefined} onCreate={() => undefined} />);
-    assert.match(markup, />下一步</);
+    assert.match(markup, /aria-label="下一步"/);
     assert.doesNotMatch(markup, /草案|确认草案/);
   });
 });

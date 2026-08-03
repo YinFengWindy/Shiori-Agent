@@ -1,5 +1,6 @@
 import { Check, UserCircle } from "@phosphor-icons/react";
 import { motion } from "motion/react";
+import { useLayoutEffect, useRef } from "react";
 import { cx, inputClass } from "../shared/styles";
 import type { StoryCreationInput, StoryRoleChoice } from "./types";
 import type { CreationStep } from "./storyCreationWizard";
@@ -21,6 +22,15 @@ const stepItemTransition = { duration: 0.22, ease: "easeOut" } as const;
 
 /** Renders the focused fields and inline summary for the active creation step. */
 export function StoryCreateStep({ step, roles, input, selectedRole, reducedMotion, onSelectRole, onChangeSetting, onChangeProfile }: StoryCreateStepProps) {
+  const backgroundRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useLayoutEffect(() => {
+    const textarea = backgroundRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [input.background]);
+
   if (step === "role") {
     return (
       <section className="grid gap-3" data-testid="story-create-step">
@@ -52,7 +62,7 @@ export function StoryCreateStep({ step, roles, input, selectedRole, reducedMotio
     return (
       <section className="grid gap-5 border-y border-[#E9C4D5] py-5" data-testid="story-create-step">
         <label className="grid gap-1.5 text-xs text-[#8B6676]">剧情名称<input className={storyInputClass} value={input.title} onChange={(event) => onChangeSetting("title", event.target.value)} /></label>
-        <label className="grid gap-1.5 text-xs text-[#8B6676]">开场背景<textarea className={cx(storyInputClass, "min-h-32 resize-y")} value={input.background} onChange={(event) => onChangeSetting("background", event.target.value)} /></label>
+        <label className="grid gap-1.5 text-xs text-[#8B6676]">开场背景<textarea ref={backgroundRef} className={cx(storyInputClass, "min-h-32 resize-none overflow-hidden")} value={input.background} onChange={(event) => onChangeSetting("background", event.target.value)} /></label>
         <label className="grid gap-1.5 text-xs text-[#8B6676]">开始时间（北京时间）<input className={storyInputClass} type="datetime-local" value={input.startsAt} onChange={(event) => onChangeSetting("startsAt", event.target.value)} /></label>
       </section>
     );

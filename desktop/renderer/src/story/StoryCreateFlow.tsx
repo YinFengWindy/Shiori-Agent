@@ -16,9 +16,9 @@ type StoryCreateFlowProps = {
 };
 
 const stepLabels: Record<CreationStep, string> = { role: "选择角色", setting: "开场设定", player: "玩家资料" };
-const storyActionButtonBase = "inline-flex min-h-10 min-w-28 items-center justify-center gap-2 whitespace-nowrap rounded-md border-0 px-4 py-2.5 text-sm font-medium transition-[background-color,box-shadow,color,transform] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] disabled:cursor-default disabled:opacity-50";
-const storyPrimaryButtonClass = cx(storyActionButtonBase, "bg-[#B64B75]/90 text-white shadow-[0_8px_20px_rgba(166,57,104,0.18)] hover:bg-[#96325F] hover:shadow-[0_10px_24px_rgba(166,57,104,0.24)] active:scale-[0.98]");
-const storySecondaryButtonClass = cx(storyActionButtonBase, "bg-[#FFF8FC]/45 text-[#6C3E52] shadow-[0_6px_16px_rgba(109,53,80,0.08)] hover:bg-white/75 hover:text-[#7A2356] hover:shadow-[0_8px_18px_rgba(109,53,80,0.12)]");
+const storyActionButtonBase = "grid h-10 w-10 shrink-0 place-items-center rounded-md border-0 p-0 transition-[color,transform] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] disabled:cursor-default disabled:opacity-50";
+const storyPrimaryButtonClass = cx(storyActionButtonBase, "text-[#B64B75] hover:text-[#96325F] active:scale-[0.94]");
+const storySecondaryButtonClass = cx(storyActionButtonBase, "text-[#6C3E52] hover:text-[#7A2356]");
 const stepTransition = { duration: 0.22, ease: "easeOut" } as const;
 
 /** Renders the compact animated form that creates one Story database entry. */
@@ -75,7 +75,7 @@ export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCre
         </div>
       </main>
 
-      <footer className="border-t border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5"><div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4"><div className="min-w-0 flex-1">{stepIndex ? <button className={storySecondaryButtonClass} type="button" disabled={busy} onClick={previous}><ArrowLeft />上一步</button> : null}</div><div className="flex shrink-0 items-center justify-end gap-3">{busy ? <span className="max-w-24 text-right text-xs text-[#7D6470]">正在创建剧情</span> : null}{step === "player" ? <button className={storyPrimaryButtonClass} type="button" disabled={busy || !stepComplete} onClick={() => onCreate(input)}>{busy ? <span className="inline-flex items-center gap-2"><CircleNotch className="animate-spin" />创建中</span> : <span className="inline-flex items-center gap-2"><Sparkle weight="fill" />开始剧情</span>}</button> : <button className={storyPrimaryButtonClass} type="button" disabled={!stepComplete} onClick={next}><span className="inline-flex items-center gap-2">下一步<ArrowRight /></span></button>}</div></div></footer>
+      <footer className="border-t border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5"><div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4"><div className="min-w-0 flex-1">{stepIndex ? <button className={storySecondaryButtonClass} type="button" aria-label="上一步" title="上一步" disabled={busy} onClick={previous}><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button> : null}</div><div className="flex shrink-0 items-center justify-end gap-3">{busy ? <span className="max-w-24 text-right text-xs text-[#7D6470]">正在创建剧情</span> : null}{step === "player" ? <button className={storyPrimaryButtonClass} type="button" aria-label={busy ? "创建中" : "开始剧情"} title={busy ? "创建中" : "开始剧情"} disabled={busy || !stepComplete} onClick={() => onCreate(input)}>{busy ? <CircleNotch className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Sparkle className="h-5 w-5" weight="fill" aria-hidden="true" />}</button> : <button className={storyPrimaryButtonClass} type="button" aria-label="下一步" title="下一步" disabled={!stepComplete} onClick={next}><ArrowRight className="h-5 w-5" aria-hidden="true" /></button>}</div></div></footer>
     </StorySurface>
   );
 }

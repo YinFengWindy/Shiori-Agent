@@ -7,6 +7,16 @@ import { StoryCreateStep } from "./StoryCreateStep";
 import { createInitialStoryCreationInput } from "./storyCreationWizard";
 
 describe("StoryCreateStep", () => {
+  it("auto-grows the opening background field without a resize handle", () => {
+    const input = createInitialStoryCreationInput();
+    const markup = renderToStaticMarkup(<StoryCreateStep step="setting" roles={[]} input={input} reducedMotion onSelectRole={() => undefined} onChangeSetting={() => undefined} onChangeProfile={() => undefined} />);
+
+    assert.match(markup, /开场背景/);
+    assert.match(markup, /resize-none/);
+    assert.match(markup, /overflow-hidden/);
+    assert.doesNotMatch(markup, /resize-y/);
+  });
+
   it("keeps the final player step focused and shows its inline summary", () => {
     const input = createInitialStoryCreationInput();
     input.title = "雨港";
