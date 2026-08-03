@@ -8,6 +8,8 @@ import {
 export const localAssetSchemePrivileges = Object.freeze({
   standard: true,
   secure: true,
+  // Renderer theme sampling reads pixels from authorized image assets via canvas.
+  corsEnabled: true,
 });
 
 type ProtocolRegistrar = {
