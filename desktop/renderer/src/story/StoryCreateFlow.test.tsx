@@ -11,9 +11,11 @@ describe("StoryCreateFlow", () => {
     assert.match(markup, />CREATE A STORY</);
     assert.match(markup, /bg-\[#FFF8FC\]/);
     assert.match(markup, />选择角色</);
-    assert.match(markup, />CHAPTER 1 \/ 4</);
+    assert.match(markup, /01 \/ 03/);
     assert.match(markup, /aria-label="创建步骤"/);
     assert.match(markup, /aria-label="返回剧情主菜单"/);
+    assert.match(markup, /data-testid="story-create-step"/);
+    assert.doesNotMatch(markup, /确认开始/);
     assert.doesNotMatch(markup, /grid-cols-\[220px/);
     assert.doesNotMatch(markup, /<aside/);
   });
