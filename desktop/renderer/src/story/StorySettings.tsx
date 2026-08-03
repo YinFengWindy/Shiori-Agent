@@ -69,12 +69,12 @@ export function StorySettings({ onBack }: StorySettingsProps) {
       </motion.header>
 
       <motion.main
-        className="relative z-10 flex h-full min-h-0 items-center justify-center overflow-y-auto px-[clamp(12px,5vw,72px)] py-[clamp(76px,10vh,104px)]"
+        className="relative z-10 flex h-full min-h-0 flex-col overflow-y-auto pt-[clamp(76px,10vh,104px)]"
         initial={{ opacity: 0, x: reduceEffects ? 0 : 28 }}
         animate={{ opacity: 1, x: 0 }}
         transition={transition}
       >
-        <section className="w-full max-w-4xl border border-[#DDA9BE]/75 bg-[#FFF8FC]/90 shadow-[0_18px_48px_rgba(49,17,35,0.3)] backdrop-blur-md" data-testid="story-settings-panel">
+        <section className="flex min-h-full w-full flex-col border-y border-[#DDA9BE]/75 bg-[#FFF8FC]/90 shadow-[0_18px_48px_rgba(49,17,35,0.3)] backdrop-blur-md" data-testid="story-settings-panel">
           <header className="flex items-center gap-4 border-b border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5">
             <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[#C785A0]/55 bg-[#FFF8FC]/55 text-[#8F355C] transition-colors hover:border-[#B64B75] hover:bg-white hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}>
               <ArrowLeft className="h-5 w-5" weight="bold" />

@@ -12,6 +12,7 @@ describe("StorySettings", () => {
     assert.match(markup, /data-testid="story-settings"/);
     assert.match(markup, /data-testid="story-settings-backdrop"/);
     assert.match(markup, /data-testid="story-settings-panel"/);
+    assert.match(markup, /min-h-full w-full/);
     assert.match(markup, /url\(\.\/assets\/backgrounds\/default-galgame-bg\.png\)/);
     assert.match(markup, /\.\/assets\/branding\/shiori-title-logo\.png/);
     assert.match(markup, />设置</);
@@ -23,6 +24,7 @@ describe("StorySettings", () => {
     assert.match(markup, /type="range"/);
     assert.match(markup, /语音/);
     assert.match(markup, /环境音/);
+    assert.doesNotMatch(markup, /max-w-4xl/);
     assert.doesNotMatch(markup, /<select|type="checkbox"/);
     assert.doesNotMatch(markup, /自动播放|快进|World|world/);
   });
