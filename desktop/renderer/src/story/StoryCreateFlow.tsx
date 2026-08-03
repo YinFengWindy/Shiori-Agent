@@ -61,7 +61,6 @@ export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCre
 
       <main className="min-h-0 flex-1 overflow-y-auto px-[clamp(18px,4vw,40px)] py-7">
         <div className="mx-auto w-full max-w-3xl">
-          <div className="mb-6 flex items-end justify-between gap-4"><div><p className="m-0 text-[0.68rem] font-semibold tracking-[0.24em] text-[#B64B75]">{String(stepIndex + 1).padStart(2, "0")} / {String(creationSteps.length).padStart(2, "0")}</p><h2 className="mt-1 font-serif text-xl font-semibold italic text-[#7A2356]">{stepLabels[step]}</h2></div><span className="hidden text-xs text-[#7D6470] sm:block">{selectedRole?.name || ""}</span></div>
           <AnimatePresence initial={false} mode="wait">
             <motion.div key={step} initial={stepMotion.initial} animate={stepMotion.animate} exit={stepMotion.exit} transition={reducedMotion ? { duration: 0 } : stepTransition}>
               <StoryCreateStep step={step} roles={roles} input={input} selectedRole={selectedRole} reducedMotion={reducedMotion} onSelectRole={(roleId) => setInput((current) => ({ ...current, roleId }))} onChangeSetting={updateSetting} onChangeProfile={updateProfile} />
