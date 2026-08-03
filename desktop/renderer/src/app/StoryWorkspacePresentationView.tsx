@@ -46,7 +46,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
     return <StoryLoadingScreen mode="listing" error={error} onRetry={() => void controller.reloadStories()} onBack={onExit} />;
   }
   if (mode === "launcher") {
-    return <StoryLauncher busy={busy} error={error} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
+    return <StoryLauncher roles={roles} busy={busy} error={error} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
   }
   if (mode === "load") {
     return <StoryLoadList stories={controller.stories} busy={busy} error={error} onBack={() => setMode("launcher")} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} />;
