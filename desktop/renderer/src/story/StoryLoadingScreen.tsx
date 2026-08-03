@@ -23,7 +23,7 @@ export function StoryLoadingScreen({ background = DEFAULT_STORY_MENU_BACKGROUND,
   const presentation = resolveStoryLoadingPresentation({ elapsedMs, loaded, total });
   const currentStage = mode === "listing" ? "读取剧情" : "恢复进度";
 
-  return <StoryMenuScene background={background} dataTestId="story-loading-screen" ariaBusy={busy}>{({ theme }) => <>
+  return <StoryMenuScene background={background} dataTestId="story-loading-screen" ariaBusy={busy} showTitle={false} animateEntrance={false}>{({ theme }) => <>
     <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02)_48%,rgba(40,20,33,0.16))]" />
     <main className="absolute right-[clamp(20px,5vw,72px)] top-1/2 z-10 w-[min(22rem,calc(100%-40px))] -translate-y-1/2" aria-label="剧情加载" data-testid="story-loading-rail">
       <div style={{ filter: theme.commandFilter }}>

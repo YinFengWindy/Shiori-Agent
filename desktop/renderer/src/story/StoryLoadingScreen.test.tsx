@@ -38,5 +38,6 @@ describe("StoryLoadingScreen", () => {
     assert.match(markup, /url\(shiori-asset:\/\/local\/story-menu-random\.webp\)/);
     assert.match(markup, /hue-rotate\(18deg\) saturate\(1\.12\)/);
     assert.match(markup, /data-testid="story-loading-rail"/);
+    assert.doesNotMatch(markup, /data-testid="story-menu-title"/);
   });
 });
