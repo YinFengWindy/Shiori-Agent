@@ -28,6 +28,10 @@ describe("resolveStoryLoadingCopy", () => {
 });
 
 describe("waitForMinimumStoryLoading", () => {
+  it("keeps the transition visible long enough to read its active stage", () => {
+    assert.ok(minStoryLoadingMs >= 2_000);
+  });
+
   it("waits for the remaining duration when loading finishes quickly", async () => {
     const delays: number[] = [];
     await waitForMinimumStoryLoading(1_000, 1_200, async (delayMs) => { delays.push(delayMs); });
@@ -36,7 +40,7 @@ describe("waitForMinimumStoryLoading", () => {
 
   it("does not add a delay after the minimum duration has elapsed", async () => {
     let slept = false;
-    await waitForMinimumStoryLoading(1_000, 2_600, async () => { slept = true; });
+    await waitForMinimumStoryLoading(1_000, 4_000, async () => { slept = true; });
     assert.equal(slept, false);
   });
 });

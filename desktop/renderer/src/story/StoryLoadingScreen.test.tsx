@@ -24,6 +24,8 @@ describe("StoryLoadingScreen", () => {
     assert.match(markup, />读取故事列表</);
     assert.match(markup, />准备菜单</);
     assert.match(markup, />完成</);
+    assert.match(markup, /story-loading-dots/);
+    assert.match(markup, /进行中[\s\S]*story-loading-dots/);
     assert.doesNotMatch(markup, /进入剧情|恢复进度|准备开场/);
     assert.doesNotMatch(markup, /Story \/ Menu|Story \/ Loading/);
     assert.doesNotMatch(markup, /<svg/);

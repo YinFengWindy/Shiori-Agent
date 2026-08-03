@@ -60,7 +60,7 @@ type StoryLoadingInput = {
 };
 
 /** Minimum time a successful Story entry spends in the loading transition. */
-export const minStoryLoadingMs = 1_500;
+export const minStoryLoadingMs = 2_200;
 
 /** Waits for the remaining minimum loading duration without delaying slow loads. */
 export async function waitForMinimumStoryLoading(
