@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { minStoryLoadingMs, resolveStoryLoadingCopy, resolveStoryLoadingPresentation, waitForMinimumStoryLoading } from "./storyLoadingPresentation";
+import { minStoryLoadingMs, resolveStoryLoadingCopy, resolveStoryLoadingPresentation, storyLoadingCompletionHoldMs, waitForMinimumStoryLoading, waitForStoryLoadingCompletion } from "./storyLoadingPresentation";
 
 describe("resolveStoryLoadingCopy", () => {
   it("uses menu semantics while loading the Story launcher", () => {
@@ -10,7 +10,7 @@ describe("resolveStoryLoadingCopy", () => {
       heading: "准备故事主菜单",
       currentStage: "读取故事列表",
       stageLabel: "主菜单加载阶段",
-      stages: ["读取故事列表", "准备菜单", "完成"],
+      stages: ["读取故事列表", "准备菜单"],
       progressLabel: "读取故事列表",
       railLabel: "故事主菜单加载",
       activeStage: 0,
@@ -24,6 +24,12 @@ describe("resolveStoryLoadingCopy", () => {
     assert.equal(copy.activeStage, 2);
     assert.deepEqual(copy.stages, ["读取剧情", "恢复进度", "准备开场"]);
     assert.equal(copy.railLabel, "剧情加载");
+  });
+
+  it("marks the final menu phase after all loading stages", () => {
+    const copy = resolveStoryLoadingCopy("listing", "menu-ready");
+    assert.equal(copy.activeStage, copy.stages.length);
+    assert.equal(copy.stages.length, 2);
   });
 });
 
@@ -42,6 +48,14 @@ describe("waitForMinimumStoryLoading", () => {
     let slept = false;
     await waitForMinimumStoryLoading(1_000, 4_000, async () => { slept = true; });
     assert.equal(slept, false);
+  });
+});
+
+describe("waitForStoryLoadingCompletion", () => {
+  it("holds the all-complete state briefly", async () => {
+    const delays: number[] = [];
+    await waitForStoryLoadingCompletion(async (delayMs) => { delays.push(delayMs); });
+    assert.deepEqual(delays, [storyLoadingCompletionHoldMs]);
   });
 });
 

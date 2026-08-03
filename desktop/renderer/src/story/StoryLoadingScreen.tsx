@@ -20,20 +20,21 @@ type StoryLoadingScreenProps = {
 export function StoryLoadingScreen({ background = DEFAULT_STORY_MENU_BACKGROUND, mode, phase, busy = true, error = "", elapsedMs = 250, loaded = 0, total = 0, onRetry, onBack }: StoryLoadingScreenProps) {
   const copy = resolveStoryLoadingCopy(mode, phase);
   const presentation = resolveStoryLoadingPresentation({ elapsedMs, loaded, total });
+  const complete = copy.activeStage >= copy.stages.length;
 
   return <StoryMenuScene background={background} dataTestId="story-loading-screen" ariaBusy={busy} showTitle={false} animateEntrance={false}>{({ theme }) => <>
     <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02)_48%,rgba(40,20,33,0.16))]" />
     <main className="absolute right-[clamp(20px,5vw,72px)] top-1/2 z-10 w-[min(22rem,calc(100%-40px))] -translate-y-1/2" aria-label={copy.railLabel} data-testid="story-loading-rail">
       <div style={{ filter: theme.commandFilter }}>
         <h2 className="mt-0 text-right font-serif text-3xl font-semibold italic leading-none text-[#7A2356] [-webkit-text-stroke:0.5px_rgba(255,255,255,0.55)] [text-shadow:0_1px_0_rgba(255,255,255,0.72),0_5px_12px_rgba(93,21,51,0.28)]">{copy.heading}</h2>
-        <p className="mt-3 text-right text-xs tracking-[0.18em] text-[#7A2356]/70" aria-live="polite" data-testid="story-loading-current-stage">{copy.currentStage}<span className="px-2">·</span>{busy ? "进行中" : "即将开始"}</p>
+        <p className="mt-3 text-right text-xs tracking-[0.18em] text-[#7A2356]/70" aria-live="polite" data-testid="story-loading-current-stage">{copy.currentStage}<span className="px-2">·</span>{complete ? "已准备好" : busy ? "进行中" : "即将开始"}</p>
 
         <div className="mt-8 border-t border-[#7A2356]/35" aria-label={copy.stageLabel}>
           {copy.stages.map((stage, index) => {
             const complete = index < copy.activeStage;
             const active = index === copy.activeStage;
             return <div key={stage} className="flex items-center gap-3 border-b border-[#7A2356]/25 py-3" aria-current={active ? "step" : undefined} data-testid={`story-loading-stage-${index}`}>
-              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${complete ? "border-[#7A2356] bg-[#7A2356] text-white" : active ? "border-[#7A2356]" : "border-[#7A2356]/35"}`}>{complete ? <Check className="h-3 w-3" weight="bold" /> : <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-[#7A2356]" : "bg-[#7A2356]/25"}`} />}</span>
+              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${complete ? "border-[#7A2356] bg-[#7A2356] text-white" : active ? "border-[#7A2356]" : "border-[#7A2356]/35"}`}>{complete ? <Check className="h-3 w-3" weight="bold" data-testid={`story-loading-stage-${index}-check`} /> : <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-[#7A2356]" : "bg-[#7A2356]/25"}`} />}</span>
               <span className={`text-sm ${active || complete ? "text-[#7A2356]" : "text-[#7A2356]/45"}`}>{stage}</span>
               <span className="ml-auto text-[0.68rem] tracking-[0.12em] text-[#7A2356]/55">
                 {complete ? "完成" : active ? <span className="inline-flex items-center gap-1.5"><ArrowClockwise aria-hidden="true" className="h-3.5 w-3.5 animate-spin" weight="bold" data-testid="story-loading-spinner" /><span>进行中</span></span> : "等待"}

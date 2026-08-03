@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createStoryBridgeClient, type StoryBridgeClient } from "./storyBridgeClient";
 import { replaceStorySummary } from "./selectors";
-import { waitForMinimumStoryLoading } from "./storyLoadingPresentation";
+import { waitForMinimumStoryLoading, waitForStoryLoadingCompletion } from "./storyLoadingPresentation";
 import type { StoryListingLoadingPhase } from "./storyLoadingPresentation";
 import type { StoryDetails, StorySummary } from "./types";
 
@@ -63,6 +63,8 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
       const stories = await client.listStories();
       setState((current) => ({ ...current, loadingPhase: "preparing-menu" }));
       if (isInitialListLoad) await waitForMinimumStoryLoading(startedAt);
+      setState((current) => ({ ...current, stories, loadingPhase: "menu-ready" }));
+      await waitForStoryLoadingCompletion();
       setState((current) => ({ ...current, stories, loading: false }));
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "无法读取剧情列表" }));

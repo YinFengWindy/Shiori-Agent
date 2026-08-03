@@ -3,7 +3,7 @@ import type { RoleRecord } from "../shared/types";
 import type { StoryBridgeClient } from "../story/storyBridgeClient";
 import type { StoryCgGallery } from "../story/types";
 import type { useStoryController } from "../story/useStoryController";
-import { waitForMinimumStoryLoading } from "../story/storyLoadingPresentation";
+import { waitForMinimumStoryLoading, waitForStoryLoadingCompletion } from "../story/storyLoadingPresentation";
 import { useStoryCreationFlowController } from "./useStoryCreationFlowController";
 import { useStoryPresentationOperation } from "./useStoryPresentationOperation";
 import { StoryWorkspacePresentationView } from "./StoryWorkspacePresentationView";
@@ -48,6 +48,8 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
         await waitForStoryReady(storyId, loadedStory);
         setLoadingPhase("preparing-opening");
         await waitForMinimumStoryLoading(startedAt);
+        setLoadingPhase("opening-ready");
+        await waitForStoryLoadingCompletion();
         setMode("game");
         return;
       }

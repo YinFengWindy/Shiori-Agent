@@ -7,8 +7,8 @@ export type StoryLoadingPresentation =
 export type StoryLoadingMode = "listing" | "story";
 
 /** Real loading phases reported by the Story list and gameplay workflows. */
-export type StoryListingLoadingPhase = "reading-list" | "preparing-menu";
-export type StoryGameplayLoadingPhase = "reading-story" | "restoring-progress" | "preparing-opening";
+export type StoryListingLoadingPhase = "reading-list" | "preparing-menu" | "menu-ready";
+export type StoryGameplayLoadingPhase = "reading-story" | "restoring-progress" | "preparing-opening" | "opening-ready";
 export type StoryLoadingPhase = StoryListingLoadingPhase | StoryGameplayLoadingPhase;
 
 /** Copy, accessibility labels, and progress semantics for one loading route. */
@@ -25,7 +25,7 @@ export type StoryLoadingCopy = {
 const storyLoadingCopy: Record<StoryLoadingMode, Omit<StoryLoadingCopy, "heading" | "currentStage" | "activeStage">> = {
     listing: {
     stageLabel: "主菜单加载阶段",
-    stages: ["读取故事列表", "准备菜单", "完成"],
+    stages: ["读取故事列表", "准备菜单"],
     progressLabel: "读取故事列表",
     railLabel: "故事主菜单加载",
   },
@@ -40,16 +40,18 @@ const storyLoadingCopy: Record<StoryLoadingMode, Omit<StoryLoadingCopy, "heading
 const storyLoadingPhaseCopy: Record<StoryLoadingPhase, Pick<StoryLoadingCopy, "heading" | "currentStage" | "activeStage">> = {
   "reading-list": { heading: "准备故事主菜单", currentStage: "读取故事列表", activeStage: 0 },
   "preparing-menu": { heading: "准备故事主菜单", currentStage: "准备菜单", activeStage: 1 },
+  "menu-ready": { heading: "准备故事主菜单", currentStage: "主菜单已准备好", activeStage: 2 },
   "reading-story": { heading: "进入剧情", currentStage: "读取剧情", activeStage: 0 },
   "restoring-progress": { heading: "进入剧情", currentStage: "恢复进度", activeStage: 1 },
   "preparing-opening": { heading: "进入剧情", currentStage: "准备开场", activeStage: 2 },
+  "opening-ready": { heading: "进入剧情", currentStage: "开场已准备好", activeStage: 3 },
 };
 
 /** Returns the copy contract for one Story loading route. */
 export function resolveStoryLoadingCopy(mode: StoryLoadingMode, phase: StoryLoadingPhase): StoryLoadingCopy {
   const phaseKey: StoryLoadingPhase = mode === "listing"
-    ? phase === "preparing-menu" ? phase : "reading-list"
-    : phase === "restoring-progress" || phase === "preparing-opening" ? phase : "reading-story";
+    ? phase === "preparing-menu" || phase === "menu-ready" ? phase : "reading-list"
+    : phase === "restoring-progress" || phase === "preparing-opening" || phase === "opening-ready" ? phase : "reading-story";
   return { ...storyLoadingCopy[mode], ...storyLoadingPhaseCopy[phaseKey] };
 }
 
@@ -61,6 +63,8 @@ type StoryLoadingInput = {
 
 /** Minimum time a successful Story entry spends in the loading transition. */
 export const minStoryLoadingMs = 2_200;
+/** Keeps the all-complete state visible before the next Story surface replaces it. */
+export const storyLoadingCompletionHoldMs = 420;
 
 /** Waits for the remaining minimum loading duration without delaying slow loads. */
 export async function waitForMinimumStoryLoading(
@@ -72,6 +76,13 @@ export async function waitForMinimumStoryLoading(
   const remainingMs = minStoryLoadingMs - elapsedMs;
   if (remainingMs <= 0) return;
   await sleep(remainingMs);
+}
+
+/** Holds the all-complete loading state long enough for its checkmarks to register. */
+export async function waitForStoryLoadingCompletion(
+  sleep = (delayMs: number) => new Promise<void>((resolve) => window.setTimeout(resolve, delayMs)),
+) {
+  await sleep(storyLoadingCompletionHoldMs);
 }
 
 /** Maps elapsed time and measurable work to the three required loading treatments. */

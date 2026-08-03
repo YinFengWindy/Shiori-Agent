@@ -23,7 +23,7 @@ describe("StoryLoadingScreen", () => {
     assert.match(markup, />准备故事主菜单</);
     assert.match(markup, />读取故事列表</);
     assert.match(markup, />准备菜单</);
-    assert.match(markup, />完成</);
+    assert.doesNotMatch(markup, />完成</);
     assert.match(markup, /data-testid="story-loading-spinner"/);
     assert.match(markup, /animate-spin/);
     assert.doesNotMatch(markup, /进入剧情|恢复进度|准备开场/);
@@ -50,5 +50,14 @@ describe("StoryLoadingScreen", () => {
     assert.match(markup, /data-testid="story-loading-rail"/);
     assert.match(markup, /data-testid="story-loading-current-stage">准备菜单/);
     assert.doesNotMatch(markup, /data-testid="story-menu-title"/);
+  });
+
+  it("checks every stage before leaving the loading transition", () => {
+    const markup = renderToStaticMarkup(<StoryLoadingScreen mode="listing" phase="menu-ready" />);
+    assert.match(markup, /data-testid="story-loading-current-stage">主菜单已准备好/);
+    assert.match(markup, /已准备好/);
+    assert.doesNotMatch(markup, /story-loading-spinner/);
+    assert.match(markup, /data-testid="story-loading-stage-0-check"/);
+    assert.match(markup, /data-testid="story-loading-stage-1-check"/);
   });
 });
