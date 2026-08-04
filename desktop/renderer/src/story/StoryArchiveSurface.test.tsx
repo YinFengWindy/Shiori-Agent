@@ -23,8 +23,12 @@ describe("StoryArchiveSurface", () => {
     assert.match(markup, /url\(shiori-asset:\/\/local\/story-menu-random\.webp\)/);
     assert.match(markup, /剧情记录/);
     assert.match(markup, /你终于来了。/);
-    assert.match(markup, /data-testid="story-current-time"/);
-    assert.match(markup, /上午/);
+    assert.match(markup, /data-testid="story-archive-day"/);
+    assert.match(markup, /2026年8月2日/);
+    assert.match(markup, /data-testid="story-archive-period"/);
+    assert.match(markup, />上午</);
+    assert.match(markup, /data-story-entry-kind="dialogue"/);
+    assert.doesNotMatch(markup, /上午 · 澪/);
     assert.match(markup, /aria-label="返回游戏页"/);
     assert.match(markup, /title="返回游戏页"/);
     assert.match(markup, /font-serif text-2xl font-semibold text-white/);
@@ -38,5 +42,16 @@ describe("StoryArchiveSurface", () => {
     const story = createStoryDetails({ beats: [createStoryBeat({ id: "first", sequence: 1 }), createStoryBeat({ id: "second", sequence: 2, text: "门开了。" })] });
     const markup = renderToStaticMarkup(<StoryArchiveSurface story={story} error="" onReturnToGame={() => undefined} />);
     assert.ok(markup.indexOf("你终于来了。") < markup.indexOf("门开了。"));
+  });
+
+  it("renders the committed player input as a distinct archive entry", () => {
+    const story = createStoryDetails({
+      turns: [{ id: "turn-player", kind: "player", input: "我走近灯火。", status: "committed", attemptId: null, committedBeatIds: ["beat-1"], error: null, createdAt: "2026-08-02T09:59:00+08:00", updatedAt: "2026-08-02T10:00:00+08:00" }],
+    });
+    const markup = renderToStaticMarkup(<StoryArchiveSurface story={story} error="" onReturnToGame={() => undefined} />);
+
+    assert.match(markup, /data-story-entry-kind="player"/);
+    assert.match(markup, />玩家</);
+    assert.match(markup, />我走近灯火。</);
   });
 });
