@@ -44,6 +44,7 @@ export type StoryCgGallery = {
 export type StorySegment = {
   id: string;
   sequence: number;
+  storyDate: string;
   timeBand: StoryTimeBand;
   status: string;
   mode: string;
@@ -59,6 +60,7 @@ export type StoryBeat = {
   segmentId: string;
   turnId: string;
   sequence: number;
+  storyDate: string;
   timeBand: StoryTimeBand;
   text: string;
   kind: "dialogue" | "action" | "narration";
@@ -103,6 +105,7 @@ export type StoryDetails = {
   turns: StoryTurn[];
   backgroundResource: StoryResource | null;
   cgGallery: StoryResource[];
+  currentStoryDate: string;
   currentTimeBand: StoryTimeBand;
 };
 
@@ -118,6 +121,7 @@ export type StoryRoleChoice = {
 export type StoryCreationInput = {
   title: string;
   background: string;
+  storyDate: string;
   timeBand: StoryTimeBand | "";
   roleId: string;
   playerProfile: {

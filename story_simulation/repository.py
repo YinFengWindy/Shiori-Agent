@@ -27,8 +27,8 @@ from .models import (
     StoryResource,
     utc_now,
 )
-from .schema_migrations import migrate_legacy_story_time, migrate_story_resources
-from .story_time import next_story_time_band, normalize_story_time_band
+from .schema_migrations import migrate_story_resources, migrate_story_timeline
+from .story_time import next_story_clock, normalize_story_date, normalize_story_time_band
 
 
 class StoryRepository:
@@ -44,7 +44,7 @@ class StoryRepository:
         self._lock = threading.RLock()
         with self._lock:
             self._connection.executescript(SCHEMA)
-            migrate_legacy_story_time(self._connection)
+            migrate_story_timeline(self._connection)
             migrate_story_resources(self._connection)
 
     def close(self) -> None:
@@ -75,6 +75,7 @@ class StoryRepository:
         background: str,
         role_snapshot: dict[str, Any],
         player_profile: StoryPlayerProfile,
+        story_date: str,
         time_band: str,
         opening_context: dict[str, Any],
     ) -> dict[str, Any]:
@@ -85,6 +86,7 @@ class StoryRepository:
             raise ValueError("title 不能为空")
         if not background.strip():
             raise ValueError("background 不能为空")
+        normalized_story_date = normalize_story_date(story_date)
         normalized_time_band = normalize_story_time_band(time_band)
         segment_id = f"segment-{uuid4().hex}"
         now = utc_now()
@@ -103,8 +105,17 @@ class StoryRepository:
             )
             connection.execute(
                 """INSERT INTO segments
-                VALUES (?, ?, 1, ?, 'awaiting_opening', 'plot', 'idle', ?, ?)""",
-                (segment_id, story_id, normalized_time_band, dump(opening_context), dump({})),
+                (id, story_id, sequence, story_date, time_band, status, mode,
+                 operation, opening_context, runtime_snapshot)
+                VALUES (?, ?, 1, ?, ?, 'awaiting_opening', 'plot', 'idle', ?, ?)""",
+                (
+                    segment_id,
+                    story_id,
+                    normalized_story_date,
+                    normalized_time_band,
+                    dump(opening_context),
+                    dump({}),
+                ),
             )
             resource_id = f"resource-{uuid4().hex}"
             connection.execute(
@@ -162,6 +173,7 @@ class StoryRepository:
             "turns": [self._turn_dict(row) for row in turns],
             "backgroundResource": background_resource,
             "cgGallery": resource_models,
+            "currentStoryDate": str(segment["story_date"]),
             "currentTimeBand": str(segment["time_band"]),
         }
 
@@ -264,6 +276,16 @@ class StoryRepository:
                 (story_id,),
             )
         return str(segment["time_band"])
+
+    def current_story_date(self, story_id: str) -> str:
+        """Return the current in-story calendar date without using system time."""
+
+        with self._lock:
+            segment = self._require_row(
+                "SELECT story_date FROM segments WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
+                (story_id,),
+            )
+        return str(segment["story_date"])
 
     def story_id_for_turn(self, turn_id: str) -> str:
         """Resolve a persisted Turn owner without loading unrelated Story state."""
@@ -449,16 +471,20 @@ class StoryRepository:
             committed_ids = load(turn["committed_beat_ids"], [])
             revision = int(story["revision"])
             segment = self._require_row(
-                "SELECT time_band FROM segments WHERE id = ?",
+                "SELECT story_date, time_band FROM segments WHERE id = ?",
                 (turn["segment_id"],),
                 connection,
             )
+            current_story_date = str(segment["story_date"])
             current_time_band = str(segment["time_band"] or default_time_band)
             committed: list[tuple[StoryBeat, PresentationCue, dict[str, Any]]] = []
             for offset, item in enumerate(draft.beats):
                 beat_id = f"beat-{uuid4().hex}"
                 cue_id = f"cue-{uuid4().hex}"
-                time_band = next_story_time_band(current_time_band, item.time_band)
+                story_date, time_band = next_story_clock(
+                    current_story_date, current_time_band, item.time_band
+                )
+                current_story_date = story_date
                 current_time_band = time_band
                 beat = StoryBeat(
                     id=beat_id,
@@ -466,6 +492,7 @@ class StoryRepository:
                     segment_id=turn["segment_id"],
                     turn_id=turn_id,
                     sequence=next_sequence + offset,
+                    story_date=story_date,
                     time_band=time_band,
                     text=item.text,
                     kind=item.kind,
@@ -514,8 +541,8 @@ class StoryRepository:
                 )
                 committed.append((beat, cue, payload))
             connection.execute(
-                """UPDATE segments SET time_band = ? WHERE id = ?""",
-                (current_time_band, turn["segment_id"]),
+                """UPDATE segments SET story_date = ?, time_band = ? WHERE id = ?""",
+                (current_story_date, current_time_band, turn["segment_id"]),
             )
             connection.execute(
                 """UPDATE stories SET revision = ? WHERE id = ?""",
@@ -690,6 +717,7 @@ class StoryRepository:
         return {
             "id": row["id"],
             "sequence": int(row["sequence"]),
+            "storyDate": row["story_date"],
             "timeBand": row["time_band"],
             "status": row["status"],
             "mode": row["mode"],
@@ -721,6 +749,7 @@ class StoryRepository:
             "segmentId": payload["segment_id"],
             "turnId": payload["turn_id"],
             "sequence": int(payload["sequence"]),
+            "storyDate": payload["story_date"],
             "timeBand": payload["time_band"],
             "text": payload["text"],
             "kind": payload["kind"],

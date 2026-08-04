@@ -75,6 +75,7 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
     payload = {
         "title": "夏日来信",
         "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
@@ -90,8 +91,10 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
     assert replay["turn_id"] == created["turn_id"]
     assert story["cues"][0]["text"] == "雨后的铃声响起。"
     assert story["turns"][0]["status"] == "committed"
+    assert story["currentStoryDate"] == "2026-08-01"
     assert story["backgroundResource"]["status"] == "failed"
     assert summaries["stories"][0]["current_time_band"] == "上午"
+    assert summaries["stories"][0]["current_story_date"] == "2026-08-01"
     await handler.aclose()
 
 
@@ -110,6 +113,7 @@ async def test_opening_image_is_saved_to_its_story_cg_gallery(tmp_path) -> None:
     payload = {
         "title": "夏日来信",
         "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
@@ -144,6 +148,7 @@ async def test_failed_opening_background_can_retry_without_creating_a_new_turn(t
     payload = {
         "title": "夏日来信",
         "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
@@ -193,6 +198,7 @@ async def test_failed_opening_closes_background_resource_without_hiding_the_erro
     payload = {
         "title": "夏日来信",
         "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
@@ -223,6 +229,7 @@ async def test_create_story_rejects_exact_time_as_a_story_period(tmp_path) -> No
             {
                 "title": "夏日来信",
                 "background": "午后的旧校舍",
+                "story_date": "2026-08-01",
                 "time_band": "2026-08-01T09:00:00+08:00",
                 "role_id": "role-1",
                 "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
@@ -252,6 +259,7 @@ async def test_create_story_recovers_from_an_interrupted_initialization(tmp_path
     payload = {
         "title": "夏日来信",
         "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
@@ -272,6 +280,7 @@ async def test_create_story_reuses_a_provisioning_entry_after_process_restart(tm
     payload = {
         "title": "夏日来信",
         "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
         "creation_id": "creation-1",
@@ -310,6 +319,7 @@ async def test_create_story_repairs_an_opening_turn_left_before_activation(tmp_p
     payload = {
         "title": "夏日来信",
         "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
         "creation_id": "creation-1",
@@ -329,6 +339,7 @@ async def test_create_story_repairs_an_opening_turn_left_before_activation(tmp_p
         background=payload["background"],
         role_snapshot=role.to_dict(),
         player_profile=StoryPlayerProfile(display_name="悠", appearance="短发", identity="转学生"),
+        story_date="2026-08-01",
         time_band=payload["time_band"],
         opening_context={"background": payload["background"], "role_id": role.id},
     )

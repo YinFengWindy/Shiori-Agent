@@ -62,7 +62,7 @@ class ProviderStoryDirector:
             "\"fact_changes\":[]}],\"stop_reason\":\"awaiting_player\","
             "\"visual_prompt\":string}。"
             "一次最多 3 个 beat，所有 text 合计最多 1200 个中文字符，单个 beat 最多 400 字符。"
-            "剧情时间只使用清晨、上午、下午、夜晚、深夜五档；具体年月日和时分不属于 Story。"
+            "故事日期由 story.story_date 提供且不能修改；剧情时间只使用清晨、上午、下午、夜晚、深夜五档。"
             "只有剧情明确进入另一个时段时才填写 time_band，否则必须填写 null。"
             "仅 opening 模式填写 visual_prompt；它必须是描述本次开场场景的英文 NovelAI tags，"
             "使用逗号分隔，不要中文、自然语言句子、文字、logo 或水印；非 opening 模式填写空字符串。"
@@ -79,6 +79,7 @@ class ProviderStoryDirector:
             "story": {
                 "title": context.story["title"],
                 "background": context.story["background"],
+                "story_date": context.segment["storyDate"],
                 "time_band": context.segment["timeBand"],
             },
             "role": {

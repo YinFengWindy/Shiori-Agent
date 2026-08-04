@@ -80,6 +80,7 @@ export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDeskt
       const requestPayload: Record<string, unknown> = {
         title: input.title,
         background: input.background,
+        story_date: input.storyDate,
         time_band: input.timeBand,
         role_id: input.roleId,
         player_profile: {

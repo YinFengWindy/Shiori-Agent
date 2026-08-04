@@ -5,6 +5,7 @@ import { toFileUrl } from "../shared/format";
 import { cx } from "../shared/styles";
 import { canSubmitStoryInput } from "./selectors";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
+import { formatStoryDate } from "./storyTime";
 import type { StoryDetails } from "./types";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
@@ -58,7 +59,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
       {renderLocalBackdrop ? <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-game-backdrop" style={{ backgroundImage: `url(${backgroundUrl})` }} /> : null}
       {showCharacterForeground ? <img className="pointer-events-none absolute bottom-[clamp(11rem,22vh,16rem)] right-[clamp(4vw,10vw,12rem)] z-10 h-[min(70vh,46rem)] max-w-[42vw] object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]" data-testid="story-game-character" src={characterAvatarUrl} alt="" /> : null}
 
-      <div className="absolute left-5 top-5 z-30 text-white/75" data-testid="story-current-time"><span className="mr-2 text-xs">当前时段</span><strong className="font-serif text-lg font-semibold text-[#F4C29F]">{story.currentTimeBand}</strong></div>
+      <div className="absolute left-5 top-5 z-30 text-white/75" data-testid="story-current-time"><span className="mr-2 text-xs">{formatStoryDate(story.currentStoryDate)}</span><strong className="font-serif text-lg font-semibold text-[#F4C29F]">{story.currentTimeBand}</strong></div>
       <div className="absolute right-5 top-5 z-30 flex gap-2">
         <button className="grid h-10 w-10 place-items-center rounded-md bg-black/20 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60" type="button" aria-label="查看剧情记录" title="查看剧情记录" onClick={onOpenArchive}><BookOpenText /></button>
         <button className="grid h-10 w-10 place-items-center rounded-md bg-black/20 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60" type="button" aria-label="剧情设置" title="剧情设置" onClick={onOpenSettings}><Gear /></button>

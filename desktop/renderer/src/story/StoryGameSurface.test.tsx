@@ -23,6 +23,7 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /url\(shiori-asset:\/\/local\/story-menu-random\.webp\)/);
     assert.match(markup, />你终于来了。</);
     assert.match(markup, /data-testid="story-current-time"/);
+    assert.match(markup, /2026年8月2日/);
     assert.match(markup, />上午</);
     assert.match(markup, /aria-label="提交剧情行动"/);
     assert.match(markup, /aria-label="查看剧情记录"/);

@@ -11,6 +11,7 @@ export function createInitialStoryCreationInput(): StoryCreationInput {
   return {
     title: "",
     background: "",
+    storyDate: "",
     timeBand: "",
     roleId: "",
     playerProfile: { displayName: "", appearance: "", identity: "" },
@@ -20,11 +21,12 @@ export function createInitialStoryCreationInput(): StoryCreationInput {
 /** Reports whether the required input for one Story creation step is complete. */
 export function isCreationStepComplete(step: CreationStep, input: StoryCreationInput): boolean {
   if (step === "role") return Boolean(input.roleId);
-  if (step === "setting") return Boolean(input.title.trim() && input.background.trim() && input.timeBand.trim());
+  if (step === "setting") return Boolean(input.title.trim() && input.background.trim() && input.storyDate.trim() && input.timeBand.trim());
   if (step === "review") return Boolean(
     input.roleId
     && input.title.trim()
     && input.background.trim()
+    && input.storyDate.trim()
     && input.timeBand.trim()
     && input.playerProfile.displayName.trim()
     && input.playerProfile.identity.trim()

@@ -56,6 +56,7 @@ def test_migrate_legacy_story_timestamps_to_periods() -> None:
         "id",
         "story_id",
         "sequence",
+        "story_date",
         "time_band",
         "status",
         "mode",
@@ -67,7 +68,13 @@ def test_migrate_legacy_story_timestamps_to_periods() -> None:
         row[1] for row in connection.execute("PRAGMA table_info(beats)")
     }
     beat_payload = json.loads(connection.execute("SELECT payload FROM beats").fetchone()[0])
-    assert beat_payload == {"id": "beat-1", "time_band": "夜晚"}
+    assert beat_payload == {
+        "id": "beat-1",
+        "story_date": "2026-08-01",
+        "time_band": "夜晚",
+    }
     outbox_payload = json.loads(connection.execute("SELECT payload FROM outbox").fetchone()[0])
-    assert outbox_payload == {"beat": {"time_band": "夜晚"}}
+    assert outbox_payload == {
+        "beat": {"story_date": "2026-08-01", "time_band": "夜晚"}
+    }
     connection.close()

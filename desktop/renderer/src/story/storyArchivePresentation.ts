@@ -1,5 +1,5 @@
 import type { StoryBeat, StoryDetails, StoryTurn } from "./types";
-import { normalizeStoryTimeBand, type StoryTimeBand } from "./storyTime";
+import { formatStoryDate, normalizeStoryTimeBand, type StoryTimeBand } from "./storyTime";
 
 /** The three player-facing entry types used by the Story archive. */
 export type StoryArchiveEntryKind = "narration" | "dialogue" | "player";
@@ -25,25 +25,18 @@ export type StoryArchiveDay = {
   periods: StoryArchivePeriod[];
 };
 
-const archiveDateFormatter = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "Asia/Shanghai",
-  year: "numeric",
-  month: "numeric",
-  day: "numeric",
-});
-
 type StoryArchiveTimelineItem = StoryArchiveEntry & {
+  storyDate: string;
   timeBand: StoryArchivePeriod["timeBand"];
-  recordedAt: string;
   order: number;
 };
 
 /** Groups committed beats and their player inputs into date and time-period sections. */
 export function buildStoryArchiveDays(story: Pick<StoryDetails, "beats" | "turns">): StoryArchiveDay[] {
   const beatsById = new Map(story.beats.map((beat) => [beat.id, beat]));
-  const beatItems = story.beats.map((beat, order) => createBeatTimelineItem(beat, order));
-  const playerItems = story.turns.flatMap((turn, order) => {
-    const item = createPlayerTimelineItem(turn, beatsById, story.beats.length + order);
+  const beatItems = story.beats.map((beat) => createBeatTimelineItem(beat));
+  const playerItems = story.turns.flatMap((turn) => {
+    const item = createPlayerTimelineItem(turn, beatsById);
     return item ? [item] : [];
   });
   const timeline = [...beatItems, ...playerItems].sort(compareTimelineItems);
@@ -52,7 +45,7 @@ export function buildStoryArchiveDays(story: Pick<StoryDetails, "beats" | "turns
   const periodsByDay = new Map<string, Map<StoryArchivePeriod["timeBand"], StoryArchivePeriod>>();
 
   for (const item of timeline) {
-    const date = resolveArchiveDate(item.recordedAt);
+    const date = resolveArchiveDate(item.storyDate);
     let day = dayMap.get(date.key);
     if (!day) {
       day = { key: date.key, label: date.label, periods: [] };
@@ -77,16 +70,16 @@ export function buildStoryArchiveDays(story: Pick<StoryDetails, "beats" | "turns
   return days;
 }
 
-function createBeatTimelineItem(beat: StoryBeat, order: number): StoryArchiveTimelineItem {
+function createBeatTimelineItem(beat: StoryBeat): StoryArchiveTimelineItem {
   if (beat.kind === "dialogue") {
     return {
       id: `beat:${beat.id}`,
       kind: "dialogue",
       label: beat.speaker || "角色",
       text: beat.text,
+      storyDate: beat.storyDate,
       timeBand: normalizeStoryTimeBand(beat.timeBand),
-      recordedAt: beat.recordedAt,
-      order,
+      order: beat.sequence * 2 + 1,
     };
   }
   return {
@@ -94,16 +87,15 @@ function createBeatTimelineItem(beat: StoryBeat, order: number): StoryArchiveTim
     kind: "narration",
     label: "旁白",
     text: beat.text,
+    storyDate: beat.storyDate,
     timeBand: normalizeStoryTimeBand(beat.timeBand),
-    recordedAt: beat.recordedAt,
-    order,
+    order: beat.sequence * 2 + 1,
   };
 }
 
 function createPlayerTimelineItem(
   turn: StoryTurn,
   beatsById: Map<string, StoryBeat>,
-  order: number,
 ): StoryArchiveTimelineItem | null {
   if ((turn.kind !== "player" && turn.kind !== "continue") || !turn.input.trim()) return null;
   const firstCommittedBeat = turn.committedBeatIds.map((beatId) => beatsById.get(beatId)).find(Boolean);
@@ -113,34 +105,22 @@ function createPlayerTimelineItem(
     kind: "player",
     label: "玩家",
     text: turn.input,
+    storyDate: firstCommittedBeat.storyDate,
     timeBand: normalizeStoryTimeBand(firstCommittedBeat.timeBand),
-    recordedAt: turn.createdAt,
-    order,
+    order: firstCommittedBeat.sequence * 2,
   };
 }
 
 function compareTimelineItems(left: StoryArchiveTimelineItem, right: StoryArchiveTimelineItem): number {
-  const timestampDelta = parseTimestamp(left.recordedAt) - parseTimestamp(right.recordedAt);
-  return timestampDelta || left.order - right.order;
-}
-
-function parseTimestamp(value: string): number {
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
+  return left.order - right.order;
 }
 
 function resolveArchiveDate(value: string): { key: string; label: string } {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { key: "unknown", label: "日期未知" };
-  const parts = archiveDateFormatter.formatToParts(date).reduce<Record<string, string>>((result, part) => {
-    if (part.type !== "literal") result[part.type] = part.value;
-    return result;
-  }, {});
-  const year = parts.year ?? "未知";
-  const month = parts.month ?? "未知";
-  const day = parts.day ?? "未知";
+  const label = formatStoryDate(value);
+  if (label === "日期未知") return { key: "unknown", label };
+  const [year, month, day] = value.split("-");
   return {
-    key: `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`,
-    label: `${year}年${month}月${day}日`,
+    key: `${year}-${month}-${day}`,
+    label,
   };
 }

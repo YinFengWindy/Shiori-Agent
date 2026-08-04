@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS segments (
     id TEXT PRIMARY KEY,
     story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
     sequence INTEGER NOT NULL,
+    story_date TEXT NOT NULL,
     time_band TEXT NOT NULL,
     status TEXT NOT NULL,
     mode TEXT NOT NULL,

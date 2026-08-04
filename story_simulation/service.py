@@ -51,6 +51,7 @@ class StorySimulationService:
         background: str,
         role: RoleRecord,
         player_profile: StoryPlayerProfile,
+        story_date: str,
         time_band: str,
         opening_context: dict[str, Any],
     ) -> dict[str, Any]:
@@ -62,6 +63,7 @@ class StorySimulationService:
             background=background,
             role_snapshot=role.to_dict(),
             player_profile=player_profile,
+            story_date=story_date,
             time_band=time_band,
             opening_context=opening_context,
         )

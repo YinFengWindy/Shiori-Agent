@@ -34,6 +34,7 @@ def _service(tmp_path, outcomes: Sequence[DirectorDraft | Exception]):
         background="午后的旧校舍",
         role_snapshot={"id": "role-1", "name": "澪"},
         player_profile=StoryPlayerProfile("悠", "短发", "转学生"),
+        story_date="2026-08-01",
         time_band="上午",
         opening_context={},
     )
@@ -65,8 +66,8 @@ async def test_service_retries_invalid_draft_once_before_committing(tmp_path) ->
     assert director.calls == 2
     assert story["turns"][0]["status"] == "committed"
     assert [cue["text"] for cue in story["cues"]] == ["风从走廊尽头吹来。", "澪抬眼看向你。"]
+    assert [beat["storyDate"] for beat in story["beats"]] == ["2026-08-01", "2026-08-01"]
     assert [beat["timeBand"] for beat in story["beats"]] == ["上午", "夜晚"]
-    assert all("effective_at" not in beat for beat in story["beats"])
     assert story["currentTimeBand"] == "夜晚"
     assert [event["method"] for event in events] == [
         "stories.beat.committed",

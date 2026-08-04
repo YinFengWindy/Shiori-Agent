@@ -8,6 +8,7 @@ export function createStoryBeat(overrides: Partial<StoryBeat> = {}): StoryBeat {
     segmentId: overrides.segmentId ?? "segment-1",
     turnId: overrides.turnId ?? "turn-1",
     sequence: overrides.sequence ?? 1,
+    storyDate: overrides.storyDate ?? "2026-08-02",
     timeBand: overrides.timeBand ?? "上午",
     text: overrides.text ?? "你终于来了。",
     kind: overrides.kind ?? "dialogue",
@@ -29,6 +30,7 @@ export function createStoryDetails(overrides: Partial<StoryDetails> = {}): Story
     segment: overrides.segment ?? {
       id: "segment-1",
       sequence: 1,
+      storyDate: "2026-08-02",
       timeBand: "上午",
       status: "active",
       mode: "plot",
@@ -41,6 +43,7 @@ export function createStoryDetails(overrides: Partial<StoryDetails> = {}): Story
     turns: overrides.turns ?? [],
     backgroundResource: overrides.backgroundResource ?? null,
     cgGallery: overrides.cgGallery ?? [],
+    currentStoryDate: overrides.currentStoryDate ?? "2026-08-02",
     currentTimeBand: overrides.currentTimeBand ?? "上午",
   };
 }

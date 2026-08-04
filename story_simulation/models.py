@@ -132,6 +132,7 @@ class StoryBeat:
     segment_id: str
     turn_id: str
     sequence: int
+    story_date: str
     time_band: str
     text: str
     kind: str
@@ -145,6 +146,7 @@ class StoryBeat:
             "segment_id": self.segment_id,
             "turn_id": self.turn_id,
             "sequence": self.sequence,
+            "story_date": self.story_date,
             "time_band": self.time_band,
             "text": self.text,
             "kind": self.kind,

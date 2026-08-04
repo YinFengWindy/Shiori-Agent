@@ -15,9 +15,10 @@ function storyPayload(revision = 4, operation: "awaiting_player" | "generating" 
     revision,
     roleSnapshot: { id: "role-1", name: "澪" },
     playerProfile: { display_name: "岚", appearance: "短发", identity: "抄写员" },
+    currentStoryDate: "2026-08-01",
     currentTimeBand: "上午" as const,
-    segment: { id: "segment-1", sequence: 1, timeBand: "上午" as const, status: "active", mode: "plot", operation, openingContext: {}, runtimeSnapshot: {} },
-    beats: [{ id: "beat-1", storyId: "story-1", segmentId: "segment-1", turnId: "turn-1", sequence: 1, timeBand: "上午" as const, text: "风从走廊尽头吹来。", kind: "narration" as const, speaker: null, recordedAt: "2026-08-02T10:00:00+08:00" }],
+    segment: { id: "segment-1", sequence: 1, storyDate: "2026-08-01", timeBand: "上午" as const, status: "active", mode: "plot", operation, openingContext: {}, runtimeSnapshot: {} },
+    beats: [{ id: "beat-1", storyId: "story-1", segmentId: "segment-1", turnId: "turn-1", sequence: 1, storyDate: "2026-08-01", timeBand: "上午" as const, text: "风从走廊尽头吹来。", kind: "narration" as const, speaker: null, recordedAt: "2026-08-02T10:00:00+08:00" }],
     cues: [],
     turns: [],
   };
@@ -67,8 +68,8 @@ describe("createStoryBridgeClient", () => {
       requests.push(request);
       return { id: "response", type: "response", method: request.method, payload: { story: storyPayload(0, "generating") }, error: null };
     });
-    await client.createStory({ title: "雨港", background: "潮汐", timeBand: "上午", roleId: "role-1", playerProfile: { displayName: "岚", appearance: "短发", identity: "抄写员" } }, "creation-1");
-    assert.deepEqual(requests[0], { method: "stories.create", payload: { title: "雨港", background: "潮汐", time_band: "上午", role_id: "role-1", creation_id: "creation-1", player_profile: { display_name: "岚", appearance: "短发", identity: "抄写员" } } });
+    await client.createStory({ title: "雨港", background: "潮汐", storyDate: "2026-08-01", timeBand: "上午", roleId: "role-1", playerProfile: { displayName: "岚", appearance: "短发", identity: "抄写员" } }, "creation-1");
+    assert.deepEqual(requests[0], { method: "stories.create", payload: { title: "雨港", background: "潮汐", story_date: "2026-08-01", time_band: "上午", role_id: "role-1", creation_id: "creation-1", player_profile: { display_name: "岚", appearance: "短发", identity: "抄写员" } } });
   });
 
   it("submits player input with the latest Story revision", async () => {

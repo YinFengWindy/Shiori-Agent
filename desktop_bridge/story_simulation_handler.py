@@ -17,7 +17,7 @@ from story_simulation.errors import StoryNotFoundError
 from story_simulation.models import StoryPlayerProfile
 from story_simulation.repository import StoryRepository, payload_hash
 from story_simulation.service import StorySimulationService
-from story_simulation.story_time import normalize_story_time_band
+from story_simulation.story_time import normalize_story_date, normalize_story_time_band
 
 from .story_image_generator import StoryImageGenerator
 
@@ -85,6 +85,7 @@ class StorySimulationHandler:
                     {
                         **summary,
                         "current_time_band": self._repository(summary["story_id"]).current_time_band(summary["story_id"]),
+                        "current_story_date": self._repository(summary["story_id"]).current_story_date(summary["story_id"]),
                     }
                     for summary in summaries
                 ]
@@ -110,6 +111,7 @@ class StorySimulationHandler:
         request_payload_hash = payload_hash(payload)
         title = self._required(payload, "title")
         background = self._required(payload, "background")
+        story_date = normalize_story_date(self._required(payload, "story_date"))
         time_band = normalize_story_time_band(self._required(payload, "time_band"))
         role = self._require_role(self._required(payload, "role_id"))
         profile_payload = payload.get("player_profile")
@@ -131,6 +133,7 @@ class StorySimulationHandler:
                 background=background,
                 role=role,
                 profile=profile,
+                story_date=story_date,
                 time_band=time_band,
                 emit_event=emit_event,
                 emit_accepted=False,
@@ -149,6 +152,7 @@ class StorySimulationHandler:
                 title=title,
                 background=background,
                 time_band=time_band,
+                story_date=story_date,
                 role=role,
                 profile=profile,
                 emit_event=emit_event,
@@ -168,6 +172,7 @@ class StorySimulationHandler:
         background: str,
         role: Any,
         profile: StoryPlayerProfile,
+        story_date: str,
         time_band: str,
         emit_event: EventEmitter,
         emit_accepted: bool,
@@ -188,6 +193,7 @@ class StorySimulationHandler:
                 background=background,
                 role=role,
                 player_profile=profile,
+                story_date=story_date,
                 time_band=time_band,
                 opening_context={"background": background, "role_id": role.id},
             )
