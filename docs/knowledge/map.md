@@ -2,7 +2,7 @@
 title: Shiori 能力地图
 kind: 能力地图
 status: 当前有效
-last_verified_commit: 27af068a
+last_verified_commit: f59ad966
 source_paths:
   - bootstrap/wiring.py
   - core/
@@ -36,7 +36,7 @@ related:
 | 调度任务 | `agent/scheduler.py`、`agent/tools/schedule.py`、`desktop_bridge/schedule_role_task_service.py` | 主动触发、角色任务、桌面展示 |
 | 桌面桥接 | `desktop_bridge/` | Electron 主进程、React renderer、后端服务 |
 | 桌面界面 | `desktop/src/`、`desktop/renderer/src/` | 角色管理、聊天、设置、图片、任务 |
-| 单角色剧情 | `story_simulation/`、`desktop_bridge/story_simulation_handler.py`、`desktop/renderer/src/story/` | 剧情事实、角色/玩家快照、提交事件、桌面剧情界面 |
+| 单角色剧情 | `story_simulation/`、`desktop_bridge/story_simulation_handler.py`、`desktop/renderer/src/story/` | 剧情事实、角色/玩家快照、提交事件、固定故事日期与“清晨/上午/下午/夜晚/深夜”五段时段时钟、桌面剧情界面 |
 | 桌宠语音 | `desktop/src/voice/`、`desktop/renderer/src/voice/`、`desktop_bridge/voice_service.py`、`desktop_bridge/tts_coordinator.py` | 录音、ASR、角色 Loop、按句 TTS、播放与中断 |
 
 ```mermaid

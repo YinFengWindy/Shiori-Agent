@@ -2,7 +2,7 @@
 title: Shiori 项目上下文
 kind: Agent 入口
 status: 当前有效
-last_verified_commit: 023eeeb8
+last_verified_commit: f59ad966
 source_paths:
   - main.py
   - bootstrap/
@@ -48,6 +48,10 @@ _避免使用_：把当前关系状态直接当作历史 Story 的开场状态�
 **Story 剧情时间（Story Effective Time）**：
 已提交 Story 节拍在角色经历中的发生时间。它从段的时间锚点开始，只能保持或向前推进；跨越明显时段必须成为剧情中的显式时间跳跃。
 _避免使用_：用生成耗时或提交时间代替剧情发生时间；向已提交段中回填更早节拍
+
+**Story 剧情时钟（Story Clock）**：
+Story 段使用玩家选择的完整日期和固定五段时段表示剧情时间。五段名称及顺序保持为“清晨、上午、下午、夜晚、深夜”，不根据系统现实时间自动变化；剧情明确从“深夜”回到“清晨”等跨午夜时段时，日期才向前推进。
+_避免使用_：修改或扩展这五段时段；用系统时钟或节拍提交耗时驱动剧情日期
 
 **Story 提交时间（Story Recorded Time）**：
 系统将 Story 节拍正式提交的操作时间，只用于审计和恢复，不决定节拍在剧情中何时发生。
