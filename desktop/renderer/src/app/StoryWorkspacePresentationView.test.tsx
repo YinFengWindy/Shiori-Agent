@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { StoryPresentationMode } from "./storyPresentationModes";
-import { StoryWorkspacePresentationView, type StoryCreationPresentationController, type StoryOperationPresentationController, type StoryWorkspacePresentationController } from "./StoryWorkspacePresentationView";
+import { STORY_PRESENTATION_TRANSITION_SECONDS, StoryWorkspacePresentationView, type StoryCreationPresentationController, type StoryOperationPresentationController, type StoryWorkspacePresentationController } from "./StoryWorkspacePresentationView";
 import { createStoryDetails, createStorySummary } from "../story/testFixtures";
 
 const story = createStoryDetails();
@@ -33,6 +33,7 @@ describe("StoryWorkspacePresentationView", () => {
     assert.match(markup, /data-testid="story-workspace-backdrop"/);
     assert.match(markup, /data-blur-mode="none" data-testid="story-workspace-backdrop-blur"/);
     assert.match(markup, /data-testid="story-game-surface"/);
+    assert.match(markup, /data-testid="story-presentation-content" data-story-mode="game"/);
     assert.doesNotMatch(markup, /data-testid="story-game-backdrop"/);
     assert.ok(markup.indexOf("story-workspace-backdrop") < markup.indexOf("story-game-surface"));
     assert.doesNotMatch(markup, /world-day-surface|world-workspace/);
@@ -48,7 +49,12 @@ describe("StoryWorkspacePresentationView", () => {
     const markup = render("load");
     assert.match(markup, /data-blur-mode="surface" data-testid="story-workspace-backdrop-blur"/);
     assert.match(markup, /data-testid="story-load"/);
+    assert.match(markup, /data-testid="story-presentation-content" data-story-mode="load"/);
     assert.match(markup, /data-testid="story-load-panel"/);
     assert.match(markup, /data-testid="story-load-list"/);
+  });
+
+  it("uses a shared transition for loading and the active Story stage", () => {
+    assert.equal(STORY_PRESENTATION_TRANSITION_SECONDS, 0.42);
   });
 });

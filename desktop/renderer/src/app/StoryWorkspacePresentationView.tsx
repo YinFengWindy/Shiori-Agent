@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { RoleRecord } from "../shared/types";
 import { toFileUrl } from "../shared/format";
 import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadList, StoryLoadingScreen, StorySettings, StoryWorkspaceBackdrop, type StoryWorkspaceBackdropBlur } from "../story";
@@ -26,6 +27,8 @@ function resolveStoryWorkspaceBackdropBlur(mode: StoryPresentationMode): StoryWo
   return "none";
 }
 
+export const STORY_PRESENTATION_TRANSITION_SECONDS = 0.42;
+
 type Props = {
   roles: RoleRecord[];
   mode: StoryPresentationMode;
@@ -51,6 +54,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   const story = controller.story;
   const error = operation.error || controller.error;
   const busy = operation.busy || controller.busy;
+  const reducedMotion = useReducedMotion() ?? false;
   const storyMenuBackground = useStoryMenuBackground(roles);
   const storyRoles = roles.map((role) => ({
     id: role.id,
@@ -82,5 +86,23 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
     content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={storyCharacter?.avatar_abs ? toFileUrl(storyCharacter.avatar_abs) : undefined} onSubmitInput={controller.submitInput} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
   }
 
-  return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation"><StoryWorkspaceBackdrop background={storyMenuBackground} blur={resolveStoryWorkspaceBackdropBlur(mode)} /><div className="relative z-10 h-full min-h-0">{content}</div></section>;
+  return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation">
+    <StoryWorkspaceBackdrop background={storyMenuBackground} blur={resolveStoryWorkspaceBackdropBlur(mode)} />
+    <div className="relative z-10 h-full min-h-0" data-testid="story-presentation-layer">
+      <AnimatePresence initial={false} mode="sync">
+        <motion.div
+          key={mode}
+          className="absolute inset-0"
+          data-testid="story-presentation-content"
+          data-story-mode={mode}
+          initial={{ opacity: 0, y: reducedMotion ? 0 : 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: reducedMotion ? 0 : -10 }}
+          transition={{ duration: reducedMotion ? 0 : STORY_PRESENTATION_TRANSITION_SECONDS, ease: "easeOut" }}
+        >
+          {content}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  </section>;
 }
