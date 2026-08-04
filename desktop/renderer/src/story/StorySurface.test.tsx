@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { StorySurface } from "./StorySurface";
+import { STORY_SURFACE_BACKDROP_TRANSITION_SECONDS, StorySurface } from "./StorySurface";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 const resolvedBackground: StoryMenuBackground = {
@@ -33,5 +33,9 @@ describe("StorySurface", () => {
 
     assert.match(markup, /url\(shiori-asset:\/\/local\/story-menu-random\.webp\)/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
+  });
+
+  it("keeps secondary-page backdrop entrance shorter than the launcher entrance", () => {
+    assert.equal(STORY_SURFACE_BACKDROP_TRANSITION_SECONDS, 0.7);
   });
 });

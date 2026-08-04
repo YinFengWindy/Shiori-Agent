@@ -14,6 +14,7 @@ type StorySurfaceProps = {
 };
 
 const transition = { duration: 0.28, ease: "easeOut" } as const;
+export const STORY_SURFACE_BACKDROP_TRANSITION_SECONDS = 0.7;
 
 /** Renders the shared Story backdrop, overlays, panel surface, and entrance motion. */
 export function StorySurface({ dataTestId, panelTestId, children, background = DEFAULT_STORY_MENU_BACKGROUND, reducedMotion = false, contentClassName }: StorySurfaceProps) {
@@ -27,7 +28,7 @@ export function StorySurface({ dataTestId, panelTestId, children, background = D
         data-testid={`${dataTestId}-backdrop`}
         initial={{ opacity: 0, scale: reduceEffects ? 1 : 1.06 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: reduceEffects ? 0 : 1.4, ease: "easeOut" }}
+        transition={{ duration: reduceEffects ? 0 : STORY_SURFACE_BACKDROP_TRANSITION_SECONDS, ease: "easeOut" }}
         style={{ backgroundImage: `url(${background.url})` }}
       />
       <div aria-hidden="true" className="absolute inset-0 bg-[#281421]/42" />
