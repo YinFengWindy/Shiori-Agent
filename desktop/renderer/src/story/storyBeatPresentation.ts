@@ -8,11 +8,9 @@ export type StoryBeatPresentationFragment = {
 
 /** Splits mixed legacy beat text without changing the committed Story transcript. */
 export function getStoryBeatPresentationFragments(beat: Pick<StoryBeat, "kind" | "text">): StoryBeatPresentationFragment[] {
-  if (beat.kind !== "dialogue") return [{ kind: "narration", text: beat.text }];
-
   const quotedTextPattern = /“[^”]*”|「[^」]*」|『[^』]*』|"[^"]*"/g;
   const matches = [...beat.text.matchAll(quotedTextPattern)];
-  if (matches.length === 0) return [{ kind: "dialogue", text: beat.text }];
+  if (matches.length === 0) return [{ kind: beat.kind === "dialogue" ? "dialogue" : "narration", text: beat.text }];
 
   const fragments: StoryBeatPresentationFragment[] = [];
   let cursor = 0;

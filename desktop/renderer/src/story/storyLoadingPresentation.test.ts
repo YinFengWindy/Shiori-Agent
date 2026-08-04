@@ -20,9 +20,9 @@ describe("resolveStoryLoadingCopy", () => {
   it("keeps gameplay-entry semantics for saved Story loading", () => {
     const copy = resolveStoryLoadingCopy("story", "preparing-opening");
     assert.equal(copy.heading, "Preparing");
-    assert.equal(copy.currentStage, "Prepare opening");
+    assert.equal(copy.currentStage, "Prepare stage");
     assert.equal(copy.activeStage, 2);
-    assert.deepEqual(copy.stages, ["Read story", "Restore progress", "Prepare opening"]);
+    assert.deepEqual(copy.stages, ["Read story", "Restore progress", "Prepare stage"]);
     assert.equal(copy.railLabel, "Story loading");
   });
 

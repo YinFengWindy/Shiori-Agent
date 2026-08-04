@@ -26,7 +26,7 @@ describe("StoryLoadingScreen", () => {
     assert.doesNotMatch(markup, />Complete</);
     assert.match(markup, /data-testid="story-loading-spinner"/);
     assert.match(markup, /animate-spin/);
-    assert.doesNotMatch(markup, /Enter Story|Restore progress|Prepare opening/);
+    assert.doesNotMatch(markup, /Enter Story|Restore progress|Prepare stage/);
     assert.doesNotMatch(markup, /Story \/ Menu|Story \/ Loading/);
     assert.doesNotMatch(markup, /animate-pulse/);
     assert.doesNotMatch(markup, /[\u4e00-\u9fff]/);
@@ -36,8 +36,8 @@ describe("StoryLoadingScreen", () => {
     const markup = renderToStaticMarkup(<StoryLoadingScreen mode="story" phase="preparing-opening" elapsedMs={2_100} loaded={2} total={4} />);
     assert.match(markup, /aria-label="Story loading"/);
     assert.match(markup, />Preparing</);
-    assert.match(markup, />Prepare opening</);
-    assert.match(markup, />Prepare assets</);
+    assert.match(markup, />Prepare stage</);
+    assert.match(markup, />Prepare stage</);
     assert.match(markup, /role="progressbar"/);
     assert.match(markup, /aria-valuenow="2"/);
     assert.match(markup, /2 \/ 4/);
@@ -64,7 +64,7 @@ describe("StoryLoadingScreen", () => {
 
   it("checks every gameplay stage before entering the Story", () => {
     const markup = renderToStaticMarkup(<StoryLoadingScreen mode="story" phase="opening-ready" />);
-    assert.match(markup, /data-testid="story-loading-current-stage">Opening ready/);
+    assert.match(markup, /data-testid="story-loading-current-stage">Stage ready/);
     assert.match(markup, /data-testid="story-loading-stage-0-check"/);
     assert.match(markup, /data-testid="story-loading-stage-1-check"/);
     assert.match(markup, /data-testid="story-loading-stage-2-check"/);

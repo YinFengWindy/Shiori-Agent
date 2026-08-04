@@ -25,6 +25,7 @@ from .models import (
     StoryContext,
     StoryPlayerProfile,
     StoryResource,
+    StoryResourceKind,
     utc_now,
 )
 from .schema_migrations import migrate_story_resources, migrate_story_timeline
@@ -117,12 +118,6 @@ class StoryRepository:
                     dump({}),
                 ),
             )
-            resource_id = f"resource-{uuid4().hex}"
-            connection.execute(
-                """INSERT INTO story_resources
-                VALUES (?, ?, 'background', 'generating', NULL, '', NULL, 1, NULL, ?, ?)""",
-                (resource_id, story_id, now, now),
-            )
         return self.story_read_model(story_id)
 
     def story_read_model(self, story_id: str) -> dict[str, Any]:
@@ -188,6 +183,39 @@ class StoryRepository:
                 (story_id,),
             ).fetchall()
         return [self._resource_dict(row) for row in rows]
+
+    def create_resource(
+        self,
+        story_id: str,
+        *,
+        kind: StoryResourceKind,
+        prompt: str,
+        source_turn_id: str | None,
+    ) -> dict[str, Any]:
+        """Create one asynchronous Story visual resource for a committed turn."""
+
+        clean_prompt = prompt.strip()
+        if not clean_prompt:
+            raise ValueError("资源提示词不能为空")
+        with self.transaction() as connection:
+            self._require_row("SELECT id FROM stories WHERE id = ?", (story_id,), connection)
+            sequence = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(sequence), 0) + 1 FROM story_resources WHERE story_id = ?",
+                    (story_id,),
+                ).fetchone()[0]
+            )
+            now = utc_now()
+            resource_id = f"resource-{uuid4().hex}"
+            connection.execute(
+                """INSERT INTO story_resources
+                VALUES (?, ?, ?, 'generating', NULL, ?, ?, ?, NULL, ?, ?)""",
+                (resource_id, story_id, kind, clean_prompt, source_turn_id, sequence, now, now),
+            )
+            row = self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+        return self._resource_dict(row)
 
     def resource(self, resource_id: str) -> dict[str, Any]:
         """Return one Story-owned resource by its stable identifier."""

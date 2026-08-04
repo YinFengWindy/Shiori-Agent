@@ -21,6 +21,18 @@ describe("getStoryBeatPresentationFragments", () => {
     ]);
   });
 
+  it("splits quoted dialogue even when the Director labels the mixed beat as narration", () => {
+    const fragments = getStoryBeatPresentationFragments(createStoryBeat({
+      kind: "narration",
+      text: "她嘴上凶着，却伸手把你碗里凉掉的汤换成了自己手边那碗还温着的。玫粉色的眼睛低垂着，声音细得像抱怨：“……吃快点，凉了又该胃疼了。”",
+    }));
+
+    assert.deepEqual(fragments, [
+      { kind: "narration", text: "她嘴上凶着，却伸手把你碗里凉掉的汤换成了自己手边那碗还温着的。玫粉色的眼睛低垂着，声音细得像抱怨：" },
+      { kind: "dialogue", text: "“……吃快点，凉了又该胃疼了。”" },
+    ]);
+  });
+
   it("presents action and narration beats as narration", () => {
     assert.deepEqual(getStoryBeatPresentationFragments(createStoryBeat({ kind: "narration", text: "雨停了。" })), [{ kind: "narration", text: "雨停了。" }]);
     assert.deepEqual(getStoryBeatPresentationFragments(createStoryBeat({ kind: "action", text: "她走近窗边。" })), [{ kind: "narration", text: "她走近窗边。" }]);

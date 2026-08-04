@@ -36,8 +36,8 @@ const storyLoadingCopy: Record<StoryLoadingMode, Omit<StoryLoadingCopy, "heading
   },
   story: {
     stageLabel: "Story loading stages",
-    stages: ["Read story", "Restore progress", "Prepare opening"],
-    progressLabel: "Prepare assets",
+    stages: ["Read story", "Restore progress", "Prepare stage"],
+    progressLabel: "Prepare stage",
     railLabel: "Story loading",
   },
 };
@@ -48,8 +48,8 @@ const storyLoadingPhaseCopy: Record<StoryLoadingPhase, Pick<StoryLoadingCopy, "h
   "menu-ready": { heading: "Preparing", currentStage: "Story menu ready", activeStage: 2 },
   "reading-story": { heading: "Preparing", currentStage: "Read story", activeStage: 0 },
   "restoring-progress": { heading: "Preparing", currentStage: "Restore progress", activeStage: 1 },
-  "preparing-opening": { heading: "Preparing", currentStage: "Prepare opening", activeStage: 2 },
-  "opening-ready": { heading: "Preparing", currentStage: "Opening ready", activeStage: 3 },
+  "preparing-opening": { heading: "Preparing", currentStage: "Prepare stage", activeStage: 2 },
+  "opening-ready": { heading: "Preparing", currentStage: "Stage ready", activeStage: 3 },
 };
 
 /** Returns the copy contract for one Story loading route. */

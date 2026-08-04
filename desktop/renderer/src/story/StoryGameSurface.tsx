@@ -45,7 +45,9 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
     : 0;
   const presentedFragment = presentedFragments[presentedFragmentIndex] ?? null;
   const hasNextFragment = presentedFragmentIndex < presentedFragments.length - 1;
-  const storyBackgroundPath = story.backgroundResource?.status === "ready" ? story.backgroundResource.path : undefined;
+  const storyVisualResource = [...story.cgGallery].reverse().find((resource) => resource.kind === "cg" && resource.status === "ready" && resource.path)
+    ?? (story.backgroundResource?.status === "ready" && story.backgroundResource.path ? story.backgroundResource : null);
+  const storyBackgroundPath = storyVisualResource?.path;
   const hasStoryBackground = Boolean(storyBackgroundPath);
   const backgroundUrl = storyBackgroundPath ? toFileUrl(storyBackgroundPath) : background.url;
   const renderLocalBackdrop = !sharedBackdrop || hasStoryBackground;

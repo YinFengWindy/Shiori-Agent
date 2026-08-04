@@ -25,12 +25,12 @@ async def test_uses_registered_plugin_tool_for_story_scene_cg() -> None:
 
     path = await generator.generate(
         story={"id": "story-1", "roleSnapshot": {"id": "role-1"}},
-        resource={"prompt": "old school building, afternoon"},
+        resource={"id": "resource-1", "prompt": "old school building, afternoon"},
     )
 
     assert path == "D:\\stories\\opening.png"
     assert tool.calls[0]["intent"] == "scene_cg"
-    assert tool.calls[0]["scene_key"] == "story:story-1:opening"
+    assert tool.calls[0]["scene_key"] == "story:story-1:cg:resource-1"
     assert tool.calls[0]["size_preset"] == "landscape"
 
 

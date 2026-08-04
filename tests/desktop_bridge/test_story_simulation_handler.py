@@ -24,6 +24,22 @@ class OpeningDirector:
         )
 
 
+class ProgressionVisualDirector:
+    """Returns a visual prompt only after the player advances the Story."""
+
+    def __init__(self) -> None:
+        self.opening = True
+
+    async def generate(self, **_kwargs) -> DirectorDraft:
+        if self.opening:
+            self.opening = False
+            return DirectorDraft(beats=(StoryBeatDraft(text="雨后的铃声响起。"),))
+        return DirectorDraft(
+            beats=(StoryBeatDraft(text="她把伞递到你手里。", kind="dialogue", speaker="澪"),),
+            visual_prompt="rainy school gate, girl handing umbrella, emotional close-up",
+        )
+
+
 class RecordingImageTool:
     async def execute(self, **_kwargs):
         return json.dumps({"output_paths": ["D:\\stories\\opening.png"]})
@@ -92,14 +108,14 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
     assert story["cues"][0]["text"] == "雨后的铃声响起。"
     assert story["turns"][0]["status"] == "committed"
     assert story["currentStoryDate"] == "2026-08-01"
-    assert story["backgroundResource"]["status"] == "failed"
+    assert story["backgroundResource"] is None
     assert summaries["stories"][0]["current_time_band"] == "上午"
     assert summaries["stories"][0]["current_story_date"] == "2026-08-01"
     await handler.aclose()
 
 
 @pytest.mark.asyncio
-async def test_opening_image_is_saved_to_its_story_cg_gallery(tmp_path) -> None:
+async def test_opening_does_not_create_a_story_cg(tmp_path) -> None:
     role = SimpleNamespace(
         id="role-1",
         to_dict=lambda: {"id": "role-1", "name": "澪"},
@@ -127,22 +143,65 @@ async def test_opening_image_is_saved_to_its_story_cg_gallery(tmp_path) -> None:
     story = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-1", emit_event=events.append))["story"]
     gallery = await handler.handle("stories.cg.list", {}, request_id="gallery-1", emit_event=events.append)
 
-    assert story["backgroundResource"]["status"] == "ready"
-    assert story["backgroundResource"]["path"] == "D:\\stories\\opening.png"
+    assert story["backgroundResource"] is None
+    assert story["cgGallery"] == []
     assert gallery["stories"][0]["story_id"] == story_id
-    assert gallery["stories"][0]["items"][0]["id"] == story["backgroundResource"]["id"]
-    assert any(event["method"] == "stories.resource.changed" for event in events)
+    assert gallery["stories"][0]["items"] == []
+    assert not any(event["method"] == "stories.resource.changed" for event in events)
     await handler.aclose()
 
 
 @pytest.mark.asyncio
-async def test_failed_opening_background_can_retry_without_creating_a_new_turn(tmp_path) -> None:
+async def test_progression_visual_prompt_creates_async_cg_instead_of_opening_background(tmp_path) -> None:
+    role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: role),
+        director=ProgressionVisualDirector(),
+        image_tool=RecordingImageTool(),
+    )
+    payload = {
+        "title": "夏日来信",
+        "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
+        "time_band": "上午",
+        "role_id": "role-1",
+        "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
+    }
+
+    created = await handler.handle("stories.create", payload, request_id="create-1", emit_event=lambda _event: None)
+    for _ in range(8):
+        await asyncio.sleep(0)
+    story_id = created["story"]["id"]
+    opening = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-1", emit_event=lambda _event: None))["story"]
+    assert opening["backgroundResource"] is None
+    assert opening["cgGallery"] == []
+
+    await handler.handle(
+        "stories.input",
+        {"story_id": story_id, "input": "和她一起走。", "expected_revision": opening["revision"]},
+        request_id="input-1",
+        emit_event=lambda _event: None,
+    )
+    for _ in range(12):
+        await asyncio.sleep(0)
+    progressed = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-2", emit_event=lambda _event: None))["story"]
+
+    assert progressed["backgroundResource"] is None
+    assert progressed["cgGallery"][0]["kind"] == "cg"
+    assert progressed["cgGallery"][0]["status"] == "ready"
+    assert progressed["cgGallery"][0]["sourceTurnId"] == progressed["turns"][-1]["id"]
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_failed_progression_cg_can_retry_without_creating_a_new_turn(tmp_path) -> None:
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
     image_tool = RetryableImageTool()
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
-        director=OpeningDirector(),
+        director=ProgressionVisualDirector(),
         image_tool=image_tool,
     )
     payload = {
@@ -160,10 +219,21 @@ async def test_failed_opening_background_can_retry_without_creating_a_new_turn(t
     story_id = created["story"]["id"]
     for _ in range(8):
         await asyncio.sleep(0)
-    failed = (await handler.handle(
+    opening = (await handler.handle(
         "stories.get", {"story_id": story_id}, request_id="get-1", emit_event=lambda _event: None
     ))["story"]
-    resource_id = failed["backgroundResource"]["id"]
+    await handler.handle(
+        "stories.input",
+        {"story_id": story_id, "input": "和她一起走。", "expected_revision": opening["revision"]},
+        request_id="input-1",
+        emit_event=lambda _event: None,
+    )
+    for _ in range(12):
+        await asyncio.sleep(0)
+    failed = (await handler.handle(
+        "stories.get", {"story_id": story_id}, request_id="get-2", emit_event=lambda _event: None
+    ))["story"]
+    resource_id = failed["cgGallery"][0]["id"]
 
     retrying = await handler.handle(
         "stories.cg.retry",
@@ -172,23 +242,23 @@ async def test_failed_opening_background_can_retry_without_creating_a_new_turn(t
         emit_event=lambda _event: None,
     )
 
-    assert retrying["story"]["backgroundResource"]["status"] == "generating"
-    assert len(retrying["story"]["turns"]) == 1
+    assert retrying["story"]["cgGallery"][0]["status"] == "generating"
+    assert len(retrying["story"]["turns"]) == 2
     for _ in range(8):
         await asyncio.sleep(0)
     ready = (await handler.handle(
         "stories.get", {"story_id": story_id}, request_id="get-2", emit_event=lambda _event: None
     ))["story"]
 
-    assert ready["backgroundResource"]["status"] == "ready"
-    assert ready["backgroundResource"]["path"] == "D:\\stories\\retry.png"
-    assert len(ready["turns"]) == 1
+    assert ready["cgGallery"][0]["status"] == "ready"
+    assert ready["cgGallery"][0]["path"] == "D:\\stories\\retry.png"
+    assert len(ready["turns"]) == 2
     assert image_tool.calls == 2
     await handler.aclose()
 
 
 @pytest.mark.asyncio
-async def test_failed_opening_closes_background_resource_without_hiding_the_error(tmp_path) -> None:
+async def test_failed_opening_keeps_story_without_a_visual_resource(tmp_path) -> None:
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
     handler = StorySimulationHandler(
         workspace=tmp_path,
@@ -210,8 +280,8 @@ async def test_failed_opening_closes_background_resource_without_hiding_the_erro
     story = (await handler.handle("stories.get", {"story_id": created["story"]["id"]}, request_id="get-1", emit_event=lambda _event: None))["story"]
 
     assert story["turns"][0]["status"] == "failed"
-    assert story["backgroundResource"]["status"] == "failed"
-    assert story["backgroundResource"]["errorCode"] == "director_invalid_output"
+    assert story["backgroundResource"] is None
+    assert story["cgGallery"] == []
     await handler.aclose()
 
 

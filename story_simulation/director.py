@@ -64,8 +64,9 @@ class ProviderStoryDirector:
             "一次最多 3 个 beat，所有 text 合计最多 1200 个中文字符，单个 beat 最多 400 字符。"
             "故事日期由 story.story_date 提供且不能修改；剧情时间只使用清晨、上午、下午、夜晚、深夜五档。"
             "只有剧情明确进入另一个时段时才填写 time_band，否则必须填写 null。"
-            "仅 opening 模式填写 visual_prompt；它必须是描述本次开场场景的英文 NovelAI tags，"
-            "使用逗号分隔，不要中文、自然语言句子、文字、logo 或水印；非 opening 模式填写空字符串。"
+            "只有需要重要视觉演出的节点才填写 visual_prompt；opening 模式必须填写空字符串，"
+            "非 opening 模式可填写描述该视觉节点的英文 NovelAI tags，使用逗号分隔，"
+            "不要中文、自然语言句子、文字、logo 或水印；普通节点填写空字符串。"
             "只描述当前角色可知的内容，不能泄露隐藏连续性或来源。"
         )
 

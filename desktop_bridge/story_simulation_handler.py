@@ -392,6 +392,41 @@ class StorySimulationHandler:
             )
         return {"story": repository.story_read_model(story_id), "resource_id": resource_id}
 
+    def _schedule_story_cg(
+        self,
+        story: dict[str, Any],
+        turn: dict[str, Any],
+        prompt: str,
+        emit_event: EventEmitter,
+    ) -> None:
+        """Schedule one important visual node without delaying committed Story text."""
+
+        story_id = str(story["id"])
+        repository = self._repository(story_id)
+        if any(
+            resource["kind"] == "cg" and resource["status"] == "generating"
+            for resource in repository.story_resources(story_id)
+        ):
+            return
+        resource = repository.create_resource(
+            story_id,
+            kind="cg",
+            prompt=prompt,
+            source_turn_id=str(turn["id"]),
+        )
+        service = self._service(repository)
+        task = asyncio.create_task(
+            service.generate_resource(resource, emit_event),
+            name=f"story-resource:{resource['id']}",
+        )
+        resource_id = str(resource["id"])
+        self._resource_tasks[resource_id] = task
+        task.add_done_callback(
+            lambda _task, resource_id=resource_id: self._resource_tasks.pop(
+                resource_id, None
+            )
+        )
+
     def _start_generation(
         self, service: StorySimulationService, turn: dict[str, Any], emit_event: EventEmitter
     ) -> None:
@@ -400,7 +435,12 @@ class StorySimulationHandler:
         if existing is not None and not existing.done():
             return
         task = asyncio.create_task(
-            service.generate_turn(turn, emit_event), name=f"story-director:{turn_id}"
+            service.generate_turn(
+                turn,
+                emit_event,
+                schedule_visual_resource=self._schedule_story_cg,
+            ),
+            name=f"story-director:{turn_id}",
         )
         self._tasks[turn_id] = task
         task.add_done_callback(lambda _task, turn_id=turn_id: self._tasks.pop(turn_id, None))

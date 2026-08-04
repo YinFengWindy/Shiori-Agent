@@ -50,6 +50,19 @@ describe("StoryGameSurface", () => {
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 
+  it("uses the latest ready progression CG as the active stage visual", () => {
+    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
+      cgGallery: [
+        { id: "resource-1", storyId: "story-1", kind: "cg", status: "ready", path: "D:\\stories\\scene-1.png", prompt: "scene one", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
+        { id: "resource-2", storyId: "story-1", kind: "cg", status: "ready", path: "D:\\stories\\scene-2.png", prompt: "scene two", sourceTurnId: "turn-3", sequence: 2, errorCode: null, createdAt: "", updatedAt: "" },
+      ],
+    })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+
+    assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.doesNotMatch(markup, /scene-1\.png/);
+    assert.doesNotMatch(markup, /default-galgame-bg\.png/);
+  });
+
   it("falls back to the shared Story background when no Story CG is ready", () => {
     const markup = renderToStaticMarkup(<StoryGameSurface background={resolvedBackground} story={createStoryDetails()} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
@@ -67,12 +80,12 @@ describe("StoryGameSurface", () => {
   });
 
   it("distinguishes narration from dialogue in the normal game surface", () => {
-    const story = createStoryDetails({ beats: [{ ...createStoryDetails().beats[0], text: "她抬眼看向你：\"你来了。\"", speaker: "澪", kind: "dialogue" }] });
+    const story = createStoryDetails({ beats: [{ ...createStoryDetails().beats[0], text: "她嘴上凶着，却伸手把你碗里凉掉的汤换成了自己手边那碗还温着的。玫粉色的眼睛低垂着，声音细得像抱怨：“……吃快点，凉了又该胃疼了。”", speaker: "澪", kind: "narration" }] });
     const markup = renderToStaticMarkup(<StoryGameSurface story={story} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.match(markup, /data-story-fragment-kind="narration"/);
     assert.match(markup, />旁白</);
-    assert.match(markup, /她抬眼看向你：/);
+    assert.match(markup, /她嘴上凶着/);
     assert.doesNotMatch(markup, /data-testid="story-player-input"/);
   });
 });
