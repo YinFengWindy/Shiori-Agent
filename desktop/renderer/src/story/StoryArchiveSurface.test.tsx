@@ -20,6 +20,7 @@ describe("StoryArchiveSurface", () => {
     const markup = renderToStaticMarkup(<StoryArchiveSurface background={resolvedBackground} story={createStoryDetails()} error="" onReturnToGame={() => undefined} />);
     assert.match(markup, /data-testid="story-archive-surface"/);
     assert.match(markup, /data-testid="story-archive-backdrop"/);
+    assert.match(markup, /story-archive-reading-layer absolute inset-0/);
     assert.match(markup, /url\(shiori-asset:\/\/local\/story-menu-random\.webp\)/);
     assert.match(markup, /剧情记录/);
     assert.match(markup, /你终于来了。/);
@@ -31,8 +32,10 @@ describe("StoryArchiveSurface", () => {
     assert.doesNotMatch(markup, /上午 · 澪/);
     assert.match(markup, /aria-label="返回游戏页"/);
     assert.match(markup, /title="返回游戏页"/);
-    assert.match(markup, /story-archive-readable m-0 mt-1 text-2xl font-semibold text-white/);
-    assert.match(markup, /story-archive-readable m-0 whitespace-pre-wrap text-base leading-7 text-white/);
+    assert.match(markup, /story-archive-control pointer-events-auto/);
+    assert.match(markup, /story-archive-readable m-0 mt-1 text-2xl font-semibold text-\[#18271F\]/);
+    assert.match(markup, /story-archive-readable m-0 whitespace-pre-wrap text-base leading-7 text-\[#18271F\]/);
+    assert.match(markup, /bg-\[#FFF0E7\]\/80/);
     assert.doesNotMatch(markup, /剧情设置|返回剧情列表/);
     assert.doesNotMatch(markup, /提交剧情输入|写下你的行动或回应/);
     assert.doesNotMatch(markup, /Day|OC|world-workspace|属性|好感度/);
