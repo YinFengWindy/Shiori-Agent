@@ -56,6 +56,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   const busy = operation.busy || controller.busy;
   const reducedMotion = useReducedMotion() ?? false;
   const storyMenuBackground = useStoryMenuBackground(roles);
+  const presentationKey = mode === "launcher" && controller.loading ? "launcher-loading" : mode;
   const storyRoles = roles.map((role) => ({
     id: role.id,
     name: role.name,
@@ -89,12 +90,13 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation">
     <StoryWorkspaceBackdrop background={storyMenuBackground} blur={resolveStoryWorkspaceBackdropBlur(mode)} />
     <div className="relative z-10 h-full min-h-0" data-testid="story-presentation-layer">
-      <AnimatePresence initial={false} mode="sync">
+      <AnimatePresence mode="sync">
         <motion.div
-          key={mode}
+          key={presentationKey}
           className="absolute inset-0"
           data-testid="story-presentation-content"
           data-story-mode={mode}
+          data-story-transition-key={presentationKey}
           initial={{ opacity: 0, y: reducedMotion ? 0 : 14 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: reducedMotion ? 0 : -10 }}

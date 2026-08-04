@@ -23,8 +23,8 @@ const controller: StoryWorkspacePresentationController = {
 const operation: StoryOperationPresentationController = { error: "", busy: false, clearError: () => undefined };
 const creation: StoryCreationPresentationController = { createStory: () => undefined };
 
-function render(mode: StoryPresentationMode) {
-  return renderToStaticMarkup(<StoryWorkspacePresentationView roles={[]} mode={mode} loadingStoryId="" loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false} controller={controller} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
+function render(mode: StoryPresentationMode, loading = controller.loading) {
+  return renderToStaticMarkup(<StoryWorkspacePresentationView roles={[]} mode={mode} loadingStoryId="" loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false} controller={{ ...controller, loading }} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
 }
 
 describe("StoryWorkspacePresentationView", () => {
@@ -37,6 +37,12 @@ describe("StoryWorkspacePresentationView", () => {
     assert.doesNotMatch(markup, /data-testid="story-game-backdrop"/);
     assert.ok(markup.indexOf("story-workspace-backdrop") < markup.indexOf("story-game-surface"));
     assert.doesNotMatch(markup, /world-day-surface|world-workspace/);
+  });
+
+  it("keeps the launcher command rail entrance when Story mode first opens", () => {
+    const markup = render("launcher");
+    assert.match(markup, /data-testid="story-launcher-command-rail"/);
+    assert.match(markup, /opacity:0;transform:translateX\(28px\)/);
   });
 
   it("uses the direct Story archive for history", () => {
@@ -56,5 +62,12 @@ describe("StoryWorkspacePresentationView", () => {
 
   it("uses a shared transition for loading and the active Story stage", () => {
     assert.equal(STORY_PRESENTATION_TRANSITION_SECONDS, 0.42);
+  });
+
+  it("keeps a distinct transition when the launcher loading screen resolves", () => {
+    const loadingMarkup = render("launcher", true);
+    const launcherMarkup = render("launcher", false);
+    assert.match(loadingMarkup, /data-story-transition-key="launcher-loading"/);
+    assert.match(launcherMarkup, /data-story-transition-key="launcher"/);
   });
 });
