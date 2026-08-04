@@ -34,6 +34,19 @@ export function replaceStoryGallery(galleries: StoryCgGallery[], story: StoryDet
     : gallery);
 }
 
+/** Converts a persisted Story resource error code into stable player-facing copy. */
+export function getStoryResourceErrorMessage(errorCode: string | null) {
+  const messages: Record<string, string> = {
+    provider_not_configured: "图片生成工具未配置",
+    invalid_image_request: "图片请求无效",
+    resource_generation_failed: "图片生成失败",
+    generation_interrupted: "上次图片生成被中断",
+    generation_cancelled: "图片生成已取消",
+    generation_timeout: "图片生成超时",
+  };
+  return (errorCode && messages[errorCode]) || (errorCode ? `图片生成失败（${errorCode}）` : "图片生成失败");
+}
+
 /** Maps the current segment operation to the player-facing status. */
 export function getStoryStatusLabel(operation: StoryOperation) {
   const labels: Record<StoryOperation, string> = {

@@ -240,15 +240,25 @@ async def test_failed_progression_cg_can_retry_without_creating_a_new_turn(tmp_p
         "stories.get", {"story_id": story_id}, request_id="get-2", emit_event=lambda _event: None
     ))["story"]
     resource_id = failed["cgGallery"][1]["id"]
+    retry_events: list[dict] = []
 
     retrying = await handler.handle(
         "stories.cg.retry",
         {"story_id": story_id, "resource_id": resource_id},
         request_id="retry-1",
-        emit_event=lambda _event: None,
+        emit_event=retry_events.append,
     )
 
     assert retrying["story"]["cgGallery"][1]["status"] == "generating"
+    assert any(
+        event["method"] == "stories.resource.changed"
+        and event["payload"]["resource"]["status"] == "generating"
+        for event in retry_events
+    )
+    persisted = await handler.handle(
+        "stories.cg.list", {}, request_id="gallery-after-retry", emit_event=lambda _event: None
+    )
+    assert persisted["stories"][0]["items"][1]["status"] == "generating"
     assert len(retrying["story"]["turns"]) == 2
     for _ in range(8):
         await asyncio.sleep(0)

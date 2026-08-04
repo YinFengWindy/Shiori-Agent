@@ -275,17 +275,27 @@ class StorySimulationHandler:
             if resource["status"] != "generating":
                 continue
             updated = repository.fail_resource(str(resource["id"]), "generation_interrupted")
-            story = repository.story_read_model(story_id)
-            await self._emit(
-                emit_event,
-                "stories.resource.changed",
-                {
-                    "event_type": "resource.changed",
-                    "story_id": story_id,
-                    "story_revision": story["revision"],
-                    "resource": updated,
-                },
-            )
+            await self._emit_resource_changed(repository, updated, emit_event)
+
+    async def _emit_resource_changed(
+        self,
+        repository: StoryRepository,
+        resource: dict[str, Any],
+        emit_event: EventEmitter,
+    ) -> None:
+        """Broadcast the durable visual-resource state to renderer subscribers."""
+
+        story = repository.story_read_model(str(resource["storyId"]))
+        await self._emit(
+            emit_event,
+            "stories.resource.changed",
+            {
+                "event_type": "resource.changed",
+                "story_id": story["id"],
+                "story_revision": story["revision"],
+                "resource": resource,
+            },
+        )
 
     async def _input(
         self, payload: dict[str, Any], *, request_id: str, emit_event: EventEmitter
@@ -377,6 +387,7 @@ class StorySimulationHandler:
             prompt=str(resource.get("prompt") or ""),
             source_turn_id=resource.get("sourceTurnId"),
         )
+        await self._emit_resource_changed(repository, prepared, emit_event)
         service = self._service(repository)
         existing = self._resource_tasks.get(resource_id)
         if existing is None or existing.done():

@@ -4,6 +4,7 @@ import type { StoryCgGallery, StoryResource } from "./types";
 import { StorySurface } from "./StorySurface";
 import { toFileUrl } from "../shared/format";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
+import { getStoryResourceErrorMessage } from "./selectors";
 
 type StoryCgGallerySurfaceProps = {
   stories: StoryCgGallery[];
@@ -61,14 +62,15 @@ export function StoryCgGallerySurface({ stories, background, sharedBackdrop = fa
               {selectedStory.items.length ? <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {selectedStory.items.map((resource, index) => {
                   const canPreview = resource.status === "ready" && Boolean(resource.path);
+                  const resourceErrorMessage = resource.status === "failed" ? getStoryResourceErrorMessage(resource.errorCode) : "";
                   return <figure key={resource.id} className="m-0 overflow-hidden border border-[#DDA9BE]/55 bg-[#FFF8FC]/55">
                     <button className="group relative aspect-video w-full overflow-hidden bg-[#5E2841]/10 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#E5A9C0]" type="button" disabled={busy || !canPreview} onClick={() => canPreview ? setPreview(resource) : undefined}>
-                      {canPreview ? <img className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" src={toFileUrl(resource.path || "")} alt={`${selectedStory.title} ${resourceLabel(resource, index)}`} /> : resource.status === "generating" ? <span className="grid h-full place-items-center gap-2 text-sm text-[#8B6676]">正在生成</span> : <span className="grid h-full place-items-center text-[#A23E69]" data-testid="story-cg-resource-failed" role="img" aria-label="生成失败" title="生成失败"><ImageBroken className="h-8 w-8" weight="duotone" /></span>}
+                      {canPreview ? <img className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" src={toFileUrl(resource.path || "")} alt={`${selectedStory.title} ${resourceLabel(resource, index)}`} /> : resource.status === "generating" ? <span className="grid h-full place-items-center gap-2 text-sm text-[#8B6676]">正在生成</span> : <span className="grid h-full place-items-center text-[#A23E69]" data-testid="story-cg-resource-failed" role="img" aria-label={resourceErrorMessage} title={resource.errorCode || resourceErrorMessage}><ImageBroken className="h-8 w-8" weight="duotone" /></span>}
                       {resource.status === "generating" ? <span className="absolute inset-x-0 bottom-0 bg-[#4A2738]/75 px-3 py-2 text-xs text-white">正在生成</span> : null}
                     </button>
                     <figcaption className="flex items-center justify-between gap-3 border-t border-[#DDA9BE]/45 px-3 py-2 text-xs text-[#765667]">
                       <span>{resourceLabel(resource, index)}</span>
-                      {resource.status === "failed" ? <button className="inline-flex items-center gap-1 text-[#A23E69] hover:text-[#7A2356] focus:outline-none focus-visible:underline" type="button" disabled={busy} onClick={() => onRetry(selectedStory.storyId, resource.id)}><ArrowClockwise weight="bold" />重试</button> : null}
+                      {resource.status === "failed" ? <span className="inline-flex min-w-0 items-center gap-2"><span className="truncate text-[#A23E69]" title={resource.errorCode || resourceErrorMessage}>{resourceErrorMessage}</span><button className="inline-flex shrink-0 items-center gap-1 text-[#A23E69] hover:text-[#7A2356] focus:outline-none focus-visible:underline" type="button" disabled={busy} onClick={() => onRetry(selectedStory.storyId, resource.id)}><ArrowClockwise weight="bold" />重试</button></span> : null}
                     </figcaption>
                   </figure>;
                 })}

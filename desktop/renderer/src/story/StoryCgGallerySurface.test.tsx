@@ -43,8 +43,9 @@ describe("StoryCgGallerySurface", () => {
     const failed = [{ ...stories[0], items: [{ ...stories[0].items[0], status: "failed" as const, path: null, errorCode: "provider_not_configured" }] }];
     const markup = renderToStaticMarkup(<StoryCgGallerySurface stories={failed} busy={false} error="" onRetry={() => undefined} onBack={() => undefined} />);
     assert.match(markup, /data-testid="story-cg-resource-failed"/);
-    assert.match(markup, /aria-label="生成失败"/);
-    assert.doesNotMatch(markup, />生成失败</);
+    assert.match(markup, /aria-label="图片生成工具未配置"/);
+    assert.match(markup, />图片生成工具未配置</);
+    assert.match(markup, /title="provider_not_configured"/);
     assert.match(markup, />重试</);
   });
 });
