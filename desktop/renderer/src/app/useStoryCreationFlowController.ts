@@ -13,9 +13,9 @@ type Args = {
 
 /** Submits the Story form directly and opens the created Story. */
 export function useStoryCreationFlowController({ client, controller, loadStoryForPlay, run }: Args) {
-  const createStory = useCallback((input: StoryCreationInput) => {
+  const createStory = useCallback((input: StoryCreationInput, creationId: string) => {
     void run(
-      () => client.createStory(input),
+      () => client.createStory(input, creationId),
       async (createdStory) => {
         await controller.reloadStories();
         await loadStoryForPlay(createdStory.id);

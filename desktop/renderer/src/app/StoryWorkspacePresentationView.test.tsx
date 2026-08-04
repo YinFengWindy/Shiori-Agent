@@ -70,4 +70,10 @@ describe("StoryWorkspacePresentationView", () => {
     assert.match(loadingMarkup, /data-story-transition-key="launcher-loading"/);
     assert.match(launcherMarkup, /data-story-transition-key="launcher"/);
   });
+
+  it("keeps a failed Story list on the retryable loading surface", () => {
+    const markup = renderToStaticMarkup(<StoryWorkspacePresentationView roles={[]} mode="launcher" loadingStoryId="" loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false} controller={{ ...controller, story: null, loading: true, error: "读取失败" }} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
+    assert.match(markup, /role="alert">读取失败/);
+    assert.match(markup, />Retry</);
+  });
 });

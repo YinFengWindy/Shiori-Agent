@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowLeft, ArrowRight, Check, CircleNotch, Sparkle } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { cx } from "../shared/styles";
 import type { StoryCreationInput, StoryRoleChoice } from "./types";
 import { createInitialStoryCreationInput, creationSteps, isCreationStepComplete, type CreationStep } from "./storyCreationWizard";
@@ -15,7 +15,7 @@ type StoryCreateFlowProps = {
   busy?: boolean;
   error?: string;
   onBack: () => void;
-  onCreate: (input: StoryCreationInput) => void;
+  onCreate: (input: StoryCreationInput, creationId: string) => void;
 };
 
 const stepLabels: Record<CreationStep, string> = { role: "选择角色", setting: "开场设定", player: "玩家资料", review: "总览" };
@@ -29,6 +29,7 @@ export function StoryCreateFlow({ roles, background, sharedBackdrop = false, bus
   const [input, setInput] = useState<StoryCreationInput>(createInitialStoryCreationInput);
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
+  const creationAttempt = useRef<{ fingerprint: string; id: string } | null>(null);
   const reducedMotion = useReducedMotion() ?? false;
   const step = creationSteps[stepIndex];
   const selectedRole = roles.find((role) => role.id === input.roleId);
@@ -41,6 +42,15 @@ export function StoryCreateFlow({ roles, background, sharedBackdrop = false, bus
   };
   const next = () => goToStep(Math.min(stepIndex + 1, creationSteps.length - 1));
   const previous = () => goToStep(Math.max(stepIndex - 1, 0));
+  const submitCreation = () => {
+    const fingerprint = JSON.stringify(input);
+    const current = creationAttempt.current;
+    const attempt = current?.fingerprint === fingerprint
+      ? current
+      : { fingerprint, id: crypto.randomUUID() };
+    creationAttempt.current = attempt;
+    onCreate(input, attempt.id);
+  };
   const stepMotion = {
     initial: { opacity: 0, x: reducedMotion ? 0 : direction > 0 ? 18 : -18 },
     animate: { opacity: 1, x: 0 },
@@ -78,7 +88,7 @@ export function StoryCreateFlow({ roles, background, sharedBackdrop = false, bus
         </div>
       </main>
 
-      <footer className="border-t border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5"><div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4"><div className="min-w-0 flex-1">{stepIndex ? <button className={storySecondaryButtonClass} type="button" aria-label="上一步" title="上一步" disabled={busy} onClick={previous}><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button> : null}</div><div className="flex shrink-0 items-center justify-end gap-3">{busy ? <span className="max-w-24 text-right text-xs text-[#7D6470]">正在创建剧情</span> : null}{step === "review" ? <button className={storyPrimaryButtonClass} type="button" aria-label={busy ? "创建中" : "开始剧情"} title={busy ? "创建中" : "开始剧情"} disabled={busy || !stepComplete} onClick={() => onCreate(input)}>{busy ? <CircleNotch className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Sparkle className="h-5 w-5" weight="fill" aria-hidden="true" />}</button> : <button className={storyPrimaryButtonClass} type="button" aria-label="下一步" title="下一步" disabled={!stepComplete} onClick={next}><ArrowRight className="h-5 w-5" aria-hidden="true" /></button>}</div></div></footer>
+      <footer className="border-t border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5"><div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4"><div className="min-w-0 flex-1">{stepIndex ? <button className={storySecondaryButtonClass} type="button" aria-label="上一步" title="上一步" disabled={busy} onClick={previous}><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button> : null}</div><div className="flex shrink-0 items-center justify-end gap-3">{busy ? <span className="max-w-24 text-right text-xs text-[#7D6470]">正在创建剧情</span> : null}{step === "review" ? <button className={storyPrimaryButtonClass} type="button" aria-label={busy ? "创建中" : "开始剧情"} title={busy ? "创建中" : "开始剧情"} disabled={busy || !stepComplete} onClick={submitCreation}>{busy ? <CircleNotch className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Sparkle className="h-5 w-5" weight="fill" aria-hidden="true" />}</button> : <button className={storyPrimaryButtonClass} type="button" aria-label="下一步" title="下一步" disabled={!stepComplete} onClick={next}><ArrowRight className="h-5 w-5" aria-hidden="true" /></button>}</div></div></footer>
     </StorySurface>
   );
 }

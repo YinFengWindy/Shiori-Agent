@@ -56,8 +56,12 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
         setMode("game");
         return;
       }
-      reportError("Unable to load this Story. Please try again.");
-      setMode("launcher");
+      setLoadingElapsedMs(250);
+      setMode("loading");
+    } catch (error) {
+      reportError(error instanceof Error ? error.message : "Unable to load this Story. Please try again.");
+      setLoadingElapsedMs(250);
+      setMode("loading");
     } finally {
       clearTimeout(transitionTimer);
       clearTimeout(progressTimer);

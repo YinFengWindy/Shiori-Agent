@@ -44,6 +44,8 @@ class StorySimulationHandler:
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._resource_tasks: dict[str, asyncio.Task[None]] = {}
         self._image_generator = StoryImageGenerator(image_tool)
+        self._recovery_lock = asyncio.Lock()
+        self._recovered = False
 
     async def aclose(self) -> None:
         """Cancel uncommitted Director tasks and release Story connections."""
@@ -74,6 +76,7 @@ class StorySimulationHandler:
 
         if not method.startswith("stories."):
             return None
+        await self._recover_persisted_stories(emit_event)
         if method == "stories.list":
             include_archived = bool(payload.get("include_archived", False))
             summaries = self._catalog.list_summaries(include_archived=include_archived)
@@ -103,23 +106,8 @@ class StorySimulationHandler:
     async def _create(
         self, payload: dict[str, Any], *, request_id: str, emit_event: EventEmitter
     ) -> dict[str, Any]:
+        creation_id = self._creation_id(payload, request_id)
         request_payload_hash = payload_hash(payload)
-        existing_story_id = self._catalog.story_id_for_request(
-            request_id, payload_hash=request_payload_hash
-        )
-        if existing_story_id is not None:
-            try:
-                repository = self._repository(existing_story_id)
-                story = repository.story_read_model(existing_story_id)
-                opening_turn = repository.opening_turn(existing_story_id)
-            except StoryNotFoundError:
-                self._discard_incomplete_story(existing_story_id)
-            else:
-                return {
-                    "story": story,
-                    "turn_id": opening_turn["id"],
-                    "state": story["segment"],
-                }
         title = self._required(payload, "title")
         background = self._required(payload, "background")
         time_band = normalize_story_time_band(self._required(payload, "time_band"))
@@ -132,16 +120,68 @@ class StorySimulationHandler:
             appearance=str(profile_payload.get("appearance") or ""),
             identity=str(profile_payload.get("identity") or ""),
         )
+        existing_story_id = self._catalog.story_id_for_request(
+            creation_id, payload_hash=request_payload_hash
+        )
+        if existing_story_id is not None:
+            return await self._complete_create(
+                story_id=existing_story_id,
+                creation_id=creation_id,
+                title=title,
+                background=background,
+                role=role,
+                profile=profile,
+                time_band=time_band,
+                emit_event=emit_event,
+                emit_accepted=False,
+            )
         story_id = f"story-{uuid4().hex}"
-        entry = self._catalog.create_entry(
+        self._catalog.create_entry(
             story_id=story_id,
             title=title,
-            request_id=request_id,
+            request_id=creation_id,
             payload_hash=request_payload_hash,
         )
         try:
-            repository = self._create_repository(story_id)
-            service = self._service(repository)
+            result = await self._complete_create(
+                story_id=story_id,
+                creation_id=creation_id,
+                title=title,
+                background=background,
+                time_band=time_band,
+                role=role,
+                profile=profile,
+                emit_event=emit_event,
+                emit_accepted=True,
+            )
+        except Exception:
+            self._discard_incomplete_story(story_id)
+            raise
+        return {**result, "catalog": self._catalog.require_entry(story_id)}
+
+    async def _complete_create(
+        self,
+        *,
+        story_id: str,
+        creation_id: str,
+        title: str,
+        background: str,
+        role: Any,
+        profile: StoryPlayerProfile,
+        time_band: str,
+        emit_event: EventEmitter,
+        emit_accepted: bool,
+    ) -> dict[str, Any]:
+        """Complete or resume the durable Story and its opening receipt."""
+
+        entry = self._catalog.require_entry(story_id)
+        repository = self._create_repository(story_id)
+        service = self._service(repository)
+        try:
+            story = repository.story_read_model(story_id)
+        except StoryNotFoundError:
+            if entry["status"] != "provisioning":
+                raise
             story = service.create_story(
                 story_id=story_id,
                 title=title,
@@ -151,30 +191,95 @@ class StorySimulationHandler:
                 time_band=time_band,
                 opening_context={"background": background, "role_id": role.id},
             )
+        try:
+            opening_turn = repository.opening_turn(story_id)
+        except StoryNotFoundError:
             opening_turn = service.create_opening_turn(
                 story_id=story_id,
-                request_id=f"{request_id}:opening",
+                request_id=f"{creation_id}:opening",
             )
-        except Exception:
-            self._discard_incomplete_story(story_id)
-            raise
-        self._start_generation(service, opening_turn, emit_event)
-        await self._emit(
-            emit_event,
-            "stories.turn.accepted",
-            {
-                "event_type": "turn.accepted",
-                "story_id": story_id,
-                "turn_id": opening_turn["id"],
-                "story_revision": story["revision"],
-            },
-        )
+        if entry["status"] == "provisioning":
+            self._catalog.set_status(story_id, "active")
+        if opening_turn["status"] == "pending":
+            self._start_generation(service, opening_turn, emit_event)
+        if emit_accepted:
+            await self._emit(
+                emit_event,
+                "stories.turn.accepted",
+                {
+                    "event_type": "turn.accepted",
+                    "story_id": story_id,
+                    "turn_id": opening_turn["id"],
+                    "story_revision": story["revision"],
+                },
+            )
         return {
             "story": story,
             "turn_id": opening_turn["id"],
             "state": story["segment"],
-            "catalog": entry,
         }
+
+    async def _recover_persisted_stories(self, emit_event: EventEmitter) -> None:
+        """Repair durable Story creation state once after the bridge starts."""
+
+        if self._recovered:
+            return
+        async with self._recovery_lock:
+            if self._recovered:
+                return
+            for entry in self._catalog.list_entries():
+                story_id = str(entry["story_id"])
+                try:
+                    repository = self._repository(story_id)
+                    repository.story_read_model(story_id)
+                except StoryNotFoundError:
+                    if entry["status"] == "active":
+                        self._catalog.set_status(story_id, "deleting")
+                    continue
+                service = self._service(repository)
+                try:
+                    opening_turn = repository.opening_turn(story_id)
+                except StoryNotFoundError:
+                    creation_id = self._catalog.request_id_for_story(story_id)
+                    if creation_id is None:
+                        continue
+                    opening_turn = service.create_opening_turn(
+                        story_id=story_id,
+                        request_id=f"{creation_id}:opening",
+                    )
+                if entry["status"] == "provisioning":
+                    self._catalog.set_status(story_id, "active")
+                if opening_turn["status"] in {"generating", "validating"}:
+                    opening_turn = repository.reset_interrupted_turn(opening_turn["id"])
+                if opening_turn["status"] == "pending":
+                    self._start_generation(service, opening_turn, emit_event)
+                if opening_turn["status"] == "committed":
+                    await self._fail_interrupted_resources(repository, story_id, emit_event)
+            self._recovered = True
+
+    async def _fail_interrupted_resources(
+        self,
+        repository: StoryRepository,
+        story_id: str,
+        emit_event: EventEmitter,
+    ) -> None:
+        """Make resources left generating by a crashed process explicitly retryable."""
+
+        for resource in repository.story_resources(story_id):
+            if resource["status"] != "generating":
+                continue
+            updated = repository.fail_resource(str(resource["id"]), "generation_interrupted")
+            story = repository.story_read_model(story_id)
+            await self._emit(
+                emit_event,
+                "stories.resource.changed",
+                {
+                    "event_type": "resource.changed",
+                    "story_id": story_id,
+                    "story_revision": story["revision"],
+                    "resource": updated,
+                },
+            )
 
     async def _input(
         self, payload: dict[str, Any], *, request_id: str, emit_event: EventEmitter
@@ -348,6 +453,13 @@ class StorySimulationHandler:
         if not value:
             raise ValueError(f"{key} 不能为空")
         return value
+
+    @staticmethod
+    def _creation_id(payload: dict[str, Any], request_id: str) -> str:
+        """Resolve the stable logical create key or retain transport compatibility."""
+
+        value = str(payload.get("creation_id") or "").strip()
+        return value or request_id
 
     @classmethod
     def _story_id(cls, payload: dict[str, Any]) -> str:

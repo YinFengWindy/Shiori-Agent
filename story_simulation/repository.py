@@ -285,6 +285,34 @@ class StoryRepository:
             )
         return self._turn_dict(row)
 
+    def reset_interrupted_turn(self, turn_id: str) -> dict[str, Any]:
+        """Return an interrupted generation Turn to pending for process recovery."""
+
+        with self.transaction() as connection:
+            turn = self._require_row("SELECT * FROM turns WHERE id = ?", (turn_id,), connection)
+            if turn["status"] not in {"generating", "validating"}:
+                return self._turn_dict(turn)
+            now = utc_now()
+            attempt_id = turn["active_attempt_id"]
+            if attempt_id:
+                connection.execute(
+                    """UPDATE attempts SET status = 'failed', failure_category = ?, ended_at = ?
+                    WHERE id = ?""",
+                    ("generation_interrupted", now, attempt_id),
+                )
+            connection.execute(
+                """UPDATE turns SET status = 'pending', active_attempt_id = NULL,
+                error = NULL, updated_at = ? WHERE id = ?""",
+                (now, turn_id),
+            )
+            connection.execute(
+                "UPDATE segments SET operation = 'generating' WHERE id = ?",
+                (turn["segment_id"],),
+            )
+            return self._turn_dict(
+                self._require_row("SELECT * FROM turns WHERE id = ?", (turn_id,), connection)
+            )
+
     def create_turn(
         self,
         *,

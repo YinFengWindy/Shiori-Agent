@@ -62,3 +62,23 @@ def test_story_repository_freezes_opening_profile_and_replays_same_turn(tmp_path
     restarted = StoryRepository(tmp_path / "story.db")
     assert restarted.story_read_model("story-1")["turns"][0]["id"] == turn["id"]
     restarted.close()
+
+
+def test_story_repository_resets_an_interrupted_generation_to_pending(tmp_path) -> None:
+    repository = StoryRepository(tmp_path / "story.db")
+    _create_story(repository)
+    turn = repository.create_turn(
+        story_id="story-1",
+        input_text="推开门",
+        request_id="request-1",
+        request_payload_hash=payload_hash({"story_id": "story-1", "input": "推开门"}),
+        expected_revision=0,
+    )
+    repository.start_attempt(turn["id"])
+
+    recovered = repository.reset_interrupted_turn(turn["id"])
+
+    assert recovered["status"] == "pending"
+    assert recovered["attemptId"] is None
+    assert repository.story_read_model("story-1")["segment"]["operation"] == "generating"
+    repository.close()

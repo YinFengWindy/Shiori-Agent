@@ -7,7 +7,9 @@ from types import SimpleNamespace
 import pytest
 
 from story_simulation.errors import StoryInvalidOutputError
-from story_simulation.models import DirectorDraft, StoryBeatDraft
+from story_simulation.catalog import StoryCatalog
+from story_simulation.models import DirectorDraft, StoryBeatDraft, StoryPlayerProfile
+from story_simulation.repository import StoryRepository, payload_hash
 
 from desktop_bridge.story_simulation_handler import StorySimulationHandler
 
@@ -41,6 +43,22 @@ class RetryableImageTool:
 class FailingOpeningDirector:
     async def generate(self, **_kwargs) -> DirectorDraft:
         raise StoryInvalidOutputError("invalid opening")
+
+
+class BlockingOpeningDirector:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def generate(self, **_kwargs) -> DirectorDraft:
+        self.calls += 1
+        self.started.set()
+        await self.release.wait()
+        return DirectorDraft(
+            beats=(StoryBeatDraft(text="雨后的铃声响起。"),),
+            visual_prompt="old school building, rainy afternoon",
+        )
 
 
 @pytest.mark.asyncio
@@ -245,4 +263,120 @@ async def test_create_story_recovers_from_an_interrupted_initialization(tmp_path
     created = await handler.handle("stories.create", payload, request_id="create-1", emit_event=lambda _event: None)
 
     assert created["story"]["id"].startswith("story-")
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_create_story_reuses_a_provisioning_entry_after_process_restart(tmp_path) -> None:
+    role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
+    payload = {
+        "title": "夏日来信",
+        "background": "午后的旧校舍",
+        "time_band": "上午",
+        "role_id": "role-1",
+        "creation_id": "creation-1",
+        "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
+    }
+    catalog = StoryCatalog(tmp_path)
+    catalog.create_entry(
+        story_id="story-recovered",
+        title=payload["title"],
+        request_id=payload["creation_id"],
+        payload_hash=payload_hash(payload),
+    )
+    catalog.close()
+
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: role),
+        director=OpeningDirector(),
+    )
+    created = await handler.handle(
+        "stories.create", payload, request_id="transport-retry", emit_event=lambda _event: None
+    )
+    summaries = await handler.handle(
+        "stories.list", {}, request_id="list-1", emit_event=lambda _event: None
+    )
+
+    assert created["story"]["id"] == "story-recovered"
+    assert summaries["stories"][0]["story_id"] == "story-recovered"
+    assert handler._catalog.require_entry("story-recovered")["status"] == "active"
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_create_story_repairs_an_opening_turn_left_before_activation(tmp_path) -> None:
+    role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
+    payload = {
+        "title": "夏日来信",
+        "background": "午后的旧校舍",
+        "time_band": "上午",
+        "role_id": "role-1",
+        "creation_id": "creation-1",
+        "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
+    }
+    catalog = StoryCatalog(tmp_path)
+    catalog.create_entry(
+        story_id="story-partial",
+        title=payload["title"],
+        request_id=payload["creation_id"],
+        payload_hash=payload_hash(payload),
+    )
+    repository = StoryRepository(catalog.database_path("story-partial"))
+    repository.create_story(
+        story_id="story-partial",
+        title=payload["title"],
+        background=payload["background"],
+        role_snapshot=role.to_dict(),
+        player_profile=StoryPlayerProfile(display_name="悠", appearance="短发", identity="转学生"),
+        time_band=payload["time_band"],
+        opening_context={"background": payload["background"], "role_id": role.id},
+    )
+    repository.close()
+    catalog.close()
+
+    director = BlockingOpeningDirector()
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: role),
+        director=director,
+    )
+    created = await handler.handle(
+        "stories.create", payload, request_id="transport-retry", emit_event=lambda _event: None
+    )
+    replay = await handler.handle(
+        "stories.create", payload, request_id="transport-retry-2", emit_event=lambda _event: None
+    )
+    await director.started.wait()
+
+    assert replay["story"]["id"] == created["story"]["id"] == "story-partial"
+    assert len(replay["story"]["turns"]) == 1
+    assert director.calls == 1
+    director.release.set()
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_story_list_quarantines_an_active_entry_with_a_missing_database(tmp_path) -> None:
+    catalog = StoryCatalog(tmp_path)
+    catalog.create_entry(
+        story_id="story-missing-db",
+        title="残留剧情",
+        request_id="creation-1",
+        payload_hash="payload-hash",
+    )
+    catalog.set_status("story-missing-db", "active")
+    catalog.close()
+
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: None),
+        director=OpeningDirector(),
+    )
+    summaries = await handler.handle(
+        "stories.list", {}, request_id="list-1", emit_event=lambda _event: None
+    )
+
+    assert summaries == {"stories": []}
+    assert handler._catalog.require_entry("story-missing-db")["status"] == "deleting"
     await handler.aclose()

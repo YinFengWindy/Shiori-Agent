@@ -70,4 +70,11 @@ describe("StoryLoadingScreen", () => {
     assert.match(markup, /data-testid="story-loading-stage-2-check"/);
     assert.doesNotMatch(markup, /story-loading-spinner/);
   });
+
+  it("shows recovery commands when loading fails", () => {
+    const markup = renderToStaticMarkup(<StoryLoadingScreen mode="story" phase="reading-story" error="读取失败" onRetry={() => undefined} onBack={() => undefined} />);
+    assert.match(markup, /role="alert">读取失败/);
+    assert.match(markup, />Back</);
+    assert.match(markup, />Retry</);
+  });
 });

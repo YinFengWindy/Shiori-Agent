@@ -23,6 +23,12 @@ function storyPayload(revision = 4, operation: "awaiting_player" | "generating" 
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
+
 describe("createStoryBridgeClient", () => {
   it("calls stories.list and maps catalog fields directly", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
@@ -61,8 +67,8 @@ describe("createStoryBridgeClient", () => {
       requests.push(request);
       return { id: "response", type: "response", method: request.method, payload: { story: storyPayload(0, "generating") }, error: null };
     });
-    await client.createStory({ title: "雨港", background: "潮汐", timeBand: "上午", roleId: "role-1", playerProfile: { displayName: "岚", appearance: "短发", identity: "抄写员" } });
-    assert.deepEqual(requests[0], { method: "stories.create", payload: { title: "雨港", background: "潮汐", time_band: "上午", role_id: "role-1", player_profile: { display_name: "岚", appearance: "短发", identity: "抄写员" } } });
+    await client.createStory({ title: "雨港", background: "潮汐", timeBand: "上午", roleId: "role-1", playerProfile: { displayName: "岚", appearance: "短发", identity: "抄写员" } }, "creation-1");
+    assert.deepEqual(requests[0], { method: "stories.create", payload: { title: "雨港", background: "潮汐", time_band: "上午", role_id: "role-1", creation_id: "creation-1", player_profile: { display_name: "岚", appearance: "短发", identity: "抄写员" } } });
   });
 
   it("submits player input with the latest Story revision", async () => {
@@ -74,6 +80,31 @@ describe("createStoryBridgeClient", () => {
     await client.getStory("story-1");
     await client.submitInput("story-1", "推开门。");
     assert.deepEqual(requests[1], { method: "stories.input", payload: { story_id: "story-1", input: "推开门。", expected_revision: 4 } });
+  });
+
+  it("does not let an older read move the remembered revision backwards", async () => {
+    const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
+    const older = deferred<BridgeResponse>();
+    const newer = deferred<BridgeResponse>();
+    let reads = 0;
+    const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => {
+      requests.push(request);
+      if (request.method === "stories.get") {
+        reads += 1;
+        return reads === 1 ? older.promise : newer.promise;
+      }
+      return { id: "response", type: "response", method: request.method, payload: { story: storyPayload(6, "generating") }, error: null };
+    });
+
+    const olderRead = client.getStory("story-1");
+    const newerRead = client.getStory("story-1");
+    newer.resolve({ id: "newer", type: "response", method: "stories.get", payload: { story: storyPayload(5) }, error: null });
+    await newerRead;
+    older.resolve({ id: "older", type: "response", method: "stories.get", payload: { story: storyPayload(4) }, error: null });
+    await olderRead;
+    await client.submitInput("story-1", "推开门。");
+
+    assert.deepEqual(requests[2], { method: "stories.input", payload: { story_id: "story-1", input: "推开门。", expected_revision: 5 } });
   });
 
   it("surfaces bridge failures as stable Story errors", async () => {

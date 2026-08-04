@@ -37,7 +37,10 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
   }, []);
 
   const applyStory = useCallback((story: StoryDetails) => {
-    setState((current) => ({ ...current, story, stories: replaceStorySummary(current.stories, story) }));
+    setState((current) => {
+      if (current.story?.id === story.id && story.revision < current.story.revision) return current;
+      return { ...current, story, stories: replaceStorySummary(current.stories, story) };
+    });
   }, []);
 
   const loadStory = useCallback((storyId: string) => run(() => client.getStory(storyId), applyStory), [applyStory, client, run]);
@@ -66,7 +69,7 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
       await waitForStoryLoadingCompletion();
       setState((current) => ({ ...current, stories, loading: false }));
     } catch (error) {
-      setState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "Unable to load the Story list" }));
+      setState((current) => ({ ...current, loading: true, error: error instanceof Error ? error.message : "Unable to load the Story list" }));
     }
   }, [client]);
 

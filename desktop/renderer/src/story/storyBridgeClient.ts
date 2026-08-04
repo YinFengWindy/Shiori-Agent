@@ -45,7 +45,7 @@ function toStorySummary(story: StorySummaryPayload): StorySummary {
 export interface StoryBridgeClient {
   listStories(): Promise<StorySummary[]>;
   getStory(storyId: string): Promise<StoryDetails>;
-  createStory(input: StoryCreationInput): Promise<StoryDetails>;
+  createStory(input: StoryCreationInput, creationId?: string): Promise<StoryDetails>;
   submitInput(storyId: string, input: string): Promise<StoryDetails>;
   continueStory(storyId: string): Promise<StoryDetails>;
   listCgGallery(): Promise<StoryCgGallery[]>;
@@ -58,12 +58,14 @@ export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDeskt
 
   async function getStory(storyId: string): Promise<StoryDetails> {
     const story = (await invokePayload<{ story: StoryPayload }>(invoke, "stories.get", { story_id: storyId })).story;
-    revisions.set(story.id, story.revision);
-    return story;
+    return rememberStory(story);
   }
 
   function rememberStory(story: StoryDetails): StoryDetails {
-    revisions.set(story.id, story.revision);
+    const previousRevision = revisions.get(story.id);
+    if (previousRevision === undefined || story.revision > previousRevision) {
+      revisions.set(story.id, story.revision);
+    }
     return story;
   }
 
@@ -73,9 +75,9 @@ export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDeskt
       return payload.stories.map(toStorySummary);
     },
     getStory,
-    async createStory(input) {
+    async createStory(input, creationId) {
       if (!input.roleId) throw new StoryBridgeError("请选择一位角色", "role_required");
-      const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.create", {
+      const requestPayload: Record<string, unknown> = {
         title: input.title,
         background: input.background,
         time_band: input.timeBand,
@@ -85,7 +87,9 @@ export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDeskt
           appearance: input.playerProfile.appearance,
           identity: input.playerProfile.identity,
         },
-      });
+      };
+      if (creationId) requestPayload.creation_id = creationId;
+      const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.create", requestPayload);
       return rememberStory(payload.story);
     },
     async submitInput(storyId, input) {

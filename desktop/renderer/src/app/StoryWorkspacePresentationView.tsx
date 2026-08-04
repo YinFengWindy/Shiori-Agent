@@ -74,7 +74,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
     content = <StoryLoadList stories={controller.stories} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} onBack={() => setMode("launcher")} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} />;
   } else if (mode === "loading") {
     const backgroundReady = story?.id === loadingStoryId && story.backgroundResource?.status !== "generating";
-    content = <StoryLoadingScreen background={storyMenuBackground} sharedBackdrop mode="story" phase={loadingPhase} busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} />;
+    content = <StoryLoadingScreen background={storyMenuBackground} sharedBackdrop mode="story" phase={loadingPhase} busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} onBack={() => setMode("launcher")} />;
   } else if (mode === "gallery") {
     content = <StoryCgGallerySurface stories={cgGallery} background={storyMenuBackground} sharedBackdrop busy={cgGalleryLoading || busy} error={error} onRetry={onRetryCg} onBack={() => setMode("launcher")} />;
   } else if (mode === "settings") {
