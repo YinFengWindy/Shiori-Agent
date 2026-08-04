@@ -2,13 +2,20 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { canSubmitStoryInput, getStoryStatusLabel, mergeStoryBeats, replaceStorySummary } from "./selectors";
+import { canShowStoryInput, canSubmitStoryInput, getStoryStatusLabel, mergeStoryBeats, replaceStorySummary } from "./selectors";
 import { createStoryBeat, createStoryDetails, createStorySummary } from "./testFixtures";
 
 describe("Story selectors", () => {
   it("allows input only while the active segment awaits the player", () => {
     assert.equal(canSubmitStoryInput(createStoryDetails()), true);
     assert.equal(canSubmitStoryInput(createStoryDetails({ segment: { ...createStoryDetails().segment, operation: "generating" } })), false);
+  });
+
+  it("hides the input until the visible beat is the latest beat", () => {
+    const story = createStoryDetails();
+    assert.equal(canShowStoryInput(story, false, false), true);
+    assert.equal(canShowStoryInput(story, false, true), false);
+    assert.equal(canShowStoryInput(story, true, false), false);
   });
 
   it("merges replayed beats without duplicates and restores repository order", () => {

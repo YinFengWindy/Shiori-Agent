@@ -1,10 +1,11 @@
-import { ArrowRight, BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
-import { useRef, useState } from "react";
+import { BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
+import { useEffect, useRef, useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { toFileUrl } from "../shared/format";
 import { cx } from "../shared/styles";
-import { canSubmitStoryInput } from "./selectors";
+import { canShowStoryInput } from "./selectors";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
+import { advanceStoryPlayback, createStoryPlaybackState, getNextStoryBeat, getPresentedStoryBeat, syncStoryPlaybackState } from "./storyPlayback";
 import { formatStoryDate } from "./storyTime";
 import type { StoryDetails } from "./types";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
@@ -26,16 +27,29 @@ type StoryGameSurfaceProps = {
 export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, busy, error, characterAvatarUrl, onSubmitInput, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
   const [action, setAction] = useState("");
   const [dialogueVisible, setDialogueVisible] = useState(true);
+  const [playbackState, setPlaybackState] = useState(() => createStoryPlaybackState(story));
   const archiveWheelTriggeredRef = useRef(false);
-  const latestBeat = story.beats[story.beats.length - 1] ?? null;
+  const synchronizedPlaybackState = syncStoryPlaybackState(playbackState, story);
+  const presentedBeat = getPresentedStoryBeat(story, synchronizedPlaybackState);
+  const nextBeat = getNextStoryBeat(story, synchronizedPlaybackState);
   const storyBackgroundPath = story.backgroundResource?.status === "ready" ? story.backgroundResource.path : undefined;
   const hasStoryBackground = Boolean(storyBackgroundPath);
   const backgroundUrl = storyBackgroundPath ? toFileUrl(storyBackgroundPath) : background.url;
   const renderLocalBackdrop = !sharedBackdrop || hasStoryBackground;
   const showCharacterForeground = Boolean(characterAvatarUrl) && hasStoryBackground;
-  const speakerName = latestBeat?.speaker ?? "";
-  const visibleText = latestBeat?.text || story.background;
-  const canSubmit = canSubmitStoryInput(story) && !busy && Boolean(action.trim());
+  const isGenerating = busy || story.segment.operation === "generating";
+  const showPlayerInput = canShowStoryInput(story, isGenerating, nextBeat !== null);
+  const speakerName = isGenerating ? "" : presentedBeat?.speaker ?? "";
+  const visibleText = isGenerating ? "剧情生成中..." : presentedBeat?.text || story.background;
+  const canSubmit = showPlayerInput && Boolean(action.trim());
+
+  useEffect(() => {
+    setPlaybackState((current) => syncStoryPlaybackState(current, story));
+  }, [story]);
+
+  useEffect(() => {
+    if (!showPlayerInput && action) setAction("");
+  }, [action, showPlayerInput]);
 
   async function submit() {
     if (!canSubmit) return;
@@ -54,8 +68,13 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
     onOpenArchive();
   }
 
+  function handleSurfaceClick(event: React.MouseEvent<HTMLElement>) {
+    if (event.target instanceof Element && event.target.closest("button, input, textarea, select, a")) return;
+    setPlaybackState((current) => advanceStoryPlayback(story, syncStoryPlaybackState(current, story)));
+  }
+
   return (
-    <section className={cx("relative h-full min-h-0 overflow-hidden text-white", renderLocalBackdrop ? "bg-[#172128]" : "bg-transparent")} data-dialogue-visible={dialogueVisible} data-testid="story-game-surface" onContextMenu={handleContextMenu} onWheel={handleWheel}>
+    <section className={cx("relative h-full min-h-0 overflow-hidden text-white", renderLocalBackdrop ? "bg-[#172128]" : "bg-transparent")} data-dialogue-visible={dialogueVisible} data-testid="story-game-surface" onClick={handleSurfaceClick} onContextMenu={handleContextMenu} onWheel={handleWheel}>
       {renderLocalBackdrop ? <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-game-backdrop" style={{ backgroundImage: `url(${backgroundUrl})` }} /> : null}
       {showCharacterForeground ? <img className="pointer-events-none absolute bottom-[clamp(11rem,22vh,16rem)] right-[clamp(4vw,10vw,12rem)] z-10 h-[min(70vh,46rem)] max-w-[42vw] object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]" data-testid="story-game-character" src={characterAvatarUrl} alt="" /> : null}
 
@@ -71,13 +90,11 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
           <div className="mx-auto max-w-6xl">
             <div className="max-w-4xl">
               {speakerName ? <div className="mb-2 flex items-center gap-3"><span aria-hidden="true" className="h-px w-8 bg-[#F4C29F]/70" /><h1 className="story-game-readable m-0 font-serif text-lg font-semibold tracking-wide text-[#F4C29F]">{speakerName}</h1></div> : null}
-              <p className="story-game-readable m-0 min-h-14 whitespace-pre-wrap font-serif text-[clamp(1rem,1.6vw,1.25rem)] leading-8 text-white" data-testid="story-dialogue-text">{visibleText}</p>
+              <p className="story-game-readable m-0 min-h-14 whitespace-pre-wrap font-serif text-[clamp(1rem,1.6vw,1.25rem)] leading-8 text-white" data-story-beat-id={presentedBeat?.id} data-testid="story-dialogue-text">{visibleText}</p>
             </div>
-            <div className="mt-5 flex items-end gap-3 border-t border-white/15 pt-3">
-              <AutosizeTextarea className="story-game-readable min-h-10 w-full bg-transparent px-1 py-2 text-sm leading-6 text-white placeholder:text-white/70 focus:outline-none" containerClassName="min-h-10 flex-1" mirrorClassName="px-1 py-2 text-sm leading-6" value={action} placeholder={story.segment.operation === "generating" ? "剧情正在生成..." : "写下你的行动或回应..."} onChange={(event) => setAction(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} />
-              <button className="story-game-readable grid h-10 w-10 shrink-0 place-items-center border border-[#EAB48C] bg-[#BA704B] text-white transition-colors hover:bg-[#A05A39] disabled:cursor-default disabled:opacity-40" type="button" aria-label="提交剧情行动" title="提交剧情行动" disabled={!canSubmit} onClick={() => void submit()}><ArrowRight /></button>
-            </div>
-            {story.segment.operation === "generating" ? <p className="story-game-readable m-0 mt-2 text-xs text-[#F1C4A8]">剧情正在生成。</p> : null}
+            {showPlayerInput ? <div className="mt-5 border-t border-white/15 pt-3">
+              <AutosizeTextarea data-testid="story-player-input" className="story-game-readable min-h-10 w-full bg-transparent px-1 py-2 text-sm leading-6 text-white placeholder:text-white/70 focus:outline-none" containerClassName="min-h-10 w-full" mirrorClassName="px-1 py-2 text-sm leading-6" value={action} placeholder="写下你的行动或回应..." onChange={(event) => setAction(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} />
+            </div> : null}
           </div>
         </section>
       </div> : null}

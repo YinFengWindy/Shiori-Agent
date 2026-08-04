@@ -32,6 +32,11 @@ export function canSubmitStoryInput(story: StoryDetails | null) {
   return Boolean(story && story.status === "active" && story.segment.operation === "awaiting_player");
 }
 
+/** Returns whether the game surface should render the player input field. */
+export function canShowStoryInput(story: StoryDetails | null, busy: boolean, hasUnpresentedBeats: boolean) {
+  return !busy && !hasUnpresentedBeats && canSubmitStoryInput(story);
+}
+
 /** Merges committed beats idempotently and keeps repository order stable. */
 export function mergeStoryBeats(current: StoryBeat[], incoming: StoryBeat[]) {
   if (incoming.length === 0) return current;
