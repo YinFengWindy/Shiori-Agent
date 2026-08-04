@@ -42,7 +42,6 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   return (
     <section className={cx("relative h-full min-h-0 overflow-hidden text-white", renderLocalBackdrop ? "bg-[#172128]" : "bg-transparent")} data-testid="story-game-surface">
       {renderLocalBackdrop ? <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-game-backdrop" style={{ backgroundImage: `url(${backgroundUrl})` }} /> : null}
-      <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-2/3 bg-[linear-gradient(0deg,rgba(13,20,25,0.9),rgba(13,20,25,0.35)_44%,transparent)]" />
       {showCharacterForeground ? <img className="pointer-events-none absolute bottom-[clamp(11rem,22vh,16rem)] right-[clamp(4vw,10vw,12rem)] z-10 h-[min(70vh,46rem)] max-w-[42vw] object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]" data-testid="story-game-character" src={characterAvatarUrl} alt="" /> : null}
 
       <div className="absolute left-5 top-5 z-30 text-white/75" data-testid="story-current-time"><span className="mr-2 text-xs">当前时段</span><strong className="font-serif text-lg font-semibold text-[#F4C29F]">{story.currentTimeBand}</strong></div>
@@ -53,7 +52,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
-        <section className="pointer-events-auto border-t border-white/15 bg-[linear-gradient(180deg,rgba(16,25,30,0.08),rgba(16,25,30,0.9)_26%,rgba(16,25,30,0.98))] px-[clamp(20px,8vw,120px)] pb-[clamp(20px,4vh,40px)] pt-[clamp(32px,7vh,72px)] backdrop-blur-md" data-testid="story-dialogue-panel">
+        <section className="pointer-events-auto border-t border-white/20 px-[clamp(20px,8vw,120px)] pb-[clamp(20px,4vh,40px)] pt-[clamp(32px,7vh,72px)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] backdrop-blur-xl backdrop-saturate-150" data-testid="story-dialogue-panel" style={{ backgroundColor: `color-mix(in srgb, ${background.theme.titleHighlight} 60%, transparent)` }}>
           <div className="mx-auto max-w-6xl">
             <div className="max-w-4xl">
               {speakerName ? <div className="mb-2 flex items-center gap-3"><span aria-hidden="true" className="h-px w-8 bg-[#F4C29F]/70" /><h1 className="m-0 font-serif text-lg font-semibold tracking-wide text-[#F4C29F]">{speakerName}</h1></div> : null}

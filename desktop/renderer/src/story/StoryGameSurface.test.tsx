@@ -17,9 +17,9 @@ const resolvedBackground: StoryMenuBackground = {
 
 describe("StoryGameSurface", () => {
   it("renders the active Story as a visual-novel stage with dialogue and player input", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface story={createStoryDetails()} busy={false} error="" characterAvatarUrl="shiori-asset://local/role" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderToStaticMarkup(<StoryGameSurface background={resolvedBackground} story={createStoryDetails()} busy={false} error="" characterAvatarUrl="shiori-asset://local/role" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /data-testid="story-game-surface"/);
-    assert.match(markup, /url\(\.\/assets\/backgrounds\/default-galgame-bg\.png\)/);
+    assert.match(markup, /url\(shiori-asset:\/\/local\/story-menu-random\.webp\)/);
     assert.match(markup, />你终于来了。</);
     assert.match(markup, /data-testid="story-current-time"/);
     assert.match(markup, />上午</);
@@ -27,6 +27,10 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /aria-label="查看剧情记录"/);
     assert.match(markup, /data-testid="story-dialogue-panel"/);
     assert.match(markup, /data-testid="story-dialogue-text"/);
+    assert.match(markup, /color-mix\(in srgb, rgba\(224,96,160,0.35\) 60%, transparent\)/);
+    assert.match(markup, /backdrop-blur-xl/);
+    assert.match(markup, /backdrop-saturate-150/);
+    assert.doesNotMatch(markup, /rgba\(13,20,25/);
     assert.doesNotMatch(markup, /data-testid="story-game-character"/);
   });
 
