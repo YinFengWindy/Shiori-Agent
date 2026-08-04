@@ -16,7 +16,7 @@ type StorySurfaceProps = {
 
 const transition = { duration: 0.28, ease: "easeOut" } as const;
 export const STORY_SURFACE_BACKDROP_TRANSITION_SECONDS = 0.7;
-export const STORY_SURFACE_BACKDROP_FADE_SECONDS = 0.36;
+export const STORY_SURFACE_BACKDROP_FADE_SECONDS = 0.7;
 
 /** Renders the shared Story backdrop, overlays, panel surface, and entrance motion. */
 export function StorySurface({ dataTestId, panelTestId, children, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, reducedMotion = false, contentClassName }: StorySurfaceProps) {

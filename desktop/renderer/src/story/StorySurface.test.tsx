@@ -42,6 +42,6 @@ describe("StorySurface", () => {
   it("fades the shared blur layer in during secondary-page entry", () => {
     const markup = renderToStaticMarkup(<StorySurface sharedBackdrop dataTestId="story-test" panelTestId="story-test-panel"><div>内容</div></StorySurface>);
     assert.match(markup, /backdrop-blur-xl/);
-    assert.equal(STORY_SURFACE_BACKDROP_FADE_SECONDS, 0.36);
+    assert.equal(STORY_SURFACE_BACKDROP_FADE_SECONDS, 0.7);
   });
 });
