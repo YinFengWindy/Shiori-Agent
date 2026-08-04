@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { cx } from "../shared/styles";
-import { STORY_MENU_BACKGROUND_URL } from "./storyStaticAssets";
+import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
+import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StorySurfaceProps = {
   dataTestId: string;
   panelTestId: string;
   children: ReactNode;
+  background?: StoryMenuBackground;
   reducedMotion?: boolean;
   contentClassName?: string;
 };
@@ -14,7 +16,7 @@ type StorySurfaceProps = {
 const transition = { duration: 0.28, ease: "easeOut" } as const;
 
 /** Renders the shared Story backdrop, overlays, panel surface, and entrance motion. */
-export function StorySurface({ dataTestId, panelTestId, children, reducedMotion = false, contentClassName }: StorySurfaceProps) {
+export function StorySurface({ dataTestId, panelTestId, children, background = DEFAULT_STORY_MENU_BACKGROUND, reducedMotion = false, contentClassName }: StorySurfaceProps) {
   const systemReducedMotion = useReducedMotion() ?? false;
   const reduceEffects = systemReducedMotion || reducedMotion;
 
@@ -26,7 +28,7 @@ export function StorySurface({ dataTestId, panelTestId, children, reducedMotion 
         initial={{ opacity: 0, scale: reduceEffects ? 1 : 1.06 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: reduceEffects ? 0 : 1.4, ease: "easeOut" }}
-        style={{ backgroundImage: `url(${STORY_MENU_BACKGROUND_URL})` }}
+        style={{ backgroundImage: `url(${background.url})` }}
       />
       <div aria-hidden="true" className="absolute inset-0 bg-[#281421]/42" />
       <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(120deg,rgba(40,20,33,0.2),rgba(40,20,33,0.05)_52%,rgba(104,31,68,0.22))]" />

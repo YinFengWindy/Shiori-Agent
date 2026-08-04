@@ -7,8 +7,9 @@ import {
 } from "./StorySettingsControls";
 import { StorySurface } from "./StorySurface";
 import { readStoryPreferences, writeStoryPreferences, type StoryPreferences } from "./storyPreferences";
+import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
-type StorySettingsProps = { onBack: () => void };
+type StorySettingsProps = { background?: StoryMenuBackground; onBack: () => void };
 
 const textSpeedOptions = [
   { value: "slow", label: "慢" },
@@ -30,7 +31,7 @@ const volumeFields = [
 ] as const;
 
 /** Renders persistent Story presentation settings in the shared Story surface. */
-export function StorySettings({ onBack }: StorySettingsProps) {
+export function StorySettings({ background, onBack }: StorySettingsProps) {
   const [settings, setSettings] = useState<StoryPreferences>(readStoryPreferences);
 
   function update<K extends keyof StoryPreferences>(key: K, value: StoryPreferences[K]): void {
@@ -42,7 +43,7 @@ export function StorySettings({ onBack }: StorySettingsProps) {
   }
 
   return (
-    <StorySurface dataTestId="story-settings" panelTestId="story-settings-panel" reducedMotion={settings.reducedMotion}>
+    <StorySurface background={background} dataTestId="story-settings" panelTestId="story-settings-panel" reducedMotion={settings.reducedMotion}>
       <header className="flex items-center gap-4 border-b border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5">
         <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#8F355C] transition-colors hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}>
           <ArrowLeft className="h-5 w-5" weight="bold" />

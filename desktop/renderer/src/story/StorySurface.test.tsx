@@ -4,6 +4,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StorySurface } from "./StorySurface";
+import type { StoryMenuBackground } from "./useStoryMenuBackground";
+
+const resolvedBackground: StoryMenuBackground = {
+  url: "shiori-asset://local/story-menu-random.webp",
+  theme: {
+    commandFilter: "hue-rotate(18deg) saturate(1.12)",
+    titleHighlight: "rgba(224,96,160,0.35)",
+  },
+};
 
 describe("StorySurface", () => {
   it("provides one shared Story backdrop and full-width panel shell", () => {
@@ -17,5 +26,12 @@ describe("StorySurface", () => {
     assert.match(markup, /bg-\[#FFF8FC\]\/72/);
     assert.match(markup, /backdrop-blur-xl/);
     assert.match(markup, /backdrop-saturate-150/);
+  });
+
+  it("uses the resolved Story background instead of the bundled fallback", () => {
+    const markup = renderToStaticMarkup(<StorySurface background={resolvedBackground} dataTestId="story-test" panelTestId="story-test-panel"><div>内容</div></StorySurface>);
+
+    assert.match(markup, /url\(shiori-asset:\/\/local\/story-menu-random\.webp\)/);
+    assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 });

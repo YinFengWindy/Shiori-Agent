@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
 import type { StorySummary } from "./types";
 import { StorySurface } from "./StorySurface";
+import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type LauncherActions = {
   busy: boolean;
@@ -15,6 +16,7 @@ type LauncherActions = {
 
 type StoryLoadListProps = Pick<LauncherActions, "busy"> & {
   stories: StorySummary[];
+  background?: StoryMenuBackground;
   reducedMotion?: boolean;
   error?: string;
   onBack: () => void;
@@ -42,12 +44,12 @@ export function StoryMainMenu({ busy, reducedMotion, onCreateStory, onOpenLoad, 
 }
 
 /** Renders saved Stories as a full-screen Story surface. */
-export function StoryLoadList({ stories, busy, reducedMotion: reducedMotionOverride, error = "", onBack, onLoadStory }: StoryLoadListProps) {
+export function StoryLoadList({ stories, busy, background, reducedMotion: reducedMotionOverride, error = "", onBack, onLoadStory }: StoryLoadListProps) {
   const systemReducedMotion = useReducedMotion() ?? false;
   const reducedMotion = reducedMotionOverride ?? systemReducedMotion;
 
   return (
-    <StorySurface dataTestId="story-load" panelTestId="story-load-panel" reducedMotion={reducedMotion}>
+    <StorySurface background={background} dataTestId="story-load" panelTestId="story-load-panel" reducedMotion={reducedMotion}>
       <header className="flex items-center gap-4 border-b border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5">
         <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#8F355C] transition-colors hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}>
           <ArrowLeft className="h-5 w-5" weight="bold" />

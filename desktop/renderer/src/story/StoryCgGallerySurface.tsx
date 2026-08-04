@@ -3,9 +3,11 @@ import { useMemo, useState } from "react";
 import type { StoryCgGallery, StoryResource } from "./types";
 import { StorySurface } from "./StorySurface";
 import { toFileUrl } from "../shared/format";
+import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StoryCgGallerySurfaceProps = {
   stories: StoryCgGallery[];
+  background?: StoryMenuBackground;
   busy: boolean;
   error: string;
   onRetry: (storyId: string, resourceId: string) => void;
@@ -18,7 +20,7 @@ function resourceLabel(resource: StoryResource, index: number) {
 }
 
 /** Renders the main-menu Story CG collection, grouped by Story. */
-export function StoryCgGallerySurface({ stories, busy, error, onRetry, onBack }: StoryCgGallerySurfaceProps) {
+export function StoryCgGallerySurface({ stories, background, busy, error, onRetry, onBack }: StoryCgGallerySurfaceProps) {
   const [selectedStoryId, setSelectedStoryId] = useState(stories[0]?.storyId ?? "");
   const [preview, setPreview] = useState<StoryResource | null>(null);
   const selectedStory = useMemo(
@@ -27,7 +29,7 @@ export function StoryCgGallerySurface({ stories, busy, error, onRetry, onBack }:
   );
 
   return (
-    <StorySurface dataTestId="story-cg-gallery" panelTestId="story-cg-gallery-panel" contentClassName="overflow-hidden">
+    <StorySurface background={background} dataTestId="story-cg-gallery" panelTestId="story-cg-gallery-panel" contentClassName="overflow-hidden">
       <header className="flex items-center gap-4 border-b border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5">
         <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#8F355C] transition-colors hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}>
           <ArrowLeft className="h-5 w-5" weight="bold" />

@@ -6,9 +6,11 @@ import type { StoryCreationInput, StoryRoleChoice } from "./types";
 import { createInitialStoryCreationInput, creationSteps, isCreationStepComplete, type CreationStep } from "./storyCreationWizard";
 import { StoryCreateStep } from "./StoryCreateStep";
 import { StorySurface } from "./StorySurface";
+import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StoryCreateFlowProps = {
   roles: StoryRoleChoice[];
+  background?: StoryMenuBackground;
   busy?: boolean;
   error?: string;
   onBack: () => void;
@@ -22,7 +24,7 @@ const storySecondaryButtonClass = cx(storyActionButtonBase, "text-[#6C3E52] hove
 const stepTransition = { duration: 0.22, ease: "easeOut" } as const;
 
 /** Renders the compact animated form that creates one Story database entry. */
-export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCreate }: StoryCreateFlowProps) {
+export function StoryCreateFlow({ roles, background, busy = false, error = "", onBack, onCreate }: StoryCreateFlowProps) {
   const [input, setInput] = useState<StoryCreationInput>(createInitialStoryCreationInput);
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -45,7 +47,7 @@ export function StoryCreateFlow({ roles, busy = false, error = "", onBack, onCre
   };
 
   return (
-    <StorySurface dataTestId="story-create-flow" panelTestId="story-create-panel" contentClassName="overflow-hidden">
+    <StorySurface background={background} dataTestId="story-create-flow" panelTestId="story-create-panel" contentClassName="overflow-hidden">
       <header>
         <div className="border-b border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5">
           <div className="flex items-center gap-4">

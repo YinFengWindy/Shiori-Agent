@@ -5,11 +5,22 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it } from "node:test";
 import { StoryArchiveSurface } from "./StoryArchiveSurface";
 import { createStoryBeat, createStoryDetails } from "./testFixtures";
+import type { StoryMenuBackground } from "./useStoryMenuBackground";
+
+const resolvedBackground: StoryMenuBackground = {
+  url: "shiori-asset://local/story-menu-random.webp",
+  theme: {
+    commandFilter: "hue-rotate(18deg) saturate(1.12)",
+    titleHighlight: "rgba(224,96,160,0.35)",
+  },
+};
 
 describe("StoryArchiveSurface", () => {
   it("renders direct Story beats without Day, OC, or workspace semantics", () => {
-    const markup = renderToStaticMarkup(<StoryArchiveSurface story={createStoryDetails()} busy={false} error="" onSubmitInput={async () => true} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderToStaticMarkup(<StoryArchiveSurface background={resolvedBackground} story={createStoryDetails()} busy={false} error="" onSubmitInput={async () => true} onOpenSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /data-testid="story-archive-surface"/);
+    assert.match(markup, /data-testid="story-archive-backdrop"/);
+    assert.match(markup, /url\(shiori-asset:\/\/local\/story-menu-random\.webp\)/);
     assert.match(markup, /剧情记录/);
     assert.match(markup, /你终于来了。/);
     assert.match(markup, /data-testid="story-current-time"/);

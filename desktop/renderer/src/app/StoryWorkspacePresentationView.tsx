@@ -59,24 +59,24 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
     return <StoryLauncher background={storyMenuBackground} busy={busy} error={error} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenCg={onOpenCg} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
   }
   if (mode === "load") {
-    return <StoryLoadList stories={controller.stories} busy={busy} error={error} onBack={() => setMode("launcher")} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} />;
+    return <StoryLoadList stories={controller.stories} background={storyMenuBackground} busy={busy} error={error} onBack={() => setMode("launcher")} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} />;
   }
   if (mode === "loading") {
     const backgroundReady = story?.id === loadingStoryId && story.backgroundResource?.status !== "generating";
     return <StoryLoadingScreen background={storyMenuBackground} mode="story" phase={loadingPhase} busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} />;
   }
   if (mode === "gallery") {
-    return <StoryCgGallerySurface stories={cgGallery} busy={cgGalleryLoading || busy} error={error} onRetry={onRetryCg} onBack={() => setMode("launcher")} />;
+    return <StoryCgGallerySurface stories={cgGallery} background={storyMenuBackground} busy={cgGalleryLoading || busy} error={error} onRetry={onRetryCg} onBack={() => setMode("launcher")} />;
   }
   if (mode === "settings") {
-    return <StorySettings onBack={onCloseSettings} />;
+    return <StorySettings background={storyMenuBackground} onBack={onCloseSettings} />;
   }
   if (mode === "create" || !story) {
-    return <StoryCreateFlow roles={storyRoles} busy={operation.busy} error={error} onBack={() => setMode("launcher")} onCreate={creation.createStory} />;
+    return <StoryCreateFlow roles={storyRoles} background={storyMenuBackground} busy={operation.busy} error={error} onBack={() => setMode("launcher")} onCreate={creation.createStory} />;
   }
   if (mode === "archive") {
-    return <StoryArchiveSurface story={story} busy={busy} error={error} onSubmitInput={controller.submitInput} onOpenSettings={() => onOpenSettings("archive")} onExit={() => setMode("launcher")} />;
+    return <StoryArchiveSurface story={story} background={storyMenuBackground} busy={busy} error={error} onSubmitInput={controller.submitInput} onOpenSettings={() => onOpenSettings("archive")} onExit={() => setMode("launcher")} />;
   }
   const storyCharacter = roles.find((role) => role.id === story.roleSnapshot.id);
-  return <StoryGameSurface story={story} busy={busy} error={error} characterAvatarUrl={storyCharacter?.avatar_abs ? toFileUrl(storyCharacter.avatar_abs) : undefined} onSubmitInput={controller.submitInput} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
+  return <StoryGameSurface story={story} background={storyMenuBackground} busy={busy} error={error} characterAvatarUrl={storyCharacter?.avatar_abs ? toFileUrl(storyCharacter.avatar_abs) : undefined} onSubmitInput={controller.submitInput} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
 }

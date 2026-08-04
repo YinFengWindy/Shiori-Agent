@@ -2,10 +2,13 @@ import { ArrowRight, Gear, SignOut } from "@phosphor-icons/react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { canSubmitStoryInput } from "./selectors";
+import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
 import type { StoryDetails } from "./types";
+import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StoryArchiveSurfaceProps = {
   story: StoryDetails;
+  background?: StoryMenuBackground;
   busy: boolean;
   error: string;
   onSubmitInput: (content: string) => Promise<boolean>;
@@ -14,7 +17,7 @@ type StoryArchiveSurfaceProps = {
 };
 
 /** Renders the immutable Story beat history and its input lane. */
-export function StoryArchiveSurface({ story, busy, error, onSubmitInput, onOpenSettings, onExit }: StoryArchiveSurfaceProps) {
+export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, busy, error, onSubmitInput, onOpenSettings, onExit }: StoryArchiveSurfaceProps) {
   const [input, setInput] = useState("");
   const latestBeatRef = useRef<HTMLLIElement | null>(null);
   const canSubmit = canSubmitStoryInput(story) && !busy && Boolean(input.trim());
@@ -29,12 +32,15 @@ export function StoryArchiveSurface({ story, busy, error, onSubmitInput, onOpenS
   }
 
   return (
-    <section className="relative grid h-full min-h-0 grid-rows-[minmax(0,1fr)] bg-[#F1F4F2] text-[#252A27]" data-testid="story-archive-surface">
-      <div className="pointer-events-none absolute right-5 top-5 z-10 flex gap-2">
+    <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520] text-[#252A27]" data-testid="story-archive-surface">
+      <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-archive-backdrop" style={{ backgroundImage: `url(${background.url})` }} />
+      <div aria-hidden="true" className="absolute inset-0 bg-[#F1F4F2]/82 backdrop-blur-sm" />
+      <div className="relative z-10 grid h-full min-h-0 grid-rows-[minmax(0,1fr)]">
+        <div className="pointer-events-none absolute right-5 top-5 z-10 flex gap-2">
         <button className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md text-[#5D6C63] transition-colors hover:bg-white/75 hover:text-[#35433A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C8D82]/35" type="button" aria-label="剧情设置" title="剧情设置" onClick={onOpenSettings}><Gear /></button>
         <button className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md text-[#5D6C63] transition-colors hover:bg-white/75 hover:text-[#35433A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C8D82]/35" type="button" aria-label="返回剧情列表" title="返回剧情列表" onClick={onExit}><SignOut /></button>
-      </div>
-      <div className="min-h-0 overflow-y-auto px-5 py-8">
+        </div>
+        <div className="min-h-0 overflow-y-auto px-5 py-8">
         <main className="mx-auto grid max-w-3xl gap-8">
           <header className="border-b border-[#CCD3CE] pb-4"><p className="m-0 text-xs text-[#727A75]">剧情记录</p><h1 className="m-0 mt-1 font-serif text-2xl font-semibold">{story.title}</h1><p className="m-0 mt-2 whitespace-pre-wrap text-sm leading-6 text-[#5D6C63]">{story.background}</p><p className="m-0 mt-3 text-xs text-[#727A75]" data-testid="story-current-time">当前时段：<strong className="font-medium text-[#53675B]">{story.currentTimeBand}</strong></p></header>
           <ol className="m-0 grid list-none gap-0 border-l border-[#B9C3BC] pl-7">
@@ -54,6 +60,7 @@ export function StoryArchiveSurface({ story, busy, error, onSubmitInput, onOpenS
           </div>
         </main>
         {error ? <div className="fixed bottom-5 left-1/2 -translate-x-1/2 rounded-md bg-[#793F36] px-4 py-2 text-sm text-white shadow-lg" role="alert">{error}</div> : null}
+        </div>
       </div>
     </section>
   );

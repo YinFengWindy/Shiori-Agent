@@ -3,11 +3,13 @@ import { useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { toFileUrl } from "../shared/format";
 import { canSubmitStoryInput } from "./selectors";
+import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
 import type { StoryDetails } from "./types";
-import { STORY_MENU_BACKGROUND_URL } from "./storyStaticAssets";
+import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StoryGameSurfaceProps = {
   story: StoryDetails;
+  background?: StoryMenuBackground;
   busy: boolean;
   error: string;
   characterAvatarUrl?: string;
@@ -18,12 +20,12 @@ type StoryGameSurfaceProps = {
 };
 
 /** Renders the active Story as a visual-novel stage while the Day view remains an archive. */
-export function StoryGameSurface({ story, busy, error, characterAvatarUrl, onSubmitInput, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
+export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, busy, error, characterAvatarUrl, onSubmitInput, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
   const [action, setAction] = useState("");
   const latestBeat = story.beats[story.beats.length - 1] ?? null;
   const backgroundUrl = story.backgroundResource?.status === "ready" && story.backgroundResource.path
     ? toFileUrl(story.backgroundResource.path)
-    : STORY_MENU_BACKGROUND_URL;
+    : background.url;
   const speakerName = latestBeat?.speaker ?? "";
   const visibleText = latestBeat?.text || story.background;
   const canSubmit = canSubmitStoryInput(story) && !busy && Boolean(action.trim());
