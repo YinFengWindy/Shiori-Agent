@@ -19,7 +19,7 @@ class StoryImageGenerator:
             raise StoryProviderUnavailableError("NovelAI generate_image 工具未注册")
         prompt = str(resource.get("prompt") or "").strip()
         if not prompt or not prompt.isascii():
-            raise StoryInvalidOutputError("CG 缺少有效的英文 NovelAI tags")
+            raise StoryInvalidOutputError("视觉资源缺少有效的英文 NovelAI tags")
         result = await self._image_tool.execute(
             prompt=(
                 f"{prompt}, anime screencap, visual novel scene, wide composition, "
@@ -31,7 +31,7 @@ class StoryImageGenerator:
             role_id=str((story.get("roleSnapshot") or {}).get("id") or ""),
             session_key=f"story:{story.get('id', '')}",
             intent="scene_cg",
-            scene_key=f"story:{story.get('id', '')}:cg:{resource.get('id', '')}",
+            scene_key=f"story:{story.get('id', '')}:visual:{resource.get('id', '')}",
         )
         raw = str(getattr(result, "text", result) or "").strip()
         try:

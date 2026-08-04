@@ -118,6 +118,12 @@ class StoryRepository:
                     dump({}),
                 ),
             )
+            resource_id = f"resource-{uuid4().hex}"
+            connection.execute(
+                """INSERT INTO story_resources
+                VALUES (?, ?, 'background', 'generating', NULL, '', NULL, 1, NULL, ?, ?)""",
+                (resource_id, story_id, now, now),
+            )
         return self.story_read_model(story_id)
 
     def story_read_model(self, story_id: str) -> dict[str, Any]:

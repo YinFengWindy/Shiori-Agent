@@ -144,7 +144,14 @@ class StorySimulationService:
                 )
                 for _, _, payload in committed:
                     await self._emit(emit_event, "stories.beat.committed", payload)
-                if not opening and schedule_visual_resource and draft.visual_prompt.strip():
+                if opening:
+                    await self._generate_opening_background(
+                        story=story,
+                        turn_id=turn_id,
+                        visual_prompt=draft.visual_prompt,
+                        emit_event=emit_event,
+                    )
+                elif schedule_visual_resource and draft.visual_prompt.strip():
                     schedule_visual_resource(story, turn, draft.visual_prompt, emit_event)
                 await self._emit(
                     emit_event,
@@ -164,6 +171,12 @@ class StorySimulationService:
                 except StorySimulationError:
                     # The draft may have committed immediately before shutdown.
                     pass
+                if opening:
+                    await self._fail_opening_background(
+                        self.repository.story_id_for_turn(turn_id),
+                        "generation_cancelled",
+                        emit_event,
+                    )
                 return
             except Exception as exc:
                 code = self._failure_code(exc)
@@ -193,6 +206,8 @@ class StorySimulationService:
                         "message": "剧情生成暂时失败，可以手动重试。",
                     },
                 )
+                if opening:
+                    await self._fail_opening_background(story["id"], code, emit_event)
                 return
 
     async def retry_resource(
@@ -216,6 +231,50 @@ class StorySimulationService:
         """Run a prepared Story resource request and publish its final state."""
 
         return await self._generate_resource(resource, emit_event)
+
+    async def _generate_opening_background(
+        self,
+        *,
+        story: dict[str, Any],
+        turn_id: str,
+        visual_prompt: str,
+        emit_event: EventEmitter,
+    ) -> None:
+        """Generate the Story-owned background attached to the opening Turn."""
+
+        resources = self.repository.story_resources(str(story["id"]))
+        background = next(
+            (resource for resource in resources if resource["kind"] == "background"),
+            None,
+        )
+        if background is None:
+            return
+        prepared = self.repository.prepare_resource(
+            str(background["id"]),
+            prompt=visual_prompt,
+            source_turn_id=turn_id,
+        )
+        await self._generate_resource(prepared, emit_event)
+
+    async def _fail_opening_background(
+        self, story_id: str, error_code: str, emit_event: EventEmitter
+    ) -> None:
+        """Mark the pending opening background failed when the opening Turn stops."""
+
+        resources = self.repository.story_resources(story_id)
+        background = next(
+            (
+                resource
+                for resource in resources
+                if resource["kind"] == "background"
+                and resource["status"] == "generating"
+            ),
+            None,
+        )
+        if background is None:
+            return
+        updated = self.repository.fail_resource(str(background["id"]), error_code)
+        await self._emit_resource_changed(emit_event, updated)
 
     async def _generate_resource(
         self, resource: dict[str, Any], emit_event: EventEmitter

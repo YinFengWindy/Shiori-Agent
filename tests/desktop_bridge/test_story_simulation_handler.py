@@ -33,7 +33,10 @@ class ProgressionVisualDirector:
     async def generate(self, **_kwargs) -> DirectorDraft:
         if self.opening:
             self.opening = False
-            return DirectorDraft(beats=(StoryBeatDraft(text="雨后的铃声响起。"),))
+            return DirectorDraft(
+                beats=(StoryBeatDraft(text="雨后的铃声响起。"),),
+                visual_prompt="old school building, rainy afternoon",
+            )
         return DirectorDraft(
             beats=(StoryBeatDraft(text="她把伞递到你手里。", kind="dialogue", speaker="澪"),),
             visual_prompt="rainy school gate, girl handing umbrella, emotional close-up",
@@ -46,14 +49,16 @@ class RecordingImageTool:
 
 
 class RetryableImageTool:
-    def __init__(self) -> None:
+    def __init__(self, *, fail_on_call: int = 1) -> None:
         self.calls = 0
+        self.fail_on_call = fail_on_call
 
     async def execute(self, **_kwargs):
         self.calls += 1
-        if self.calls == 1:
+        if self.calls == self.fail_on_call:
             raise RuntimeError("provider temporarily unavailable")
-        return json.dumps({"output_paths": ["D:\\stories\\retry.png"]})
+        path = "D:\\stories\\opening.png" if self.calls == 1 else "D:\\stories\\retry.png"
+        return json.dumps({"output_paths": [path]})
 
 
 class FailingOpeningDirector:
@@ -108,14 +113,14 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
     assert story["cues"][0]["text"] == "雨后的铃声响起。"
     assert story["turns"][0]["status"] == "committed"
     assert story["currentStoryDate"] == "2026-08-01"
-    assert story["backgroundResource"] is None
+    assert story["backgroundResource"]["status"] == "failed"
     assert summaries["stories"][0]["current_time_band"] == "上午"
     assert summaries["stories"][0]["current_story_date"] == "2026-08-01"
     await handler.aclose()
 
 
 @pytest.mark.asyncio
-async def test_opening_does_not_create_a_story_cg(tmp_path) -> None:
+async def test_opening_background_is_saved_to_its_story_visual_gallery(tmp_path) -> None:
     role = SimpleNamespace(
         id="role-1",
         to_dict=lambda: {"id": "role-1", "name": "澪"},
@@ -143,11 +148,12 @@ async def test_opening_does_not_create_a_story_cg(tmp_path) -> None:
     story = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-1", emit_event=events.append))["story"]
     gallery = await handler.handle("stories.cg.list", {}, request_id="gallery-1", emit_event=events.append)
 
-    assert story["backgroundResource"] is None
-    assert story["cgGallery"] == []
+    assert story["backgroundResource"]["status"] == "ready"
+    assert story["backgroundResource"]["path"] == "D:\\stories\\opening.png"
     assert gallery["stories"][0]["story_id"] == story_id
-    assert gallery["stories"][0]["items"] == []
-    assert not any(event["method"] == "stories.resource.changed" for event in events)
+    assert gallery["stories"][0]["items"][0]["kind"] == "background"
+    assert gallery["stories"][0]["items"][0]["id"] == story["backgroundResource"]["id"]
+    assert any(event["method"] == "stories.resource.changed" for event in events)
     await handler.aclose()
 
 
@@ -174,8 +180,8 @@ async def test_progression_visual_prompt_creates_async_cg_instead_of_opening_bac
         await asyncio.sleep(0)
     story_id = created["story"]["id"]
     opening = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-1", emit_event=lambda _event: None))["story"]
-    assert opening["backgroundResource"] is None
-    assert opening["cgGallery"] == []
+    assert opening["backgroundResource"]["status"] == "ready"
+    assert opening["cgGallery"][0]["kind"] == "background"
 
     await handler.handle(
         "stories.input",
@@ -187,17 +193,17 @@ async def test_progression_visual_prompt_creates_async_cg_instead_of_opening_bac
         await asyncio.sleep(0)
     progressed = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-2", emit_event=lambda _event: None))["story"]
 
-    assert progressed["backgroundResource"] is None
-    assert progressed["cgGallery"][0]["kind"] == "cg"
-    assert progressed["cgGallery"][0]["status"] == "ready"
-    assert progressed["cgGallery"][0]["sourceTurnId"] == progressed["turns"][-1]["id"]
+    assert progressed["backgroundResource"]["status"] == "ready"
+    assert progressed["cgGallery"][1]["kind"] == "cg"
+    assert progressed["cgGallery"][1]["status"] == "ready"
+    assert progressed["cgGallery"][1]["sourceTurnId"] == progressed["turns"][-1]["id"]
     await handler.aclose()
 
 
 @pytest.mark.asyncio
 async def test_failed_progression_cg_can_retry_without_creating_a_new_turn(tmp_path) -> None:
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
-    image_tool = RetryableImageTool()
+    image_tool = RetryableImageTool(fail_on_call=2)
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
@@ -233,7 +239,7 @@ async def test_failed_progression_cg_can_retry_without_creating_a_new_turn(tmp_p
     failed = (await handler.handle(
         "stories.get", {"story_id": story_id}, request_id="get-2", emit_event=lambda _event: None
     ))["story"]
-    resource_id = failed["cgGallery"][0]["id"]
+    resource_id = failed["cgGallery"][1]["id"]
 
     retrying = await handler.handle(
         "stories.cg.retry",
@@ -242,7 +248,7 @@ async def test_failed_progression_cg_can_retry_without_creating_a_new_turn(tmp_p
         emit_event=lambda _event: None,
     )
 
-    assert retrying["story"]["cgGallery"][0]["status"] == "generating"
+    assert retrying["story"]["cgGallery"][1]["status"] == "generating"
     assert len(retrying["story"]["turns"]) == 2
     for _ in range(8):
         await asyncio.sleep(0)
@@ -250,10 +256,10 @@ async def test_failed_progression_cg_can_retry_without_creating_a_new_turn(tmp_p
         "stories.get", {"story_id": story_id}, request_id="get-2", emit_event=lambda _event: None
     ))["story"]
 
-    assert ready["cgGallery"][0]["status"] == "ready"
-    assert ready["cgGallery"][0]["path"] == "D:\\stories\\retry.png"
+    assert ready["cgGallery"][1]["status"] == "ready"
+    assert ready["cgGallery"][1]["path"] == "D:\\stories\\retry.png"
     assert len(ready["turns"]) == 2
-    assert image_tool.calls == 2
+    assert image_tool.calls == 3
     await handler.aclose()
 
 
@@ -280,8 +286,8 @@ async def test_failed_opening_keeps_story_without_a_visual_resource(tmp_path) ->
     story = (await handler.handle("stories.get", {"story_id": created["story"]["id"]}, request_id="get-1", emit_event=lambda _event: None))["story"]
 
     assert story["turns"][0]["status"] == "failed"
-    assert story["backgroundResource"] is None
-    assert story["cgGallery"] == []
+    assert story["backgroundResource"]["status"] == "failed"
+    assert story["backgroundResource"]["errorCode"] == "director_invalid_output"
     await handler.aclose()
 
 
