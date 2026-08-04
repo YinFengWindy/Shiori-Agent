@@ -8,4 +8,4 @@ export { StoryLoadList } from "./StoryMenu";
 export { StoryLoadingScreen } from "./StoryLoadingScreen";
 export { StorySettings } from "./StorySettings";
 export { StorySurface } from "./StorySurface";
-export { StoryWorkspaceBackdrop } from "./StoryWorkspaceBackdrop";
+export { StoryWorkspaceBackdrop, STORY_WORKSPACE_BACKDROP_TRANSITION_SECONDS, type StoryWorkspaceBackdropBlur } from "./StoryWorkspaceBackdrop";

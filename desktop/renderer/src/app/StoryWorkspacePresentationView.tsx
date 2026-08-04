@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { RoleRecord } from "../shared/types";
 import { toFileUrl } from "../shared/format";
-import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadList, StoryLoadingScreen, StorySettings, StoryWorkspaceBackdrop } from "../story";
+import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadList, StoryLoadingScreen, StorySettings, StoryWorkspaceBackdrop, type StoryWorkspaceBackdropBlur } from "../story";
 import { StoryCgGallerySurface } from "../story";
 import { useStoryMenuBackground } from "../story/useStoryMenuBackground";
 import type { useStoryController } from "../story/useStoryController";
@@ -19,6 +19,12 @@ export type StoryOperationPresentationController = Pick<ReturnType<typeof useSto
 
 /** Creation state consumed by the Story launcher route. */
 export type StoryCreationPresentationController = Pick<ReturnType<typeof useStoryCreationFlowController>, "createStory">;
+
+function resolveStoryWorkspaceBackdropBlur(mode: StoryPresentationMode): StoryWorkspaceBackdropBlur {
+  if (mode === "archive") return "archive";
+  if (mode === "load" || mode === "gallery" || mode === "settings" || mode === "create") return "surface";
+  return "none";
+}
 
 type Props = {
   roles: RoleRecord[];
@@ -76,5 +82,5 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
     content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={storyCharacter?.avatar_abs ? toFileUrl(storyCharacter.avatar_abs) : undefined} onSubmitInput={controller.submitInput} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
   }
 
-  return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation"><StoryWorkspaceBackdrop background={storyMenuBackground} /><div className="relative z-10 h-full min-h-0">{content}</div></section>;
+  return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation"><StoryWorkspaceBackdrop background={storyMenuBackground} blur={resolveStoryWorkspaceBackdropBlur(mode)} /><div className="relative z-10 h-full min-h-0">{content}</div></section>;
 }

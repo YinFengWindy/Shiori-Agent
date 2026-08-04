@@ -31,6 +31,7 @@ describe("StoryWorkspacePresentationView", () => {
   it("uses the visual-novel stage for an active Story", () => {
     const markup = render("game");
     assert.match(markup, /data-testid="story-workspace-backdrop"/);
+    assert.match(markup, /data-blur-mode="none" data-testid="story-workspace-backdrop-blur"/);
     assert.match(markup, /data-testid="story-game-surface"/);
     assert.doesNotMatch(markup, /data-testid="story-game-backdrop"/);
     assert.ok(markup.indexOf("story-workspace-backdrop") < markup.indexOf("story-game-surface"));
@@ -45,6 +46,7 @@ describe("StoryWorkspacePresentationView", () => {
 
   it("uses a full-screen Story surface for saved Stories", () => {
     const markup = render("load");
+    assert.match(markup, /data-blur-mode="surface" data-testid="story-workspace-backdrop-blur"/);
     assert.match(markup, /data-testid="story-load"/);
     assert.match(markup, /data-testid="story-load-panel"/);
     assert.match(markup, /data-testid="story-load-list"/);

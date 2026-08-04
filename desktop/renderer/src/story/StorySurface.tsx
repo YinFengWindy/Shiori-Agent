@@ -45,7 +45,7 @@ export function StorySurface({ dataTestId, panelTestId, children, background = D
         <section className="relative flex min-h-full w-full flex-col border-y border-[#DDA9BE]/75 shadow-[0_18px_48px_rgba(49,17,35,0.3)]" data-testid={panelTestId}>
           <motion.div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[#FFF8FC]/72 backdrop-blur-xl backdrop-saturate-150"
+            className={`pointer-events-none absolute inset-0 bg-[#FFF8FC]/72 ${sharedBackdrop ? "" : "backdrop-blur-xl backdrop-saturate-150"}`}
             initial={sharedBackdrop && !reduceEffects ? { opacity: 0 } : false}
             animate={sharedBackdrop && !reduceEffects ? { opacity: 1 } : undefined}
             transition={{ duration: sharedBackdrop && !reduceEffects ? STORY_SURFACE_BACKDROP_FADE_SECONDS : 0, ease: "easeOut" }}
