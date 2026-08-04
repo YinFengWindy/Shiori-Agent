@@ -1,4 +1,5 @@
 import type { StoryBeat, StoryDetails, StoryTurn } from "./types";
+import { getStoryBeatPresentationFragments } from "./storyBeatPresentation";
 import { formatStoryDate, normalizeStoryTimeBand, type StoryTimeBand } from "./storyTime";
 
 /** The three player-facing entry types used by the Story archive. */
@@ -71,7 +72,7 @@ export function buildStoryArchiveDays(story: Pick<StoryDetails, "beats" | "turns
 }
 
 function createBeatTimelineItems(beat: StoryBeat): StoryArchiveTimelineItem[] {
-  const fragments = beat.kind === "dialogue" ? splitMixedDialogueText(beat.text) : [{ kind: "narration" as const, text: beat.text }];
+  const fragments = getStoryBeatPresentationFragments(beat);
   const timeBand = normalizeStoryTimeBand(beat.timeBand);
   return fragments.map((fragment, index) => ({
     id: fragments.length === 1 ? `beat:${beat.id}` : `beat:${beat.id}:${index}`,
@@ -82,31 +83,6 @@ function createBeatTimelineItems(beat: StoryBeat): StoryArchiveTimelineItem[] {
     timeBand,
     order: beat.sequence * 1000 + index + 1,
   }));
-}
-
-type StoryBeatPresentationFragment = {
-  kind: "narration" | "dialogue";
-  text: string;
-};
-
-/** Splits legacy mixed beats for presentation without changing the committed Story transcript. */
-function splitMixedDialogueText(text: string): StoryBeatPresentationFragment[] {
-  const fragments: StoryBeatPresentationFragment[] = [];
-  const quotedTextPattern = /“[^”]*”|「[^」]*」|『[^』]*』|"[^"]*"/g;
-  const matches = [...text.matchAll(quotedTextPattern)];
-  if (matches.length === 0) return [{ kind: "dialogue", text }];
-  let cursor = 0;
-  for (const match of matches) {
-    const start = match.index ?? 0;
-    const narration = text.slice(cursor, start).trim();
-    if (narration) fragments.push({ kind: "narration", text: narration });
-    const dialogue = match[0].trim();
-    if (dialogue) fragments.push({ kind: "dialogue", text: dialogue });
-    cursor = start + match[0].length;
-  }
-  const trailingNarration = text.slice(cursor).trim();
-  if (trailingNarration) fragments.push({ kind: "narration", text: trailingNarration });
-  return fragments;
 }
 
 function createPlayerTimelineItem(

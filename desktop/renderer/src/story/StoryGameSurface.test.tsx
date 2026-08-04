@@ -65,4 +65,14 @@ describe("StoryGameSurface", () => {
     assert.doesNotMatch(markup, /data-testid="story-player-input"/);
     assert.doesNotMatch(markup, /剧情正在生成。/);
   });
+
+  it("distinguishes narration from dialogue in the normal game surface", () => {
+    const story = createStoryDetails({ beats: [{ ...createStoryDetails().beats[0], text: "她抬眼看向你：\"你来了。\"", speaker: "澪", kind: "dialogue" }] });
+    const markup = renderToStaticMarkup(<StoryGameSurface story={story} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+
+    assert.match(markup, /data-story-fragment-kind="narration"/);
+    assert.match(markup, />旁白</);
+    assert.match(markup, /她抬眼看向你：/);
+    assert.doesNotMatch(markup, /data-testid="story-player-input"/);
+  });
 });
