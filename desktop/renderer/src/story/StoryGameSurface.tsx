@@ -66,7 +66,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
       </div>
 
       {dialogueVisible ? <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
-        <section className="pointer-events-auto border-t border-white/20 px-[clamp(20px,8vw,120px)] pb-[clamp(20px,4vh,40px)] pt-[clamp(32px,7vh,72px)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] backdrop-blur-xl backdrop-saturate-150" data-testid="story-dialogue-panel" style={{ backgroundColor: `color-mix(in srgb, ${background.theme.titleHighlight} 60%, transparent)` }}>
+        <section className="pointer-events-auto border-t border-white/20 px-[clamp(20px,8vw,120px)] pb-[clamp(20px,4vh,40px)] pt-[clamp(32px,7vh,72px)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] backdrop-blur-xl backdrop-saturate-150" data-testid="story-dialogue-panel" style={{ backgroundColor: `color-mix(in srgb, ${background.theme.titleHighlight} 40%, transparent)` }}>
           <div className="mx-auto max-w-6xl">
             <div className="max-w-4xl">
               {speakerName ? <div className="mb-2 flex items-center gap-3"><span aria-hidden="true" className="h-px w-8 bg-[#F4C29F]/70" /><h1 className="m-0 font-serif text-lg font-semibold tracking-wide text-[#F4C29F]">{speakerName}</h1></div> : null}

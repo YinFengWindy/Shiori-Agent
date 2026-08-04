@@ -28,7 +28,7 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /aria-label="查看剧情记录"/);
     assert.match(markup, /data-testid="story-dialogue-panel"/);
     assert.match(markup, /data-testid="story-dialogue-text"/);
-    assert.match(markup, /color-mix\(in srgb, rgba\(224,96,160,0.35\) 60%, transparent\)/);
+    assert.match(markup, /color-mix\(in srgb, rgba\(224,96,160,0.35\) 40%, transparent\)/);
     assert.match(markup, /backdrop-blur-xl/);
     assert.match(markup, /backdrop-saturate-150/);
     assert.doesNotMatch(markup, /rgba\(13,20,25/);
