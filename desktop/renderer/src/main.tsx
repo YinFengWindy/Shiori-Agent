@@ -38,6 +38,7 @@ import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalD
 import { useImageStudioState } from "./image/useImageStudioState";
 import { type PromptTagWorkspaceSectionId } from "./image/PromptTagWorkspaceSidebar";
 import { createRoleFormFromRole } from "./roles/roleFormState";
+import { useRoleDifferenceGeneration } from "./roles/useRoleDifferenceGeneration";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { useRoleFormAdapters } from "./roles/useRoleFormAdapters";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
@@ -421,6 +422,17 @@ function App(): React.ReactElement {
     roleAssetSaveRequestIdRef,
   });
 
+  const roleDifferenceGeneration = useRoleDifferenceGeneration({
+    roleId: detailRoleId,
+    onRoleUpdated: (updated) => {
+      setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
+      if (updated.id === detailRoleId) {
+        applyRoleSnapshot(updated);
+        setNotice("角色差分已生成并加入素材库。");
+      }
+    },
+  });
+
   const {
     openRoleDetail,
     openRoleAssets,
@@ -596,6 +608,8 @@ function App(): React.ReactElement {
       onSelectAvatarAsset={setSelectedAvatarAsset}
       onSelectChatBackground={setSelectedChatBackground}
       onSaveRoleAssets={(nextSelection) => void saveRoleAssets(nextSelection)}
+      differenceGeneration={roleDifferenceGeneration.state}
+      onGenerateDifferences={(baseAsset) => void roleDifferenceGeneration.generate(baseAsset)}
       onSettingsMetaChange={({ configPath, dirty }) => {
         setSettingsConfigPath(configPath);
         setSettingsDirty(dirty);

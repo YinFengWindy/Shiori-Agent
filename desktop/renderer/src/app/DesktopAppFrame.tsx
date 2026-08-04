@@ -155,6 +155,8 @@ type DesktopAppFrameProps = {
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;
   onSaveRoleAssets: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
+  differenceGeneration: import("../roles/roleDifferenceGeneration").RoleDifferenceGenerationState;
+  onGenerateDifferences: (baseAsset: string) => void;
   onSettingsMetaChange: (meta: { configPath: string; dirty: boolean }) => void;
   showSearchDialog: boolean;
   searchQuery: string;
@@ -288,6 +290,8 @@ export function DesktopAppFrame({
   onSelectAvatarAsset,
   onSelectChatBackground,
   onSaveRoleAssets,
+  differenceGeneration,
+  onGenerateDifferences,
   onSettingsMetaChange,
   showSearchDialog,
   searchQuery,
@@ -549,6 +553,8 @@ export function DesktopAppFrame({
               onSelectChatBackground={onSelectChatBackground}
               onUpdateRoleForm={onUpdateRoleForm}
               onSaveSelections={onSaveRoleAssets}
+              differenceGeneration={differenceGeneration}
+              onGenerateDifferences={onGenerateDifferences}
             />
           ) : null}
           {mainView.kind === "settings" ? (

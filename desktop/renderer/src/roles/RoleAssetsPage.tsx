@@ -8,6 +8,8 @@ import { applyMoodToIllustration, getMoodForIllustration } from "./roleMoodBindi
 import { RoleMoodBindingsPanel } from "./RoleMoodBindingsPanel";
 import { RoleAssetCategoryGroups } from "./RoleAssetCategoryGroups";
 import { RolePetPackagesPanel } from "./RolePetPackagesPanel";
+import { RoleDifferenceGenerationPanel } from "./RoleDifferenceGenerationPanel";
+import type { RoleDifferenceGenerationState } from "./roleDifferenceGeneration";
 
 type RoleAssetsPageProps = {
   activeRole: RoleRecord | null;
@@ -31,6 +33,8 @@ type RoleAssetsPageProps = {
     removedIllustrations?: string[],
   ) => Promise<boolean>;
   onSaveSelections: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
+  differenceGeneration: RoleDifferenceGenerationState;
+  onGenerateDifferences: (baseAsset: string) => void;
 };
 
 export function RoleAssetsPage({
@@ -51,6 +55,8 @@ export function RoleAssetsPage({
   onUpdateRoleForm,
   onUpdateAssetOrganization,
   onSaveSelections,
+  differenceGeneration,
+  onGenerateDifferences,
 }: RoleAssetsPageProps) {
   const assetPairs = (activeRole?.illustrations ?? []).map((relPath, index) => ({
     relPath,
@@ -67,6 +73,13 @@ export function RoleAssetsPage({
   const selectedMoodAssetPath = selectionMode === "mood-binding" ? selectedMoodAsset : "";
   const selectedMoodAssetPair = assetPairs.find((item) => item.relPath === selectedMoodAssetPath) ?? null;
   const selectedMood = getMoodForIllustration(selectedMoodAssetPath, roleForm.moodIllustrationBindings);
+
+  function switchSelectionMode(nextMode: "avatar" | "chat-background" | "mood-binding"): void {
+    if (nextMode === "mood-binding" && !selectedMoodAsset && selectedAssetPath) {
+      setSelectedMoodAsset(selectedAssetPath);
+    }
+    setSelectionMode(nextMode);
+  }
 
   function saveSingleSelection(mode: "avatar" | "chat-background", nextPath: string): void {
     if (mode === "avatar") {
@@ -189,7 +202,7 @@ export function RoleAssetsPage({
                         selectionMode === "avatar" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
                       )}
                       type="button"
-                      onClick={() => setSelectionMode("avatar")}
+                      onClick={() => switchSelectionMode("avatar")}
                     >
                       头像
                     </button>
@@ -200,7 +213,7 @@ export function RoleAssetsPage({
                         selectionMode === "chat-background" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
                       )}
                       type="button"
-                      onClick={() => setSelectionMode("chat-background")}
+                      onClick={() => switchSelectionMode("chat-background")}
                     >
                       立绘
                     </button>
@@ -211,20 +224,28 @@ export function RoleAssetsPage({
                         selectionMode === "mood-binding" ? "bg-[#272536] text-white shadow-[0_6px_16px_rgba(39,37,54,0.18)]" : "text-[#5B6472] hover:text-[#272536]",
                       )}
                       type="button"
-                      onClick={() => setSelectionMode("mood-binding")}
+                      onClick={() => switchSelectionMode("mood-binding")}
                     >
                       差分
                     </button>
                   </div>
                 </div>
                 {selectionMode === "mood-binding" ? (
-                  <RoleMoodBindingsPanel
-                    selectedAssetPath={selectedMoodAssetPath}
-                    selectedAssetAbsPath={selectedMoodAssetPair?.absPath ? toFileUrl(selectedMoodAssetPair.absPath) : ""}
-                    selectedMood={selectedMood}
-                    onSaveMoodBinding={saveMoodBinding}
-                    onClearSelectedAsset={() => setSelectedMoodAsset("")}
-                  />
+                  <div className="flex min-h-0 flex-1 flex-col">
+                    <RoleDifferenceGenerationPanel
+                      baseAssetPath={selectedMoodAssetPath}
+                      bridgeReady={bridgeReady}
+                      state={differenceGeneration}
+                      onGenerate={() => onGenerateDifferences(selectedMoodAssetPath)}
+                    />
+                    <RoleMoodBindingsPanel
+                      selectedAssetPath={selectedMoodAssetPath}
+                      selectedAssetAbsPath={selectedMoodAssetPair?.absPath ? toFileUrl(selectedMoodAssetPair.absPath) : ""}
+                      selectedMood={selectedMood}
+                      onSaveMoodBinding={saveMoodBinding}
+                      onClearSelectedAsset={() => setSelectedMoodAsset("")}
+                    />
+                  </div>
                 ) : selectedAsset ? (
                   selectionMode === "avatar" ? (
                     <div className="relative grid min-h-[360px] flex-1 place-items-center rounded-[20px] bg-white p-8">
