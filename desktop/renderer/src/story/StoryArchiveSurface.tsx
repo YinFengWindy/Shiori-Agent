@@ -21,7 +21,7 @@ export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BAC
   }, [story.beats.length]);
 
   return (
-    <section className={`relative h-full min-h-0 overflow-hidden text-[#252A27] ${sharedBackdrop ? "bg-transparent" : "bg-[#1D1520]"}`} data-testid="story-archive-surface">
+    <section className={`relative h-full min-h-0 overflow-hidden text-white ${sharedBackdrop ? "bg-transparent" : "bg-[#1D1520]"}`} data-testid="story-archive-surface">
       {sharedBackdrop ? null : <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-archive-backdrop" style={{ backgroundImage: `url(${background.url})` }} />}
       <div aria-hidden="true" className={`absolute inset-0 bg-[#F1F4F2]/82 ${sharedBackdrop ? "" : "backdrop-blur-sm"}`} />
       <div className="relative z-10 grid h-full min-h-0 grid-rows-[minmax(0,1fr)]">
@@ -30,13 +30,13 @@ export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BAC
         </div>
         <div className="min-h-0 overflow-y-auto px-5 py-8">
         <main className="mx-auto grid max-w-3xl gap-8">
-          <header className="border-b border-[#CCD3CE] pb-4"><p className="m-0 text-xs text-[#727A75]">剧情记录</p><h1 className="m-0 mt-1 font-serif text-2xl font-semibold">{story.title}</h1><p className="m-0 mt-2 whitespace-pre-wrap text-sm leading-6 text-[#5D6C63]">{story.background}</p><p className="m-0 mt-3 text-xs text-[#727A75]" data-testid="story-current-time">当前时段：<strong className="font-medium text-[#53675B]">{story.currentTimeBand}</strong></p></header>
+          <header className="border-b border-white/25 pb-4"><p className="m-0 text-xs text-white/70">剧情记录</p><h1 className="m-0 mt-1 font-serif text-2xl font-semibold text-white">{story.title}</h1><p className="m-0 mt-2 whitespace-pre-wrap text-sm leading-6 text-white/80">{story.background}</p><p className="m-0 mt-3 text-xs text-white/70" data-testid="story-current-time">当前时段：<strong className="font-medium text-white">{story.currentTimeBand}</strong></p></header>
           <ol className="m-0 grid list-none gap-0 border-l border-[#B9C3BC] pl-7">
             {story.beats.map((beat, index) => (
               <li key={beat.id} ref={index === story.beats.length - 1 ? latestBeatRef : undefined} className="relative pb-7">
                 <span className={`absolute -left-[33px] top-1 h-3 w-3 rounded-full border-2 border-[#F1F4F2] ${beat.kind === "dialogue" ? "bg-[#A75F41]" : "bg-[#66766C]"}`} />
-                <p className="m-0 mb-1 text-xs text-[#727A75]">{beat.timeBand}{beat.speaker ? ` · ${beat.speaker}` : ""}</p>
-                <p className="m-0 whitespace-pre-wrap font-serif text-base leading-7 text-[#3B423E]">{beat.text}</p>
+                <p className="m-0 mb-1 text-xs text-white/70">{beat.timeBand}{beat.speaker ? ` · ${beat.speaker}` : ""}</p>
+                <p className="m-0 whitespace-pre-wrap font-serif text-base leading-7 text-white">{beat.text}</p>
               </li>
             ))}
           </ol>
