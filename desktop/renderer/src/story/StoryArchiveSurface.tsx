@@ -1,14 +1,17 @@
 import { ArrowRight, Gear, SignOut } from "@phosphor-icons/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { canSubmitStoryInput } from "./selectors";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
+import { STORY_SURFACE_BACKDROP_FADE_SECONDS } from "./StorySurface";
 import type { StoryDetails } from "./types";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StoryArchiveSurfaceProps = {
   story: StoryDetails;
   background?: StoryMenuBackground;
+  sharedBackdrop?: boolean;
   busy: boolean;
   error: string;
   onSubmitInput: (content: string) => Promise<boolean>;
@@ -17,7 +20,8 @@ type StoryArchiveSurfaceProps = {
 };
 
 /** Renders the immutable Story beat history and its input lane. */
-export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, busy, error, onSubmitInput, onOpenSettings, onExit }: StoryArchiveSurfaceProps) {
+export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, busy, error, onSubmitInput, onOpenSettings, onExit }: StoryArchiveSurfaceProps) {
+  const reducedMotion = useReducedMotion() ?? false;
   const [input, setInput] = useState("");
   const latestBeatRef = useRef<HTMLLIElement | null>(null);
   const canSubmit = canSubmitStoryInput(story) && !busy && Boolean(input.trim());
@@ -32,9 +36,15 @@ export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BAC
   }
 
   return (
-    <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520] text-[#252A27]" data-testid="story-archive-surface">
-      <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-archive-backdrop" style={{ backgroundImage: `url(${background.url})` }} />
-      <div aria-hidden="true" className="absolute inset-0 bg-[#F1F4F2]/82 backdrop-blur-sm" />
+    <section className={`relative h-full min-h-0 overflow-hidden text-[#252A27] ${sharedBackdrop ? "bg-transparent" : "bg-[#1D1520]"}`} data-testid="story-archive-surface">
+      {sharedBackdrop ? null : <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-archive-backdrop" style={{ backgroundImage: `url(${background.url})` }} />}
+      <motion.div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[#F1F4F2]/82 backdrop-blur-sm"
+        initial={sharedBackdrop && !reducedMotion ? { opacity: 0 } : false}
+        animate={sharedBackdrop && !reducedMotion ? { opacity: 1 } : undefined}
+        transition={{ duration: sharedBackdrop && !reducedMotion ? STORY_SURFACE_BACKDROP_FADE_SECONDS : 0, ease: "easeOut" }}
+      />
       <div className="relative z-10 grid h-full min-h-0 grid-rows-[minmax(0,1fr)]">
         <div className="pointer-events-none absolute right-5 top-5 z-10 flex gap-2">
         <button className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md text-[#5D6C63] transition-colors hover:bg-white/75 hover:text-[#35433A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C8D82]/35" type="button" aria-label="剧情设置" title="剧情设置" onClick={onOpenSettings}><Gear /></button>

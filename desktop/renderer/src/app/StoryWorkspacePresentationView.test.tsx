@@ -30,13 +30,17 @@ function render(mode: StoryPresentationMode) {
 describe("StoryWorkspacePresentationView", () => {
   it("uses the visual-novel stage for an active Story", () => {
     const markup = render("game");
+    assert.match(markup, /data-testid="story-workspace-backdrop"/);
     assert.match(markup, /data-testid="story-game-surface"/);
+    assert.doesNotMatch(markup, /data-testid="story-game-backdrop"/);
+    assert.ok(markup.indexOf("story-workspace-backdrop") < markup.indexOf("story-game-surface"));
     assert.doesNotMatch(markup, /world-day-surface|world-workspace/);
   });
 
   it("uses the direct Story archive for history", () => {
     const markup = render("archive");
     assert.match(markup, /data-testid="story-archive-surface"/);
+    assert.doesNotMatch(markup, /data-testid="story-archive-backdrop"/);
   });
 
   it("uses a full-screen Story surface for saved Stories", () => {

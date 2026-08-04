@@ -1,6 +1,7 @@
+import type { ReactNode } from "react";
 import type { RoleRecord } from "../shared/types";
 import { toFileUrl } from "../shared/format";
-import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadList, StoryLoadingScreen, StorySettings } from "../story";
+import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadList, StoryLoadingScreen, StorySettings, StoryWorkspaceBackdrop } from "../story";
 import { StoryCgGallerySurface } from "../story";
 import { useStoryMenuBackground } from "../story/useStoryMenuBackground";
 import type { useStoryController } from "../story/useStoryController";
@@ -52,31 +53,28 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
     avatarUrl: role.avatar_abs ? toFileUrl(role.avatar_abs) : undefined,
   }));
 
+  let content: ReactNode;
   if (mode === "launcher" && controller.loading) {
-    return <StoryLoadingScreen background={storyMenuBackground} mode="listing" phase={controller.loadingPhase} error={error} onRetry={() => void controller.reloadStories()} />;
-  }
-  if (mode === "launcher") {
-    return <StoryLauncher background={storyMenuBackground} busy={busy} error={error} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenCg={onOpenCg} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
-  }
-  if (mode === "load") {
-    return <StoryLoadList stories={controller.stories} background={storyMenuBackground} busy={busy} error={error} onBack={() => setMode("launcher")} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} />;
-  }
-  if (mode === "loading") {
+    content = <StoryLoadingScreen background={storyMenuBackground} sharedBackdrop mode="listing" phase={controller.loadingPhase} error={error} onRetry={() => void controller.reloadStories()} />;
+  } else if (mode === "launcher") {
+    content = <StoryLauncher background={storyMenuBackground} sharedBackdrop busy={busy} error={error} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenCg={onOpenCg} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
+  } else if (mode === "load") {
+    content = <StoryLoadList stories={controller.stories} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} onBack={() => setMode("launcher")} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} />;
+  } else if (mode === "loading") {
     const backgroundReady = story?.id === loadingStoryId && story.backgroundResource?.status !== "generating";
-    return <StoryLoadingScreen background={storyMenuBackground} mode="story" phase={loadingPhase} busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} />;
+    content = <StoryLoadingScreen background={storyMenuBackground} sharedBackdrop mode="story" phase={loadingPhase} busy={busy} error={error} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} />;
+  } else if (mode === "gallery") {
+    content = <StoryCgGallerySurface stories={cgGallery} background={storyMenuBackground} sharedBackdrop busy={cgGalleryLoading || busy} error={error} onRetry={onRetryCg} onBack={() => setMode("launcher")} />;
+  } else if (mode === "settings") {
+    content = <StorySettings background={storyMenuBackground} sharedBackdrop onBack={onCloseSettings} />;
+  } else if (mode === "create" || !story) {
+    content = <StoryCreateFlow roles={storyRoles} background={storyMenuBackground} sharedBackdrop busy={operation.busy} error={error} onBack={() => setMode("launcher")} onCreate={creation.createStory} />;
+  } else if (mode === "archive") {
+    content = <StoryArchiveSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} onSubmitInput={controller.submitInput} onOpenSettings={() => onOpenSettings("archive")} onExit={() => setMode("launcher")} />;
+  } else {
+    const storyCharacter = roles.find((role) => role.id === story.roleSnapshot.id);
+    content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={storyCharacter?.avatar_abs ? toFileUrl(storyCharacter.avatar_abs) : undefined} onSubmitInput={controller.submitInput} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
   }
-  if (mode === "gallery") {
-    return <StoryCgGallerySurface stories={cgGallery} background={storyMenuBackground} busy={cgGalleryLoading || busy} error={error} onRetry={onRetryCg} onBack={() => setMode("launcher")} />;
-  }
-  if (mode === "settings") {
-    return <StorySettings background={storyMenuBackground} onBack={onCloseSettings} />;
-  }
-  if (mode === "create" || !story) {
-    return <StoryCreateFlow roles={storyRoles} background={storyMenuBackground} busy={operation.busy} error={error} onBack={() => setMode("launcher")} onCreate={creation.createStory} />;
-  }
-  if (mode === "archive") {
-    return <StoryArchiveSurface story={story} background={storyMenuBackground} busy={busy} error={error} onSubmitInput={controller.submitInput} onOpenSettings={() => onOpenSettings("archive")} onExit={() => setMode("launcher")} />;
-  }
-  const storyCharacter = roles.find((role) => role.id === story.roleSnapshot.id);
-  return <StoryGameSurface story={story} background={storyMenuBackground} busy={busy} error={error} characterAvatarUrl={storyCharacter?.avatar_abs ? toFileUrl(storyCharacter.avatar_abs) : undefined} onSubmitInput={controller.submitInput} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
+
+  return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation"><StoryWorkspaceBackdrop background={storyMenuBackground} /><div className="relative z-10 h-full min-h-0">{content}</div></section>;
 }

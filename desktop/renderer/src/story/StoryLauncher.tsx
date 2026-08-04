@@ -5,6 +5,7 @@ import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StoryLauncherProps = {
   background?: StoryMenuBackground;
+  sharedBackdrop?: boolean;
   busy?: boolean;
   error?: string;
   onCreateStory: () => void;
@@ -15,8 +16,8 @@ type StoryLauncherProps = {
 };
 
 /** Renders the cinematic Story title screen and its command rail. */
-export function StoryLauncher({ background = DEFAULT_STORY_MENU_BACKGROUND, busy = false, error = "", onCreateStory, onOpenLoad, onOpenCg, onOpenSettings, onExit }: StoryLauncherProps) {
-  return <StoryMenuScene background={background} dataTestId="story-launcher">{({ reducedMotion, theme }) => <>
+export function StoryLauncher({ background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, busy = false, error = "", onCreateStory, onOpenLoad, onOpenCg, onOpenSettings, onExit }: StoryLauncherProps) {
+  return <StoryMenuScene background={background} sharedBackdrop={sharedBackdrop} dataTestId="story-launcher">{({ reducedMotion, theme }) => <>
     <div className="absolute right-[clamp(20px,5vw,72px)] top-1/2 z-10 w-[min(18rem,calc(100%-40px))] -translate-y-1/2">
       <div data-testid="story-menu-theme" style={{ filter: theme.commandFilter }}>
         <StoryMainMenu busy={busy} reducedMotion={reducedMotion} onCreateStory={onCreateStory} onOpenLoad={onOpenLoad} onOpenCg={onOpenCg} onOpenSettings={onOpenSettings} onExit={onExit} />

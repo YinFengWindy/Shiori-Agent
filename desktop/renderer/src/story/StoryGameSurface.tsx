@@ -2,6 +2,7 @@ import { ArrowRight, BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
 import { useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { toFileUrl } from "../shared/format";
+import { cx } from "../shared/styles";
 import { canSubmitStoryInput } from "./selectors";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
 import type { StoryDetails } from "./types";
@@ -10,6 +11,7 @@ import type { StoryMenuBackground } from "./useStoryMenuBackground";
 type StoryGameSurfaceProps = {
   story: StoryDetails;
   background?: StoryMenuBackground;
+  sharedBackdrop?: boolean;
   busy: boolean;
   error: string;
   characterAvatarUrl?: string;
@@ -20,12 +22,13 @@ type StoryGameSurfaceProps = {
 };
 
 /** Renders the active Story as a visual-novel stage while the Day view remains an archive. */
-export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, busy, error, characterAvatarUrl, onSubmitInput, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
+export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, busy, error, characterAvatarUrl, onSubmitInput, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
   const [action, setAction] = useState("");
   const latestBeat = story.beats[story.beats.length - 1] ?? null;
-  const backgroundUrl = story.backgroundResource?.status === "ready" && story.backgroundResource.path
-    ? toFileUrl(story.backgroundResource.path)
-    : background.url;
+  const storyBackgroundPath = story.backgroundResource?.status === "ready" ? story.backgroundResource.path : undefined;
+  const hasStoryBackground = Boolean(storyBackgroundPath);
+  const backgroundUrl = storyBackgroundPath ? toFileUrl(storyBackgroundPath) : background.url;
+  const renderLocalBackdrop = !sharedBackdrop || hasStoryBackground;
   const speakerName = latestBeat?.speaker ?? "";
   const visibleText = latestBeat?.text || story.background;
   const canSubmit = canSubmitStoryInput(story) && !busy && Boolean(action.trim());
@@ -36,8 +39,8 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   }
 
   return (
-    <section className="relative h-full min-h-0 overflow-hidden bg-[#172128] text-white" data-testid="story-game-surface">
-      <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-game-backdrop" style={{ backgroundImage: `url(${backgroundUrl})` }} />
+    <section className={cx("relative h-full min-h-0 overflow-hidden text-white", renderLocalBackdrop ? "bg-[#172128]" : "bg-transparent")} data-testid="story-game-surface">
+      {renderLocalBackdrop ? <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-game-backdrop" style={{ backgroundImage: `url(${backgroundUrl})` }} /> : null}
       <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-2/3 bg-[linear-gradient(0deg,rgba(13,20,25,0.9),rgba(13,20,25,0.35)_44%,transparent)]" />
       {characterAvatarUrl ? <img className="pointer-events-none absolute bottom-[clamp(10rem,20vh,15rem)] right-[clamp(4vw,10vw,12rem)] z-10 h-[min(64vh,42rem)] max-w-[42vw] object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]" src={characterAvatarUrl} alt="" /> : null}
 

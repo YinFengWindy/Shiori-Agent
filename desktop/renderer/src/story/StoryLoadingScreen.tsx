@@ -5,6 +5,7 @@ import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StoryLoadingScreenProps = {
   background?: StoryMenuBackground;
+  sharedBackdrop?: boolean;
   mode: StoryLoadingMode;
   phase: StoryLoadingPhase;
   busy?: boolean;
@@ -16,12 +17,12 @@ type StoryLoadingScreenProps = {
 };
 
 /** Renders the Story entry and save-loading transition without a spinner. */
-export function StoryLoadingScreen({ background = DEFAULT_STORY_MENU_BACKGROUND, mode, phase, busy = true, error = "", elapsedMs = 250, loaded = 0, total = 0, onRetry }: StoryLoadingScreenProps) {
+export function StoryLoadingScreen({ background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, mode, phase, busy = true, error = "", elapsedMs = 250, loaded = 0, total = 0, onRetry }: StoryLoadingScreenProps) {
   const copy = resolveStoryLoadingCopy(mode, phase);
   const presentation = resolveStoryLoadingPresentation({ elapsedMs, loaded, total });
   const complete = copy.activeStage >= copy.stages.length;
 
-  return <StoryMenuScene background={background} dataTestId="story-loading-screen" ariaBusy={busy} showTitle={false} animateEntrance={false}>{({ theme }) => <>
+  return <StoryMenuScene background={background} sharedBackdrop={sharedBackdrop} dataTestId="story-loading-screen" ariaBusy={busy} showTitle={false} animateEntrance={false}>{({ theme }) => <>
     <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02)_48%,rgba(40,20,33,0.16))]" />
     <main className="absolute right-[clamp(20px,5vw,72px)] top-1/2 z-10 w-[min(22rem,calc(100%-40px))] -translate-y-1/2" aria-label={copy.railLabel} data-testid="story-loading-rail">
       <div style={{ filter: theme.commandFilter }}>

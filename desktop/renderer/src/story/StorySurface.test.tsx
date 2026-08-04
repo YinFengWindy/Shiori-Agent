@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { STORY_SURFACE_BACKDROP_TRANSITION_SECONDS, StorySurface } from "./StorySurface";
+import { STORY_SURFACE_BACKDROP_FADE_SECONDS, STORY_SURFACE_BACKDROP_TRANSITION_SECONDS, StorySurface } from "./StorySurface";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 const resolvedBackground: StoryMenuBackground = {
@@ -37,5 +37,11 @@ describe("StorySurface", () => {
 
   it("keeps secondary-page backdrop entrance shorter than the launcher entrance", () => {
     assert.equal(STORY_SURFACE_BACKDROP_TRANSITION_SECONDS, 0.7);
+  });
+
+  it("fades the shared blur layer in during secondary-page entry", () => {
+    const markup = renderToStaticMarkup(<StorySurface sharedBackdrop dataTestId="story-test" panelTestId="story-test-panel"><div>内容</div></StorySurface>);
+    assert.match(markup, /backdrop-blur-xl/);
+    assert.equal(STORY_SURFACE_BACKDROP_FADE_SECONDS, 0.36);
   });
 });
