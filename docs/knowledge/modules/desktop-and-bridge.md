@@ -2,7 +2,7 @@
 title: 桌面端与桥接
 kind: 领域说明
 status: 当前有效
-last_verified_commit: c2877183
+last_verified_commit: d927e08e
 source_paths:
   - desktop/src/
   - desktop/renderer/src/
