@@ -37,6 +37,23 @@ describe("buildStoryArchiveDays", () => {
     assert.deepEqual(days[1]?.periods.map((period) => period.timeBand), ["夜晚"]);
   });
 
+  it("splits mixed narrative and quoted dialogue into separate archive entries", () => {
+    const story = createStoryDetails({
+      beats: [createStoryBeat({
+        kind: "dialogue",
+        speaker: "吟风",
+        text: "她抬眼看向你，耳尖悄悄染上一抹粉：\"哼……算你有眼光。\"",
+      })],
+    });
+
+    const entries = buildStoryArchiveDays(story)[0]?.periods[0]?.entries ?? [];
+
+    assert.deepEqual(entries.map(({ kind, label, text }) => ({ kind, label, text })), [
+      { kind: "narration", label: "旁白", text: "她抬眼看向你，耳尖悄悄染上一抹粉：" },
+      { kind: "dialogue", label: "吟风", text: "\"哼……算你有眼光。\"" },
+    ]);
+  });
+
   it("does not show uncommitted or input-less turns", () => {
     const story = createStoryDetails({
       turns: [
