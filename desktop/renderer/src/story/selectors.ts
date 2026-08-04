@@ -1,4 +1,4 @@
-import type { StoryBeat, StoryDetails, StoryOperation, StorySummary } from "./types";
+import type { StoryBeat, StoryCgGallery, StoryDetails, StoryOperation, StorySummary } from "./types";
 
 /** Returns a launcher Story by id without creating a synthetic fallback. */
 export function selectStory(stories: StorySummary[], storyId: string) {
@@ -15,6 +15,23 @@ export function replaceStorySummary(stories: StorySummary[], story: StoryDetails
   return stories.map((candidate, candidateIndex) => candidateIndex === index
     ? { ...candidate, title: story.title, status: story.status, currentTimeBand }
     : candidate);
+}
+
+/** Applies the authoritative Story read model returned by a visual-resource retry. */
+export function replaceStoryGallery(galleries: StoryCgGallery[], story: StoryDetails) {
+  const index = galleries.findIndex((gallery) => gallery.storyId === story.id);
+  if (index < 0) return galleries;
+  const current = galleries[index];
+  const items = story.cgGallery;
+  if (
+    current.title === story.title
+    && current.status === story.status
+    && current.items.length === items.length
+    && current.items.every((item, itemIndex) => item === items[itemIndex])
+  ) return galleries;
+  return galleries.map((gallery, galleryIndex) => galleryIndex === index
+    ? { ...gallery, title: story.title, status: story.status, items }
+    : gallery);
 }
 
 /** Maps the current segment operation to the player-facing status. */

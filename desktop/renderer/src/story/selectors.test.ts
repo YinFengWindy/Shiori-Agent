@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { canShowStoryInput, canSubmitStoryInput, getStoryStatusLabel, mergeStoryBeats, replaceStorySummary } from "./selectors";
+import { canShowStoryInput, canSubmitStoryInput, getStoryStatusLabel, mergeStoryBeats, replaceStoryGallery, replaceStorySummary } from "./selectors";
 import { createStoryBeat, createStoryDetails, createStorySummary } from "./testFixtures";
 
 describe("Story selectors", () => {
@@ -32,5 +32,26 @@ describe("Story selectors", () => {
     assert.equal(updated[0].status, "archived");
     assert.equal(updated[0].currentTimeBand, "夜晚");
     assert.equal(getStoryStatusLabel("awaiting_player"), "轮到你了");
+  });
+
+  it("applies the retry response to the visible CG gallery immediately", () => {
+    const failedResource = {
+      id: "resource-1",
+      storyId: "story-1",
+      kind: "cg" as const,
+      status: "failed" as const,
+      path: null,
+      prompt: "rainy school gate",
+      sourceTurnId: "turn-2",
+      sequence: 1,
+      errorCode: "resource_generation_failed",
+      createdAt: "2026-08-02T10:00:00+08:00",
+      updatedAt: "2026-08-02T10:00:00+08:00",
+    };
+    const retryingResource = { ...failedResource, status: "generating" as const, errorCode: null };
+    const story = createStoryDetails({ cgGallery: [retryingResource] });
+    const current = [{ ...createStorySummary(), items: [failedResource] }];
+
+    assert.equal(replaceStoryGallery(current, story)[0].items[0].status, "generating");
   });
 });

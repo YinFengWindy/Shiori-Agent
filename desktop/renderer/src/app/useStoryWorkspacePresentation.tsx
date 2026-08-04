@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { RoleRecord } from "../shared/types";
 import type { StoryBridgeClient } from "../story/storyBridgeClient";
 import type { StoryCgGallery } from "../story/types";
+import { replaceStoryGallery } from "../story/selectors";
 import type { useStoryController } from "../story/useStoryController";
 import { waitForMinimumStoryLoadingStage, waitForStoryLoadingCompletion } from "../story/storyLoadingPresentation";
 import { useStoryCreationFlowController } from "./useStoryCreationFlowController";
@@ -94,9 +95,9 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
   const retryCg = useCallback((storyId: string, resourceId: string) => {
     void run(
       () => client.retryCg(storyId, resourceId),
-      refreshCgGallery,
+      (story) => setCgGallery((current) => replaceStoryGallery(current, story)),
     );
-  }, [client, refreshCgGallery, run]);
+  }, [client, run]);
 
   return {
     content: <StoryWorkspacePresentationView roles={roles} mode={mode} loadingStoryId={loadingStoryId} loadingElapsedMs={loadingElapsedMs} loadingPhase={loadingPhase} cgGallery={cgGallery} cgGalleryLoading={cgGalleryLoading} controller={controller} operation={operation} creation={creation} setMode={setMode} loadStoryForPlay={loadStoryForPlay} onOpenCg={openCgGallery} onRetryCg={retryCg} onOpenSettings={openSettings} onCloseSettings={closeSettings} onExit={onExit} />,
