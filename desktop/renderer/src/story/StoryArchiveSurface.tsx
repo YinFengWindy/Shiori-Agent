@@ -33,20 +33,20 @@ export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BAC
         </div>
         <div className="min-h-0 overflow-y-auto px-5 py-8">
         <main className="mx-auto grid max-w-3xl gap-8">
-          <header className="border-b border-white/25 pb-4"><p className="m-0 text-xs text-white/70">剧情记录</p><h1 className="m-0 mt-1 font-serif text-2xl font-semibold text-white">{story.title}</h1><p className="m-0 mt-2 whitespace-pre-wrap text-sm leading-6 text-white/80">{story.background}</p></header>
+          <header className="border-b border-white/25 pb-4"><p className="story-archive-readable m-0 text-xs text-white/70">剧情记录</p><h1 className="story-archive-readable m-0 mt-1 text-2xl font-semibold text-white">{story.title}</h1><p className="story-archive-readable m-0 mt-2 whitespace-pre-wrap text-sm leading-6 text-white/80">{story.background}</p></header>
           <div className="grid gap-10">
             {archiveDays.map((day) => (
               <section key={day.key} data-testid="story-archive-day">
-                <h2 className="m-0 font-serif text-2xl font-semibold text-white">{day.label}</h2>
+                <h2 className="story-archive-readable m-0 text-2xl font-semibold text-white">{day.label}</h2>
                 <div className="mt-5 grid gap-7">
                   {day.periods.map((period) => (
                     <section key={`${day.key}:${period.timeBand}`} data-testid="story-archive-period">
-                      <h3 className="m-0 border-b border-white/20 pb-2 text-sm font-semibold tracking-[0.16em] text-white/80">{period.timeBand}</h3>
+                      <h3 className="story-archive-readable m-0 border-b border-white/20 pb-2 text-sm font-semibold tracking-[0.16em] text-white/80">{period.timeBand}</h3>
                       <ol className="m-0 mt-3 grid list-none gap-3">
                         {period.entries.map((entry) => (
                           <li className={`rounded-md border-l-2 px-4 py-3 ${entry.kind === "player" ? "border-[#A7D4E8] bg-white/10" : entry.kind === "dialogue" ? "border-[#F4C29F] bg-white/5" : "border-dashed border-white/35 bg-transparent"}`} data-story-entry-kind={entry.kind} key={entry.id} ref={entry.id === lastEntryId ? latestEntryRef : undefined}>
-                            <p className="m-0 mb-1 text-xs font-medium tracking-wide text-white/75">{entry.label}</p>
-                            <p className="m-0 whitespace-pre-wrap font-serif text-base leading-7 text-white">{entry.text}</p>
+                            <p className="story-archive-readable m-0 mb-1 text-xs font-medium tracking-wide text-white/75">{entry.label}</p>
+                            <p className="story-archive-readable m-0 whitespace-pre-wrap text-base leading-7 text-white">{entry.text}</p>
                           </li>
                         ))}
                       </ol>
