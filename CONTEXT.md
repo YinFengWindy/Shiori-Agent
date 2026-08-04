@@ -2,7 +2,7 @@
 title: Shiori 项目上下文
 kind: Agent 入口
 status: 当前有效
-last_verified_commit: cab07f24
+last_verified_commit: 8c89787a
 source_paths:
   - main.py
   - bootstrap/
