@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+/** One value-label pair accepted by a Story segmented preference control. */
 export type StorySettingOption<T extends string> = {
   value: T;
   label: string;

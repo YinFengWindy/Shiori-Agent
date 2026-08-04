@@ -1,6 +1,9 @@
 import type { StoryDetails } from "./types";
 
+/** Player-facing Story periods accepted by creation and runtime read models. */
 export const STORY_TIME_BANDS = ["清晨", "上午", "下午", "夜晚", "深夜"] as const;
+
+/** Union of valid player-facing Story period labels. */
 export type StoryTimeBand = (typeof STORY_TIME_BANDS)[number];
 
 /** Validates a player-facing Story period without deriving it from a timestamp. */

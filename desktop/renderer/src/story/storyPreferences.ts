@@ -1,3 +1,4 @@
+/** Persisted renderer preferences controlling Story playback and presentation. */
 export type StoryPreferences = {
   textSpeed: "slow" | "normal" | "fast";
   showFullText: boolean;
@@ -14,6 +15,7 @@ export type StoryPreferences = {
 
 const storageKey = "shiori.story-preferences.v1";
 
+/** Baseline Story preferences used when storage is empty or invalid. */
 export const defaultStoryPreferences: StoryPreferences = {
   textSpeed: "normal",
   showFullText: false,

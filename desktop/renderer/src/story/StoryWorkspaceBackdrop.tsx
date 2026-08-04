@@ -9,6 +9,7 @@ type StoryWorkspaceBackdropProps = {
 /** Selects the blur strength for the current Story presentation surface. */
 export type StoryWorkspaceBackdropBlur = "none" | "surface" | "archive";
 
+/** Duration of the shared Story workspace blur transition. */
 export const STORY_WORKSPACE_BACKDROP_TRANSITION_SECONDS = 0.7;
 
 const backdropFilters: Record<StoryWorkspaceBackdropBlur, string> = {

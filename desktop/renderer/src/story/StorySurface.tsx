@@ -15,7 +15,11 @@ type StorySurfaceProps = {
 };
 
 const transition = { duration: 0.28, ease: "easeOut" } as const;
+
+/** Duration of the standalone Story surface backdrop entrance animation. */
 export const STORY_SURFACE_BACKDROP_TRANSITION_SECONDS = 0.7;
+
+/** Duration of the shared-backdrop fade used by Story surfaces. */
 export const STORY_SURFACE_BACKDROP_FADE_SECONDS = 0.7;
 
 /** Renders the shared Story backdrop, overlays, panel surface, and entrance motion. */

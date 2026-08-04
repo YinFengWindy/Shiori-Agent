@@ -1,3 +1,4 @@
+/** Visual state for the loading surface before the next Story route is mounted. */
 export type StoryLoadingPresentation =
   | { kind: "hidden" }
   | { kind: "transition" }
@@ -8,7 +9,11 @@ export type StoryLoadingMode = "listing" | "story";
 
 /** Real loading phases reported by the Story list and gameplay workflows. */
 export type StoryListingLoadingPhase = "reading-list" | "preparing-menu" | "menu-ready";
+
+/** Real loading phases reported while restoring one Story for gameplay. */
 export type StoryGameplayLoadingPhase = "reading-story" | "restoring-progress" | "preparing-opening" | "opening-ready";
+
+/** Union of loading phases accepted by the Story loading surface. */
 export type StoryLoadingPhase = StoryListingLoadingPhase | StoryGameplayLoadingPhase;
 
 /** Copy, accessibility labels, and progress semantics for one loading route. */

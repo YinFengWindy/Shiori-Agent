@@ -1,7 +1,9 @@
 import type { StoryCreationInput } from "./types";
 
+/** Ordered steps required before a Story creation request can be submitted. */
 export const creationSteps = ["role", "setting", "player", "review"] as const;
 
+/** Valid step identifiers used by the Story creation wizard. */
 export type CreationStep = (typeof creationSteps)[number];
 
 /** Creates the local form state accepted by stories.create. */
