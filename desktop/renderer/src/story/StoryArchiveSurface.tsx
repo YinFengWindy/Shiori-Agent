@@ -1,4 +1,4 @@
-import { Gear, SignOut } from "@phosphor-icons/react";
+import { ArrowLeft } from "@phosphor-icons/react";
 import { useLayoutEffect, useRef } from "react";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
 import type { StoryDetails } from "./types";
@@ -9,12 +9,11 @@ type StoryArchiveSurfaceProps = {
   background?: StoryMenuBackground;
   sharedBackdrop?: boolean;
   error: string;
-  onOpenSettings: () => void;
-  onExit: () => void;
+  onReturnToGame: () => void;
 };
 
 /** Renders the immutable Story beat history without exposing gameplay input controls. */
-export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, error, onOpenSettings, onExit }: StoryArchiveSurfaceProps) {
+export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, error, onReturnToGame }: StoryArchiveSurfaceProps) {
   const latestBeatRef = useRef<HTMLLIElement | null>(null);
 
   useLayoutEffect(() => {
@@ -27,8 +26,7 @@ export function StoryArchiveSurface({ story, background = DEFAULT_STORY_MENU_BAC
       <div aria-hidden="true" className={`absolute inset-0 bg-[#F1F4F2]/82 ${sharedBackdrop ? "" : "backdrop-blur-sm"}`} />
       <div className="relative z-10 grid h-full min-h-0 grid-rows-[minmax(0,1fr)]">
         <div className="pointer-events-none absolute right-5 top-5 z-10 flex gap-2">
-        <button className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md text-[#5D6C63] transition-colors hover:bg-white/75 hover:text-[#35433A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C8D82]/35" type="button" aria-label="剧情设置" title="剧情设置" onClick={onOpenSettings}><Gear /></button>
-        <button className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md text-[#5D6C63] transition-colors hover:bg-white/75 hover:text-[#35433A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C8D82]/35" type="button" aria-label="返回剧情列表" title="返回剧情列表" onClick={onExit}><SignOut /></button>
+        <button className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md text-[#5D6C63] transition-colors hover:bg-white/75 hover:text-[#35433A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7C8D82]/35" type="button" aria-label="返回游戏页" title="返回游戏页" onClick={onReturnToGame}><ArrowLeft /></button>
         </div>
         <div className="min-h-0 overflow-y-auto px-5 py-8">
         <main className="mx-auto grid max-w-3xl gap-8">

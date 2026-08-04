@@ -19,6 +19,7 @@ describe("StoryGameSurface", () => {
   it("renders the active Story as a visual-novel stage with dialogue and player input", () => {
     const markup = renderToStaticMarkup(<StoryGameSurface background={resolvedBackground} story={createStoryDetails()} busy={false} error="" characterAvatarUrl="shiori-asset://local/role" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /data-testid="story-game-surface"/);
+    assert.match(markup, /data-dialogue-visible="true"/);
     assert.match(markup, /url\(shiori-asset:\/\/local\/story-menu-random\.webp\)/);
     assert.match(markup, />你终于来了。</);
     assert.match(markup, /data-testid="story-current-time"/);

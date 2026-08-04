@@ -82,7 +82,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   } else if (mode === "create" || !story) {
     content = <StoryCreateFlow roles={storyRoles} background={storyMenuBackground} sharedBackdrop busy={operation.busy} error={error} onBack={() => setMode("launcher")} onCreate={creation.createStory} />;
   } else if (mode === "archive") {
-    content = <StoryArchiveSurface story={story} background={storyMenuBackground} sharedBackdrop error={error} onOpenSettings={() => onOpenSettings("archive")} onExit={() => setMode("launcher")} />;
+    content = <StoryArchiveSurface story={story} background={storyMenuBackground} sharedBackdrop error={error} onReturnToGame={() => setMode("game")} />;
   } else {
     const storyCharacter = roles.find((role) => role.id === story.roleSnapshot.id);
     content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={storyCharacter?.avatar_abs ? toFileUrl(storyCharacter.avatar_abs) : undefined} onSubmitInput={controller.submitInput} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
