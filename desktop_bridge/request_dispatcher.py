@@ -29,6 +29,7 @@ _INTEGRATION_METHODS = frozenset(
         "stories.input",
         "stories.continue",
         "stories.cg.retry",
+        "stories.cg.regenerate",
         "observation.analyze",
         "voice.synthesize",
         "voice.synthesize.cancel",

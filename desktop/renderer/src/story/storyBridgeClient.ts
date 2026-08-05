@@ -50,6 +50,7 @@ export interface StoryBridgeClient {
   continueStory(storyId: string): Promise<StoryDetails>;
   listCgGallery(): Promise<StoryCgGallery[]>;
   retryCg(storyId: string, resourceId: string): Promise<StoryDetails>;
+  regenerateCg(storyId: string, resourceId: string): Promise<StoryDetails>;
 }
 
 /** Creates the renderer client for the Story simulation bounded context. */
@@ -120,6 +121,13 @@ export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDeskt
     },
     async retryCg(storyId, resourceId) {
       const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.cg.retry", {
+        story_id: storyId,
+        resource_id: resourceId,
+      });
+      return rememberStory(payload.story);
+    },
+    async regenerateCg(storyId, resourceId) {
+      const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.cg.regenerate", {
         story_id: storyId,
         resource_id: resourceId,
       });

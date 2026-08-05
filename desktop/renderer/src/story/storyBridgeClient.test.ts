@@ -83,6 +83,18 @@ describe("createStoryBridgeClient", () => {
     assert.deepEqual(requests[1], { method: "stories.input", payload: { story_id: "story-1", input: "推开门。", expected_revision: 4 } });
   });
 
+  it("regenerates the selected Story CG", async () => {
+    const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
+    const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => {
+      requests.push(request);
+      return { id: "response", type: "response", method: request.method, payload: { story: storyPayload(5) }, error: null };
+    });
+
+    await client.regenerateCg("story-1", "resource-1");
+
+    assert.deepEqual(requests, [{ method: "stories.cg.regenerate", payload: { story_id: "story-1", resource_id: "resource-1" } }]);
+  });
+
   it("does not let an older read move the remembered revision backwards", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
     const older = deferred<BridgeResponse>();

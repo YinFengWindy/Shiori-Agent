@@ -276,6 +276,61 @@ async def test_failed_progression_cg_can_retry_without_creating_a_new_turn(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_ready_cg_regeneration_creates_a_new_visual_version(tmp_path) -> None:
+    role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: role),
+        director=ProgressionVisualDirector(),
+        image_tool=RecordingImageTool(),
+    )
+    payload = {
+        "title": "夏日来信",
+        "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
+        "time_band": "上午",
+        "role_id": "role-1",
+        "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
+    }
+
+    created = await handler.handle("stories.create", payload, request_id="create-1", emit_event=lambda _event: None)
+    story_id = created["story"]["id"]
+    for _ in range(8):
+        await asyncio.sleep(0)
+    opening = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-1", emit_event=lambda _event: None))["story"]
+    await handler.handle(
+        "stories.input",
+        {"story_id": story_id, "input": "和她一起走。", "expected_revision": opening["revision"]},
+        request_id="input-1",
+        emit_event=lambda _event: None,
+    )
+    for _ in range(12):
+        await asyncio.sleep(0)
+    before = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-2", emit_event=lambda _event: None))["story"]
+    original = before["cgGallery"][-1]
+
+    regenerated = await handler.handle(
+        "stories.cg.regenerate",
+        {"story_id": story_id, "resource_id": original["id"]},
+        request_id="regenerate-1",
+        emit_event=lambda _event: None,
+    )
+    replacement = regenerated["story"]["cgGallery"][-1]
+
+    assert len(regenerated["story"]["cgGallery"]) == len(before["cgGallery"]) + 1
+    assert replacement["id"] != original["id"]
+    assert replacement["kind"] == "cg"
+    assert replacement["visualType"] == "character"
+    assert replacement["prompt"] == original["prompt"]
+    assert replacement["status"] == "generating"
+    for _ in range(8):
+        await asyncio.sleep(0)
+    ready = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-3", emit_event=lambda _event: None))["story"]
+    assert ready["cgGallery"][-1]["status"] == "ready"
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
 async def test_failed_opening_keeps_story_without_a_visual_resource(tmp_path) -> None:
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
     handler = StorySimulationHandler(

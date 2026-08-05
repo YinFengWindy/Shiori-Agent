@@ -60,12 +60,23 @@ describe("StoryGameSurface", () => {
         { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "scene", status: "ready", path: "D:\\stories\\scene-1.png", prompt: "scene one", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
         { id: "resource-2", storyId: "story-1", kind: "cg", visualType: "character", status: "ready", path: "D:\\stories\\scene-2.png", prompt: "scene two", sourceTurnId: "turn-3", sequence: 2, errorCode: null, createdAt: "", updatedAt: "" },
       ],
-    })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    })} busy={false} error="" onSubmitInput={async () => true} onRegenerateCg={() => undefined} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.match(markup, /aria-label="重新生成当前 CG"/);
     assert.doesNotMatch(markup, /scene-1\.png/);
     assert.doesNotMatch(markup, /data-testid="story-game-character"/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
+  });
+
+  it("does not overlay the role difference while a CG is active", () => {
+    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
+      cgGallery: [
+        { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "scene", status: "ready", path: "D:\\stories\\scene.png", prompt: "girl feeding man", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
+      ],
+    })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+
+    assert.doesNotMatch(markup, /data-testid="story-game-character"/);
   });
 
   it("falls back to the shared Story background when no Story CG is ready", () => {

@@ -18,6 +18,7 @@ const controller: StoryWorkspacePresentationController = {
   busy: false,
   reloadStories: async () => undefined,
   submitInput: async () => true,
+  regenerateCg: async () => true,
 };
 
 const operation: StoryOperationPresentationController = { error: "", busy: false, clearError: () => undefined };

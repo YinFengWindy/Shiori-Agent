@@ -14,7 +14,7 @@ import type { StoryCgGallery } from "../story/types";
 import type { StoryGameplayLoadingPhase } from "../story/storyLoadingPresentation";
 
 /** Story state required by the presentation router. */
-export type StoryWorkspacePresentationController = Pick<ReturnType<typeof useStoryController>, "story" | "stories" | "loading" | "loadingPhase" | "error" | "busy" | "reloadStories" | "submitInput">;
+export type StoryWorkspacePresentationController = Pick<ReturnType<typeof useStoryController>, "story" | "stories" | "loading" | "loadingPhase" | "error" | "busy" | "reloadStories" | "submitInput" | "regenerateCg">;
 
 /** Operation state required by Story routes. */
 export type StoryOperationPresentationController = Pick<ReturnType<typeof useStoryPresentationOperation>, "error" | "busy" | "clearError">;
@@ -87,7 +87,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   } else {
     const storyCharacter = roles.find((role) => role.id === story.roleSnapshot.id);
     const characterIllustration = resolveStoryCharacterIllustration(storyCharacter ?? null, story.roleSnapshot);
-    content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={characterIllustration ? toFileUrl(characterIllustration) : undefined} onSubmitInput={controller.submitInput} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
+    content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={characterIllustration ? toFileUrl(characterIllustration) : undefined} onSubmitInput={controller.submitInput} onRegenerateCg={(resourceId) => { void controller.regenerateCg(resourceId); }} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
   }
 
   return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation">

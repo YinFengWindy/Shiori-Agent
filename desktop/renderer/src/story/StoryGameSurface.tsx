@@ -1,4 +1,4 @@
-import { BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
+import { ArrowClockwise, BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { toFileUrl } from "../shared/format";
@@ -19,6 +19,7 @@ type StoryGameSurfaceProps = {
   error: string;
   characterAvatarUrl?: string;
   onSubmitInput: (content: string) => Promise<boolean>;
+  onRegenerateCg?: (resourceId: string) => void | Promise<boolean>;
   onOpenArchive: () => void;
   onOpenSettings: () => void;
   onExit: () => void;
@@ -30,7 +31,7 @@ type StoryFragmentCursor = {
 };
 
 /** Renders the active Story as a layered visual-novel stage with one bottom dialogue band. */
-export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, busy, error, characterAvatarUrl, onSubmitInput, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
+export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, busy, error, characterAvatarUrl, onSubmitInput, onRegenerateCg, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
   const [action, setAction] = useState("");
   const [dialogueVisible, setDialogueVisible] = useState(true);
   const [playbackState, setPlaybackState] = useState(() => createStoryPlaybackState(story));
@@ -45,15 +46,15 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
     : 0;
   const presentedFragment = presentedFragments[presentedFragmentIndex] ?? null;
   const hasNextFragment = presentedFragmentIndex < presentedFragments.length - 1;
-  const storyVisualResource = [...story.cgGallery].reverse().find((resource) => resource.kind === "cg" && resource.status === "ready" && resource.path)
+  const storyCgResource = [...story.cgGallery].reverse().find((resource) => resource.kind === "cg" && resource.status === "ready" && resource.path) ?? null;
+  const storyVisualResource = storyCgResource
     ?? (story.backgroundResource?.status === "ready" && story.backgroundResource.path ? story.backgroundResource : null);
   const storyBackgroundPath = storyVisualResource?.path;
   const hasStoryBackground = Boolean(storyBackgroundPath);
   const backgroundUrl = storyBackgroundPath ? toFileUrl(storyBackgroundPath) : background.url;
   const renderLocalBackdrop = !sharedBackdrop || hasStoryBackground;
-  const showCharacterForeground = Boolean(characterAvatarUrl)
-    && hasStoryBackground
-    && storyVisualResource?.visualType !== "character";
+  const showCharacterForeground = Boolean(characterAvatarUrl) && hasStoryBackground && !storyCgResource;
+  const hasGeneratingCg = story.cgGallery.some((resource) => resource.kind === "cg" && resource.status === "generating");
   const isGenerating = busy || story.segment.operation === "generating";
   const showPlayerInput = canShowStoryInput(story, isGenerating, hasNextFragment || nextBeat !== null);
   const isDialogueFragment = presentedFragment?.kind === "dialogue";
@@ -106,6 +107,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
       <div className="story-game-chrome story-game-readable absolute left-5 top-5 z-30 rounded-md px-3 py-2 text-white/85" data-testid="story-current-time"><span className="mr-2 text-xs">{formatStoryDate(story.currentStoryDate)}</span><strong className="font-serif text-lg font-semibold text-[#F4C29F]">{story.currentTimeBand}</strong></div>
       <div className="absolute right-5 top-5 z-30 flex gap-2">
         <button className="story-game-control story-game-readable grid h-10 w-10 place-items-center rounded-md text-white/85 transition-colors hover:bg-white/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60" type="button" aria-label="查看剧情记录" title="查看剧情记录" onClick={onOpenArchive}><BookOpenText /></button>
+        {storyCgResource && onRegenerateCg ? <button className="story-game-control story-game-readable grid h-10 w-10 place-items-center rounded-md text-white/85 transition-colors hover:bg-white/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 disabled:cursor-not-allowed disabled:opacity-45" type="button" aria-label="重新生成当前 CG" title="重新生成当前 CG" disabled={busy || hasGeneratingCg} onClick={() => { void onRegenerateCg(storyCgResource.id); }}><ArrowClockwise /></button> : null}
         <button className="story-game-control story-game-readable grid h-10 w-10 place-items-center rounded-md text-white/85 transition-colors hover:bg-white/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60" type="button" aria-label="剧情设置" title="剧情设置" onClick={onOpenSettings}><Gear /></button>
         <button className="story-game-control story-game-readable grid h-10 w-10 place-items-center rounded-md text-white/85 transition-colors hover:bg-white/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60" type="button" aria-label="返回剧情列表" title="返回剧情列表" onClick={onExit}><SignOut /></button>
       </div>

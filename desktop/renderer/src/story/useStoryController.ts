@@ -103,6 +103,12 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
     return story !== null;
   }, [applyStory, client, run, state.story]);
 
+  const regenerateCg = useCallback(async (resourceId: string) => {
+    if (!state.story) return false;
+    const story = await run(() => client.regenerateCg(state.story!.id, resourceId), applyStory);
+    return story !== null;
+  }, [applyStory, client, run, state.story]);
+
   return useMemo(() => ({
     ...state,
     reloadStories,
@@ -110,5 +116,6 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
     waitForStoryReady,
     submitInput,
     continueStory,
-  }), [continueStory, loadStory, reloadStories, state, submitInput, waitForStoryReady]);
+    regenerateCg,
+  }), [continueStory, loadStory, regenerateCg, reloadStories, state, submitInput, waitForStoryReady]);
 }

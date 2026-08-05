@@ -9,6 +9,45 @@ from story_simulation.errors import StoryInvalidOutputError, StoryProviderUnavai
 
 _STORY_CG_MODEL = "nai-diffusion-4-5-full"
 _BASE_NEGATIVE_PROMPT = "text, logo, watermark, signature, user interface, border"
+_SCENE_PERSON_MARKERS = (
+    "girl", "boy", "woman", "man", "person", "people", "human", "character",
+    "couple", "group", "crowd", "feeding", "hug", "kiss", "embrace",
+)
+_PLAYER_MARKERS = (
+    "player", "protagonist", "main character", "you", "man", "boy", "male", "1boy",
+)
+
+
+def prompt_mentions_people(prompt: str) -> bool:
+    """Return whether a visual prompt explicitly describes a person."""
+
+    normalized = prompt.casefold()
+    return any(marker in normalized for marker in _SCENE_PERSON_MARKERS)
+
+
+def _scene_prompt(prompt: str) -> str:
+    """Keep environment tags while removing person-bearing comma tags."""
+
+    tags = [tag.strip() for tag in prompt.split(",") if tag.strip()]
+    kept = [
+        tag
+        for tag in tags
+        if not any(marker in tag.casefold() for marker in _SCENE_PERSON_MARKERS)
+    ]
+    return ", ".join(kept) or "empty scene"
+
+
+def _character_prompt_constraints(prompt: str) -> tuple[str, str]:
+    """Describe the allowed role/player count without excluding a valid player."""
+
+    has_player = any(marker in prompt.casefold() for marker in _PLAYER_MARKERS)
+    if has_player:
+        positive = "two characters, the described role and player only, exactly two people"
+        negative = "duplicate, clone, twin, extra characters, unrelated characters, group, crowd, 2girls"
+    else:
+        positive = "solo, single character, exactly one character"
+        negative = "multiple characters, duplicate, clone, twin, extra characters, group, crowd, 2girls, 2boys"
+    return positive, negative
 
 
 class StoryImageGenerator:
@@ -27,15 +66,17 @@ class StoryImageGenerator:
         if visual_type not in {"scene", "character"}:
             raise StoryInvalidOutputError("视觉资源缺少有效的视觉类型")
         if visual_type == "character":
+            positive_constraints, negative_constraints = _character_prompt_constraints(prompt)
             generation_prompt = (
                 f"{prompt}, anime screencap, visual novel CG, character-focused composition, "
-                "cinematic lighting"
+                f"{positive_constraints}, cinematic lighting"
             )
-            negative_prompt = _BASE_NEGATIVE_PROMPT
+            negative_prompt = f"{_BASE_NEGATIVE_PROMPT}, {negative_constraints}"
         else:
+            scene_prompt = _scene_prompt(prompt)
             generation_prompt = (
-                f"{prompt}, anime background, visual novel background, wide composition, "
-                "cinematic lighting"
+                f"{scene_prompt}, empty scene, no characters, no people, no human figures, "
+                "anime background, visual novel background, wide composition, cinematic lighting"
             )
             negative_prompt = (
                 f"{_BASE_NEGATIVE_PROMPT}, person, people, human, character, 1girl, 1boy"

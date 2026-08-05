@@ -34,6 +34,7 @@ async def test_uses_registered_plugin_tool_for_story_scene_cg() -> None:
     assert tool.calls[0]["size_preset"] == "landscape"
     assert tool.calls[0]["model"] == "nai-diffusion-4-5-full"
     assert "anime background" in tool.calls[0]["prompt"]
+    assert "empty scene" in tool.calls[0]["prompt"]
     assert "person" in tool.calls[0]["negative_prompt"]
 
 
@@ -52,8 +53,47 @@ async def test_uses_character_prompt_without_a_scene_character_exclusion() -> No
     )
 
     assert "visual novel CG" in tool.calls[0]["prompt"]
+    assert "solo" in tool.calls[0]["prompt"]
+    assert "multiple characters" in tool.calls[0]["negative_prompt"]
     assert "person" not in tool.calls[0]["negative_prompt"]
     assert tool.calls[0]["model"] == "nai-diffusion-4-5-full"
+
+
+@pytest.mark.asyncio
+async def test_scene_prompt_removes_character_tags_before_generation() -> None:
+    tool = RecordingImageTool({"output_paths": ["D:\\stories\\scene.png"]})
+    generator = StoryImageGenerator(tool)
+
+    await generator.generate(
+        story={"id": "story-1", "roleSnapshot": {"id": "role-1"}},
+        resource={
+            "id": "resource-1",
+            "prompt": "warm living room, young woman feeding man, soft lamplight",
+        },
+    )
+
+    assert "warm living room" in tool.calls[0]["prompt"]
+    assert "young woman feeding man" not in tool.calls[0]["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_character_prompt_keeps_the_player_without_extra_people() -> None:
+    tool = RecordingImageTool({"output_paths": ["D:\\stories\\pair.png"]})
+    generator = StoryImageGenerator(tool)
+
+    await generator.generate(
+        story={"id": "story-1", "roleSnapshot": {"id": "role-1"}},
+        resource={
+            "id": "resource-1",
+            "visualType": "character",
+            "prompt": "girl feeding man, warm living room",
+        },
+    )
+
+    assert "two characters" in tool.calls[0]["prompt"]
+    assert "role and player only" in tool.calls[0]["prompt"]
+    assert "man" not in tool.calls[0]["negative_prompt"]
+    assert "multiple characters" not in tool.calls[0]["negative_prompt"]
 
 
 @pytest.mark.asyncio

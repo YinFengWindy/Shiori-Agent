@@ -19,7 +19,7 @@ from story_simulation.repository import StoryRepository, payload_hash
 from story_simulation.service import StorySimulationService
 from story_simulation.story_time import normalize_story_date, normalize_story_time_band
 
-from .story_image_generator import StoryImageGenerator
+from .story_image_generator import StoryImageGenerator, prompt_mentions_people
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 
@@ -96,6 +96,8 @@ class StorySimulationHandler:
             return self._cg_gallery()
         if method == "stories.cg.retry":
             return await self._retry_cg(payload, emit_event=emit_event)
+        if method == "stories.cg.regenerate":
+            return await self._regenerate_cg(payload, emit_event=emit_event)
         if method == "stories.create":
             return await self._create(payload, request_id=request_id, emit_event=emit_event)
         if method == "stories.input":
@@ -389,19 +391,40 @@ class StorySimulationHandler:
         )
         await self._emit_resource_changed(repository, prepared, emit_event)
         service = self._service(repository)
-        existing = self._resource_tasks.get(resource_id)
-        if existing is None or existing.done():
-            task = asyncio.create_task(
-                service.generate_resource(prepared, emit_event),
-                name=f"story-resource:{resource_id}",
-            )
-            self._resource_tasks[resource_id] = task
-            task.add_done_callback(
-                lambda _task, resource_id=resource_id: self._resource_tasks.pop(
-                    resource_id, None
-                )
-            )
+        self._start_resource_generation(service, prepared, emit_event)
         return {"story": repository.story_read_model(story_id), "resource_id": resource_id}
+
+    async def _regenerate_cg(
+        self, payload: dict[str, Any], *, emit_event: EventEmitter
+    ) -> dict[str, Any]:
+        """Create a replacement CG while retaining the currently visible version."""
+
+        story_id = self._story_id(payload)
+        resource_id = self._required(payload, "resource_id")
+        repository = self._repository(story_id)
+        resource = repository.resource(resource_id)
+        if resource["storyId"] != story_id:
+            raise StoryNotFoundError("Story resource 不属于当前 Story")
+        if resource["kind"] != "cg":
+            raise ValueError("只有 CG 资源可以重新生成")
+        if resource["status"] == "generating":
+            raise ValueError("资源正在生成")
+        visual_type: StoryVisualType = "character" if resource.get("visualType") == "character" else "scene"
+        if visual_type == "scene" and prompt_mentions_people(str(resource.get("prompt") or "")):
+            visual_type = "character"
+        replacement = repository.create_resource(
+            story_id,
+            kind="cg",
+            prompt=str(resource.get("prompt") or ""),
+            source_turn_id=resource.get("sourceTurnId"),
+            visual_type=visual_type,
+        )
+        await self._emit_resource_changed(repository, replacement, emit_event)
+        self._start_resource_generation(self._service(repository), replacement, emit_event)
+        return {
+            "story": repository.story_read_model(story_id),
+            "resource_id": replacement["id"],
+        }
 
     def _schedule_story_cg(
         self,
@@ -420,6 +443,8 @@ class StorySimulationHandler:
             for resource in repository.story_resources(story_id)
         ):
             return
+        if visual_type == "scene" and prompt_mentions_people(prompt):
+            visual_type = "character"
         resource = repository.create_resource(
             story_id,
             kind="cg",
@@ -427,12 +452,24 @@ class StorySimulationHandler:
             source_turn_id=str(turn["id"]),
             visual_type=visual_type,
         )
-        service = self._service(repository)
+        self._start_resource_generation(self._service(repository), resource, emit_event)
+
+    def _start_resource_generation(
+        self,
+        service: StorySimulationService,
+        resource: dict[str, Any],
+        emit_event: EventEmitter,
+    ) -> None:
+        """Run one prepared visual resource and remove its task after completion."""
+
+        resource_id = str(resource["id"])
+        existing = self._resource_tasks.get(resource_id)
+        if existing is not None and not existing.done():
+            return
         task = asyncio.create_task(
             service.generate_resource(resource, emit_event),
-            name=f"story-resource:{resource['id']}",
+            name=f"story-resource:{resource_id}",
         )
-        resource_id = str(resource["id"])
         self._resource_tasks[resource_id] = task
         task.add_done_callback(
             lambda _task, resource_id=resource_id: self._resource_tasks.pop(
