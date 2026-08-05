@@ -27,6 +27,14 @@ DEFAULT_ROLE_DIFFERENCES: tuple[tuple[str, str], ...] = (
     ("sad", "sad expression with downcast eyes"),
 )
 
+DEFAULT_ROLE_DIFFERENCE_MOODS: dict[str, str] = {
+    "neutral": "平静",
+    "happy": "开心",
+    "surprised": "惊讶",
+    "angry": "生气",
+    "sad": "悲伤",
+}
+
 
 class RoleDifferenceGenerationService:
     """Generates stable role-expression cutouts and persists them atomically."""
@@ -220,11 +228,35 @@ class RoleDifferenceGenerationService:
         categories.append(
             {"id": category_id, "name": category_name, "allow_role_send": False}
         )
-        return self._role_store.update_role(
+        updated_role = self._role_store.update_role(
             role_id,
             asset_categories=categories,
             illustration_sources=[str(path) for path in generated_paths],
             illustration_category_id=category_id,
+        )
+        generated_assets = updated_role.illustrations[-len(generated_paths) :]
+        mood_bindings = _read_mood_illustration_bindings(
+            updated_role.runtime_config.get("mood_illustration_bindings")
+        )
+        for (difference_id, _prompt), illustration_path in zip(
+            DEFAULT_ROLE_DIFFERENCES,
+            generated_assets,
+            strict=True,
+        ):
+            mood_bindings[DEFAULT_ROLE_DIFFERENCE_MOODS[difference_id]] = (
+                illustration_path
+            )
+
+        runtime_config = dict(updated_role.runtime_config)
+        runtime_config["mood_illustration_bindings"] = mood_bindings
+        runtime_config["mood_catalog"] = list(mood_bindings)
+        default_mood = str(runtime_config.get("default_mood") or "").strip()
+        runtime_config["default_mood"] = (
+            default_mood if default_mood in mood_bindings else "平静"
+        )
+        return self._role_store.update_role(
+            role_id,
+            runtime_config=runtime_config,
         )
 
     @staticmethod
@@ -259,3 +291,15 @@ def _next_category_name(existing_names: list[str]) -> str:
     while f"{base} {index}".casefold() in used:
         index += 1
     return f"{base} {index}"
+
+
+def _read_mood_illustration_bindings(raw_bindings: Any) -> dict[str, str]:
+    """Normalizes persisted mood bindings before replacing generated moods."""
+
+    if not isinstance(raw_bindings, dict):
+        return {}
+    return {
+        str(mood).strip(): str(path).strip()
+        for mood, path in raw_bindings.items()
+        if str(mood).strip() and str(path).strip()
+    }
