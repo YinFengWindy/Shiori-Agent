@@ -30,6 +30,12 @@ type StoryFragmentCursor = {
   index: number;
 };
 
+function resolveDialogueSpeakerName(speaker: string | null | undefined, roleName: string | undefined) {
+  const normalizedSpeaker = speaker?.trim() ?? "";
+  if (normalizedSpeaker === "角色") return roleName?.trim() || normalizedSpeaker;
+  return normalizedSpeaker;
+}
+
 /** Renders the active Story as a layered visual-novel stage with one bottom dialogue band. */
 export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, busy, error, characterAvatarUrl, onSubmitInput, onRegenerateCg, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
   const [action, setAction] = useState("");
@@ -58,7 +64,13 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   const isGenerating = busy || story.segment.operation === "generating";
   const showPlayerInput = canShowStoryInput(story, isGenerating, hasNextFragment || nextBeat !== null);
   const isDialogueFragment = presentedFragment?.kind === "dialogue";
-  const fragmentLabel = isGenerating ? "" : isDialogueFragment ? presentedBeat?.speaker ?? "" : presentedFragment ? "旁白" : "";
+  const fragmentLabel = isGenerating
+    ? ""
+    : isDialogueFragment
+      ? resolveDialogueSpeakerName(presentedBeat?.speaker, story.roleSnapshot.name)
+      : presentedFragment
+        ? "旁白"
+        : "";
   const visibleText = isGenerating ? "剧情生成中..." : presentedFragment?.text || story.background;
   const canSubmit = showPlayerInput && Boolean(action.trim());
 

@@ -104,4 +104,12 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /她嘴上凶着/);
     assert.doesNotMatch(markup, /data-testid="story-player-input"/);
   });
+
+  it("uses the frozen Story role name for legacy generic dialogue speakers", () => {
+    const story = createStoryDetails({ beats: [{ ...createStoryDetails().beats[0], speaker: "角色" }] });
+    const markup = renderToStaticMarkup(<StoryGameSurface story={story} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+
+    assert.match(markup, />澪</);
+    assert.doesNotMatch(markup, />角色</);
+  });
 });

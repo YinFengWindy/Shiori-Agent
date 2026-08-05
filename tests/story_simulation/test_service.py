@@ -77,6 +77,27 @@ async def test_service_retries_invalid_draft_once_before_committing(tmp_path) ->
 
 
 @pytest.mark.asyncio
+async def test_service_replaces_a_generic_dialogue_speaker_with_the_story_role_name(tmp_path) -> None:
+    service, _director = _service(
+        tmp_path,
+        [DirectorDraft(beats=(StoryBeatDraft(text="别乱动。", kind="dialogue", speaker="角色"),))],
+    )
+    turn = service.create_player_turn(
+        story_id="story-1",
+        input_text="靠近她。",
+        request_id="request-generic-speaker",
+        request_payload_hash=payload_hash({"input": "靠近她。"}),
+        expected_revision=0,
+    )
+
+    await service.generate_turn(turn, lambda _event: None)
+
+    story = service.repository.story_read_model("story-1")
+    assert story["beats"][0]["speaker"] == "澪"
+    assert story["cues"][0]["speaker"] == "澪"
+
+
+@pytest.mark.asyncio
 async def test_service_does_not_commit_beats_after_final_failure(tmp_path) -> None:
     service, director = _service(
         tmp_path,

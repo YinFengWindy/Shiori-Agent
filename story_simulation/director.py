@@ -64,6 +64,8 @@ class ProviderStoryDirector:
             "一次最多 3 个 beat，所有 text 合计最多 1200 个中文字符，单个 beat 最多 400 字符。"
             "故事日期由 story.story_date 提供且不能修改；剧情时间只使用清晨、上午、下午、夜晚、深夜五档。"
             "只有剧情明确进入另一个时段时才填写 time_band，否则必须填写 null。"
+            "每个 dialogue 都是正式角色的台词，speaker 必须精确填写 role.name；"
+            "绝不能写角色、正式角色、女主等泛称，也不生成玩家的 dialogue。"
             "opening 模式的 visual_type 必须是 scene；普通场景视觉使用 scene，"
             "scene 只描述环境空镜，绝对不能出现人物；需要人物出现在画面中的重要视觉节点使用 character。"
             "character 可以包含正式角色和玩家：如果剧情明确描述玩家，visual_prompt 必须同时描述正式角色与玩家，"

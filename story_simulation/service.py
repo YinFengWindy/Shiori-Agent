@@ -12,7 +12,7 @@ from core.roles.models import RoleRecord
 from .continuity import ContinuityGuard
 from .director import StoryDirector
 from .errors import StoryInvalidOutputError, StorySimulationError
-from .models import StoryPlayerProfile, StoryVisualType
+from .models import DirectorDraft, StoryBeatDraft, StoryPlayerProfile, StoryVisualType
 from .repository import StoryRepository, payload_hash
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
@@ -134,6 +134,7 @@ class StorySimulationService:
                     ),
                     timeout=30,
                 )
+                draft = self._bind_dialogue_speakers(draft, context.role_snapshot)
                 self.repository.mark_validating(turn_id, attempt_id)
                 self._continuity_guard.validate(draft, context)
                 committed, story = self.repository.commit_draft(
@@ -184,6 +185,7 @@ class StorySimulationService:
                         emit_event,
                     )
                 return
+
             except Exception as exc:
                 code = self._failure_code(exc)
                 if attempt_index == 0 and self._is_retryable(exc):
@@ -215,6 +217,31 @@ class StorySimulationService:
                 if opening:
                     await self._fail_opening_background(story["id"], code, emit_event)
                 return
+
+    @staticmethod
+    def _bind_dialogue_speakers(
+        draft: DirectorDraft, role_snapshot: dict[str, Any]
+    ) -> DirectorDraft:
+        """Bind dialogue to the single formal Story role frozen at creation."""
+
+        role_name = str(role_snapshot.get("name") or "").strip()
+        if not role_name:
+            raise StoryInvalidOutputError("Story 角色快照缺少名称")
+        return DirectorDraft(
+            beats=tuple(
+                StoryBeatDraft(
+                    text=beat.text,
+                    kind=beat.kind,
+                    speaker=role_name if beat.kind == "dialogue" else beat.speaker,
+                    time_band=beat.time_band,
+                    fact_changes=beat.fact_changes,
+                )
+                for beat in draft.beats
+            ),
+            stop_reason=draft.stop_reason,
+            visual_prompt=draft.visual_prompt,
+            visual_type=draft.visual_type,
+        )
 
     async def retry_resource(
         self, resource_id: str, emit_event: EventEmitter
