@@ -69,6 +69,18 @@ describe("StoryGameSurface", () => {
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 
+  it("keeps the previous CG visible while its replacement is generating", () => {
+    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
+      cgGallery: [
+        { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "scene", status: "generating", path: "D:\\stories\\scene-old.png", prompt: "scene", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
+      ],
+    })} busy={false} error="" onSubmitInput={async () => true} onRegenerateCg={() => undefined} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+
+    assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
+    assert.match(markup, /aria-label="重新生成当前 CG"/);
+    assert.doesNotMatch(markup, /default-galgame-bg\.png/);
+  });
+
   it("does not overlay the role difference while a CG is active", () => {
     const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
       cgGallery: [

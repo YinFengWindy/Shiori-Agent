@@ -339,7 +339,7 @@ async def test_ready_cg_regeneration_replaces_the_existing_gallery_resource(tmp_
     assert replacement["visualType"] == "character"
     assert replacement["prompt"] == original["prompt"]
     assert replacement["status"] == "generating"
-    assert replacement["path"] is None
+    assert replacement["path"] == original["path"]
     assert any(
         event["method"] == "stories.resource.changed"
         and event["payload"]["resource"]["id"] == original["id"]

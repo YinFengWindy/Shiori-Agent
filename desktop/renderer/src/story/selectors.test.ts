@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { canShowStoryInput, canSubmitStoryInput, getStoryStatusLabel, mergeStoryBeats, replaceStoryGallery, replaceStorySummary } from "./selectors";
+import { canShowStoryInput, canSubmitStoryInput, getStoryStatusLabel, mergeStoryBeats, replaceStoryGallery, replaceStorySummary, selectActiveStoryVisualResource } from "./selectors";
 import { createStoryBeat, createStoryDetails, createStorySummary } from "./testFixtures";
 
 describe("Story selectors", () => {
@@ -54,5 +54,26 @@ describe("Story selectors", () => {
     const current = [{ ...createStorySummary(), items: [failedResource] }];
 
     assert.equal(replaceStoryGallery(current, story)[0].items[0].status, "generating");
+  });
+
+  it("keeps a previous CG active while its replacement is generating", () => {
+    const story = createStoryDetails({
+      cgGallery: [{
+        id: "resource-1",
+        storyId: "story-1",
+        kind: "cg",
+        visualType: "scene",
+        status: "generating",
+        path: "D:\\stories\\scene-old.png",
+        prompt: "rainy school gate",
+        sourceTurnId: "turn-2",
+        sequence: 1,
+        errorCode: null,
+        createdAt: "",
+        updatedAt: "",
+      }],
+    });
+
+    assert.equal(selectActiveStoryVisualResource(story)?.path, "D:\\stories\\scene-old.png");
   });
 });

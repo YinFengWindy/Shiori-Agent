@@ -34,6 +34,12 @@ export function replaceStoryGallery(galleries: StoryCgGallery[], story: StoryDet
     : gallery);
 }
 
+/** Returns the latest Story visual that still has a usable local asset path. */
+export function selectActiveStoryVisualResource(story: Pick<StoryDetails, "backgroundResource" | "cgGallery">) {
+  return [...story.cgGallery].reverse().find((resource) => resource.kind === "cg" && resource.path)
+    ?? (story.backgroundResource?.path ? story.backgroundResource : null);
+}
+
 /** Converts a persisted Story resource error code into stable player-facing copy. */
 export function getStoryResourceErrorMessage(errorCode: string | null) {
   const messages: Record<string, string> = {

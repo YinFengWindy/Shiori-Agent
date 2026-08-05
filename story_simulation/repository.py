@@ -257,7 +257,7 @@ class StoryRepository:
         prompt: str,
         source_turn_id: str | None,
     ) -> dict[str, Any]:
-        """Attach the immutable generation inputs before a resource request."""
+        """Start generation without dropping the last successfully generated asset."""
 
         clean_prompt = prompt.strip()
         with self.transaction() as connection:
@@ -268,7 +268,7 @@ class StoryRepository:
             connection.execute(
                 """UPDATE story_resources
                 SET prompt = ?, source_turn_id = ?, status = 'generating',
-                    path = NULL, error_code = NULL, updated_at = ?
+                    error_code = NULL, updated_at = ?
                 WHERE id = ?""",
                 (clean_prompt, source_turn_id, now, resource_id),
             )
