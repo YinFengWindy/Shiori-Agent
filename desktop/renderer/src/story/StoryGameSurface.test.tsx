@@ -47,6 +47,8 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
     assert.match(markup, /data-testid="story-game-character"/);
     assert.match(markup, /shiori-asset:\/\/local\/role/);
+    assert.match(markup, /bottom-0 right-\[clamp\(4vw,10vw,12rem\)\] z-10/);
+    assert.match(markup, /bottom-0 z-20/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 
