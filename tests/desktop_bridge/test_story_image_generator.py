@@ -82,7 +82,11 @@ async def test_character_prompt_keeps_the_player_without_extra_people() -> None:
     generator = StoryImageGenerator(tool)
 
     await generator.generate(
-        story={"id": "story-1", "roleSnapshot": {"id": "role-1"}},
+        story={
+            "id": "story-1",
+            "roleSnapshot": {"id": "role-1"},
+            "playerProfile": {"appearance": "暖棕色头发、黑色眼睛、圆脸"},
+        },
         resource={
             "id": "resource-1",
             "visualType": "character",
@@ -96,6 +100,10 @@ async def test_character_prompt_keeps_the_player_without_extra_people() -> None:
     assert "{{girl feeding boy}}" in tool.calls[0]["prompt"]
     assert "{{girl holding spoon}}" in tool.calls[0]["prompt"]
     assert "boy receiving food" in tool.calls[0]["prompt"]
+    assert "warm brown hair" in tool.calls[0]["prompt"]
+    assert "black eyes" in tool.calls[0]["prompt"]
+    assert "round face" in tool.calls[0]["prompt"]
+    assert "暖棕色头发" not in tool.calls[0]["prompt"]
     assert "boy feeding girl" in tool.calls[0]["negative_prompt"]
 
 

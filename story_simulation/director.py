@@ -71,6 +71,8 @@ class ProviderStoryDirector:
             "只有需要视觉演出的节点才填写 visual_prompt；非 opening 模式可填写描述该视觉节点的英文 NovelAI tags，"
             "使用逗号分隔的 NovelAI V4.5 标签，不要中文、自然语言句子、文字、logo 或水印。"
             "双人画面使用 1girl, 1boy, duo 等人数标签；强调只用 {tag}，不能使用 :1.2 数字权重。"
+            "玩家出镜时，必须把 player_profile.appearance 转换为对应的英文 V4.5 外观标签写入 visual_prompt，"
+            "不能用玩家昵称或身份代替外观。"
             "正式角色对玩家执行动作时，角色必须是动作主语、玩家必须是接受者；例如角色喂玩家使用 "
             "{girl feeding boy}, {girl holding spoon}, boy receiving food，禁止写成玩家喂角色。"
             "普通非视觉节点填写空字符串。"

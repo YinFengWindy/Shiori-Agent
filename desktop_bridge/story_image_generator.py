@@ -18,6 +18,18 @@ _PLAYER_MARKERS = (
 )
 _FEMALE_MARKERS = ("girl", "woman", "female", "1girl")
 _MALE_MARKERS = ("boy", "man", "male", "1boy")
+_APPEARANCE_COLORS = (
+    ("暖棕色", "warm brown"),
+    ("深棕色", "dark brown"),
+    ("棕色", "brown"),
+    ("黑色", "black"),
+    ("白色", "white"),
+    ("金色", "blonde"),
+    ("银色", "silver"),
+    ("粉色", "pink"),
+    ("蓝色", "blue"),
+    ("红色", "red"),
+)
 
 
 def prompt_mentions_people(prompt: str) -> bool:
@@ -86,20 +98,71 @@ def _legacy_character_tags(prompt: str) -> str:
     return ", ".join(tags)
 
 
+def _player_appearance_tags(story: dict[str, Any]) -> str:
+    """Return V4.5 tags for the frozen player appearance when available."""
+
+    profile = story.get("playerProfile")
+    if not isinstance(profile, dict):
+        return ""
+    appearance = str(profile.get("appearance") or "").strip()
+    if not appearance:
+        return ""
+    if appearance.isascii():
+        return appearance
+
+    def color_before(position: int) -> str:
+        matches = [
+            (appearance.rfind(marker, 0, position), len(marker), tag)
+            for marker, tag in _APPEARANCE_COLORS
+            if appearance.rfind(marker, 0, position) >= 0
+        ]
+        if not matches:
+            return ""
+        return max(matches, key=lambda item: (item[0] + item[1], item[1]))[2]
+
+    tags: list[str] = []
+    if "头发" in appearance or "短发" in appearance or "长发" in appearance:
+        hair_positions = [appearance.find(marker) for marker in ("头发", "短发", "长发")]
+        hair_position = min(
+            (position for position in hair_positions if position >= 0),
+            default=len(appearance),
+        )
+        color = color_before(hair_position)
+        if color:
+            tags.append(f"{color} hair")
+        if "短发" in appearance:
+            tags.append("short hair")
+        if "长发" in appearance:
+            tags.append("long hair")
+    if "眼" in appearance:
+        eye_color = color_before(appearance.find("眼"))
+        if eye_color:
+            tags.append(f"{eye_color} eyes")
+    if "圆脸" in appearance:
+        tags.append("round face")
+    return ", ".join(dict.fromkeys(tags))
+
+
 def _character_prompt_constraints(prompt: str) -> tuple[str, str]:
     """Describe the allowed V4.5 tags without excluding a valid player."""
 
     has_player = any(marker in prompt.casefold() for marker in _PLAYER_MARKERS)
     if has_player:
         positive = "1girl, 1boy, duo"
-        negative = "2girls, 2boys, extra character, multiple people, duplicate, clone, twin, group, crowd"
+        negative = (
+            "2girls, 2boys, extra character, multiple people, duplicate, clone, twin, "
+            "group, crowd"
+        )
         if "feeding" in prompt.casefold():
             relation_positive, relation_negative = _feeding_relation_constraints(prompt)
             positive = f"{positive}, {relation_positive}"
             negative = f"{negative}, {relation_negative}"
     else:
         positive = "1girl, solo"
-        negative = "2girls, 2boys, extra character, multiple people, duplicate, clone, twin, group, crowd"
+        negative = (
+            "2girls, 2boys, extra character, multiple people, duplicate, clone, twin, "
+            "group, crowd"
+        )
     return positive, negative
 
 
@@ -121,8 +184,10 @@ class StoryImageGenerator:
         if visual_type == "character":
             positive_constraints, negative_constraints = _character_prompt_constraints(prompt)
             character_prompt = _legacy_character_tags(prompt)
+            player_appearance = _player_appearance_tags(story)
+            appearance_suffix = f", {player_appearance}" if player_appearance else ""
             generation_prompt = (
-                f"{character_prompt}, anime screencap, visual novel CG, "
+                f"{character_prompt}{appearance_suffix}, anime screencap, visual novel CG, "
                 f"{positive_constraints}, cinematic lighting"
             )
             negative_prompt = f"{_BASE_NEGATIVE_PROMPT}, {negative_constraints}"
