@@ -16,6 +16,8 @@ _SCENE_PERSON_MARKERS = (
 _PLAYER_MARKERS = (
     "player", "protagonist", "main character", "you", "man", "boy", "male", "1boy",
 )
+_FEMALE_MARKERS = ("girl", "woman", "female", "1girl")
+_MALE_MARKERS = ("boy", "man", "male", "1boy")
 
 
 def prompt_mentions_people(prompt: str) -> bool:
@@ -37,16 +39,67 @@ def _scene_prompt(prompt: str) -> str:
     return ", ".join(kept) or "empty scene"
 
 
+def _gender_tag(text: str) -> str | None:
+    """Return the NovelAI gender count tag described by one prompt fragment."""
+
+    normalized = text.casefold()
+    if any(marker in normalized for marker in _FEMALE_MARKERS):
+        return "girl"
+    if any(marker in normalized for marker in _MALE_MARKERS):
+        return "boy"
+    return None
+
+
+def _feeding_relation_constraints(prompt: str) -> tuple[str, str]:
+    """Return V4.5 tags that retain the prompt's feeding direction."""
+
+    before, _, after = prompt.casefold().partition("feeding")
+    actor = _gender_tag(before)
+    recipient = _gender_tag(after)
+    if actor == "girl" and recipient == "boy":
+        return (
+            "{{girl feeding boy}}, {{girl holding spoon}}, boy receiving food, spoon, food, open mouth",
+            "boy feeding girl, reversed roles",
+        )
+    if actor == "boy" and recipient == "girl":
+        return (
+            "{{boy feeding girl}}, {{boy holding spoon}}, girl receiving food, spoon, food, open mouth",
+            "girl feeding boy, reversed roles",
+        )
+    return "{{feeding}}, holding spoon, receiving food, spoon, food, open mouth", "reversed roles"
+
+
+def _legacy_character_tags(prompt: str) -> str:
+    """Convert legacy feeding prose into comma-separated NovelAI V4.5 tags."""
+
+    tags: list[str] = []
+    for tag in (item.strip() for item in prompt.split(",")):
+        if not tag:
+            continue
+        if "feeding" not in tag.casefold():
+            tags.append(tag)
+            continue
+        attributes = tag.replace(" and ", ",")
+        for marker in ("young", "woman", "girl", "man", "boy", "feeding", "with"):
+            attributes = attributes.replace(marker, "")
+        tags.extend(item.strip() for item in attributes.split(",") if item.strip())
+    return ", ".join(tags)
+
+
 def _character_prompt_constraints(prompt: str) -> tuple[str, str]:
-    """Describe the allowed role/player count without excluding a valid player."""
+    """Describe the allowed V4.5 tags without excluding a valid player."""
 
     has_player = any(marker in prompt.casefold() for marker in _PLAYER_MARKERS)
     if has_player:
-        positive = "two characters, the described role and player only, exactly two people"
-        negative = "duplicate, clone, twin, extra characters, unrelated characters, group, crowd, 2girls"
+        positive = "1girl, 1boy, duo"
+        negative = "2girls, 2boys, extra character, multiple people, duplicate, clone, twin, group, crowd"
+        if "feeding" in prompt.casefold():
+            relation_positive, relation_negative = _feeding_relation_constraints(prompt)
+            positive = f"{positive}, {relation_positive}"
+            negative = f"{negative}, {relation_negative}"
     else:
-        positive = "solo, single character, exactly one character"
-        negative = "multiple characters, duplicate, clone, twin, extra characters, group, crowd, 2girls, 2boys"
+        positive = "1girl, solo"
+        negative = "2girls, 2boys, extra character, multiple people, duplicate, clone, twin, group, crowd"
     return positive, negative
 
 
@@ -67,8 +120,9 @@ class StoryImageGenerator:
             raise StoryInvalidOutputError("视觉资源缺少有效的视觉类型")
         if visual_type == "character":
             positive_constraints, negative_constraints = _character_prompt_constraints(prompt)
+            character_prompt = _legacy_character_tags(prompt)
             generation_prompt = (
-                f"{prompt}, anime screencap, visual novel CG, character-focused composition, "
+                f"{character_prompt}, anime screencap, visual novel CG, "
                 f"{positive_constraints}, cinematic lighting"
             )
             negative_prompt = f"{_BASE_NEGATIVE_PROMPT}, {negative_constraints}"

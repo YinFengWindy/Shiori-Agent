@@ -53,8 +53,8 @@ async def test_uses_character_prompt_without_a_scene_character_exclusion() -> No
     )
 
     assert "visual novel CG" in tool.calls[0]["prompt"]
-    assert "solo" in tool.calls[0]["prompt"]
-    assert "multiple characters" in tool.calls[0]["negative_prompt"]
+    assert "1girl, solo" in tool.calls[0]["prompt"]
+    assert "multiple people" in tool.calls[0]["negative_prompt"]
     assert "person" not in tool.calls[0]["negative_prompt"]
     assert tool.calls[0]["model"] == "nai-diffusion-4-5-full"
 
@@ -90,10 +90,13 @@ async def test_character_prompt_keeps_the_player_without_extra_people() -> None:
         },
     )
 
-    assert "two characters" in tool.calls[0]["prompt"]
-    assert "role and player only" in tool.calls[0]["prompt"]
-    assert "man" not in tool.calls[0]["negative_prompt"]
-    assert "multiple characters" not in tool.calls[0]["negative_prompt"]
+    assert "young woman" not in tool.calls[0]["prompt"]
+    assert "feeding man" not in tool.calls[0]["prompt"]
+    assert "1girl, 1boy, duo" in tool.calls[0]["prompt"]
+    assert "{{girl feeding boy}}" in tool.calls[0]["prompt"]
+    assert "{{girl holding spoon}}" in tool.calls[0]["prompt"]
+    assert "boy receiving food" in tool.calls[0]["prompt"]
+    assert "boy feeding girl" in tool.calls[0]["negative_prompt"]
 
 
 @pytest.mark.asyncio

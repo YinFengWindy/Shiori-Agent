@@ -48,3 +48,11 @@ def test_director_parser_rejects_unknown_visual_type() -> None:
         ProviderStoryDirector._parse(
             json.dumps({"beats": [{"text": "门开了。"}], "visual_type": "portrait"})
         )
+
+
+def test_director_prompt_requires_novelai_v45_directional_tags() -> None:
+    prompt = ProviderStoryDirector._system_prompt()
+
+    assert "NovelAI V4.5" in prompt
+    assert "{girl feeding boy}" in prompt
+    assert "不能使用 :1.2 数字权重" in prompt
