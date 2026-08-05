@@ -33,6 +33,30 @@ describe("getStoryBeatPresentationFragments", () => {
     ]);
   });
 
+  it("splits quoted dialogue after a colon with optional whitespace", () => {
+    const fragments = getStoryBeatPresentationFragments(createStoryBeat({
+      kind: "action",
+      text: "她停顿了一下： \"别乱动。\"",
+    }));
+
+    assert.deepEqual(fragments, [
+      { kind: "narration", text: "她停顿了一下：" },
+      { kind: "dialogue", text: "\"别乱动。\"" },
+    ]);
+  });
+
+  it("keeps ordinary quoted text together when it is not introduced by a colon", () => {
+    const fragments = getStoryBeatPresentationFragments(createStoryBeat({
+      kind: "action",
+      text: "她听到你这声撒娇般的\"啊——\"，动作明显一滞。",
+    }));
+
+    assert.deepEqual(fragments, [{
+      kind: "narration",
+      text: "她听到你这声撒娇般的\"啊——\"，动作明显一滞。",
+    }]);
+  });
+
   it("presents action and narration beats as narration", () => {
     assert.deepEqual(getStoryBeatPresentationFragments(createStoryBeat({ kind: "narration", text: "雨停了。" })), [{ kind: "narration", text: "雨停了。" }]);
     assert.deepEqual(getStoryBeatPresentationFragments(createStoryBeat({ kind: "action", text: "她走近窗边。" })), [{ kind: "narration", text: "她走近窗边。" }]);
