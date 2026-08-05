@@ -27,6 +27,7 @@ from .models import (
     StoryResource,
     StoryResourceKind,
     StoryVisualType,
+    has_chinese_text,
     utc_now,
 )
 from .schema_migrations import migrate_story_resources, migrate_story_timeline
@@ -825,11 +826,12 @@ class StoryRepository:
     def _current_scene_dict(runtime_snapshot: dict[str, Any]) -> dict[str, Any]:
         raw_scene = runtime_snapshot.get("current_scene")
         if not isinstance(raw_scene, dict):
-            return {"key": "", "name": "", "characterIds": []}
+            return {"key": "", "name": "未命名场景", "characterIds": []}
         character_ids = raw_scene.get("character_ids")
+        raw_name = str(raw_scene.get("name") or "").strip()
         return {
             "key": str(raw_scene.get("key") or ""),
-            "name": str(raw_scene.get("name") or ""),
+            "name": raw_name if has_chinese_text(raw_name) else "未命名场景",
             "characterIds": [str(item) for item in character_ids if str(item).strip()]
             if isinstance(character_ids, list)
             else [],

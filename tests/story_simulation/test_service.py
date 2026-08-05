@@ -142,4 +142,4 @@ async def test_service_rejects_characters_outside_the_current_scene_contract(tmp
     story = service.repository.story_read_model("story-1")
     assert director.calls == 2
     assert story["beats"] == []
-    assert story["currentScene"] == {"key": "", "name": "", "characterIds": []}
+    assert story["currentScene"] == {"key": "", "name": "未命名场景", "characterIds": []}

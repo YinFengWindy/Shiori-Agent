@@ -6,6 +6,18 @@ from story_simulation.models import DirectorDraft, StoryBeatDraft, StoryPlayerPr
 from story_simulation.repository import StoryRepository, payload_hash
 
 
+def test_story_repository_replaces_legacy_english_scene_names_at_the_read_boundary() -> None:
+    assert StoryRepository._current_scene_dict(
+        {
+            "current_scene": {
+                "key": "home-living-room-night",
+                "name": "home living room night",
+                "character_ids": ["role-1"],
+            }
+        }
+    ) == {"key": "home-living-room-night", "name": "未命名场景", "characterIds": ["role-1"]}
+
+
 def _create_story(repository: StoryRepository) -> None:
     repository.create_story(
         story_id="story-1",

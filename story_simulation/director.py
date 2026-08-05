@@ -6,7 +6,7 @@ import json
 from typing import Any, Protocol
 
 from .errors import StoryInvalidOutputError, StoryProviderUnavailableError
-from .models import DirectorDraft, StoryBeatDraft, StoryContext, StoryScene
+from .models import DirectorDraft, StoryBeatDraft, StoryContext, StoryScene, has_chinese_text
 
 
 class StoryDirector(Protocol):
@@ -161,7 +161,7 @@ class ProviderStoryDirector:
         scene_key = str(raw_current_scene.get("key") or "").strip()
         scene_name = str(raw_current_scene.get("name") or "").strip()
         raw_character_ids = raw_current_scene.get("character_ids")
-        if not scene_key or not scene_name or not any("一" <= char <= "龥" for char in scene_name) or not isinstance(raw_character_ids, list):
+        if not scene_key or not scene_name or not has_chinese_text(scene_name) or not isinstance(raw_character_ids, list):
             raise StoryInvalidOutputError("Director current_scene 格式无效")
         character_ids = tuple(
             str(character_id).strip()

@@ -13,6 +13,12 @@ StoryVisualType = Literal["scene", "character"]
 StoryResourceStatus = Literal["generating", "ready", "failed"]
 
 
+def has_chinese_text(value: str) -> bool:
+    """Return whether a display label contains at least one CJK character."""
+
+    return any("一" <= char <= "龥" for char in value)
+
+
 def utc_now() -> str:
     """Return an RFC 3339 timestamp used for audit fields."""
 
@@ -84,8 +90,8 @@ class StoryScene:
     def validate(self) -> None:
         if not self.key.strip():
             raise ValueError("current_scene.key 不能为空")
-        if not self.name.strip():
-            raise ValueError("current_scene.name 不能为空")
+        if not self.name.strip() or not has_chinese_text(self.name):
+            raise ValueError("current_scene.name 必须是中文")
         if any(not character_id.strip() for character_id in self.character_ids):
             raise ValueError("current_scene.character_ids 不能包含空值")
         if len(set(self.character_ids)) != len(self.character_ids):
