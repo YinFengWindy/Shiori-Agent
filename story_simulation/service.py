@@ -258,6 +258,34 @@ class StorySimulationService:
         )
         return await self.generate_resource(prepared, emit_event)
 
+    async def regenerate_resource_prompt(
+        self, resource: dict[str, Any]
+    ) -> tuple[str, StoryVisualType]:
+        """Ask the Director for a fresh visual prompt without committing Story beats."""
+
+        source_turn_id = str(resource.get("sourceTurnId") or "").strip()
+        if not source_turn_id:
+            raise StoryInvalidOutputError("视觉资源缺少来源回合")
+        turn = self.repository.turn(source_turn_id)
+        story_id = str(resource["storyId"])
+        if self.repository.story_id_for_turn(source_turn_id) != story_id:
+            raise StoryInvalidOutputError("视觉资源来源回合不属于当前 Story")
+        context = self.repository.build_context(story_id)
+        draft = await asyncio.wait_for(
+            self._director.generate(
+                context=context,
+                input_text=str(turn["input"]),
+                opening=str(turn["kind"]) == "opening",
+            ),
+            timeout=30,
+        )
+        draft = self._bind_dialogue_speakers(draft, context.role_snapshot)
+        self._continuity_guard.validate(draft, context)
+        prompt = draft.visual_prompt.strip()
+        if not prompt or not prompt.isascii():
+            raise StoryInvalidOutputError("Director 未返回有效的英文 NovelAI visual_prompt")
+        return prompt, draft.visual_type
+
     async def generate_resource(
         self, resource: dict[str, Any], emit_event: EventEmitter
     ) -> dict[str, Any]:
