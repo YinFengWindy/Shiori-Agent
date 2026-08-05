@@ -101,7 +101,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   return (
     <section className={cx("relative h-full min-h-0 overflow-hidden text-white", renderLocalBackdrop ? "bg-[#172128]" : "bg-transparent")} data-dialogue-visible={dialogueVisible} data-testid="story-game-surface" onClick={handleSurfaceClick} onContextMenu={handleContextMenu} onWheel={handleWheel}>
       {renderLocalBackdrop ? <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center bg-no-repeat" data-testid="story-game-backdrop" style={{ backgroundImage: `url(${backgroundUrl})` }} /> : null}
-      {showCharacterForeground ? <img className="pointer-events-none absolute bottom-0 right-[clamp(4vw,10vw,12rem)] z-10 h-[min(70vh,46rem)] max-w-[42vw] object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]" data-testid="story-game-character" src={characterAvatarUrl} alt="" /> : null}
+      {showCharacterForeground ? <img className="pointer-events-none absolute bottom-0 right-[clamp(4vw,10vw,12rem)] z-10 h-[min(78vh,52rem)] max-w-[48vw] object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]" data-testid="story-game-character" src={characterAvatarUrl} alt="" /> : null}
 
       <div className="story-game-chrome story-game-readable absolute left-5 top-5 z-30 rounded-md px-3 py-2 text-white/85" data-testid="story-current-time"><span className="mr-2 text-xs">{formatStoryDate(story.currentStoryDate)}</span><strong className="font-serif text-lg font-semibold text-[#F4C29F]">{story.currentTimeBand}</strong></div>
       <div className="absolute right-5 top-5 z-30 flex gap-2">
