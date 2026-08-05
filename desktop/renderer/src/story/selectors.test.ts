@@ -26,11 +26,13 @@ describe("Story selectors", () => {
 
   it("refreshes a launcher summary from a Story read model", () => {
     const summary = createStorySummary();
-    const story = createStoryDetails({ title: "新标题", status: "archived", currentTimeBand: "夜晚", beats: [createStoryBeat({ timeBand: "夜晚" })] });
+    const story = createStoryDetails({ title: "新标题", status: "archived", currentStoryDate: "2026-08-03", currentTimeBand: "夜晚", currentScene: { key: "bedroom", name: "卧室", characterIds: ["role-1"] }, beats: [createStoryBeat({ timeBand: "夜晚" })] });
     const updated = replaceStorySummary([summary], story);
     assert.equal(updated[0].title, "新标题");
     assert.equal(updated[0].status, "archived");
+    assert.equal(updated[0].currentStoryDate, "2026-08-03");
     assert.equal(updated[0].currentTimeBand, "夜晚");
+    assert.equal(updated[0].currentScene.name, "卧室");
     assert.equal(getStoryStatusLabel("awaiting_player"), "轮到你了");
   });
 
@@ -81,7 +83,7 @@ describe("Story selectors", () => {
 
   it("selects only visual resources owned by the current scene", () => {
     const story = createStoryDetails({
-      currentScene: { key: "station", characterIds: ["role-1"] },
+      currentScene: { key: "station", name: "车站", characterIds: ["role-1"] },
       cgGallery: [
         { id: "old", storyId: "story-1", kind: "cg", visualType: "character", sceneKey: "street", status: "ready", path: "old.png", prompt: "", sourceTurnId: null, sequence: 2, errorCode: null, createdAt: "", updatedAt: "" },
         { id: "current", storyId: "story-1", kind: "cg", visualType: "scene", sceneKey: "station", status: "ready", path: "current.png", prompt: "", sourceTurnId: null, sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },

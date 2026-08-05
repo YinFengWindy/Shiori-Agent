@@ -17,7 +17,7 @@ function storyPayload(revision = 4, operation: "awaiting_player" | "generating" 
     playerProfile: { display_name: "岚", appearance: "短发", identity: "抄写员" },
     currentStoryDate: "2026-08-01",
     currentTimeBand: "上午" as const,
-    currentScene: { key: "default", characterIds: [] },
+    currentScene: { key: "default", name: "默认场景", characterIds: [] },
     backgroundResource: null,
     cgGallery: [],
     segment: { id: "segment-1", sequence: 1, storyDate: "2026-08-01", timeBand: "上午" as const, status: "active", mode: "plot", operation, openingContext: {}, runtimeSnapshot: {} },
@@ -38,10 +38,10 @@ describe("createStoryBridgeClient", () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
     const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> => {
       requests.push(request);
-      return { id: "response", type: "response", method: request.method, payload: { stories: [{ story_id: "story-1", relative_db_path: "story-1/story.db", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", current_time_band: "上午" }] }, error: null };
+      return { id: "response", type: "response", method: request.method, payload: { stories: [{ story_id: "story-1", relative_db_path: "story-1/story.db", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", current_story_date: "2026-08-02", current_time_band: "上午", current_scene: { key: "station", name: "车站", character_ids: [] } }] }, error: null };
     };
 
-    assert.deepEqual(await createStoryBridgeClient(invoke).listStories(), [{ storyId: "story-1", relativeDbPath: "story-1/story.db", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", currentTimeBand: "上午" }]);
+    assert.deepEqual(await createStoryBridgeClient(invoke).listStories(), [{ storyId: "story-1", relativeDbPath: "story-1/story.db", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", currentStoryDate: "2026-08-02", currentTimeBand: "上午", currentScene: { key: "station", name: "车站", characterIds: [] } }]);
     assert.deepEqual(requests, [{ method: "stories.list", payload: {} }]);
   });
 

@@ -102,7 +102,7 @@ def test_story_repository_advances_the_story_date_when_period_wraps_midnight(tmp
     assert committed[0][0].story_date == "2026-08-02"
     assert committed[0][0].time_band == "清晨"
     assert story["currentStoryDate"] == "2026-08-02"
-    assert story["currentScene"] == {"key": "dawn-room", "characterIds": ["role-1"]}
+    assert story["currentScene"] == {"key": "dawn-room", "name": "默认场景", "characterIds": ["role-1"]}
     repository.close()
 
 

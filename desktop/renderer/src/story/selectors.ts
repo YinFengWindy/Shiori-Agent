@@ -11,9 +11,14 @@ export function replaceStorySummary(stories: StorySummary[], story: StoryDetails
   if (index < 0) return stories;
   const current = stories[index];
   const currentTimeBand = story.currentTimeBand;
-  if (current.title === story.title && current.status === story.status && current.currentTimeBand === currentTimeBand) return stories;
+  const nextScene = story.currentScene;
+  const sameScene = current.currentScene.key === nextScene.key
+    && current.currentScene.name === nextScene.name
+    && current.currentScene.characterIds.length === nextScene.characterIds.length
+    && current.currentScene.characterIds.every((id, index) => id === nextScene.characterIds[index]);
+  if (current.title === story.title && current.status === story.status && current.currentStoryDate === story.currentStoryDate && current.currentTimeBand === currentTimeBand && sameScene) return stories;
   return stories.map((candidate, candidateIndex) => candidateIndex === index
-    ? { ...candidate, title: story.title, status: story.status, currentTimeBand }
+    ? { ...candidate, title: story.title, status: story.status, currentStoryDate: story.currentStoryDate, currentTimeBand, currentScene: nextScene }
     : candidate);
 }
 

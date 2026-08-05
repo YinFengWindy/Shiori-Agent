@@ -41,7 +41,7 @@ export function createStoryDetails(overrides: Partial<StoryDetails> = {}): Story
     beats: overrides.beats ?? [createStoryBeat()],
     cues: overrides.cues ?? [],
     turns: overrides.turns ?? [],
-    currentScene: overrides.currentScene ?? { key: "default", characterIds: [] },
+    currentScene: overrides.currentScene ?? { key: "default", name: "默认场景", characterIds: [] },
     backgroundResource: overrides.backgroundResource ?? null,
     cgGallery: overrides.cgGallery ?? [],
     currentStoryDate: overrides.currentStoryDate ?? "2026-08-02",
@@ -57,6 +57,8 @@ export function createStorySummary(story = createStoryDetails()): StorySummary {
     title: story.title,
     status: story.status,
     createdAt: "2026-08-02T10:00:00+08:00",
+    currentStoryDate: story.currentStoryDate,
     currentTimeBand: story.currentTimeBand,
+    currentScene: story.currentScene,
   };
 }

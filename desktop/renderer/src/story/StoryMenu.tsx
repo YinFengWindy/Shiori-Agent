@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
 import type { StorySummary } from "./types";
+import { formatStoryDate } from "./storyTime";
 import { StorySurface } from "./StorySurface";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
@@ -66,7 +67,7 @@ export function StoryLoadList({ stories, busy, background, sharedBackdrop = fals
             <div className="grid border-t border-[#DDA9BE]/65" data-testid="story-load-list" aria-label="已保存剧情">
               {stories.map((story) => (
                 <motion.button key={story.storyId} className="flex min-h-20 w-full items-center gap-3 border-b border-[#DDA9BE]/65 bg-[#FFF8FC]/45 px-4 py-3 text-left transition-colors hover:bg-white/75 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] disabled:opacity-40" type="button" disabled={busy} whileHover={commandHover(reducedMotion)} whileTap={reducedMotion ? undefined : { scale: 0.98 }} onClick={() => onLoadStory(story.storyId)}>
-                  <span className="min-w-0 flex-1"><strong className="block truncate font-serif text-base text-[#5E2841]">{story.title}</strong><span className="mt-1 block truncate text-xs text-[#8B6676]">{story.currentTimeBand}</span></span>
+                  <span className="min-w-0 flex-1"><strong className="block truncate font-serif text-base text-[#5E2841]">{story.title}</strong><span className="mt-1 block truncate text-xs text-[#8B6676]">{formatStoryDate(story.currentStoryDate)} · {story.currentTimeBand} · {(story.currentScene.name ?? "").trim() || "未命名场景"}</span></span>
                   <ArrowRight className="shrink-0 text-[#B64B75]" />
                 </motion.button>
               ))}

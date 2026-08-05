@@ -57,7 +57,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   const storyBackgroundPath = storyVisualResource?.path;
   const hasStoryBackground = Boolean(storyBackgroundPath);
   const backgroundUrl = storyBackgroundPath ? toFileUrl(storyBackgroundPath) : background.url;
-  const currentSceneLabel = story.currentScene.key.trim() || "未命名场景";
+  const currentSceneLabel = (story.currentScene.name ?? "").trim() || "未命名场景";
   const renderLocalBackdrop = true;
   const showCharacterForeground = Boolean(characterAvatarUrl)
     && storyVisualResource?.visualType === "scene"

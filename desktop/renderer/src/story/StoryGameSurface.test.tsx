@@ -44,14 +44,15 @@ describe("StoryGameSurface", () => {
   });
 
   it("shows the current scene beside the Story time", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface story={createStoryDetails({ currentScene: { key: "home-living-room-night", characterIds: ["role-1", "player"] } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderToStaticMarkup(<StoryGameSurface story={createStoryDetails({ currentScene: { key: "home-living-room-night", name: "夜间客厅", characterIds: ["role-1", "player"] } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.match(markup, /data-testid="story-current-scene"/);
-    assert.match(markup, /场景：home-living-room-night/);
+    assert.match(markup, /场景：夜间客厅/);
+    assert.doesNotMatch(markup, /home-living-room-night/);
   });
 
   it("uses the Story-owned background resource when it is ready", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({ currentScene: { key: "default", characterIds: ["role-1"] }, backgroundResource: { id: "resource-1", storyId: "story-1", kind: "background", visualType: "scene", sceneKey: "default", status: "ready", path: "D:\\stories\\opening.png", prompt: "anime screencap", sourceTurnId: "turn-1", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({ currentScene: { key: "default", name: "默认场景", characterIds: ["role-1"] }, backgroundResource: { id: "resource-1", storyId: "story-1", kind: "background", visualType: "scene", sceneKey: "default", status: "ready", path: "D:\\stories\\opening.png", prompt: "anime screencap", sourceTurnId: "turn-1", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /data-testid="story-game-backdrop"/);
     assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
     assert.match(markup, /data-testid="story-game-character"/);
@@ -92,7 +93,7 @@ describe("StoryGameSurface", () => {
 
   it("overlays the current role difference on a character-free scene CG", () => {
     const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
-      currentScene: { key: "default", characterIds: ["role-1"] },
+      currentScene: { key: "default", name: "默认场景", characterIds: ["role-1"] },
       cgGallery: [
         { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "scene", sceneKey: "default", status: "ready", path: "D:\\stories\\scene.png", prompt: "empty station", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
       ],
@@ -113,7 +114,7 @@ describe("StoryGameSurface", () => {
 
   it("does not overlay the role difference when the current CG already contains characters", () => {
     const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
-      currentScene: { key: "default", characterIds: ["role-1"] },
+      currentScene: { key: "default", name: "默认场景", characterIds: ["role-1"] },
       cgGallery: [
         { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "character", sceneKey: "default", status: "ready", path: "D:\\stories\\scene.png", prompt: "girl feeding man", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
       ],

@@ -14,7 +14,8 @@ describe("StoryLoadList", () => {
     assert.match(markup, />载入剧情</);
     assert.doesNotMatch(markup, />LOAD STORY</);
     assert.match(markup, /data-testid="story-load-list"/);
-    assert.match(markup, />上午</);
+    assert.match(markup, />2026年8月2日 · 上午 · 默认场景</);
+    assert.doesNotMatch(markup, />上午</);
     assert.doesNotMatch(markup, /2026-08-02T10:00:00\+08:00/);
     assert.match(markup, /bg-\[#FFF8FC\]\/45/);
     assert.doesNotMatch(markup, /bg-\[#FFF8FC\]\/55/);

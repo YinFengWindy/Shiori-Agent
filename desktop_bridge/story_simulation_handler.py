@@ -84,8 +84,7 @@ class StorySimulationHandler:
                 "stories": [
                     {
                         **summary,
-                        "current_time_band": self._repository(summary["story_id"]).current_time_band(summary["story_id"]),
-                        "current_story_date": self._repository(summary["story_id"]).current_story_date(summary["story_id"]),
+                        **self._repository(summary["story_id"]).current_stage_state(summary["story_id"]),
                     }
                     for summary in summaries
                 ]

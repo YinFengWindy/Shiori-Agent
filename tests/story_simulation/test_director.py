@@ -20,7 +20,7 @@ def test_director_parser_keeps_only_an_explicit_time_band() -> None:
                         "effective_at": "2026-08-01T20:00:00+08:00",
                     }
                 ],
-                "current_scene": {"key": "school-rooftop", "character_ids": []},
+                "current_scene": {"key": "school-rooftop", "name": "学校天台", "character_ids": []},
             },
             ensure_ascii=False,
         )
@@ -37,7 +37,7 @@ def test_director_parser_accepts_character_visual_type() -> None:
                 "beats": [{"text": "她转身挡在你身前。"}],
                 "visual_type": "character",
                 "visual_prompt": "girl, umbrella, rainy street",
-                "current_scene": {"key": "rainy-street", "character_ids": ["role-1", "player"]},
+                "current_scene": {"key": "rainy-street", "name": "雨中街道", "character_ids": ["role-1", "player"]},
             }
         )
     )
@@ -77,7 +77,7 @@ def test_director_request_carries_the_persisted_current_scene() -> None:
                 "storyDate": "2026-08-01",
                 "timeBand": "上午",
                 "runtimeSnapshot": {
-                    "current_scene": {"key": "station", "character_ids": ["role-1"]},
+                    "current_scene": {"key": "station", "name": "车站", "character_ids": ["role-1"]},
                 },
             },
         ),
@@ -87,6 +87,7 @@ def test_director_request_carries_the_persisted_current_scene() -> None:
 
     assert payload["story"]["current_scene"] == {
         "key": "station",
+        "name": "车站",
         "character_ids": ["role-1"],
     }
 
@@ -94,3 +95,19 @@ def test_director_request_carries_the_persisted_current_scene() -> None:
 def test_director_parser_requires_current_scene() -> None:
     with pytest.raises(StoryInvalidOutputError, match="current_scene"):
         ProviderStoryDirector._parse(json.dumps({"beats": [{"text": "门开了。"}]}))
+
+
+def test_director_parser_requires_a_chinese_scene_name() -> None:
+    with pytest.raises(StoryInvalidOutputError, match="current_scene"):
+        ProviderStoryDirector._parse(
+            json.dumps(
+                {
+                    "beats": [{"text": "门开了。"}],
+                    "current_scene": {
+                        "key": "home-living-room-night",
+                        "name": "home living room",
+                        "character_ids": [],
+                    },
+                }
+            )
+        )

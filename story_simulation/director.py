@@ -60,15 +60,15 @@ class ProviderStoryDirector:
             "输出格式为 {\"beats\":[{\"text\":string,\"kind\":\"dialogue|action|narration\","
             "\"speaker\":string|null,\"time_band\":\"清晨|上午|下午|夜晚|深夜\"|null,"
             "\"fact_changes\":[]}],\"stop_reason\":\"awaiting_player\","
-            "\"current_scene\":{\"key\":string,\"character_ids\":[string]},"
+            "\"current_scene\":{\"key\":string,\"name\":string,\"character_ids\":[string]},"
             "\"visual_type\":\"scene|character\",\"visual_prompt\":string}。"
             "一次最多 3 个 beat，所有 text 合计最多 1200 个中文字符，单个 beat 最多 400 字符。"
             "故事日期由 story.story_date 提供且不能修改；剧情时间只使用清晨、上午、下午、夜晚、深夜五档。"
             "只有剧情明确进入另一个时段时才填写 time_band，否则必须填写 null。"
             "每个 dialogue 都是正式角色的台词，speaker 必须精确填写 role.name；"
             "绝不能写角色、正式角色、女主等泛称，也不生成玩家的 dialogue。"
-            "current_scene 必须描述这次剧情提交后的当前场景。key 使用稳定简短标识；"
-            "场景未变化时沿用 current_scene.key，切换场景时生成新 key。"
+            "current_scene 必须描述这次剧情提交后的当前场景。key 使用稳定简短标识，name 使用简洁中文场景名；"
+            "场景未变化时沿用 current_scene.key 和 current_scene.name，切换场景时生成新 key 和中文 name。"
             "character_ids 只填写当前场景实际在场者；正式角色使用 role.id，玩家使用 player。"
             "不在当前场景的角色绝不能加入 character_ids。"
             "opening 模式的 visual_type 必须是 scene；普通场景视觉使用 scene，"
@@ -159,15 +159,16 @@ class ProviderStoryDirector:
         if not isinstance(raw_current_scene, dict):
             raise StoryInvalidOutputError("Director 缺少 current_scene")
         scene_key = str(raw_current_scene.get("key") or "").strip()
+        scene_name = str(raw_current_scene.get("name") or "").strip()
         raw_character_ids = raw_current_scene.get("character_ids")
-        if not scene_key or not isinstance(raw_character_ids, list):
+        if not scene_key or not scene_name or not any("一" <= char <= "龥" for char in scene_name) or not isinstance(raw_character_ids, list):
             raise StoryInvalidOutputError("Director current_scene 格式无效")
         character_ids = tuple(
             str(character_id).strip()
             for character_id in raw_character_ids
             if str(character_id).strip()
         )
-        current_scene = StoryScene(key=scene_key, character_ids=character_ids)
+        current_scene = StoryScene(key=scene_key, name=scene_name, character_ids=character_ids)
         try:
             current_scene.validate()
         except ValueError as exc:

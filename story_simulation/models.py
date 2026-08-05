@@ -78,18 +78,21 @@ class StoryScene:
     """The Director-owned scene identity and participants for the active Story stage."""
 
     key: str
+    name: str = "默认场景"
     character_ids: tuple[str, ...] = ()
 
     def validate(self) -> None:
         if not self.key.strip():
             raise ValueError("current_scene.key 不能为空")
+        if not self.name.strip():
+            raise ValueError("current_scene.name 不能为空")
         if any(not character_id.strip() for character_id in self.character_ids):
             raise ValueError("current_scene.character_ids 不能包含空值")
         if len(set(self.character_ids)) != len(self.character_ids):
             raise ValueError("current_scene.character_ids 不能重复")
 
     def to_dict(self) -> dict[str, Any]:
-        return {"key": self.key, "character_ids": list(self.character_ids)}
+        return {"key": self.key, "name": self.name, "character_ids": list(self.character_ids)}
 
 
 @dataclass(frozen=True)

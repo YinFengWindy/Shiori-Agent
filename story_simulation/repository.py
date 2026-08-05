@@ -352,6 +352,26 @@ class StoryRepository:
             )
         return str(segment["story_date"])
 
+    def current_stage_state(self, story_id: str) -> dict[str, Any]:
+        """Return the current date, time band, and scene for a Story summary."""
+
+        with self._lock:
+            segment = self._require_row(
+                "SELECT story_date, time_band, runtime_snapshot FROM segments "
+                "WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
+                (story_id,),
+            )
+        scene = self._current_scene_dict(load(segment["runtime_snapshot"], {}))
+        return {
+            "current_story_date": str(segment["story_date"]),
+            "current_time_band": str(segment["time_band"]),
+            "current_scene": {
+                "key": scene["key"],
+                "name": scene["name"],
+                "character_ids": scene["characterIds"],
+            },
+        }
+
     def story_id_for_turn(self, turn_id: str) -> str:
         """Resolve a persisted Turn owner without loading unrelated Story state."""
 
@@ -805,10 +825,11 @@ class StoryRepository:
     def _current_scene_dict(runtime_snapshot: dict[str, Any]) -> dict[str, Any]:
         raw_scene = runtime_snapshot.get("current_scene")
         if not isinstance(raw_scene, dict):
-            return {"key": "", "characterIds": []}
+            return {"key": "", "name": "", "characterIds": []}
         character_ids = raw_scene.get("character_ids")
         return {
             "key": str(raw_scene.get("key") or ""),
+            "name": str(raw_scene.get("name") or ""),
             "characterIds": [str(item) for item in character_ids if str(item).strip()]
             if isinstance(character_ids, list)
             else [],

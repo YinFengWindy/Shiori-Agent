@@ -7,7 +7,9 @@ export type StorySummary = {
   title: string;
   status: "active" | "archived" | "deleting";
   createdAt: string;
+  currentStoryDate: string;
   currentTimeBand: StoryTimeBand;
+  currentScene: StoryScene;
 };
 
 /** Story operation state owned by the current segment. */
@@ -20,6 +22,7 @@ export type StoryVisualType = "scene" | "character";
 /** Current Director-owned scene and the characters who are actually present. */
 export type StoryScene = {
   key: string;
+  name: string;
   characterIds: string[];
 };
 

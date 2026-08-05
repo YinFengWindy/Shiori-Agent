@@ -9,7 +9,9 @@ type StorySummaryPayload = {
   title: string;
   status: "active" | "archived" | "deleting";
   created_at: string;
+  current_story_date: string;
   current_time_band: StorySummary["currentTimeBand"];
+  current_scene: { key: string; name: string; character_ids: string[] };
 };
 
 type StoryPayload = StoryDetails;
@@ -37,7 +39,9 @@ function toStorySummary(story: StorySummaryPayload): StorySummary {
     title: story.title,
     status: story.status,
     createdAt: story.created_at,
+    currentStoryDate: story.current_story_date,
     currentTimeBand: story.current_time_band,
+    currentScene: { key: story.current_scene.key, name: story.current_scene.name, characterIds: story.current_scene.character_ids },
   };
 }
 
