@@ -7,6 +7,7 @@ import {
   buildRoleProactiveConfig,
   createRoleFormFromRole,
   isRoleFormDirty,
+  syncRoleFormMoodConfig,
 } from "./roleFormState";
 
 function createRole(runtime_config: Record<string, unknown> = {}): RoleRecord {
@@ -97,5 +98,28 @@ describe("roleFormState", () => {
       buildRoleProactiveConfig(role, { ...form, proactiveEnabled: true }).overrides,
       { loneliness: { threshold: 0.7 } },
     );
+  });
+
+  it("syncs generated mood bindings without discarding unrelated form edits", () => {
+    const form = {
+      ...createRoleFormFromRole(createRole()),
+      name: "Unsaved Mira",
+    };
+
+    const synced = syncRoleFormMoodConfig(form, createRole({
+      default_mood: "开心",
+      mood_illustration_bindings: {
+        平静: "illustrations/calm.png",
+        开心: "illustrations/happy.png",
+      },
+    }));
+
+    assert.equal(synced.name, "Unsaved Mira");
+    assert.equal(synced.defaultMood, "开心");
+    assert.deepEqual(synced.moodCatalog, ["平静", "开心"]);
+    assert.deepEqual(synced.moodIllustrationBindings, {
+      平静: "illustrations/calm.png",
+      开心: "illustrations/happy.png",
+    });
   });
 });

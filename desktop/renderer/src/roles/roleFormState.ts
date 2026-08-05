@@ -70,6 +70,20 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
   };
 }
 
+/** Applies persisted mood settings without discarding unrelated in-progress form edits. */
+export function syncRoleFormMoodConfig(
+  roleForm: RoleFormState,
+  role: Pick<RoleRecord, "runtime_config">,
+): RoleFormState {
+  const moodConfig = readRoleMoodConfig(role);
+  return {
+    ...roleForm,
+    moodCatalog: moodConfig.moodCatalog,
+    defaultMood: moodConfig.defaultMood,
+    moodIllustrationBindings: moodConfig.moodIllustrationBindings,
+  };
+}
+
 /** Checks whether the editable role form has diverged from the persisted role snapshot. */
 export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null): boolean {
   const persistedMoodConfig = readRoleMoodConfig(role);

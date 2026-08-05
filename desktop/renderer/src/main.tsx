@@ -37,7 +37,7 @@ import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalDiagnostics";
 import { useImageStudioState } from "./image/useImageStudioState";
 import { type PromptTagWorkspaceSectionId } from "./image/PromptTagWorkspaceSidebar";
-import { createRoleFormFromRole } from "./roles/roleFormState";
+import { createRoleFormFromRole, syncRoleFormMoodConfig } from "./roles/roleFormState";
 import { useRoleDifferenceGeneration } from "./roles/useRoleDifferenceGeneration";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { useRoleFormAdapters } from "./roles/useRoleFormAdapters";
@@ -427,6 +427,7 @@ function App(): React.ReactElement {
     onRoleUpdated: (updated) => {
       setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
       if (updated.id === detailRoleId) {
+        updateRoleForm((current) => syncRoleFormMoodConfig(current, updated));
         applyRoleSnapshot(updated);
         setNotice("角色差分已生成并加入素材库。");
       }

@@ -46,10 +46,11 @@ async def test_role_difference_rpc_publishes_progress_and_returns_updated_role(
     )
     generated_dir = tmp_path / "generated"
     generated_dir.mkdir()
+    session_manager = SessionManager(tmp_path)
     service = DesktopBridgeService(
         workspace=tmp_path,
         role_store=role_store,
-        session_manager=SessionManager(tmp_path),
+        session_manager=session_manager,
         agent_loop=SimpleNamespace(process_direct=AsyncMock()),
         event_bus=EventBus(),
         novelai_service=FakeNovelAI(generated_dir),
@@ -68,6 +69,15 @@ async def test_role_difference_rpc_publishes_progress_and_returns_updated_role(
 
     assert response.error is None
     assert response.payload["role"]["asset_categories"][-1]["name"] == "AI 差分"
-    assert [event["method"] for event in events].count("roles.differences.progress") == 12
+    assert [event["method"] for event in events].count(
+        "roles.differences.progress"
+    ) == 12
     assert events[-1]["payload"]["phase"] == "finished"
+    session_config = session_manager.get_or_create("role:mira").metadata[
+        "role_runtime_config"
+    ]
+    assert session_config["mood_catalog"] == ["平静", "开心", "惊讶", "生气", "悲伤"]
+    assert set(session_config["mood_illustration_bindings"]) == set(
+        session_config["mood_catalog"]
+    )
     await service.aclose()

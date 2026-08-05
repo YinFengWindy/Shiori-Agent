@@ -105,6 +105,7 @@ class DesktopRoleRequestHandler:
                 base_asset=str(payload.get("base_asset") or ""),
                 emit_progress=self._emit_difference_progress,
             )
+            self._role_service.sessions.open_by_role(result["role"])
             return {
                 "job_id": result["job_id"],
                 "category_id": result["category_id"],
