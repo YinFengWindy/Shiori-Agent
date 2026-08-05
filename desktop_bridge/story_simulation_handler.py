@@ -409,16 +409,13 @@ class StorySimulationHandler:
             raise ValueError("只有 CG 资源可以重新生成")
         if resource["status"] == "generating":
             raise ValueError("资源正在生成")
-        service = self._service(repository)
-        prompt, visual_type = await service.regenerate_resource_prompt(resource)
         prepared = repository.prepare_resource(
             resource_id,
-            prompt=prompt,
+            prompt=str(resource.get("prompt") or ""),
             source_turn_id=resource.get("sourceTurnId"),
-            visual_type=visual_type,
         )
         await self._emit_resource_changed(repository, prepared, emit_event)
-        self._start_resource_generation(service, prepared, emit_event)
+        self._start_resource_generation(self._service(repository), prepared, emit_event)
         return {
             "story": repository.story_read_model(story_id),
             "resource_id": resource_id,

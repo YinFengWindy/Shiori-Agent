@@ -256,7 +256,6 @@ class StoryRepository:
         *,
         prompt: str,
         source_turn_id: str | None,
-        visual_type: StoryVisualType | None = None,
     ) -> dict[str, Any]:
         """Attach the immutable generation inputs before a resource request."""
 
@@ -266,25 +265,13 @@ class StoryRepository:
                 "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
             )
             now = utc_now()
-            if visual_type is None:
-                connection.execute(
-                    """UPDATE story_resources
-                    SET prompt = ?, source_turn_id = ?, status = 'generating',
-                        path = NULL, error_code = NULL, updated_at = ?
-                    WHERE id = ?""",
-                    (clean_prompt, source_turn_id, now, resource_id),
-                )
-            else:
-                if visual_type not in {"scene", "character"}:
-                    raise ValueError("资源视觉类型无效")
-                connection.execute(
-                    """UPDATE story_resources
-                    SET prompt = ?, source_turn_id = ?, visual_type = ?,
-                        status = 'generating', path = NULL, error_code = NULL,
-                        updated_at = ?
-                    WHERE id = ?""",
-                    (clean_prompt, source_turn_id, visual_type, now, resource_id),
-                )
+            connection.execute(
+                """UPDATE story_resources
+                SET prompt = ?, source_turn_id = ?, status = 'generating',
+                    path = NULL, error_code = NULL, updated_at = ?
+                WHERE id = ?""",
+                (clean_prompt, source_turn_id, now, resource_id),
+            )
             row = self._require_row(
                 "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
             )
@@ -360,13 +347,6 @@ class StoryRepository:
                 "SELECT story_id FROM turns WHERE id = ?", (turn_id,)
             )
         return str(row["story_id"])
-
-    def turn(self, turn_id: str) -> dict[str, Any]:
-        """Return one persisted Turn for resource-level regeneration context."""
-
-        with self._lock:
-            row = self._require_row("SELECT * FROM turns WHERE id = ?", (turn_id,))
-        return self._turn_dict(row)
 
     def opening_turn(self, story_id: str) -> dict[str, Any]:
         """Return the single durable opening receipt for a Story creation replay."""

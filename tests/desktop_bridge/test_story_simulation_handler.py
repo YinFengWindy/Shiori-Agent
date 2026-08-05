@@ -39,12 +39,6 @@ class ProgressionVisualDirector:
                 beats=(StoryBeatDraft(text="雨后的铃声响起。"),),
                 visual_prompt="old school building, rainy afternoon",
             )
-        if self.calls >= 3:
-            return DirectorDraft(
-                beats=(StoryBeatDraft(text="她把伞收起，向你靠近。", kind="action"),),
-                visual_prompt="rainy school gate, girl stepping closer to boy, intimate close-up",
-                visual_type="character",
-            )
         return DirectorDraft(
             beats=(StoryBeatDraft(text="她把伞递到你手里。", kind="dialogue", speaker="澪"),),
             visual_prompt="rainy school gate, girl handing umbrella, emotional close-up",
@@ -343,10 +337,7 @@ async def test_ready_cg_regeneration_replaces_the_existing_gallery_resource(tmp_
     assert replacement["id"] == original["id"]
     assert replacement["kind"] == "cg"
     assert replacement["visualType"] == "character"
-    assert replacement["prompt"] == (
-        "rainy school gate, girl stepping closer to boy, intimate close-up"
-    )
-    assert replacement["prompt"] != original["prompt"]
+    assert replacement["prompt"] == original["prompt"]
     assert replacement["status"] == "generating"
     assert replacement["path"] is None
     assert any(
@@ -362,7 +353,7 @@ async def test_ready_cg_regeneration_replaces_the_existing_gallery_resource(tmp_
     assert ready["cgGallery"][-1]["id"] == original["id"]
     assert ready["cgGallery"][-1]["path"] != original["path"]
     assert image_tool.calls == 3
-    assert image_tool.prompts[-1] == replacement["prompt"]
+    assert image_tool.prompts[-1] == original["prompt"]
     await handler.aclose()
 
 
