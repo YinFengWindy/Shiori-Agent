@@ -19,7 +19,7 @@ from story_simulation.repository import StoryRepository, payload_hash
 from story_simulation.service import StorySimulationService
 from story_simulation.story_time import normalize_story_date, normalize_story_time_band
 
-from .story_image_generator import StoryImageGenerator, prompt_mentions_people
+from .story_image_generator import StoryImageGenerator
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 
@@ -438,8 +438,6 @@ class StorySimulationHandler:
             for resource in repository.story_resources(story_id)
         ):
             return
-        if visual_type == "scene" and prompt_mentions_people(prompt):
-            visual_type = "character"
         resource = repository.create_resource(
             story_id,
             kind="cg",

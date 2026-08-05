@@ -8,162 +8,6 @@ from typing import Any
 from story_simulation.errors import StoryInvalidOutputError, StoryProviderUnavailableError
 
 _STORY_CG_MODEL = "nai-diffusion-4-5-full"
-_BASE_NEGATIVE_PROMPT = "text, logo, watermark, signature, user interface, border"
-_SCENE_PERSON_MARKERS = (
-    "girl", "boy", "woman", "man", "person", "people", "human", "character",
-    "couple", "group", "crowd", "feeding", "hug", "kiss", "embrace",
-)
-_PLAYER_MARKERS = (
-    "player", "protagonist", "main character", "you", "man", "boy", "male", "1boy",
-)
-_FEMALE_MARKERS = ("girl", "woman", "female", "1girl")
-_MALE_MARKERS = ("boy", "man", "male", "1boy")
-_APPEARANCE_COLORS = (
-    ("暖棕色", "warm brown"),
-    ("深棕色", "dark brown"),
-    ("棕色", "brown"),
-    ("黑色", "black"),
-    ("白色", "white"),
-    ("金色", "blonde"),
-    ("银色", "silver"),
-    ("粉色", "pink"),
-    ("蓝色", "blue"),
-    ("红色", "red"),
-)
-
-
-def prompt_mentions_people(prompt: str) -> bool:
-    """Return whether a visual prompt explicitly describes a person."""
-
-    normalized = prompt.casefold()
-    return any(marker in normalized for marker in _SCENE_PERSON_MARKERS)
-
-
-def _scene_prompt(prompt: str) -> str:
-    """Keep environment tags while removing person-bearing comma tags."""
-
-    tags = [tag.strip() for tag in prompt.split(",") if tag.strip()]
-    kept = [
-        tag
-        for tag in tags
-        if not any(marker in tag.casefold() for marker in _SCENE_PERSON_MARKERS)
-    ]
-    return ", ".join(kept) or "empty scene"
-
-
-def _gender_tag(text: str) -> str | None:
-    """Return the NovelAI gender count tag described by one prompt fragment."""
-
-    normalized = text.casefold()
-    if any(marker in normalized for marker in _FEMALE_MARKERS):
-        return "girl"
-    if any(marker in normalized for marker in _MALE_MARKERS):
-        return "boy"
-    return None
-
-
-def _feeding_relation_constraints(prompt: str) -> tuple[str, str]:
-    """Return V4.5 tags that retain the prompt's feeding direction."""
-
-    before, _, after = prompt.casefold().partition("feeding")
-    actor = _gender_tag(before)
-    recipient = _gender_tag(after)
-    if actor == "girl" and recipient == "boy":
-        return (
-            "{{girl feeding boy}}, {{girl holding spoon}}, boy receiving food, spoon, food, open mouth",
-            "boy feeding girl, reversed roles",
-        )
-    if actor == "boy" and recipient == "girl":
-        return (
-            "{{boy feeding girl}}, {{boy holding spoon}}, girl receiving food, spoon, food, open mouth",
-            "girl feeding boy, reversed roles",
-        )
-    return "{{feeding}}, holding spoon, receiving food, spoon, food, open mouth", "reversed roles"
-
-
-def _legacy_character_tags(prompt: str) -> str:
-    """Convert legacy feeding prose into comma-separated NovelAI V4.5 tags."""
-
-    tags: list[str] = []
-    for tag in (item.strip() for item in prompt.split(",")):
-        if not tag:
-            continue
-        if "feeding" not in tag.casefold():
-            tags.append(tag)
-            continue
-        attributes = tag.replace(" and ", ",")
-        for marker in ("young", "woman", "girl", "man", "boy", "feeding", "with"):
-            attributes = attributes.replace(marker, "")
-        tags.extend(item.strip() for item in attributes.split(",") if item.strip())
-    return ", ".join(tags)
-
-
-def _player_appearance_tags(story: dict[str, Any]) -> str:
-    """Return V4.5 tags for the frozen player appearance when available."""
-
-    profile = story.get("playerProfile")
-    if not isinstance(profile, dict):
-        return ""
-    appearance = str(profile.get("appearance") or "").strip()
-    if not appearance:
-        return ""
-    if appearance.isascii():
-        return appearance
-
-    def color_before(position: int) -> str:
-        matches = [
-            (appearance.rfind(marker, 0, position), len(marker), tag)
-            for marker, tag in _APPEARANCE_COLORS
-            if appearance.rfind(marker, 0, position) >= 0
-        ]
-        if not matches:
-            return ""
-        return max(matches, key=lambda item: (item[0] + item[1], item[1]))[2]
-
-    tags: list[str] = []
-    if "头发" in appearance or "短发" in appearance or "长发" in appearance:
-        hair_positions = [appearance.find(marker) for marker in ("头发", "短发", "长发")]
-        hair_position = min(
-            (position for position in hair_positions if position >= 0),
-            default=len(appearance),
-        )
-        color = color_before(hair_position)
-        if color:
-            tags.append(f"{color} hair")
-        if "短发" in appearance:
-            tags.append("short hair")
-        if "长发" in appearance:
-            tags.append("long hair")
-    if "眼" in appearance:
-        eye_color = color_before(appearance.find("眼"))
-        if eye_color:
-            tags.append(f"{eye_color} eyes")
-    if "圆脸" in appearance:
-        tags.append("round face")
-    return ", ".join(dict.fromkeys(tags))
-
-
-def _character_prompt_constraints(prompt: str) -> tuple[str, str]:
-    """Describe the allowed V4.5 tags without excluding a valid player."""
-
-    has_player = any(marker in prompt.casefold() for marker in _PLAYER_MARKERS)
-    if has_player:
-        positive = "1girl, 1boy, duo"
-        negative = (
-            "2girls, 2boys, extra character, multiple people, duplicate, clone, twin, "
-            "group, crowd"
-        )
-        if "feeding" in prompt.casefold():
-            relation_positive, relation_negative = _feeding_relation_constraints(prompt)
-            positive = f"{positive}, {relation_positive}"
-            negative = f"{negative}, {relation_negative}"
-    else:
-        positive = "1girl, solo"
-        negative = (
-            "2girls, 2boys, extra character, multiple people, duplicate, clone, twin, "
-            "group, crowd"
-        )
-    return positive, negative
 
 
 class StoryImageGenerator:
@@ -178,32 +22,15 @@ class StoryImageGenerator:
         prompt = str(resource.get("prompt") or "").strip()
         if not prompt or not prompt.isascii():
             raise StoryInvalidOutputError("视觉资源缺少有效的英文 NovelAI tags")
-        visual_type = str(resource.get("visualType") or "scene").strip()
-        if visual_type not in {"scene", "character"}:
+        if str(resource.get("visualType") or "scene").strip() not in {
+            "scene",
+            "character",
+        }:
             raise StoryInvalidOutputError("视觉资源缺少有效的视觉类型")
-        if visual_type == "character":
-            positive_constraints, negative_constraints = _character_prompt_constraints(prompt)
-            character_prompt = _legacy_character_tags(prompt)
-            player_appearance = _player_appearance_tags(story)
-            appearance_suffix = f", {player_appearance}" if player_appearance else ""
-            generation_prompt = (
-                f"{character_prompt}{appearance_suffix}, anime screencap, visual novel CG, "
-                f"{positive_constraints}, cinematic lighting"
-            )
-            negative_prompt = f"{_BASE_NEGATIVE_PROMPT}, {negative_constraints}"
-        else:
-            scene_prompt = _scene_prompt(prompt)
-            generation_prompt = (
-                f"{scene_prompt}, empty scene, no characters, no people, no human figures, "
-                "anime background, visual novel background, wide composition, cinematic lighting"
-            )
-            negative_prompt = (
-                f"{_BASE_NEGATIVE_PROMPT}, person, people, human, character, 1girl, 1boy"
-            )
         result = await self._image_tool.execute(
-            prompt=generation_prompt,
+            prompt=prompt,
             mode="txt2img",
-            negative_prompt=negative_prompt,
+            negative_prompt="",
             size_preset="landscape",
             model=_STORY_CG_MODEL,
             role_id=str((story.get("roleSnapshot") or {}).get("id") or ""),

@@ -25,7 +25,10 @@ async def test_uses_registered_plugin_tool_for_story_scene_cg() -> None:
 
     path = await generator.generate(
         story={"id": "story-1", "roleSnapshot": {"id": "role-1"}},
-        resource={"id": "resource-1", "prompt": "old school building, afternoon"},
+        resource={
+            "id": "resource-1",
+            "prompt": "white background, old school building, afternoon",
+        },
     )
 
     assert path == "D:\\stories\\opening.png"
@@ -33,13 +36,12 @@ async def test_uses_registered_plugin_tool_for_story_scene_cg() -> None:
     assert tool.calls[0]["scene_key"] == "story:story-1:visual:resource-1"
     assert tool.calls[0]["size_preset"] == "landscape"
     assert tool.calls[0]["model"] == "nai-diffusion-4-5-full"
-    assert "anime background" in tool.calls[0]["prompt"]
-    assert "empty scene" in tool.calls[0]["prompt"]
-    assert "person" in tool.calls[0]["negative_prompt"]
+    assert tool.calls[0]["prompt"] == "white background, old school building, afternoon"
+    assert tool.calls[0]["negative_prompt"] == ""
 
 
 @pytest.mark.asyncio
-async def test_uses_character_prompt_without_a_scene_character_exclusion() -> None:
+async def test_passes_a_model_ready_character_prompt_without_rewriting_it() -> None:
     tool = RecordingImageTool({"output_paths": ["D:\\stories\\character.png"]})
     generator = StoryImageGenerator(tool)
 
@@ -48,19 +50,17 @@ async def test_uses_character_prompt_without_a_scene_character_exclusion() -> No
         resource={
             "id": "resource-1",
             "visualType": "character",
-            "prompt": "girl handing umbrella, emotional close-up",
+            "prompt": "white background, 1girl, solo, girl, holding umbrella, emotional close-up",
         },
     )
 
-    assert "visual novel CG" in tool.calls[0]["prompt"]
-    assert "1girl, solo" in tool.calls[0]["prompt"]
-    assert "multiple people" in tool.calls[0]["negative_prompt"]
-    assert "person" not in tool.calls[0]["negative_prompt"]
+    assert tool.calls[0]["prompt"] == "white background, 1girl, solo, girl, holding umbrella, emotional close-up"
+    assert tool.calls[0]["negative_prompt"] == ""
     assert tool.calls[0]["model"] == "nai-diffusion-4-5-full"
 
 
 @pytest.mark.asyncio
-async def test_scene_prompt_removes_character_tags_before_generation() -> None:
+async def test_passes_a_model_ready_scene_prompt_without_removing_tags() -> None:
     tool = RecordingImageTool({"output_paths": ["D:\\stories\\scene.png"]})
     generator = StoryImageGenerator(tool)
 
@@ -68,43 +68,34 @@ async def test_scene_prompt_removes_character_tags_before_generation() -> None:
         story={"id": "story-1", "roleSnapshot": {"id": "role-1"}},
         resource={
             "id": "resource-1",
-            "prompt": "warm living room, young woman feeding man, soft lamplight",
+            "prompt": "white background, warm living room, young woman feeding man, soft lamplight",
         },
     )
 
-    assert "warm living room" in tool.calls[0]["prompt"]
-    assert "young woman feeding man" not in tool.calls[0]["prompt"]
+    assert tool.calls[0]["prompt"] == "white background, warm living room, young woman feeding man, soft lamplight"
 
 
 @pytest.mark.asyncio
-async def test_character_prompt_keeps_the_player_without_extra_people() -> None:
+async def test_passes_player_appearance_tags_from_the_model_without_injection() -> None:
     tool = RecordingImageTool({"output_paths": ["D:\\stories\\pair.png"]})
     generator = StoryImageGenerator(tool)
+    resource_prompt = "white background, 1girl, 1boy, duo, {{girl feeding boy}}, {{girl holding spoon}}, boy receiving food, warm brown hair, black eyes, round face, warm living room"
 
     await generator.generate(
         story={
             "id": "story-1",
             "roleSnapshot": {"id": "role-1"},
-            "playerProfile": {"appearance": "暖棕色头发、黑色眼睛、圆脸"},
+            "playerProfile": {"appearance": "warm brown hair, black eyes, round face"},
         },
         resource={
             "id": "resource-1",
             "visualType": "character",
-            "prompt": "girl feeding man, warm living room",
+            "prompt": resource_prompt,
         },
     )
 
-    assert "young woman" not in tool.calls[0]["prompt"]
-    assert "feeding man" not in tool.calls[0]["prompt"]
-    assert "1girl, 1boy, duo" in tool.calls[0]["prompt"]
-    assert "{{girl feeding boy}}" in tool.calls[0]["prompt"]
-    assert "{{girl holding spoon}}" in tool.calls[0]["prompt"]
-    assert "boy receiving food" in tool.calls[0]["prompt"]
-    assert "warm brown hair" in tool.calls[0]["prompt"]
-    assert "black eyes" in tool.calls[0]["prompt"]
-    assert "round face" in tool.calls[0]["prompt"]
-    assert "暖棕色头发" not in tool.calls[0]["prompt"]
-    assert "boy feeding girl" in tool.calls[0]["negative_prompt"]
+    assert tool.calls[0]["prompt"] == resource_prompt
+    assert tool.calls[0]["negative_prompt"] == ""
 
 
 @pytest.mark.asyncio
