@@ -124,13 +124,13 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
       </div>
 
       {dialogueVisible ? <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
-        <section className="pointer-events-auto border-t border-white/25 px-[clamp(20px,8vw,120px)] pb-[clamp(20px,4vh,40px)] pt-[clamp(20px,4vh,44px)] shadow-[inset_0_1px_0_rgba(255,255,255,0.24)] backdrop-blur-xl backdrop-saturate-150" data-testid="story-dialogue-panel" style={{ backgroundColor: `color-mix(in srgb, ${background.theme.titleHighlight} 40%, transparent)` }}>
+        <section className="pointer-events-auto border-t border-white/25 px-[clamp(20px,8vw,120px)] pb-[clamp(20px,4vh,40px)] pt-[clamp(12px,2vh,24px)] shadow-[inset_0_1px_0_rgba(255,255,255,0.24)] backdrop-blur-xl backdrop-saturate-150" data-testid="story-dialogue-panel" style={{ backgroundColor: `color-mix(in srgb, ${background.theme.titleHighlight} 40%, transparent)` }}>
           <div className="mx-auto max-w-6xl">
             <div className="max-w-4xl">
               {fragmentLabel ? <div className="mb-2 flex items-center gap-3"><span aria-hidden="true" className={cx("h-px w-8", isDialogueFragment ? "bg-[#F4C29F]/70" : "bg-white/40")} /><h1 className={cx("story-game-readable m-0 font-serif text-lg font-semibold tracking-wide", isDialogueFragment ? "text-[#F4C29F]" : "text-white/70")}>{fragmentLabel}</h1></div> : null}
               <p className={cx("story-game-readable m-0 min-h-14 whitespace-pre-wrap font-serif text-[clamp(1rem,1.6vw,1.25rem)] leading-8", isDialogueFragment ? "text-white" : "text-white/80 italic")} data-story-beat-id={presentedBeat?.id} data-story-fragment-index={presentedFragment ? presentedFragmentIndex : undefined} data-story-fragment-kind={presentedFragment?.kind ?? "narration"} data-testid="story-dialogue-text">{visibleText}</p>
             </div>
-            {showPlayerInput ? <div className="mt-5 border-t border-white/15 pt-3">
+            {showPlayerInput ? <div className="mt-3 border-t border-white/15 pt-2">
               <AutosizeTextarea data-testid="story-player-input" className="story-game-readable min-h-10 w-full bg-transparent px-1 py-2 text-sm leading-6 text-white placeholder:text-white/70 focus:outline-none" containerClassName="min-h-10 w-full" mirrorClassName="px-1 py-2 text-sm leading-6" value={action} placeholder="写下你的行动或回应..." onChange={(event) => setAction(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} />
             </div> : null}
           </div>

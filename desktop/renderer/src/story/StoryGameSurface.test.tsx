@@ -29,6 +29,8 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /placeholder="写下你的行动或回应\.\.\."/);
     assert.match(markup, /aria-label="查看剧情记录"/);
     assert.match(markup, /data-testid="story-dialogue-panel"/);
+    assert.match(markup, /pb-\[clamp\(20px,4vh,40px\)\] pt-\[clamp\(12px,2vh,24px\)\]/);
+    assert.match(markup, /class="mt-3 border-t border-white\/15 pt-2"/);
     assert.match(markup, /data-testid="story-dialogue-text"/);
     assert.match(markup, /story-game-chrome story-game-readable/);
     assert.match(markup, /story-game-control story-game-readable/);
