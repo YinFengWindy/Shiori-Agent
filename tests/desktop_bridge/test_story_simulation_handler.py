@@ -49,6 +49,15 @@ class RecordingImageTool:
         return json.dumps({"output_paths": ["D:\\stories\\opening.png"]})
 
 
+class SequentialImageTool:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def execute(self, **_kwargs):
+        self.calls += 1
+        return json.dumps({"output_paths": [f"D:\\stories\\image-{self.calls}.png"]})
+
+
 class RetryableImageTool:
     def __init__(self, *, fail_on_call: int = 1) -> None:
         self.calls = 0
@@ -276,13 +285,14 @@ async def test_failed_progression_cg_can_retry_without_creating_a_new_turn(tmp_p
 
 
 @pytest.mark.asyncio
-async def test_ready_cg_regeneration_creates_a_new_visual_version(tmp_path) -> None:
+async def test_ready_cg_regeneration_replaces_the_existing_gallery_resource(tmp_path) -> None:
     role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
+    image_tool = SequentialImageTool()
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
         director=ProgressionVisualDirector(),
-        image_tool=RecordingImageTool(),
+        image_tool=image_tool,
     )
     payload = {
         "title": "夏日来信",
@@ -309,24 +319,36 @@ async def test_ready_cg_regeneration_creates_a_new_visual_version(tmp_path) -> N
     before = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-2", emit_event=lambda _event: None))["story"]
     original = before["cgGallery"][-1]
 
+    regeneration_events: list[dict] = []
     regenerated = await handler.handle(
         "stories.cg.regenerate",
         {"story_id": story_id, "resource_id": original["id"]},
         request_id="regenerate-1",
-        emit_event=lambda _event: None,
+        emit_event=regeneration_events.append,
     )
     replacement = regenerated["story"]["cgGallery"][-1]
 
-    assert len(regenerated["story"]["cgGallery"]) == len(before["cgGallery"]) + 1
-    assert replacement["id"] != original["id"]
+    assert len(regenerated["story"]["cgGallery"]) == len(before["cgGallery"])
+    assert regenerated["resource_id"] == original["id"]
+    assert replacement["id"] == original["id"]
     assert replacement["kind"] == "cg"
     assert replacement["visualType"] == "character"
     assert replacement["prompt"] == original["prompt"]
     assert replacement["status"] == "generating"
+    assert replacement["path"] is None
+    assert any(
+        event["method"] == "stories.resource.changed"
+        and event["payload"]["resource"]["id"] == original["id"]
+        and event["payload"]["resource"]["status"] == "generating"
+        for event in regeneration_events
+    )
     for _ in range(8):
         await asyncio.sleep(0)
     ready = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-3", emit_event=lambda _event: None))["story"]
     assert ready["cgGallery"][-1]["status"] == "ready"
+    assert ready["cgGallery"][-1]["id"] == original["id"]
+    assert ready["cgGallery"][-1]["path"] != original["path"]
+    assert image_tool.calls == 3
     await handler.aclose()
 
 

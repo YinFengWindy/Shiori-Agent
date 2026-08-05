@@ -397,7 +397,7 @@ class StorySimulationHandler:
     async def _regenerate_cg(
         self, payload: dict[str, Any], *, emit_event: EventEmitter
     ) -> dict[str, Any]:
-        """Create a replacement CG while retaining the currently visible version."""
+        """Regenerate a CG in place without adding another gallery resource."""
 
         story_id = self._story_id(payload)
         resource_id = self._required(payload, "resource_id")
@@ -409,21 +409,16 @@ class StorySimulationHandler:
             raise ValueError("只有 CG 资源可以重新生成")
         if resource["status"] == "generating":
             raise ValueError("资源正在生成")
-        visual_type: StoryVisualType = "character" if resource.get("visualType") == "character" else "scene"
-        if visual_type == "scene" and prompt_mentions_people(str(resource.get("prompt") or "")):
-            visual_type = "character"
-        replacement = repository.create_resource(
-            story_id,
-            kind="cg",
+        prepared = repository.prepare_resource(
+            resource_id,
             prompt=str(resource.get("prompt") or ""),
             source_turn_id=resource.get("sourceTurnId"),
-            visual_type=visual_type,
         )
-        await self._emit_resource_changed(repository, replacement, emit_event)
-        self._start_resource_generation(self._service(repository), replacement, emit_event)
+        await self._emit_resource_changed(repository, prepared, emit_event)
+        self._start_resource_generation(self._service(repository), prepared, emit_event)
         return {
             "story": repository.story_read_model(story_id),
-            "resource_id": replacement["id"],
+            "resource_id": resource_id,
         }
 
     def _schedule_story_cg(
