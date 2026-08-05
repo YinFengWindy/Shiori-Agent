@@ -126,6 +126,7 @@ describe("DesktopBridgeClient", () => {
       client.invokeTimeoutMs("novelai.regenerateMessageMedia"),
       5 * 60_000,
     );
+    assert.equal(client.invokeTimeoutMs("roles.differences.generate"), 5 * 60_000);
   });
 
   it("resolves a response and removes its generation-local pending entry", async () => {

@@ -15,6 +15,10 @@ source_paths:
   - core/roles/world.py
   - core/roles/relationship_runtime/
   - core/roles/scene_followup_runtime.py
+  - desktop_bridge/role_difference_service.py
+  - desktop/src/bridgeClient.ts
+  - desktop/renderer/src/roles/useRoleDifferenceGeneration.ts
+  - desktop/renderer/src/roles/RoleAssetCategoryGroups.tsx
 related:
   - conversations-and-sessions.md
   - proactive-and-drift.md
@@ -39,6 +43,7 @@ related:
 - 修改角色删除：检查会话、对话线程、关系状态、记忆、调度任务、工作区和素材清理。
 - 修改心情或关系：检查主动触发条件、提示词装配、场景判断和桌面展示。
 - 修改素材分类：检查角色素材页、选择器、图片提示词与本地资源传输。
+- 自动生成角色差分：五张差分串行生成并持久化到 `AI 差分` 分类后，bridge 才返回最终角色快照；`roles.differences.generate` 使用图片生成长超时，renderer 依靠最终快照刷新素材分组。
 - 导入桌宠素材包：`pet.json` 的预览图字段兼容可选；提供 `previewPath` 时仍校验并保存预览图。
 
 ## 不变量
