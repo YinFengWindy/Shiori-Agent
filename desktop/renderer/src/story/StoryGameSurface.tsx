@@ -57,6 +57,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   const storyBackgroundPath = storyVisualResource?.path;
   const hasStoryBackground = Boolean(storyBackgroundPath);
   const backgroundUrl = storyBackgroundPath ? toFileUrl(storyBackgroundPath) : background.url;
+  const currentSceneLabel = story.currentScene.key.trim() || "未命名场景";
   const renderLocalBackdrop = true;
   const showCharacterForeground = Boolean(characterAvatarUrl)
     && storyVisualResource?.visualType === "scene"
@@ -117,7 +118,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
       {renderLocalBackdrop ? <div aria-hidden="true" className="absolute inset-0 bg-black bg-cover bg-center bg-no-repeat" data-testid="story-game-backdrop" style={hasStoryBackground ? { backgroundImage: `url(${backgroundUrl})` } : undefined} /> : null}
       {showCharacterForeground ? <img className="pointer-events-none absolute -bottom-6 right-[clamp(4vw,10vw,12rem)] z-10 h-[min(78vh,52rem)] max-w-[48vw] origin-bottom-right scale-120 object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]" data-testid="story-game-character" src={characterAvatarUrl} alt="" /> : null}
 
-      <div className="story-game-chrome story-game-readable absolute left-5 top-5 z-30 rounded-md px-3 py-2 text-white/85" data-testid="story-current-time"><span className="mr-2 text-xs">{formatStoryDate(story.currentStoryDate)}</span><strong className="font-serif text-lg font-semibold text-[#F4C29F]">{story.currentTimeBand}</strong></div>
+      <div className="story-game-chrome story-game-readable absolute left-5 top-5 z-30 flex min-w-0 max-w-[calc(100vw-9rem)] flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-3 py-2 text-white/85" data-testid="story-current-time"><span className="text-xs">{formatStoryDate(story.currentStoryDate)}</span><strong className="font-serif text-lg font-semibold text-[#F4C29F]">{story.currentTimeBand}</strong><span aria-hidden="true" className="h-4 w-px bg-white/30" /><span className="min-w-0 max-w-full truncate text-xs text-white/75" data-testid="story-current-scene" title={`场景：${currentSceneLabel}`}>场景：{currentSceneLabel}</span></div>
       <div className="absolute right-5 top-5 z-30 flex gap-2">
         <button className="story-game-control story-game-readable grid h-10 w-10 place-items-center rounded-md text-white/85 transition-colors hover:bg-white/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60" type="button" aria-label="查看剧情记录" title="查看剧情记录" onClick={onOpenArchive}><BookOpenText /></button>
         {storyCgResource && onRegenerateCg ? <button className="story-game-control story-game-readable grid h-10 w-10 place-items-center rounded-md text-white/85 transition-colors hover:bg-white/20 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 disabled:cursor-not-allowed disabled:opacity-45" type="button" aria-label="重新生成当前 CG" title="重新生成当前 CG" disabled={busy || hasGeneratingCg} onClick={() => { void onRegenerateCg(storyCgResource.id); }}><ArrowClockwise /></button> : null}
