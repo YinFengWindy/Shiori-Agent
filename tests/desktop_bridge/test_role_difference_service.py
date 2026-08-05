@@ -78,6 +78,13 @@ async def test_generates_all_differences_from_one_base_and_persists_one_category
         for path in role.illustrations[-5:]
     )
     assert [request.mode for request in novelai.requests] == ["img2img"] * 5
+    assert all(
+        "solid pure white background (#FFFFFF)" in request.prompt
+        for request in novelai.requests
+    )
+    assert all(
+        "colored background" in request.negative_prompt for request in novelai.requests
+    )
     assert {request.base_image_path for request in novelai.requests} == {
         str(store.resolve_role_asset_path(role_id, base_asset))
     }
@@ -88,6 +95,11 @@ async def test_generates_all_differences_from_one_base_and_persists_one_category
         )
         for difference_id, _prompt in DEFAULT_ROLE_DIFFERENCES
     ]
+    with Image.open(
+        store.resolve_role_asset_path(role_id, role.illustrations[-1])
+    ) as generated:
+        assert generated.mode == "RGB"
+        assert generated.getpixel((0, 0)) == (255, 255, 255)
     assert events[0]["phase"] == "started"
     assert events[-1]["phase"] == "finished"
     assert [event["phase"] for event in events[1:-1]].count("completed") == 5
@@ -149,7 +161,9 @@ async def test_generated_differences_bind_standard_moods_and_preserve_custom_moo
 
 
 @pytest.mark.asyncio
-async def test_generation_failure_does_not_persist_partial_category(tmp_path: Path) -> None:
+async def test_generation_failure_does_not_persist_partial_category(
+    tmp_path: Path,
+) -> None:
     store, role_id, output_dir = _create_role(tmp_path)
     output_dir.mkdir()
     novelai = FakeNovelAI(output_dir, fail_at=3)

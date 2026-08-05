@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import inspect
-import tempfile
 import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -12,12 +10,8 @@ from typing import Any
 from core.integrations.novelai import GenerateImageRequest, NovelAIService
 from core.roles import RoleStore
 
-from .role_difference_image import remove_edge_connected_background
-
 # Progress events are deliberately smaller than the final serialized role snapshot.
-RoleDifferenceProgressEmitter = Callable[
-    [dict[str, Any]], Awaitable[None] | None
-]
+RoleDifferenceProgressEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 DEFAULT_ROLE_DIFFERENCES: tuple[tuple[str, str], ...] = (
     ("neutral", "calm neutral expression"),
@@ -37,7 +31,7 @@ DEFAULT_ROLE_DIFFERENCE_MOODS: dict[str, str] = {
 
 
 class RoleDifferenceGenerationService:
-    """Generates stable role-expression cutouts and persists them atomically."""
+    """Generates stable role-expression images and persists them atomically."""
 
     def __init__(
         self,
@@ -86,8 +80,6 @@ class RoleDifferenceGenerationService:
             for difference_id, _prompt in DEFAULT_ROLE_DIFFERENCES
         ]
         try:
-            runtime_dir = self._workspace / "private_runtime"
-            runtime_dir.mkdir(parents=True, exist_ok=True)
             await self._emit_progress(
                 emit_progress,
                 job_id=job_id,
@@ -97,74 +89,67 @@ class RoleDifferenceGenerationService:
                 completed=0,
                 stages=stages,
             )
-            with tempfile.TemporaryDirectory(
-                prefix=f"{job_id}-",
-                dir=runtime_dir,
-            ) as temp_dir:
-                generated_paths: list[Path] = []
-                base_hash = _sha256_file(base_path)
-                for index, (difference_id, expression_prompt) in enumerate(
-                    DEFAULT_ROLE_DIFFERENCES
-                ):
-                    stages[index]["status"] = "generating"
-                    await self._emit_progress(
-                        emit_progress,
-                        job_id=job_id,
-                        role_id=clean_role_id,
-                        phase="generating",
-                        current=difference_id,
-                        completed=index,
-                        stages=stages,
-                    )
-                    result = await self._novelai_service.generate(
-                        GenerateImageRequest(
-                            prompt=(
-                                "same character as the reference image, consistent face, "
-                                "hairstyle, hair color, eye color, outfit and body proportions, "
-                                "single character, centered upper body, anime illustration, "
-                                f"plain white background, {expression_prompt}"
-                            ),
-                            negative_prompt=(
-                                "different character, multiple characters, scenery, complex "
-                                "background, cropped head, extra limbs, blurry, low quality"
-                            ),
-                            mode="img2img",
-                            base_image_path=str(base_path),
-                            strength=0.38,
-                            noise=0.08,
-                            size_preset="square",
-                            steps=24,
-                            seed=_stable_seed(base_hash, difference_id),
-                            sampler="k_euler_ancestral",
-                        )
-                    )
-                    generated_path = Path(
-                        str(result.output_paths[0] if result.output_paths else "").strip()
-                    )
-                    if not generated_path.is_file():
-                        raise ValueError(f"{difference_id} 未返回有效图片")
-                    cutout_path = Path(temp_dir) / f"{difference_id}.png"
-                    await asyncio.to_thread(
-                        remove_edge_connected_background,
-                        generated_path,
-                        cutout_path,
-                    )
-                    generated_paths.append(cutout_path)
-                    stages[index]["status"] = "completed"
-                    await self._emit_progress(
-                        emit_progress,
-                        job_id=job_id,
-                        role_id=clean_role_id,
-                        phase="completed",
-                        current=difference_id,
-                        completed=index + 1,
-                        stages=stages,
-                    )
-
-                updated_role = self._persist_generated_assets(
-                    clean_role_id,
-                    generated_paths,
+            generated_paths: list[Path] = []
+            base_hash = _sha256_file(base_path)
+            for index, (difference_id, expression_prompt) in enumerate(
+                DEFAULT_ROLE_DIFFERENCES
+            ):
+                stages[index]["status"] = "generating"
+                await self._emit_progress(
+                    emit_progress,
+                    job_id=job_id,
+                    role_id=clean_role_id,
+                    phase="generating",
+                    current=difference_id,
+                    completed=index,
+                    stages=stages,
                 )
+                result = await self._novelai_service.generate(
+                    GenerateImageRequest(
+                        prompt=(
+                            "same character as the reference image, consistent face, "
+                            "hairstyle, hair color, eye color, outfit and body proportions, "
+                            "single character, centered upper body, anime illustration, "
+                            f"solid pure white background (#FFFFFF), no background elements, "
+                            f"{expression_prompt}"
+                        ),
+                        negative_prompt=(
+                            "different character, multiple characters, scenery, complex "
+                            "background, colored background, off-white background, "
+                            "gray background, background shadows, cropped head, extra limbs, "
+                            "blurry, low quality"
+                        ),
+                        mode="img2img",
+                        base_image_path=str(base_path),
+                        strength=0.38,
+                        noise=0.08,
+                        size_preset="square",
+                        steps=24,
+                        seed=_stable_seed(base_hash, difference_id),
+                        sampler="k_euler_ancestral",
+                    )
+                )
+                generated_path = Path(
+                    str(result.output_paths[0] if result.output_paths else "").strip()
+                )
+                if not generated_path.is_file():
+                    raise ValueError(f"{difference_id} 未返回有效图片")
+                generated_paths.append(generated_path)
+                stages[index]["status"] = "completed"
+                await self._emit_progress(
+                    emit_progress,
+                    job_id=job_id,
+                    role_id=clean_role_id,
+                    phase="completed",
+                    current=difference_id,
+                    completed=index + 1,
+                    stages=stages,
+                )
+
+            updated_role = self._persist_generated_assets(
+                clean_role_id,
+                generated_paths,
+            )
             category = updated_role.asset_categories[-1]
             await self._emit_progress(
                 emit_progress,
