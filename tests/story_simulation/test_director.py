@@ -57,3 +57,4 @@ def test_director_prompt_requires_novelai_v45_directional_tags() -> None:
     assert "player_profile.appearance" in prompt
     assert "{girl feeding boy}" in prompt
     assert "不能使用 :1.2 数字权重" in prompt
+    assert "white background" not in prompt

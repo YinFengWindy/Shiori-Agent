@@ -71,7 +71,7 @@ class ProviderStoryDirector:
             "character 可以包含正式角色和玩家：如果剧情明确描述玩家，visual_prompt 必须同时描述正式角色与玩家，"
             "且只能出现这两个明确人物；如果剧情没有玩家，才只描述正式角色。不得凭空增加人物、复制角色或群像。"
             "只有需要视觉演出的节点才填写 visual_prompt；visual_prompt 必须是可以直接提交给 NovelAI 的完整正向提示词，"
-            "使用逗号分隔的 NovelAI V4.5 标签，不要中文、自然语言句子、文字、logo 或水印，并包含 white background。"
+            "使用逗号分隔的 NovelAI V4.5 标签，不要中文、自然语言句子、文字或 logo；只描述当前视觉场景，不添加无关背景要求。"
             "双人画面使用 1girl, 1boy, duo 等人数标签；强调只用 {tag}，不能使用 :1.2 数字权重。"
             "玩家出镜时，必须把 player_profile.appearance 转换为对应的英文 V4.5 外观标签写入 visual_prompt，"
             "不能用玩家昵称或身份代替外观。"
