@@ -4,6 +4,7 @@ import type { RoleRecord } from "../shared/types";
 import { toFileUrl } from "../shared/format";
 import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadList, StoryLoadingScreen, StorySettings, StoryWorkspaceBackdrop, type StoryWorkspaceBackdropBlur } from "../story";
 import { StoryCgGallerySurface } from "../story";
+import { resolveStoryCharacterIllustration } from "../story/storyCharacterPresentation";
 import { useStoryMenuBackground } from "../story/useStoryMenuBackground";
 import type { useStoryController } from "../story/useStoryController";
 import type { useStoryCreationFlowController } from "./useStoryCreationFlowController";
@@ -85,7 +86,8 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
     content = <StoryArchiveSurface story={story} background={storyMenuBackground} sharedBackdrop error={error} onReturnToGame={() => setMode("game")} />;
   } else {
     const storyCharacter = roles.find((role) => role.id === story.roleSnapshot.id);
-    content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={storyCharacter?.avatar_abs ? toFileUrl(storyCharacter.avatar_abs) : undefined} onSubmitInput={controller.submitInput} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
+    const characterIllustration = resolveStoryCharacterIllustration(storyCharacter ?? null, story.roleSnapshot);
+    content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} characterAvatarUrl={characterIllustration ? toFileUrl(characterIllustration) : undefined} onSubmitInput={controller.submitInput} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
   }
 
   return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation">

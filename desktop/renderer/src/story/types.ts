@@ -95,6 +95,8 @@ export type StoryDetails = {
     name?: string;
     description?: string;
     avatar?: string | null;
+    illustrations?: string[];
+    runtime_config?: Record<string, unknown>;
   };
   playerProfile: {
     display_name?: string;
