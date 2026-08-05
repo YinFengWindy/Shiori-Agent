@@ -2,6 +2,7 @@ import json
 import sqlite3
 
 from story_simulation.schema_migrations import migrate_legacy_story_time
+from story_simulation.schema_migrations import migrate_story_resources
 
 
 def test_migrate_legacy_story_timestamps_to_periods() -> None:
@@ -77,4 +78,39 @@ def test_migrate_legacy_story_timestamps_to_periods() -> None:
     assert outbox_payload == {
         "beat": {"story_date": "2026-08-01", "time_band": "夜晚"}
     }
+    connection.close()
+
+
+def test_migrate_story_resources_adds_visual_type_to_legacy_table() -> None:
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.executescript(
+        """
+        CREATE TABLE stories (id TEXT PRIMARY KEY);
+        CREATE TABLE story_resources (
+            id TEXT PRIMARY KEY,
+            story_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            status TEXT NOT NULL,
+            path TEXT,
+            prompt TEXT NOT NULL,
+            source_turn_id TEXT,
+            sequence INTEGER NOT NULL,
+            error_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        INSERT INTO stories VALUES ('story-1');
+        INSERT INTO story_resources VALUES (
+            'resource-1', 'story-1', 'cg', 'ready', 'scene.png', 'old scene', NULL, 1,
+            NULL, '2026-08-01T00:00:00+00:00', '2026-08-01T00:00:00+00:00'
+        );
+        """
+    )
+
+    migrate_story_resources(connection)
+
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(story_resources)")}
+    assert "visual_type" in columns
+    assert connection.execute("SELECT visual_type FROM story_resources").fetchone()[0] == "scene"
     connection.close()

@@ -51,7 +51,9 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   const hasStoryBackground = Boolean(storyBackgroundPath);
   const backgroundUrl = storyBackgroundPath ? toFileUrl(storyBackgroundPath) : background.url;
   const renderLocalBackdrop = !sharedBackdrop || hasStoryBackground;
-  const showCharacterForeground = Boolean(characterAvatarUrl) && hasStoryBackground;
+  const showCharacterForeground = Boolean(characterAvatarUrl)
+    && hasStoryBackground
+    && storyVisualResource?.visualType !== "character";
   const isGenerating = busy || story.segment.operation === "generating";
   const showPlayerInput = canShowStoryInput(story, isGenerating, hasNextFragment || nextBeat !== null);
   const isDialogueFragment = presentedFragment?.kind === "dialogue";

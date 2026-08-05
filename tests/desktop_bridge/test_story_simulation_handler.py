@@ -40,6 +40,7 @@ class ProgressionVisualDirector:
         return DirectorDraft(
             beats=(StoryBeatDraft(text="她把伞递到你手里。", kind="dialogue", speaker="澪"),),
             visual_prompt="rainy school gate, girl handing umbrella, emotional close-up",
+            visual_type="character",
         )
 
 
@@ -195,6 +196,7 @@ async def test_progression_visual_prompt_creates_async_cg_instead_of_opening_bac
 
     assert progressed["backgroundResource"]["status"] == "ready"
     assert progressed["cgGallery"][1]["kind"] == "cg"
+    assert progressed["cgGallery"][1]["visualType"] == "character"
     assert progressed["cgGallery"][1]["status"] == "ready"
     assert progressed["cgGallery"][1]["sourceTurnId"] == progressed["turns"][-1]["id"]
     await handler.aclose()

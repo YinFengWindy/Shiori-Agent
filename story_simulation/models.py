@@ -9,6 +9,7 @@ from typing import Any, Literal
 from .story_time import normalize_story_time_band
 
 StoryResourceKind = Literal["background", "cg"]
+StoryVisualType = Literal["scene", "character"]
 StoryResourceStatus = Literal["generating", "ready", "failed"]
 
 
@@ -79,10 +80,13 @@ class DirectorDraft:
     beats: tuple[StoryBeatDraft, ...]
     stop_reason: str = "awaiting_player"
     visual_prompt: str = ""
+    visual_type: StoryVisualType = "scene"
 
     def validate(self) -> None:
         if not self.beats:
             raise ValueError("Director 至少需要一个 Beat")
+        if self.visual_type not in {"scene", "character"}:
+            raise ValueError("Director visual_type 无效")
         if len(self.beats) > 3:
             raise ValueError("一次输入最多生成 3 个 Beat")
         if sum(len(item.text) for item in self.beats) > 1200:
@@ -98,6 +102,7 @@ class StoryResource:
     id: str
     story_id: str
     kind: StoryResourceKind
+    visual_type: StoryVisualType
     status: StoryResourceStatus
     path: str | None
     prompt: str
@@ -112,6 +117,7 @@ class StoryResource:
             "id": self.id,
             "storyId": self.story_id,
             "kind": self.kind,
+            "visualType": self.visual_type,
             "status": self.status,
             "path": self.path,
             "prompt": self.prompt,

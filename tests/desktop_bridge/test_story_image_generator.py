@@ -32,6 +32,28 @@ async def test_uses_registered_plugin_tool_for_story_scene_cg() -> None:
     assert tool.calls[0]["intent"] == "scene_cg"
     assert tool.calls[0]["scene_key"] == "story:story-1:visual:resource-1"
     assert tool.calls[0]["size_preset"] == "landscape"
+    assert tool.calls[0]["model"] == "nai-diffusion-4-5-full"
+    assert "anime background" in tool.calls[0]["prompt"]
+    assert "person" in tool.calls[0]["negative_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_uses_character_prompt_without_a_scene_character_exclusion() -> None:
+    tool = RecordingImageTool({"output_paths": ["D:\\stories\\character.png"]})
+    generator = StoryImageGenerator(tool)
+
+    await generator.generate(
+        story={"id": "story-1", "roleSnapshot": {"id": "role-1"}},
+        resource={
+            "id": "resource-1",
+            "visualType": "character",
+            "prompt": "girl handing umbrella, emotional close-up",
+        },
+    )
+
+    assert "visual novel CG" in tool.calls[0]["prompt"]
+    assert "person" not in tool.calls[0]["negative_prompt"]
+    assert tool.calls[0]["model"] == "nai-diffusion-4-5-full"
 
 
 @pytest.mark.asyncio

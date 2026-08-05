@@ -60,13 +60,14 @@ class ProviderStoryDirector:
             "输出格式为 {\"beats\":[{\"text\":string,\"kind\":\"dialogue|action|narration\","
             "\"speaker\":string|null,\"time_band\":\"清晨|上午|下午|夜晚|深夜\"|null,"
             "\"fact_changes\":[]}],\"stop_reason\":\"awaiting_player\","
-            "\"visual_prompt\":string}。"
+            "\"visual_type\":\"scene|character\",\"visual_prompt\":string}。"
             "一次最多 3 个 beat，所有 text 合计最多 1200 个中文字符，单个 beat 最多 400 字符。"
             "故事日期由 story.story_date 提供且不能修改；剧情时间只使用清晨、上午、下午、夜晚、深夜五档。"
             "只有剧情明确进入另一个时段时才填写 time_band，否则必须填写 null。"
-            "只有需要重要视觉演出的节点才填写 visual_prompt；opening 模式必须填写空字符串，"
-            "非 opening 模式可填写描述该视觉节点的英文 NovelAI tags，使用逗号分隔，"
-            "不要中文、自然语言句子、文字、logo 或水印；普通节点填写空字符串。"
+            "opening 模式的 visual_type 必须是 scene；普通场景视觉使用 scene，"
+            "只有需要角色完整出现在画面中的重要视觉节点才使用 character。"
+            "只有需要视觉演出的节点才填写 visual_prompt；非 opening 模式可填写描述该视觉节点的英文 NovelAI tags，"
+            "使用逗号分隔，不要中文、自然语言句子、文字、logo 或水印；普通非视觉节点填写空字符串。"
             "只描述当前角色可知的内容，不能泄露隐藏连续性或来源。"
         )
 
@@ -133,8 +134,12 @@ class ProviderStoryDirector:
                     ),
                 )
             )
+        raw_visual_type = str(payload.get("visual_type") or "scene").strip()
+        if raw_visual_type not in {"scene", "character"}:
+            raise StoryInvalidOutputError("Director visual_type 无效")
         return DirectorDraft(
             beats=tuple(beats),
             stop_reason=str(payload.get("stop_reason") or "awaiting_player"),
             visual_prompt=str(payload.get("visual_prompt") or "").strip(),
+            visual_type=raw_visual_type,  # type: ignore[arg-type]
         )

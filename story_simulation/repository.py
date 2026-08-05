@@ -26,6 +26,7 @@ from .models import (
     StoryPlayerProfile,
     StoryResource,
     StoryResourceKind,
+    StoryVisualType,
     utc_now,
 )
 from .schema_migrations import migrate_story_resources, migrate_story_timeline
@@ -121,7 +122,9 @@ class StoryRepository:
             resource_id = f"resource-{uuid4().hex}"
             connection.execute(
                 """INSERT INTO story_resources
-                VALUES (?, ?, 'background', 'generating', NULL, '', NULL, 1, NULL, ?, ?)""",
+                (id, story_id, kind, visual_type, status, path, prompt,
+                 source_turn_id, sequence, error_code, created_at, updated_at)
+                VALUES (?, ?, 'background', 'scene', 'generating', NULL, '', NULL, 1, NULL, ?, ?)""",
                 (resource_id, story_id, now, now),
             )
         return self.story_read_model(story_id)
@@ -197,12 +200,15 @@ class StoryRepository:
         kind: StoryResourceKind,
         prompt: str,
         source_turn_id: str | None,
+        visual_type: StoryVisualType = "scene",
     ) -> dict[str, Any]:
         """Create one asynchronous Story visual resource for a committed turn."""
 
         clean_prompt = prompt.strip()
         if not clean_prompt:
             raise ValueError("资源提示词不能为空")
+        if visual_type not in {"scene", "character"}:
+            raise ValueError("资源视觉类型无效")
         with self.transaction() as connection:
             self._require_row("SELECT id FROM stories WHERE id = ?", (story_id,), connection)
             sequence = int(
@@ -215,8 +221,20 @@ class StoryRepository:
             resource_id = f"resource-{uuid4().hex}"
             connection.execute(
                 """INSERT INTO story_resources
-                VALUES (?, ?, ?, 'generating', NULL, ?, ?, ?, NULL, ?, ?)""",
-                (resource_id, story_id, kind, clean_prompt, source_turn_id, sequence, now, now),
+                (id, story_id, kind, visual_type, status, path, prompt,
+                 source_turn_id, sequence, error_code, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'generating', NULL, ?, ?, ?, NULL, ?, ?)""",
+                (
+                    resource_id,
+                    story_id,
+                    kind,
+                    visual_type,
+                    clean_prompt,
+                    source_turn_id,
+                    sequence,
+                    now,
+                    now,
+                ),
             )
             row = self._require_row(
                 "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
@@ -797,6 +815,7 @@ class StoryRepository:
             id=str(row["id"]),
             story_id=str(row["story_id"]),
             kind=str(row["kind"]),  # type: ignore[arg-type]
+            visual_type=str(row["visual_type"] or "scene"),  # type: ignore[arg-type]
             status=str(row["status"]),  # type: ignore[arg-type]
             path=str(row["path"]) if row["path"] else None,
             prompt=str(row["prompt"] or ""),

@@ -39,6 +39,7 @@ describe("Story selectors", () => {
       id: "resource-1",
       storyId: "story-1",
       kind: "cg" as const,
+      visualType: "scene" as const,
       status: "failed" as const,
       path: null,
       prompt: "rainy school gate",

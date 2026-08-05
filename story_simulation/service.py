@@ -12,12 +12,12 @@ from core.roles.models import RoleRecord
 from .continuity import ContinuityGuard
 from .director import StoryDirector
 from .errors import StoryInvalidOutputError, StorySimulationError
-from .models import StoryPlayerProfile
+from .models import StoryPlayerProfile, StoryVisualType
 from .repository import StoryRepository, payload_hash
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 VisualResourceScheduler = Callable[
-    [dict[str, Any], dict[str, Any], str, EventEmitter], None
+    [dict[str, Any], dict[str, Any], str, StoryVisualType, EventEmitter], None
 ]
 
 
@@ -152,7 +152,13 @@ class StorySimulationService:
                         emit_event=emit_event,
                     )
                 elif schedule_visual_resource and draft.visual_prompt.strip():
-                    schedule_visual_resource(story, turn, draft.visual_prompt, emit_event)
+                    schedule_visual_resource(
+                        story,
+                        turn,
+                        draft.visual_prompt,
+                        draft.visual_type,
+                        emit_event,
+                    )
                 await self._emit(
                     emit_event,
                     "stories.operation.changed",

@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS story_resources (
     id TEXT PRIMARY KEY,
     story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
     kind TEXT NOT NULL,
+    visual_type TEXT NOT NULL DEFAULT 'scene',
     status TEXT NOT NULL,
     path TEXT,
     prompt TEXT NOT NULL,

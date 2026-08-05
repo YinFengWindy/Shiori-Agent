@@ -15,12 +15,14 @@ export type StoryOperation = "idle" | "awaiting_player" | "generating";
 
 /** Lifecycle state of a Story-owned image resource. */
 export type StoryResourceStatus = "generating" | "ready" | "failed";
+export type StoryVisualType = "scene" | "character";
 
 /** One image owned by a Story and shown by its CG collection. */
 export type StoryResource = {
   id: string;
   storyId: string;
   kind: "background" | "cg";
+  visualType: StoryVisualType;
   status: StoryResourceStatus;
   path: string | null;
   prompt: string;

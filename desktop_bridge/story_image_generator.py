@@ -7,6 +7,9 @@ from typing import Any
 
 from story_simulation.errors import StoryInvalidOutputError, StoryProviderUnavailableError
 
+_STORY_CG_MODEL = "nai-diffusion-4-5-full"
+_BASE_NEGATIVE_PROMPT = "text, logo, watermark, signature, user interface, border"
+
 
 class StoryImageGenerator:
     """Adapt the plugin's ``generate_image`` tool to the Story resource contract."""
@@ -20,14 +23,29 @@ class StoryImageGenerator:
         prompt = str(resource.get("prompt") or "").strip()
         if not prompt or not prompt.isascii():
             raise StoryInvalidOutputError("视觉资源缺少有效的英文 NovelAI tags")
-        result = await self._image_tool.execute(
-            prompt=(
-                f"{prompt}, anime screencap, visual novel scene, wide composition, "
+        visual_type = str(resource.get("visualType") or "scene").strip()
+        if visual_type not in {"scene", "character"}:
+            raise StoryInvalidOutputError("视觉资源缺少有效的视觉类型")
+        if visual_type == "character":
+            generation_prompt = (
+                f"{prompt}, anime screencap, visual novel CG, character-focused composition, "
                 "cinematic lighting"
-            ),
+            )
+            negative_prompt = _BASE_NEGATIVE_PROMPT
+        else:
+            generation_prompt = (
+                f"{prompt}, anime background, visual novel background, wide composition, "
+                "cinematic lighting"
+            )
+            negative_prompt = (
+                f"{_BASE_NEGATIVE_PROMPT}, person, people, human, character, 1girl, 1boy"
+            )
+        result = await self._image_tool.execute(
+            prompt=generation_prompt,
             mode="txt2img",
-            negative_prompt="text, logo, watermark, signature, user interface, border",
+            negative_prompt=negative_prompt,
             size_preset="landscape",
+            model=_STORY_CG_MODEL,
             role_id=str((story.get("roleSnapshot") or {}).get("id") or ""),
             session_key=f"story:{story.get('id', '')}",
             intent="scene_cg",

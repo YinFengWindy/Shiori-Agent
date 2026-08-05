@@ -42,7 +42,7 @@ describe("StoryGameSurface", () => {
   });
 
   it("uses the Story-owned background resource when it is ready", () => {
-    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({ backgroundResource: { id: "resource-1", storyId: "story-1", kind: "background", status: "ready", path: "D:\\stories\\opening.png", prompt: "anime screencap", sourceTurnId: "turn-1", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+    const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({ backgroundResource: { id: "resource-1", storyId: "story-1", kind: "background", visualType: "scene", status: "ready", path: "D:\\stories\\opening.png", prompt: "anime screencap", sourceTurnId: "turn-1", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" } })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /data-testid="story-game-backdrop"/);
     assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
     assert.match(markup, /data-testid="story-game-character"/);
@@ -53,13 +53,14 @@ describe("StoryGameSurface", () => {
   it("uses the latest ready progression CG as the active stage visual", () => {
     const markup = renderToStaticMarkup(<StoryGameSurface characterAvatarUrl="shiori-asset://local/role" story={createStoryDetails({
       cgGallery: [
-        { id: "resource-1", storyId: "story-1", kind: "cg", status: "ready", path: "D:\\stories\\scene-1.png", prompt: "scene one", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
-        { id: "resource-2", storyId: "story-1", kind: "cg", status: "ready", path: "D:\\stories\\scene-2.png", prompt: "scene two", sourceTurnId: "turn-3", sequence: 2, errorCode: null, createdAt: "", updatedAt: "" },
+        { id: "resource-1", storyId: "story-1", kind: "cg", visualType: "scene", status: "ready", path: "D:\\stories\\scene-1.png", prompt: "scene one", sourceTurnId: "turn-2", sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
+        { id: "resource-2", storyId: "story-1", kind: "cg", visualType: "character", status: "ready", path: "D:\\stories\\scene-2.png", prompt: "scene two", sourceTurnId: "turn-3", sequence: 2, errorCode: null, createdAt: "", updatedAt: "" },
       ],
     })} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
     assert.doesNotMatch(markup, /scene-1\.png/);
+    assert.doesNotMatch(markup, /data-testid="story-game-character"/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 

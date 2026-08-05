@@ -14,7 +14,7 @@ from core.roles import RoleStore
 from story_simulation.catalog import StoryCatalog
 from story_simulation.director import ProviderStoryDirector, StoryDirector
 from story_simulation.errors import StoryNotFoundError
-from story_simulation.models import StoryPlayerProfile
+from story_simulation.models import StoryPlayerProfile, StoryVisualType
 from story_simulation.repository import StoryRepository, payload_hash
 from story_simulation.service import StorySimulationService
 from story_simulation.story_time import normalize_story_date, normalize_story_time_band
@@ -408,6 +408,7 @@ class StorySimulationHandler:
         story: dict[str, Any],
         turn: dict[str, Any],
         prompt: str,
+        visual_type: StoryVisualType,
         emit_event: EventEmitter,
     ) -> None:
         """Schedule one important visual node without delaying committed Story text."""
@@ -424,6 +425,7 @@ class StorySimulationHandler:
             kind="cg",
             prompt=prompt,
             source_turn_id=str(turn["id"]),
+            visual_type=visual_type,
         )
         service = self._service(repository)
         task = asyncio.create_task(
