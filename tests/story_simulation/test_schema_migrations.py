@@ -112,5 +112,7 @@ def test_migrate_story_resources_adds_visual_type_to_legacy_table() -> None:
 
     columns = {row[1] for row in connection.execute("PRAGMA table_info(story_resources)")}
     assert "visual_type" in columns
+    assert "scene_key" in columns
     assert connection.execute("SELECT visual_type FROM story_resources").fetchone()[0] == "scene"
+    assert connection.execute("SELECT scene_key FROM story_resources").fetchone()[0] == ""
     connection.close()

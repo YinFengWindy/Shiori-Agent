@@ -106,9 +106,15 @@ def migrate_legacy_story_time(connection: sqlite3.Connection) -> None:
 def migrate_story_resources(connection: sqlite3.Connection) -> None:
     """Add visual type metadata and give legacy Stories a background fallback."""
 
-    if "visual_type" not in _table_columns(connection, "story_resources"):
+    resource_columns = _table_columns(connection, "story_resources")
+    if "visual_type" not in resource_columns:
         connection.execute(
             "ALTER TABLE story_resources ADD COLUMN visual_type TEXT NOT NULL DEFAULT 'scene'"
+        )
+        connection.commit()
+    if "scene_key" not in resource_columns:
+        connection.execute(
+            "ALTER TABLE story_resources ADD COLUMN scene_key TEXT NOT NULL DEFAULT ''"
         )
         connection.commit()
 
@@ -118,9 +124,9 @@ def migrate_story_resources(connection: sqlite3.Connection) -> None:
     now = "1970-01-01T00:00:00+00:00"
     connection.executemany(
         """INSERT INTO story_resources
-        (id, story_id, kind, visual_type, status, path, prompt, source_turn_id,
+        (id, story_id, kind, visual_type, scene_key, status, path, prompt, source_turn_id,
          sequence, error_code, created_at, updated_at)
-        SELECT ?, ?, 'background', 'scene', 'failed', NULL, '', NULL, 1,
+        SELECT ?, ?, 'background', 'scene', '', 'failed', NULL, '', NULL, 1,
                'legacy_story_no_background', ?, ?
         WHERE NOT EXISTS (
             SELECT 1 FROM story_resources WHERE story_id = ? AND kind = 'background'

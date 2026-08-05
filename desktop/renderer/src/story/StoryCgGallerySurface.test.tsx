@@ -16,6 +16,7 @@ const stories: StoryCgGallery[] = [{
     storyId: "story-1",
     kind: "background",
     visualType: "scene",
+    sceneKey: "default",
     status: "ready",
     path: "D:\\stories\\opening.png",
     prompt: "anime screencap",

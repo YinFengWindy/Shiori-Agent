@@ -74,6 +74,25 @@ class StoryBeatDraft:
 
 
 @dataclass(frozen=True)
+class StoryScene:
+    """The Director-owned scene identity and participants for the active Story stage."""
+
+    key: str
+    character_ids: tuple[str, ...] = ()
+
+    def validate(self) -> None:
+        if not self.key.strip():
+            raise ValueError("current_scene.key 不能为空")
+        if any(not character_id.strip() for character_id in self.character_ids):
+            raise ValueError("current_scene.character_ids 不能包含空值")
+        if len(set(self.character_ids)) != len(self.character_ids):
+            raise ValueError("current_scene.character_ids 不能重复")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"key": self.key, "character_ids": list(self.character_ids)}
+
+
+@dataclass(frozen=True)
 class DirectorDraft:
     """Validated-shape-independent Director result before Story commit."""
 
@@ -81,6 +100,7 @@ class DirectorDraft:
     stop_reason: str = "awaiting_player"
     visual_prompt: str = ""
     visual_type: StoryVisualType = "scene"
+    current_scene: StoryScene = field(default_factory=lambda: StoryScene(key="default"))
 
     def validate(self) -> None:
         if not self.beats:
@@ -91,6 +111,7 @@ class DirectorDraft:
             raise ValueError("一次输入最多生成 3 个 Beat")
         if sum(len(item.text) for item in self.beats) > 1200:
             raise ValueError("一次输入可见文本不能超过 1200 字符")
+        self.current_scene.validate()
         for beat in self.beats:
             beat.validate()
 
@@ -103,6 +124,7 @@ class StoryResource:
     story_id: str
     kind: StoryResourceKind
     visual_type: StoryVisualType
+    scene_key: str
     status: StoryResourceStatus
     path: str | None
     prompt: str
@@ -118,6 +140,7 @@ class StoryResource:
             "storyId": self.story_id,
             "kind": self.kind,
             "visualType": self.visual_type,
+            "sceneKey": self.scene_key,
             "status": self.status,
             "path": self.path,
             "prompt": self.prompt,

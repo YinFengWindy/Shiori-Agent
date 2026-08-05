@@ -41,6 +41,7 @@ export function createStoryDetails(overrides: Partial<StoryDetails> = {}): Story
     beats: overrides.beats ?? [createStoryBeat()],
     cues: overrides.cues ?? [],
     turns: overrides.turns ?? [],
+    currentScene: overrides.currentScene ?? { key: "default", characterIds: [] },
     backgroundResource: overrides.backgroundResource ?? null,
     cgGallery: overrides.cgGallery ?? [],
     currentStoryDate: overrides.currentStoryDate ?? "2026-08-02",

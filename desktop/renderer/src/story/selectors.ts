@@ -35,9 +35,19 @@ export function replaceStoryGallery(galleries: StoryCgGallery[], story: StoryDet
 }
 
 /** Returns the latest Story visual that still has a usable local asset path. */
-export function selectActiveStoryVisualResource(story: Pick<StoryDetails, "backgroundResource" | "cgGallery">) {
-  return [...story.cgGallery].reverse().find((resource) => resource.kind === "cg" && resource.path)
-    ?? (story.backgroundResource?.path ? story.backgroundResource : null);
+export function selectActiveStoryVisualResource(story: Pick<StoryDetails, "backgroundResource" | "cgGallery" | "currentScene">) {
+  const activeSceneKey = story.currentScene.key;
+  if (!activeSceneKey) return null;
+  return [...story.cgGallery].reverse().find((resource) => resource.sceneKey === activeSceneKey && resource.path)
+    ?? (story.backgroundResource?.sceneKey === activeSceneKey && story.backgroundResource.path
+      ? story.backgroundResource
+      : null);
+}
+
+/** Returns whether the frozen Story role is a participant in the current scene. */
+export function isStoryRoleInCurrentScene(story: Pick<StoryDetails, "currentScene" | "roleSnapshot">) {
+  const roleId = story.roleSnapshot.id?.trim() ?? "";
+  return Boolean(roleId && story.currentScene.characterIds.includes(roleId));
 }
 
 /** Converts a persisted Story resource error code into stable player-facing copy. */

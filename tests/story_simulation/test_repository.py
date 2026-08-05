@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from story_simulation.models import DirectorDraft, StoryBeatDraft, StoryPlayerProfile
+from story_simulation.models import DirectorDraft, StoryBeatDraft, StoryPlayerProfile, StoryScene
 from story_simulation.repository import StoryRepository, payload_hash
 
 
@@ -92,13 +92,17 @@ def test_story_repository_advances_the_story_date_when_period_wraps_midnight(tmp
     committed, story = repository.commit_draft(
         turn_id=turn["id"],
         attempt_id=attempt["attempt_id"],
-        draft=DirectorDraft(beats=(StoryBeatDraft(text="天亮了。", time_band="清晨"),)),
+        draft=DirectorDraft(
+            beats=(StoryBeatDraft(text="天亮了。", time_band="清晨"),),
+            current_scene=StoryScene(key="dawn-room", character_ids=("role-1",)),
+        ),
         default_time_band="深夜",
     )
 
     assert committed[0][0].story_date == "2026-08-02"
     assert committed[0][0].time_band == "清晨"
     assert story["currentStoryDate"] == "2026-08-02"
+    assert story["currentScene"] == {"key": "dawn-room", "characterIds": ["role-1"]}
     repository.close()
 
 

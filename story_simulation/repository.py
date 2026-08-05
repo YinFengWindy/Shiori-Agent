@@ -122,9 +122,9 @@ class StoryRepository:
             resource_id = f"resource-{uuid4().hex}"
             connection.execute(
                 """INSERT INTO story_resources
-                (id, story_id, kind, visual_type, status, path, prompt,
+                (id, story_id, kind, visual_type, scene_key, status, path, prompt,
                  source_turn_id, sequence, error_code, created_at, updated_at)
-                VALUES (?, ?, 'background', 'scene', 'generating', NULL, '', NULL, 1, NULL, ?, ?)""",
+                VALUES (?, ?, 'background', 'scene', '', 'generating', NULL, '', NULL, 1, NULL, ?, ?)""",
                 (resource_id, story_id, now, now),
             )
         return self.story_read_model(story_id)
@@ -179,6 +179,7 @@ class StoryRepository:
             "cgGallery": resource_models,
             "currentStoryDate": str(segment["story_date"]),
             "currentTimeBand": str(segment["time_band"]),
+            "currentScene": self._current_scene_dict(load(segment["runtime_snapshot"], {})),
         }
 
     def story_resources(self, story_id: str) -> list[dict[str, Any]]:
@@ -201,6 +202,7 @@ class StoryRepository:
         prompt: str,
         source_turn_id: str | None,
         visual_type: StoryVisualType = "scene",
+        scene_key: str = "",
     ) -> dict[str, Any]:
         """Create one asynchronous Story visual resource for a committed turn."""
 
@@ -221,14 +223,15 @@ class StoryRepository:
             resource_id = f"resource-{uuid4().hex}"
             connection.execute(
                 """INSERT INTO story_resources
-                (id, story_id, kind, visual_type, status, path, prompt,
+                (id, story_id, kind, visual_type, scene_key, status, path, prompt,
                  source_turn_id, sequence, error_code, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 'generating', NULL, ?, ?, ?, NULL, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, 'generating', NULL, ?, ?, ?, NULL, ?, ?)""",
                 (
                     resource_id,
                     story_id,
                     kind,
                     visual_type,
+                    scene_key.strip(),
                     clean_prompt,
                     source_turn_id,
                     sequence,
@@ -256,6 +259,7 @@ class StoryRepository:
         *,
         prompt: str,
         source_turn_id: str | None,
+        scene_key: str | None = None,
     ) -> dict[str, Any]:
         """Start generation without dropping the last successfully generated asset."""
 
@@ -265,13 +269,22 @@ class StoryRepository:
                 "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
             )
             now = utc_now()
-            connection.execute(
-                """UPDATE story_resources
-                SET prompt = ?, source_turn_id = ?, status = 'generating',
-                    error_code = NULL, updated_at = ?
-                WHERE id = ?""",
-                (clean_prompt, source_turn_id, now, resource_id),
-            )
+            if scene_key is None:
+                connection.execute(
+                    """UPDATE story_resources
+                    SET prompt = ?, source_turn_id = ?, status = 'generating',
+                        error_code = NULL, updated_at = ?
+                    WHERE id = ?""",
+                    (clean_prompt, source_turn_id, now, resource_id),
+                )
+            else:
+                connection.execute(
+                    """UPDATE story_resources
+                    SET prompt = ?, source_turn_id = ?, scene_key = ?,
+                        status = 'generating', error_code = NULL, updated_at = ?
+                    WHERE id = ?""",
+                    (clean_prompt, source_turn_id, scene_key.strip(), now, resource_id),
+                )
             row = self._require_row(
                 "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
             )
@@ -523,7 +536,7 @@ class StoryRepository:
             committed_ids = load(turn["committed_beat_ids"], [])
             revision = int(story["revision"])
             segment = self._require_row(
-                "SELECT story_date, time_band FROM segments WHERE id = ?",
+                "SELECT story_date, time_band, runtime_snapshot FROM segments WHERE id = ?",
                 (turn["segment_id"],),
                 connection,
             )
@@ -593,8 +606,17 @@ class StoryRepository:
                 )
                 committed.append((beat, cue, payload))
             connection.execute(
-                """UPDATE segments SET story_date = ?, time_band = ? WHERE id = ?""",
-                (current_story_date, current_time_band, turn["segment_id"]),
+                """UPDATE segments SET story_date = ?, time_band = ?, runtime_snapshot = ?
+                WHERE id = ?""",
+                (
+                    current_story_date,
+                    current_time_band,
+                    dump({
+                        **load(segment["runtime_snapshot"], {}),
+                        "current_scene": draft.current_scene.to_dict(),
+                    }),
+                    turn["segment_id"],
+                ),
             )
             connection.execute(
                 """UPDATE stories SET revision = ? WHERE id = ?""",
@@ -766,6 +788,7 @@ class StoryRepository:
 
     @staticmethod
     def _segment_dict(row: sqlite3.Row) -> dict[str, Any]:
+        runtime_snapshot = load(row["runtime_snapshot"], {})
         return {
             "id": row["id"],
             "sequence": int(row["sequence"]),
@@ -775,7 +798,20 @@ class StoryRepository:
             "mode": row["mode"],
             "operation": row["operation"],
             "openingContext": load(row["opening_context"], {}),
-            "runtimeSnapshot": load(row["runtime_snapshot"], {}),
+            "runtimeSnapshot": runtime_snapshot,
+        }
+
+    @staticmethod
+    def _current_scene_dict(runtime_snapshot: dict[str, Any]) -> dict[str, Any]:
+        raw_scene = runtime_snapshot.get("current_scene")
+        if not isinstance(raw_scene, dict):
+            return {"key": "", "characterIds": []}
+        character_ids = raw_scene.get("character_ids")
+        return {
+            "key": str(raw_scene.get("key") or ""),
+            "characterIds": [str(item) for item in character_ids if str(item).strip()]
+            if isinstance(character_ids, list)
+            else [],
         }
 
     @staticmethod
@@ -816,6 +852,7 @@ class StoryRepository:
             story_id=str(row["story_id"]),
             kind=str(row["kind"]),  # type: ignore[arg-type]
             visual_type=str(row["visual_type"] or "scene"),  # type: ignore[arg-type]
+            scene_key=str(row["scene_key"] or ""),
             status=str(row["status"]),  # type: ignore[arg-type]
             path=str(row["path"]) if row["path"] else None,
             prompt=str(row["prompt"] or ""),

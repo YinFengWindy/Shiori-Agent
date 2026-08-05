@@ -8,7 +8,7 @@ import pytest
 
 from story_simulation.errors import StoryInvalidOutputError
 from story_simulation.catalog import StoryCatalog
-from story_simulation.models import DirectorDraft, StoryBeatDraft, StoryPlayerProfile
+from story_simulation.models import DirectorDraft, StoryBeatDraft, StoryPlayerProfile, StoryScene
 from story_simulation.repository import StoryRepository, payload_hash
 
 from desktop_bridge.story_simulation_handler import StorySimulationHandler
@@ -21,6 +21,7 @@ class OpeningDirector:
         return DirectorDraft(
             beats=(StoryBeatDraft(text="雨后的铃声响起。"),),
             visual_prompt="old school building, rainy afternoon",
+            current_scene=StoryScene(key="old-school", character_ids=("role-1",)),
         )
 
 
@@ -38,11 +39,13 @@ class ProgressionVisualDirector:
             return DirectorDraft(
                 beats=(StoryBeatDraft(text="雨后的铃声响起。"),),
                 visual_prompt="old school building, rainy afternoon",
+                current_scene=StoryScene(key="old-school", character_ids=("role-1",)),
             )
         return DirectorDraft(
             beats=(StoryBeatDraft(text="她把伞递到你手里。", kind="dialogue", speaker="澪"),),
             visual_prompt="rainy school gate, girl handing umbrella, emotional close-up",
             visual_type="character",
+            current_scene=StoryScene(key="school-gate", character_ids=("role-1", "player")),
         )
 
 
@@ -93,6 +96,7 @@ class BlockingOpeningDirector:
         return DirectorDraft(
             beats=(StoryBeatDraft(text="雨后的铃声响起。"),),
             visual_prompt="old school building, rainy afternoon",
+            current_scene=StoryScene(key="old-school", character_ids=("role-1",)),
         )
 
 
@@ -164,6 +168,8 @@ async def test_opening_background_is_saved_to_its_story_visual_gallery(tmp_path)
 
     assert story["backgroundResource"]["status"] == "ready"
     assert story["backgroundResource"]["path"] == "D:\\stories\\opening.png"
+    assert story["backgroundResource"]["sceneKey"] == "old-school"
+    assert story["currentScene"] == {"key": "old-school", "characterIds": ["role-1"]}
     assert gallery["stories"][0]["story_id"] == story_id
     assert gallery["stories"][0]["items"][0]["kind"] == "background"
     assert gallery["stories"][0]["items"][0]["id"] == story["backgroundResource"]["id"]
@@ -211,6 +217,8 @@ async def test_progression_visual_prompt_creates_async_cg_instead_of_opening_bac
     assert progressed["cgGallery"][1]["kind"] == "cg"
     assert progressed["cgGallery"][1]["visualType"] == "character"
     assert progressed["cgGallery"][1]["status"] == "ready"
+    assert progressed["cgGallery"][1]["sceneKey"] == "school-gate"
+    assert progressed["currentScene"] == {"key": "school-gate", "characterIds": ["role-1", "player"]}
     assert progressed["cgGallery"][1]["sourceTurnId"] == progressed["turns"][-1]["id"]
     await handler.aclose()
 

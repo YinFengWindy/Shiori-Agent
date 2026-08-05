@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { canShowStoryInput, canSubmitStoryInput, getStoryStatusLabel, mergeStoryBeats, replaceStoryGallery, replaceStorySummary, selectActiveStoryVisualResource } from "./selectors";
+import { canShowStoryInput, canSubmitStoryInput, getStoryStatusLabel, isStoryRoleInCurrentScene, mergeStoryBeats, replaceStoryGallery, replaceStorySummary, selectActiveStoryVisualResource } from "./selectors";
 import { createStoryBeat, createStoryDetails, createStorySummary } from "./testFixtures";
 
 describe("Story selectors", () => {
@@ -40,6 +40,7 @@ describe("Story selectors", () => {
       storyId: "story-1",
       kind: "cg" as const,
       visualType: "scene" as const,
+      sceneKey: "default",
       status: "failed" as const,
       path: null,
       prompt: "rainy school gate",
@@ -63,6 +64,7 @@ describe("Story selectors", () => {
         storyId: "story-1",
         kind: "cg",
         visualType: "scene",
+        sceneKey: "default",
         status: "generating",
         path: "D:\\stories\\scene-old.png",
         prompt: "rainy school gate",
@@ -75,5 +77,18 @@ describe("Story selectors", () => {
     });
 
     assert.equal(selectActiveStoryVisualResource(story)?.path, "D:\\stories\\scene-old.png");
+  });
+
+  it("selects only visual resources owned by the current scene", () => {
+    const story = createStoryDetails({
+      currentScene: { key: "station", characterIds: ["role-1"] },
+      cgGallery: [
+        { id: "old", storyId: "story-1", kind: "cg", visualType: "character", sceneKey: "street", status: "ready", path: "old.png", prompt: "", sourceTurnId: null, sequence: 2, errorCode: null, createdAt: "", updatedAt: "" },
+        { id: "current", storyId: "story-1", kind: "cg", visualType: "scene", sceneKey: "station", status: "ready", path: "current.png", prompt: "", sourceTurnId: null, sequence: 1, errorCode: null, createdAt: "", updatedAt: "" },
+      ],
+    });
+
+    assert.equal(selectActiveStoryVisualResource(story)?.id, "current");
+    assert.equal(isStoryRoleInCurrentScene(story), true);
   });
 });

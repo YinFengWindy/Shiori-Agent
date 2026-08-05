@@ -6,7 +6,7 @@ import pytest
 
 from story_simulation.director import StoryDirector
 from story_simulation.errors import StoryInvalidOutputError
-from story_simulation.models import DirectorDraft, StoryBeatDraft, StoryPlayerProfile
+from story_simulation.models import DirectorDraft, StoryBeatDraft, StoryPlayerProfile, StoryScene
 from story_simulation.repository import StoryRepository, payload_hash
 from story_simulation.service import StorySimulationService
 
@@ -120,3 +120,26 @@ async def test_service_does_not_commit_beats_after_final_failure(tmp_path) -> No
     assert story["cues"] == []
     assert story["turns"][0]["status"] == "failed"
     assert events[-1]["method"] == "stories.failed"
+
+
+@pytest.mark.asyncio
+async def test_service_rejects_characters_outside_the_current_scene_contract(tmp_path) -> None:
+    invalid = DirectorDraft(
+        beats=(StoryBeatDraft(text="陌生人推门进来。"),),
+        current_scene=StoryScene(key="classroom", character_ids=("role-unknown",)),
+    )
+    service, director = _service(tmp_path, [invalid, invalid])
+    turn = service.create_player_turn(
+        story_id="story-1",
+        input_text="看看门口。",
+        request_id="request-invalid-scene-role",
+        request_payload_hash=payload_hash({"input": "看看门口。"}),
+        expected_revision=0,
+    )
+
+    await service.generate_turn(turn, lambda _event: None)
+
+    story = service.repository.story_read_model("story-1")
+    assert director.calls == 2
+    assert story["beats"] == []
+    assert story["currentScene"] == {"key": "", "characterIds": []}

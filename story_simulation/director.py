@@ -6,7 +6,7 @@ import json
 from typing import Any, Protocol
 
 from .errors import StoryInvalidOutputError, StoryProviderUnavailableError
-from .models import DirectorDraft, StoryBeatDraft, StoryContext
+from .models import DirectorDraft, StoryBeatDraft, StoryContext, StoryScene
 
 
 class StoryDirector(Protocol):
@@ -60,12 +60,17 @@ class ProviderStoryDirector:
             "输出格式为 {\"beats\":[{\"text\":string,\"kind\":\"dialogue|action|narration\","
             "\"speaker\":string|null,\"time_band\":\"清晨|上午|下午|夜晚|深夜\"|null,"
             "\"fact_changes\":[]}],\"stop_reason\":\"awaiting_player\","
+            "\"current_scene\":{\"key\":string,\"character_ids\":[string]},"
             "\"visual_type\":\"scene|character\",\"visual_prompt\":string}。"
             "一次最多 3 个 beat，所有 text 合计最多 1200 个中文字符，单个 beat 最多 400 字符。"
             "故事日期由 story.story_date 提供且不能修改；剧情时间只使用清晨、上午、下午、夜晚、深夜五档。"
             "只有剧情明确进入另一个时段时才填写 time_band，否则必须填写 null。"
             "每个 dialogue 都是正式角色的台词，speaker 必须精确填写 role.name；"
             "绝不能写角色、正式角色、女主等泛称，也不生成玩家的 dialogue。"
+            "current_scene 必须描述这次剧情提交后的当前场景。key 使用稳定简短标识；"
+            "场景未变化时沿用 current_scene.key，切换场景时生成新 key。"
+            "character_ids 只填写当前场景实际在场者；正式角色使用 role.id，玩家使用 player。"
+            "不在当前场景的角色绝不能加入 character_ids。"
             "opening 模式的 visual_type 必须是 scene；普通场景视觉使用 scene，"
             "scene 只描述环境空镜，绝对不能出现人物；需要人物出现在画面中的重要视觉节点使用 character。"
             "character 可以包含正式角色和玩家：如果剧情明确描述玩家，visual_prompt 必须同时描述正式角色与玩家，"
@@ -86,6 +91,7 @@ class ProviderStoryDirector:
         context: StoryContext, input_text: str, opening: bool
     ) -> dict[str, Any]:
         role = context.role_snapshot
+        runtime_snapshot = context.segment.get("runtimeSnapshot") or {}
         return {
             "mode": "opening" if opening else "player_input",
             "story": {
@@ -93,8 +99,10 @@ class ProviderStoryDirector:
                 "background": context.story["background"],
                 "story_date": context.segment["storyDate"],
                 "time_band": context.segment["timeBand"],
+                "current_scene": runtime_snapshot.get("current_scene"),
             },
             "role": {
+                "id": role.get("id"),
                 "name": role.get("name"),
                 "description": role.get("description"),
                 "system_prompt": role.get("system_prompt"),
@@ -147,9 +155,27 @@ class ProviderStoryDirector:
         raw_visual_type = str(payload.get("visual_type") or "scene").strip()
         if raw_visual_type not in {"scene", "character"}:
             raise StoryInvalidOutputError("Director visual_type 无效")
+        raw_current_scene = payload.get("current_scene")
+        if not isinstance(raw_current_scene, dict):
+            raise StoryInvalidOutputError("Director 缺少 current_scene")
+        scene_key = str(raw_current_scene.get("key") or "").strip()
+        raw_character_ids = raw_current_scene.get("character_ids")
+        if not scene_key or not isinstance(raw_character_ids, list):
+            raise StoryInvalidOutputError("Director current_scene 格式无效")
+        character_ids = tuple(
+            str(character_id).strip()
+            for character_id in raw_character_ids
+            if str(character_id).strip()
+        )
+        current_scene = StoryScene(key=scene_key, character_ids=character_ids)
+        try:
+            current_scene.validate()
+        except ValueError as exc:
+            raise StoryInvalidOutputError(str(exc)) from exc
         return DirectorDraft(
             beats=tuple(beats),
             stop_reason=str(payload.get("stop_reason") or "awaiting_player"),
             visual_prompt=str(payload.get("visual_prompt") or "").strip(),
             visual_type=raw_visual_type,  # type: ignore[arg-type]
+            current_scene=current_scene,
         )

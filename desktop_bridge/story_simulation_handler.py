@@ -427,6 +427,7 @@ class StorySimulationHandler:
         turn: dict[str, Any],
         prompt: str,
         visual_type: StoryVisualType,
+        scene_key: str,
         emit_event: EventEmitter,
     ) -> None:
         """Schedule one important visual node without delaying committed Story text."""
@@ -444,6 +445,7 @@ class StorySimulationHandler:
             prompt=prompt,
             source_turn_id=str(turn["id"]),
             visual_type=visual_type,
+            scene_key=scene_key,
         )
         self._start_resource_generation(self._service(repository), resource, emit_event)
 

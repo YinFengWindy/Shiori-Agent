@@ -17,7 +17,7 @@ from .repository import StoryRepository, payload_hash
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
 VisualResourceScheduler = Callable[
-    [dict[str, Any], dict[str, Any], str, StoryVisualType, EventEmitter], None
+    [dict[str, Any], dict[str, Any], str, StoryVisualType, str, EventEmitter], None
 ]
 
 
@@ -150,6 +150,7 @@ class StorySimulationService:
                         story=story,
                         turn_id=turn_id,
                         visual_prompt=draft.visual_prompt,
+                        scene_key=draft.current_scene.key,
                         emit_event=emit_event,
                     )
                 elif schedule_visual_resource and draft.visual_prompt.strip():
@@ -158,6 +159,7 @@ class StorySimulationService:
                         turn,
                         draft.visual_prompt,
                         draft.visual_type,
+                        draft.current_scene.key,
                         emit_event,
                     )
                 await self._emit(
@@ -225,8 +227,12 @@ class StorySimulationService:
         """Bind dialogue to the single formal Story role frozen at creation."""
 
         role_name = str(role_snapshot.get("name") or "").strip()
-        if not role_name:
-            raise StoryInvalidOutputError("Story 角色快照缺少名称")
+        role_id = str(role_snapshot.get("id") or "").strip()
+        if not role_id or not role_name:
+            raise StoryInvalidOutputError("Story 角色快照缺少身份")
+        unknown_character_ids = set(draft.current_scene.character_ids) - {role_id, "player"}
+        if unknown_character_ids:
+            raise StoryInvalidOutputError("current_scene 包含不属于 Story 的角色")
         return DirectorDraft(
             beats=tuple(
                 StoryBeatDraft(
@@ -241,6 +247,7 @@ class StorySimulationService:
             stop_reason=draft.stop_reason,
             visual_prompt=draft.visual_prompt,
             visual_type=draft.visual_type,
+            current_scene=draft.current_scene,
         )
 
     async def retry_resource(
@@ -271,6 +278,7 @@ class StorySimulationService:
         story: dict[str, Any],
         turn_id: str,
         visual_prompt: str,
+        scene_key: str,
         emit_event: EventEmitter,
     ) -> None:
         """Generate the Story-owned background attached to the opening Turn."""
@@ -286,6 +294,7 @@ class StorySimulationService:
             str(background["id"]),
             prompt=visual_prompt,
             source_turn_id=turn_id,
+            scene_key=scene_key,
         )
         await self._generate_resource(prepared, emit_event)
 

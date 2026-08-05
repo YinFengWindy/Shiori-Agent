@@ -17,12 +17,19 @@ export type StoryOperation = "idle" | "awaiting_player" | "generating";
 export type StoryResourceStatus = "generating" | "ready" | "failed";
 export type StoryVisualType = "scene" | "character";
 
+/** Current Director-owned scene and the characters who are actually present. */
+export type StoryScene = {
+  key: string;
+  characterIds: string[];
+};
+
 /** One image owned by a Story and shown by its CG collection. */
 export type StoryResource = {
   id: string;
   storyId: string;
   kind: "background" | "cg";
   visualType: StoryVisualType;
+  sceneKey: string;
   status: StoryResourceStatus;
   path: string | null;
   prompt: string;
@@ -107,6 +114,7 @@ export type StoryDetails = {
   beats: StoryBeat[];
   cues: Array<Record<string, unknown>>;
   turns: StoryTurn[];
+  currentScene: StoryScene;
   backgroundResource: StoryResource | null;
   cgGallery: StoryResource[];
   currentStoryDate: string;
