@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { toFileUrl } from "../shared/format";
 import { cx } from "../shared/styles";
-import { canShowStoryInput } from "./selectors";
+import { canShowStoryInput, selectActiveStoryVisualResource } from "./selectors";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
 import { advanceStoryPlayback, createStoryPlaybackState, getNextStoryBeat, getPresentedStoryBeat, syncStoryPlaybackState } from "./storyPlayback";
 import { getStoryBeatPresentationFragments } from "./storyBeatPresentation";
@@ -52,9 +52,8 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
     : 0;
   const presentedFragment = presentedFragments[presentedFragmentIndex] ?? null;
   const hasNextFragment = presentedFragmentIndex < presentedFragments.length - 1;
-  const storyCgResource = [...story.cgGallery].reverse().find((resource) => resource.kind === "cg" && resource.status === "ready" && resource.path) ?? null;
-  const storyVisualResource = storyCgResource
-    ?? (story.backgroundResource?.status === "ready" && story.backgroundResource.path ? story.backgroundResource : null);
+  const storyCgResource = [...story.cgGallery].reverse().find((resource) => resource.kind === "cg" && resource.path) ?? null;
+  const storyVisualResource = selectActiveStoryVisualResource(story);
   const storyBackgroundPath = storyVisualResource?.path;
   const hasStoryBackground = Boolean(storyBackgroundPath);
   const backgroundUrl = storyBackgroundPath ? toFileUrl(storyBackgroundPath) : background.url;
@@ -125,7 +124,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
       </div>
 
       {dialogueVisible ? <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
-        <section className="pointer-events-auto border-t border-white/25 px-[clamp(20px,8vw,120px)] pb-[clamp(20px,4vh,40px)] pt-[clamp(32px,7vh,72px)] shadow-[inset_0_1px_0_rgba(255,255,255,0.24)] backdrop-blur-xl backdrop-saturate-150" data-testid="story-dialogue-panel" style={{ backgroundColor: `color-mix(in srgb, ${background.theme.titleHighlight} 40%, transparent)` }}>
+        <section className="pointer-events-auto border-t border-white/25 px-[clamp(20px,8vw,120px)] pb-[clamp(20px,4vh,40px)] pt-[clamp(20px,4vh,44px)] shadow-[inset_0_1px_0_rgba(255,255,255,0.24)] backdrop-blur-xl backdrop-saturate-150" data-testid="story-dialogue-panel" style={{ backgroundColor: `color-mix(in srgb, ${background.theme.titleHighlight} 40%, transparent)` }}>
           <div className="mx-auto max-w-6xl">
             <div className="max-w-4xl">
               {fragmentLabel ? <div className="mb-2 flex items-center gap-3"><span aria-hidden="true" className={cx("h-px w-8", isDialogueFragment ? "bg-[#F4C29F]/70" : "bg-white/40")} /><h1 className={cx("story-game-readable m-0 font-serif text-lg font-semibold tracking-wide", isDialogueFragment ? "text-[#F4C29F]" : "text-white/70")}>{fragmentLabel}</h1></div> : null}
