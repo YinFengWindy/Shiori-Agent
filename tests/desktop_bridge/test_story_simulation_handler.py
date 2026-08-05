@@ -49,6 +49,35 @@ class ProgressionVisualDirector:
         )
 
 
+class RepeatedCharacterVisualDirector:
+    """Returns the same character visual again after it has already completed."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def generate(self, **_kwargs) -> DirectorDraft:
+        self.calls += 1
+        if self.calls == 1:
+            return DirectorDraft(
+                beats=(StoryBeatDraft(text="雨后的铃声响起。"),),
+                visual_prompt="old school building, rainy afternoon",
+                current_scene=StoryScene(key="old-school", character_ids=("role-1",)),
+            )
+        if self.calls <= 3:
+            return DirectorDraft(
+                beats=(StoryBeatDraft(text="她朝你伸出手。", kind="dialogue", speaker="澪"),),
+                visual_prompt="rainy school gate, girl reaching hand, emotional close-up",
+                visual_type="character",
+                current_scene=StoryScene(key="school-gate", character_ids=("role-1", "player")),
+            )
+        return DirectorDraft(
+            beats=(StoryBeatDraft(text="雨幕重新遮住了远处的校门。"),),
+            visual_prompt="rainy school gate, empty scene, wet pavement, soft afternoon light",
+            visual_type="scene",
+            current_scene=StoryScene(key="school-gate", character_ids=("role-1", "player")),
+        )
+
+
 class RecordingImageTool:
     async def execute(self, **_kwargs):
         return json.dumps({"output_paths": ["D:\\stories\\opening.png"]})
@@ -362,6 +391,74 @@ async def test_ready_cg_regeneration_replaces_the_existing_gallery_resource(tmp_
     assert ready["cgGallery"][-1]["path"] != original["path"]
     assert image_tool.calls == 3
     assert image_tool.prompts[-1] == original["prompt"]
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_repeated_character_visual_does_not_create_another_cg_for_the_same_scene(tmp_path) -> None:
+    role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
+    image_tool = SequentialImageTool()
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: role),
+        director=RepeatedCharacterVisualDirector(),
+        image_tool=image_tool,
+    )
+    payload = {
+        "title": "夏日来信",
+        "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
+        "time_band": "上午",
+        "role_id": "role-1",
+        "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
+    }
+
+    created = await handler.handle("stories.create", payload, request_id="create-1", emit_event=lambda _event: None)
+    story_id = created["story"]["id"]
+    for _ in range(8):
+        await asyncio.sleep(0)
+    opening = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-1", emit_event=lambda _event: None))["story"]
+    await handler.handle(
+        "stories.input",
+        {"story_id": story_id, "input": "和她一起走。", "expected_revision": opening["revision"]},
+        request_id="input-1",
+        emit_event=lambda _event: None,
+    )
+    for _ in range(12):
+        await asyncio.sleep(0)
+    second = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-2", emit_event=lambda _event: None))["story"]
+    assert len(second["cgGallery"]) == 2
+    assert image_tool.calls == 2
+
+    await handler.handle(
+        "stories.input",
+        {"story_id": story_id, "input": "她还在等你的回答。", "expected_revision": second["revision"]},
+        request_id="input-2",
+        emit_event=lambda _event: None,
+    )
+    for _ in range(12):
+        await asyncio.sleep(0)
+    repeated = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-3", emit_event=lambda _event: None))["story"]
+
+    assert len(repeated["cgGallery"]) == 2
+    assert repeated["cgGallery"][1]["visualType"] == "character"
+    assert repeated["cgGallery"][1]["path"] == "D:\\stories\\image-2.png"
+    assert image_tool.calls == 2
+
+    await handler.handle(
+        "stories.input",
+        {"story_id": story_id, "input": "我们继续往前走。", "expected_revision": repeated["revision"]},
+        request_id="input-3",
+        emit_event=lambda _event: None,
+    )
+    for _ in range(12):
+        await asyncio.sleep(0)
+    scene = (await handler.handle("stories.get", {"story_id": story_id}, request_id="get-4", emit_event=lambda _event: None))["story"]
+
+    assert len(scene["cgGallery"]) == 3
+    assert scene["cgGallery"][2]["visualType"] == "scene"
+    assert scene["cgGallery"][2]["path"] == "D:\\stories\\image-3.png"
+    assert image_tool.calls == 3
     await handler.aclose()
 
 

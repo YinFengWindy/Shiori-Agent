@@ -434,9 +434,19 @@ class StorySimulationHandler:
 
         story_id = str(story["id"])
         repository = self._repository(story_id)
+        resources = repository.story_resources(story_id)
         if any(
             resource["kind"] == "cg" and resource["status"] == "generating"
-            for resource in repository.story_resources(story_id)
+            for resource in resources
+        ):
+            return
+        if visual_type == "character" and any(
+            resource["kind"] == "cg"
+            and resource["visualType"] == "character"
+            and resource["sceneKey"] == scene_key
+            and resource["status"] == "ready"
+            and resource["path"]
+            for resource in resources
         ):
             return
         resource = repository.create_resource(
