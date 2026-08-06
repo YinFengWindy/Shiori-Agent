@@ -7,7 +7,7 @@ import type { RunStoryOperation } from "./useStoryPresentationOperation";
 type Args = {
   client: StoryBridgeClient;
   controller: ReturnType<typeof useStoryController>;
-  loadStoryForPlay: (storyId: string) => Promise<void>;
+  loadStoryForPlay: (storyId: string, options?: { keepCurrentSurface?: boolean }) => Promise<void>;
   run: RunStoryOperation;
 };
 
@@ -18,7 +18,7 @@ export function useStoryCreationFlowController({ client, controller, loadStoryFo
       () => client.createStory(input, creationId),
       async (createdStory) => {
         await controller.reloadStories();
-        await loadStoryForPlay(createdStory.id);
+        await loadStoryForPlay(createdStory.id, { keepCurrentSurface: true });
       },
     );
   }, [client, controller, loadStoryForPlay, run]);

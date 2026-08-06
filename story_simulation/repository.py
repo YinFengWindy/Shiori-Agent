@@ -421,6 +421,41 @@ class StoryRepository:
                 self._require_row("SELECT * FROM turns WHERE id = ?", (turn_id,), connection)
             )
 
+    def interrupted_turns(self, story_id: str) -> list[dict[str, Any]]:
+        """Return all Turns left in an active generation state by a stopped process."""
+
+        with self._lock:
+            rows = self._connection.execute(
+                """SELECT * FROM turns WHERE story_id = ?
+                AND status IN ('generating', 'validating')
+                ORDER BY created_at, id""",
+                (story_id,),
+            ).fetchall()
+        return [self._turn_dict(row) for row in rows]
+
+    def retry_failed_turn(self, turn_id: str) -> dict[str, Any]:
+        """Return one failed Turn to pending so its logical request can be retried."""
+
+        with self.transaction() as connection:
+            turn = self._require_row("SELECT * FROM turns WHERE id = ?", (turn_id,), connection)
+            if turn["status"] != "failed":
+                raise StoryInvalidStateError("Turn 当前不可重试")
+            now = utc_now()
+            connection.execute(
+                """UPDATE turns SET status = 'pending', active_attempt_id = NULL,
+                error = NULL, updated_at = ? WHERE id = ?""",
+                (now, turn_id),
+            )
+            segment_status = "awaiting_opening" if turn["kind"] == "opening" else "active"
+            connection.execute(
+                """UPDATE segments SET status = ?, operation = 'generating'
+                WHERE id = ?""",
+                (segment_status, turn["segment_id"]),
+            )
+            return self._turn_dict(
+                self._require_row("SELECT * FROM turns WHERE id = ?", (turn_id,), connection)
+            )
+
     def create_turn(
         self,
         *,

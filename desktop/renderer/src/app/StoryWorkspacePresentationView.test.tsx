@@ -35,7 +35,7 @@ describe("StoryWorkspacePresentationView", () => {
     assert.match(markup, /data-blur-mode="none" data-testid="story-workspace-backdrop-blur"/);
     assert.match(markup, /data-testid="story-game-surface"/);
     assert.match(markup, /data-testid="story-presentation-content" data-story-mode="game"/);
-    assert.doesNotMatch(markup, /data-testid="story-game-backdrop"/);
+    assert.match(markup, /data-testid="story-game-backdrop"/);
     assert.ok(markup.indexOf("story-workspace-backdrop") < markup.indexOf("story-game-surface"));
     assert.doesNotMatch(markup, /world-day-surface|world-workspace/);
   });

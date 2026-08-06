@@ -112,6 +112,21 @@ class FailingOpeningDirector:
         raise StoryInvalidOutputError("invalid opening")
 
 
+class FailTwiceOpeningDirector:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def generate(self, **_kwargs) -> DirectorDraft:
+        self.calls += 1
+        if self.calls <= 2:
+            raise StoryInvalidOutputError("invalid opening")
+        return DirectorDraft(
+            beats=(StoryBeatDraft(text="雨后的铃声响起。"),),
+            visual_prompt="old school building, rainy afternoon",
+            current_scene=StoryScene(key="old-school", character_ids=("role-1",)),
+        )
+
+
 class BlockingOpeningDirector:
     def __init__(self) -> None:
         self.calls = 0
@@ -488,6 +503,137 @@ async def test_failed_opening_keeps_story_without_a_visual_resource(tmp_path) ->
     assert story["turns"][0]["status"] == "failed"
     assert story["backgroundResource"]["status"] == "failed"
     assert story["backgroundResource"]["errorCode"] == "director_invalid_output"
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_failed_opening_retries_with_the_same_creation_request(tmp_path) -> None:
+    role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
+    director = FailTwiceOpeningDirector()
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: role),
+        director=director,
+    )
+    payload = {
+        "title": "夏日来信",
+        "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
+        "time_band": "上午",
+        "role_id": "role-1",
+        "creation_id": "creation-1",
+        "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
+    }
+
+    created = await handler.handle(
+        "stories.create", payload, request_id="transport-1", emit_event=lambda _event: None
+    )
+    for _ in range(8):
+        await asyncio.sleep(0)
+    failed = (
+        await handler.handle(
+            "stories.get",
+            {"story_id": created["story"]["id"]},
+            request_id="get-1",
+            emit_event=lambda _event: None,
+        )
+    )["story"]
+    assert failed["turns"][0]["status"] == "failed"
+
+    replay = await handler.handle(
+        "stories.create", payload, request_id="transport-2", emit_event=lambda _event: None
+    )
+    for _ in range(12):
+        await asyncio.sleep(0)
+    retried = (
+        await handler.handle(
+            "stories.get",
+            {"story_id": created["story"]["id"]},
+            request_id="get-2",
+            emit_event=lambda _event: None,
+        )
+    )["story"]
+
+    assert replay["story"]["id"] == created["story"]["id"]
+    assert retried["turns"][0]["status"] == "committed"
+    assert retried["beats"]
+    assert director.calls == 3
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_story_recovery_restarts_an_interrupted_player_turn(tmp_path) -> None:
+    role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
+    catalog = StoryCatalog(tmp_path)
+    catalog.create_entry(
+        story_id="story-1",
+        title="夏日来信",
+        request_id="creation-1",
+        payload_hash="creation-payload",
+    )
+    repository = StoryRepository(catalog.database_path("story-1"))
+    repository.create_story(
+        story_id="story-1",
+        title="夏日来信",
+        background="午后的旧校舍",
+        role_snapshot=role.to_dict(),
+        player_profile=StoryPlayerProfile("悠", "短发", "转学生"),
+        story_date="2026-08-01",
+        time_band="上午",
+        opening_context={},
+    )
+    opening = repository.create_turn(
+        story_id="story-1",
+        input_text="",
+        request_id="creation-1:opening",
+        request_payload_hash=payload_hash(
+            {"story_id": "story-1", "kind": "opening", "request_id": "creation-1:opening"}
+        ),
+        expected_revision=0,
+        kind="opening",
+    )
+    opening_attempt = repository.start_attempt(opening["id"])
+    repository.mark_validating(opening["id"], opening_attempt["attempt_id"])
+    repository.commit_draft(
+        turn_id=opening["id"],
+        attempt_id=opening_attempt["attempt_id"],
+        draft=DirectorDraft(
+            beats=(StoryBeatDraft(text="开场。"),),
+            current_scene=StoryScene(key="old-school", character_ids=("role-1",)),
+        ),
+        default_time_band="上午",
+    )
+    player = repository.create_turn(
+        story_id="story-1",
+        input_text="继续故事。",
+        request_id="input-1",
+        request_payload_hash=payload_hash({"story_id": "story-1", "input": "继续故事。"}),
+        expected_revision=1,
+    )
+    original_attempt = repository.start_attempt(player["id"])
+    repository.close()
+    catalog.close()
+
+    director = BlockingOpeningDirector()
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: role),
+        director=director,
+    )
+    await handler.handle("stories.list", {}, request_id="list-1", emit_event=lambda _event: None)
+    await director.started.wait()
+    recovered = (
+        await handler.handle(
+            "stories.get",
+            {"story_id": "story-1"},
+            request_id="get-1",
+            emit_event=lambda _event: None,
+        )
+    )["story"]
+
+    assert recovered["turns"][1]["status"] == "generating"
+    assert recovered["turns"][1]["attemptId"] != original_attempt["attempt_id"]
+    director.release.set()
     await handler.aclose()
 
 

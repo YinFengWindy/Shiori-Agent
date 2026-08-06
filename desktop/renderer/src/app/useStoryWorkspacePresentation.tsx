@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { RoleRecord } from "../shared/types";
 import type { StoryBridgeClient } from "../story/storyBridgeClient";
 import type { StoryCgGallery } from "../story/types";
-import { replaceStoryGallery } from "../story/selectors";
+import { isStoryOpeningFailed, replaceStoryGallery } from "../story/selectors";
 import type { useStoryController } from "../story/useStoryController";
 import { waitForMinimumStoryLoadingStage, waitForStoryLoadingCompletion } from "../story/storyLoadingPresentation";
 import { useStoryCreationFlowController } from "./useStoryCreationFlowController";
@@ -31,40 +31,44 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
   const { clearError, reportError, run } = operation;
   const { loadStory, waitForStoryReady } = controller;
 
-  const loadStoryForPlay = useCallback(async (storyId: string) => {
+  const loadStoryForPlay = useCallback(async (storyId: string, options: { keepCurrentSurface?: boolean } = {}) => {
+    const keepCurrentSurface = options.keepCurrentSurface === true;
     const startedAt = Date.now();
     setLoadingStoryId(storyId);
     clearError();
     setLoadingElapsedMs(0);
     setLoadingPhase("reading-story");
-    const transitionTimer = setTimeout(() => {
+    const transitionTimer = keepCurrentSurface ? undefined : setTimeout(() => {
       setLoadingElapsedMs(250);
       setMode("loading");
     }, 250);
     const progressTimer = setTimeout(() => setLoadingElapsedMs(2_000), 2_000);
     try {
       const loadedStory = await loadStory(storyId);
-      if (loadedStory) {
-        await waitForMinimumStoryLoadingStage(startedAt);
-        setLoadingPhase("restoring-progress");
-        const restoringStartedAt = Date.now();
-        await waitForStoryReady(storyId, loadedStory);
-        await waitForMinimumStoryLoadingStage(restoringStartedAt);
-        setLoadingPhase("preparing-opening");
-        await waitForMinimumStoryLoadingStage(Date.now());
-        setLoadingPhase("opening-ready");
-        await waitForStoryLoadingCompletion();
-        setMode("game");
+      if (!loadedStory) {
+        if (keepCurrentSurface) throw new Error("无法读取已创建的剧情，请重试。");
+        setLoadingElapsedMs(250);
+        setMode("loading");
         return;
       }
-      setLoadingElapsedMs(250);
-      setMode("loading");
+      await waitForMinimumStoryLoadingStage(startedAt);
+      setLoadingPhase("restoring-progress");
+      const restoringStartedAt = Date.now();
+      const readyStory = await waitForStoryReady(storyId, loadedStory);
+      if (isStoryOpeningFailed(readyStory)) throw new Error("开场生成失败，请重试。");
+      await waitForMinimumStoryLoadingStage(restoringStartedAt);
+      setLoadingPhase("preparing-opening");
+      await waitForMinimumStoryLoadingStage(Date.now());
+      setLoadingPhase("opening-ready");
+      await waitForStoryLoadingCompletion();
+      setMode("game");
     } catch (error) {
+      if (keepCurrentSurface) throw error instanceof Error ? error : new Error("无法加载这段剧情，请重试。");
       reportError(error instanceof Error ? error.message : "Unable to load this Story. Please try again.");
       setLoadingElapsedMs(250);
       setMode("loading");
     } finally {
-      clearTimeout(transitionTimer);
+      if (transitionTimer !== undefined) clearTimeout(transitionTimer);
       clearTimeout(progressTimer);
     }
   }, [clearError, loadStory, reportError, waitForStoryReady]);

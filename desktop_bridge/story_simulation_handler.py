@@ -205,6 +205,9 @@ class StorySimulationHandler:
                 story_id=story_id,
                 request_id=f"{creation_id}:opening",
             )
+        if opening_turn["status"] == "failed":
+            opening_turn = repository.retry_failed_turn(opening_turn["id"])
+            story = repository.story_read_model(story_id)
         if entry["status"] == "provisioning":
             self._catalog.set_status(story_id, "active")
         if opening_turn["status"] == "pending":
@@ -262,6 +265,11 @@ class StorySimulationHandler:
                     self._start_generation(service, opening_turn, emit_event)
                 if opening_turn["status"] == "committed":
                     await self._fail_interrupted_resources(repository, story_id, emit_event)
+                for turn in repository.interrupted_turns(story_id):
+                    if turn["id"] == opening_turn["id"]:
+                        continue
+                    recovered_turn = repository.reset_interrupted_turn(turn["id"])
+                    self._start_generation(service, recovered_turn, emit_event)
             self._recovered = True
 
     async def _fail_interrupted_resources(

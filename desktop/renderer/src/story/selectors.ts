@@ -55,6 +55,11 @@ export function isStoryRoleInCurrentScene(story: Pick<StoryDetails, "currentScen
   return Boolean(roleId && story.currentScene.characterIds.includes(roleId));
 }
 
+/** Returns whether Story creation stopped on a failed opening Turn. */
+export function isStoryOpeningFailed(story: Pick<StoryDetails, "turns">) {
+  return story.turns.some((turn) => turn.kind === "opening" && turn.status === "failed");
+}
+
 /** Converts a persisted Story resource error code into stable player-facing copy. */
 export function getStoryResourceErrorMessage(errorCode: string | null) {
   const messages: Record<string, string> = {

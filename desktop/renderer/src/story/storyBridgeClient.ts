@@ -60,6 +60,7 @@ export interface StoryBridgeClient {
 /** Creates the renderer client for the Story simulation bounded context. */
 export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDesktop.invoke): StoryBridgeClient {
   const revisions = new Map<string, number>();
+  const latestStories = new Map<string, StoryDetails>();
 
   async function getStory(storyId: string): Promise<StoryDetails> {
     const story = (await invokePayload<{ story: StoryPayload }>(invoke, "stories.get", { story_id: storyId })).story;
@@ -67,11 +68,13 @@ export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDeskt
   }
 
   function rememberStory(story: StoryDetails): StoryDetails {
+    const latestStory = mergeStoryReadModels(latestStories.get(story.id), story);
+    latestStories.set(story.id, latestStory);
     const previousRevision = revisions.get(story.id);
-    if (previousRevision === undefined || story.revision > previousRevision) {
-      revisions.set(story.id, story.revision);
+    if (previousRevision === undefined || latestStory.revision > previousRevision) {
+      revisions.set(story.id, latestStory.revision);
     }
-    return story;
+    return latestStory;
   }
 
   return {
@@ -138,4 +141,34 @@ export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDeskt
       return rememberStory(payload.story);
     },
   };
+}
+
+function mergeStoryReadModels(previous: StoryDetails | undefined, incoming: StoryDetails) {
+  if (!previous) return incoming;
+  const base = incoming.revision >= previous.revision ? incoming : previous;
+  const resources = mergeResources(previous.cgGallery, incoming.cgGallery);
+  const backgroundResource = resources.find((resource) => resource.kind === "background")
+    ?? mergeResource(previous.backgroundResource, incoming.backgroundResource);
+  return {
+    ...base,
+    backgroundResource,
+    cgGallery: resources,
+  };
+}
+
+function mergeResources(previous: StoryResource[], incoming: StoryResource[]) {
+  const resources = new Map<string, StoryResource>();
+  for (const resource of previous) resources.set(resource.id, resource);
+  for (const resource of incoming) {
+    resources.set(resource.id, mergeResource(resources.get(resource.id) ?? null, resource) ?? resource);
+  }
+  return [...resources.values()].sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id));
+}
+
+function mergeResource(previous: StoryResource | null, incoming: StoryResource | null) {
+  if (!previous) return incoming;
+  if (!incoming) return previous;
+  const previousTime = Date.parse(previous.updatedAt);
+  const incomingTime = Date.parse(incoming.updatedAt);
+  return incomingTime > previousTime ? incoming : previous;
 }

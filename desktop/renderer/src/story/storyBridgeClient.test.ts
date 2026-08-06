@@ -123,6 +123,44 @@ describe("createStoryBridgeClient", () => {
     assert.deepEqual(requests[2], { method: "stories.input", payload: { story_id: "story-1", input: "推开门。", expected_revision: 5 } });
   });
 
+  it("keeps the newest resource state when equal-revision reads arrive out of order", async () => {
+    const generatingResource = {
+      id: "background-1",
+      storyId: "story-1",
+      kind: "background" as const,
+      visualType: "scene" as const,
+      sceneKey: "default",
+      status: "generating" as const,
+      path: null,
+      prompt: "rainy school",
+      sourceTurnId: "turn-1",
+      sequence: 1,
+      errorCode: null,
+      createdAt: "2026-08-02T10:00:00+08:00",
+      updatedAt: "2026-08-02T10:00:00+08:00",
+    };
+    const readyResource = { ...generatingResource, status: "ready" as const, path: "opening.png", updatedAt: "2026-08-02T10:00:01+08:00" };
+    const older = deferred<BridgeResponse>();
+    const newer = deferred<BridgeResponse>();
+    let reads = 0;
+    const client = createStoryBridgeClient(async (request): Promise<BridgeResponse> => {
+      if (request.method !== "stories.get") return { id: "response", type: "response", method: request.method, payload: { story: storyPayload() }, error: null };
+      reads += 1;
+      return reads === 1 ? older.promise : newer.promise;
+    });
+
+    const olderRead = client.getStory("story-1");
+    const newerRead = client.getStory("story-1");
+    newer.resolve({ id: "newer", type: "response", method: "stories.get", payload: { story: { ...storyPayload(4), backgroundResource: readyResource, cgGallery: [readyResource] } }, error: null });
+    const resolvedNewer = await newerRead;
+    older.resolve({ id: "older", type: "response", method: "stories.get", payload: { story: { ...storyPayload(4), backgroundResource: generatingResource, cgGallery: [generatingResource] } }, error: null });
+    const resolvedOlder = await olderRead;
+
+    assert.equal(resolvedNewer.backgroundResource?.status, "ready");
+    assert.equal(resolvedOlder.backgroundResource?.status, "ready");
+    assert.equal(resolvedOlder.backgroundResource?.path, "opening.png");
+  });
+
   it("surfaces bridge failures as stable Story errors", async () => {
     const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<BridgeResponse> => ({ id: "response", type: "response", method: request.method, payload: {}, error: { code: "story_conflict", message: "剧情版本已变化" } });
     await assert.rejects(() => createStoryBridgeClient(invoke).continueStory("story-1"), (error: unknown) => error instanceof StoryBridgeError && error.code === "story_conflict");

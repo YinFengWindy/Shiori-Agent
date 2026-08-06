@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { canShowStoryInput, canSubmitStoryInput, getStoryStatusLabel, isStoryRoleInCurrentScene, mergeStoryBeats, replaceStoryGallery, replaceStorySummary, selectActiveStoryVisualResource } from "./selectors";
+import { canShowStoryInput, canSubmitStoryInput, getStoryStatusLabel, isStoryOpeningFailed, isStoryRoleInCurrentScene, mergeStoryBeats, replaceStoryGallery, replaceStorySummary, selectActiveStoryVisualResource } from "./selectors";
 import { createStoryBeat, createStoryDetails, createStorySummary } from "./testFixtures";
 
 describe("Story selectors", () => {
@@ -16,6 +16,13 @@ describe("Story selectors", () => {
     assert.equal(canShowStoryInput(story, false, false), true);
     assert.equal(canShowStoryInput(story, false, true), false);
     assert.equal(canShowStoryInput(story, true, false), false);
+  });
+
+  it("recognizes a failed opening Turn without treating later Turn failures as creation failures", () => {
+    const failedOpening = createStoryDetails({ turns: [{ id: "opening", kind: "opening", input: "", status: "failed", attemptId: null, committedBeatIds: [], error: "invalid opening", createdAt: "", updatedAt: "" }] });
+    const failedPlayerTurn = createStoryDetails({ turns: [{ id: "player", kind: "player", input: "继续", status: "failed", attemptId: null, committedBeatIds: [], error: "failed", createdAt: "", updatedAt: "" }] });
+    assert.equal(isStoryOpeningFailed(failedOpening), true);
+    assert.equal(isStoryOpeningFailed(failedPlayerTurn), false);
   });
 
   it("merges replayed beats without duplicates and restores repository order", () => {

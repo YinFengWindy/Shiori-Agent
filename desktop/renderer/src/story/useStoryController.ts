@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createStoryBridgeClient, type StoryBridgeClient } from "./storyBridgeClient";
 import { replaceStorySummary } from "./selectors";
 import { waitForMinimumStoryLoadingStage, waitForStoryLoadingCompletion } from "./storyLoadingPresentation";
@@ -21,6 +21,7 @@ const storyResourcePollLimit = 240;
 /** Owns Story list, read-model refresh, and player input state. */
 export function useStoryController(client: StoryBridgeClient = createStoryBridgeClient()) {
   const [state, setState] = useState(initialState);
+  const refreshSequenceRef = useRef(new Map<string, number>());
 
   const run = useCallback(async <T,>(operation: () => Promise<T>, apply?: (value: T) => void) => {
     setState((current) => ({ ...current, busy: true, error: "" }));
@@ -74,12 +75,16 @@ export function useStoryController(client: StoryBridgeClient = createStoryBridge
   }, [client]);
 
   const refreshStory = useCallback((storyId: string) => {
+    const sequence = (refreshSequenceRef.current.get(storyId) ?? 0) + 1;
+    refreshSequenceRef.current.set(storyId, sequence);
     void client.getStory(storyId).then((story) => {
-      setState((current) => current.story?.id === storyId ? { ...current, story, stories: replaceStorySummary(current.stories, story) } : current);
+      if (refreshSequenceRef.current.get(storyId) !== sequence) return;
+      applyStory(story);
     }).catch((error: unknown) => {
+      if (refreshSequenceRef.current.get(storyId) !== sequence) return;
       setState((current) => current.story?.id === storyId ? { ...current, error: error instanceof Error ? error.message : "无法刷新剧情" } : current);
     });
-  }, [client]);
+  }, [applyStory, client]);
 
   useEffect(() => {
     void reloadStories();
