@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from core.roles import RoleAggregateService, RolePetPackageService, RoleStore
 
 from .role_presenter import DesktopRolePresenter
+from .role_difference_service import RoleDifferenceGenerationService
 from .voice_handler import DesktopVoiceHandler
 
 
@@ -17,14 +19,18 @@ class DesktopRoleRequestHandler:
         role_service: RoleAggregateService,
         role_store: RoleStore,
         pet_packages: RolePetPackageService,
+        role_differences: RoleDifferenceGenerationService,
         role_presenter: DesktopRolePresenter,
         voice_handler: DesktopVoiceHandler,
+        publish_event: Callable[[dict[str, Any]], Awaitable[None]],
     ) -> None:
         self._role_service = role_service
         self._role_store = role_store
         self._pet_packages = pet_packages
+        self._role_differences = role_differences
         self._role_presenter = role_presenter
         self._voice_handler = voice_handler
+        self._publish_event = publish_event
 
     async def handle(
         self, method: str, payload: dict[str, Any]
@@ -93,6 +99,19 @@ class DesktopRoleRequestHandler:
                 aggregate.role.runtime_config,
             )
             return {"role": self._role_presenter.serialize(aggregate.role)}
+        if method == "roles.differences.generate":
+            result = await self._role_differences.generate(
+                role_id=str(payload.get("role_id") or ""),
+                base_asset=str(payload.get("base_asset") or ""),
+                emit_progress=self._emit_difference_progress,
+            )
+            self._role_service.sessions.open_by_role(result["role"])
+            return {
+                "job_id": result["job_id"],
+                "category_id": result["category_id"],
+                "category_name": result["category_name"],
+                "role": self._role_presenter.serialize(result["role"]),
+            }
         if method == "roles.delete":
             role_id = str(payload.get("role_id") or "").strip()
             role = self._role_service.repository.get_required(role_id)
@@ -130,6 +149,16 @@ class DesktopRoleRequestHandler:
             )
             return {"role": self._role_presenter.serialize(role)}
         return None
+
+    async def _emit_difference_progress(self, payload: dict[str, Any]) -> None:
+        await self._publish_event(
+            {
+                "id": str(payload.get("job_id") or "role-differences"),
+                "type": "event",
+                "method": "roles.differences.progress",
+                "payload": payload,
+            }
+        )
 
     @staticmethod
     def _dict_payload(payload: dict[str, Any], key: str) -> dict[str, Any] | None:

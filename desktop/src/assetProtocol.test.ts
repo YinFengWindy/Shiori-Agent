@@ -48,6 +48,7 @@ describe("local asset protocol", () => {
     assert.equal(legacyResponse.status, 403);
     assert.equal(tokenWithLegacyQuery.status, 403);
     assert.equal(response.headers.get("Content-Type"), "image/png");
+    assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
     assert.equal(response.headers.get("Cache-Control"), "no-store");
     assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
     assert.equal(await response.text(), "image-bytes");
@@ -132,7 +133,7 @@ describe("local asset protocol", () => {
     assert.equal(response.status, 403);
   });
 
-  it("registers the handler without granting Fetch or CORS privileges", () => {
+  it("registers the handler with image CORS but without Fetch privileges", () => {
     const registry = new LocalAssetRegistry();
     let scheme = "";
     let handler: ((request: { url: string }) => Promise<Response> | Response) | null = null;
@@ -146,8 +147,8 @@ describe("local asset protocol", () => {
 
     assert.equal(scheme, "shiori-asset");
     assert.equal(typeof handler, "function");
-    assert.deepEqual(localAssetSchemePrivileges, { standard: true, secure: true });
+    assert.deepEqual(localAssetSchemePrivileges, { standard: true, secure: true, corsEnabled: true });
     assert.equal("supportFetchAPI" in localAssetSchemePrivileges, false);
-    assert.equal("corsEnabled" in localAssetSchemePrivileges, false);
+    assert.equal(localAssetSchemePrivileges.corsEnabled, true);
   });
 });

@@ -87,7 +87,7 @@ type DesktopAppFrameProps = {
   bridgeReady: boolean;
   onOpenSearch: () => void;
   onOpenRolesWorkspace: () => void;
-  onOpenWorld: () => void;
+  onOpenStory: () => void;
   onOpenRole: (roleId: string) => void;
   onOpenImageStudio: () => void;
   onOpenPromptTagLibrary: () => void;
@@ -155,6 +155,8 @@ type DesktopAppFrameProps = {
   onSelectAvatarAsset: (path: string) => void;
   onSelectChatBackground: (path: string) => void;
   onSaveRoleAssets: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
+  differenceGeneration: import("../roles/roleDifferenceGeneration").RoleDifferenceGenerationState;
+  onGenerateDifferences: (baseAsset: string) => void;
   onSettingsMetaChange: (meta: { configPath: string; dirty: boolean }) => void;
   showSearchDialog: boolean;
   searchQuery: string;
@@ -220,7 +222,7 @@ export function DesktopAppFrame({
   bridgeReady,
   onOpenSearch,
   onOpenRolesWorkspace,
-  onOpenWorld,
+  onOpenStory,
   onOpenRole,
   onOpenImageStudio,
   onOpenPromptTagLibrary,
@@ -288,6 +290,8 @@ export function DesktopAppFrame({
   onSelectAvatarAsset,
   onSelectChatBackground,
   onSaveRoleAssets,
+  differenceGeneration,
+  onGenerateDifferences,
   onSettingsMetaChange,
   showSearchDialog,
   searchQuery,
@@ -406,7 +410,7 @@ export function DesktopAppFrame({
               width={sidebarState.width}
               onOpenSearch={onOpenSearch}
               onOpenRolesWorkspace={onOpenRolesWorkspace}
-              onOpenWorld={onOpenWorld}
+              onOpenStory={onOpenStory}
               onOpenRole={onOpenRole}
               onOpenImageStudio={onOpenImageStudio}
               onOpenPromptTagLibrary={onOpenPromptTagLibrary}
@@ -549,6 +553,8 @@ export function DesktopAppFrame({
               onSelectChatBackground={onSelectChatBackground}
               onUpdateRoleForm={onUpdateRoleForm}
               onSaveSelections={onSaveRoleAssets}
+              differenceGeneration={differenceGeneration}
+              onGenerateDifferences={onGenerateDifferences}
             />
           ) : null}
           {mainView.kind === "settings" ? (

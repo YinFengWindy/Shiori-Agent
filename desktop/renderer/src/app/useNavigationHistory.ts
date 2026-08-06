@@ -128,8 +128,8 @@ export function useNavigationHistory({
   }
 
   /** Opens the independent Story workspace without selecting a chat session. */
-  function openWorldWorkspace(options?: { recordHistory?: boolean }): void {
-    const nextView: AppMainView = { kind: "world" };
+  function openStoryWorkspace(options?: { recordHistory?: boolean }): void {
+    const nextView: AppMainView = { kind: "story" };
     setSidebarAnimating(true);
     setSidebarCollapsed(false);
     setMainView(nextView);
@@ -208,8 +208,8 @@ export function useNavigationHistory({
       openPromptTagLibrary({ recordHistory: false });
       return;
     }
-    if (nextEntry.view.kind === "world") {
-      openWorldWorkspace({ recordHistory: false });
+    if (nextEntry.view.kind === "story") {
+      openStoryWorkspace({ recordHistory: false });
       return;
     }
     if (nextEntry.view.kind === "roles-list" || nextEntry.view.kind === "role-create") {
@@ -255,7 +255,7 @@ export function useNavigationHistory({
     buildNavigationEntry,
     replaceNavigationEntry,
     openChatView,
-    openWorldWorkspace,
+    openStoryWorkspace,
     openImageStudio,
     openPromptTagLibrary,
     openSettingsWorkspace,

@@ -59,7 +59,7 @@ class StoryCatalog:
     def create_entry(
         self, *, story_id: str, title: str, request_id: str, payload_hash: str
     ) -> dict[str, Any]:
-        """Register one new Story idempotently before its database is opened."""
+        """Register one provisioning Story idempotently before its database is opened."""
 
         clean_title = title.strip()
         if not clean_title:
@@ -80,7 +80,7 @@ class StoryCatalog:
                     raise ValueError("request_id 携带了不同的请求")
             else:
                 connection.execute(
-                    "INSERT INTO story_entries VALUES (?, ?, ?, 'active', ?)",
+                    "INSERT INTO story_entries VALUES (?, ?, ?, 'provisioning', ?)",
                     (story_id, relative_db_path, clean_title, utc_now()),
                 )
                 connection.execute(
@@ -123,13 +123,31 @@ class StoryCatalog:
             raise ValueError("request_id 携带了不同的请求")
         return str(row["story_id"])
 
+    def request_id_for_story(self, story_id: str) -> str | None:
+        """Return the logical creation key associated with one Story."""
+
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT request_id FROM catalog_idempotency WHERE story_id = ?",
+                (story_id,),
+            ).fetchone()
+        return None if row is None else str(row["request_id"])
+
+    def list_entries(self) -> list[dict[str, Any]]:
+        """Return all catalog entries for startup recovery."""
+
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM story_entries ORDER BY created_at, story_id"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def list_summaries(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
         """List active Stories by default, with an explicit archived opt-in."""
 
         query = "SELECT * FROM story_entries"
         params: tuple[Any, ...] = ()
-        if not include_archived:
-            query += " WHERE status = 'active'"
+        query += " WHERE status IN ('active', 'archived')" if include_archived else " WHERE status = 'active'"
         query += " ORDER BY created_at, story_id"
         with self._lock:
             rows = self._connection.execute(query, params).fetchall()
@@ -138,7 +156,7 @@ class StoryCatalog:
     def set_status(self, story_id: str, status: str) -> dict[str, Any]:
         """Update a library status without touching Story facts."""
 
-        if status not in {"active", "archived", "deleting"}:
+        if status not in {"provisioning", "active", "archived", "deleting"}:
             raise ValueError("invalid Story catalog status")
         with self._lock:
             updated = self._connection.execute(

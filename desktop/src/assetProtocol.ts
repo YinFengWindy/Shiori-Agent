@@ -8,6 +8,8 @@ import {
 export const localAssetSchemePrivileges = Object.freeze({
   standard: true,
   secure: true,
+  // Renderer theme sampling reads pixels from authorized image assets via canvas.
+  corsEnabled: true,
 });
 
 type ProtocolRegistrar = {
@@ -59,6 +61,7 @@ export async function loadGrantedLocalAsset(
         "Cache-Control": "no-store",
         "Content-Length": String(data.byteLength),
         "Content-Type": grant.mimeType,
+        ...(grant.kind === "image" ? { "Access-Control-Allow-Origin": "*" } : {}),
         "X-Content-Type-Options": "nosniff",
       },
     });

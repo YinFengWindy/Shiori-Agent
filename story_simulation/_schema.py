@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS segments (
     id TEXT PRIMARY KEY,
     story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
     sequence INTEGER NOT NULL,
-    starts_at TEXT NOT NULL,
+    story_date TEXT NOT NULL,
+    time_band TEXT NOT NULL,
     status TEXT NOT NULL,
     mode TEXT NOT NULL,
     operation TEXT NOT NULL,
@@ -65,7 +66,6 @@ CREATE TABLE IF NOT EXISTS beats (
     segment_id TEXT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
     turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
     sequence INTEGER NOT NULL,
-    effective_at TEXT NOT NULL,
     payload TEXT NOT NULL,
     recorded_at TEXT NOT NULL,
     UNIQUE(story_id, sequence)
@@ -75,6 +75,23 @@ CREATE TABLE IF NOT EXISTS cues (
     id TEXT PRIMARY KEY,
     beat_id TEXT NOT NULL UNIQUE REFERENCES beats(id) ON DELETE CASCADE,
     payload TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS story_resources (
+    id TEXT PRIMARY KEY,
+    story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    visual_type TEXT NOT NULL DEFAULT 'scene',
+    scene_key TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    path TEXT,
+    prompt TEXT NOT NULL,
+    source_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL,
+    sequence INTEGER NOT NULL,
+    error_code TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(story_id, sequence)
 );
 
 CREATE TABLE IF NOT EXISTS idempotency (
@@ -98,4 +115,7 @@ ON turns(story_id, created_at, id);
 
 CREATE INDEX IF NOT EXISTS ix_story_beats_sequence
 ON beats(story_id, sequence);
+
+CREATE INDEX IF NOT EXISTS ix_story_resources_story_sequence
+ON story_resources(story_id, sequence);
 """

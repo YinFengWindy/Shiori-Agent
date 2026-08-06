@@ -38,6 +38,7 @@ def _build_server(tmp_path: Path) -> DesktopBridgeServer:
         ),
         loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
         event_bus=EventBus(),
+        provider=None,
     )
     return DesktopBridgeServer(runtime)
 

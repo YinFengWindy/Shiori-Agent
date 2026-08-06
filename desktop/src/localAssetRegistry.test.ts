@@ -53,11 +53,13 @@ describe("LocalAssetRegistry", () => {
     const avatarPath = join(managedDirectory, "avatar.png");
     const audioPath = join(managedDirectory, "rain.mp3");
     const arbitraryPath = join(managedDirectory, "arbitrary.png");
+    const storyResourcePath = join(managedDirectory, "story-resource.png");
     const documentPath = join(managedDirectory, "note.md");
     const launderedPath = join(externalDirectory, "laundered.txt");
     await writeFile(avatarPath, Buffer.from("avatar"));
     await writeFile(audioPath, Buffer.from("audio"));
     await writeFile(arbitraryPath, Buffer.from("arbitrary"));
+    await writeFile(storyResourcePath, Buffer.from("story-resource"));
     await writeFile(documentPath, "note", "utf-8");
     await writeFile(launderedPath, "secret", "utf-8");
     const registry = new LocalAssetRegistry();
@@ -67,12 +69,13 @@ describe("LocalAssetRegistry", () => {
       role: { avatar_abs: avatarPath, arbitrary: arbitraryPath },
       session: { media: [documentPath, launderedPath] },
       presentation: { items: [{ image_path: arbitraryPath }] },
+      story: { cgGallery: [{ path: storyResourcePath }] },
       world: { audio_path: audioPath },
     });
 
     assert.deepEqual(
       references.map((reference) => reference.path).sort(),
-      [avatarPath, arbitraryPath, audioPath, documentPath].sort(),
+      [avatarPath, arbitraryPath, audioPath, documentPath, storyResourcePath].sort(),
     );
     assert.equal(registry.resolveReference(avatarPath)?.kind, "image");
     assert.equal(registry.resolveReference(arbitraryPath)?.kind, "image");

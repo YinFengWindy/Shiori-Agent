@@ -902,6 +902,7 @@ async def test_desktop_bridge_server_streams_requests_and_responses(tmp_path: Pa
         ),
         loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
         event_bus=event_bus,
+        provider=None,
     )
     server = DesktopBridgeServer(runtime)
 
@@ -948,6 +949,7 @@ async def test_desktop_bridge_server_returns_invalid_request_and_keeps_stream_op
         ),
         loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
         event_bus=event_bus,
+        provider=None,
     )
     server = DesktopBridgeServer(runtime)
 
@@ -990,6 +992,7 @@ async def test_desktop_bridge_server_wraps_handler_errors_without_closing_stream
         ),
         loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
         event_bus=event_bus,
+        provider=None,
     )
     server = DesktopBridgeServer(runtime)
     call_count = 0

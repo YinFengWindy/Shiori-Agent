@@ -24,8 +24,14 @@ from .models import (
     StoryBeat,
     StoryContext,
     StoryPlayerProfile,
+    StoryResource,
+    StoryResourceKind,
+    StoryVisualType,
+    has_chinese_text,
     utc_now,
 )
+from .schema_migrations import migrate_story_resources, migrate_story_timeline
+from .story_time import next_story_clock, normalize_story_date, normalize_story_time_band
 
 
 class StoryRepository:
@@ -41,6 +47,8 @@ class StoryRepository:
         self._lock = threading.RLock()
         with self._lock:
             self._connection.executescript(SCHEMA)
+            migrate_story_timeline(self._connection)
+            migrate_story_resources(self._connection)
 
     def close(self) -> None:
         """Close this Story database connection."""
@@ -70,7 +78,8 @@ class StoryRepository:
         background: str,
         role_snapshot: dict[str, Any],
         player_profile: StoryPlayerProfile,
-        starts_at: str,
+        story_date: str,
+        time_band: str,
         opening_context: dict[str, Any],
     ) -> dict[str, Any]:
         """Create the Story and its first awaiting-opening segment atomically."""
@@ -80,6 +89,8 @@ class StoryRepository:
             raise ValueError("title 不能为空")
         if not background.strip():
             raise ValueError("background 不能为空")
+        normalized_story_date = normalize_story_date(story_date)
+        normalized_time_band = normalize_story_time_band(time_band)
         segment_id = f"segment-{uuid4().hex}"
         now = utc_now()
         with self.transaction() as connection:
@@ -97,8 +108,25 @@ class StoryRepository:
             )
             connection.execute(
                 """INSERT INTO segments
-                VALUES (?, ?, 1, ?, 'awaiting_opening', 'plot', 'idle', ?, ?)""",
-                (segment_id, story_id, starts_at, dump(opening_context), dump({})),
+                (id, story_id, sequence, story_date, time_band, status, mode,
+                 operation, opening_context, runtime_snapshot)
+                VALUES (?, ?, 1, ?, ?, 'awaiting_opening', 'plot', 'idle', ?, ?)""",
+                (
+                    segment_id,
+                    story_id,
+                    normalized_story_date,
+                    normalized_time_band,
+                    dump(opening_context),
+                    dump({}),
+                ),
+            )
+            resource_id = f"resource-{uuid4().hex}"
+            connection.execute(
+                """INSERT INTO story_resources
+                (id, story_id, kind, visual_type, scene_key, status, path, prompt,
+                 source_turn_id, sequence, error_code, created_at, updated_at)
+                VALUES (?, ?, 'background', 'scene', '', 'generating', NULL, '', NULL, 1, NULL, ?, ?)""",
+                (resource_id, story_id, now, now),
             )
         return self.story_read_model(story_id)
 
@@ -126,6 +154,16 @@ class StoryRepository:
                 FROM turns WHERE story_id = ? ORDER BY created_at, id""",
                 (story_id,),
             ).fetchall()
+            resources = self._connection.execute(
+                """SELECT * FROM story_resources
+                WHERE story_id = ? ORDER BY sequence, created_at, id""",
+                (story_id,),
+            ).fetchall()
+        resource_models = [self._resource_dict(row) for row in resources]
+        background_resource = next(
+            (resource for resource in resource_models if resource["kind"] == "background"),
+            None,
+        )
         return {
             "id": story["id"],
             "title": story["title"],
@@ -138,6 +176,201 @@ class StoryRepository:
             "beats": [self._beat_dict(row) for row in beats],
             "cues": [load(row["payload"], {}) for row in cues],
             "turns": [self._turn_dict(row) for row in turns],
+            "backgroundResource": background_resource,
+            "cgGallery": resource_models,
+            "currentStoryDate": str(segment["story_date"]),
+            "currentTimeBand": str(segment["time_band"]),
+            "currentScene": self._current_scene_dict(load(segment["runtime_snapshot"], {})),
+        }
+
+    def story_resources(self, story_id: str) -> list[dict[str, Any]]:
+        """Return the Story-owned visual resources in creation order."""
+
+        with self._lock:
+            self._require_row("SELECT id FROM stories WHERE id = ?", (story_id,))
+            rows = self._connection.execute(
+                """SELECT * FROM story_resources
+                WHERE story_id = ? ORDER BY sequence, created_at, id""",
+                (story_id,),
+            ).fetchall()
+        return [self._resource_dict(row) for row in rows]
+
+    def create_resource(
+        self,
+        story_id: str,
+        *,
+        kind: StoryResourceKind,
+        prompt: str,
+        source_turn_id: str | None,
+        visual_type: StoryVisualType = "scene",
+        scene_key: str = "",
+    ) -> dict[str, Any]:
+        """Create one asynchronous Story visual resource for a committed turn."""
+
+        clean_prompt = prompt.strip()
+        if not clean_prompt:
+            raise ValueError("资源提示词不能为空")
+        if visual_type not in {"scene", "character"}:
+            raise ValueError("资源视觉类型无效")
+        with self.transaction() as connection:
+            self._require_row("SELECT id FROM stories WHERE id = ?", (story_id,), connection)
+            sequence = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(sequence), 0) + 1 FROM story_resources WHERE story_id = ?",
+                    (story_id,),
+                ).fetchone()[0]
+            )
+            now = utc_now()
+            resource_id = f"resource-{uuid4().hex}"
+            connection.execute(
+                """INSERT INTO story_resources
+                (id, story_id, kind, visual_type, scene_key, status, path, prompt,
+                 source_turn_id, sequence, error_code, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 'generating', NULL, ?, ?, ?, NULL, ?, ?)""",
+                (
+                    resource_id,
+                    story_id,
+                    kind,
+                    visual_type,
+                    scene_key.strip(),
+                    clean_prompt,
+                    source_turn_id,
+                    sequence,
+                    now,
+                    now,
+                ),
+            )
+            row = self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+        return self._resource_dict(row)
+
+    def resource(self, resource_id: str) -> dict[str, Any]:
+        """Return one Story-owned resource by its stable identifier."""
+
+        with self._lock:
+            row = self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,)
+            )
+        return self._resource_dict(row)
+
+    def prepare_resource(
+        self,
+        resource_id: str,
+        *,
+        prompt: str,
+        source_turn_id: str | None,
+        scene_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Start generation without dropping the last successfully generated asset."""
+
+        clean_prompt = prompt.strip()
+        with self.transaction() as connection:
+            self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+            now = utc_now()
+            if scene_key is None:
+                connection.execute(
+                    """UPDATE story_resources
+                    SET prompt = ?, source_turn_id = ?, status = 'generating',
+                        error_code = NULL, updated_at = ?
+                    WHERE id = ?""",
+                    (clean_prompt, source_turn_id, now, resource_id),
+                )
+            else:
+                connection.execute(
+                    """UPDATE story_resources
+                    SET prompt = ?, source_turn_id = ?, scene_key = ?,
+                        status = 'generating', error_code = NULL, updated_at = ?
+                    WHERE id = ?""",
+                    (clean_prompt, source_turn_id, scene_key.strip(), now, resource_id),
+                )
+            row = self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+        return self._resource_dict(row)
+
+    def complete_resource(self, resource_id: str, path: str) -> dict[str, Any]:
+        """Persist a successfully generated local asset path."""
+
+        clean_path = path.strip()
+        if not clean_path:
+            raise ValueError("资源路径不能为空")
+        with self.transaction() as connection:
+            self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+            now = utc_now()
+            connection.execute(
+                """UPDATE story_resources
+                SET status = 'ready', path = ?, error_code = NULL, updated_at = ?
+                WHERE id = ?""",
+                (clean_path, now, resource_id),
+            )
+            row = self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+        return self._resource_dict(row)
+
+    def fail_resource(self, resource_id: str, error_code: str) -> dict[str, Any]:
+        """Persist a safe, stable failure state without exposing provider details."""
+
+        clean_code = error_code.strip() or "resource_generation_failed"
+        with self.transaction() as connection:
+            self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+            now = utc_now()
+            connection.execute(
+                """UPDATE story_resources
+                SET status = 'failed', error_code = ?, updated_at = ?
+                WHERE id = ?""",
+                (clean_code, now, resource_id),
+            )
+            row = self._require_row(
+                "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
+            )
+        return self._resource_dict(row)
+
+    def current_time_band(self, story_id: str) -> str:
+        """Return the current player-facing Story period."""
+
+        with self._lock:
+            segment = self._require_row(
+                "SELECT time_band FROM segments WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
+                (story_id,),
+            )
+        return str(segment["time_band"])
+
+    def current_story_date(self, story_id: str) -> str:
+        """Return the current in-story calendar date without using system time."""
+
+        with self._lock:
+            segment = self._require_row(
+                "SELECT story_date FROM segments WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
+                (story_id,),
+            )
+        return str(segment["story_date"])
+
+    def current_stage_state(self, story_id: str) -> dict[str, Any]:
+        """Return the current date, time band, and scene for a Story summary."""
+
+        with self._lock:
+            segment = self._require_row(
+                "SELECT story_date, time_band, runtime_snapshot FROM segments "
+                "WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
+                (story_id,),
+            )
+        scene = self._current_scene_dict(load(segment["runtime_snapshot"], {}))
+        return {
+            "current_story_date": str(segment["story_date"]),
+            "current_time_band": str(segment["time_band"]),
+            "current_scene": {
+                "key": scene["key"],
+                "name": scene["name"],
+                "character_ids": scene["characterIds"],
+            },
         }
 
     def story_id_for_turn(self, turn_id: str) -> str:
@@ -159,6 +392,69 @@ class StoryRepository:
                 (story_id,),
             )
         return self._turn_dict(row)
+
+    def reset_interrupted_turn(self, turn_id: str) -> dict[str, Any]:
+        """Return an interrupted generation Turn to pending for process recovery."""
+
+        with self.transaction() as connection:
+            turn = self._require_row("SELECT * FROM turns WHERE id = ?", (turn_id,), connection)
+            if turn["status"] not in {"generating", "validating"}:
+                return self._turn_dict(turn)
+            now = utc_now()
+            attempt_id = turn["active_attempt_id"]
+            if attempt_id:
+                connection.execute(
+                    """UPDATE attempts SET status = 'failed', failure_category = ?, ended_at = ?
+                    WHERE id = ?""",
+                    ("generation_interrupted", now, attempt_id),
+                )
+            connection.execute(
+                """UPDATE turns SET status = 'pending', active_attempt_id = NULL,
+                error = NULL, updated_at = ? WHERE id = ?""",
+                (now, turn_id),
+            )
+            connection.execute(
+                "UPDATE segments SET operation = 'generating' WHERE id = ?",
+                (turn["segment_id"],),
+            )
+            return self._turn_dict(
+                self._require_row("SELECT * FROM turns WHERE id = ?", (turn_id,), connection)
+            )
+
+    def interrupted_turns(self, story_id: str) -> list[dict[str, Any]]:
+        """Return all Turns left in an active generation state by a stopped process."""
+
+        with self._lock:
+            rows = self._connection.execute(
+                """SELECT * FROM turns WHERE story_id = ?
+                AND status IN ('generating', 'validating')
+                ORDER BY created_at, id""",
+                (story_id,),
+            ).fetchall()
+        return [self._turn_dict(row) for row in rows]
+
+    def retry_failed_turn(self, turn_id: str) -> dict[str, Any]:
+        """Return one failed Turn to pending so its logical request can be retried."""
+
+        with self.transaction() as connection:
+            turn = self._require_row("SELECT * FROM turns WHERE id = ?", (turn_id,), connection)
+            if turn["status"] != "failed":
+                raise StoryInvalidStateError("Turn 当前不可重试")
+            now = utc_now()
+            connection.execute(
+                """UPDATE turns SET status = 'pending', active_attempt_id = NULL,
+                error = NULL, updated_at = ? WHERE id = ?""",
+                (now, turn_id),
+            )
+            segment_status = "awaiting_opening" if turn["kind"] == "opening" else "active"
+            connection.execute(
+                """UPDATE segments SET status = ?, operation = 'generating'
+                WHERE id = ?""",
+                (segment_status, turn["segment_id"]),
+            )
+            return self._turn_dict(
+                self._require_row("SELECT * FROM turns WHERE id = ?", (turn_id,), connection)
+            )
 
     def create_turn(
         self,
@@ -277,7 +573,7 @@ class StoryRepository:
         turn_id: str,
         attempt_id: str,
         draft: DirectorDraft,
-        default_effective_at: str,
+        default_time_band: str,
     ) -> tuple[list[tuple[StoryBeat, PresentationCue, dict[str, Any]]], dict[str, Any]]:
         """Atomically commit one validated Director draft and release the input lane."""
 
@@ -295,17 +591,30 @@ class StoryRepository:
             recorded_at = utc_now()
             committed_ids = load(turn["committed_beat_ids"], [])
             revision = int(story["revision"])
+            segment = self._require_row(
+                "SELECT story_date, time_band, runtime_snapshot FROM segments WHERE id = ?",
+                (turn["segment_id"],),
+                connection,
+            )
+            current_story_date = str(segment["story_date"])
+            current_time_band = str(segment["time_band"] or default_time_band)
             committed: list[tuple[StoryBeat, PresentationCue, dict[str, Any]]] = []
             for offset, item in enumerate(draft.beats):
                 beat_id = f"beat-{uuid4().hex}"
                 cue_id = f"cue-{uuid4().hex}"
+                story_date, time_band = next_story_clock(
+                    current_story_date, current_time_band, item.time_band
+                )
+                current_story_date = story_date
+                current_time_band = time_band
                 beat = StoryBeat(
                     id=beat_id,
                     story_id=story["id"],
                     segment_id=turn["segment_id"],
                     turn_id=turn_id,
                     sequence=next_sequence + offset,
-                    effective_at=item.effective_at or default_effective_at,
+                    story_date=story_date,
+                    time_band=time_band,
                     text=item.text,
                     kind=item.kind,
                     speaker=item.speaker,
@@ -320,14 +629,13 @@ class StoryRepository:
                     speaker=item.speaker,
                 )
                 connection.execute(
-                    "INSERT INTO beats VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO beats VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         beat.id,
                         beat.story_id,
                         beat.segment_id,
                         beat.turn_id,
                         beat.sequence,
-                        beat.effective_at,
                         dump(beat.to_dict()),
                         beat.recorded_at,
                     ),
@@ -353,6 +661,19 @@ class StoryRepository:
                     (event_id, story["id"], "beat.committed", dump(payload), recorded_at),
                 )
                 committed.append((beat, cue, payload))
+            connection.execute(
+                """UPDATE segments SET story_date = ?, time_band = ?, runtime_snapshot = ?
+                WHERE id = ?""",
+                (
+                    current_story_date,
+                    current_time_band,
+                    dump({
+                        **load(segment["runtime_snapshot"], {}),
+                        "current_scene": draft.current_scene.to_dict(),
+                    }),
+                    turn["segment_id"],
+                ),
+            )
             connection.execute(
                 """UPDATE stories SET revision = ? WHERE id = ?""",
                 (revision, story["id"]),
@@ -523,15 +844,32 @@ class StoryRepository:
 
     @staticmethod
     def _segment_dict(row: sqlite3.Row) -> dict[str, Any]:
+        runtime_snapshot = load(row["runtime_snapshot"], {})
         return {
             "id": row["id"],
             "sequence": int(row["sequence"]),
-            "startsAt": row["starts_at"],
+            "storyDate": row["story_date"],
+            "timeBand": row["time_band"],
             "status": row["status"],
             "mode": row["mode"],
             "operation": row["operation"],
             "openingContext": load(row["opening_context"], {}),
-            "runtimeSnapshot": load(row["runtime_snapshot"], {}),
+            "runtimeSnapshot": runtime_snapshot,
+        }
+
+    @staticmethod
+    def _current_scene_dict(runtime_snapshot: dict[str, Any]) -> dict[str, Any]:
+        raw_scene = runtime_snapshot.get("current_scene")
+        if not isinstance(raw_scene, dict):
+            return {"key": "", "name": "未命名场景", "characterIds": []}
+        character_ids = raw_scene.get("character_ids")
+        raw_name = str(raw_scene.get("name") or "").strip()
+        return {
+            "key": str(raw_scene.get("key") or ""),
+            "name": raw_name if has_chinese_text(raw_name) else "未命名场景",
+            "characterIds": [str(item) for item in character_ids if str(item).strip()]
+            if isinstance(character_ids, list)
+            else [],
         }
 
     @staticmethod
@@ -550,7 +888,39 @@ class StoryRepository:
 
     @staticmethod
     def _beat_dict(row: sqlite3.Row) -> dict[str, Any]:
-        return load(row["payload"], {})
+        payload = load(row["payload"], {})
+        return {
+            "id": payload["id"],
+            "storyId": payload["story_id"],
+            "segmentId": payload["segment_id"],
+            "turnId": payload["turn_id"],
+            "sequence": int(payload["sequence"]),
+            "storyDate": payload["story_date"],
+            "timeBand": payload["time_band"],
+            "text": payload["text"],
+            "kind": payload["kind"],
+            "speaker": payload.get("speaker"),
+            "recordedAt": payload["recorded_at"],
+        }
+
+    @staticmethod
+    def _resource_dict(row: sqlite3.Row) -> dict[str, Any]:
+        resource = StoryResource(
+            id=str(row["id"]),
+            story_id=str(row["story_id"]),
+            kind=str(row["kind"]),  # type: ignore[arg-type]
+            visual_type=str(row["visual_type"] or "scene"),  # type: ignore[arg-type]
+            scene_key=str(row["scene_key"] or ""),
+            status=str(row["status"]),  # type: ignore[arg-type]
+            path=str(row["path"]) if row["path"] else None,
+            prompt=str(row["prompt"] or ""),
+            source_turn_id=(str(row["source_turn_id"]) if row["source_turn_id"] else None),
+            sequence=int(row["sequence"]),
+            error_code=str(row["error_code"]) if row["error_code"] else None,
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
+        return resource.to_dict()
 
 
 def payload_hash(payload: dict[str, Any]) -> str:

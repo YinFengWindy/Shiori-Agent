@@ -39,6 +39,7 @@ from desktop_bridge.request_router import DesktopBridgeRequestRouter
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
 from agent.screen_observation.service import ScreenObservationService
 from desktop_bridge.role_presenter import DesktopRolePresenter
+from desktop_bridge.role_difference_service import RoleDifferenceGenerationService
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_task_requests import DesktopSessionTaskRequestHandler
 from desktop_bridge.session_presenter import DesktopSessionPresenter
@@ -96,6 +97,7 @@ class DesktopBridgeService:
         voice_service: VoiceService | None = None,
         provider: Any | None = None,
         story_director: Any | None = None,
+        image_tool: Any | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -178,6 +180,11 @@ class DesktopBridgeService:
         self.novelai_store = novelai_store or NovelAIStore(workspace)
         self.prompt_tag_store = PromptTagStore(workspace)
         self.novelai_service = novelai_service or self._build_novelai_service()
+        self.role_difference_service = RoleDifferenceGenerationService(
+            role_store=self.role_store,
+            novelai_service=self.novelai_service,
+            workspace=self.workspace,
+        )
         self.image_service = DesktopImageService(
             role_service=self.role_service,
             session_manager=session_manager,
@@ -191,6 +198,7 @@ class DesktopBridgeService:
             director=story_director,
             provider=provider,
             model=str(getattr(config, "model", "") or ""),
+            image_tool=image_tool,
         )
         self.observation_service = observation_service
         self.request_router = DesktopBridgeRequestRouter(
@@ -198,8 +206,10 @@ class DesktopBridgeService:
                 role_service=self.role_service,
                 role_store=role_store,
                 pet_packages=self.pet_packages,
+                role_differences=self.role_difference_service,
                 role_presenter=self.role_presenter,
                 voice_handler=self.voice_handler,
+                publish_event=self._broadcast_event,
             ),
             sessions_and_tasks=DesktopSessionTaskRequestHandler(
                 app_service=self.app_service,

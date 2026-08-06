@@ -202,6 +202,13 @@ class RoleStore:
         """Imports one file into the role-owned asset directory."""
         return self._assets.import_asset(role_id, source, prefix=prefix)
 
+    def resolve_role_asset_path(self, role_id: str, rel_path: str) -> Path | None:
+        """Returns a validated absolute path for one asset owned by a role."""
+        normalized = normalize_rel_path(rel_path)
+        if not normalized or not self._assets.is_role_asset_path(role_id, normalized):
+            return None
+        return self._assets.resolve_path(normalized)
+
     def replace_pet_packages(
         self,
         role_id: str,

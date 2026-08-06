@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
+
+from .story_time import normalize_story_time_band
+
+StoryResourceKind = Literal["background", "cg"]
+StoryVisualType = Literal["scene", "character"]
+StoryResourceStatus = Literal["generating", "ready", "failed"]
+
+
+def has_chinese_text(value: str) -> bool:
+    """Return whether a display label contains at least one CJK character."""
+
+    return any("一" <= char <= "龥" for char in value)
 
 
 def utc_now() -> str:
@@ -44,7 +56,7 @@ class StoryBeatDraft:
     text: str
     kind: str = "narration"
     speaker: str | None = None
-    effective_at: str | None = None
+    time_band: str | None = None
     fact_changes: tuple[dict[str, Any], ...] = ()
 
     def validate(self) -> None:
@@ -54,15 +66,39 @@ class StoryBeatDraft:
             raise ValueError("beat.kind 无效")
         if len(self.text) > 400:
             raise ValueError("单个 Beat 文本不能超过 400 字符")
+        if self.time_band is not None:
+            normalize_story_time_band(self.time_band)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "text": self.text,
             "kind": self.kind,
             "speaker": self.speaker,
-            "effective_at": self.effective_at,
+            "time_band": self.time_band,
             "fact_changes": list(self.fact_changes),
         }
+
+
+@dataclass(frozen=True)
+class StoryScene:
+    """The Director-owned scene identity and participants for the active Story stage."""
+
+    key: str
+    name: str = "默认场景"
+    character_ids: tuple[str, ...] = ()
+
+    def validate(self) -> None:
+        if not self.key.strip():
+            raise ValueError("current_scene.key 不能为空")
+        if not self.name.strip() or not has_chinese_text(self.name):
+            raise ValueError("current_scene.name 必须是中文")
+        if any(not character_id.strip() for character_id in self.character_ids):
+            raise ValueError("current_scene.character_ids 不能包含空值")
+        if len(set(self.character_ids)) != len(self.character_ids):
+            raise ValueError("current_scene.character_ids 不能重复")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"key": self.key, "name": self.name, "character_ids": list(self.character_ids)}
 
 
 @dataclass(frozen=True)
@@ -71,16 +107,58 @@ class DirectorDraft:
 
     beats: tuple[StoryBeatDraft, ...]
     stop_reason: str = "awaiting_player"
+    visual_prompt: str = ""
+    visual_type: StoryVisualType = "scene"
+    current_scene: StoryScene = field(default_factory=lambda: StoryScene(key="default"))
 
     def validate(self) -> None:
         if not self.beats:
             raise ValueError("Director 至少需要一个 Beat")
+        if self.visual_type not in {"scene", "character"}:
+            raise ValueError("Director visual_type 无效")
         if len(self.beats) > 3:
             raise ValueError("一次输入最多生成 3 个 Beat")
         if sum(len(item.text) for item in self.beats) > 1200:
             raise ValueError("一次输入可见文本不能超过 1200 字符")
+        self.current_scene.validate()
         for beat in self.beats:
             beat.validate()
+
+
+@dataclass(frozen=True)
+class StoryResource:
+    """One Story-owned visual resource and its generation lifecycle."""
+
+    id: str
+    story_id: str
+    kind: StoryResourceKind
+    visual_type: StoryVisualType
+    scene_key: str
+    status: StoryResourceStatus
+    path: str | None
+    prompt: str
+    source_turn_id: str | None
+    sequence: int
+    error_code: str | None
+    created_at: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "storyId": self.story_id,
+            "kind": self.kind,
+            "visualType": self.visual_type,
+            "sceneKey": self.scene_key,
+            "status": self.status,
+            "path": self.path,
+            "prompt": self.prompt,
+            "sourceTurnId": self.source_turn_id,
+            "sequence": self.sequence,
+            "errorCode": self.error_code,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+        }
 
 
 @dataclass(frozen=True)
@@ -92,7 +170,8 @@ class StoryBeat:
     segment_id: str
     turn_id: str
     sequence: int
-    effective_at: str
+    story_date: str
+    time_band: str
     text: str
     kind: str
     speaker: str | None
@@ -105,7 +184,8 @@ class StoryBeat:
             "segment_id": self.segment_id,
             "turn_id": self.turn_id,
             "sequence": self.sequence,
-            "effective_at": self.effective_at,
+            "story_date": self.story_date,
+            "time_band": self.time_band,
             "text": self.text,
             "kind": self.kind,
             "speaker": self.speaker,

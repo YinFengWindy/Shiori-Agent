@@ -2,7 +2,7 @@
 title: 角色、关系、心情与素材
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 8fdae87c
+last_verified_commit: b3381cd3
 source_paths:
   - core/roles/store.py
   - core/roles/models.py
@@ -15,6 +15,10 @@ source_paths:
   - core/roles/world.py
   - core/roles/relationship_runtime/
   - core/roles/scene_followup_runtime.py
+  - desktop_bridge/role_difference_service.py
+  - desktop/src/bridgeClient.ts
+  - desktop/renderer/src/roles/useRoleDifferenceGeneration.ts
+  - desktop/renderer/src/roles/RoleAssetCategoryGroups.tsx
 related:
   - conversations-and-sessions.md
   - proactive-and-drift.md
@@ -39,6 +43,8 @@ related:
 - 修改角色删除：检查会话、对话线程、关系状态、记忆、调度任务、工作区和素材清理。
 - 修改心情或关系：检查主动触发条件、提示词装配、场景判断和桌面展示。
 - 修改素材分类：检查角色素材页、选择器、图片提示词与本地资源传输。
+- 修改自动差分生成或 bridge 等待策略：同步检查五张差分的最终角色快照、素材分组刷新和图片生成请求超时。
+- 自动生成角色差分：五张带纯白背景的差分图串行生成并持久化到 `AI 差分` 分类后，bridge 会同步角色会话的运行时配置，再返回最终角色快照；`roles.differences.generate` 使用图片生成长超时，renderer 依靠最终快照刷新素材分组。
 - 导入桌宠素材包：`pet.json` 的预览图字段兼容可选；提供 `previewPath` 时仍校验并保存预览图。
 
 ## 不变量
