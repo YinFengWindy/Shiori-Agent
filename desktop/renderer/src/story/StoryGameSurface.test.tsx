@@ -59,7 +59,8 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /shiori-asset:\/\/local\/role/);
     assert.match(markup, /-bottom-6 right-\[clamp\(4vw,10vw,12rem\)\] z-10/);
     assert.match(markup, /h-\[min\(78vh,52rem\)\] max-w-\[48vw\]/);
-    assert.match(markup, /origin-bottom-right scale-120/);
+    assert.match(markup, /origin-bottom-right object-contain object-bottom/);
+    assert.match(markup, /style="opacity:1;transform:translateY\(0\) scale\(1\.2\)"/);
     assert.match(markup, /bottom-0 z-20/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });

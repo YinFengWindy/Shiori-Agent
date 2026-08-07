@@ -1,4 +1,5 @@
 import { ArrowClockwise, BookOpenText, Gear, SignOut } from "@phosphor-icons/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
 import { toFileUrl } from "../shared/format";
@@ -43,6 +44,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   const [playbackState, setPlaybackState] = useState(() => createStoryPlaybackState(story));
   const [fragmentCursor, setFragmentCursor] = useState<StoryFragmentCursor>({ beatId: null, index: 0 });
   const archiveWheelTriggeredRef = useRef(false);
+  const reducedMotion = useReducedMotion() ?? false;
   const synchronizedPlaybackState = syncStoryPlaybackState(playbackState, story);
   const presentedBeat = getPresentedStoryBeat(story, synchronizedPlaybackState);
   const nextBeat = getNextStoryBeat(story, synchronizedPlaybackState);
@@ -116,7 +118,19 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   return (
     <section className={cx("relative h-full min-h-0 overflow-hidden text-white", renderLocalBackdrop ? "bg-[#172128]" : "bg-transparent")} data-dialogue-visible={dialogueVisible} data-testid="story-game-surface" onClick={handleSurfaceClick} onContextMenu={handleContextMenu} onWheel={handleWheel}>
       {renderLocalBackdrop ? <div aria-hidden="true" className="absolute inset-0 bg-black bg-cover bg-center bg-no-repeat" data-testid="story-game-backdrop" style={hasStoryBackground ? { backgroundImage: `url(${backgroundUrl})` } : undefined} /> : null}
-      {showCharacterForeground ? <img className="pointer-events-none absolute -bottom-6 right-[clamp(4vw,10vw,12rem)] z-10 h-[min(78vh,52rem)] max-w-[48vw] origin-bottom-right scale-120 object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]" data-testid="story-game-character" src={characterAvatarUrl} alt="" /> : null}
+      <AnimatePresence initial={false} mode="wait">
+        {showCharacterForeground && characterAvatarUrl ? <motion.img
+          key={`${story.currentScene.key}:${characterAvatarUrl}`}
+          className="pointer-events-none absolute -bottom-6 right-[clamp(4vw,10vw,12rem)] z-10 h-[min(78vh,52rem)] max-w-[48vw] origin-bottom-right object-contain object-bottom drop-shadow-[0_16px_24px_rgba(12,19,24,0.38)]"
+          data-testid="story-game-character"
+          src={characterAvatarUrl}
+          alt=""
+          initial={{ opacity: 0, transform: reducedMotion ? "scale(1.2)" : "translateY(8px) scale(1.18)" }}
+          animate={{ opacity: 1, transform: "translateY(0) scale(1.2)" }}
+          exit={{ opacity: 0, transform: reducedMotion ? "scale(1.2)" : "translateY(-4px) scale(1.2)" }}
+          transition={{ duration: reducedMotion ? 0.12 : 0.28, ease: "easeOut" }}
+        /> : null}
+      </AnimatePresence>
 
       <div className="story-game-chrome story-game-readable absolute left-5 top-5 z-30 flex min-w-0 max-w-[calc(100vw-9rem)] flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-3 py-2 text-white/85" data-testid="story-current-time"><span className="text-xs">{formatStoryDate(story.currentStoryDate)}</span><strong className="font-serif text-lg font-semibold text-[#F4C29F]">{story.currentTimeBand}</strong><span aria-hidden="true" className="h-4 w-px bg-white/30" /><span className="min-w-0 max-w-full truncate text-xs text-white/75" data-testid="story-current-scene" title={`场景：${currentSceneLabel}`}>场景：{currentSceneLabel}</span></div>
       <div className="absolute right-5 top-5 z-30 flex gap-2">

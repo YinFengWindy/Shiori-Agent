@@ -1,4 +1,5 @@
 import { ArrowClockwise, ArrowLeft, ImageBroken, X } from "@phosphor-icons/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo, useState } from "react";
 import type { StoryCgGallery, StoryResource } from "./types";
 import { StorySurface } from "./StorySurface";
@@ -25,6 +26,7 @@ function resourceLabel(resource: StoryResource, index: number) {
 export function StoryCgGallerySurface({ stories, background, sharedBackdrop = false, busy, error, onRetry, onBack }: StoryCgGallerySurfaceProps) {
   const [selectedStoryId, setSelectedStoryId] = useState(stories[0]?.storyId ?? "");
   const [preview, setPreview] = useState<StoryResource | null>(null);
+  const reducedMotion = useReducedMotion() ?? false;
   const selectedStory = useMemo(
     () => stories.find((story) => story.storyId === selectedStoryId) ?? stories[0] ?? null,
     [selectedStoryId, stories],
@@ -81,10 +83,30 @@ export function StoryCgGallerySurface({ stories, background, sharedBackdrop = fa
         </main>
       </div>
 
-      {preview ? <div className="fixed inset-0 z-40 grid place-items-center bg-[#1D1520]/80 p-6 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="CG 预览">
-        <button className="absolute right-5 top-5 grid h-10 w-10 place-items-center rounded-md text-white/80 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70" type="button" aria-label="关闭 CG 预览" title="关闭 CG 预览" onClick={() => setPreview(null)}><X className="h-6 w-6" weight="bold" /></button>
-        <img className="max-h-full max-w-full object-contain shadow-[0_18px_70px_rgba(0,0,0,0.5)]" src={toFileUrl(preview.path || "")} alt="CG 预览" />
-      </div> : null}
+      <AnimatePresence initial={false}>
+        {preview ? <motion.div
+          key={preview.id}
+          className="fixed inset-0 z-40 grid place-items-center bg-[#1D1520]/80 p-6 backdrop-blur-md"
+          role="dialog"
+          aria-modal="true"
+          aria-label="CG 预览"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: reducedMotion ? 0.12 : 0.18, ease: "easeOut" }}
+        >
+          <button className="absolute right-5 top-5 grid h-10 w-10 place-items-center rounded-md text-white/80 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70" type="button" aria-label="关闭 CG 预览" title="关闭 CG 预览" onClick={() => setPreview(null)}><X className="h-6 w-6" weight="bold" /></button>
+          <motion.img
+            className="max-h-full max-w-full object-contain shadow-[0_18px_70px_rgba(0,0,0,0.5)]"
+            src={toFileUrl(preview.path || "")}
+            alt="CG 预览"
+            initial={{ opacity: 0, transform: reducedMotion ? "scale(1)" : "scale(0.97)" }}
+            animate={{ opacity: 1, transform: "scale(1)" }}
+            exit={{ opacity: 0, transform: reducedMotion ? "scale(1)" : "scale(0.97)" }}
+            transition={{ duration: reducedMotion ? 0.12 : 0.24, ease: "easeOut" }}
+          />
+        </motion.div> : null}
+      </AnimatePresence>
     </StorySurface>
   );
 }
