@@ -9,22 +9,7 @@ import { SettingsSectionContent } from "./SettingsSectionContent.js";
 function createSettingsFormData(): SettingsFormData {
   return {
     models: {
-      provider: "openai",
-      mainModel: "gpt-main",
-      mainApiKey: "main-key",
-      mainBaseUrl: "https://main.example",
-      enableThinking: true,
-      reasoningEffort: "medium",
-      multimodal: true,
-      fastModel: "gpt-fast",
-      fastApiKey: "fast-key",
-      fastBaseUrl: "https://fast.example",
-      agentModel: "gpt-agent",
-      agentApiKey: "agent-key",
-      agentBaseUrl: "https://agent.example",
-      vlModel: "gpt-vl",
-      vlApiKey: "vl-key",
-      vlBaseUrl: "https://vl.example",
+      registrations: [{ id: "00000000-0000-4000-a000-000000000001", name: "Agent 模型", provider: "openai", model: "gpt-agent", apiKey: "agent-key", baseUrl: "https://agent.example", effort: "high" }],
     },
     channels: {
       telegramToken: "telegram-token",
@@ -83,7 +68,7 @@ describe("SettingsSectionContent", () => {
 
   it("routes every settings domain to its editor", () => {
     const cases = [
-      { sectionId: "models", subsectionId: "main", expected: "gpt-main" },
+      { sectionId: "models", subsectionId: "catalog", expected: "gpt-agent" },
       { sectionId: "channels", subsectionId: "qqbot", expected: "qq-app" },
       { sectionId: "memory", subsectionId: "embedding", expected: "embed-model" },
       { sectionId: "integrations", subsectionId: "novelai", expected: "novel-token" },
@@ -108,7 +93,7 @@ describe("SettingsSectionContent", () => {
     const markup = renderToStaticMarkup(
       <SettingsSectionContent
         sectionId="models"
-        subsectionId="agent"
+        subsectionId="catalog"
         draft={draft}
         updateDraft={updateDraft}
       />,

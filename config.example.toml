@@ -4,29 +4,24 @@
 # =============================================================================
 
 [llm]
-provider = "deepseek"
 
-[llm.main]
-# 主模型，必填。推荐 deepseek-v4-flash（agent 能力强、价格低）。
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
+name = "DeepSeek 对话"
+provider = "deepseek"
 model = "deepseek-v4-flash"
 api_key = "sk-..."
 base_url = "https://api.deepseek.com/v1"
-enable_thinking = true
-multimodal = false
+effort = "high"
 
-[llm.fast]
-# 轻量模型，用于 memory gate / query rewrite / HyDE。
-# 不填则退回主模型，但延迟会稍高。
-model = "qwen-flash"
-api_key = "sk-..."
-base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-
-[llm.vl]
-# 视觉模型，仅在 llm.main.multimodal = false 时需要。
-# model 留空则不启用，图片会作为路径传给主模型。
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000002"
+name = "Qwen 视觉"
+provider = "qwen"
 model = "qwen-vl-plus"
 api_key = "sk-..."
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+effort = "none"
 
 # =============================================================================
 # 可选：桌宠语音交互

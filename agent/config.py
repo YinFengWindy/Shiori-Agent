@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import tomllib
+import uuid
 from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -19,6 +20,7 @@ from agent.config_models import (
     Config,
     MemoryConfig,
     MemoryEmbeddingConfig,
+    ModelRegistration,
     NovelAISettings,
     QQChannelConfig,
     TelegramChannelConfig,
@@ -64,7 +66,6 @@ def load_config(path: str | Path = "config.toml") -> Config:
     agent_context = _as_dict(agent_cfg.get("context"))
     agent_tools = _as_dict(agent_cfg.get("tools"))
     agent_maintenance = _as_dict(agent_cfg.get("maintenance"))
-    provider = str(llm.get("provider") or data["provider"])
     channels = _load_channels_config(data)
     proactive = _load_proactive_config(data)
     memory = _load_memory_config(data)
@@ -72,11 +73,13 @@ def load_config(path: str | Path = "config.toml") -> Config:
     voice = _load_voice_config(data)
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
+    model_registrations = _load_model_registrations(data, source_path=Path(path))
+    primary_registration = model_registrations[0]
 
     return Config(
-        provider=provider,
-        model=str(llm_main.get("model") or data["model"]),
-        api_key=_resolve(str(llm_main.get("api_key") or data.get("api_key", ""))),
+        provider=primary_registration.provider,
+        model=primary_registration.model,
+        api_key=primary_registration.api_key,
         system_prompt=str(
             agent_cfg.get("system_prompt")
             or data.get("system_prompt", "You are a helpful assistant.")
@@ -88,8 +91,8 @@ def load_config(path: str | Path = "config.toml") -> Config:
         memory_window=int(
             agent_context.get("memory_window", data.get("memory_window", 40))
         ),
-        base_url=str(llm_main.get("base_url") or data.get("base_url") or _PRESETS.get(provider) or ""),
-        extra_body=_load_extra_body(data),
+        base_url=primary_registration.base_url,
+        extra_body=_effort_extra_body(primary_registration.effort),
         channels=channels,
         proactive=proactive,
         memory_optimizer_enabled=bool(
@@ -142,7 +145,134 @@ def load_config(path: str | Path = "config.toml") -> Config:
         voice=voice,
         wiring=wiring,
         plugins=plugins,
+        model_registrations=model_registrations,
     )
+
+
+def _load_model_registrations(
+    data: dict[str, Any],
+    *,
+    source_path: Path,
+) -> list[ModelRegistration]:
+    llm = _as_dict(data.get("llm"))
+    raw_registrations = llm.get("registrations", [])
+    if raw_registrations:
+        if not isinstance(raw_registrations, list):
+            raise ValueError("llm.registrations 必须是数组")
+        registrations = [
+            _parse_model_registration(item)
+            for item in raw_registrations
+            if isinstance(item, dict)
+        ]
+        _validate_model_registrations(registrations)
+        return registrations
+
+    registrations = _migrate_legacy_model_registrations(
+        data,
+        source_path=source_path,
+    )
+    _validate_model_registrations(registrations)
+    return registrations
+
+
+def _parse_model_registration(payload: dict[str, Any]) -> ModelRegistration:
+    effort = str(payload.get("effort") or "none").strip().lower()
+    if effort not in {"none", "low", "high", "max"}:
+        raise ValueError(f"模型注册 Effort 无效: {effort}")
+    return ModelRegistration(
+        id=str(payload.get("id") or "").strip(),
+        name=str(payload.get("name") or "").strip(),
+        provider=str(payload.get("provider") or "openai").strip(),
+        base_url=str(payload.get("base_url") or "").strip(),
+        api_key=_resolve(str(payload.get("api_key") or "")),
+        model=str(payload.get("model") or "").strip(),
+        effort=cast(Any, effort),
+    )
+
+
+def _migrate_legacy_model_registrations(
+    data: dict[str, Any],
+    *,
+    source_path: Path,
+) -> list[ModelRegistration]:
+    llm = _as_dict(data.get("llm"))
+    provider = str(llm.get("provider") or data.get("provider") or "openai").strip()
+    main = _as_dict(llm.get("main"))
+    legacy_sections = [
+        ("main", "主模型", main, provider),
+        ("fast", "轻量模型", _as_dict(llm.get("fast")), provider),
+        ("agent", "Agent 模型", _as_dict(llm.get("agent")), provider),
+        ("visual", "视觉模型", _as_dict(llm.get("vl")), provider),
+    ]
+    registrations: list[ModelRegistration] = []
+    for key, name, section, section_provider in legacy_sections:
+        model = str(section.get("model") or "").strip()
+        if key == "main" and not model:
+            model = str(data.get("model") or "").strip()
+        if not model:
+            continue
+        base_url = str(
+            section.get("base_url")
+            or (data.get("base_url") if key == "main" else main.get("base_url"))
+            or _PRESETS.get(section_provider)
+            or ""
+        ).strip()
+        api_key = _resolve(
+            str(
+                section.get("api_key")
+                or (data.get("api_key") if key == "main" else main.get("api_key"))
+                or ""
+            )
+        )
+        effort = "none"
+        if key == "main":
+            raw_effort = str(main.get("reasoning_effort") or "").strip().lower()
+            if raw_effort in {"low", "high", "max"}:
+                effort = raw_effort
+            elif bool(main.get("enable_thinking")):
+                effort = "high"
+        stable_key = "|".join(
+            [str(source_path.resolve()), key, section_provider, base_url, model]
+        )
+        registrations.append(
+            ModelRegistration(
+                id=str(uuid.uuid5(uuid.NAMESPACE_URL, stable_key)),
+                name=name,
+                provider=section_provider,
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                effort=cast(Any, effort),
+            )
+        )
+    if not registrations:
+        raise ValueError("至少需要一个完整的模型注册")
+    return registrations
+
+
+def _validate_model_registrations(registrations: list[ModelRegistration]) -> None:
+    if not registrations:
+        raise ValueError("至少需要一个模型注册")
+    ids: set[str] = set()
+    names: set[str] = set()
+    for registration in registrations:
+        if not registration.id or not registration.name or not registration.model:
+            raise ValueError("模型注册必须包含 id、name 和 model")
+        try:
+            uuid.UUID(registration.id)
+        except ValueError as error:
+            raise ValueError(f"模型注册 ID 必须是 UUID: {registration.id}") from error
+        normalized_name = registration.name.casefold()
+        if registration.id in ids:
+            raise ValueError(f"模型注册 ID 重复: {registration.id}")
+        if normalized_name in names:
+            raise ValueError(f"模型注册名称重复: {registration.name}")
+        ids.add(registration.id)
+        names.add(normalized_name)
+
+
+def _effort_extra_body(effort: str) -> dict[str, Any]:
+    return {} if effort == "none" else {"reasoning_effort": effort}
 
 
 def _load_channels_config(data: dict) -> ChannelsConfig:

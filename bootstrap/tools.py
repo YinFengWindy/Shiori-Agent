@@ -63,6 +63,7 @@ from core.roles import (
     RoleStore,
     RoleWorldRegistry,
 )
+from core.roles.model_runtime import RoleModelRuntime
 from infra.screen_capture import PrimaryScreenCapture
 from conversation.push_sync import ExternalImageSyncService
 from proactive_v2.presence import PresenceStore
@@ -369,6 +370,7 @@ def _build_loop_deps(
     memory_runtime: MemoryRuntime,
     relationship_runtime: RoleRelationshipRuntimeService,
     role_world_registry: RoleWorldRegistry | None = None,
+    role_model_runtime: RoleModelRuntime | None = None,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
     context = resolve_context_factory(wiring.context)(
@@ -377,8 +379,8 @@ def _build_loop_deps(
     )
     if isinstance(context, ContextBuilder):
         context.set_media_capabilities(
-            multimodal=bool(getattr(config, "multimodal", True)),
-            vl_available=bool(getattr(config, "vl_model", "")),
+            multimodal=True,
+            vl_available=False,
         )
     memory_engine = memory_runtime.engine
     light = light_provider or provider
@@ -421,6 +423,7 @@ def _build_loop_deps(
         memory_services=memory_services,
         session_services=session_services,
         role_world_registry=role_world_registry,
+        role_model_runtime=role_model_runtime,
     )
 
 
@@ -467,12 +470,31 @@ def build_core_runtime(
     event_bus = EventBus()
     provider, light_provider, agent_provider = build_providers(config)
     vl_provider = build_vl_provider(config)
-    # agent_provider is used for the AgentLoop (QA / tool calling).
-    # provider (llm.main) is used for consolidation event extraction.
-    loop_provider = agent_provider or provider
-    loop_model = config.agent_model or config.model
+    loop_provider = provider
+    loop_model = config.model
     session_manager = SessionManager(workspace)
-    role_store = RoleStore(workspace)
+    role_store = RoleStore(
+        workspace,
+        default_dialogue_registration_id=config.model_registrations[0].id,
+    )
+    visual_registration = next(
+        (
+            registration
+            for registration in config.model_registrations
+            if registration.name == "视觉模型"
+        ),
+        None,
+    )
+    role_store.migrate_model_selections(
+        dialogue_registration_id=config.model_registrations[0].id,
+        visual_registration_id=(visual_registration.id if visual_registration else ""),
+    )
+    role_model_runtime = RoleModelRuntime(
+        role_store=role_store,
+        registrations=config.model_registrations,
+        system_prompt=config.system_prompt,
+        dev_mode=config.dev_mode,
+    )
     role_repository = RoleRepository(role_store)
     role_migration = RoleConfigMigrator(
         workspace,
@@ -546,6 +568,7 @@ def build_core_runtime(
         memory_runtime=memory_runtime,
         relationship_runtime=relationship_runtime,
         role_world_registry=role_world_registry,
+        role_model_runtime=role_model_runtime,
     )
     loop = AgentLoop(
         loop_deps,
@@ -556,8 +579,8 @@ def build_core_runtime(
                 max_iterations=config.max_iterations,
                 max_tokens=config.max_tokens,
                 tool_search_enabled=config.tool_search_enabled,
-                multimodal=bool(getattr(config, "multimodal", True)),
-                vl_available=bool(getattr(config, "vl_model", "")),
+                multimodal=True,
+                vl_available=False,
             ),
             memory=MemoryConfig(
                 window=config.memory_window,

@@ -1,84 +1,148 @@
+import { Plus, Trash } from "@phosphor-icons/react";
+import type { ModelRegistrationFormData } from "../../../src/shared";
+import type { RoleRecord } from "../shared/types";
 import { SettingsField as Field } from "./SettingsField";
 import {
   SettingsSecretInput,
   SettingsSectionCard,
-  SettingsToggleField,
   settingsInputClass,
 } from "./SettingsFieldPrimitives";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 
-/** Renders model-provider settings for the selected model subsection. */
+function createRegistration(): ModelRegistrationFormData {
+  return {
+    id: crypto.randomUUID(),
+    name: "",
+    provider: "openai",
+    baseUrl: "",
+    apiKey: "",
+    model: "",
+    effort: "none",
+  };
+}
+
+/** Renders the editable global model registration catalog. */
 export function ModelsSettingsSection({
   draft,
-  subsectionId,
   updateDraft,
 }: SettingsSectionEditorProps) {
-  switch (subsectionId) {
-    case "main":
-      return (
-        <SettingsSectionCard>
-          <Field label="Provider" hint="当前主模型提供商。">
-            <input className={settingsInputClass} value={draft.models.provider} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, provider: event.target.value } }))} />
-          </Field>
-          <Field label="主模型" hint="对话使用的模型。">
-            <input className={settingsInputClass} value={draft.models.mainModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, mainModel: event.target.value } }))} />
-          </Field>
-          <Field label="API Key">
-            <SettingsSecretInput value={draft.models.mainApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, mainApiKey: value } }))} />
-          </Field>
-          <Field label="Base URL">
-            <input className={settingsInputClass} value={draft.models.mainBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, mainBaseUrl: event.target.value } }))} />
-          </Field>
-          <Field label="Reasoning Effort" hint="支持的模型可用，用于控制推理强度；留空表示不写入。">
-            <input className={settingsInputClass} value={draft.models.reasoningEffort} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, reasoningEffort: event.target.value } }))} placeholder="例如 low / medium / high" />
-          </Field>
-          <SettingsToggleField label="启用 Thinking" checked={draft.models.enableThinking} onChange={(checked) => updateDraft((current) => ({ ...current, models: { ...current.models, enableThinking: checked } }))} />
-          <SettingsToggleField label="启用多模态" checked={draft.models.multimodal} onChange={(checked) => updateDraft((current) => ({ ...current, models: { ...current.models, multimodal: checked } }))} />
-        </SettingsSectionCard>
-      );
-    case "fast":
-      return (
-        <SettingsSectionCard>
-          <Field label="轻量模型" hint="轻量任务时使用的模型名；留空时则沿用主模型。">
-            <input className={settingsInputClass} value={draft.models.fastModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastModel: event.target.value } }))} placeholder="模型名" />
-          </Field>
-          <Field label="API Key">
-            <SettingsSecretInput value={draft.models.fastApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, fastApiKey: value } }))} />
-          </Field>
-          <Field label="Base URL">
-            <input className={settingsInputClass} value={draft.models.fastBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, fastBaseUrl: event.target.value } }))} placeholder="基础地址" />
-          </Field>
-        </SettingsSectionCard>
-      );
-    case "agent":
-      return (
-        <SettingsSectionCard>
-          <Field label="Agent 模型" hint="用于工具调用和角色主动任务；留空时沿用主模型。">
-            <input className={settingsInputClass} value={draft.models.agentModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentModel: event.target.value } }))} placeholder="模型名" />
-          </Field>
-          <Field label="API Key">
-            <SettingsSecretInput value={draft.models.agentApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, agentApiKey: value } }))} />
-          </Field>
-          <Field label="Base URL">
-            <input className={settingsInputClass} value={draft.models.agentBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, agentBaseUrl: event.target.value } }))} placeholder="基础地址" />
-          </Field>
-        </SettingsSectionCard>
-      );
-    case "vl":
-      return (
-        <SettingsSectionCard>
-          <Field label="视觉模型" hint="若主模型未启动多模态，则使用该模型；留空时则沿用主模型。">
-            <input className={settingsInputClass} value={draft.models.vlModel} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlModel: event.target.value } }))} placeholder="模型名" />
-          </Field>
-          <Field label="API Key" hint="">
-            <SettingsSecretInput value={draft.models.vlApiKey} onChange={(value) => updateDraft((current) => ({ ...current, models: { ...current.models, vlApiKey: value } }))} />
-          </Field>
-          <Field label="Base URL" hint="">
-            <input className={settingsInputClass} value={draft.models.vlBaseUrl} onChange={(event) => updateDraft((current) => ({ ...current, models: { ...current.models, vlBaseUrl: event.target.value } }))} placeholder="基础地址" />
-          </Field>
-        </SettingsSectionCard>
-      );
-    default:
-      return null;
+  function updateRegistration(
+    id: string,
+    mutate: (registration: ModelRegistrationFormData) => ModelRegistrationFormData,
+  ): void {
+    updateDraft((current) => ({
+      ...current,
+      models: {
+        registrations: current.models.registrations.map((registration) => (
+          registration.id === id ? mutate(registration) : registration
+        )),
+      },
+    }));
   }
+
+  async function removeRegistration(registration: ModelRegistrationFormData): Promise<void> {
+    if (draft.models.registrations.length <= 1) return;
+    const response = await window.miraDesktop.invoke({ method: "roles.list", payload: {} });
+    if (response.error) {
+      window.alert(response.error.message);
+      return;
+    }
+    const roles = Array.isArray(response.payload.roles) ? response.payload.roles as RoleRecord[] : [];
+    const affectedRoles = roles.filter((role) => (
+      role.runtime_config.dialogue_model_registration_id === registration.id
+      || role.runtime_config.visual_model_registration_id === registration.id
+    ));
+    const impact = affectedRoles.length > 0
+      ? `\n受影响角色：${affectedRoles.map((role) => role.name).join("、")}`
+      : "";
+    if (!window.confirm(`删除模型注册“${registration.name || registration.model}”？${impact}`)) return;
+    const remaining = draft.models.registrations.filter((item) => item.id !== registration.id);
+    const fallbackId = remaining[0]?.id ?? "";
+    try {
+      await Promise.all(affectedRoles.map(async (role) => {
+        const runtimeConfig = {
+          ...role.runtime_config,
+          dialogue_model_registration_id: role.runtime_config.dialogue_model_registration_id === registration.id
+            ? fallbackId
+            : role.runtime_config.dialogue_model_registration_id,
+          visual_model_registration_id: role.runtime_config.visual_model_registration_id === registration.id
+            ? ""
+            : role.runtime_config.visual_model_registration_id,
+        };
+        const updateResponse = await window.miraDesktop.invoke({
+          method: "roles.update",
+          payload: { role_id: role.id, runtime_config: runtimeConfig },
+        });
+        if (updateResponse.error) throw new Error(updateResponse.error.message);
+      }));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    updateDraft((current) => ({
+      ...current,
+      models: {
+        registrations: current.models.registrations.filter((item) => item.id !== registration.id),
+      },
+    }));
+  }
+
+  return (
+    <SettingsSectionCard>
+      <div className="grid gap-5">
+        {draft.models.registrations.map((registration) => (
+          <section className="grid gap-4 border-b border-[#E8EDF2] pb-5 last:border-b-0 last:pb-0" key={registration.id}>
+            <div className="flex items-center justify-between gap-3">
+              <strong className="truncate text-sm font-semibold text-[#182230]">
+                {registration.name || registration.model || "未命名模型"}
+              </strong>
+              <button
+                className="grid h-8 w-8 place-items-center rounded-md text-[#8A94A3] transition hover:bg-[#FFF1F1] hover:text-[#C83E3E] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-35"
+                type="button"
+                title="删除模型注册"
+                aria-label="删除模型注册"
+                disabled={draft.models.registrations.length <= 1}
+                onClick={() => void removeRegistration(registration)}
+              >
+                <Trash className="h-4 w-4" weight="bold" />
+              </button>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="名称">
+                <input className={settingsInputClass} value={registration.name} onChange={(event) => updateRegistration(registration.id, (current) => ({ ...current, name: event.target.value }))} />
+              </Field>
+              <Field label="Provider">
+                <input className={settingsInputClass} value={registration.provider} onChange={(event) => updateRegistration(registration.id, (current) => ({ ...current, provider: event.target.value }))} />
+              </Field>
+              <Field label="模型">
+                <input className={settingsInputClass} value={registration.model} onChange={(event) => updateRegistration(registration.id, (current) => ({ ...current, model: event.target.value }))} />
+              </Field>
+              <Field label="Effort">
+                <select className={settingsInputClass} value={registration.effort} onChange={(event) => updateRegistration(registration.id, (current) => ({ ...current, effort: event.target.value as ModelRegistrationFormData["effort"] }))}>
+                  <option value="none">none</option>
+                  <option value="low">low</option>
+                  <option value="high">high</option>
+                  <option value="max">max</option>
+                </select>
+              </Field>
+              <Field label="Base URL">
+                <input className={settingsInputClass} value={registration.baseUrl} onChange={(event) => updateRegistration(registration.id, (current) => ({ ...current, baseUrl: event.target.value }))} />
+              </Field>
+              <Field label="API Key">
+                <SettingsSecretInput value={registration.apiKey} onChange={(value) => updateRegistration(registration.id, (current) => ({ ...current, apiKey: value }))} />
+              </Field>
+            </div>
+          </section>
+        ))}
+        <button
+          className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-[#D8DFE7] bg-white px-3 text-sm font-medium text-[#344054] transition hover:bg-[#F7F9FB] focus:outline-none focus:ring-2 focus:ring-primary/20"
+          type="button"
+          onClick={() => updateDraft((current) => ({ ...current, models: { registrations: [...current.models.registrations, createRegistration()] } }))}
+        >
+          <Plus className="h-4 w-4" weight="bold" />
+          新建注册
+        </button>
+      </div>
+    </SettingsSectionCard>
+  );
 }

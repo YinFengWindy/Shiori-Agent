@@ -1,7 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 
 import type {
+  ModelRegistrationFormData,
   SaveSettingsResult,
   SettingsFormData,
   SettingsSnapshot,
@@ -126,14 +128,73 @@ function renderPluginSection(name: string, value: Record<string, unknown>): stri
   return lines.join("\n");
 }
 
+export function stableLegacyRegistrationId(
+  kind: string,
+  provider: string,
+  baseUrl: string,
+  model: string,
+): string {
+  const namespace = Buffer.from("6ba7b8119dad11d180b400c04fd430c8", "hex");
+  const digest = createHash("sha1")
+    .update(namespace)
+    .update([configPath, kind, provider, baseUrl, model].join("|"), "utf-8")
+    .digest("hex")
+    .slice(0, 32);
+  const bytes = Buffer.from(digest, "hex");
+  bytes[6] = (bytes[6]! & 0x0f) | 0x50;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function loadModelRegistrations(llm: Record<string, unknown>): ModelRegistrationFormData[] {
+  const raw = Array.isArray(llm.registrations) ? llm.registrations : [];
+  if (raw.length > 0) {
+    return raw.map((value) => {
+      const item = asRecord(value);
+      return {
+        id: String(item.id ?? ""),
+        name: String(item.name ?? ""),
+        provider: String(item.provider ?? "openai"),
+        baseUrl: String(item.base_url ?? ""),
+        apiKey: String(item.api_key ?? ""),
+        model: String(item.model ?? ""),
+        effort: String(item.effort ?? "none") as "none" | "low" | "high" | "max",
+      };
+    });
+  }
+  const provider = String(llm.provider ?? "openai");
+  const main = asRecord(llm.main);
+  const definitions = [
+    ["main", "主模型", main],
+    ["fast", "轻量模型", asRecord(llm.fast)],
+    ["agent", "Agent 模型", asRecord(llm.agent)],
+    ["visual", "视觉模型", asRecord(llm.vl)],
+  ] as const;
+  return definitions.flatMap(([kind, name, item]) => {
+    const model = String(item.model ?? "").trim();
+    if (!model) return [];
+    const baseUrl = String(item.base_url ?? main.base_url ?? "");
+    const rawEffort = String(item.reasoning_effort ?? "").toLowerCase();
+    const effort: ModelRegistrationFormData["effort"] = kind === "main" && ["low", "high", "max"].includes(rawEffort)
+      ? rawEffort as "low" | "high" | "max"
+      : (kind === "main" && item.enable_thinking ? "high" : "none");
+    return [{
+      id: stableLegacyRegistrationId(kind, provider, baseUrl, model),
+      name,
+      provider,
+      baseUrl,
+      apiKey: String(item.api_key ?? main.api_key ?? ""),
+      model,
+      effort,
+    }];
+  });
+}
+
 export function loadSettingsData(): SettingsSnapshot {
   const content = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
   const parsed = parseToml(content);
   const llm = asRecord(parsed.llm);
-  const llmMain = asRecord(llm.main);
-  const llmFast = asRecord(llm.fast);
-  const llmAgent = asRecord(llm.agent);
-  const llmVl = asRecord(llm.vl);
   const channels = asRecord(parsed.channels);
   const telegram = asRecord(channels.telegram);
   const qq = asRecord(channels.qq);
@@ -154,22 +215,7 @@ export function loadSettingsData(): SettingsSnapshot {
     configPath,
     formData: {
       models: {
-        provider: String(llm.provider ?? ""),
-        mainModel: String(llmMain.model ?? ""),
-        mainApiKey: String(llmMain.api_key ?? ""),
-        mainBaseUrl: String(llmMain.base_url ?? ""),
-        enableThinking: Boolean(llmMain.enable_thinking),
-        reasoningEffort: String(llmMain.reasoning_effort ?? ""),
-        multimodal: Boolean(llmMain.multimodal),
-        fastModel: String(llmFast.model ?? ""),
-        fastApiKey: String(llmFast.api_key ?? ""),
-        fastBaseUrl: String(llmFast.base_url ?? ""),
-        agentModel: String(llmAgent.model ?? ""),
-        agentApiKey: String(llmAgent.api_key ?? ""),
-        agentBaseUrl: String(llmAgent.base_url ?? ""),
-        vlModel: String(llmVl.model ?? ""),
-        vlApiKey: String(llmVl.api_key ?? ""),
-        vlBaseUrl: String(llmVl.base_url ?? ""),
+        registrations: loadModelRegistrations(llm),
       },
       channels: {
         telegramToken: String(telegram.token ?? ""),
@@ -246,33 +292,18 @@ function renderSettingsToml(formData: SettingsFormData): string {
 
   return [
     "[llm]",
-    `provider = ${quote(formData.models.provider)}`,
     "",
-    "[llm.main]",
-    `model = ${quote(formData.models.mainModel)}`,
-    `api_key = ${quote(formData.models.mainApiKey)}`,
-    `base_url = ${quote(formData.models.mainBaseUrl)}`,
-    `enable_thinking = ${formData.models.enableThinking ? "true" : "false"}`,
-    formData.models.reasoningEffort.trim()
-      ? `reasoning_effort = ${quote(formData.models.reasoningEffort.trim())}`
-      : "",
-    `multimodal = ${formData.models.multimodal ? "true" : "false"}`,
-    "",
-    "[llm.fast]",
-    `model = ${quote(formData.models.fastModel)}`,
-    `api_key = ${quote(formData.models.fastApiKey)}`,
-    `base_url = ${quote(formData.models.fastBaseUrl)}`,
-    "",
-    "[llm.agent]",
-    `model = ${quote(formData.models.agentModel)}`,
-    `api_key = ${quote(formData.models.agentApiKey)}`,
-    `base_url = ${quote(formData.models.agentBaseUrl)}`,
-    "",
-    "[llm.vl]",
-    `model = ${quote(formData.models.vlModel)}`,
-    `api_key = ${quote(formData.models.vlApiKey)}`,
-    `base_url = ${quote(formData.models.vlBaseUrl)}`,
-    "",
+    ...formData.models.registrations.flatMap((registration) => [
+      "[[llm.registrations]]",
+      `id = ${quote(registration.id)}`,
+      `name = ${quote(registration.name.trim())}`,
+      `provider = ${quote(registration.provider.trim())}`,
+      `base_url = ${quote(registration.baseUrl.trim())}`,
+      `api_key = ${quote(registration.apiKey)}`,
+      `model = ${quote(registration.model.trim())}`,
+      `effort = ${quote(registration.effort)}`,
+      "",
+    ]),
     "[agent]",
     `system_prompt = ${quote(formData.advanced.systemPrompt)}`,
     `max_tokens = ${formData.advanced.maxTokens}`,
@@ -376,8 +407,27 @@ function renderSettingsToml(formData: SettingsFormData): string {
 }
 
 function validateSettings(formData: SettingsFormData): void {
-  if (!formData.models.mainModel.trim()) {
-    throw new Error("主模型不能为空");
+  if (formData.models.registrations.length === 0) {
+    throw new Error("至少需要一个模型注册");
+  }
+  const registrationIds = new Set<string>();
+  const registrationNames = new Set<string>();
+  for (const registration of formData.models.registrations) {
+    if (!registration.id || !registration.name.trim() || !registration.model.trim()) {
+      throw new Error("模型注册 ID、名称和模型不能为空");
+    }
+    const normalizedName = registration.name.trim().toLocaleLowerCase();
+    if (registrationIds.has(registration.id)) {
+      throw new Error("模型注册 ID 不能重复");
+    }
+    if (registrationNames.has(normalizedName)) {
+      throw new Error("模型注册名称不能重复");
+    }
+    if (!["none", "low", "high", "max"].includes(registration.effort)) {
+      throw new Error("Effort 必须是 none、low、high 或 max");
+    }
+    registrationIds.add(registration.id);
+    registrationNames.add(normalizedName);
   }
   if (formData.advanced.maxTokens <= 0) {
     throw new Error("max_tokens 必须大于 0");
