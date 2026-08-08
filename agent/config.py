@@ -73,7 +73,10 @@ def load_config(path: str | Path = "config.toml") -> Config:
     voice = _load_voice_config(data)
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
-    model_registrations = _load_model_registrations(data, source_path=Path(path))
+    model_registrations, legacy_visual_registration_id = _load_model_registrations(
+        data,
+        source_path=Path(path),
+    )
     primary_registration = model_registrations[0]
 
     return Config(
@@ -146,6 +149,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
         wiring=wiring,
         plugins=plugins,
         model_registrations=model_registrations,
+        legacy_visual_registration_id=legacy_visual_registration_id,
     )
 
 
@@ -153,7 +157,7 @@ def _load_model_registrations(
     data: dict[str, Any],
     *,
     source_path: Path,
-) -> list[ModelRegistration]:
+) -> tuple[list[ModelRegistration], str]:
     llm = _as_dict(data.get("llm"))
     raw_registrations = llm.get("registrations", [])
     if raw_registrations:
@@ -165,14 +169,14 @@ def _load_model_registrations(
             if isinstance(item, dict)
         ]
         _validate_model_registrations(registrations)
-        return registrations
+        return registrations, ""
 
-    registrations = _migrate_legacy_model_registrations(
+    registrations, visual_registration_id = _migrate_legacy_model_registrations(
         data,
         source_path=source_path,
     )
     _validate_model_registrations(registrations)
-    return registrations
+    return registrations, visual_registration_id
 
 
 def _parse_model_registration(payload: dict[str, Any]) -> ModelRegistration:
@@ -181,7 +185,6 @@ def _parse_model_registration(payload: dict[str, Any]) -> ModelRegistration:
         raise ValueError(f"模型注册 Effort 无效: {effort}")
     return ModelRegistration(
         id=str(payload.get("id") or "").strip(),
-        name=str(payload.get("name") or "").strip(),
         provider=str(payload.get("provider") or "openai").strip(),
         base_url=str(payload.get("base_url") or "").strip(),
         api_key=_resolve(str(payload.get("api_key") or "")),
@@ -194,18 +197,19 @@ def _migrate_legacy_model_registrations(
     data: dict[str, Any],
     *,
     source_path: Path,
-) -> list[ModelRegistration]:
+) -> tuple[list[ModelRegistration], str]:
     llm = _as_dict(data.get("llm"))
     provider = str(llm.get("provider") or data.get("provider") or "openai").strip()
     main = _as_dict(llm.get("main"))
     legacy_sections = [
-        ("main", "主模型", main, provider),
-        ("fast", "轻量模型", _as_dict(llm.get("fast")), provider),
-        ("agent", "Agent 模型", _as_dict(llm.get("agent")), provider),
-        ("visual", "视觉模型", _as_dict(llm.get("vl")), provider),
+        ("main", main, provider),
+        ("fast", _as_dict(llm.get("fast")), provider),
+        ("agent", _as_dict(llm.get("agent")), provider),
+        ("visual", _as_dict(llm.get("vl")), provider),
     ]
     registrations: list[ModelRegistration] = []
-    for key, name, section, section_provider in legacy_sections:
+    visual_registration_id = ""
+    for key, section, section_provider in legacy_sections:
         model = str(section.get("model") or "").strip()
         if key == "main" and not model:
             model = str(data.get("model") or "").strip()
@@ -231,13 +235,16 @@ def _migrate_legacy_model_registrations(
                 effort = raw_effort
             elif bool(main.get("enable_thinking")):
                 effort = "high"
-        stable_key = "|".join(
-            [str(source_path.resolve()), key, section_provider, base_url, model]
+        registration_id = _stable_legacy_registration_id(
+            source_path=source_path,
+            key=key,
+            provider=section_provider,
+            base_url=base_url,
+            model=model,
         )
         registrations.append(
             ModelRegistration(
-                id=str(uuid.uuid5(uuid.NAMESPACE_URL, stable_key)),
-                name=name,
+                id=registration_id,
                 provider=section_provider,
                 base_url=base_url,
                 api_key=api_key,
@@ -245,30 +252,41 @@ def _migrate_legacy_model_registrations(
                 effort=cast(Any, effort),
             )
         )
+        if key == "visual":
+            visual_registration_id = registration_id
     if not registrations:
         raise ValueError("至少需要一个完整的模型注册")
-    return registrations
+    return registrations, visual_registration_id
+
+
+def _stable_legacy_registration_id(
+    *,
+    source_path: Path,
+    key: str,
+    provider: str,
+    base_url: str,
+    model: str,
+) -> str:
+    stable_key = "|".join(
+        [str(source_path.resolve()), key, provider, base_url, model]
+    )
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, stable_key))
 
 
 def _validate_model_registrations(registrations: list[ModelRegistration]) -> None:
     if not registrations:
         raise ValueError("至少需要一个模型注册")
     ids: set[str] = set()
-    names: set[str] = set()
     for registration in registrations:
-        if not registration.id or not registration.name or not registration.model:
-            raise ValueError("模型注册必须包含 id、name 和 model")
+        if not registration.id or not registration.model:
+            raise ValueError("模型注册必须包含 id 和 model")
         try:
             uuid.UUID(registration.id)
         except ValueError as error:
             raise ValueError(f"模型注册 ID 必须是 UUID: {registration.id}") from error
-        normalized_name = registration.name.casefold()
         if registration.id in ids:
             raise ValueError(f"模型注册 ID 重复: {registration.id}")
-        if normalized_name in names:
-            raise ValueError(f"模型注册名称重复: {registration.name}")
         ids.add(registration.id)
-        names.add(normalized_name)
 
 
 def _effort_extra_body(effort: str) -> dict[str, Any]:

@@ -18,7 +18,6 @@ class RoleModelSnapshot:
     """Immutable provider and model selection captured at turn start."""
 
     registration_id: str
-    registration_name: str
     provider: LLMProvider
     model: str
     effort: str
@@ -89,7 +88,6 @@ class RoleModelRuntime:
         )
         return RoleModelSnapshot(
             registration_id=registration.id,
-            registration_name=registration.name,
             provider=provider,
             model=registration.model,
             effort=registration.effort,

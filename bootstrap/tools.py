@@ -477,17 +477,9 @@ def build_core_runtime(
         workspace,
         default_dialogue_registration_id=config.model_registrations[0].id,
     )
-    visual_registration = next(
-        (
-            registration
-            for registration in config.model_registrations
-            if registration.name == "视觉模型"
-        ),
-        None,
-    )
     role_store.migrate_model_selections(
         dialogue_registration_id=config.model_registrations[0].id,
-        visual_registration_id=(visual_registration.id if visual_registration else ""),
+        visual_registration_id=config.legacy_visual_registration_id,
     )
     role_model_runtime = RoleModelRuntime(
         role_store=role_store,

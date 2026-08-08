@@ -88,7 +88,6 @@ export type RoleProactiveConfig = {
   profile?: string;
   overrides?: Record<string, Record<string, number>>;
   agent?: {
-    model?: string;
     max_steps?: number;
     content_limit?: number;
     web_fetch_max_chars?: number;
@@ -198,7 +197,6 @@ export type RoleFormState = {
   proactiveTargetChannel?: string;
   proactiveTargetChatId?: string;
   proactiveProfile?: string;
-  proactiveAgentModel?: string;
   proactiveAgentMaxSteps?: number;
   proactiveAgentContentLimit?: number;
   proactiveAgentWebFetchMaxChars?: number;

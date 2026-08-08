@@ -103,7 +103,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
         onClick={() => setOpen((current) => !current)}
       >
         <Brain className="h-4 w-4 shrink-0" weight="duotone" />
-        <span className="truncate">{dialogue?.name ?? "选择模型"}</span>
+        <span className="truncate">{dialogue?.model ?? "选择模型"}</span>
         <CaretDown className="h-3 w-3 shrink-0" weight="bold" />
       </button>
       {open && selection ? (
@@ -111,14 +111,14 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
           <label className="grid gap-1.5 text-xs text-[#667085]">
             <span>对话模型</span>
             <select className="h-9 rounded-md border border-[#D8DFE7] bg-white px-2 text-sm text-[#182230] transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" value={selection.dialogueId} onChange={(event) => void updateSelection("dialogue", event.target.value)}>
-              {registrations.map((registration) => <option key={registration.id} value={registration.id}>{registration.name}</option>)}
+              {registrations.map((registration) => <option key={registration.id} value={registration.id}>{registration.model}</option>)}
             </select>
           </label>
           <label className="grid gap-1.5 text-xs text-[#667085]">
             <span>视觉模型</span>
             <select className="h-9 rounded-md border border-[#D8DFE7] bg-white px-2 text-sm text-[#182230] transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" value={selection.visualId} onChange={(event) => void updateSelection("visual", event.target.value)}>
               <option value="">沿用对话模型</option>
-              {registrations.map((registration) => <option key={registration.id} value={registration.id}>{registration.name}</option>)}
+              {registrations.map((registration) => <option key={registration.id} value={registration.id}>{registration.model}</option>)}
             </select>
           </label>
         </div>

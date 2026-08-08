@@ -9,7 +9,7 @@ import { SettingsSectionContent } from "./SettingsSectionContent.js";
 function createSettingsFormData(): SettingsFormData {
   return {
     models: {
-      registrations: [{ id: "00000000-0000-4000-a000-000000000001", name: "Agent 模型", provider: "openai", model: "gpt-agent", apiKey: "agent-key", baseUrl: "https://agent.example", effort: "high" }],
+      registrations: [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "gpt-agent", apiKey: "agent-key", baseUrl: "https://agent.example", effort: "high" }],
     },
     channels: {
       telegramToken: "telegram-token",
@@ -89,7 +89,7 @@ describe("SettingsSectionContent", () => {
     });
   });
 
-  it("binds the Agent subsection to the model settings domain", () => {
+  it("shows the model value without a registration name field", () => {
     const markup = renderToStaticMarkup(
       <SettingsSectionContent
         sectionId="models"
@@ -99,7 +99,8 @@ describe("SettingsSectionContent", () => {
       />,
     );
 
-    assert.match(markup, /Agent 模型/);
+    assert.doesNotMatch(markup, />名称</);
+    assert.match(markup, />gpt-agent</);
     assert.match(markup, /value="gpt-agent"/);
     assert.match(markup, /value="agent-key"/);
   });

@@ -113,6 +113,8 @@ def build_proactive_runtime(
 def _build_role_proactive_config(role: RoleRecord):
     """Builds the runtime proactive config from one authoritative role snapshot."""
     target = role.proactive
+    agent = dict(getattr(target, "agent", {}) or {})
+    agent.pop("model", None)
     return load_proactive_config(
         {
             "enabled": target.enabled,
@@ -123,7 +125,7 @@ def _build_role_proactive_config(role: RoleRecord):
                 "chat_id": target.target_chat_id,
             },
             "overrides": dict(getattr(target, "overrides", {}) or {}),
-            "agent": dict(getattr(target, "agent", {}) or {}),
+            "agent": agent,
             "drift": dict(getattr(target, "drift", {}) or {}),
         }
     )

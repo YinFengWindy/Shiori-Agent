@@ -124,7 +124,6 @@ class AgentTickFactory:
         return lambda: presence.get_last_user_at(session_key)
 
     def _build_llm_fn(self) -> LlmFn:
-        agent_model = self._deps.cfg.agent_tick_model or self._deps.model
         provider = self._deps.provider
 
         async def llm_fn(
@@ -138,7 +137,7 @@ class AgentTickFactory:
             resp = await provider.chat(
                 messages=messages,
                 tools=schemas,
-                model=agent_model,
+                model=self._deps.model,
                 max_tokens=self._deps.max_tokens,
                 tool_choice=tool_choice,
                 disable_thinking=True,

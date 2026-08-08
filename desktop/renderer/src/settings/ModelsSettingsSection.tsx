@@ -12,7 +12,6 @@ import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 function createRegistration(): ModelRegistrationFormData {
   return {
     id: crypto.randomUUID(),
-    name: "",
     provider: "openai",
     baseUrl: "",
     apiKey: "",
@@ -55,7 +54,7 @@ export function ModelsSettingsSection({
     const impact = affectedRoles.length > 0
       ? `\n受影响角色：${affectedRoles.map((role) => role.name).join("、")}`
       : "";
-    if (!window.confirm(`删除模型注册“${registration.name || registration.model}”？${impact}`)) return;
+    if (!window.confirm(`删除模型注册“${registration.model}”？${impact}`)) return;
     const remaining = draft.models.registrations.filter((item) => item.id !== registration.id);
     const fallbackId = remaining[0]?.id ?? "";
     try {
@@ -94,7 +93,7 @@ export function ModelsSettingsSection({
           <section className="grid gap-4 border-b border-[#E8EDF2] pb-5 last:border-b-0 last:pb-0" key={registration.id}>
             <div className="flex items-center justify-between gap-3">
               <strong className="truncate text-sm font-semibold text-[#182230]">
-                {registration.name || registration.model || "未命名模型"}
+                {registration.model || "未配置模型"}
               </strong>
               <button
                 className="grid h-8 w-8 place-items-center rounded-md text-[#8A94A3] transition hover:bg-[#FFF1F1] hover:text-[#C83E3E] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-35"
@@ -108,9 +107,6 @@ export function ModelsSettingsSection({
               </button>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="名称">
-                <input className={settingsInputClass} value={registration.name} onChange={(event) => updateRegistration(registration.id, (current) => ({ ...current, name: event.target.value }))} />
-              </Field>
               <Field label="Provider">
                 <input className={settingsInputClass} value={registration.provider} onChange={(event) => updateRegistration(registration.id, (current) => ({ ...current, provider: event.target.value }))} />
               </Field>

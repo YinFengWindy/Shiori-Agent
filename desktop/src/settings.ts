@@ -154,7 +154,6 @@ function loadModelRegistrations(llm: Record<string, unknown>): ModelRegistration
       const item = asRecord(value);
       return {
         id: String(item.id ?? ""),
-        name: String(item.name ?? ""),
         provider: String(item.provider ?? "openai"),
         baseUrl: String(item.base_url ?? ""),
         apiKey: String(item.api_key ?? ""),
@@ -166,12 +165,12 @@ function loadModelRegistrations(llm: Record<string, unknown>): ModelRegistration
   const provider = String(llm.provider ?? "openai");
   const main = asRecord(llm.main);
   const definitions = [
-    ["main", "主模型", main],
-    ["fast", "轻量模型", asRecord(llm.fast)],
-    ["agent", "Agent 模型", asRecord(llm.agent)],
-    ["visual", "视觉模型", asRecord(llm.vl)],
+    ["main", main],
+    ["fast", asRecord(llm.fast)],
+    ["agent", asRecord(llm.agent)],
+    ["visual", asRecord(llm.vl)],
   ] as const;
-  return definitions.flatMap(([kind, name, item]) => {
+  return definitions.flatMap(([kind, item]) => {
     const model = String(item.model ?? "").trim();
     if (!model) return [];
     const baseUrl = String(item.base_url ?? main.base_url ?? "");
@@ -181,7 +180,6 @@ function loadModelRegistrations(llm: Record<string, unknown>): ModelRegistration
       : (kind === "main" && item.enable_thinking ? "high" : "none");
     return [{
       id: stableLegacyRegistrationId(kind, provider, baseUrl, model),
-      name,
       provider,
       baseUrl,
       apiKey: String(item.api_key ?? main.api_key ?? ""),
@@ -296,7 +294,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
     ...formData.models.registrations.flatMap((registration) => [
       "[[llm.registrations]]",
       `id = ${quote(registration.id)}`,
-      `name = ${quote(registration.name.trim())}`,
       `provider = ${quote(registration.provider.trim())}`,
       `base_url = ${quote(registration.baseUrl.trim())}`,
       `api_key = ${quote(registration.apiKey)}`,
@@ -411,23 +408,17 @@ function validateSettings(formData: SettingsFormData): void {
     throw new Error("至少需要一个模型注册");
   }
   const registrationIds = new Set<string>();
-  const registrationNames = new Set<string>();
   for (const registration of formData.models.registrations) {
-    if (!registration.id || !registration.name.trim() || !registration.model.trim()) {
-      throw new Error("模型注册 ID、名称和模型不能为空");
+    if (!registration.id || !registration.model.trim()) {
+      throw new Error("模型注册 ID 和模型不能为空");
     }
-    const normalizedName = registration.name.trim().toLocaleLowerCase();
     if (registrationIds.has(registration.id)) {
       throw new Error("模型注册 ID 不能重复");
-    }
-    if (registrationNames.has(normalizedName)) {
-      throw new Error("模型注册名称不能重复");
     }
     if (!["none", "low", "high", "max"].includes(registration.effort)) {
       throw new Error("Effort 必须是 none、low、high 或 max");
     }
     registrationIds.add(registration.id);
-    registrationNames.add(normalizedName);
   }
   if (formData.advanced.maxTokens <= 0) {
     throw new Error("max_tokens 必须大于 0");

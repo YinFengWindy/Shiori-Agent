@@ -14,7 +14,7 @@ function createSettingsFormData(
 ): SettingsFormData {
   return {
     models: {
-      registrations: overrides.registrations ?? [{ id: "00000000-0000-4000-a000-000000000001", name: "主模型", provider: "openai", model: "gpt-main", apiKey: "", baseUrl: "", effort: "none" }],
+      registrations: overrides.registrations ?? [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "gpt-main", apiKey: "", baseUrl: "", effort: "none" }],
     },
     channels: {
       telegramToken: "",
@@ -97,7 +97,7 @@ describe("loadSettingsPageData", () => {
 describe("saveSettingsPageData", () => {
   it("does not touch role-owned channel bindings", async () => {
     const calls: string[] = [];
-    const persistedSnapshot = createSettingsSnapshot({ registrations: [{ id: "00000000-0000-4000-a000-000000000001", name: "已保存", provider: "openai", model: "saved-model", apiKey: "", baseUrl: "", effort: "none" }] });
+    const persistedSnapshot = createSettingsSnapshot({ registrations: [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "saved-model", apiKey: "", baseUrl: "", effort: "none" }] });
     const result = await saveSettingsPageData(
       {
         saveSettings: async () => {
@@ -113,7 +113,7 @@ describe("saveSettingsPageData", () => {
           return persistedSnapshot;
         },
       } satisfies Pick<DesktopApi, "readSettings" | "saveSettings">,
-      createSettingsFormData({ registrations: [{ id: "00000000-0000-4000-a000-000000000001", name: "草稿", provider: "openai", model: "draft-model", apiKey: "", baseUrl: "", effort: "none" }] }),
+      createSettingsFormData({ registrations: [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "draft-model", apiKey: "", baseUrl: "", effort: "none" }] }),
     );
 
     assert.deepEqual(calls, ["saveSettings", "readSettings"]);

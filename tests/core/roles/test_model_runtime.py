@@ -5,10 +5,9 @@ from core.roles.model_runtime import RoleModelRuntime
 from core.roles.store import RoleStore
 
 
-def registration(identifier: str, name: str, model: str) -> ModelRegistration:
+def registration(identifier: str, model: str) -> ModelRegistration:
     return ModelRegistration(
         id=identifier,
-        name=name,
         provider="openai",
         base_url="https://example.com/v1",
         api_key="secret",
@@ -18,8 +17,8 @@ def registration(identifier: str, name: str, model: str) -> ModelRegistration:
 
 
 def test_runtime_resolves_dialogue_and_visual_fallback(tmp_path) -> None:
-    dialogue = registration("00000000-0000-4000-a000-000000000001", "对话", "chat-model")
-    visual = registration("00000000-0000-4000-a000-000000000002", "视觉", "vision-model")
+    dialogue = registration("00000000-0000-4000-a000-000000000001", "chat-model")
+    visual = registration("00000000-0000-4000-a000-000000000002", "vision-model")
     store = RoleStore(tmp_path, default_dialogue_registration_id=dialogue.id)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
     runtime = RoleModelRuntime(
@@ -44,8 +43,8 @@ def test_runtime_resolves_dialogue_and_visual_fallback(tmp_path) -> None:
 
 
 def test_runtime_snapshot_stays_stable_after_role_selection_changes(tmp_path) -> None:
-    first = registration("00000000-0000-4000-a000-000000000001", "一", "first-model")
-    second = registration("00000000-0000-4000-a000-000000000002", "二", "second-model")
+    first = registration("00000000-0000-4000-a000-000000000001", "first-model")
+    second = registration("00000000-0000-4000-a000-000000000002", "second-model")
     store = RoleStore(tmp_path, default_dialogue_registration_id=first.id)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
     runtime = RoleModelRuntime(

@@ -28,8 +28,8 @@ def test_agent_tick_max_steps_is_int():
     assert isinstance(ProactiveConfig().agent_tick_max_steps, int)
 
 
-def test_agent_tick_model_default_empty():
-    assert ProactiveConfig().agent_tick_model == ""
+def test_agent_tick_model_removed():
+    assert not hasattr(ProactiveConfig(), "agent_tick_model")
 
 
 def test_agent_tick_content_limit_default():
@@ -106,11 +106,6 @@ def test_max_steps_can_be_overridden():
 def test_web_fetch_max_chars_can_be_overridden():
     cfg = ProactiveConfig(agent_tick_web_fetch_max_chars=4_000)
     assert cfg.agent_tick_web_fetch_max_chars == 4_000
-
-
-def test_model_can_be_overridden():
-    cfg = ProactiveConfig(agent_tick_model="claude-sonnet-4-6")
-    assert cfg.agent_tick_model == "claude-sonnet-4-6"
 
 
 # ── v2 字段不影响 v1 字段默认值 ──────────────────────────────────────────

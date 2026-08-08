@@ -61,7 +61,6 @@ export type VoicePlaybackCommand =
 
 export type ModelRegistrationFormData = {
   id: string;
-  name: string;
   provider: string;
   baseUrl: string;
   apiKey: string;

@@ -51,7 +51,6 @@ class ModelRegistration:
     """One selectable chat connection and model definition."""
 
     id: str
-    name: str
     provider: str
     base_url: str
     api_key: str
@@ -107,6 +106,7 @@ class Config:
     wiring: WiringConfig = field(default_factory=WiringConfig)
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
     model_registrations: list[ModelRegistration] = field(default_factory=list)
+    legacy_visual_registration_id: str = ""
 
     def __post_init__(self) -> None:
         if self.model_registrations:
@@ -117,7 +117,6 @@ class Config:
         self.model_registrations = [
             ModelRegistration(
                 id=str(uuid.uuid5(uuid.NAMESPACE_URL, stable_key)),
-                name="主模型",
                 provider=self.provider,
                 base_url=str(self.base_url or ""),
                 api_key=self.api_key,

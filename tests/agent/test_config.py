@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 from agent import config
 
 
@@ -69,18 +67,19 @@ system_prompt = "system"
     first = config.load_config(config_path)
     second = config.load_config(config_path)
 
-    assert [item.name for item in first.model_registrations] == [
-        "主模型",
-        "轻量模型",
-        "视觉模型",
+    assert [item.model for item in first.model_registrations] == [
+        "deepseek-chat",
+        "deepseek-fast",
+        "vision-model",
     ]
     assert first.model_registrations[0].effort == "high"
+    assert first.legacy_visual_registration_id == first.model_registrations[2].id
     assert [item.id for item in first.model_registrations] == [
         item.id for item in second.model_registrations
     ]
 
 
-def test_load_config_rejects_duplicate_registration_names(tmp_path: Path) -> None:
+def test_load_config_ignores_retired_registration_names(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
@@ -104,5 +103,7 @@ system_prompt = "system"
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="模型注册名称重复"):
-        config.load_config(config_path)
+    loaded = config.load_config(config_path)
+
+    assert [item.model for item in loaded.model_registrations] == ["first", "second"]
+    assert all(not hasattr(item, "name") for item in loaded.model_registrations)

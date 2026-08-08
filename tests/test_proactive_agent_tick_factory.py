@@ -24,7 +24,6 @@ def _build_deps(*, with_pool: bool):
     cfg = SimpleNamespace(
         default_role_id="",
         default_chat_id="cid",
-        agent_tick_model="",
         agent_tick_web_fetch_max_chars=4000,
         message_dedupe_recent_n=3,
     )

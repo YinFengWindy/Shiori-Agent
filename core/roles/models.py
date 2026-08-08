@@ -52,7 +52,7 @@ class RoleChannelBindingConfig:
 
 @dataclass(frozen=True)
 class RoleProactiveConfig:
-    """角色自己的主动推送目标、策略与 agent 参数。"""
+    """角色自己的主动推送目标、策略与执行参数。"""
 
     enabled: bool = False
     target_channel: str = ""
@@ -64,13 +64,15 @@ class RoleProactiveConfig:
     policy_configured: bool = False
 
     def to_dict(self) -> dict[str, Any]:
+        agent = dict(self.agent)
+        agent.pop("model", None)
         return {
             "enabled": self.enabled,
             "target_channel": self.target_channel,
             "target_chat_id": self.target_chat_id,
             "profile": self.profile,
             "overrides": dict(self.overrides),
-            "agent": dict(self.agent),
+            "agent": agent,
             "drift": dict(self.drift),
             "policy_configured": self.policy_configured,
         }
@@ -81,13 +83,15 @@ class RoleProactiveConfig:
         profile = str(data.get("profile") or "daily").strip()
         if not profile:
             raise ValueError("角色主动推送 profile 不能为空")
+        agent = _proactive_dict_field(data, "agent")
+        agent.pop("model", None)
         return cls(
             enabled=bool(data.get("enabled", False)),
             target_channel=str(data.get("target_channel") or "").strip(),
             target_chat_id=str(data.get("target_chat_id") or "").strip(),
             profile=profile,
             overrides=_proactive_dict_field(data, "overrides"),
-            agent=_proactive_dict_field(data, "agent"),
+            agent=agent,
             drift=_proactive_dict_field(data, "drift"),
             policy_configured=(
                 bool(data.get("policy_configured"))

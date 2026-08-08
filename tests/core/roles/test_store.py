@@ -51,6 +51,7 @@ def test_role_store_persists_proactive_policy_and_keeps_it_when_target_is_remove
     assert updated.proactive.target_channel == ""
     assert reloaded is not None
     assert reloaded.proactive.profile == "quiet"
-    assert reloaded.proactive.agent["model"] == "agent-model"
+    assert "model" not in reloaded.proactive.agent
+    assert reloaded.proactive.agent["max_steps"] == 12
     assert reloaded.proactive.drift["min_interval_hours"] == 6
     assert reloaded.proactive.policy_configured is True

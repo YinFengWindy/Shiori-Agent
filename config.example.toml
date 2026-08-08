@@ -7,7 +7,6 @@
 
 [[llm.registrations]]
 id = "00000000-0000-4000-a000-000000000001"
-name = "DeepSeek 对话"
 provider = "deepseek"
 model = "deepseek-v4-flash"
 api_key = "sk-..."
@@ -16,7 +15,6 @@ effort = "high"
 
 [[llm.registrations]]
 id = "00000000-0000-4000-a000-000000000002"
-name = "Qwen 视觉"
 provider = "qwen"
 model = "qwen-vl-plus"
 api_key = "sk-..."
