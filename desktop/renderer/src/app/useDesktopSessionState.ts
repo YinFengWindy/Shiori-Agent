@@ -446,8 +446,7 @@ export function useDesktopSessionState({
             current?.key === sessionKey ? previousSession : current,
           );
         }
-        setError(res.error.message);
-        appendSessionErrorMessage(sessionKey, res.error.message);
+        window.alert(res.error.message);
         return false;
       }
       const nextSession = res.payload.session as SessionPayload;
@@ -469,8 +468,7 @@ export function useDesktopSessionState({
         );
       }
       const message = error instanceof Error ? error.message : String(error);
-      setError(message);
-      appendSessionErrorMessage(sessionKey, message);
+      window.alert(message);
       return false;
     }
   }

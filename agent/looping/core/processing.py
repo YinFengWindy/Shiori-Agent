@@ -71,6 +71,12 @@ class _ProcessingMixin:
         return self._role_world_registry
 
     @property
+    def role_model_runtime(self):
+        """Returns the shared role model resolver used by role-owned work."""
+
+        return self._role_model_runtime
+
+    @property
     def active_turn_states(self) -> dict[str, TurnInterruptState]:
         return self._active_turn_states
 
@@ -147,11 +153,26 @@ class _ProcessingMixin:
         if self._processing_state:
             self._processing_state.enter(key)
         try:
-            outbound = await self._core_runner.process(
-                msg,
-                key,
-                dispatch_outbound=dispatch_outbound,
-            )
+            model_runtime = getattr(self, "_role_model_runtime", None)
+            metadata = getattr(msg, "metadata", None)
+            metadata = metadata if isinstance(metadata, dict) else {}
+            role_id = str(metadata.get("role_id") or "").strip()
+            if not role_id and key.startswith("role:"):
+                role_id = key.removeprefix("role:").strip()
+            if model_runtime is not None and role_id:
+                purpose = "vision" if getattr(msg, "media", None) else "chat"
+                with model_runtime.activate(role_id, purpose):
+                    outbound = await self._core_runner.process(
+                        msg,
+                        key,
+                        dispatch_outbound=dispatch_outbound,
+                    )
+            else:
+                outbound = await self._core_runner.process(
+                    msg,
+                    key,
+                    dispatch_outbound=dispatch_outbound,
+                )
             if resumed_from_interrupt:
                 self._interrupt_states.pop(key, None)
             return outbound

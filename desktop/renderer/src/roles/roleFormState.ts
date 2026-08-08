@@ -8,6 +8,8 @@ export function buildRoleProactiveConfig(
   roleForm: RoleFormState,
 ): RoleProactiveConfig {
   const persisted = role?.proactive;
+  const persistedAgent = { ...(persisted?.agent ?? {}) } as Record<string, unknown>;
+  delete persistedAgent.model;
   return {
     ...persisted,
     enabled: Boolean(roleForm.proactiveEnabled),
@@ -15,8 +17,7 @@ export function buildRoleProactiveConfig(
     target_chat_id: roleForm.proactiveTargetChatId ?? "",
     profile: roleForm.proactiveProfile ?? "daily",
     agent: {
-      ...(persisted?.agent ?? {}),
-      model: roleForm.proactiveAgentModel ?? "",
+      ...persistedAgent,
       max_steps: roleForm.proactiveAgentMaxSteps ?? 35,
       content_limit: roleForm.proactiveAgentContentLimit ?? 5,
       web_fetch_max_chars: roleForm.proactiveAgentWebFetchMaxChars ?? 8000,
@@ -45,7 +46,6 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     proactiveTargetChannel: role.proactive?.target_channel ?? "",
     proactiveTargetChatId: role.proactive?.target_chat_id ?? "",
     proactiveProfile: role.proactive?.profile ?? "daily",
-    proactiveAgentModel: role.proactive?.agent?.model ?? "",
     proactiveAgentMaxSteps: role.proactive?.agent?.max_steps ?? 35,
     proactiveAgentContentLimit: role.proactive?.agent?.content_limit ?? 5,
     proactiveAgentWebFetchMaxChars: role.proactive?.agent?.web_fetch_max_chars ?? 8000,
@@ -101,7 +101,6 @@ export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null
         || (roleForm.proactiveTargetChannel ?? "") !== (role.proactive?.target_channel ?? "")
         || (roleForm.proactiveTargetChatId ?? "") !== (role.proactive?.target_chat_id ?? "")
         || (roleForm.proactiveProfile ?? "daily") !== (role.proactive?.profile ?? "daily")
-        || (roleForm.proactiveAgentModel ?? "") !== (role.proactive?.agent?.model ?? "")
         || (roleForm.proactiveAgentMaxSteps ?? 35) !== (role.proactive?.agent?.max_steps ?? 35)
         || (roleForm.proactiveAgentContentLimit ?? 5) !== (role.proactive?.agent?.content_limit ?? 5)
         || (roleForm.proactiveAgentWebFetchMaxChars ?? 8000) !== (role.proactive?.agent?.web_fetch_max_chars ?? 8000)

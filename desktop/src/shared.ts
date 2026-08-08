@@ -59,24 +59,18 @@ export type VoicePlaybackCommand =
   | { command: "play"; id: string; audioBase64: string; format: "mp3" }
   | { command: "cancel" };
 
+export type ModelRegistrationFormData = {
+  id: string;
+  provider: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  effort: "none" | "low" | "high" | "max";
+};
+
 export type SettingsFormData = {
   models: {
-    provider: string;
-    mainModel: string;
-    mainApiKey: string;
-    mainBaseUrl: string;
-    enableThinking: boolean;
-    reasoningEffort: string;
-    multimodal: boolean;
-    fastModel: string;
-    fastApiKey: string;
-    fastBaseUrl: string;
-    agentModel: string;
-    agentApiKey: string;
-    agentBaseUrl: string;
-    vlModel: string;
-    vlApiKey: string;
-    vlBaseUrl: string;
+    registrations: ModelRegistrationFormData[];
   };
   channels: {
     telegramToken: string;

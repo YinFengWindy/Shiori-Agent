@@ -158,7 +158,6 @@ class RoleConfigMigrator:
                     profile=str(getattr(proactive, "profile", "daily") or "daily"),
                     overrides=dict(getattr(proactive, "overrides", {}) or {}),
                     agent={
-                        "model": str(getattr(proactive, "agent_tick_model", "") or ""),
                         "max_steps": int(
                             getattr(proactive, "agent_tick_max_steps", 35)
                         ),

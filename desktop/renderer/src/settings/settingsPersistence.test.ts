@@ -14,22 +14,7 @@ function createSettingsFormData(
 ): SettingsFormData {
   return {
     models: {
-      provider: "openai",
-      mainModel: overrides.mainModel ?? "gpt-main",
-      mainApiKey: "",
-      mainBaseUrl: "",
-      enableThinking: false,
-      reasoningEffort: "medium",
-      multimodal: false,
-      fastModel: "gpt-fast",
-      fastApiKey: "",
-      fastBaseUrl: "",
-      agentModel: "gpt-agent",
-      agentApiKey: "",
-      agentBaseUrl: "",
-      vlModel: "gpt-vl",
-      vlApiKey: "",
-      vlBaseUrl: "",
+      registrations: overrides.registrations ?? [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "gpt-main", apiKey: "", baseUrl: "", effort: "none" }],
     },
     channels: {
       telegramToken: "",
@@ -112,7 +97,7 @@ describe("loadSettingsPageData", () => {
 describe("saveSettingsPageData", () => {
   it("does not touch role-owned channel bindings", async () => {
     const calls: string[] = [];
-    const persistedSnapshot = createSettingsSnapshot({ mainModel: "saved-model" });
+    const persistedSnapshot = createSettingsSnapshot({ registrations: [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "saved-model", apiKey: "", baseUrl: "", effort: "none" }] });
     const result = await saveSettingsPageData(
       {
         saveSettings: async () => {
@@ -128,11 +113,11 @@ describe("saveSettingsPageData", () => {
           return persistedSnapshot;
         },
       } satisfies Pick<DesktopApi, "readSettings" | "saveSettings">,
-      createSettingsFormData({ mainModel: "draft-model" }),
+      createSettingsFormData({ registrations: [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "draft-model", apiKey: "", baseUrl: "", effort: "none" }] }),
     );
 
     assert.deepEqual(calls, ["saveSettings", "readSettings"]);
-    assert.equal(result.snapshot.formData.models.mainModel, "saved-model");
+    assert.equal(result.snapshot.formData.models.registrations[0]?.model, "saved-model");
     assert.equal(result.nextDraft.channels.telegramToken, "");
   });
 });

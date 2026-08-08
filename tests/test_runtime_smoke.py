@@ -1,5 +1,6 @@
 import json
 import sys
+import tomllib
 import types
 from pathlib import Path
 from typing import cast, Any
@@ -150,9 +151,14 @@ def test_init_workspace_creates_expected_assets(tmp_path):
 
     assert config_path.exists()
     config_text = config_path.read_text(encoding="utf-8")
-    assert "multimodal = false" in config_text
-    assert "[llm.vl]" in config_text
-    assert 'model = "qwen-vl-plus"' in config_text
+    assert config_text.count("[[llm.registrations]]") == 2
+    registrations = tomllib.loads(config_text)["llm"]["registrations"]
+    assert all("name" not in registration for registration in registrations)
+    assert [registration["model"] for registration in registrations] == [
+        "deepseek-v4-flash",
+        "qwen-vl-plus",
+    ]
+    assert "[llm.vl]" not in config_text
     assert (workspace / "sessions.db").exists()
     assert (workspace / "observe").is_dir()
     assert (workspace / "memory" / "consolidation_writes.db").exists()

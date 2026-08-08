@@ -24,7 +24,12 @@ from .pet_state import RolePetStateStore
 class RoleStore:
     """Compatibility facade for persisted role records and owned sub-stores."""
 
-    def __init__(self, workspace: Path) -> None:
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        default_dialogue_registration_id: str = "",
+    ) -> None:
         self.workspace = workspace
         self._repository = RoleManifestRepository(workspace)
         self.roles_dir = self._repository.roles_dir
@@ -34,12 +39,45 @@ class RoleStore:
         self._assets = RoleAssetStore(self.roles_dir, self.assets_dir)
         self._bindings = RoleBindingPolicy()
         self._pets = RolePetStateStore(self._repository)
+        self._default_dialogue_registration_id = (
+            default_dialogue_registration_id.strip()
+        )
 
     def list_roles(self) -> list[RoleRecord]:
         return self._repository.list_roles()
 
     def get_role(self, role_id: str) -> RoleRecord | None:
         return self._repository.get_role(role_id)
+
+    def migrate_model_selections(
+        self,
+        *,
+        dialogue_registration_id: str,
+        visual_registration_id: str = "",
+    ) -> int:
+        """Assigns migrated defaults only to roles without model selections."""
+
+        changed = 0
+        with self._lock:
+            roles = self.list_roles()
+            for role in roles:
+                runtime_config = dict(role.runtime_config)
+                if not str(
+                    runtime_config.get("dialogue_model_registration_id") or ""
+                ).strip():
+                    runtime_config["dialogue_model_registration_id"] = (
+                        dialogue_registration_id
+                    )
+                    changed += 1
+                if "visual_model_registration_id" not in runtime_config:
+                    runtime_config["visual_model_registration_id"] = (
+                        visual_registration_id
+                    )
+                    changed += 1
+                role.runtime_config = runtime_config
+            if changed:
+                self._save_roles(roles)
+        return changed
 
     def create_role(
         self,
@@ -68,6 +106,16 @@ class RoleStore:
             if any(role.id == resolved_id for role in roles):
                 raise ValueError(f"role 已存在: {resolved_id}")
             now = now_iso()
+            resolved_runtime_config = dict(runtime_config or {})
+            if self._default_dialogue_registration_id:
+                resolved_runtime_config.setdefault(
+                    "dialogue_model_registration_id",
+                    self._default_dialogue_registration_id,
+                )
+                resolved_runtime_config.setdefault(
+                    "visual_model_registration_id",
+                    "",
+                )
             record = RoleRecord(
                 id=resolved_id,
                 name=clean_name,
@@ -79,7 +127,7 @@ class RoleStore:
                 illustrations=[],
                 asset_categories=[default_asset_category()],
                 asset_category_bindings={},
-                runtime_config=dict(runtime_config or {}),
+                runtime_config=resolved_runtime_config,
                 channel_bindings=[],
                 proactive=RoleProactiveConfig(),
                 memory_init_state={},

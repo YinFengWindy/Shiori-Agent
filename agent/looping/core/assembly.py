@@ -29,6 +29,7 @@ from ..ports import (
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.turns.outbound import BusOutboundPort
 from bus.event_bus import EventBus
+from core.roles.model_runtime import RoleAwareProvider
 
 from typing import TYPE_CHECKING
 
@@ -51,6 +52,7 @@ class _AssemblyMixin:
         self._processing_state = deps.processing_state
         self._event_bus = deps.event_bus or EventBus()
         self._role_world_registry = deps.role_world_registry
+        self._role_model_runtime = deps.role_model_runtime
 
         # ── 中断控制面（纯内存态） ──
         self._active_tasks: dict[str, asyncio.Task] = {}
@@ -74,9 +76,17 @@ class _AssemblyMixin:
             multimodal=config.llm.multimodal,
             vl_available=config.llm.vl_available,
         )
-        self._llm_services = deps.llm_services or LLMServices(
+        base_llm_services = deps.llm_services or LLMServices(
             provider=deps.provider,
             light_provider=deps.light_provider or deps.provider,
+        )
+        self._llm_services = (
+            LLMServices(
+                provider=RoleAwareProvider(base_llm_services.provider),
+                light_provider=RoleAwareProvider(base_llm_services.light_provider),
+            )
+            if self._role_model_runtime is not None
+            else base_llm_services
         )
         self._session_services = deps.session_services or SessionServices(
             session_manager=deps.session_manager,

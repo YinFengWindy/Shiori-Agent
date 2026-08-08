@@ -8,10 +8,7 @@ export type SettingsSubsection = {
 /** Lists the available subsections for every settings domain. */
 export const settingsSubsections: Record<SettingsSectionId, SettingsSubsection[]> = {
   models: [
-    { id: "main", label: "主模型" },
-    { id: "fast", label: "轻量模型" },
-    { id: "agent", label: "Agent 模型" },
-    { id: "vl", label: "视觉模型" },
+    { id: "catalog", label: "模型注册" },
   ],
   channels: [
     { id: "telegram", label: "Telegram" },
