@@ -38,7 +38,7 @@ function resolveDialogueSpeakerName(speaker: string | null | undefined, roleName
 }
 
 /** Renders the active Story as a layered visual-novel stage with one bottom dialogue band. */
-export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, busy, error, characterAvatarUrl, onSubmitInput, onRegenerateCg, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
+export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, busy, error, characterAvatarUrl, onSubmitInput, onRegenerateCg, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
   const [action, setAction] = useState("");
   const [dialogueVisible, setDialogueVisible] = useState(true);
   const [playbackState, setPlaybackState] = useState(() => createStoryPlaybackState(story));

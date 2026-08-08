@@ -78,7 +78,7 @@ test("above observation bubbles render ahead of the sprite", () => {
 });
 
 test("oversized reply bubbles keep their full text in a scrollable surface", () => {
-  const markup = renderToStaticMarkup(
+  renderToStaticMarkup(
     <CodexSpritePetRenderer
       spritesheetUrl="mira-asset://pet"
       state="idle"

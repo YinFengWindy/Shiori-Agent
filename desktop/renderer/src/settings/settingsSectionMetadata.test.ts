@@ -10,7 +10,7 @@ import {
 
 describe("settingsSectionMetadata", () => {
   it("keeps every configured subsection attached to its owning domain", () => {
-    assert.deepEqual(settingsSubsections.models.map((item) => item.id), ["main", "fast", "agent", "vl"]);
+    assert.deepEqual(settingsSubsections.models.map((item) => item.id), ["catalog"]);
     assert.deepEqual(settingsSubsections.channels.map((item) => item.id), ["telegram", "qq", "qqbot"]);
   });
 
@@ -18,6 +18,6 @@ describe("settingsSectionMetadata", () => {
     const active = createInitialSettingsSubsectionState();
     active.models = "removed-model-section";
 
-    assert.equal(resolveSettingsSubsectionId("models", active), "main");
+    assert.equal(resolveSettingsSubsectionId("models", active), "catalog");
   });
 });
