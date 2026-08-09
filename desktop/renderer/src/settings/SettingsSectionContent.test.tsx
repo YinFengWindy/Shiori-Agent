@@ -89,7 +89,7 @@ describe("SettingsSectionContent", () => {
     });
   });
 
-  it("shows the model value without a registration name field", () => {
+  it("shows model registration previews without exposing detail fields", () => {
     const markup = renderToStaticMarkup(
       <SettingsSectionContent
         sectionId="models"
@@ -101,8 +101,9 @@ describe("SettingsSectionContent", () => {
 
     assert.doesNotMatch(markup, />名称</);
     assert.match(markup, />gpt-agent</);
-    assert.match(markup, /value="gpt-agent"/);
-    assert.match(markup, /value="agent-key"/);
+    assert.match(markup, />https:\/\/agent\.example</);
+    assert.doesNotMatch(markup, /value="gpt-agent"/);
+    assert.doesNotMatch(markup, /agent-key/);
   });
 
   it("renders the global TTS volume control", () => {
