@@ -30,7 +30,7 @@ export function SettingsPageToolbar({
   return (
     <div className="mx-auto flex w-full flex-col gap-4 sm:flex-row sm:items-center">
       <div className="min-w-0 flex-1">
-        {subsections.length ? (
+        {subsections.length > 1 ? (
           <nav className="scrollbar-soft flex max-w-full gap-1 overflow-x-auto" aria-label="设置子区">
             {subsections.map((item) => <button className={cx("h-9 shrink-0 rounded-md px-3 text-sm transition focus:outline-none focus:ring-2 focus:ring-primary/20", item.id === currentSubsectionId ? "bg-[#EEF4FA] font-medium text-[#1D5F9E]" : "text-[#667085] hover:bg-[#F5F7FA] hover:text-[#182230]")} key={item.id} type="button" aria-current={item.id === currentSubsectionId ? "page" : undefined} onClick={() => onSubsectionChange(item.id)}>{item.label}</button>)}
           </nav>

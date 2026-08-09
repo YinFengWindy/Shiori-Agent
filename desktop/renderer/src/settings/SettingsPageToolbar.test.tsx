@@ -21,6 +21,29 @@ describe("SettingsPageToolbar", () => {
     );
 
     assert.match(markup, /aria-label="保存并重启"[^>]*disabled=""/);
-    assert.match(markup, /aria-current="page"[^>]*>主模型/);
+    assert.doesNotMatch(markup, /aria-label="设置子区"/);
+    assert.doesNotMatch(markup, />主模型</);
+  });
+
+  it("renders subsection navigation when multiple destinations are available", () => {
+    const markup = renderToStaticMarkup(
+      <SettingsPageToolbar
+        bridgeReady
+        currentSubsectionId="telegram"
+        isDirty={false}
+        savePhase="idle"
+        subsections={[
+          { id: "telegram", label: "Telegram" },
+          { id: "qq", label: "QQ" },
+        ]}
+        onReset={() => undefined}
+        onSave={async () => undefined}
+        onSubsectionChange={() => undefined}
+      />,
+    );
+
+    assert.match(markup, /aria-label="设置子区"/);
+    assert.match(markup, /aria-current="page"[^>]*>Telegram/);
+    assert.match(markup, />QQ</);
   });
 });
