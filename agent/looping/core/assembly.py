@@ -34,6 +34,7 @@ from core.roles.model_runtime import RoleAwareProvider
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from agent.lifecycle.phases.before_turn import MemoryConsolidator
     from core.memory.engine import MemoryEngine
     from core.memory.markdown import MemoryProfileApi
 
@@ -165,7 +166,7 @@ class _AssemblyMixin:
                 event_bus=self._event_bus,
                 outbound_port=BusOutboundPort(self.bus),
                 history_window=config.memory.keep_count,
-                memory_consolidator=self,
+                memory_consolidator=cast("MemoryConsolidator", self),
             )
         )
         self._agent_core = agent_core

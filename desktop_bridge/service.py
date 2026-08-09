@@ -525,9 +525,8 @@ class DesktopBridgeService:
 
         request_id = str(request.get("id") or "").strip() or "bridge-request"
         method = str(request.get("method") or "").strip()
-        payload = (
-            request.get("payload") if isinstance(request.get("payload"), dict) else {}
-        )
+        raw_payload = request.get("payload")
+        payload: dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
         self.start_background_tasks()
         try:
             result = await self.request_router.dispatch(

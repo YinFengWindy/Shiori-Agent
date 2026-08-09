@@ -50,7 +50,7 @@ class StorySimulationHandler:
         self._director = director
         self._world_registry = world_registry
         self._tasks: dict[str, asyncio.Task[None]] = {}
-        self._resource_tasks: dict[str, asyncio.Task[None]] = {}
+        self._resource_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
         self._image_generator = StoryImageGenerator(image_tool)
         self._recovery_lock = asyncio.Lock()
         self._recovered = False
@@ -58,7 +58,7 @@ class StorySimulationHandler:
     async def aclose(self) -> None:
         """Cancel uncommitted Director tasks and release Story connections."""
 
-        tasks = list(self._tasks.values())
+        tasks: list[asyncio.Task[Any]] = list(self._tasks.values())
         tasks.extend(self._resource_tasks.values())
         for task in tasks:
             if not task.done():
@@ -661,7 +661,7 @@ class StorySimulationHandler:
     @staticmethod
     def _expected_revision(payload: dict[str, Any]) -> int:
         raw = payload.get("expected_revision")
-        if isinstance(raw, bool):
+        if raw is None or isinstance(raw, bool):
             raise ValueError("expected_revision 必须是非负整数")
         try:
             value = int(raw)
@@ -683,5 +683,5 @@ class StorySimulationHandler:
                 "payload": payload,
             }
         )
-        if hasattr(result, "__await__"):
+        if result is not None:
             await result

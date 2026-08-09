@@ -13,7 +13,7 @@ from agent.prompting import (
 from core.memory.markdown import MemoryProfileApi
 from prompts.agent import build_current_message_time_envelope
 from proactive_v2.context import AgentTickContext
-from .gates import ProactiveMode
+from .gates import ProactiveMode, resolve_gate_attempt_index
 from proactive_v2.contracts import normalize_alert, normalize_content, normalize_context
 from proactive_v2.gateway import GatewayResult
 from proactive_v2.time import to_beijing_time
@@ -206,9 +206,7 @@ def build_runtime_context_message(
     """构建包含预取数据、角色记忆和共享规则的 context frame。"""
 
     active_mode = ctx.active_gate.mode if ctx.active_gate is not None else None
-    scene_followup_attempt = int(
-        (ctx.active_gate.metadata.get("attempt_index", 0) if ctx.active_gate else 0) or 0
-    )
+    scene_followup_attempt = resolve_gate_attempt_index(ctx.active_gate)
     sections: list[PromptSectionRender] = [
         PromptSectionRender(
             name="current_time",

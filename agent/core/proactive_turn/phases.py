@@ -8,9 +8,10 @@ from typing import Any, Protocol
 from core.common.diagnostic_log import diagnostic_line
 from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import DataGateway, GatewayDeps, GatewayResult
+from agent.turns.result import TurnResult
 
 from .types import FeedResult, GateResult
-from .gates import ProactiveGateContext, ProactiveMode
+from .gates import ProactiveGateContext, ProactiveMode, resolve_gate_attempt_index
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,13 @@ class ProactivePhaseHost(Protocol):
 
     def _relationship_fallback_style_hint(self) -> str: ...
 
-    def _record_tick_log_finish(self, ctx: AgentTickContext, **kwargs: Any) -> None: ...
+    def _record_tick_log_finish(
+        self,
+        ctx: AgentTickContext,
+        *,
+        gate_exit: str | None = None,
+        result: TurnResult | None = None,
+    ) -> None: ...
 
 
 def _log_content_candidates(gateway_result: GatewayResult) -> None:
@@ -273,10 +280,7 @@ async def fetch_pull(
         and pipeline._is_relationship_only_fallback(gateway_result)
     )
     if scene_followup_mode:
-        scene_followup_attempt = int(
-            (ctx.active_gate.metadata.get("attempt_index", 0) if ctx.active_gate else 0)
-            or 0
-        )
+        scene_followup_attempt = resolve_gate_attempt_index(ctx.active_gate)
         kickoff_content = (
             "开始本轮同一场景追问。"
             f"这是本场景第 {scene_followup_attempt + 1} 次追问，间隔会逐次缩短。"
