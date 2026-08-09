@@ -1,4 +1,3 @@
-import { Brain, CaretDown } from "@phosphor-icons/react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { ModelRegistrationFormData } from "../../../src/shared";
 import type { RoleRecord } from "../shared/types";
@@ -95,16 +94,14 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
   return (
     <div className="relative" ref={containerRef}>
       <button
-        className="inline-flex h-[30px] max-w-[190px] items-center gap-1.5 rounded-md px-2 text-xs text-[#5B6472] transition hover:bg-[#F3F5F7] hover:text-[#22272E] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-40"
+        className="inline-flex h-[30px] max-w-[190px] items-center rounded-md px-2 text-xs text-[#5B6472] transition hover:bg-[#F3F5F7] hover:text-[#22272E] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-40"
         type="button"
         aria-label="选择角色模型"
         aria-expanded={open}
         disabled={!bridgeReady || !selection}
         onClick={() => setOpen((current) => !current)}
       >
-        <Brain className="h-4 w-4 shrink-0" weight="duotone" />
         <span className="truncate">{dialogue?.model ?? "选择模型"}</span>
-        <CaretDown className="h-3 w-3 shrink-0" weight="bold" />
       </button>
       {open && selection ? (
         <div className="absolute bottom-9 left-0 z-20 grid w-[280px] gap-3 rounded-md border border-[#DDE3EA] bg-white p-3 shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
