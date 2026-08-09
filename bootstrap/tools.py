@@ -90,7 +90,6 @@ class CoreRuntime:
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
     role_world_registry: RoleWorldRegistry
-    role_model_runtime: RoleModelRuntime | None = None
     vl_provider: LLMProvider | None = None
     image_sync_service: ExternalImageSyncService | None = None
     agent_provider: LLMProvider | None = None
@@ -256,7 +255,7 @@ def build_registered_tools(
     event_publisher: EventBus | None = None,
     agent_loop_provider: Callable[[], Any] | None = None,
     role_repository: RoleRepository | None = None,
-    role_model_runtime: RoleModelRuntime | None = None,
+    role_world_registry: RoleWorldRegistry | None = None,
 ) -> tuple[
     ToolRegistry,
     MessagePushTool,
@@ -286,7 +285,7 @@ def build_registered_tools(
             light_provider=light_provider,
             http_resources=http_resources,
             event_publisher=event_publisher,
-            role_model_runtime=role_model_runtime,
+            role_world_registry=role_world_registry,
         ),
     )
     memory_runtime = memory_result.extras["memory_runtime"]
@@ -296,7 +295,7 @@ def build_registered_tools(
         provider=provider,
         vl_provider=vl_provider,
         memory=memory_runtime.engine,
-        model_runtime=role_model_runtime,
+        world_registry=role_world_registry,
     )
     tools.register(
         ObserveScreenTool(
@@ -336,7 +335,7 @@ def build_registered_tools(
                 memory_engine=memory_runtime.engine,
                 scheduler=scheduler,
                 event_publisher=event_publisher,
-                role_model_runtime=role_model_runtime,
+                role_world_registry=role_world_registry,
             ),
         )
         maybe_mcp = result.extras.get("mcp_registry")
@@ -375,7 +374,6 @@ def _build_loop_deps(
     memory_runtime: MemoryRuntime,
     relationship_runtime: RoleRelationshipRuntimeService,
     role_world_registry: RoleWorldRegistry | None = None,
-    role_model_runtime: RoleModelRuntime | None = None,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
     context = resolve_context_factory(wiring.context)(
@@ -400,7 +398,7 @@ def _build_loop_deps(
         relationship_runtime,
         provider=provider,
         model=config.agent_model or config.model,
-        model_runtime=role_model_runtime,
+        world_registry=role_world_registry,
     )
     _bind_memory_lifecycle_if_supported(
         markdown=memory_runtime.markdown.maintenance,
@@ -429,7 +427,6 @@ def _build_loop_deps(
         memory_services=memory_services,
         session_services=session_services,
         role_world_registry=role_world_registry,
-        role_model_runtime=role_model_runtime,
     )
 
 
@@ -487,7 +484,7 @@ def build_core_runtime(
         dialogue_registration_id=config.model_registrations[0].id,
         visual_registration_id=config.legacy_visual_registration_id,
     )
-    role_model_runtime = RoleModelRuntime(
+    role_model_resolver = RoleModelRuntime(
         role_store=role_store,
         registrations=config.model_registrations,
         system_prompt=config.system_prompt,
@@ -515,6 +512,10 @@ def build_core_runtime(
         len(migration_summary.migrated_session_keys),
         len(migration_summary.unresolved_session_keys),
     )
+    role_world_registry = RoleWorldRegistry(
+        role_repository,
+        model_resolver=role_model_resolver,
+    )
     loop_ref: dict[str, AgentLoop] = {}
     tools, push_tool, scheduler, mcp_registry, memory_runtime, screen_observation = (
         build_registered_tools(
@@ -527,7 +528,7 @@ def build_core_runtime(
             vl_provider=vl_provider,
             session_store=session_manager._store,
             event_publisher=event_bus,
-            role_model_runtime=role_model_runtime,
+            role_world_registry=role_world_registry,
             agent_loop_provider=lambda: loop_ref.get("loop"),
             role_repository=role_repository,
         )
@@ -544,7 +545,6 @@ def build_core_runtime(
         session_manager=session_manager,
         event_bus=event_bus,
     )
-    role_world_registry = RoleWorldRegistry(role_repository)
     push_tool.set_role_target_validator(
         lambda role_id, channel, chat_id: _validate_role_target(
             role_repository,
@@ -567,7 +567,6 @@ def build_core_runtime(
         memory_runtime=memory_runtime,
         relationship_runtime=relationship_runtime,
         role_world_registry=role_world_registry,
-        role_model_runtime=role_model_runtime,
     )
     loop = AgentLoop(
         loop_deps,
@@ -632,7 +631,6 @@ def build_core_runtime(
         presence=presence,
         relationship_runtime=relationship_runtime,
         role_world_registry=role_world_registry,
-        role_model_runtime=role_model_runtime,
         plugin_manager=plugin_manager,
         screen_observation=screen_observation,
     )

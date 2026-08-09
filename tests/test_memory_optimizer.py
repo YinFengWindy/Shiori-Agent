@@ -66,10 +66,14 @@ def test_optimize_uses_the_role_dialogue_model_snapshot(tmp_path):
     fallback_provider = types.SimpleNamespace(chat=AsyncMock(side_effect=AssertionError("fallback")))
     activations: list[tuple[str, str]] = []
 
-    class _ModelRuntime:
+    class _WorldRegistry:
+        async def get(self, role_id: str):
+            self.role_id = role_id
+            return self
+
         @contextmanager
-        def activate(self, role_id: str, purpose: str):
-            activations.append((role_id, purpose))
+        def activate_model(self, purpose: str):
+            activations.append((self.role_id, purpose))
             yield types.SimpleNamespace(provider=selected_provider, model="role-model")
 
     optimizer = MemoryOptimizer(
@@ -77,7 +81,7 @@ def test_optimize_uses_the_role_dialogue_model_snapshot(tmp_path):
         cast(Any, fallback_provider),
         "base-model",
         tmp_path,
-        model_runtime=_ModelRuntime(),
+        world_registry=_WorldRegistry(),
     )
     optimizer._STEP_DELAY_SECONDS = 0
 

@@ -12,7 +12,7 @@ from agent.screen_observation.contract import (
 from agent.screen_observation.safety import safe_observation_text
 
 if TYPE_CHECKING:
-    from core.roles.model_runtime import RoleModelRuntime
+    from core.roles.world import RoleWorldRegistry
 
 _MAX_ROLE_DESCRIPTION_CHARS = 600
 _MAX_ROLE_SYSTEM_PROMPT_CHARS = 2400
@@ -40,17 +40,17 @@ class ObservationModelAdapter:
         roles: RoleRepository,
         provider: LLMProvider | None,
         model: str,
-        model_runtime: RoleModelRuntime | None = None,
+        world_registry: RoleWorldRegistry | None = None,
     ) -> None:
         self._roles = roles
         self._provider = provider
         self._model = model
-        self._model_runtime = model_runtime
+        self._world_registry = world_registry
 
     async def analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Analyzes one frame without retaining it or enabling desktop actions."""
 
-        if self._model_runtime is None and (self._provider is None or not self._model):
+        if self._world_registry is None and (self._provider is None or not self._model):
             raise RuntimeError("屏幕识别视觉模型未配置")
         frame = parse_observation_frame(payload)
         role = self._roles.get_required(frame.role_id)
@@ -73,8 +73,9 @@ class ObservationModelAdapter:
             )
             if part
         )
-        if self._model_runtime is not None:
-            with self._model_runtime.activate(frame.role_id, "vision") as snapshot:
+        if self._world_registry is not None:
+            world = await self._world_registry.get(frame.role_id)
+            with world.activate_model("vision") as snapshot:
                 return await self._analyze_with_provider(
                     provider=snapshot.provider,
                     model=snapshot.model,

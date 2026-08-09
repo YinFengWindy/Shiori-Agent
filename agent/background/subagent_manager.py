@@ -32,7 +32,7 @@ from core.net.http import HttpRequester
 from prompts.background import build_spawn_subagent_prompt
 
 if TYPE_CHECKING:
-    from core.roles.model_runtime import RoleModelRuntime
+    from core.roles.world import RoleWorldRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ class SubagentManager:
         max_tokens: int,
         fetch_requester: HttpRequester,
         multimodal: bool = True,
-        model_runtime: RoleModelRuntime | None = None,
+        world_registry: RoleWorldRegistry | None = None,
     ) -> None:
         self._workspace = workspace
         self._bus = bus
@@ -78,7 +78,7 @@ class SubagentManager:
             model=model,
             max_tokens=max_tokens,
         )
-        self._model_runtime = model_runtime
+        self._world_registry = world_registry
         self._fetch_requester = fetch_requester
         self._multimodal = multimodal
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
@@ -140,7 +140,7 @@ class SubagentManager:
                 exit_reason = getattr(subagent, "last_exit_reason", None) or "completed"
                 return result, exit_reason
 
-            result, exit_reason = await self._run_with_role_model(role_id, _run)
+            result, exit_reason = await self._run_with_role_world(role_id, _run)
         except Exception as e:
             logger.exception("[spawn_sync] subagent failed job_id=%s err=%s", job_id, e)
             result = f"执行出错：{e}"
@@ -311,7 +311,7 @@ class SubagentManager:
                     error_result_summary=None,
                 )
 
-            result = await self._run_with_role_model(role_id, _run)
+            result = await self._run_with_role_world(role_id, _run)
         except asyncio.CancelledError:
             if job_id not in self._cancel_announced:
                 await self._announce_result(
@@ -410,16 +410,17 @@ class SubagentManager:
         return spec.build(runtime or self._runtime)
 
     @property
-    def role_model_runtime_enabled(self) -> bool:
-        return self._model_runtime is not None
+    def role_world_enabled(self) -> bool:
+        return self._world_registry is not None
 
-    async def _run_with_role_model(self, role_id: str, operation):
-        if self._model_runtime is None:
+    async def _run_with_role_world(self, role_id: str, operation):
+        if self._world_registry is None:
             return await operation(None)
         clean_role_id = str(role_id or "").strip()
         if not clean_role_id:
             raise ValueError("子 Agent 缺少角色运行时上下文")
-        with self._model_runtime.activate(clean_role_id, "chat") as snapshot:
+        world = await self._world_registry.get(clean_role_id)
+        with world.activate_model("chat") as snapshot:
             runtime = SubagentRuntime(
                 provider=snapshot.provider,
                 model=snapshot.model,

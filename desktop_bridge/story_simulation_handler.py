@@ -9,8 +9,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from core.roles import RoleStore
-from core.roles.model_runtime import RoleModelRuntime
+from core.roles import RoleStore, RoleWorldRegistry
 
 from story_simulation.catalog import StoryCatalog
 from story_simulation.director import ProviderStoryDirector, StoryDirector
@@ -42,14 +41,14 @@ class StorySimulationHandler:
         workspace: Path,
         role_store: RoleStore,
         director: StoryDirector | None = None,
-        model_runtime: RoleModelRuntime | None = None,
+        world_registry: RoleWorldRegistry | None = None,
         image_tool: Any | None = None,
     ) -> None:
         self._roles = role_store
         self._catalog = StoryCatalog(workspace)
         self._repositories: dict[str, StoryRepository] = {}
         self._director = director
-        self._model_runtime = model_runtime
+        self._world_registry = world_registry
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._resource_tasks: dict[str, asyncio.Task[None]] = {}
         self._image_generator = StoryImageGenerator(image_tool)
@@ -527,12 +526,12 @@ class StorySimulationHandler:
                 schedule_visual_resource=self._schedule_story_cg,
             )
             return
-        if self._model_runtime is None:
+        if self._world_registry is None:
             await self._fail_generation(
                 service,
                 turn,
                 emit_event,
-                StoryProviderUnavailableError("Story Director 尚未配置角色模型运行时"),
+                StoryProviderUnavailableError("Story Director 尚未配置角色世界"),
             )
             return
         story_id = service.repository.story_id_for_turn(str(turn["id"]))
@@ -547,7 +546,8 @@ class StorySimulationHandler:
             )
             return
         try:
-            with self._model_runtime.activate(role_id, "chat") as snapshot:
+            world = await self._world_registry.get(role_id)
+            with world.activate_model("chat") as snapshot:
                 runtime_service = self._service(
                     service.repository,
                     director=ProviderStoryDirector(
@@ -560,7 +560,7 @@ class StorySimulationHandler:
                     emit_event,
                     schedule_visual_resource=self._schedule_story_cg,
                 )
-        except (KeyError, ValueError) as exc:
+        except (KeyError, RuntimeError, ValueError) as exc:
             await self._fail_generation(
                 service,
                 turn,

@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from proactive_v2.presence import PresenceStore
     from core.roles.relationship_runtime import RoleRelationshipRuntimeService
     from core.roles.world import RoleWorldRegistry
-    from core.roles.model_runtime import RoleModelRuntime
     from conversation.service import ConversationService
     from session.manager import SessionManager
 
@@ -95,7 +94,6 @@ class AgentLoopDeps:
     reasoner: "Reasoner | None" = None
     core_runner: "CoreRunner | None" = None
     role_world_registry: "RoleWorldRegistry | None" = None
-    role_model_runtime: "RoleModelRuntime | None" = None
 
 @dataclass
 class AgentLoopConfig:

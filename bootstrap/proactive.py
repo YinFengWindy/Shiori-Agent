@@ -15,7 +15,6 @@ from core.roles.model_runtime import RoleAwareProvider
 from proactive_v2.config_loader import load_proactive_config
 from proactive_v2.loop import ProactiveLoop
 from proactive_v2.memory_optimizer import MemoryOptimizer, MemoryOptimizerLoop
-from core.roles.model_runtime import RoleModelRuntime
 from proactive_v2.presence import PresenceStore
 from proactive_v2.state import ProactiveStateStore
 from session.manager import SessionManager
@@ -24,6 +23,7 @@ if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from core.memory.markdown import MarkdownMemoryStore
     from core.memory.runtime import MemoryRuntime
+    from core.roles.world import RoleWorldRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,6 @@ def build_proactive_runtime(
     proactive_provider = _build_proactive_provider(config, provider)
     loops: dict[str, ProactiveLoop] = {}
     role_world_registry = agent_loop.role_world_registry
-    role_model_runtime = getattr(agent_loop, "role_model_runtime", None)
     role_aware_provider = RoleAwareProvider(proactive_provider)
     for role in roles:
         target = role.proactive
@@ -103,7 +102,6 @@ def build_proactive_runtime(
                 channel=target.target_channel,
                 chat_id=target.target_chat_id,
                 registry=role_world_registry,
-                model_runtime=role_model_runtime,
             ),
         )
         loops[role.id] = loop
@@ -138,7 +136,6 @@ def _build_role_tick_dispatcher(
     channel: str,
     chat_id: str,
     registry,
-    model_runtime,
 ):
     if registry is None:
         raise RuntimeError("主动任务需要 RoleWorldRegistry")
@@ -153,9 +150,8 @@ def _build_role_tick_dispatcher(
             work_kind="proactive_tick",
         )
         async def run_with_model_snapshot():
-            if model_runtime is None:
-                return await operation()
-            with model_runtime.activate(role_id, "chat"):
+            world = await registry.get(role_id)
+            with world.activate_model("chat"):
                 return await operation()
 
         return await registry.dispatch_proactive_tick(
@@ -171,7 +167,7 @@ def build_memory_optimizer_task(
     *,
     provider: LLMProvider,
     memory_store: "MarkdownMemoryStore",
-    model_runtime: RoleModelRuntime | None = None,
+    world_registry: "RoleWorldRegistry | None" = None,
 ) -> tuple[list, "MemoryOptimizer | None"]:
     if not config.memory_optimizer_enabled:
         logger.info("MemoryOptimizerLoop 已禁用（memory_optimizer_enabled=false）")
@@ -182,7 +178,7 @@ def build_memory_optimizer_task(
         provider=provider,
         model=config.model,
         workspace=memory_store.memory_dir.parent,
-        model_runtime=model_runtime,
+        world_registry=world_registry,
     )
     interval = config.memory_optimizer_interval_seconds
     logger.info("MemoryOptimizerLoop 已启动，间隔=%ss (%.1fh)", interval, interval / 3600)

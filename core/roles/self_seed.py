@@ -10,7 +10,7 @@ from agent.provider import LLMProvider
 from .store import RoleRecord
 
 if TYPE_CHECKING:
-    from core.roles.model_runtime import RoleModelRuntime
+    from core.roles.world import RoleWorldRegistry
 
 _SELF_SEED_SYSTEM = (
     "你正在为一个新创建的角色生成首版 SELF.md。"
@@ -55,14 +55,15 @@ class LlmRoleSelfSeedGenerator:
     provider: LLMProvider
     model: str
     timeout_s: float = 60.0
-    model_runtime: RoleModelRuntime | None = None
+    world_registry: RoleWorldRegistry | None = None
 
     def generate(self, role: RoleRecord) -> str:
         return asyncio.run(self.agenerate(role))
 
     async def agenerate(self, role: RoleRecord) -> str:
-        if self.model_runtime is not None:
-            with self.model_runtime.activate(role.id, "chat") as snapshot:
+        if self.world_registry is not None:
+            world = await self.world_registry.get(role.id)
+            with world.activate_model("chat") as snapshot:
                 return await self._agenerate(
                     role,
                     provider=snapshot.provider,

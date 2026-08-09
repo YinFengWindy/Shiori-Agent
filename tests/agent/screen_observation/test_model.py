@@ -133,10 +133,14 @@ async def test_analyze_uses_the_role_visual_model_snapshot() -> None:
     )
     activations: list[tuple[str, str]] = []
 
-    class _ModelRuntime:
+    class _WorldRegistry:
+        async def get(self, role_id: str):
+            self.role_id = role_id
+            return self
+
         @contextmanager
-        def activate(self, role_id: str, purpose: str):
-            activations.append((role_id, purpose))
+        def activate_model(self, purpose: str):
+            activations.append((self.role_id, purpose))
             yield SimpleNamespace(provider=provider, model="role-vision-model")
 
     adapter = ObservationModelAdapter(
@@ -147,7 +151,7 @@ async def test_analyze_uses_the_role_visual_model_snapshot() -> None:
         ),
         provider=None,
         model="",
-        model_runtime=_ModelRuntime(),
+        world_registry=_WorldRegistry(),
     )
 
     await adapter.analyze(_payload())

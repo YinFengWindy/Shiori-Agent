@@ -174,22 +174,29 @@ class RecordingStoryProvider:
         )
 
 
-class RecordingStoryModelRuntime:
+class RecordingStoryWorldRegistry:
     def __init__(self, *, model: str = "first-model", block_call: int | None = None) -> None:
         self.model = model
         self.provider = RecordingStoryProvider(block_call=block_call)
         self.activations: list[tuple[str, str, str]] = []
 
+    async def get(self, role_id: str):
+        self.role_id = role_id
+        return self
+
     @contextmanager
-    def activate(self, role_id: str, purpose: str):
+    def activate_model(self, purpose: str):
         snapshot = SimpleNamespace(provider=self.provider, model=self.model)
-        self.activations.append((role_id, purpose, self.model))
+        self.activations.append((self.role_id, purpose, self.model))
         yield snapshot
 
 
-class MissingStoryModelRuntime:
+class MissingStoryWorldRegistry:
+    async def get(self, _role_id: str):
+        return self
+
     @contextmanager
-    def activate(self, _role_id: str, _purpose: str):
+    def activate_model(self, _purpose: str):
         raise ValueError("角色引用了不存在的模型注册: missing-model")
         yield
 
@@ -246,11 +253,11 @@ async def test_story_turns_capture_the_role_dialogue_model_inside_each_task(tmp_
         id="role-1",
         to_dict=lambda: {"id": "role-1", "name": "澪", "system_prompt": "保持克制"},
     )
-    model_runtime = RecordingStoryModelRuntime(block_call=2)
+    world_registry = RecordingStoryWorldRegistry(block_call=2)
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
-        model_runtime=model_runtime,
+        world_registry=world_registry,
     )
     payload = {
         "title": "夏日来信",
@@ -285,9 +292,9 @@ async def test_story_turns_capture_the_role_dialogue_model_inside_each_task(tmp_
         request_id="input-1",
         emit_event=lambda _event: None,
     )
-    await model_runtime.provider.started.wait()
-    model_runtime.model = "second-model"
-    model_runtime.provider.release.set()
+    await world_registry.provider.started.wait()
+    world_registry.model = "second-model"
+    world_registry.provider.release.set()
     await _wait_for_director_tasks(handler)
     story = (
         await handler.handle(
@@ -306,12 +313,12 @@ async def test_story_turns_capture_the_role_dialogue_model_inside_each_task(tmp_
     )
     await _wait_for_director_tasks(handler)
 
-    assert model_runtime.activations == [
+    assert world_registry.activations == [
         ("role-1", "chat", "first-model"),
         ("role-1", "chat", "first-model"),
         ("role-1", "chat", "second-model"),
     ]
-    assert model_runtime.provider.calls == ["first-model", "first-model", "second-model"]
+    assert world_registry.provider.calls == ["first-model", "first-model", "second-model"]
     await handler.aclose()
 
 
@@ -324,7 +331,7 @@ async def test_story_turn_fails_when_the_role_model_registration_is_missing(tmp_
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
-        model_runtime=MissingStoryModelRuntime(),
+        world_registry=MissingStoryWorldRegistry(),
     )
     events: list[dict] = []
 
@@ -788,14 +795,14 @@ async def test_story_recovery_restarts_an_interrupted_player_turn(tmp_path) -> N
     repository.close()
     catalog.close()
 
-    model_runtime = RecordingStoryModelRuntime(block_call=1)
+    world_registry = RecordingStoryWorldRegistry(block_call=1)
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
-        model_runtime=model_runtime,
+        world_registry=world_registry,
     )
     await handler.handle("stories.list", {}, request_id="list-1", emit_event=lambda _event: None)
-    await model_runtime.provider.started.wait()
+    await world_registry.provider.started.wait()
     recovered = (
         await handler.handle(
             "stories.get",
@@ -807,8 +814,8 @@ async def test_story_recovery_restarts_an_interrupted_player_turn(tmp_path) -> N
 
     assert recovered["turns"][1]["status"] == "generating"
     assert recovered["turns"][1]["attemptId"] != original_attempt["attempt_id"]
-    assert model_runtime.activations == [("role-1", "chat", "first-model")]
-    model_runtime.provider.release.set()
+    assert world_registry.activations == [("role-1", "chat", "first-model")]
+    world_registry.provider.release.set()
     await handler.aclose()
 
 

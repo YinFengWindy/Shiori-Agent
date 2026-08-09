@@ -161,7 +161,7 @@ subagent 没有看过当前会话。像给刚进房间的同事写交接文档�
                 return "错误：当前会话上下文缺失，无法创建后台任务"
             ctx = self._tool_registry.get_context()
             role_id = str(ctx.get("role_id", "") or "").strip()
-            if self._manager.role_model_runtime_enabled is True and not role_id:
+            if self._manager.role_world_enabled is True and not role_id:
                 return "错误：当前角色上下文缺失，无法创建子 Agent"
             spawn_kwargs = {
                 "task": task,
@@ -180,7 +180,7 @@ subagent 没有看过当前会话。像给刚进房间的同事写交接文档�
 
         ctx = self._tool_registry.get_context()
         role_id = str(ctx.get("role_id", "") or "").strip()
-        if self._manager.role_model_runtime_enabled is True and not role_id:
+        if self._manager.role_world_enabled is True and not role_id:
             return "错误：当前角色上下文缺失，无法创建子 Agent"
         spawn_sync_kwargs = {"task": task, "label": label, "profile": profile}
         if role_id:

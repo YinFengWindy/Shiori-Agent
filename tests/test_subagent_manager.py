@@ -206,10 +206,14 @@ async def test_spawn_sync_uses_shorter_iteration_budget(tmp_path):
 async def test_spawn_sync_uses_the_origin_role_model_snapshot(tmp_path):
     activations: list[tuple[str, str]] = []
 
-    class _ModelRuntime:
+    class _WorldRegistry:
+        async def get(self, role_id: str):
+            self.role_id = role_id
+            return self
+
         @contextmanager
-        def activate(self, role_id: str, purpose: str):
-            activations.append((role_id, purpose))
+        def activate_model(self, purpose: str):
+            activations.append((self.role_id, purpose))
             yield SimpleNamespace(provider=cast(Any, _Provider()), model="role-model")
 
     manager = SubagentManager(
@@ -219,7 +223,7 @@ async def test_spawn_sync_uses_the_origin_role_model_snapshot(tmp_path):
         model="base-model",
         max_tokens=256,
         fetch_requester=object(),  # type: ignore[arg-type]
-        model_runtime=_ModelRuntime(),
+        world_registry=_WorldRegistry(),
     )
     observed: dict[str, object] = {}
 

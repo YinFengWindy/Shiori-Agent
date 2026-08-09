@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 
@@ -127,6 +129,38 @@ async def test_registry_allows_different_roles_to_execute_independently(tmp_path
     await asyncio.wait_for(asyncio.gather(mira_started.wait(), shiori_started.wait()), 0.2)
     release.set()
     await asyncio.gather(mira_task, shiori_task)
+
+
+@pytest.mark.asyncio
+async def test_world_owns_role_model_activation(tmp_path):
+    repository = RoleRepository(RoleStore(tmp_path))
+    role = repository.create_role(role_id="mira", name="Mira", system_prompt="test")
+    activations: list[tuple[str, str]] = []
+
+    class _ModelRuntime:
+        @contextmanager
+        def activate(self, role_id: str, purpose: str):
+            activations.append((role_id, purpose))
+            yield SimpleNamespace(model="role-model")
+
+    registry = RoleWorldRegistry(repository, model_resolver=_ModelRuntime())
+    world = await registry.get(role.id)
+
+    with world.activate_model("vision") as snapshot:
+        assert snapshot.model == "role-model"
+
+    assert activations == [("mira", "vision")]
+
+
+@pytest.mark.asyncio
+async def test_world_rejects_model_activation_when_capability_is_missing(tmp_path):
+    repository = RoleRepository(RoleStore(tmp_path))
+    role = repository.create_role(role_id="mira", name="Mira", system_prompt="test")
+    world = await RoleWorldRegistry(repository).get(role.id)
+
+    with pytest.raises(RuntimeError, match="未配置模型能力"):
+        with world.activate_model("chat"):
+            pass
 
 
 @pytest.mark.asyncio

@@ -4,12 +4,14 @@ import asyncio
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, TypeVar
+from typing import Any, Generator, TypeVar
 from uuid import uuid4
 
 from .services import RoleRepository
+from .model_runtime import ModelPurpose, RoleModelRuntime, RoleModelSnapshot
 from .store import RoleRecord
 
 
@@ -92,8 +94,14 @@ class RoleExecutionContext:
 class RoleWorld:
     """Owns one role's mutable execution boundaries inside a process."""
 
-    def __init__(self, role: RoleRecord) -> None:
+    def __init__(
+        self,
+        role: RoleRecord,
+        *,
+        model_resolver: RoleModelRuntime | None = None,
+    ) -> None:
         self._role = role
+        self._model_resolver = model_resolver
         # A role session is shared by every transport, so all mutable role work
         # must enter one role-wide turn gate regardless of its source thread.
         self._turn_lock = asyncio.Lock()
@@ -125,6 +133,26 @@ class RoleWorld:
         """Returns the number of work items currently executing in this world."""
 
         return self._active_work
+
+    @property
+    def models_enabled(self) -> bool:
+        """Returns whether this world can resolve role-owned model snapshots."""
+
+        return self._model_resolver is not None
+
+    @contextmanager
+    def activate_model(
+        self,
+        purpose: ModelPurpose,
+    ) -> Generator[RoleModelSnapshot]:
+        """Activates one immutable model snapshot owned by this role world."""
+
+        if self._closing:
+            raise RuntimeError(f"角色世界已停止: {self.role_id}")
+        if self._model_resolver is None:
+            raise RuntimeError(f"角色世界未配置模型能力: {self.role_id}")
+        with self._model_resolver.activate(self.role_id, purpose) as snapshot:
+            yield snapshot
 
     def begin_closing(self) -> None:
         """Rejects new work while existing handlers finish or are cancelled."""
@@ -213,8 +241,14 @@ class RoleWorld:
 class RoleWorldRegistry:
     """Creates and validates the process-local worlds that own role work."""
 
-    def __init__(self, repository: RoleRepository) -> None:
+    def __init__(
+        self,
+        repository: RoleRepository,
+        *,
+        model_resolver: RoleModelRuntime | None = None,
+    ) -> None:
         self._repository = repository
+        self._model_resolver = model_resolver
         self._worlds: dict[str, RoleWorld] = {}
         self._lock = asyncio.Lock()
 
@@ -227,7 +261,7 @@ class RoleWorldRegistry:
             if current is not None:
                 current.refresh_role(role)
                 return current
-            world = RoleWorld(role)
+            world = RoleWorld(role, model_resolver=self._model_resolver)
             self._worlds[role.id] = world
             return world
 

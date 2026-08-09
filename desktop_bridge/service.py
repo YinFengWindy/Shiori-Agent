@@ -28,7 +28,7 @@ from core.roles import (
     RoleRelationshipRuntimeService,
     RoleStore,
 )
-from core.roles.model_runtime import RoleModelRuntime
+from core.roles.world import RoleWorldRegistry
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.app_service import DesktopAppService
 from desktop_bridge.chat_requests import DesktopChatRequestHandler
@@ -96,7 +96,7 @@ class DesktopBridgeService:
         memory_optimizer: Any | None = None,
         observation_service: ScreenObservationService | None = None,
         voice_service: VoiceService | None = None,
-        role_model_runtime: RoleModelRuntime | None = None,
+        role_world_registry: RoleWorldRegistry | None = None,
         story_director: Any | None = None,
         image_tool: Any | None = None,
     ) -> None:
@@ -113,7 +113,7 @@ class DesktopBridgeService:
             self._proactive_message_listener,
         )
         self.config = config
-        self.role_model_runtime = role_model_runtime
+        self.role_world_registry = role_world_registry
         self._event_listeners: set[
             Callable[[dict[str, Any]], Awaitable[None] | None]
         ] = set()
@@ -198,7 +198,7 @@ class DesktopBridgeService:
             workspace=workspace,
             role_store=role_store,
             director=story_director,
-            model_runtime=role_model_runtime,
+            world_registry=role_world_registry,
             image_tool=image_tool,
         )
         self.observation_service = observation_service
@@ -512,7 +512,7 @@ class DesktopBridgeService:
         return LlmRoleSelfSeedGenerator(
             provider=provider,
             model=self.config.model,
-            model_runtime=self.role_model_runtime,
+            world_registry=self.role_world_registry,
         )
 
     async def handle(
