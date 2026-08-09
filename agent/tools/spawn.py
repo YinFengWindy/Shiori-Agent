@@ -159,21 +159,33 @@ subagent 没有看过当前会话。像给刚进房间的同事写交接文档�
                 chat_id = str(ctx.get("chat_id", "") or "").strip()
             if not channel or not chat_id:
                 return "错误：当前会话上下文缺失，无法创建后台任务"
+            ctx = self._tool_registry.get_context()
+            role_id = str(ctx.get("role_id", "") or "").strip()
+            if self._manager.role_model_runtime_enabled is True and not role_id:
+                return "错误：当前角色上下文缺失，无法创建子 Agent"
+            spawn_kwargs = {
+                "task": task,
+                "label": label,
+                "origin_channel": channel,
+                "origin_chat_id": chat_id,
+                "decision": decision,
+                "profile": profile,
+                "retry_count": retry_count,
+            }
+            if role_id:
+                spawn_kwargs["role_id"] = role_id
             return await self._manager.spawn(
-                task=task,
-                label=label,
-                origin_channel=channel,
-                origin_chat_id=chat_id,
-                decision=decision,
-                profile=profile,
-                retry_count=retry_count,
+                **spawn_kwargs,
             )
 
-        return await self._manager.spawn_sync(
-            task=task,
-            label=label,
-            profile=profile,
-        )
+        ctx = self._tool_registry.get_context()
+        role_id = str(ctx.get("role_id", "") or "").strip()
+        if self._manager.role_model_runtime_enabled is True and not role_id:
+            return "错误：当前角色上下文缺失，无法创建子 Agent"
+        spawn_sync_kwargs = {"task": task, "label": label, "profile": profile}
+        if role_id:
+            spawn_sync_kwargs["role_id"] = role_id
+        return await self._manager.spawn_sync(**spawn_sync_kwargs)
 
 
 class SpawnManageTool(Tool):

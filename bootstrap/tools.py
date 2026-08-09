@@ -90,6 +90,7 @@ class CoreRuntime:
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
     role_world_registry: RoleWorldRegistry
+    role_model_runtime: RoleModelRuntime | None = None
     vl_provider: LLMProvider | None = None
     image_sync_service: ExternalImageSyncService | None = None
     agent_provider: LLMProvider | None = None
@@ -255,6 +256,7 @@ def build_registered_tools(
     event_publisher: EventBus | None = None,
     agent_loop_provider: Callable[[], Any] | None = None,
     role_repository: RoleRepository | None = None,
+    role_model_runtime: RoleModelRuntime | None = None,
 ) -> tuple[
     ToolRegistry,
     MessagePushTool,
@@ -284,6 +286,7 @@ def build_registered_tools(
             light_provider=light_provider,
             http_resources=http_resources,
             event_publisher=event_publisher,
+            role_model_runtime=role_model_runtime,
         ),
     )
     memory_runtime = memory_result.extras["memory_runtime"]
@@ -293,6 +296,7 @@ def build_registered_tools(
         provider=provider,
         vl_provider=vl_provider,
         memory=memory_runtime.engine,
+        model_runtime=role_model_runtime,
     )
     tools.register(
         ObserveScreenTool(
@@ -332,6 +336,7 @@ def build_registered_tools(
                 memory_engine=memory_runtime.engine,
                 scheduler=scheduler,
                 event_publisher=event_publisher,
+                role_model_runtime=role_model_runtime,
             ),
         )
         maybe_mcp = result.extras.get("mcp_registry")
@@ -395,6 +400,7 @@ def _build_loop_deps(
         relationship_runtime,
         provider=provider,
         model=config.agent_model or config.model,
+        model_runtime=role_model_runtime,
     )
     _bind_memory_lifecycle_if_supported(
         markdown=memory_runtime.markdown.maintenance,
@@ -521,6 +527,7 @@ def build_core_runtime(
             vl_provider=vl_provider,
             session_store=session_manager._store,
             event_publisher=event_bus,
+            role_model_runtime=role_model_runtime,
             agent_loop_provider=lambda: loop_ref.get("loop"),
             role_repository=role_repository,
         )
@@ -625,6 +632,7 @@ def build_core_runtime(
         presence=presence,
         relationship_runtime=relationship_runtime,
         role_world_registry=role_world_registry,
+        role_model_runtime=role_model_runtime,
         plugin_manager=plugin_manager,
         screen_observation=screen_observation,
     )

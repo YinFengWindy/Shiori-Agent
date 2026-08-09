@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from agent.provider import LLMProvider
 
 if TYPE_CHECKING:
+    from core.roles.model_runtime import RoleModelRuntime
     from .service import RoleRelationshipRuntimeService
 
 _RELATIONSHIP_SYSTEM = (
@@ -79,10 +80,12 @@ class RelationshipSnapshotOptimizer:
         provider: LLMProvider,
         model: str,
         max_tokens: int = 2048,
+        model_runtime: RoleModelRuntime | None = None,
     ) -> None:
         self._runtime = runtime
         self._provider = provider
         self._model = model
+        self._model_runtime = model_runtime
         self._max_tokens = max_tokens
         self._lock = asyncio.Lock()
 
@@ -97,13 +100,23 @@ class RelationshipSnapshotOptimizer:
         async with self._lock:
             now = datetime.now().astimezone()
             try:
-                snapshot = await self._runtime.generate_snapshot_via_llm(
-                    clean_role_id,
-                    provider=self._provider,
-                    model=self._model,
-                    max_tokens=self._max_tokens,
-                    now=now,
-                )
+                if self._model_runtime is None:
+                    snapshot = await self._generate(
+                        clean_role_id,
+                        provider=self._provider,
+                        model=self._model,
+                        now=now,
+                    )
+                else:
+                    with self._model_runtime.activate(
+                        clean_role_id, "chat"
+                    ) as model_snapshot:
+                        snapshot = await self._generate(
+                            clean_role_id,
+                            provider=model_snapshot.provider,
+                            model=model_snapshot.model,
+                            now=now,
+                        )
                 self._runtime.recompute_loneliness(clean_role_id, now=now)
                 return snapshot
             except Exception as exc:
@@ -113,3 +126,19 @@ class RelationshipSnapshotOptimizer:
                     attempted_at=now,
                 )
                 return None
+
+    async def _generate(
+        self,
+        role_id: str,
+        *,
+        provider: LLMProvider,
+        model: str,
+        now: datetime,
+    ):
+        return await self._runtime.generate_snapshot_via_llm(
+            role_id,
+            provider=provider,
+            model=model,
+            max_tokens=self._max_tokens,
+            now=now,
+        )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -118,3 +119,38 @@ async def test_analyze_rejects_model_tool_actions() -> None:
     )
     with pytest.raises(ValueError, match="未授权桌面动作"):
         await adapter.analyze(_payload())
+
+
+@pytest.mark.asyncio
+async def test_analyze_uses_the_role_visual_model_snapshot() -> None:
+    provider = SimpleNamespace(
+        chat=AsyncMock(
+            return_value=SimpleNamespace(
+                content='{"interface_summary":"编辑器","activity_key":"writing","targets":[],"risks":[]}',
+                tool_calls=[],
+            )
+        )
+    )
+    activations: list[tuple[str, str]] = []
+
+    class _ModelRuntime:
+        @contextmanager
+        def activate(self, role_id: str, purpose: str):
+            activations.append((role_id, purpose))
+            yield SimpleNamespace(provider=provider, model="role-vision-model")
+
+    adapter = ObservationModelAdapter(
+        roles=SimpleNamespace(
+            get_required=lambda _role_id: SimpleNamespace(
+                name="Mira", description="陪伴者", system_prompt="用中文回复"
+            )
+        ),
+        provider=None,
+        model="",
+        model_runtime=_ModelRuntime(),
+    )
+
+    await adapter.analyze(_payload())
+
+    assert activations == [("mira", "vision")]
+    assert provider.chat.await_args.kwargs["model"] == "role-vision-model"

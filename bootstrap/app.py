@@ -162,6 +162,7 @@ class AppRuntime:
                 self.config,
                 provider=self.provider,
                 memory_store=self.memory_runtime.markdown.store,
+                model_runtime=getattr(self.core, "role_model_runtime", None),
             )
             self.core.memory_optimizer = self._memory_optimizer
             self._background_tasks.extend(
