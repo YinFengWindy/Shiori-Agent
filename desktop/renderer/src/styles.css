@@ -127,26 +127,26 @@
 }
 
 .settings-hover-toolbar {
+  max-height: 8px;
+  overflow: hidden;
   opacity: 0;
-  transform: translateY(calc(-100% + 8px));
   transition:
-    transform 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    max-height 200ms cubic-bezier(0.23, 1, 0.32, 1),
     opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
-  will-change: transform, opacity;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .settings-hover-toolbar:hover,
   .settings-hover-toolbar:focus-within {
+    max-height: 12rem;
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
 @media (hover: none), (pointer: coarse) {
   .settings-hover-toolbar {
+    max-height: 12rem;
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -157,6 +157,7 @@
 
   .settings-hover-toolbar:hover,
   .settings-hover-toolbar:focus-within {
+    max-height: 12rem;
     opacity: 1;
   }
 }

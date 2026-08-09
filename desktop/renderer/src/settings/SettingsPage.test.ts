@@ -21,9 +21,9 @@ describe("SettingsPage layout", () => {
     assert.match(settingsContentClass, /px-3 py-5 sm:px-5 lg:px-7 lg:py-7/);
   });
 
-  it("keeps the toolbar out of layout flow for hover reveal", () => {
+  it("keeps the hover toolbar in layout flow so expansion pushes content down", () => {
     assert.match(settingsToolbarClass, /settings-hover-toolbar/);
-    assert.match(settingsToolbarClass, /absolute/);
-    assert.match(settingsContentClass, /h-full/);
+    assert.doesNotMatch(settingsToolbarClass, /absolute/);
+    assert.doesNotMatch(settingsContentClass, /h-full/);
   });
 });

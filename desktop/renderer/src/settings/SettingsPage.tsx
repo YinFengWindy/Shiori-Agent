@@ -22,10 +22,10 @@ type SettingsPageProps = {
 export const settingsPageSurfaceClass = "settings-page bg-white";
 
 /** Responsive spacing for the settings toolbar. */
-export const settingsToolbarClass = "settings-hover-toolbar absolute inset-x-0 top-0 z-20 border-b border-[#E8EBF0] bg-white px-3 py-3 sm:px-5 lg:px-7";
+export const settingsToolbarClass = "settings-hover-toolbar border-b border-[#E8EBF0] bg-white px-3 py-3 sm:px-5 lg:px-7";
 
 /** Responsive spacing for the scrollable settings content. */
-export const settingsContentClass = "scrollbar-soft h-full overflow-y-auto bg-white px-3 py-5 sm:px-5 lg:px-7 lg:py-7";
+export const settingsContentClass = "relative scrollbar-soft overflow-y-auto bg-white px-3 py-5 sm:px-5 lg:px-7 lg:py-7";
 
 /** Renders the active settings domain and delegates persistence to its controller. */
 export function SettingsPage({ bridgeReady, search, section, onMetaChange }: SettingsPageProps) {
@@ -77,12 +77,12 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   }
 
   return (
-    <section className={cx(settingsPageSurfaceClass, "relative h-full overflow-hidden")} data-testid="settings-page">
+    <section className={cx(settingsPageSurfaceClass, "relative grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden")} data-testid="settings-page">
       <SettingsSaveFeedback
         phase={controller.savePhase}
         message={controller.statusMessage}
       />
-      <div className="settings-content relative h-full min-h-0 overflow-hidden">
+      <div className="settings-content grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
         <div className={settingsToolbarClass}>
           <SettingsPageToolbar
             bridgeReady={bridgeReady}
