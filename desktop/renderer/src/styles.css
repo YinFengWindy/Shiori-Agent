@@ -131,8 +131,8 @@
   overflow: hidden;
   opacity: 0;
   transition:
-    max-height 200ms cubic-bezier(0.23, 1, 0.32, 1),
-    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    max-height 260ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -152,7 +152,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .settings-hover-toolbar {
-    transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
   }
 
   .settings-hover-toolbar:hover,
