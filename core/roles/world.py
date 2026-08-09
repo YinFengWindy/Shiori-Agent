@@ -7,12 +7,14 @@ from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Generator, TypeVar
+from typing import TYPE_CHECKING, Any, Generator, TypeVar
 from uuid import uuid4
 
 from .services import RoleRepository
-from .model_runtime import ModelPurpose, RoleModelRuntime, RoleModelSnapshot
 from .store import RoleRecord
+
+if TYPE_CHECKING:
+    from .model_runtime import ModelPurpose, RoleModelRuntime, RoleModelSnapshot
 
 
 T = TypeVar("T")
