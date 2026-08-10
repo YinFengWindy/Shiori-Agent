@@ -1,4 +1,6 @@
 import asyncio
+from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -198,3 +200,47 @@ async def test_spawn_sync_uses_shorter_iteration_budget(tmp_path):
     assert "退出原因: completed" in result
     assert observed["profile"] == "research"
     assert observed["max_iterations"] == 10
+
+
+@pytest.mark.asyncio
+async def test_spawn_sync_uses_the_origin_role_model_snapshot(tmp_path):
+    activations: list[tuple[str, str]] = []
+
+    class _WorldRegistry:
+        async def get(self, role_id: str):
+            self.role_id = role_id
+            return self
+
+        @contextmanager
+        def activate_model(self, purpose: str):
+            activations.append((self.role_id, purpose))
+            yield SimpleNamespace(provider=cast(Any, _Provider()), model="role-model")
+
+    manager = SubagentManager(
+        provider=cast(Any, _Provider()),
+        workspace=tmp_path,
+        bus=MessageBus(),
+        model="base-model",
+        max_tokens=256,
+        fetch_requester=object(),  # type: ignore[arg-type]
+        world_registry=_WorldRegistry(),
+    )
+    observed: dict[str, object] = {}
+
+    class _FakeSubAgent:
+        last_exit_reason = "completed"
+
+        async def run(self, _task: str) -> str:
+            return "ok"
+
+    def _fake_build_subagent(**kwargs):
+        observed["runtime"] = kwargs["runtime"]
+        return _FakeSubAgent()
+
+    manager._build_subagent = _fake_build_subagent  # type: ignore[assignment]
+
+    await manager.spawn_sync(task="research this", label="job", role_id="mira")
+
+    runtime = observed["runtime"]
+    assert activations == [("mira", "chat")]
+    assert getattr(runtime, "model") == "role-model"

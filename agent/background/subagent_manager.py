@@ -7,6 +7,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent.background.runtime import (
     AgentBackgroundJobRunner,
@@ -29,6 +30,9 @@ from bus.queue import MessageBus
 from core.common.strategy_trace import build_strategy_trace_envelope
 from core.net.http import HttpRequester
 from prompts.background import build_spawn_subagent_prompt
+
+if TYPE_CHECKING:
+    from core.roles.world import RoleWorldRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +69,7 @@ class SubagentManager:
         max_tokens: int,
         fetch_requester: HttpRequester,
         multimodal: bool = True,
+        world_registry: RoleWorldRegistry | None = None,
     ) -> None:
         self._workspace = workspace
         self._bus = bus
@@ -73,6 +78,7 @@ class SubagentManager:
             model=model,
             max_tokens=max_tokens,
         )
+        self._world_registry = world_registry
         self._fetch_requester = fetch_requester
         self._multimodal = multimodal
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
@@ -98,6 +104,7 @@ class SubagentManager:
         task: str,
         label: str | None,
         profile: str = PROFILE_RESEARCH,
+        role_id: str = "",
     ) -> str:
         """同步执行 subagent，阻塞当前 turn 直到完成，结果作为 tool result 直接返回。
 
@@ -114,14 +121,26 @@ class SubagentManager:
             profile,
         )
 
-        subagent = self._build_subagent(
-            task_dir=task_dir,
-            profile=profile,
-            max_iterations=_SYNC_MAX_ITERATIONS,
-        )
         try:
-            result = await subagent.run(task)
-            exit_reason = getattr(subagent, "last_exit_reason", None) or "completed"
+            async def _run(snapshot_runtime: SubagentRuntime | None) -> tuple[str, str]:
+                if snapshot_runtime is None:
+                    subagent = self._build_subagent(
+                        task_dir=task_dir,
+                        profile=profile,
+                        max_iterations=_SYNC_MAX_ITERATIONS,
+                    )
+                else:
+                    subagent = self._build_subagent(
+                        task_dir=task_dir,
+                        profile=profile,
+                        max_iterations=_SYNC_MAX_ITERATIONS,
+                        runtime=snapshot_runtime,
+                    )
+                result = await subagent.run(task)
+                exit_reason = getattr(subagent, "last_exit_reason", None) or "completed"
+                return result, exit_reason
+
+            result, exit_reason = await self._run_with_role_world(role_id, _run)
         except Exception as e:
             logger.exception("[spawn_sync] subagent failed job_id=%s err=%s", job_id, e)
             result = f"执行出错：{e}"
@@ -153,6 +172,7 @@ class SubagentManager:
         decision: SpawnDecision | None = None,
         profile: str = PROFILE_RESEARCH,
         retry_count: int = 0,
+        role_id: str = "",
     ) -> str:
         """创建后台 subagent 任务，并立即把控制权还给主 agent。"""
         job_id = uuid.uuid4().hex[:8]
@@ -184,6 +204,7 @@ class SubagentManager:
                 decision=decision,
                 profile=profile,
                 retry_count=retry_count,
+                role_id=role_id,
             ),
             name=f"spawn:{job_id}",
         )
@@ -253,28 +274,44 @@ class SubagentManager:
         decision: SpawnDecision | None,
         profile: str = PROFILE_RESEARCH,
         retry_count: int = 0,
+        role_id: str = "",
     ) -> None:
         """运行后台 subagent，并把统一结果协议回灌给主 agent。"""
-        job_runner = AgentBackgroundJobRunner(
-            lambda: self._build_subagent(task_dir=task_dir, profile=profile)
-        )
         try:
-            # 1. 先按统一 background job spec 执行 subagent，本层不直接碰 loop 细节。
-            result = await job_runner.run(
-                AgentBackgroundJobSpec(
-                    job_id=job_id,
-                    job_kind="conversation_spawn",
-                    label=label,
-                    task=task,
-                    max_iterations=_SPAWN_MAX_ITERATIONS,
-                    completion_mode="message_bus",
-                    persistence_mode="ephemeral",
-                ),
-                on_exception=lambda e: logger.exception(
-                    "[spawn] subagent failed job_id=%s err=%s", job_id, e
-                ),
-                error_result_summary=None,
-            )
+            async def _run(snapshot_runtime: SubagentRuntime | None):
+                def _build():
+                    if snapshot_runtime is None:
+                        return self._build_subagent(
+                            task_dir=task_dir,
+                            profile=profile,
+                        )
+                    return self._build_subagent(
+                        task_dir=task_dir,
+                        profile=profile,
+                        runtime=snapshot_runtime,
+                    )
+
+                job_runner = AgentBackgroundJobRunner(
+                    _build
+                )
+                # 1. 先按统一 background job spec 执行 subagent，本层不直接碰 loop 细节。
+                return await job_runner.run(
+                    AgentBackgroundJobSpec(
+                        job_id=job_id,
+                        job_kind="conversation_spawn",
+                        label=label,
+                        task=task,
+                        max_iterations=_SPAWN_MAX_ITERATIONS,
+                        completion_mode="message_bus",
+                        persistence_mode="ephemeral",
+                    ),
+                    on_exception=lambda e: logger.exception(
+                        "[spawn] subagent failed job_id=%s err=%s", job_id, e
+                    ),
+                    error_result_summary=None,
+                )
+
+            result = await self._run_with_role_world(role_id, _run)
         except asyncio.CancelledError:
             if job_id not in self._cancel_announced:
                 await self._announce_result(
@@ -357,6 +394,7 @@ class SubagentManager:
         task_dir: Path,
         profile: str = PROFILE_RESEARCH,
         max_iterations: int = _SPAWN_MAX_ITERATIONS,
+        runtime: SubagentRuntime | None = None,
     ) -> SubAgent:
         spec = build_spawn_spec(
             workspace=self._workspace,
@@ -369,7 +407,27 @@ class SubagentManager:
             profile=profile,
             multimodal=self._multimodal,
         )
-        return spec.build(self._runtime)
+        return spec.build(runtime or self._runtime)
+
+    @property
+    def role_world_enabled(self) -> bool:
+        return self._world_registry is not None
+
+    async def _run_with_role_world(self, role_id: str, operation):
+        if self._world_registry is None:
+            return await operation(None)
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("子 Agent 缺少角色运行时上下文")
+        world = await self._world_registry.get(clean_role_id)
+        with world.activate_model("chat") as snapshot:
+            runtime = SubagentRuntime(
+                provider=snapshot.provider,
+                model=snapshot.model,
+                max_tokens=self._runtime.max_tokens,
+                tool_hooks=list(self._runtime.tool_hooks),
+            )
+            return await operation(runtime)
 
     def _build_subagent_prompt(self, task_dir: Path, profile: str = PROFILE_RESEARCH) -> str:
         return build_spawn_subagent_prompt(self._workspace, task_dir, profile)

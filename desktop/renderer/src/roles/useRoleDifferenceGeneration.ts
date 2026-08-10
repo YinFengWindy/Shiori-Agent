@@ -34,7 +34,7 @@ export function useRoleDifferenceGeneration({ roleId, onRoleUpdated }: UseRoleDi
 
   async function generate(baseAsset: string): Promise<void> {
     if (!roleId || !baseAsset || state.status === "running") return;
-    setState((current) => ({
+    setState(() => ({
       ...createRoleDifferenceGenerationState(),
       status: "running",
     }));

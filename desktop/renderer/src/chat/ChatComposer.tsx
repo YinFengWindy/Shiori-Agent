@@ -7,6 +7,7 @@ import { DeleteIcon, DocumentIcon, PlusIcon, SendIcon } from "../shared/icons";
 import { toFileUrl } from "../shared/format";
 import type { ChatReplyTarget, ChatSendRequest } from "../shared/types";
 import { AutosizeTextarea } from "../shared/AutosizeTextarea";
+import { ChatModelMenu } from "./ChatModelMenu";
 
 type ChatComposerProps = {
   activeRoleId: string;
@@ -238,6 +239,7 @@ export const ChatComposer = React.memo(function ChatComposer({
             >
               <PlusIcon className="h-[14px] w-[14px] fill-current" />
             </button>
+            <ChatModelMenu activeRoleId={activeRoleId} bridgeReady={bridgeReady} />
             <div className="composer-spacer flex-1" />
             <ChatEmojiPicker
               disabled={composerInputDisabled}

@@ -22,6 +22,7 @@ class ToolsetDeps:
     light_provider: Any = None
     vl_provider: Any = None
     vl_model: str = ""
+    role_world_registry: Any = None
     http_resources: "SharedHttpResources | None" = None
     session_store: object | None = None
     push_tool: "MessagePushTool | None" = None

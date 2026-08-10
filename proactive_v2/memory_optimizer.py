@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from core.memory.markdown import MarkdownMemoryStore
+    from core.roles.world import RoleWorldRegistry
 
 from agent.memory import DEFAULT_SELF_MD
 from agent.provider import LLMProvider
@@ -216,10 +217,12 @@ class MemoryOptimizer:
         model: str,
         workspace: Path,
         max_tokens: int = 16384,
+        world_registry: RoleWorldRegistry | None = None,
     ) -> None:
         self._memory = memory
         self._provider = provider
         self._model = model
+        self._world_registry = world_registry
         self._workspace = Path(workspace)
         self._max_tokens = max_tokens
         self._lock = asyncio.Lock()
@@ -254,15 +257,32 @@ class MemoryOptimizer:
             self._active_role_id = clean_role_id
             self._active_started_at = datetime.now().astimezone().isoformat()
             try:
-                await self._optimize(role_id=clean_role_id)
+                if self._world_registry is None:
+                    await self._optimize(role_id=clean_role_id)
+                else:
+                    world = await self._world_registry.get(clean_role_id)
+                    with world.activate_model("chat") as snapshot:
+                        await self._optimize(
+                            role_id=clean_role_id,
+                            provider=snapshot.provider,
+                            model=snapshot.model,
+                        )
             finally:
                 self._active_role_id = ""
                 self._active_started_at = ""
 
-    async def _optimize(self, *, role_id: str | None = None) -> None:
+    async def _optimize(
+        self,
+        *,
+        role_id: str | None = None,
+        provider: LLMProvider | None = None,
+        model: str | None = None,
+    ) -> None:
         clean_role_id = str(role_id or "").strip()
         if not clean_role_id:
             raise ValueError("role_id required for memory optimizer")
+        active_provider = provider or self._provider
+        active_model = model or self._model
         memory_store = resolve_markdown_store(
             workspace=self._workspace,
             default_store=self._memory,
@@ -276,7 +296,12 @@ class MemoryOptimizer:
             logger.info("[memory_optimizer] 记忆和 pending 均为空，跳过优化")
             return
 
-        merged_memory = await self._merge_memory(current_memory, pending)
+        merged_memory = await self._merge_memory(
+            current_memory,
+            pending,
+            provider=active_provider,
+            model=active_model,
+        )
         if merged_memory:
             if current_memory:
                 memory_store.backup_long_term()
@@ -300,10 +325,22 @@ class MemoryOptimizer:
 
         # ── Step 2: SELF.md 更新 ──────────────────────────────────
         await asyncio.sleep(self._STEP_DELAY_SECONDS)
-        await self._update_self(memory_store, pending)
+        await self._update_self(
+            memory_store,
+            pending,
+            provider=active_provider,
+            model=active_model,
+        )
         self._mark_role_optimized(clean_role_id)
 
-    async def _merge_memory(self, memory: str, pending: str) -> str:
+    async def _merge_memory(
+        self,
+        memory: str,
+        pending: str,
+        *,
+        provider: LLMProvider,
+        model: str,
+    ) -> str:
         today = datetime.now().strftime("%Y-%m-%d")
         prompt = _MERGE_PROMPT.format(
             today=today,
@@ -315,12 +352,21 @@ class MemoryOptimizer:
                 system_content=_MERGE_SYSTEM,
                 user_content=prompt,
                 max_tokens=self._max_tokens,
+                provider=provider,
+                model=model,
             )
         except Exception as e:
             logger.error("[memory_optimizer] 记忆合并失败: %s", e)
             return ""
 
-    async def _update_self(self, memory_store: "MarkdownMemoryStore", pending: str) -> None:
+    async def _update_self(
+        self,
+        memory_store: "MarkdownMemoryStore",
+        pending: str,
+        *,
+        provider: LLMProvider,
+        model: str,
+    ) -> None:
         """只更新 SELF.md 现有保留的三段，不新增 section。"""
         self_content = memory_store.read_self().strip() or DEFAULT_SELF_MD.strip()
         if not self_content:
@@ -335,6 +381,8 @@ class MemoryOptimizer:
                 system_content=_SELF_SYSTEM,
                 user_content=prompt,
                 max_tokens=2048,
+                provider=provider,
+                model=model,
             )
             if updated:
                 memory_store.write_self(updated)
@@ -348,14 +396,16 @@ class MemoryOptimizer:
         system_content: str,
         user_content: str,
         max_tokens: int,
+        provider: LLMProvider,
+        model: str,
     ) -> str:
-        resp = await self._provider.chat(
+        resp = await provider.chat(
             messages=[
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": user_content},
             ],
             tools=[],
-            model=self._model,
+            model=model,
             max_tokens=max_tokens,
         )
         return (resp.content or "").strip()

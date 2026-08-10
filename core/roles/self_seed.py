@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from agent.memory import DEFAULT_SELF_MD
 from agent.provider import LLMProvider
 
 from .store import RoleRecord
+
+if TYPE_CHECKING:
+    from core.roles.world import RoleWorldRegistry
 
 _SELF_SEED_SYSTEM = (
     "你正在为一个新创建的角色生成首版 SELF.md。"
@@ -51,11 +55,33 @@ class LlmRoleSelfSeedGenerator:
     provider: LLMProvider
     model: str
     timeout_s: float = 60.0
+    world_registry: RoleWorldRegistry | None = None
 
     def generate(self, role: RoleRecord) -> str:
         return asyncio.run(self.agenerate(role))
 
     async def agenerate(self, role: RoleRecord) -> str:
+        if self.world_registry is not None:
+            world = await self.world_registry.get(role.id)
+            with world.activate_model("chat") as snapshot:
+                return await self._agenerate(
+                    role,
+                    provider=snapshot.provider,
+                    model=snapshot.model,
+                )
+        return await self._agenerate(
+            role,
+            provider=self.provider,
+            model=self.model,
+        )
+
+    async def _agenerate(
+        self,
+        role: RoleRecord,
+        *,
+        provider: LLMProvider,
+        model: str,
+    ) -> str:
         prompt = _SELF_SEED_PROMPT.format(
             role_name=role.name or role.id,
             role_description=role.description.strip() or "（无）",
@@ -64,13 +90,13 @@ class LlmRoleSelfSeedGenerator:
         )
         try:
             response = await asyncio.wait_for(
-                self.provider.chat(
+                provider.chat(
                     messages=[
                         {"role": "system", "content": _SELF_SEED_SYSTEM},
                         {"role": "user", "content": prompt},
                     ],
                     tools=[],
-                    model=self.model,
+                    model=model,
                     max_tokens=2048,
                 ),
                 timeout=self.timeout_s,

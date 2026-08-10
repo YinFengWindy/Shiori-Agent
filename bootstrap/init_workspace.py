@@ -184,7 +184,7 @@ def init_workspace(
     summary.notes.append(f"工作区已初始化: {workspace}")
     summary.next_steps = [
         f"1. 编辑 {config_path}，填写以下必填项：",
-        "     [llm.main]  api_key = \"sk-...\"",
+        "     [[llm.registrations]]  api_key = \"sk-...\"",
         "     [channels.telegram]  token = \"...\"   （或配置 QQ 频道）",
         "     [memory.embedding]  api_key = \"sk-...\"",
         "2. 运行 uv run python main.py 启动。",

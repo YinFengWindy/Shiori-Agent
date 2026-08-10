@@ -2,6 +2,7 @@
 
 from typing import Any, cast
 import asyncio
+from contextlib import contextmanager
 import types
 from datetime import datetime
 from unittest.mock import AsyncMock
@@ -52,6 +53,46 @@ def test_optimize_rewrites_memory_from_first_llm_call(tmp_path):
     asyncio.run(optimizer.optimize(role_id="mira"))
 
     assert role_memory.read_long_term().strip() == "## 用户画像\n- 新版本"
+
+
+def test_optimize_uses_the_role_dialogue_model_snapshot(tmp_path):
+    memory = MarkdownMemoryStore(tmp_path)
+    role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
+    role_memory.write_long_term("old profile")
+    selected_provider = _provider_with_responses(
+        "## 用户画像\n- 新版本\n",
+        "# 角色自我认知\n\n## 人格与形象\n- 稳定\n\n## 我对当前用户的理解\n- 克制\n\n## 我们关系的定义\n- 初识\n",
+    )
+    fallback_provider = types.SimpleNamespace(chat=AsyncMock(side_effect=AssertionError("fallback")))
+    activations: list[tuple[str, str]] = []
+
+    class _WorldRegistry:
+        async def get(self, role_id: str):
+            self.role_id = role_id
+            return self
+
+        @contextmanager
+        def activate_model(self, purpose: str):
+            activations.append((self.role_id, purpose))
+            yield types.SimpleNamespace(provider=selected_provider, model="role-model")
+
+    optimizer = MemoryOptimizer(
+        memory,
+        cast(Any, fallback_provider),
+        "base-model",
+        tmp_path,
+        world_registry=_WorldRegistry(),
+    )
+    optimizer._STEP_DELAY_SECONDS = 0
+
+    asyncio.run(optimizer.optimize(role_id="mira"))
+
+    assert activations == [("mira", "chat")]
+    assert [call.kwargs["model"] for call in selected_provider.chat.await_args_list] == [
+        "role-model",
+        "role-model",
+    ]
+    fallback_provider.chat.assert_not_called()
 
 
 def test_optimize_rolls_back_snapshot_when_merge_returns_empty(tmp_path):
@@ -127,6 +168,8 @@ def test_update_self_does_not_copy_user_preference_facts_verbatim(tmp_path):
         optimizer._update_self(
             role_memory,
             "- [preference] 用户偏好rurudo画风（柔光透亮质感）",
+            provider=cast(Any, provider),
+            model="test-model",
         )
     )
 
@@ -145,6 +188,8 @@ def test_request_text_response_uses_expected_chat_kwargs(tmp_path):
             system_content="system",
             user_content="user",
             max_tokens=123,
+            provider=cast(Any, provider),
+            model="test-model",
         )
     )
 

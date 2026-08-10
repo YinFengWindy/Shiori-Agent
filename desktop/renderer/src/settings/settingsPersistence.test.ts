@@ -14,22 +14,7 @@ function createSettingsFormData(
 ): SettingsFormData {
   return {
     models: {
-      provider: "openai",
-      mainModel: overrides.mainModel ?? "gpt-main",
-      mainApiKey: "",
-      mainBaseUrl: "",
-      enableThinking: false,
-      reasoningEffort: "medium",
-      multimodal: false,
-      fastModel: "gpt-fast",
-      fastApiKey: "",
-      fastBaseUrl: "",
-      agentModel: "gpt-agent",
-      agentApiKey: "",
-      agentBaseUrl: "",
-      vlModel: "gpt-vl",
-      vlApiKey: "",
-      vlBaseUrl: "",
+      registrations: overrides.registrations ?? [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "gpt-main", apiKey: "", baseUrl: "", effort: "none" }],
     },
     channels: {
       telegramToken: "",
@@ -112,7 +97,7 @@ describe("loadSettingsPageData", () => {
 describe("saveSettingsPageData", () => {
   it("does not touch role-owned channel bindings", async () => {
     const calls: string[] = [];
-    const persistedSnapshot = createSettingsSnapshot({ mainModel: "saved-model" });
+    const persistedSnapshot = createSettingsSnapshot({ registrations: [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "saved-model", apiKey: "", baseUrl: "", effort: "none" }] });
     const result = await saveSettingsPageData(
       {
         saveSettings: async () => {
@@ -127,12 +112,52 @@ describe("saveSettingsPageData", () => {
           calls.push("readSettings");
           return persistedSnapshot;
         },
-      } satisfies Pick<DesktopApi, "readSettings" | "saveSettings">,
-      createSettingsFormData({ mainModel: "draft-model" }),
+        invoke: async () => ({ id: "", type: "response", method: "roles.update", payload: {}, error: null }),
+      } satisfies Pick<DesktopApi, "readSettings" | "saveSettings" | "invoke">,
+      createSettingsFormData({ registrations: [{ id: "00000000-0000-4000-a000-000000000001", provider: "openai", model: "draft-model", apiKey: "", baseUrl: "", effort: "none" }] }),
     );
 
     assert.deepEqual(calls, ["saveSettings", "readSettings"]);
-    assert.equal(result.snapshot.formData.models.mainModel, "saved-model");
+    assert.equal(result.snapshot.formData.models.registrations[0]?.model, "saved-model");
     assert.equal(result.nextDraft.channels.telegramToken, "");
+  });
+
+  it("commits deferred role reference changes only after settings save", async () => {
+    const calls: string[] = [];
+    const draft = createSettingsFormData();
+    draft.pendingRoleModelUpdates = [{
+      roleId: "role-1",
+      runtimeConfig: { dialogue_model_registration_id: "registration-2", visual_model_registration_id: "" },
+    }];
+    const snapshot = createSettingsSnapshot();
+    await saveSettingsPageData({
+      saveSettings: async (value) => {
+        calls.push(`save:${String("pendingRoleModelUpdates" in value)}`);
+        return { ok: true, restart: { ok: true, running: true, lastError: null }, health: { ok: true, message: "ok" } };
+      },
+      invoke: async (request) => {
+        calls.push(`${request.method}:${String(request.payload.role_id)}`);
+        return { id: "", type: "response", method: request.method, payload: {}, error: null };
+      },
+      readSettings: async () => snapshot,
+    }, draft);
+    assert.deepEqual(calls, ["save:false", "roles.update:role-1"]);
+  });
+
+  it("keeps deferred role changes when the settings restart fails", async () => {
+    const draft = createSettingsFormData();
+    draft.pendingRoleModelUpdates = [{ roleId: "role-1", runtimeConfig: { dialogue_model_registration_id: "registration-2" } }];
+    const result = await saveSettingsPageData({
+      saveSettings: async () => ({
+        ok: false,
+        restart: { ok: false, running: false, lastError: "restart failed" },
+        health: { ok: false, message: "restart failed" },
+      }),
+      invoke: async () => {
+        throw new Error("role updates must wait for a healthy restart");
+      },
+      readSettings: async () => createSettingsSnapshot(),
+    }, draft);
+    assert.deepEqual(result.nextDraft.pendingRoleModelUpdates, draft.pendingRoleModelUpdates);
   });
 });

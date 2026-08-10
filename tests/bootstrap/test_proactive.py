@@ -34,7 +34,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
                 target_chat_id="1",
                 profile="daily",
                 overrides={},
-                agent={"model": "mira-model", "max_steps": 11},
+                agent={"max_steps": 11},
                 drift={"enabled": False},
             ),
         ),
@@ -46,7 +46,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
                 target_chat_id="2",
                 profile="quiet",
                 overrides={},
-                agent={"model": "luna-model", "max_steps": 22},
+                agent={"max_steps": 22},
                 drift={"enabled": True, "min_interval_hours": 7},
             ),
         ),
@@ -98,9 +98,9 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
 
     assert tasks == ["run:mira", "run:luna"]
     assert set(loops) == {"mira", "luna"}
-    assert loops["mira"].config.agent_tick_model == "mira-model"
+    assert not hasattr(loops["mira"].config, "agent_tick_model")
     assert loops["mira"].config.tick_interval_s0 == 480
-    assert loops["luna"].config.agent_tick_model == "luna-model"
+    assert not hasattr(loops["luna"].config, "agent_tick_model")
     assert loops["luna"].config.tick_interval_s0 == 1800
     assert loops["luna"].config.drift_enabled is True
     assert loops["luna"].config.drift_min_interval_hours == 7

@@ -11,6 +11,7 @@ from agent.tool_hooks import ToolHook
 from agent.core.proactive_turn.gates import ProactiveGate
 from agent.tools.message_push import MessagePushTool
 from core.roles import RoleRecord, RoleStore
+from core.roles.model_runtime import RoleAwareProvider
 from proactive_v2.config_loader import load_proactive_config
 from proactive_v2.loop import ProactiveLoop
 from proactive_v2.memory_optimizer import MemoryOptimizer, MemoryOptimizerLoop
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from core.memory.markdown import MarkdownMemoryStore
     from core.memory.runtime import MemoryRuntime
+    from core.roles.world import RoleWorldRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,7 @@ def build_proactive_runtime(
     proactive_provider = _build_proactive_provider(config, provider)
     loops: dict[str, ProactiveLoop] = {}
     role_world_registry = agent_loop.role_world_registry
+    role_aware_provider = RoleAwareProvider(proactive_provider)
     for role in roles:
         target = role.proactive
         proactive_cfg = _build_role_proactive_config(role)
@@ -77,7 +80,7 @@ def build_proactive_runtime(
         )
         loop = ProactiveLoop(
             session_manager=session_manager,
-            provider=proactive_provider,
+            provider=role_aware_provider,
             push_tool=push_tool,
             config=proactive_cfg,
             model=config.model,
@@ -85,8 +88,8 @@ def build_proactive_runtime(
             state_store=proactive_state,
             memory_store=memory_store,
             presence=presence,
-            light_provider=light_provider,
-            light_model=config.light_model,
+            light_provider=role_aware_provider,
+            light_model=config.model,
             passive_busy_fn=(
                 agent_loop.processing_state.is_busy if agent_loop.processing_state else None
             ),
@@ -109,6 +112,8 @@ def build_proactive_runtime(
 def _build_role_proactive_config(role: RoleRecord):
     """Builds the runtime proactive config from one authoritative role snapshot."""
     target = role.proactive
+    agent = dict(getattr(target, "agent", {}) or {})
+    agent.pop("model", None)
     return load_proactive_config(
         {
             "enabled": target.enabled,
@@ -119,13 +124,19 @@ def _build_role_proactive_config(role: RoleRecord):
                 "chat_id": target.target_chat_id,
             },
             "overrides": dict(getattr(target, "overrides", {}) or {}),
-            "agent": dict(getattr(target, "agent", {}) or {}),
+            "agent": agent,
             "drift": dict(getattr(target, "drift", {}) or {}),
         }
     )
 
 
-def _build_role_tick_dispatcher(*, role_id: str, channel: str, chat_id: str, registry):
+def _build_role_tick_dispatcher(
+    *,
+    role_id: str,
+    channel: str,
+    chat_id: str,
+    registry,
+):
     if registry is None:
         raise RuntimeError("主动任务需要 RoleWorldRegistry")
 
@@ -138,7 +149,15 @@ def _build_role_tick_dispatcher(*, role_id: str, channel: str, chat_id: str, reg
             source="proactive",
             work_kind="proactive_tick",
         )
-        return await registry.dispatch_proactive_tick(context, operation)
+        async def run_with_model_snapshot():
+            world = await registry.get(role_id)
+            with world.activate_model("chat"):
+                return await operation()
+
+        return await registry.dispatch_proactive_tick(
+            context,
+            run_with_model_snapshot,
+        )
 
     return dispatch
 
@@ -148,6 +167,7 @@ def build_memory_optimizer_task(
     *,
     provider: LLMProvider,
     memory_store: "MarkdownMemoryStore",
+    world_registry: "RoleWorldRegistry | None" = None,
 ) -> tuple[list, "MemoryOptimizer | None"]:
     if not config.memory_optimizer_enabled:
         logger.info("MemoryOptimizerLoop 已禁用（memory_optimizer_enabled=false）")
@@ -158,6 +178,7 @@ def build_memory_optimizer_task(
         provider=provider,
         model=config.model,
         workspace=memory_store.memory_dir.parent,
+        world_registry=world_registry,
     )
     interval = config.memory_optimizer_interval_seconds
     logger.info("MemoryOptimizerLoop 已启动，间隔=%ss (%.1fh)", interval, interval / 3600)

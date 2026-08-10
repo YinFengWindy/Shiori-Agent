@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type {
+  ModelRegistrationFormData,
   SaveSettingsResult,
   SettingsFormData,
   SettingsSnapshot,
@@ -126,14 +127,25 @@ function renderPluginSection(name: string, value: Record<string, unknown>): stri
   return lines.join("\n");
 }
 
+function loadModelRegistrations(llm: Record<string, unknown>): ModelRegistrationFormData[] {
+  const raw = Array.isArray(llm.registrations) ? llm.registrations : [];
+  return raw.map((value) => {
+    const item = asRecord(value);
+    return {
+      id: String(item.id ?? ""),
+      provider: String(item.provider ?? "openai"),
+      baseUrl: String(item.base_url ?? ""),
+      apiKey: String(item.api_key ?? ""),
+      model: String(item.model ?? ""),
+      effort: String(item.effort ?? "none") as "none" | "low" | "high" | "max",
+    };
+  });
+}
+
 export function loadSettingsData(): SettingsSnapshot {
   const content = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
   const parsed = parseToml(content);
   const llm = asRecord(parsed.llm);
-  const llmMain = asRecord(llm.main);
-  const llmFast = asRecord(llm.fast);
-  const llmAgent = asRecord(llm.agent);
-  const llmVl = asRecord(llm.vl);
   const channels = asRecord(parsed.channels);
   const telegram = asRecord(channels.telegram);
   const qq = asRecord(channels.qq);
@@ -154,22 +166,7 @@ export function loadSettingsData(): SettingsSnapshot {
     configPath,
     formData: {
       models: {
-        provider: String(llm.provider ?? ""),
-        mainModel: String(llmMain.model ?? ""),
-        mainApiKey: String(llmMain.api_key ?? ""),
-        mainBaseUrl: String(llmMain.base_url ?? ""),
-        enableThinking: Boolean(llmMain.enable_thinking),
-        reasoningEffort: String(llmMain.reasoning_effort ?? ""),
-        multimodal: Boolean(llmMain.multimodal),
-        fastModel: String(llmFast.model ?? ""),
-        fastApiKey: String(llmFast.api_key ?? ""),
-        fastBaseUrl: String(llmFast.base_url ?? ""),
-        agentModel: String(llmAgent.model ?? ""),
-        agentApiKey: String(llmAgent.api_key ?? ""),
-        agentBaseUrl: String(llmAgent.base_url ?? ""),
-        vlModel: String(llmVl.model ?? ""),
-        vlApiKey: String(llmVl.api_key ?? ""),
-        vlBaseUrl: String(llmVl.base_url ?? ""),
+        registrations: loadModelRegistrations(llm),
       },
       channels: {
         telegramToken: String(telegram.token ?? ""),
@@ -246,33 +243,17 @@ function renderSettingsToml(formData: SettingsFormData): string {
 
   return [
     "[llm]",
-    `provider = ${quote(formData.models.provider)}`,
     "",
-    "[llm.main]",
-    `model = ${quote(formData.models.mainModel)}`,
-    `api_key = ${quote(formData.models.mainApiKey)}`,
-    `base_url = ${quote(formData.models.mainBaseUrl)}`,
-    `enable_thinking = ${formData.models.enableThinking ? "true" : "false"}`,
-    formData.models.reasoningEffort.trim()
-      ? `reasoning_effort = ${quote(formData.models.reasoningEffort.trim())}`
-      : "",
-    `multimodal = ${formData.models.multimodal ? "true" : "false"}`,
-    "",
-    "[llm.fast]",
-    `model = ${quote(formData.models.fastModel)}`,
-    `api_key = ${quote(formData.models.fastApiKey)}`,
-    `base_url = ${quote(formData.models.fastBaseUrl)}`,
-    "",
-    "[llm.agent]",
-    `model = ${quote(formData.models.agentModel)}`,
-    `api_key = ${quote(formData.models.agentApiKey)}`,
-    `base_url = ${quote(formData.models.agentBaseUrl)}`,
-    "",
-    "[llm.vl]",
-    `model = ${quote(formData.models.vlModel)}`,
-    `api_key = ${quote(formData.models.vlApiKey)}`,
-    `base_url = ${quote(formData.models.vlBaseUrl)}`,
-    "",
+    ...formData.models.registrations.flatMap((registration) => [
+      "[[llm.registrations]]",
+      `id = ${quote(registration.id)}`,
+      `provider = ${quote(registration.provider.trim())}`,
+      `base_url = ${quote(registration.baseUrl.trim())}`,
+      `api_key = ${quote(registration.apiKey)}`,
+      `model = ${quote(registration.model.trim())}`,
+      `effort = ${quote(registration.effort)}`,
+      "",
+    ]),
     "[agent]",
     `system_prompt = ${quote(formData.advanced.systemPrompt)}`,
     `max_tokens = ${formData.advanced.maxTokens}`,
@@ -376,8 +357,21 @@ function renderSettingsToml(formData: SettingsFormData): string {
 }
 
 function validateSettings(formData: SettingsFormData): void {
-  if (!formData.models.mainModel.trim()) {
-    throw new Error("主模型不能为空");
+  if (formData.models.registrations.length === 0) {
+    throw new Error("至少需要一个模型注册");
+  }
+  const registrationIds = new Set<string>();
+  for (const registration of formData.models.registrations) {
+    if (!registration.id || !registration.model.trim()) {
+      throw new Error("模型注册 ID 和模型不能为空");
+    }
+    if (registrationIds.has(registration.id)) {
+      throw new Error("模型注册 ID 不能重复");
+    }
+    if (!["none", "low", "high", "max"].includes(registration.effort)) {
+      throw new Error("Effort 必须是 none、low、high 或 max");
+    }
+    registrationIds.add(registration.id);
   }
   if (formData.advanced.maxTokens <= 0) {
     throw new Error("max_tokens 必须大于 0");

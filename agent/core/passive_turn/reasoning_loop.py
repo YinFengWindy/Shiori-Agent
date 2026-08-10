@@ -21,6 +21,7 @@ from agent.tool_runtime import (
     tool_call_batch_snapshot,
 )
 from agent.tools.base import normalize_tool_result
+from agent.tools.registry import ToolRegistry
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -36,6 +37,8 @@ def _is_tool_loop_guard_denial(exec_result: object) -> bool:
 
 class _PassiveReasoningLoopMixin:
     """实现 DefaultReasoner 的多轮工具调用循环。"""
+
+    _tools: ToolRegistry
 
     async def run(
         self,

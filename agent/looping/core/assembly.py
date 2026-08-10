@@ -29,10 +29,12 @@ from ..ports import (
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.turns.outbound import BusOutboundPort
 from bus.event_bus import EventBus
+from core.roles.model_runtime import RoleAwareProvider
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from agent.lifecycle.phases.before_turn import MemoryConsolidator
     from core.memory.engine import MemoryEngine
     from core.memory.markdown import MemoryProfileApi
 
@@ -74,9 +76,17 @@ class _AssemblyMixin:
             multimodal=config.llm.multimodal,
             vl_available=config.llm.vl_available,
         )
-        self._llm_services = deps.llm_services or LLMServices(
+        base_llm_services = deps.llm_services or LLMServices(
             provider=deps.provider,
             light_provider=deps.light_provider or deps.provider,
+        )
+        self._llm_services = (
+            LLMServices(
+                provider=RoleAwareProvider(base_llm_services.provider),
+                light_provider=RoleAwareProvider(base_llm_services.light_provider),
+            )
+            if self._role_world_registry is not None
+            else base_llm_services
         )
         self._session_services = deps.session_services or SessionServices(
             session_manager=deps.session_manager,
@@ -156,7 +166,7 @@ class _AssemblyMixin:
                 event_bus=self._event_bus,
                 outbound_port=BusOutboundPort(self.bus),
                 history_window=config.memory.keep_count,
-                memory_consolidator=self,
+                memory_consolidator=cast("MemoryConsolidator", self),
             )
         )
         self._agent_core = agent_core

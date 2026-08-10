@@ -69,6 +69,21 @@ class ProactiveGateActivation:
     metadata: Mapping[str, object]
 
 
+def resolve_gate_attempt_index(gate: ProactiveGateActivation | None) -> int:
+    """Returns the validated zero-based attempt index carried by a gate."""
+
+    raw = gate.metadata.get("attempt_index", 0) if gate is not None else 0
+    if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+        raise ValueError("proactive gate attempt_index 必须是非负整数")
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("proactive gate attempt_index 必须是非负整数") from exc
+    if value < 0:
+        raise ValueError("proactive gate attempt_index 必须是非负整数")
+    return value
+
+
 @dataclass(frozen=True)
 class ProactiveGateCompletion:
     """Final outcome delivered to the gate that activated the tick."""

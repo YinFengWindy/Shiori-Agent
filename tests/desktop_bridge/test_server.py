@@ -43,6 +43,25 @@ def _build_server(tmp_path: Path) -> DesktopBridgeServer:
     return DesktopBridgeServer(runtime)
 
 
+def test_server_forwards_the_role_world_registry_to_story(tmp_path: Path) -> None:
+    session_manager = SessionManager(tmp_path)
+    world_registry = SimpleNamespace()
+    runtime = SimpleNamespace(
+        session_manager=SimpleNamespace(
+            workspace=tmp_path,
+            open_role_session=session_manager.open_role_session,
+        ),
+        loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
+        event_bus=EventBus(),
+        provider=None,
+        role_world_registry=world_registry,
+    )
+
+    server = DesktopBridgeServer(runtime)
+
+    assert server.service.story_simulation._world_registry is world_registry
+
+
 def test_observation_service_prefers_dedicated_vl_provider(tmp_path: Path) -> None:
     role_store = SimpleNamespace()
     main_provider = SimpleNamespace(name="main")

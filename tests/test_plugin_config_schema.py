@@ -87,12 +87,12 @@ def test_config_load_resolves_plugin_env_value(
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
-[llm]
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
 provider = "openai"
-
-[llm.main]
 model = "m"
 api_key = "k"
+effort = "none"
 
 [agent]
 system_prompt = "s"

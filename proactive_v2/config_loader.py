@@ -122,7 +122,6 @@ def _validate_feature_keys(features: dict[str, Any]) -> None:
 
 def _validate_agent_tick_keys(agent_tick: dict[str, Any]) -> None:
     allowed = {
-        "model",
         "max_steps",
         "content_limit",
         "web_fetch_max_chars",
@@ -169,7 +168,6 @@ def _merge_profiles(user_profiles: dict[str, Any]) -> dict[str, Any]:
 
 def _validate_agent_keys(agent: dict[str, Any]) -> None:
     allowed = {
-        "model",
         "max_steps",
         "content_limit",
         "web_fetch_max_chars",
@@ -334,9 +332,6 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
         raise ProactiveConfigError("proactive.drift 必须是字典")
     _validate_drift_keys(drift)
 
-    agent_model = agent.get("model", at.get("model"))
-    if agent_model:
-        config.agent_tick_model = str(agent_model)
     if "max_steps" in agent or "max_steps" in at:
         config.agent_tick_max_steps = max(
             1,

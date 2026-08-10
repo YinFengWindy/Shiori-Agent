@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -144,6 +145,70 @@ class BlockingOpeningDirector:
         )
 
 
+class RecordingStoryProvider:
+    def __init__(self, *, block_call: int | None = None) -> None:
+        self.block_call = block_call
+        self.calls: list[str] = []
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def chat(self, **kwargs):
+        self.calls.append(str(kwargs["model"]))
+        if len(self.calls) == self.block_call:
+            self.started.set()
+            await self.release.wait()
+        return SimpleNamespace(
+            content=json.dumps(
+                {
+                    "beats": [{"text": "雨后的铃声响起。", "kind": "narration"}],
+                    "current_scene": {
+                        "key": "old-school",
+                        "name": "旧校舍",
+                        "character_ids": ["role-1"],
+                    },
+                    "visual_type": "scene",
+                    "visual_prompt": "old school building, rainy afternoon",
+                },
+                ensure_ascii=False,
+            )
+        )
+
+
+class RecordingStoryWorldRegistry:
+    def __init__(self, *, model: str = "first-model", block_call: int | None = None) -> None:
+        self.model = model
+        self.provider = RecordingStoryProvider(block_call=block_call)
+        self.activations: list[tuple[str, str, str]] = []
+
+    async def get(self, role_id: str):
+        self.role_id = role_id
+        return self
+
+    @contextmanager
+    def activate_model(self, purpose: str):
+        snapshot = SimpleNamespace(provider=self.provider, model=self.model)
+        self.activations.append((self.role_id, purpose, self.model))
+        yield snapshot
+
+
+class MissingStoryWorldRegistry:
+    async def get(self, _role_id: str):
+        return self
+
+    @contextmanager
+    def activate_model(self, _purpose: str):
+        raise ValueError("角色引用了不存在的模型注册: missing-model")
+        yield
+
+
+async def _wait_for_director_tasks(handler: StorySimulationHandler) -> None:
+    for _ in range(30):
+        if not handler._tasks:
+            return
+        await asyncio.sleep(0)
+    raise AssertionError("Story Director task did not finish")
+
+
 @pytest.mark.asyncio
 async def test_create_story_generates_opening_and_replays_request(tmp_path) -> None:
     role = SimpleNamespace(
@@ -179,6 +244,122 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
     assert summaries["stories"][0]["current_time_band"] == "上午"
     assert summaries["stories"][0]["current_story_date"] == "2026-08-01"
     assert summaries["stories"][0]["current_scene"] == {"key": "old-school", "name": "默认场景", "character_ids": ["role-1"]}
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_story_turns_capture_the_role_dialogue_model_inside_each_task(tmp_path) -> None:
+    role = SimpleNamespace(
+        id="role-1",
+        to_dict=lambda: {"id": "role-1", "name": "澪", "system_prompt": "保持克制"},
+    )
+    world_registry = RecordingStoryWorldRegistry(block_call=2)
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: role),
+        world_registry=world_registry,
+    )
+    payload = {
+        "title": "夏日来信",
+        "background": "午后的旧校舍",
+        "story_date": "2026-08-01",
+        "time_band": "上午",
+        "role_id": "role-1",
+        "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
+    }
+
+    created = await handler.handle(
+        "stories.create", payload, request_id="create-1", emit_event=lambda _event: None
+    )
+    await _wait_for_director_tasks(handler)
+    story_id = created["story"]["id"]
+    story = (
+        await handler.handle(
+            "stories.get",
+            {"story_id": story_id},
+            request_id="get-1",
+            emit_event=lambda _event: None,
+        )
+    )["story"]
+
+    await handler.handle(
+        "stories.input",
+        {
+            "story_id": story_id,
+            "input": "走进校舍。",
+            "expected_revision": story["revision"],
+        },
+        request_id="input-1",
+        emit_event=lambda _event: None,
+    )
+    await world_registry.provider.started.wait()
+    world_registry.model = "second-model"
+    world_registry.provider.release.set()
+    await _wait_for_director_tasks(handler)
+    story = (
+        await handler.handle(
+            "stories.get",
+            {"story_id": story_id},
+            request_id="get-2",
+            emit_event=lambda _event: None,
+        )
+    )["story"]
+
+    await handler.handle(
+        "stories.continue",
+        {"story_id": story_id, "expected_revision": story["revision"]},
+        request_id="continue-1",
+        emit_event=lambda _event: None,
+    )
+    await _wait_for_director_tasks(handler)
+
+    assert world_registry.activations == [
+        ("role-1", "chat", "first-model"),
+        ("role-1", "chat", "first-model"),
+        ("role-1", "chat", "second-model"),
+    ]
+    assert world_registry.provider.calls == ["first-model", "first-model", "second-model"]
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_story_turn_fails_when_the_role_model_registration_is_missing(tmp_path) -> None:
+    role = SimpleNamespace(
+        id="role-1",
+        to_dict=lambda: {"id": "role-1", "name": "澪", "system_prompt": "保持克制"},
+    )
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: role),
+        world_registry=MissingStoryWorldRegistry(),
+    )
+    events: list[dict] = []
+
+    created = await handler.handle(
+        "stories.create",
+        {
+            "title": "夏日来信",
+            "background": "午后的旧校舍",
+            "story_date": "2026-08-01",
+            "time_band": "上午",
+            "role_id": "role-1",
+            "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
+        },
+        request_id="create-1",
+        emit_event=events.append,
+    )
+    await _wait_for_director_tasks(handler)
+    story = (
+        await handler.handle(
+            "stories.get",
+            {"story_id": created["story"]["id"]},
+            request_id="get-1",
+            emit_event=events.append,
+        )
+    )["story"]
+
+    assert story["turns"][0]["status"] == "failed"
+    assert next(event for event in events if event["method"] == "stories.failed")["payload"]["code"] == "provider_not_configured"
     await handler.aclose()
 
 
@@ -614,14 +795,14 @@ async def test_story_recovery_restarts_an_interrupted_player_turn(tmp_path) -> N
     repository.close()
     catalog.close()
 
-    director = BlockingOpeningDirector()
+    world_registry = RecordingStoryWorldRegistry(block_call=1)
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
-        director=director,
+        world_registry=world_registry,
     )
     await handler.handle("stories.list", {}, request_id="list-1", emit_event=lambda _event: None)
-    await director.started.wait()
+    await world_registry.provider.started.wait()
     recovered = (
         await handler.handle(
             "stories.get",
@@ -633,7 +814,8 @@ async def test_story_recovery_restarts_an_interrupted_player_turn(tmp_path) -> N
 
     assert recovered["turns"][1]["status"] == "generating"
     assert recovered["turns"][1]["attemptId"] != original_attempt["attempt_id"]
-    director.release.set()
+    assert world_registry.activations == [("role-1", "chat", "first-model")]
+    world_registry.provider.release.set()
     await handler.aclose()
 
 

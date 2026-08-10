@@ -1,5 +1,6 @@
 import json
 import sys
+import tomllib
 import types
 from pathlib import Path
 from typing import cast, Any
@@ -36,6 +37,8 @@ def _dump_toml(data: dict, prefix: tuple[str, ...] = ()) -> list[str]:
     for key, value in data.items():
         if isinstance(value, dict):
             continue
+        if isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
+            continue
         scalar_lines.append(f"{key} = {_toml_value(value)}")
     if prefix:
         lines.append(f"[{'.'.join(prefix)}]")
@@ -45,17 +48,24 @@ def _dump_toml(data: dict, prefix: tuple[str, ...] = ()) -> list[str]:
     for key, value in data.items():
         if isinstance(value, dict):
             lines.extend(_dump_toml(value, prefix + (key,)))
+        elif isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
+            for item in value:
+                lines.append(f"[[{'.'.join(prefix + (key,))}]]")
+                lines.extend(f"{item_key} = {_toml_value(item_value)}" for item_key, item_value in item.items())
+                lines.append("")
     return lines
 
 
 def _write_config(path: Path) -> None:
     payload = {
         "llm": {
-            "provider": "openai",
-            "main": {
+            "registrations": [{
+                "id": "00000000-0000-4000-a000-000000000001",
+                "provider": "openai",
                 "model": "test-model",
                 "api_key": "test-key",
-            },
+                "effort": "none",
+            }],
         },
         "agent": {
             "system_prompt": "test system prompt",
@@ -77,12 +87,12 @@ def test_load_config_keeps_internal_max_iterations_default(tmp_path: Path):
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
-[llm]
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
 provider = "openai"
-
-[llm.main]
 model = "test-model"
 api_key = "test-key"
+effort = "none"
 
 [agent]
 system_prompt = "test"
@@ -100,12 +110,12 @@ def test_load_config_defaults_memory_window_and_optimizer_interval(tmp_path: Pat
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
-[llm]
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
 provider = "openai"
-
-[llm.main]
 model = "test-model"
 api_key = "test-key"
+effort = "none"
 
 [agent]
 system_prompt = "test"
@@ -150,9 +160,14 @@ def test_init_workspace_creates_expected_assets(tmp_path):
 
     assert config_path.exists()
     config_text = config_path.read_text(encoding="utf-8")
-    assert "multimodal = false" in config_text
-    assert "[llm.vl]" in config_text
-    assert 'model = "qwen-vl-plus"' in config_text
+    assert config_text.count("[[llm.registrations]]") == 2
+    registrations = tomllib.loads(config_text)["llm"]["registrations"]
+    assert all("name" not in registration for registration in registrations)
+    assert [registration["model"] for registration in registrations] == [
+        "deepseek-v4-flash",
+        "qwen-vl-plus",
+    ]
+    assert "[llm.vl]" not in config_text
     assert (workspace / "sessions.db").exists()
     assert (workspace / "observe").is_dir()
     assert (workspace / "memory" / "consolidation_writes.db").exists()

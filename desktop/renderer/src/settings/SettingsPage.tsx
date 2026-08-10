@@ -22,7 +22,7 @@ type SettingsPageProps = {
 export const settingsPageSurfaceClass = "settings-page bg-white";
 
 /** Responsive spacing for the settings toolbar. */
-export const settingsToolbarClass = "border-b border-[#E8EBF0] bg-white px-3 py-3 sm:px-5 lg:px-7";
+export const settingsToolbarClass = "settings-hover-toolbar border-b border-[#E8EBF0] bg-white px-3 py-3 sm:px-5 lg:px-7";
 
 /** Responsive spacing for the scrollable settings content. */
 export const settingsContentClass = "relative scrollbar-soft overflow-y-auto bg-white px-3 py-5 sm:px-5 lg:px-7 lg:py-7";

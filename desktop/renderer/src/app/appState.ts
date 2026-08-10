@@ -92,7 +92,6 @@ export function createEmptyRoleForm(): RoleFormState {
     proactiveTargetChannel: "",
     proactiveTargetChatId: "",
     proactiveProfile: "daily",
-    proactiveAgentModel: "",
     proactiveAgentMaxSteps: 35,
     proactiveAgentContentLimit: 5,
     proactiveAgentWebFetchMaxChars: 8000,

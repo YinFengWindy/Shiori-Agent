@@ -43,3 +43,5 @@ def test_render_config_omits_removed_proactive_agent_keys() -> None:
     assert "context_prob" not in rendered
     assert "delivery_cooldown_hours" not in rendered
     assert "[proactive]" not in rendered
+    assert rendered.count("[[llm.registrations]]") == 1
+    assert "[llm.main]" not in rendered

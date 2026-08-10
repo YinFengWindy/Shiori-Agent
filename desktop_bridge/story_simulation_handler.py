@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from core.roles import RoleStore
+from core.roles import RoleStore, RoleWorldRegistry
 
 from story_simulation.catalog import StoryCatalog
 from story_simulation.director import ProviderStoryDirector, StoryDirector
-from story_simulation.errors import StoryNotFoundError
+from story_simulation.errors import StoryNotFoundError, StoryProviderUnavailableError
 from story_simulation.models import StoryPlayerProfile, StoryVisualType
 from story_simulation.repository import StoryRepository, payload_hash
 from story_simulation.service import StorySimulationService
@@ -22,6 +22,14 @@ from story_simulation.story_time import normalize_story_date, normalize_story_ti
 from .story_image_generator import StoryImageGenerator
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]
+
+
+class _FailingStoryDirector:
+    def __init__(self, error: StoryProviderUnavailableError) -> None:
+        self._error = error
+
+    async def generate(self, **_kwargs: Any):
+        raise self._error
 
 
 class StorySimulationHandler:
@@ -33,16 +41,16 @@ class StorySimulationHandler:
         workspace: Path,
         role_store: RoleStore,
         director: StoryDirector | None = None,
-        provider: Any | None = None,
-        model: str = "",
+        world_registry: RoleWorldRegistry | None = None,
         image_tool: Any | None = None,
     ) -> None:
         self._roles = role_store
         self._catalog = StoryCatalog(workspace)
         self._repositories: dict[str, StoryRepository] = {}
-        self._director = director or ProviderStoryDirector(provider=provider, model=model)
+        self._director = director
+        self._world_registry = world_registry
         self._tasks: dict[str, asyncio.Task[None]] = {}
-        self._resource_tasks: dict[str, asyncio.Task[None]] = {}
+        self._resource_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
         self._image_generator = StoryImageGenerator(image_tool)
         self._recovery_lock = asyncio.Lock()
         self._recovered = False
@@ -50,7 +58,7 @@ class StorySimulationHandler:
     async def aclose(self) -> None:
         """Cancel uncommitted Director tasks and release Story connections."""
 
-        tasks = list(self._tasks.values())
+        tasks: list[asyncio.Task[Any]] = list(self._tasks.values())
         tasks.extend(self._resource_tasks.values())
         for task in tasks:
             if not task.done():
@@ -497,15 +505,85 @@ class StorySimulationHandler:
         if existing is not None and not existing.done():
             return
         task = asyncio.create_task(
-            service.generate_turn(
-                turn,
-                emit_event,
-                schedule_visual_resource=self._schedule_story_cg,
-            ),
+            self._generate_turn(service, turn, emit_event),
             name=f"story-director:{turn_id}",
         )
         self._tasks[turn_id] = task
         task.add_done_callback(lambda _task, turn_id=turn_id: self._tasks.pop(turn_id, None))
+
+    async def _generate_turn(
+        self,
+        service: StorySimulationService,
+        turn: dict[str, Any],
+        emit_event: EventEmitter,
+    ) -> None:
+        """Resolve and hold the Story role's dialogue model inside the task boundary."""
+
+        if self._director is not None:
+            await service.generate_turn(
+                turn,
+                emit_event,
+                schedule_visual_resource=self._schedule_story_cg,
+            )
+            return
+        if self._world_registry is None:
+            await self._fail_generation(
+                service,
+                turn,
+                emit_event,
+                StoryProviderUnavailableError("Story Director 尚未配置角色世界"),
+            )
+            return
+        story_id = service.repository.story_id_for_turn(str(turn["id"]))
+        story = service.repository.story_read_model(story_id)
+        role_id = str((story.get("roleSnapshot") or {}).get("id") or "").strip()
+        if not role_id:
+            await self._fail_generation(
+                service,
+                turn,
+                emit_event,
+                StoryProviderUnavailableError("Story 缺少正式角色绑定"),
+            )
+            return
+        try:
+            world = await self._world_registry.get(role_id)
+            with world.activate_model("chat") as snapshot:
+                runtime_service = self._service(
+                    service.repository,
+                    director=ProviderStoryDirector(
+                        provider=snapshot.provider,
+                        model=snapshot.model,
+                    ),
+                )
+                await runtime_service.generate_turn(
+                    turn,
+                    emit_event,
+                    schedule_visual_resource=self._schedule_story_cg,
+                )
+        except (KeyError, RuntimeError, ValueError) as exc:
+            await self._fail_generation(
+                service,
+                turn,
+                emit_event,
+                StoryProviderUnavailableError(str(exc)),
+            )
+
+    async def _fail_generation(
+        self,
+        service: StorySimulationService,
+        turn: dict[str, Any],
+        emit_event: EventEmitter,
+        error: StoryProviderUnavailableError,
+    ) -> None:
+        failure_service = self._service(
+            service.repository,
+            director=_FailingStoryDirector(error),
+        )
+        await failure_service.generate_turn(
+            turn,
+            emit_event,
+            schedule_visual_resource=self._schedule_story_cg,
+        )
 
     def _repository(self, story_id: str) -> StoryRepository:
         repository = self._repositories.get(story_id)
@@ -542,10 +620,17 @@ class StorySimulationHandler:
         if story_path.exists():
             shutil.rmtree(story_path)
 
-    def _service(self, repository: StoryRepository) -> StorySimulationService:
+    def _service(
+        self,
+        repository: StoryRepository,
+        *,
+        director: StoryDirector | None = None,
+    ) -> StorySimulationService:
         return StorySimulationService(
             repository=repository,
-            director=self._director,
+            director=director
+            or self._director
+            or ProviderStoryDirector(provider=None, model=""),
             image_generator=self._image_generator,
         )
 
@@ -576,7 +661,7 @@ class StorySimulationHandler:
     @staticmethod
     def _expected_revision(payload: dict[str, Any]) -> int:
         raw = payload.get("expected_revision")
-        if isinstance(raw, bool):
+        if raw is None or isinstance(raw, bool):
             raise ValueError("expected_revision 必须是非负整数")
         try:
             value = int(raw)
@@ -598,5 +683,5 @@ class StorySimulationHandler:
                 "payload": payload,
             }
         )
-        if hasattr(result, "__await__"):
+        if result is not None:
             await result

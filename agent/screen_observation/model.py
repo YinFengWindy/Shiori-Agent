@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent.llm_json import load_json_object_loose
 from agent.provider import LLMProvider
@@ -10,6 +10,9 @@ from agent.screen_observation.contract import (
     parse_observation_frame,
 )
 from agent.screen_observation.safety import safe_observation_text
+
+if TYPE_CHECKING:
+    from core.roles.world import RoleWorldRegistry
 
 _MAX_ROLE_DESCRIPTION_CHARS = 600
 _MAX_ROLE_SYSTEM_PROMPT_CHARS = 2400
@@ -37,15 +40,17 @@ class ObservationModelAdapter:
         roles: RoleRepository,
         provider: LLMProvider | None,
         model: str,
+        world_registry: RoleWorldRegistry | None = None,
     ) -> None:
         self._roles = roles
         self._provider = provider
         self._model = model
+        self._world_registry = world_registry
 
     async def analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Analyzes one frame without retaining it or enabling desktop actions."""
 
-        if self._provider is None or not self._model:
+        if self._world_registry is None and (self._provider is None or not self._model):
             raise RuntimeError("屏幕识别视觉模型未配置")
         frame = parse_observation_frame(payload)
         role = self._roles.get_required(frame.role_id)
@@ -68,7 +73,38 @@ class ObservationModelAdapter:
             )
             if part
         )
-        response = await self._provider.chat(
+        if self._world_registry is not None:
+            world = await self._world_registry.get(frame.role_id)
+            with world.activate_model("vision") as snapshot:
+                return await self._analyze_with_provider(
+                    provider=snapshot.provider,
+                    model=snapshot.model,
+                    frame=frame,
+                    role_context=role_context,
+                    previous_context=previous_context,
+                    recent_bubbles=recent_bubbles,
+                )
+        assert self._provider is not None
+        return await self._analyze_with_provider(
+            provider=self._provider,
+            model=self._model,
+            frame=frame,
+            role_context=role_context,
+            previous_context=previous_context,
+            recent_bubbles=recent_bubbles,
+        )
+
+    async def _analyze_with_provider(
+        self,
+        *,
+        provider: LLMProvider,
+        model: str,
+        frame,
+        role_context: str,
+        previous_context: str,
+        recent_bubbles: str,
+    ) -> dict[str, Any]:
+        response = await provider.chat(
             messages=[
                 {
                     "role": "system",
@@ -97,10 +133,9 @@ class ObservationModelAdapter:
                 },
             ],
             tools=[],
-            model=self._model,
+            model=model,
             max_tokens=1200,
             tool_choice="auto",
-            disable_thinking=True,
             payload_snapshot_enabled=False,
         )
         if response.tool_calls:

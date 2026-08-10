@@ -49,7 +49,6 @@ def test_agent_tick_factory_requires_default_role_id() -> None:
             {
                 "default_role_id": "",
                 "default_chat_id": "cid",
-                "agent_tick_model": "",
                 "agent_tick_web_fetch_max_chars": 4000,
                 "message_dedupe_recent_n": 3,
             },

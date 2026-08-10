@@ -9,7 +9,9 @@ from agent.core.proactive_turn.gates import (
     ProactiveGateChain,
     ProactiveGateContext,
     ProactiveGateDecision,
+    ProactiveGateActivation,
     ProactiveMode,
+    resolve_gate_attempt_index,
 )
 
 
@@ -68,6 +70,30 @@ def test_gate_chain_rejects_duplicate_names():
                 _Gate("same", 1, ProactiveGateDecision.continue_(), calls),
             ]
         )
+
+
+def test_resolve_gate_attempt_index_accepts_non_negative_integer_strings():
+    gate = ProactiveGateActivation(
+        gate_name="scene",
+        mode=ProactiveMode.SCENE_FOLLOWUP,
+        reason="due",
+        metadata={"attempt_index": "2"},
+    )
+
+    assert resolve_gate_attempt_index(gate) == 2
+
+
+@pytest.mark.parametrize("value", [True, -1, "invalid", object()])
+def test_resolve_gate_attempt_index_rejects_invalid_metadata(value):
+    gate = ProactiveGateActivation(
+        gate_name="scene",
+        mode=ProactiveMode.SCENE_FOLLOWUP,
+        reason="due",
+        metadata={"attempt_index": value},
+    )
+
+    with pytest.raises(ValueError, match="attempt_index"):
+        resolve_gate_attempt_index(gate)
 
 
 def test_gate_chain_propagates_gate_errors():

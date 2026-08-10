@@ -147,11 +147,27 @@ class _ProcessingMixin:
         if self._processing_state:
             self._processing_state.enter(key)
         try:
-            outbound = await self._core_runner.process(
-                msg,
-                key,
-                dispatch_outbound=dispatch_outbound,
-            )
+            registry = getattr(self, "_role_world_registry", None)
+            metadata = getattr(msg, "metadata", None)
+            metadata = metadata if isinstance(metadata, dict) else {}
+            role_id = str(metadata.get("role_id") or "").strip()
+            if not role_id and key.startswith("role:"):
+                role_id = key.removeprefix("role:").strip()
+            if registry is not None and role_id:
+                purpose = "vision" if getattr(msg, "media", None) else "chat"
+                world = await registry.get(role_id)
+                with world.activate_model(purpose):
+                    outbound = await self._core_runner.process(
+                        msg,
+                        key,
+                        dispatch_outbound=dispatch_outbound,
+                    )
+            else:
+                outbound = await self._core_runner.process(
+                    msg,
+                    key,
+                    dispatch_outbound=dispatch_outbound,
+                )
             if resumed_from_interrupt:
                 self._interrupt_states.pop(key, None)
             return outbound

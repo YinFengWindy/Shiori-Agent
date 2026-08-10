@@ -28,6 +28,7 @@ from core.roles import (
     RoleRelationshipRuntimeService,
     RoleStore,
 )
+from core.roles.world import RoleWorldRegistry
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
 from desktop_bridge.app_service import DesktopAppService
 from desktop_bridge.chat_requests import DesktopChatRequestHandler
@@ -95,7 +96,7 @@ class DesktopBridgeService:
         memory_optimizer: Any | None = None,
         observation_service: ScreenObservationService | None = None,
         voice_service: VoiceService | None = None,
-        provider: Any | None = None,
+        role_world_registry: RoleWorldRegistry | None = None,
         story_director: Any | None = None,
         image_tool: Any | None = None,
     ) -> None:
@@ -112,6 +113,7 @@ class DesktopBridgeService:
             self._proactive_message_listener,
         )
         self.config = config
+        self.role_world_registry = role_world_registry
         self._event_listeners: set[
             Callable[[dict[str, Any]], Awaitable[None] | None]
         ] = set()
@@ -196,8 +198,7 @@ class DesktopBridgeService:
             workspace=workspace,
             role_store=role_store,
             director=story_director,
-            provider=provider,
-            model=str(getattr(config, "model", "") or ""),
+            world_registry=role_world_registry,
             image_tool=image_tool,
         )
         self.observation_service = observation_service
@@ -508,7 +509,11 @@ class DesktopBridgeService:
             provider, _light, _agent = build_providers(self.config)
         except Exception:
             return None
-        return LlmRoleSelfSeedGenerator(provider=provider, model=self.config.model)
+        return LlmRoleSelfSeedGenerator(
+            provider=provider,
+            model=self.config.model,
+            world_registry=self.role_world_registry,
+        )
 
     async def handle(
         self,
@@ -520,9 +525,8 @@ class DesktopBridgeService:
 
         request_id = str(request.get("id") or "").strip() or "bridge-request"
         method = str(request.get("method") or "").strip()
-        payload = (
-            request.get("payload") if isinstance(request.get("payload"), dict) else {}
-        )
+        raw_payload = request.get("payload")
+        payload: dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
         self.start_background_tasks()
         try:
             result = await self.request_router.dispatch(
