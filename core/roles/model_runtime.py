@@ -75,10 +75,9 @@ class RoleModelRuntime:
         if registration is None:
             raise ValueError(f"角色引用了不存在的模型注册: {selected_id}")
         effort = registration.effort
-        if purpose == "chat":
-            role_effort = str(
-                role.runtime_config.get("dialogue_model_effort") or ""
-            ).strip().lower()
+        if purpose in ("chat", "vision"):
+            effort_key = f"{'dialogue' if purpose == 'chat' else 'visual'}_model_effort"
+            role_effort = str(role.runtime_config.get(effort_key) or "").strip().lower()
             if role_effort in _VALID_EFFORTS:
                 effort = role_effort
         extra_body = {} if effort == "none" else {"reasoning_effort": effort}

@@ -19,6 +19,7 @@ describe("chat model selection", () => {
   it("falls back to the selected registration effort and preserves role overrides", () => {
     const fallback = selectionFromRole(role({ dialogue_model_registration_id: "vision" }), registrations);
     assert.equal(fallback.dialogueEffort, "high");
+    assert.equal(fallback.visualEffort, "high");
 
     const invalidOverride = selectionFromRole(role({
       dialogue_model_registration_id: "vision",
@@ -29,16 +30,19 @@ describe("chat model selection", () => {
     const override = selectionFromRole(role({
       dialogue_model_registration_id: "chat",
       dialogue_model_effort: "max",
+      visual_model_effort: "low",
     }), registrations);
     assert.equal(override.dialogueEffort, "max");
+    assert.equal(override.visualEffort, "low");
   });
 
   it("writes effort changes alongside the role model selections", () => {
     const selection = selectionFromRole(role({ dialogue_model_registration_id: "chat" }), registrations);
-    assert.deepEqual(runtimeConfigForSelection(selection, "effort", "low"), {
+    assert.deepEqual(runtimeConfigForSelection(selection, "dialogueEffort", "low"), {
       dialogue_model_registration_id: "chat",
       visual_model_registration_id: "",
       dialogue_model_effort: "low",
+      visual_model_effort: "none",
     });
   });
 });

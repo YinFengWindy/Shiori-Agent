@@ -93,6 +93,7 @@ def test_runtime_uses_role_dialogue_effort_override(tmp_path) -> None:
         runtime_config={
             **role.runtime_config,
             "dialogue_model_effort": "high",
+            "visual_model_effort": "max",
             "visual_model_registration_id": visual.id,
         },
     )
@@ -102,5 +103,5 @@ def test_runtime_uses_role_dialogue_effort_override(tmp_path) -> None:
     assert snapshot.provider._extra_body == {"reasoning_effort": "high"}
 
     visual_snapshot = runtime.resolve("mira", "vision")
-    assert visual_snapshot.effort == "low"
-    assert visual_snapshot.provider._extra_body == {"reasoning_effort": "low"}
+    assert visual_snapshot.effort == "max"
+    assert visual_snapshot.provider._extra_body == {"reasoning_effort": "max"}

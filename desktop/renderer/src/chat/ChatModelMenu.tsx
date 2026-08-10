@@ -17,6 +17,8 @@ type ChatModelMenuProps = {
 export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [submenu, setSubmenu] = useState<"dialogue" | "visual" | null>(null);
+  const [detailMenu, setDetailMenu] = useState<"model" | "effort" | null>(null);
   const [registrations, setRegistrations] = useState<ModelRegistrationFormData[]>([]);
   const [selection, setSelection] = useState<RoleModelSelection | null>(null);
 
@@ -42,6 +44,8 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
 
   useEffect(() => {
     setOpen(false);
+    setSubmenu(null);
+    setDetailMenu(null);
     setSelection(null);
     void loadSelection();
   }, [activeRoleId, bridgeReady]);
@@ -56,7 +60,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
     return () => window.removeEventListener("pointerdown", close, true);
   }, [open]);
 
-  async function updateSelection(kind: "dialogue" | "visual" | "effort", value: string): Promise<void> {
+  async function updateSelection(kind: "dialogue" | "visual" | "dialogueEffort" | "visualEffort", value: string): Promise<void> {
     if (!selection || !activeRoleId) return;
     const runtimeConfig = runtimeConfigForSelection(selection, kind, value);
     try {
@@ -70,6 +74,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
         dialogueId: String(runtimeConfig.dialogue_model_registration_id),
         visualId: String(runtimeConfig.visual_model_registration_id),
         dialogueEffort: String(runtimeConfig.dialogue_model_effort) as ModelEffort,
+        visualEffort: String(runtimeConfig.visual_model_effort) as ModelEffort,
         runtimeConfig,
       });
     } catch (error) {
@@ -93,29 +98,30 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
         <span className="truncate">{dialogue?.model ?? "选择模型"}</span>
       </button>
       {open && selection ? (
-        <div className="absolute bottom-9 left-0 z-20 grid w-[280px] gap-3 rounded-md border border-[#DDE3EA] bg-white p-3 shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
-          <label className="grid gap-1.5 text-xs text-[#667085]">
-            <span>对话模型</span>
-            <select className="h-9 rounded-md border border-[#D8DFE7] bg-white px-2 text-sm text-[#182230] transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" value={selection.dialogueId} onChange={(event) => void updateSelection("dialogue", event.target.value)}>
-              {registrations.map((registration) => <option key={registration.id} value={registration.id}>{registration.model}</option>)}
-            </select>
-          </label>
-          <label className="grid gap-1.5 text-xs text-[#667085]">
-            <span>视觉模型</span>
-            <select className="h-9 rounded-md border border-[#D8DFE7] bg-white px-2 text-sm text-[#182230] transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" value={selection.visualId} onChange={(event) => void updateSelection("visual", event.target.value)}>
-              <option value="">沿用对话模型</option>
-              {registrations.map((registration) => <option key={registration.id} value={registration.id}>{registration.model}</option>)}
-            </select>
-          </label>
-          <label className="grid gap-1.5 text-xs text-[#667085]">
-            <span>思考强度</span>
-            <select className="h-9 rounded-md border border-[#D8DFE7] bg-white px-2 text-sm text-[#182230] transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" value={selection.dialogueEffort} onChange={(event) => void updateSelection("effort", event.target.value)}>
-              <option value="none">关闭</option>
-              <option value="low">低</option>
-              <option value="high">高</option>
-              <option value="max">最大</option>
-            </select>
-          </label>
+        <div className="absolute bottom-9 left-0 z-20 flex rounded-md border border-[#DDE3EA] bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
+          <div className="grid w-[112px] content-start gap-1">
+            {(["dialogue", "visual"] as const).map((kind) => (
+              <button key={kind} type="button" className="flex h-9 items-center justify-between rounded-md px-2 text-left text-xs text-[#344054] transition hover:bg-[#F3F5F7]" onMouseEnter={() => { setSubmenu(kind); setDetailMenu(null); }} onClick={() => { setSubmenu(kind); setDetailMenu(null); }}>
+                <span>{kind === "dialogue" ? "对话模型" : "识图模型"}</span><span aria-hidden="true">›</span>
+              </button>
+            ))}
+          </div>
+          {submenu ? (
+            <div className="relative ml-1 min-w-[132px] border-l border-[#EEF1F4] pl-2">
+              <div className="grid gap-1">
+                <button type="button" className="flex h-9 items-center justify-between rounded-md px-2 text-left text-xs text-[#344054] transition hover:bg-[#F3F5F7]" onMouseEnter={() => setDetailMenu("model")} onClick={() => setDetailMenu("model")}><span>模型</span><span aria-hidden="true">›</span></button>
+                <button type="button" className="flex h-9 items-center justify-between rounded-md px-2 text-left text-xs text-[#344054] transition hover:bg-[#F3F5F7]" onMouseEnter={() => setDetailMenu("effort")} onClick={() => setDetailMenu("effort")}><span>思考强度</span><span aria-hidden="true">›</span></button>
+              </div>
+              {detailMenu ? (
+                <div className="absolute left-full top-0 ml-1 grid min-w-[150px] gap-1 rounded-md border border-[#DDE3EA] bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
+                  {detailMenu === "model" ? <>
+                    {submenu === "visual" ? <button type="button" className="rounded-md px-2 py-2 text-left text-xs text-[#344054] transition hover:bg-[#F3F5F7]" onClick={() => void updateSelection("visual", "")}>沿用对话模型</button> : null}
+                    {registrations.map((registration) => <button key={registration.id} type="button" className="rounded-md px-2 py-2 text-left text-xs text-[#344054] transition hover:bg-[#F3F5F7]" onClick={() => void updateSelection(submenu, registration.id)}>{registration.model}</button>)}
+                  </> : (["none", "low", "high", "max"] as const).map((effort) => <button key={effort} type="button" className="rounded-md px-2 py-2 text-left text-xs text-[#344054] transition hover:bg-[#F3F5F7]" onClick={() => void updateSelection(submenu === "dialogue" ? "dialogueEffort" : "visualEffort", effort)}>{effort === "none" ? "关闭" : effort === "low" ? "低" : effort === "high" ? "高" : "最大"}</button>)}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

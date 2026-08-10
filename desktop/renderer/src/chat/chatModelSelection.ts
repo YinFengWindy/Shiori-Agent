@@ -9,6 +9,7 @@ export type RoleModelSelection = {
   dialogueId: string;
   visualId: string;
   dialogueEffort: ModelEffort;
+  visualEffort: ModelEffort;
   runtimeConfig: Record<string, unknown>;
 };
 
@@ -20,14 +21,17 @@ export function selectionFromRole(
   const dialogueId = String(role.runtime_config.dialogue_model_registration_id ?? "");
   const dialogue = registrations.find((registration) => registration.id === dialogueId);
   const fallbackEffort = dialogue?.effort ?? "none";
-  const rawEffort = String(role.runtime_config.dialogue_model_effort ?? fallbackEffort);
-  const dialogueEffort = MODEL_EFFORTS.has(rawEffort as ModelEffort)
-    ? rawEffort as ModelEffort
-    : fallbackEffort;
+  const visualId = String(role.runtime_config.visual_model_registration_id ?? "");
+  const visual = registrations.find((registration) => registration.id === visualId) ?? dialogue;
+  const effortFromRole = (key: string, fallback: ModelEffort) => {
+    const raw = String(role.runtime_config[key] ?? fallback);
+    return MODEL_EFFORTS.has(raw as ModelEffort) ? raw as ModelEffort : fallback;
+  };
   return {
     dialogueId,
-    visualId: String(role.runtime_config.visual_model_registration_id ?? ""),
-    dialogueEffort,
+    visualId,
+    dialogueEffort: effortFromRole("dialogue_model_effort", fallbackEffort),
+    visualEffort: effortFromRole("visual_model_effort", visual?.effort ?? "none"),
     runtimeConfig: role.runtime_config,
   };
 }
@@ -35,13 +39,14 @@ export function selectionFromRole(
 /** Builds the role runtime config for one chat model control change. */
 export function runtimeConfigForSelection(
   selection: RoleModelSelection,
-  kind: "dialogue" | "visual" | "effort",
+  kind: "dialogue" | "visual" | "dialogueEffort" | "visualEffort",
   value: string,
 ): Record<string, unknown> {
   return {
     ...selection.runtimeConfig,
     dialogue_model_registration_id: kind === "dialogue" ? value : selection.dialogueId,
     visual_model_registration_id: kind === "visual" ? value : selection.visualId,
-    dialogue_model_effort: kind === "effort" ? value : selection.dialogueEffort,
+    dialogue_model_effort: kind === "dialogueEffort" ? value : selection.dialogueEffort,
+    visual_model_effort: kind === "visualEffort" ? value : selection.visualEffort,
   };
 }
