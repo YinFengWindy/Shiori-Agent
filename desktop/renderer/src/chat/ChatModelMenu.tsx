@@ -1,27 +1,19 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { ModelRegistrationFormData } from "../../../src/shared";
 import type { RoleRecord } from "../shared/types";
+import {
+  runtimeConfigForSelection,
+  selectionFromRole,
+  type ModelEffort,
+  type RoleModelSelection,
+} from "./chatModelSelection";
 
 type ChatModelMenuProps = {
   activeRoleId: string;
   bridgeReady: boolean;
 };
 
-type RoleModelSelection = {
-  dialogueId: string;
-  visualId: string;
-  runtimeConfig: Record<string, unknown>;
-};
-
-function selectionFromRole(role: RoleRecord): RoleModelSelection {
-  return {
-    dialogueId: String(role.runtime_config.dialogue_model_registration_id ?? ""),
-    visualId: String(role.runtime_config.visual_model_registration_id ?? ""),
-    runtimeConfig: role.runtime_config,
-  };
-}
-
-/** Owns the compact role-level dialogue and visual model selectors. */
+/** Owns the compact role-level model and dialogue effort selectors. */
 export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -42,7 +34,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
       const role = roles.find((item) => item.id === activeRoleId);
       if (!role) throw new Error("当前角色不存在");
       setRegistrations(settings.formData.models.registrations);
-      setSelection(selectionFromRole(role));
+      setSelection(selectionFromRole(role, settings.formData.models.registrations));
     } catch (error) {
       window.alert(error instanceof Error ? error.message : String(error));
     }
@@ -64,13 +56,9 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
     return () => window.removeEventListener("pointerdown", close, true);
   }, [open]);
 
-  async function updateSelection(kind: "dialogue" | "visual", registrationId: string): Promise<void> {
+  async function updateSelection(kind: "dialogue" | "visual" | "effort", value: string): Promise<void> {
     if (!selection || !activeRoleId) return;
-    const runtimeConfig = {
-      ...selection.runtimeConfig,
-      dialogue_model_registration_id: kind === "dialogue" ? registrationId : selection.dialogueId,
-      visual_model_registration_id: kind === "visual" ? registrationId : selection.visualId,
-    };
+    const runtimeConfig = runtimeConfigForSelection(selection, kind, value);
     try {
       const response = await window.miraDesktop.invoke({
         method: "roles.update",
@@ -78,9 +66,10 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
       });
       if (response.error) throw new Error(response.error.message);
       const role = response.payload.role as RoleRecord | undefined;
-      setSelection(role ? selectionFromRole(role) : {
+      setSelection(role ? selectionFromRole(role, registrations) : {
         dialogueId: String(runtimeConfig.dialogue_model_registration_id),
         visualId: String(runtimeConfig.visual_model_registration_id),
+        dialogueEffort: String(runtimeConfig.dialogue_model_effort) as ModelEffort,
         runtimeConfig,
       });
     } catch (error) {
@@ -116,6 +105,15 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
             <select className="h-9 rounded-md border border-[#D8DFE7] bg-white px-2 text-sm text-[#182230] transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" value={selection.visualId} onChange={(event) => void updateSelection("visual", event.target.value)}>
               <option value="">沿用对话模型</option>
               {registrations.map((registration) => <option key={registration.id} value={registration.id}>{registration.model}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1.5 text-xs text-[#667085]">
+            <span>思考强度</span>
+            <select className="h-9 rounded-md border border-[#D8DFE7] bg-white px-2 text-sm text-[#182230] transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" value={selection.dialogueEffort} onChange={(event) => void updateSelection("effort", event.target.value)}>
+              <option value="none">关闭</option>
+              <option value="low">低</option>
+              <option value="high">高</option>
+              <option value="max">最大</option>
             </select>
           </label>
         </div>

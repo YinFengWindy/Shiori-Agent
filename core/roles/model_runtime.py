@@ -11,6 +11,7 @@ from agent.provider import LLMProvider, LLMResponse, StreamDelta
 from .store import RoleStore
 
 ModelPurpose = Literal["chat", "vision"]
+_VALID_EFFORTS = {"none", "low", "high", "max"}
 
 
 @dataclass(frozen=True)
@@ -73,11 +74,14 @@ class RoleModelRuntime:
         registration = self._registrations.get(selected_id)
         if registration is None:
             raise ValueError(f"角色引用了不存在的模型注册: {selected_id}")
-        extra_body = (
-            {}
-            if registration.effort == "none"
-            else {"reasoning_effort": registration.effort}
-        )
+        effort = registration.effort
+        if purpose == "chat":
+            role_effort = str(
+                role.runtime_config.get("dialogue_model_effort") or ""
+            ).strip().lower()
+            if role_effort in _VALID_EFFORTS:
+                effort = role_effort
+        extra_body = {} if effort == "none" else {"reasoning_effort": effort}
         provider = LLMProvider(
             api_key=registration.api_key,
             base_url=registration.base_url,
@@ -90,7 +94,7 @@ class RoleModelRuntime:
             registration_id=registration.id,
             provider=provider,
             model=registration.model,
-            effort=registration.effort,
+            effort=effort,
         )
 
     @contextmanager

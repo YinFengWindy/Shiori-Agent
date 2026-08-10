@@ -66,3 +66,41 @@ def test_runtime_snapshot_stays_stable_after_role_selection_changes(tmp_path) ->
 
     assert in_flight.model == "first-model"
     assert runtime.resolve("mira", "chat").model == "second-model"
+
+
+def test_runtime_uses_role_dialogue_effort_override(tmp_path) -> None:
+    dialogue = registration("00000000-0000-4000-a000-000000000001", "chat-model")
+    visual = ModelRegistration(
+        id="00000000-0000-4000-a000-000000000002",
+        provider="openai",
+        base_url="https://example.com/v1",
+        api_key="secret",
+        model="vision-model",
+        effort="low",
+    )
+    store = RoleStore(tmp_path, default_dialogue_registration_id=dialogue.id)
+    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
+    runtime = RoleModelRuntime(
+        role_store=store,
+        registrations=[dialogue, visual],
+        system_prompt="system",
+    )
+
+    role = store.get_role("mira")
+    assert role is not None
+    store.update_role(
+        "mira",
+        runtime_config={
+            **role.runtime_config,
+            "dialogue_model_effort": "high",
+            "visual_model_registration_id": visual.id,
+        },
+    )
+
+    snapshot = runtime.resolve("mira", "chat")
+    assert snapshot.effort == "high"
+    assert snapshot.provider._extra_body == {"reasoning_effort": "high"}
+
+    visual_snapshot = runtime.resolve("mira", "vision")
+    assert visual_snapshot.effort == "low"
+    assert visual_snapshot.provider._extra_body == {"reasoning_effort": "low"}
