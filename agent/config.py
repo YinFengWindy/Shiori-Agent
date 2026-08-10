@@ -33,12 +33,6 @@ from proactive_v2.config_loader import ProactiveConfigError, load_proactive_conf
 
 logger = logging.getLogger(__name__)
 
-_PRESETS: dict[str, str] = {
-    "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "deepseek": "https://api.deepseek.com/v1",
-    "openai": "https://api.openai.com/v1",
-}
-
 def _validated_timezone(tz_name: str, *, enabled: bool) -> str:
     """仅当 anyaction_enabled=True 时校验时区合法性，无效则启动时 fail-fast。"""
     if not enabled:
@@ -73,10 +67,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     voice = _load_voice_config(data)
     wiring = _load_wiring_config(data)
     plugins = _load_plugins_config(data)
-    model_registrations, legacy_visual_registration_id = _load_model_registrations(
-        data,
-        source_path=Path(path),
-    )
+    model_registrations = _load_model_registrations(data)
     primary_registration = model_registrations[0]
 
     return Config(
@@ -149,34 +140,23 @@ def load_config(path: str | Path = "config.toml") -> Config:
         wiring=wiring,
         plugins=plugins,
         model_registrations=model_registrations,
-        legacy_visual_registration_id=legacy_visual_registration_id,
     )
 
 
 def _load_model_registrations(
     data: dict[str, Any],
-    *,
-    source_path: Path,
-) -> tuple[list[ModelRegistration], str]:
+) -> list[ModelRegistration]:
     llm = _as_dict(data.get("llm"))
     raw_registrations = llm.get("registrations", [])
-    if raw_registrations:
-        if not isinstance(raw_registrations, list):
-            raise ValueError("llm.registrations 必须是数组")
-        registrations = [
-            _parse_model_registration(item)
-            for item in raw_registrations
-            if isinstance(item, dict)
-        ]
-        _validate_model_registrations(registrations)
-        return registrations, ""
-
-    registrations, visual_registration_id = _migrate_legacy_model_registrations(
-        data,
-        source_path=source_path,
-    )
+    if not isinstance(raw_registrations, list):
+        raise ValueError("llm.registrations 必须是数组")
+    registrations = [
+        _parse_model_registration(item)
+        for item in raw_registrations
+        if isinstance(item, dict)
+    ]
     _validate_model_registrations(registrations)
-    return registrations, visual_registration_id
+    return registrations
 
 
 def _parse_model_registration(payload: dict[str, Any]) -> ModelRegistration:
@@ -191,86 +171,6 @@ def _parse_model_registration(payload: dict[str, Any]) -> ModelRegistration:
         model=str(payload.get("model") or "").strip(),
         effort=cast(Any, effort),
     )
-
-
-def _migrate_legacy_model_registrations(
-    data: dict[str, Any],
-    *,
-    source_path: Path,
-) -> tuple[list[ModelRegistration], str]:
-    llm = _as_dict(data.get("llm"))
-    provider = str(llm.get("provider") or data.get("provider") or "openai").strip()
-    main = _as_dict(llm.get("main"))
-    legacy_sections = [
-        ("main", main, provider),
-        ("fast", _as_dict(llm.get("fast")), provider),
-        ("agent", _as_dict(llm.get("agent")), provider),
-        ("visual", _as_dict(llm.get("vl")), provider),
-    ]
-    registrations: list[ModelRegistration] = []
-    visual_registration_id = ""
-    for key, section, section_provider in legacy_sections:
-        model = str(section.get("model") or "").strip()
-        if key == "main" and not model:
-            model = str(data.get("model") or "").strip()
-        if not model:
-            continue
-        base_url = str(
-            section.get("base_url")
-            or (data.get("base_url") if key == "main" else main.get("base_url"))
-            or _PRESETS.get(section_provider)
-            or ""
-        ).strip()
-        api_key = _resolve(
-            str(
-                section.get("api_key")
-                or (data.get("api_key") if key == "main" else main.get("api_key"))
-                or ""
-            )
-        )
-        effort = "none"
-        if key == "main":
-            raw_effort = str(main.get("reasoning_effort") or "").strip().lower()
-            if raw_effort in {"low", "high", "max"}:
-                effort = raw_effort
-            elif bool(main.get("enable_thinking")):
-                effort = "high"
-        registration_id = _stable_legacy_registration_id(
-            source_path=source_path,
-            key=key,
-            provider=section_provider,
-            base_url=base_url,
-            model=model,
-        )
-        registrations.append(
-            ModelRegistration(
-                id=registration_id,
-                provider=section_provider,
-                base_url=base_url,
-                api_key=api_key,
-                model=model,
-                effort=cast(Any, effort),
-            )
-        )
-        if key == "visual":
-            visual_registration_id = registration_id
-    if not registrations:
-        raise ValueError("至少需要一个完整的模型注册")
-    return registrations, visual_registration_id
-
-
-def _stable_legacy_registration_id(
-    *,
-    source_path: Path,
-    key: str,
-    provider: str,
-    base_url: str,
-    model: str,
-) -> str:
-    stable_key = "|".join(
-        [str(source_path.resolve()), key, provider, base_url, model]
-    )
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, stable_key))
 
 
 def _validate_model_registrations(registrations: list[ModelRegistration]) -> None:

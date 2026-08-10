@@ -1,4 +1,4 @@
-import { Check } from "@phosphor-icons/react";
+import { CaretRight, Check } from "@phosphor-icons/react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ModelRegistrationFormData } from "../../../src/shared";
@@ -124,7 +124,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
           <div className="grid w-[112px] content-start gap-1 rounded-md border border-[#DDE3EA] bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
             {(["dialogue", "visual"] as const).map((kind) => (
               <button key={kind} type="button" className={`flex h-9 items-center justify-between rounded-md px-2 text-left text-xs transition ${submenu === kind ? "bg-[#EEF2F6] text-[#182230]" : "text-[#344054] hover:bg-[#F3F5F7]"}`} aria-current={submenu === kind ? "true" : undefined} onMouseEnter={() => { setSubmenu(kind); setHoveredModelId(null); }} onClick={() => { setSubmenu(kind); setHoveredModelId(null); }}>
-                <span>{kind === "dialogue" ? "聊天模型" : "识图模型"}</span><span aria-hidden="true">›</span>
+                <span>{kind === "dialogue" ? "聊天模型" : "识图模型"}</span><CaretRight className="h-3 w-3" weight="bold" aria-hidden="true" />
               </button>
             ))}
           </div>
@@ -133,7 +133,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
               <div className="grid gap-1">
                 {(submenu === "visual" ? [{ id: "", model: "沿用对话模型" }, ...registrations] : registrations).map((registration) => (
                   <button key={registration.id || "dialogue-fallback"} type="button" className={`flex h-9 items-center justify-between gap-2 rounded-md px-2 text-left text-xs transition ${(submenu === "dialogue" ? selection.dialogueId : selection.visualId) === registration.id ? "bg-[#EEF2F6] text-[#182230]" : "text-[#344054] hover:bg-[#F3F5F7]"}`} aria-current={(submenu === "dialogue" ? selection.dialogueId : selection.visualId) === registration.id ? "true" : undefined} onMouseEnter={() => setHoveredModelId(registration.id)} onClick={() => void updateSelection(submenu, registration.id)}>
-                    <span className="max-w-[150px] truncate">{registration.model}</span><span className="flex items-center gap-1" aria-hidden="true">{(submenu === "dialogue" ? selection.dialogueId : selection.visualId) === registration.id ? <Check className="h-3 w-3" weight="bold" /> : null}<span>›</span></span>
+                    <span className="max-w-[150px] truncate">{registration.model}</span><span className="flex items-center gap-1" aria-hidden="true">{(submenu === "dialogue" ? selection.dialogueId : selection.visualId) === registration.id ? <Check className="h-3 w-3" weight="bold" /> : null}<CaretRight className="h-3 w-3" weight="bold" /></span>
                   </button>
                 ))}
               </div>

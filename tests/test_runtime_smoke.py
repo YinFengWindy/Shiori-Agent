@@ -37,6 +37,8 @@ def _dump_toml(data: dict, prefix: tuple[str, ...] = ()) -> list[str]:
     for key, value in data.items():
         if isinstance(value, dict):
             continue
+        if isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
+            continue
         scalar_lines.append(f"{key} = {_toml_value(value)}")
     if prefix:
         lines.append(f"[{'.'.join(prefix)}]")
@@ -46,17 +48,24 @@ def _dump_toml(data: dict, prefix: tuple[str, ...] = ()) -> list[str]:
     for key, value in data.items():
         if isinstance(value, dict):
             lines.extend(_dump_toml(value, prefix + (key,)))
+        elif isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
+            for item in value:
+                lines.append(f"[[{'.'.join(prefix + (key,))}]]")
+                lines.extend(f"{item_key} = {_toml_value(item_value)}" for item_key, item_value in item.items())
+                lines.append("")
     return lines
 
 
 def _write_config(path: Path) -> None:
     payload = {
         "llm": {
-            "provider": "openai",
-            "main": {
+            "registrations": [{
+                "id": "00000000-0000-4000-a000-000000000001",
+                "provider": "openai",
                 "model": "test-model",
                 "api_key": "test-key",
-            },
+                "effort": "none",
+            }],
         },
         "agent": {
             "system_prompt": "test system prompt",
@@ -78,12 +87,12 @@ def test_load_config_keeps_internal_max_iterations_default(tmp_path: Path):
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
-[llm]
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
 provider = "openai"
-
-[llm.main]
 model = "test-model"
 api_key = "test-key"
+effort = "none"
 
 [agent]
 system_prompt = "test"
@@ -101,12 +110,12 @@ def test_load_config_defaults_memory_window_and_optimizer_interval(tmp_path: Pat
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
-[llm]
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
 provider = "openai"
-
-[llm.main]
 model = "test-model"
 api_key = "test-key"
+effort = "none"
 
 [agent]
 system_prompt = "test"

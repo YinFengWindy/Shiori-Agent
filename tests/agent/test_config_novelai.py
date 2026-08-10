@@ -9,13 +9,13 @@ def test_load_config_reads_novelai_settings(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
-[llm]
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
 provider = "openai"
-
-[llm.main]
 model = "gpt-4.1"
 api_key = "sk-test"
 base_url = "https://api.openai.com/v1"
+effort = "none"
 
 [integrations.novelai]
 enabled = true
@@ -57,13 +57,13 @@ def test_load_config_preserves_proactive_base_config_without_role_target(tmp_pat
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
-[llm]
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
 provider = "openai"
-
-[llm.main]
 model = "gpt-4.1"
 api_key = "sk-test"
 base_url = "https://api.openai.com/v1"
+effort = "none"
 
 [proactive]
 enabled = true
@@ -87,13 +87,13 @@ def test_load_config_keeps_channel_permissions_in_role_bindings(tmp_path: Path) 
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
-[llm]
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
 provider = "openai"
-
-[llm.main]
 model = "gpt-4.1"
 api_key = "sk-test"
 base_url = "https://api.openai.com/v1"
+effort = "none"
 
 [channels.telegram]
 token = "telegram-token"

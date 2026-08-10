@@ -43,6 +43,7 @@ class MemoryConfig:
     embedding: MemoryEmbeddingConfig = field(default_factory=MemoryEmbeddingConfig)
 
 
+# Supported reasoning effort values persisted by model registrations.
 Effort = Literal["none", "low", "high", "max"]
 
 
@@ -106,7 +107,6 @@ class Config:
     wiring: WiringConfig = field(default_factory=WiringConfig)
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
     model_registrations: list[ModelRegistration] = field(default_factory=list)
-    legacy_visual_registration_id: str = ""
 
     def __post_init__(self) -> None:
         if self.model_registrations:

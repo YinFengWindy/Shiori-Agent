@@ -9,6 +9,7 @@ import sys
 import select
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -237,28 +238,25 @@ def _phase_main_llm(a: WizardAnswers) -> None:
     a.api_key = _secret_prompt("API key")
     a.provider = "openai"
     a.enable_thinking = click.confirm("开启 thinking 模式？", default=False)
-    a.multimodal = click.confirm("主模型原生支持图片输入？", default=False)
-
-    if not a.multimodal:
-        if click.confirm("配置独立视觉模型？", default=False):
-            a.vl_model = click.prompt("视觉模型名")
-            a.vl_base_url = click.prompt(
-                "base_url（回车 = 复用主模型 base_url）",
-                default="",
-                show_default=False,
-            ) or a.base_url
-            a.vl_api_key = _secret_prompt(
-                "API key（回车 = 复用主模型 key）",
-                default="",
-                show_default=False,
-            ) or a.api_key
+    if click.confirm("配置独立视觉模型注册？", default=False):
+        a.vl_model = click.prompt("视觉模型名")
+        a.vl_base_url = click.prompt(
+            "base_url（回车 = 复用主模型 base_url）",
+            default="",
+            show_default=False,
+        ) or a.base_url
+        a.vl_api_key = _secret_prompt(
+            "API key（回车 = 复用主模型 key）",
+            default="",
+            show_default=False,
+        ) or a.api_key
 
 
 def _phase_fast_model(a: WizardAnswers) -> None:
-    _section_header("2/4", "轻量模型（可跳过）")
-    _hint("用于 memory gate / HyDE 等低延迟场景，跳过则退回主模型")
+    _section_header("2/4", "额外模型注册（可跳过）")
+    _hint("额外连接保存为普通注册，不承担特殊运行时职责")
 
-    if not click.confirm("配置独立轻量模型？", default=False):
+    if not click.confirm("配置额外模型注册？", default=False):
         return
 
     a.fast_model = click.prompt("模型名")
@@ -420,53 +418,68 @@ def _render_config(a: WizardAnswers) -> str:
 
 
 def _render_llm(a: WizardAnswers) -> str:
-    lines: list[str] = [
-        "[llm]",
-        f'provider = "{a.provider}"',
-        "",
-        "[llm.main]",
-        f'model = "{a.model}"',
-        f'api_key = "{a.api_key}"',
-        f'base_url = "{a.base_url}"',
-    ]
-    if a.enable_thinking:
-        lines.append("enable_thinking = true")
-    lines.append(f"multimodal = {'true' if a.multimodal else 'false'}")
-    lines.append("")
+    lines: list[str] = ["[llm]", ""]
+    lines.extend(
+        _render_model_registration(
+            kind="main",
+            provider=a.provider,
+            model=a.model,
+            api_key=a.api_key,
+            base_url=a.base_url,
+            effort="high" if a.enable_thinking else "none",
+        )
+    )
 
     if a.fast_model:
-        lines += [
-            "[llm.fast]",
-            f'model = "{a.fast_model}"',
-            f'api_key = "{a.fast_api_key}"',
-            f'base_url = "{a.fast_base_url}"',
-            "",
-        ]
-    else:
-        lines += [
-            "# 轻量模型未配置，memory gate / HyDE 将使用主模型",
-            "# [llm.fast]",
-            "# model = \"\"",
-            "",
-        ]
+        lines.extend(
+            _render_model_registration(
+                kind="extra",
+                provider=a.provider,
+                model=a.fast_model,
+                api_key=a.fast_api_key,
+                base_url=a.fast_base_url,
+                effort="none",
+            )
+        )
 
     if a.vl_model:
-        lines += [
-            "[llm.vl]",
-            f'model = "{a.vl_model}"',
-            f'api_key = "{a.vl_api_key}"',
-            f'base_url = "{a.vl_base_url}"',
-            "",
-        ]
-    else:
-        lines += [
-            "# 视觉模型未配置",
-            "# [llm.vl]",
-            "# model = \"\"",
-            "",
-        ]
+        lines.extend(
+            _render_model_registration(
+                kind="visual",
+                provider=a.provider,
+                model=a.vl_model,
+                api_key=a.vl_api_key,
+                base_url=a.vl_base_url,
+                effort="none",
+            )
+        )
 
     return "\n".join(lines)
+
+
+def _render_model_registration(
+    *,
+    kind: str,
+    provider: str,
+    model: str,
+    api_key: str,
+    base_url: str,
+    effort: str,
+) -> list[str]:
+    """Renders one explicit model registration for a newly generated config."""
+
+    stable_key = "|".join((kind, provider, base_url, model))
+    registration_id = uuid.uuid5(uuid.NAMESPACE_URL, stable_key)
+    return [
+        "[[llm.registrations]]",
+        f'id = "{registration_id}"',
+        f'provider = "{provider}"',
+        f'model = "{model}"',
+        f'api_key = "{api_key}"',
+        f'base_url = "{base_url}"',
+        f'effort = "{effort}"',
+        "",
+    ]
 
 
 def _render_agent() -> str:

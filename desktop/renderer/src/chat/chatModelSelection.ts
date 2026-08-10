@@ -1,10 +1,12 @@
 import type { ModelRegistrationFormData } from "../../../src/shared";
 import type { RoleRecord } from "../shared/types";
 
+/** Supported reasoning effort values exposed by model controls. */
 export type ModelEffort = ModelRegistrationFormData["effort"];
 
 const MODEL_EFFORTS = new Set<ModelEffort>(["none", "low", "high", "max"]);
 
+/** Effective role-owned model and effort selections shown in the chat menu. */
 export type RoleModelSelection = {
   dialogueId: string;
   visualId: string;

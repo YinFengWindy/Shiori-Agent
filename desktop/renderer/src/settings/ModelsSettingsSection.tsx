@@ -62,6 +62,12 @@ export function ModelsSettingsSection({
       models: {
         registrations: current.models.registrations.filter((item) => item.id !== registration.id),
       },
+      pendingRoleModelUpdates: [
+        ...(current.pendingRoleModelUpdates ?? []).filter(
+          (item) => !canRemove.some((update) => update.roleId === item.roleId),
+        ),
+        ...canRemove,
+      ],
     }));
     setActiveRegistrationId(null);
   }

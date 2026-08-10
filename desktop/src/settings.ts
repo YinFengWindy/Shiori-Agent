@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createHash } from "node:crypto";
 
 import type {
   ModelRegistrationFormData,
@@ -128,64 +127,18 @@ function renderPluginSection(name: string, value: Record<string, unknown>): stri
   return lines.join("\n");
 }
 
-export function stableLegacyRegistrationId(
-  kind: string,
-  provider: string,
-  baseUrl: string,
-  model: string,
-): string {
-  const namespace = Buffer.from("6ba7b8119dad11d180b400c04fd430c8", "hex");
-  const digest = createHash("sha1")
-    .update(namespace)
-    .update([configPath, kind, provider, baseUrl, model].join("|"), "utf-8")
-    .digest("hex")
-    .slice(0, 32);
-  const bytes = Buffer.from(digest, "hex");
-  bytes[6] = (bytes[6]! & 0x0f) | 0x50;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = bytes.toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
 function loadModelRegistrations(llm: Record<string, unknown>): ModelRegistrationFormData[] {
   const raw = Array.isArray(llm.registrations) ? llm.registrations : [];
-  if (raw.length > 0) {
-    return raw.map((value) => {
-      const item = asRecord(value);
-      return {
-        id: String(item.id ?? ""),
-        provider: String(item.provider ?? "openai"),
-        baseUrl: String(item.base_url ?? ""),
-        apiKey: String(item.api_key ?? ""),
-        model: String(item.model ?? ""),
-        effort: String(item.effort ?? "none") as "none" | "low" | "high" | "max",
-      };
-    });
-  }
-  const provider = String(llm.provider ?? "openai");
-  const main = asRecord(llm.main);
-  const definitions = [
-    ["main", main],
-    ["fast", asRecord(llm.fast)],
-    ["agent", asRecord(llm.agent)],
-    ["visual", asRecord(llm.vl)],
-  ] as const;
-  return definitions.flatMap(([kind, item]) => {
-    const model = String(item.model ?? "").trim();
-    if (!model) return [];
-    const baseUrl = String(item.base_url ?? main.base_url ?? "");
-    const rawEffort = String(item.reasoning_effort ?? "").toLowerCase();
-    const effort: ModelRegistrationFormData["effort"] = kind === "main" && ["low", "high", "max"].includes(rawEffort)
-      ? rawEffort as "low" | "high" | "max"
-      : (kind === "main" && item.enable_thinking ? "high" : "none");
-    return [{
-      id: stableLegacyRegistrationId(kind, provider, baseUrl, model),
-      provider,
-      baseUrl,
-      apiKey: String(item.api_key ?? main.api_key ?? ""),
-      model,
-      effort,
-    }];
+  return raw.map((value) => {
+    const item = asRecord(value);
+    return {
+      id: String(item.id ?? ""),
+      provider: String(item.provider ?? "openai"),
+      baseUrl: String(item.base_url ?? ""),
+      apiKey: String(item.api_key ?? ""),
+      model: String(item.model ?? ""),
+      effort: String(item.effort ?? "none") as "none" | "low" | "high" | "max",
+    };
   });
 }
 

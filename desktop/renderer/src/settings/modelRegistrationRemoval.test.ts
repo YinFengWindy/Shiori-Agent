@@ -15,8 +15,7 @@ afterEach(() => {
 });
 
 describe("prepareModelRegistrationRemoval", () => {
-  it("migrates affected role model references before allowing deletion", async () => {
-    const updates: Record<string, unknown>[] = [];
+  it("returns affected role updates without persisting them", async () => {
     Object.defineProperty(globalThis, "window", {
       configurable: true,
       value: {
@@ -39,8 +38,7 @@ describe("prepareModelRegistrationRemoval", () => {
                 error: null,
               };
             }
-            updates.push(request.payload);
-            return { payload: {}, error: null };
+            throw new Error(`unexpected ${request.method}`);
           },
         },
       },
@@ -61,14 +59,12 @@ describe("prepareModelRegistrationRemoval", () => {
       ],
     );
 
-    assert.equal(removable, true);
-    assert.equal(updates.length, 1);
-    assert.deepEqual(updates[0], {
-      role_id: "role-1",
-      runtime_config: {
+    assert.deepEqual(removable, [{
+      roleId: "role-1",
+      runtimeConfig: {
         dialogue_model_registration_id: "registration-2",
         visual_model_registration_id: "",
       },
-    });
+    }]);
   });
 });

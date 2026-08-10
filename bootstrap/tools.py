@@ -482,7 +482,7 @@ def build_core_runtime(
     )
     role_store.migrate_model_selections(
         dialogue_registration_id=config.model_registrations[0].id,
-        visual_registration_id=config.legacy_visual_registration_id,
+        visual_registration_id="",
     )
     role_model_resolver = RoleModelRuntime(
         role_store=role_store,

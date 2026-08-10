@@ -136,7 +136,6 @@ class ObservationModelAdapter:
             model=model,
             max_tokens=1200,
             tool_choice="auto",
-            disable_thinking=True,
             payload_snapshot_enabled=False,
         )
         if response.tool_calls:

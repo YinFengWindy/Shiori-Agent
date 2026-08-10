@@ -59,6 +59,7 @@ export type VoicePlaybackCommand =
   | { command: "play"; id: string; audioBase64: string; format: "mp3" }
   | { command: "cancel" };
 
+/** Editable model registration persisted in config.toml. */
 export type ModelRegistrationFormData = {
   id: string;
   provider: string;
@@ -124,6 +125,13 @@ export type SettingsFormData = {
     memoryOptimizerIntervalSeconds: number;
     pluginsRawToml: string;
   };
+  pendingRoleModelUpdates?: PendingRoleModelUpdate[];
+};
+
+/** Deferred role-reference changes committed after the settings save succeeds. */
+export type PendingRoleModelUpdate = {
+  roleId: string;
+  runtimeConfig: Record<string, unknown>;
 };
 
 export type SettingsSnapshot = {

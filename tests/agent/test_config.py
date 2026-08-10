@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from agent import config
 
 
@@ -39,7 +41,7 @@ def test_load_voice_config_reads_global_provider_and_input_settings() -> None:
     assert loaded.tts.volume == 2.5
 
 
-def test_load_config_migrates_legacy_models_to_stable_registrations(tmp_path: Path) -> None:
+def test_load_config_rejects_legacy_model_sections(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
         """
@@ -64,19 +66,8 @@ system_prompt = "system"
         encoding="utf-8",
     )
 
-    first = config.load_config(config_path)
-    second = config.load_config(config_path)
-
-    assert [item.model for item in first.model_registrations] == [
-        "deepseek-chat",
-        "deepseek-fast",
-        "vision-model",
-    ]
-    assert first.model_registrations[0].effort == "high"
-    assert first.legacy_visual_registration_id == first.model_registrations[2].id
-    assert [item.id for item in first.model_registrations] == [
-        item.id for item in second.model_registrations
-    ]
+    with pytest.raises(ValueError, match="至少需要一个模型注册"):
+        config.load_config(config_path)
 
 
 def test_load_config_ignores_retired_registration_names(tmp_path: Path) -> None:
