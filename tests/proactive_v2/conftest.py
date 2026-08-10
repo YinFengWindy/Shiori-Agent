@@ -23,6 +23,7 @@ from agent.core.proactive_turn.gates import (
     ProactiveGateDecision,
     ProactiveMode,
 )
+from plugins.relationship_proactive.plugin import RelationshipLonelinessGate
 
 
 # ── FakeStateStore ────────────────────────────────────────────────────────
@@ -243,26 +244,11 @@ def relationship_gate_chain(
             elif completion.outcome == "closed" and on_scene_closed is not None:
                 on_scene_closed(completion.session_key)
 
-    class _LonelinessGate(ProactiveGateAdapter):
-        name = "test.loneliness"
-        priority = 0
-
-        def evaluate(self, ctx: ProactiveGateContext) -> ProactiveGateDecision:
-            if loneliness_evaluate is None:
-                return ProactiveGateDecision.continue_()
-            should_trigger, metadata = loneliness_evaluate(
-                ctx.session_key,
-                ctx.now_utc,
-            )
-            if not should_trigger:
-                return ProactiveGateDecision.block("loneliness")
-            return ProactiveGateDecision.activate(
-                ProactiveMode.RELATIONSHIP_FALLBACK,
-                reason="loneliness",
-                metadata=metadata,
-            )
-
-    return ProactiveGateChain([_SceneGate(), _LonelinessGate()])
+    gates: list[ProactiveGateAdapter] = [_SceneGate()]
+    if loneliness_evaluate is not None:
+        runtime = SimpleNamespace(should_trigger_proactive=loneliness_evaluate)
+        gates.append(RelationshipLonelinessGate(cast(Any, runtime)))
+    return ProactiveGateChain(gates)
 
 def make_proactive_pipeline(
     *,

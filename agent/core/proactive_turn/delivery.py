@@ -36,6 +36,9 @@ class ProactiveDeliveryHost(Protocol):
         ctx: AgentTickContext,
         *,
         gate_exit: str | None = None,
+        gate_name: str = "",
+        gate_reason: str = "",
+        gate_metadata: dict[str, object] | None = None,
         result: TurnResult | None = None,
     ) -> None: ...
 

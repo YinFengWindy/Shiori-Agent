@@ -72,6 +72,32 @@ def test_gate_chain_rejects_duplicate_names():
         )
 
 
+def test_gate_chain_preserves_block_metadata():
+    calls: list[str] = []
+    chain = ProactiveGateChain(
+        [
+            _Gate(
+                "relationship.loneliness",
+                0,
+                ProactiveGateDecision.block(
+                    "cooldown",
+                    metadata={"cooldown_until": "2026-08-10T18:16:40+08:00"},
+                ),
+                calls,
+            )
+        ]
+    )
+
+    result = chain.evaluate(_ctx())
+
+    assert result.blocked is True
+    assert result.blocked_gate_name == "relationship.loneliness"
+    assert result.reason == "cooldown"
+    assert result.trace[0].metadata == {
+        "cooldown_until": "2026-08-10T18:16:40+08:00"
+    }
+
+
 def test_resolve_gate_attempt_index_accepts_non_negative_integer_strings():
     gate = ProactiveGateActivation(
         gate_name="scene",

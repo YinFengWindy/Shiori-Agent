@@ -313,6 +313,7 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
                 "loneliness_value": runtime["loneliness_value"],
                 "effective_loneliness_value": round(effective_value, 2),
                 "trigger_threshold": threshold,
+                "cooldown_until": str(runtime.get("cooldown_until") or ""),
             }
         return effective_value >= threshold, {
             "reason": "threshold" if effective_value >= threshold else "below_threshold",
