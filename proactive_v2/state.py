@@ -686,17 +686,7 @@ class ProactiveStateStore:
             CREATE INDEX IF NOT EXISTS idx_tick_step_log_tick_step
             ON tick_step_log(tick_id, step_index);
             """)
-        self._ensure_tick_log_diagnostic_columns()
         self._db.commit()
-
-    def _ensure_tick_log_diagnostic_columns(self) -> None:
-        columns = {
-            str(row["name"])
-            for row in self._db.execute("PRAGMA table_info(tick_log)").fetchall()
-        }
-        for name in ("gate_name", "gate_reason", "gate_metadata"):
-            if name not in columns:
-                self._db.execute(f"ALTER TABLE tick_log ADD COLUMN {name} TEXT")
 
     def _get_kv_datetime(self, key: str) -> datetime | None:
         with self._lock:
