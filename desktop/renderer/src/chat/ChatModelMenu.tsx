@@ -70,7 +70,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
     const updatePosition = () => {
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
-      setMenuPosition({ left: rect.left, bottom: window.innerHeight - rect.top + 8 });
+      setMenuPosition({ left: rect.left, bottom: window.innerHeight - rect.bottom + 4 });
     };
     updatePosition();
     window.addEventListener("resize", updatePosition);
