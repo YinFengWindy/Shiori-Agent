@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ModelRegistrationFormData } from "../../../src/shared";
 import type { RoleRecord } from "../shared/types";
 import {
@@ -16,9 +17,11 @@ type ChatModelMenuProps = {
 /** Owns the compact role-level model and dialogue effort selectors. */
 export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [submenu, setSubmenu] = useState<"dialogue" | "visual" | null>(null);
   const [hoveredModelId, setHoveredModelId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ left: number; bottom: number } | null>(null);
   const [registrations, setRegistrations] = useState<ModelRegistrationFormData[]>([]);
   const [selection, setSelection] = useState<RoleModelSelection | null>(null);
 
@@ -46,6 +49,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
     setOpen(false);
     setSubmenu(null);
     setHoveredModelId(null);
+    setMenuPosition(null);
     setSelection(null);
     void loadSelection();
   }, [activeRoleId, bridgeReady]);
@@ -53,11 +57,27 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
   useEffect(() => {
     if (!open) return undefined;
     const close = (event: PointerEvent) => {
-      if (containerRef.current?.contains(event.target as Node)) return;
+      if (containerRef.current?.contains(event.target as Node) || menuRef.current?.contains(event.target as Node)) return;
       setOpen(false);
     };
     window.addEventListener("pointerdown", close, true);
     return () => window.removeEventListener("pointerdown", close, true);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !containerRef.current) return undefined;
+    const updatePosition = () => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setMenuPosition({ left: rect.left, bottom: window.innerHeight - rect.top + 8 });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
   }, [open]);
 
   async function updateSelection(kind: "dialogue" | "visual" | "dialogueEffort" | "visualEffort", value: string): Promise<void> {
@@ -97,8 +117,8 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
       >
         <span className="truncate">{dialogue?.model ?? "选择模型"}</span>
       </button>
-      {open && selection ? (
-        <div className="absolute bottom-9 left-0 z-20 flex rounded-md border border-[#DDE3EA] bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
+      {open && selection && menuPosition ? createPortal(
+        <div ref={menuRef} className="fixed z-50 flex rounded-md border border-[#DDE3EA] bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)]" style={menuPosition}>
           <div className="grid w-[112px] content-start gap-1">
             {(["dialogue", "visual"] as const).map((kind) => (
               <button key={kind} type="button" className="flex h-9 items-center justify-between rounded-md px-2 text-left text-xs text-[#344054] transition hover:bg-[#F3F5F7]" onMouseEnter={() => { setSubmenu(kind); setHoveredModelId(null); }} onClick={() => { setSubmenu(kind); setHoveredModelId(null); }}>
@@ -123,7 +143,8 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
               ) : null}
             </div>
           ) : null}
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
