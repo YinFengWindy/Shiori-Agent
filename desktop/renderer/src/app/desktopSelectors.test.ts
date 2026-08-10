@@ -214,7 +214,7 @@ describe("desktopSelectors", () => {
         awaiting_reply_after_proactive: false,
         awaiting_reply_since: "",
         last_triggered_at: "",
-        cooldown_until: "2026-07-06T20:00:00+08:00",
+        cooldown_until: "",
       },
     };
 
@@ -233,7 +233,6 @@ describe("desktopSelectors", () => {
     assert.equal(viewModel.roleSelfView, "我最近会不自觉地去想你会不会来找我。");
     assert.deepEqual(viewModel.relationshipTags, ["亲近", "怕被冷落"]);
     assert.equal(viewModel.lonelinessValue, 64);
-    assert.equal(viewModel.lonelinessCooldownUntil, "2026-07-06T20:00:00+08:00");
   });
 
   it("falls back to the role payload relationship runtime when the session metadata is empty", () => {

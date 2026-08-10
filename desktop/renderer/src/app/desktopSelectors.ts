@@ -107,9 +107,6 @@ export function buildDesktopViewModel({
   const lonelinessValue = Number.isFinite(normalizedLonelinessValue)
     ? normalizedLonelinessValue
     : 0;
-  const lonelinessCooldownUntil = typeof lonelinessRuntime?.cooldown_until === "string"
-    ? lonelinessRuntime.cooldown_until
-    : "";
 
   return {
     activeRole,
@@ -140,6 +137,5 @@ export function buildDesktopViewModel({
     roleSelfView,
     relationshipTags,
     lonelinessValue,
-    lonelinessCooldownUntil,
   };
 }

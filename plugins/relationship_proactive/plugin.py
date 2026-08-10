@@ -44,7 +44,9 @@ class _SceneFollowupGate(ProactiveGateAdapter):
         self._runtime.close_scene_followup(completion.session_key)
 
 
-class _LonelinessGate(ProactiveGateAdapter):
+class RelationshipLonelinessGate(ProactiveGateAdapter):
+    """Adapts relationship loneliness decisions to the proactive gate contract."""
+
     name = "relationship.loneliness"
     priority = 0
 
@@ -91,7 +93,7 @@ class RelationshipProactivePlugin(Plugin):
         runtime = self.context.relationship_runtime
         if runtime is None:
             return []
-        return [_SceneFollowupGate(runtime), _LonelinessGate(runtime)]
+        return [_SceneFollowupGate(runtime), RelationshipLonelinessGate(runtime)]
 
     async def terminate(self) -> None:
         handler = getattr(self, "_scene_handler", None)

@@ -25,7 +25,7 @@ related:
 
 `ProactiveLoop` 驱动周期性 tick。传感器、presence、时间、关系和记忆等信息形成 `AgentTickContext`，随后经过裁定、Agent tick 创建、工具执行和投递。`ProactiveStateStore` 保存节流、最近行为和裁定所需状态。
 
-关系门控的 `gate_exit` 保持兼容的门控类别；具体阻断原因（例如 `cooldown`、`below_threshold`）和判断 metadata 通过 gate trace 写入新建 `tick_log` 的 `gate_name`、`gate_reason` 与 `gate_metadata` 字段，因此冷却、阈值和关系条件不会再被统一的 `loneliness` 标签遮蔽。
+关系门控的 `gate_exit` 保持兼容的门控类别；具体阻断原因（例如 `cooldown`、`below_threshold`）和判断 metadata 通过 gate trace 写入 `tick_log` 的 `gate_name`、`gate_reason` 与 `gate_metadata` 字段。已有数据库会在启动时补齐这些字段，因此冷却、阈值和关系条件不会再被统一的 `loneliness` 标签遮蔽。
 
 主动行为不是绕开会话的单独机器人：成功输出应写入权威角色会话，并复用统一工具、消息推送和渠道投递。
 

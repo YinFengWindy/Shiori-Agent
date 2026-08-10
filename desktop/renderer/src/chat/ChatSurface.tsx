@@ -38,7 +38,6 @@ type ChatSurfaceProps = {
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
-  lonelinessCooldownUntil: string;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
@@ -81,7 +80,6 @@ export function ChatSurface({
   roleSelfView,
   relationshipTags,
   lonelinessValue,
-  lonelinessCooldownUntil,
   conversationEndRef,
   headerTitle,
   highlightedMessageKey,
@@ -539,7 +537,6 @@ export function ChatSurface({
                 currentMood={currentMood}
                 imagePath={chatLatestImagePath}
                 lonelinessValue={lonelinessValue}
-                lonelinessCooldownUntil={lonelinessCooldownUntil}
                 mode={sidebarMode}
                 moodIllustrationUrl={moodIllustrationUrl}
                 relationshipTags={relationshipTags}

@@ -255,7 +255,7 @@ async def test_loneliness_gate_blocks_when_threshold_not_reached():
     assert len(gate_calls) == 1
     assert gate_calls[0][0] == "test_session"
     assert state.tick_log_finishes[0]["gate_exit"] == "loneliness"
-    assert state.tick_log_finishes[0]["gate_name"] == "test.loneliness"
+    assert state.tick_log_finishes[0]["gate_name"] == "relationship.loneliness"
     assert state.tick_log_finishes[0]["gate_reason"] == "below_threshold"
     assert state.tick_log_finishes[0]["gate_metadata"] == {
         "reason": "below_threshold"
