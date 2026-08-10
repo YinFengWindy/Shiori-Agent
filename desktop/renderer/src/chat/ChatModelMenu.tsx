@@ -1,3 +1,4 @@
+import { Check } from "@phosphor-icons/react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ModelRegistrationFormData } from "../../../src/shared";
@@ -102,7 +103,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
     }
   }
 
-  const dialogue = registrations.find((item) => item.id === selection?.dialogueId);
+  const chatModel = registrations.find((item) => item.id === selection?.dialogueId);
   if (!activeRoleId) return null;
 
   return (
@@ -110,19 +111,19 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
       <button
         className="inline-flex h-[30px] max-w-[190px] items-center rounded-md px-2 text-xs text-[#5B6472] transition hover:bg-[#F3F5F7] hover:text-[#22272E] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-40"
         type="button"
-        aria-label="选择角色模型"
+        aria-label="选择聊天模型"
         aria-expanded={open}
         disabled={!bridgeReady || !selection}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="truncate">{dialogue?.model ?? "选择模型"}</span>
+        <span className="truncate">{chatModel?.model ?? "选择聊天模型"}</span>
       </button>
       {open && selection && menuPosition ? createPortal(
         <div ref={menuRef} className="fixed z-50 flex rounded-md border border-[#DDE3EA] bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)]" style={menuPosition}>
           <div className="grid w-[112px] content-start gap-1">
             {(["dialogue", "visual"] as const).map((kind) => (
-              <button key={kind} type="button" className="flex h-9 items-center justify-between rounded-md px-2 text-left text-xs text-[#344054] transition hover:bg-[#F3F5F7]" onMouseEnter={() => { setSubmenu(kind); setHoveredModelId(null); }} onClick={() => { setSubmenu(kind); setHoveredModelId(null); }}>
-                <span>{kind === "dialogue" ? "对话模型" : "识图模型"}</span><span aria-hidden="true">›</span>
+              <button key={kind} type="button" className={`flex h-9 items-center justify-between rounded-md px-2 text-left text-xs transition ${submenu === kind ? "bg-[#EEF2F6] text-[#182230]" : "text-[#344054] hover:bg-[#F3F5F7]"}`} aria-current={submenu === kind ? "true" : undefined} onMouseEnter={() => { setSubmenu(kind); setHoveredModelId(null); }} onClick={() => { setSubmenu(kind); setHoveredModelId(null); }}>
+                <span>{kind === "dialogue" ? "聊天模型" : "识图模型"}</span><span aria-hidden="true">›</span>
               </button>
             ))}
           </div>
@@ -130,15 +131,18 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
             <div className="relative ml-1 min-w-[132px] border-l border-[#EEF1F4] pl-2">
               <div className="grid gap-1">
                 {(submenu === "visual" ? [{ id: "", model: "沿用对话模型" }, ...registrations] : registrations).map((registration) => (
-                  <button key={registration.id || "dialogue-fallback"} type="button" className="flex h-9 items-center justify-between rounded-md px-2 text-left text-xs text-[#344054] transition hover:bg-[#F3F5F7]" onMouseEnter={() => setHoveredModelId(registration.id)} onClick={() => void updateSelection(submenu, registration.id)}>
-                    <span className="max-w-[150px] truncate">{registration.model}</span><span aria-hidden="true">›</span>
+                  <button key={registration.id || "dialogue-fallback"} type="button" className={`flex h-9 items-center justify-between gap-2 rounded-md px-2 text-left text-xs transition ${(submenu === "dialogue" ? selection.dialogueId : selection.visualId) === registration.id ? "bg-[#EEF2F6] text-[#182230]" : "text-[#344054] hover:bg-[#F3F5F7]"}`} aria-current={(submenu === "dialogue" ? selection.dialogueId : selection.visualId) === registration.id ? "true" : undefined} onMouseEnter={() => setHoveredModelId(registration.id)} onClick={() => void updateSelection(submenu, registration.id)}>
+                    <span className="max-w-[150px] truncate">{registration.model}</span><span className="flex items-center gap-1" aria-hidden="true">{(submenu === "dialogue" ? selection.dialogueId : selection.visualId) === registration.id ? <Check className="h-3 w-3" weight="bold" /> : null}<span>›</span></span>
                   </button>
                 ))}
               </div>
               {hoveredModelId !== null ? (
                 <div className="absolute left-full top-0 ml-1 grid min-w-[150px] gap-1 rounded-md border border-[#DDE3EA] bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
                   <span className="px-2 py-1 text-[11px] text-[#667085]">思考强度</span>
-                  {(["none", "low", "high", "max"] as const).map((effort) => <button key={effort} type="button" className="rounded-md px-2 py-2 text-left text-xs text-[#344054] transition hover:bg-[#F3F5F7]" onClick={() => void updateSelection(submenu === "dialogue" ? "dialogueEffort" : "visualEffort", effort)}>{effort === "none" ? "关闭" : effort === "low" ? "低" : effort === "high" ? "高" : "最大"}</button>)}
+                  {(["none", "low", "high", "max"] as const).map((effort) => {
+                    const selected = (submenu === "dialogue" ? selection.dialogueEffort : selection.visualEffort) === effort;
+                    return <button key={effort} type="button" className={`flex items-center justify-between rounded-md px-2 py-2 text-left text-xs transition ${selected ? "bg-[#EEF2F6] text-[#182230]" : "text-[#344054] hover:bg-[#F3F5F7]"}`} aria-current={selected ? "true" : undefined} onClick={() => void updateSelection(submenu === "dialogue" ? "dialogueEffort" : "visualEffort", effort)}><span>{effort === "none" ? "关闭" : effort === "low" ? "低" : effort === "high" ? "高" : "最大"}</span>{selected ? <Check className="h-3 w-3" weight="bold" aria-hidden="true" /> : null}</button>;
+                  })}
                 </div>
               ) : null}
             </div>
