@@ -64,7 +64,14 @@ def test_scene_gate_claims_tick_and_advances_only_after_delivery(tmp_path: Path)
 def test_loneliness_gate_blocks_when_relationship_runtime_rejects(tmp_path: Path):
     runtime = MagicMock()
     runtime.should_trigger_scene_followup.return_value = (False, {})
-    runtime.should_trigger_proactive.return_value = (False, {"reason": "below_threshold"})
+    runtime.should_trigger_proactive.return_value = (
+        False,
+        {
+            "reason": "cooldown",
+            "loneliness_value": 100,
+            "trigger_threshold": 60,
+        },
+    )
     plugin = RelationshipProactivePlugin()
     plugin.context = PluginContext(
         event_bus=EventBus(),
@@ -78,7 +85,13 @@ def test_loneliness_gate_blocks_when_relationship_runtime_rejects(tmp_path: Path
     result = ProactiveGateChain(plugin.proactive_gates()).evaluate(_context())
 
     assert result.blocked is True
-    assert result.reason == "loneliness"
+    assert result.reason == "cooldown"
+    assert result.blocked_gate_name == "relationship.loneliness"
+    assert result.trace[1].metadata == {
+        "reason": "cooldown",
+        "loneliness_value": 100,
+        "trigger_threshold": 60,
+    }
 
 
 @pytest.mark.asyncio

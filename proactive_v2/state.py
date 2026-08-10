@@ -89,6 +89,9 @@ class ProactiveStateStore:
         started_at: str,
         finished_at: str,
         gate_exit: str | None,
+        gate_name: str,
+        gate_reason: str,
+        gate_metadata: dict[str, object],
         terminal_action: str | None,
         skip_reason: str,
         steps_taken: int,
@@ -106,15 +109,19 @@ class ProactiveStateStore:
                 """
                 INSERT INTO tick_log(
                     tick_id, session_key, started_at, finished_at, gate_exit,
-                    terminal_action, skip_reason, steps_taken, alert_count,
-                    content_count, context_count, interesting_ids, discarded_ids,
-                    cited_ids, drift_entered, final_message
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    gate_name, gate_reason, gate_metadata, terminal_action,
+                    skip_reason, steps_taken, alert_count, content_count,
+                    context_count, interesting_ids, discarded_ids, cited_ids,
+                    drift_entered, final_message
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(tick_id) DO UPDATE SET
                     session_key = excluded.session_key,
                     started_at = excluded.started_at,
                     finished_at = excluded.finished_at,
                     gate_exit = excluded.gate_exit,
+                    gate_name = excluded.gate_name,
+                    gate_reason = excluded.gate_reason,
+                    gate_metadata = excluded.gate_metadata,
                     terminal_action = excluded.terminal_action,
                     skip_reason = excluded.skip_reason,
                     steps_taken = excluded.steps_taken,
@@ -133,6 +140,9 @@ class ProactiveStateStore:
                     started_at,
                     finished_at,
                     gate_exit,
+                    gate_name,
+                    gate_reason,
+                    json.dumps(gate_metadata, ensure_ascii=False, sort_keys=True),
                     terminal_action,
                     skip_reason,
                     steps_taken,
@@ -639,6 +649,9 @@ class ProactiveStateStore:
                 started_at TEXT NOT NULL,
                 finished_at TEXT,
                 gate_exit TEXT,
+                gate_name TEXT,
+                gate_reason TEXT,
+                gate_metadata TEXT,
                 terminal_action TEXT,
                 skip_reason TEXT,
                 steps_taken INTEGER,
@@ -673,7 +686,17 @@ class ProactiveStateStore:
             CREATE INDEX IF NOT EXISTS idx_tick_step_log_tick_step
             ON tick_step_log(tick_id, step_index);
             """)
+        self._ensure_tick_log_diagnostic_columns()
         self._db.commit()
+
+    def _ensure_tick_log_diagnostic_columns(self) -> None:
+        columns = {
+            str(row["name"])
+            for row in self._db.execute("PRAGMA table_info(tick_log)").fetchall()
+        }
+        for name in ("gate_name", "gate_reason", "gate_metadata"):
+            if name not in columns:
+                self._db.execute(f"ALTER TABLE tick_log ADD COLUMN {name} TEXT")
 
     def _get_kv_datetime(self, key: str) -> datetime | None:
         with self._lock:

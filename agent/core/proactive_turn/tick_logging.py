@@ -31,6 +31,9 @@ def record_tick_log_finish(
     session_key: str,
     ctx: AgentTickContext,
     gate_exit: str | None = None,
+    gate_name: str = "",
+    gate_reason: str = "",
+    gate_metadata: dict[str, object] | None = None,
     result: TurnResult | None = None,
 ) -> None:
     """记录主动 tick 的最终裁定与上下文快照。"""
@@ -51,6 +54,9 @@ def record_tick_log_finish(
         started_at=ctx.now_utc.isoformat(),
         finished_at=datetime.now(timezone.utc).isoformat(),
         gate_exit=gate_exit,
+        gate_name=gate_name,
+        gate_reason=gate_reason,
+        gate_metadata=dict(gate_metadata or {}),
         terminal_action=decision,
         skip_reason=skip_reason,
         steps_taken=ctx.steps_taken,

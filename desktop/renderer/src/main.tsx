@@ -320,6 +320,7 @@ function App(): React.ReactElement {
     roleSelfView,
     relationshipTags,
     lonelinessValue,
+    lonelinessCooldownUntil,
     visibleIllustrationUrl,
     chatBackgroundUrl,
     activeSessionKey,
@@ -558,6 +559,7 @@ function App(): React.ReactElement {
       roleSelfView={roleSelfView}
       relationshipTags={relationshipTags}
       lonelinessValue={lonelinessValue}
+      lonelinessCooldownUntil={lonelinessCooldownUntil}
       conversationEndRef={conversationEndRef}
       headerTitle={headerTitle}
       highlightedMessageKey={highlightedMessageKey}

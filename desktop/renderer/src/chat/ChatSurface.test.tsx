@@ -46,6 +46,7 @@ function renderChatSurface(
     currentMood?: string;
     moodIllustrationUrl?: string;
     chatLatestImageSidebarCollapsed?: boolean;
+    lonelinessCooldownUntil?: string;
     windowVisible?: boolean;
   } = {},
 ): string {
@@ -67,6 +68,7 @@ function renderChatSurface(
       roleSelfView="我最近会不自觉地想起你。"
       relationshipTags={["亲近", "等你主动"]}
       lonelinessValue={72}
+      lonelinessCooldownUntil={options.lonelinessCooldownUntil ?? ""}
       conversationEndRef={React.createRef<HTMLDivElement>()}
       headerTitle={activeRole?.name ?? "Mira"}
       highlightedMessageKey=""
@@ -296,6 +298,17 @@ describe("ChatSurface", () => {
     assert.match(markup, />等你主动</);
     assert.match(markup, />寂寞值</);
     assert.match(markup, />72</);
+  });
+
+  it("shows when loneliness-triggered proactive messaging is cooling down", () => {
+    const markup = renderChatSurface(createRole(), "mira", {
+      currentMood: "开心",
+      moodIllustrationUrl: "shiori-asset://local/mood-happy-token",
+      chatLatestImageSidebarCollapsed: false,
+      lonelinessCooldownUntil: "2099-08-10T18:16:40+08:00",
+    });
+
+    assert.match(markup, />冷却至 18:16</);
   });
 
   it("unmounts the status illustration when the desktop window is hidden", () => {

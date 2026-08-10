@@ -104,6 +104,7 @@ type DesktopAppFrameProps = {
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
+  lonelinessCooldownUntil: string;
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
@@ -239,6 +240,7 @@ export function DesktopAppFrame({
   roleSelfView,
   relationshipTags,
   lonelinessValue,
+  lonelinessCooldownUntil,
   conversationEndRef,
   headerTitle,
   highlightedMessageKey,
@@ -451,6 +453,7 @@ export function DesktopAppFrame({
               roleSelfView={roleSelfView}
               relationshipTags={relationshipTags}
               lonelinessValue={lonelinessValue}
+              lonelinessCooldownUntil={lonelinessCooldownUntil}
               conversationEndRef={conversationEndRef}
               headerTitle={headerTitle}
               highlightedMessageKey={highlightedMessageKey}

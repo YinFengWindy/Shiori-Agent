@@ -40,8 +40,17 @@ class ProactiveGateDecision:
         return cls(kind="continue")
 
     @classmethod
-    def block(cls, reason: str) -> "ProactiveGateDecision":
-        return cls(kind="block", reason=reason)
+    def block(
+        cls,
+        reason: str,
+        *,
+        metadata: Mapping[str, object] | None = None,
+    ) -> "ProactiveGateDecision":
+        return cls(
+            kind="block",
+            reason=reason,
+            metadata=dict(metadata or {}),
+        )
 
     @classmethod
     def activate(
@@ -103,6 +112,7 @@ class ProactiveGateTraceItem:
     priority: int
     decision: Literal["continue", "block", "activate"]
     reason: str
+    metadata: Mapping[str, object]
     duration_ms: int
 
 
@@ -114,6 +124,7 @@ class ProactiveGateResult:
     reason: str
     activation: ProactiveGateActivation | None
     trace: tuple[ProactiveGateTraceItem, ...]
+    blocked_gate_name: str | None = None
 
 
 @runtime_checkable
@@ -168,6 +179,7 @@ class ProactiveGateChain:
                     priority=gate.priority,
                     decision=decision.kind,
                     reason=decision.reason,
+                    metadata=dict(decision.metadata),
                     duration_ms=duration_ms,
                 )
             )
@@ -177,6 +189,7 @@ class ProactiveGateChain:
                     reason=decision.reason or gate.name,
                     activation=None,
                     trace=tuple(trace),
+                    blocked_gate_name=gate.name,
                 )
             if decision.kind == "activate":
                 assert decision.mode is not None

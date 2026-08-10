@@ -255,7 +255,10 @@ def relationship_gate_chain(
                 ctx.now_utc,
             )
             if not should_trigger:
-                return ProactiveGateDecision.block("loneliness")
+                return ProactiveGateDecision.block(
+                    str(metadata.get("reason") or "loneliness"),
+                    metadata=metadata,
+                )
             return ProactiveGateDecision.activate(
                 ProactiveMode.RELATIONSHIP_FALLBACK,
                 reason="loneliness",

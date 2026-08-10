@@ -55,6 +55,9 @@ class ProactivePhaseHost(Protocol):
         ctx: AgentTickContext,
         *,
         gate_exit: str | None = None,
+        gate_name: str = "",
+        gate_reason: str = "",
+        gate_metadata: dict[str, object] | None = None,
         result: TurnResult | None = None,
     ) -> None: ...
 
@@ -118,7 +121,20 @@ def gate_check(pipeline: ProactivePhaseHost, ctx: AgentTickContext) -> GateResul
         )
     if gate_result.blocked:
         logger.debug("[proactive_v2] plugin gate blocked: %s", gate_result.reason)
-        return GateResult(blocked=True, reason=gate_result.reason, base_score=None)
+        blocked_gate_name = str(gate_result.blocked_gate_name or "")
+        blocked_trace = next(
+            (item for item in reversed(gate_result.trace) if item.decision == "block"),
+            None,
+        )
+        gate_exit = blocked_gate_name.rsplit(".", 1)[-1] or gate_result.reason
+        return GateResult(
+            blocked=True,
+            reason=gate_exit,
+            base_score=None,
+            gate_name=blocked_gate_name,
+            gate_reason=gate_result.reason,
+            gate_metadata=dict(blocked_trace.metadata) if blocked_trace else {},
+        )
 
     return GateResult(
         blocked=False,

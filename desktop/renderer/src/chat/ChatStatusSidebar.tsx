@@ -1,6 +1,7 @@
 import React from "react";
 import { cx } from "../shared/styles";
 import { chatSidebarPanelClass } from "./chatSidebarStyles";
+import { formatLonelinessCooldownStatus } from "./chatStatus";
 
 type ChatStatusSidebarProps = {
   currentMood: string;
@@ -8,6 +9,7 @@ type ChatStatusSidebarProps = {
   roleSelfView: string;
   relationshipTags: string[];
   lonelinessValue: number;
+  lonelinessCooldownUntil: string;
   visualsActive?: boolean;
 };
 
@@ -18,9 +20,11 @@ export function ChatStatusSidebar({
   roleSelfView,
   relationshipTags,
   lonelinessValue,
+  lonelinessCooldownUntil,
   visualsActive = true,
 }: ChatStatusSidebarProps) {
   const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
+  const cooldownStatus = formatLonelinessCooldownStatus(lonelinessCooldownUntil);
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   return (
     <div className={cx(chatSidebarPanelClass, "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto] gap-3")}>
@@ -75,6 +79,9 @@ export function ChatStatusSidebar({
             style={{ width: `${normalizedLoneliness}%` }}
           />
         </div>
+        {cooldownStatus ? (
+          <div className="mt-2 text-right text-[11px] text-[#7A8593]">{cooldownStatus}</div>
+        ) : null}
       </div>
     </div>
   );

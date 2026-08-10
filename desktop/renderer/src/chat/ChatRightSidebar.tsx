@@ -13,6 +13,7 @@ type ChatRightSidebarProps = {
   currentMood: string;
   imagePath: string;
   lonelinessValue: number;
+  lonelinessCooldownUntil: string;
   mode: ChatSidebarMode;
   moodIllustrationUrl: string;
   relationshipTags: string[];
@@ -37,6 +38,7 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
   currentMood,
   imagePath,
   lonelinessValue,
+  lonelinessCooldownUntil,
   mode,
   moodIllustrationUrl,
   relationshipTags,
@@ -63,6 +65,7 @@ export const ChatRightSidebar = React.memo(function ChatRightSidebar({
         roleSelfView={roleSelfView}
         relationshipTags={relationshipTags}
         lonelinessValue={lonelinessValue}
+        lonelinessCooldownUntil={lonelinessCooldownUntil}
         visualsActive={renderHeavyVisuals}
       />
     );
