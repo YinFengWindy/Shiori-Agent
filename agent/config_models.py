@@ -73,6 +73,14 @@ class WiringConfig:
     )
 
 
+@dataclass(frozen=True)
+class PluginDistributionConfig:
+    """Source and compatibility settings for independently packaged plugins."""
+
+    organization: str = "Shiori-Plugins"
+    api_version: int = 1
+
+
 @dataclass
 class Config:
     provider: str
@@ -105,15 +113,16 @@ class Config:
     novelai: NovelAISettings = field(default_factory=NovelAISettings)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     wiring: WiringConfig = field(default_factory=WiringConfig)
+    plugin_distribution: PluginDistributionConfig = field(
+        default_factory=PluginDistributionConfig
+    )
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
     model_registrations: list[ModelRegistration] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.model_registrations:
             return
-        stable_key = "|".join(
-            [self.provider, str(self.base_url or ""), self.model]
-        )
+        stable_key = "|".join([self.provider, str(self.base_url or ""), self.model])
         self.model_registrations = [
             ModelRegistration(
                 id=str(uuid.uuid5(uuid.NAMESPACE_URL, stable_key)),

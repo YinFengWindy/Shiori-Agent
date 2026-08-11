@@ -15,6 +15,7 @@ def _router(*, role_result=None, story_result=None):
         voice=SimpleNamespace(handle=AsyncMock(return_value=None)),
         stories=SimpleNamespace(handle=AsyncMock(return_value=story_result)),
         observation=None,
+        plugin_packages=SimpleNamespace(handle=AsyncMock(return_value=None)),
     )
 
 
@@ -65,3 +66,20 @@ async def test_request_router_stops_after_story_handler_matches() -> None:
 
     assert result == {"stories": []}
     router._stories.handle.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_request_router_sends_plugin_package_methods_to_their_owner() -> None:
+    router = _router()
+    router._plugin_packages.handle.return_value = {"plugins": []}
+
+    result = await router.dispatch(
+        "plugins.catalog",
+        {},
+        request_id="request-4",
+        emit_event=Mock(),
+    )
+
+    assert result == {"plugins": []}
+    router._plugin_packages.handle.assert_awaited_once_with("plugins.catalog", {})
+    router._stories.handle.assert_not_awaited()

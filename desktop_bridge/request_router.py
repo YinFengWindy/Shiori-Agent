@@ -7,6 +7,7 @@ from agent.screen_observation.service import ScreenObservationService
 
 from .chat_requests import DesktopChatRequestHandler
 from .image_requests import DesktopImageRequestHandler
+from .plugin_package_requests import DesktopPluginPackageRequestHandler
 from .role_requests import DesktopRoleRequestHandler
 from .session_task_requests import DesktopSessionTaskRequestHandler
 from .voice_handler import DesktopVoiceHandler
@@ -28,6 +29,7 @@ class DesktopBridgeRequestRouter:
         voice: DesktopVoiceHandler,
         stories: StorySimulationHandler,
         observation: ScreenObservationService | None,
+        plugin_packages: DesktopPluginPackageRequestHandler | None = None,
     ) -> None:
         self._roles = roles
         self._sessions_and_tasks = sessions_and_tasks
@@ -36,6 +38,7 @@ class DesktopBridgeRequestRouter:
         self._voice = voice
         self._stories = stories
         self._observation = observation
+        self._plugin_packages = plugin_packages
 
     async def dispatch(
         self,
@@ -45,6 +48,10 @@ class DesktopBridgeRequestRouter:
         request_id: str,
         emit_event: EventEmitter,
     ) -> dict[str, Any] | None:
+        if method.startswith("plugins."):
+            if self._plugin_packages is None:
+                raise RuntimeError("plugin package service unavailable")
+            return await self._plugin_packages.handle(method, payload)
         if method in {"observation.analyze", "observation.remember"}:
             if self._observation is None:
                 raise RuntimeError("desktop observation service unavailable")

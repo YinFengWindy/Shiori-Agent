@@ -22,6 +22,7 @@ from agent.config_models import (
     MemoryEmbeddingConfig,
     ModelRegistration,
     NovelAISettings,
+    PluginDistributionConfig,
     QQChannelConfig,
     TelegramChannelConfig,
     WiringConfig,
@@ -32,6 +33,7 @@ from proactive_v2.config import ProactiveConfig
 from proactive_v2.config_loader import ProactiveConfigError, load_proactive_config
 
 logger = logging.getLogger(__name__)
+
 
 def _validated_timezone(tz_name: str, *, enabled: bool) -> str:
     """仅当 anyaction_enabled=True 时校验时区合法性，无效则启动时 fail-fast。"""
@@ -66,6 +68,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
     novelai = _load_novelai_config(data)
     voice = _load_voice_config(data)
     wiring = _load_wiring_config(data)
+    plugin_distribution = _load_plugin_distribution_config(data)
     plugins = _load_plugins_config(data)
     model_registrations = _load_model_registrations(data)
     primary_registration = model_registrations[0]
@@ -105,16 +108,12 @@ def load_config(path: str | Path = "config.toml") -> Config:
         light_api_key=_resolve(
             str(llm_fast.get("api_key") or data.get("light_api_key", ""))
         ),
-        light_base_url=str(
-            llm_fast.get("base_url") or data.get("light_base_url", "")
-        ),
+        light_base_url=str(llm_fast.get("base_url") or data.get("light_base_url", "")),
         agent_model=str(llm_agent.get("model") or data.get("agent_model", "")),
         agent_api_key=_resolve(
             str(llm_agent.get("api_key") or data.get("agent_api_key", ""))
         ),
-        agent_base_url=str(
-            llm_agent.get("base_url") or data.get("agent_base_url", "")
-        ),
+        agent_base_url=str(llm_agent.get("base_url") or data.get("agent_base_url", "")),
         memory=memory,
         tool_search_enabled=bool(
             agent_tools.get("search_enabled", data.get("tool_search_enabled", False))
@@ -138,6 +137,7 @@ def load_config(path: str | Path = "config.toml") -> Config:
         novelai=novelai,
         voice=voice,
         wiring=wiring,
+        plugin_distribution=plugin_distribution,
         plugins=plugins,
         model_registrations=model_registrations,
     )
@@ -279,7 +279,9 @@ def _load_novelai_config(data: dict) -> NovelAISettings:
         max_steps=int(raw.get("max_steps", defaults.max_steps)),
         default_samples=int(raw.get("default_samples", defaults.default_samples)),
         add_quality_tags=bool(raw.get("add_quality_tags", defaults.add_quality_tags)),
-        undesired_content_preset=int(raw.get("undesired_content_preset", defaults.undesired_content_preset)),
+        undesired_content_preset=int(
+            raw.get("undesired_content_preset", defaults.undesired_content_preset)
+        ),
     )
 
 
@@ -294,14 +296,20 @@ def _load_voice_config(data: dict) -> VoiceConfig:
         asr=VoiceAsrConfig(
             enabled=bool(asr.get("enabled", False)),
             provider=str(asr.get("provider", "tencent") or "tencent"),
-            base_url=str(asr.get("base_url", "https://asr.tencentcloudapi.com/") or "https://asr.tencentcloudapi.com/"),
+            base_url=str(
+                asr.get("base_url", "https://asr.tencentcloudapi.com/")
+                or "https://asr.tencentcloudapi.com/"
+            ),
             secret_id=_resolve(str(asr.get("secret_id", ""))),
             secret_key=_resolve(str(asr.get("secret_key", ""))),
         ),
         tts=VoiceTtsConfig(
             enabled=bool(tts.get("enabled", False)),
             provider=str(tts.get("provider", "minimax") or "minimax"),
-            base_url=str(tts.get("base_url", "https://api.minimaxi.com/v1/t2a_v2") or "https://api.minimaxi.com/v1/t2a_v2"),
+            base_url=str(
+                tts.get("base_url", "https://api.minimaxi.com/v1/t2a_v2")
+                or "https://api.minimaxi.com/v1/t2a_v2"
+            ),
             model=str(tts.get("model", "speech-2.8-turbo") or "speech-2.8-turbo"),
             api_key=_resolve(str(tts.get("api_key", ""))),
             volume=float(tts.get("volume", 2.0)),
@@ -332,6 +340,20 @@ def _load_plugins_config(data: dict) -> dict[str, dict[str, Any]]:
         if isinstance(name, str) and isinstance(value, dict):
             plugins[name] = cast(dict[str, Any], _resolve_config_value(value))
     return plugins
+
+
+def _load_plugin_distribution_config(data: dict) -> PluginDistributionConfig:
+    raw = _as_dict(data.get("plugin_distribution"))
+    organization = str(raw.get("organization") or "Shiori-Plugins").strip()
+    if not organization:
+        raise ValueError("plugin_distribution.organization 不能为空")
+    api_version = int(raw.get("api_version", 1))
+    if api_version < 1:
+        raise ValueError("plugin_distribution.api_version 必须大于 0")
+    return PluginDistributionConfig(
+        organization=organization,
+        api_version=api_version,
+    )
 
 
 def _reject_removed_runtime_config(data: dict) -> None:

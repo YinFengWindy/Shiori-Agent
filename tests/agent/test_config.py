@@ -41,6 +41,27 @@ def test_load_voice_config_reads_global_provider_and_input_settings() -> None:
     assert loaded.tts.volume == 2.5
 
 
+def test_load_plugin_distribution_config_reads_organization_and_api_version() -> None:
+    loaded = config._load_plugin_distribution_config(
+        {
+            "plugin_distribution": {
+                "organization": "Example-Plugins",
+                "api_version": 2,
+            }
+        }
+    )
+
+    assert loaded.organization == "Example-Plugins"
+    assert loaded.api_version == 2
+
+
+def test_load_plugin_distribution_config_rejects_non_positive_api_version() -> None:
+    with pytest.raises(ValueError, match="api_version"):
+        config._load_plugin_distribution_config(
+            {"plugin_distribution": {"api_version": 0}}
+        )
+
+
 def test_load_config_rejects_legacy_model_sections(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(

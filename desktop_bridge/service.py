@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from agent.looping.core import AgentLoop
+from agent.plugin_packages import PluginPackageService
 from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
@@ -36,6 +37,7 @@ from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.image_requests import DesktopImageRequestHandler
 from desktop_bridge.image_service import DesktopImageService
 from desktop_bridge.models import BridgeError, BridgeEvent, BridgeResponse
+from desktop_bridge.plugin_package_requests import DesktopPluginPackageRequestHandler
 from desktop_bridge.request_router import DesktopBridgeRequestRouter
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
 from agent.screen_observation.service import ScreenObservationService
@@ -99,6 +101,7 @@ class DesktopBridgeService:
         role_world_registry: RoleWorldRegistry | None = None,
         story_director: Any | None = None,
         image_tool: Any | None = None,
+        plugin_packages: PluginPackageService | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -238,6 +241,11 @@ class DesktopBridgeService:
             voice=self.voice_handler,
             stories=self.story_simulation,
             observation=observation_service,
+            plugin_packages=(
+                DesktopPluginPackageRequestHandler(plugin_packages)
+                if plugin_packages is not None
+                else None
+            ),
         )
         if push_tool is not None:
             self.register_desktop_push_channel(push_tool)

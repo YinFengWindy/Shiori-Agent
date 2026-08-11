@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, cast
 
 if TYPE_CHECKING:
+    from agent.plugin_packages import PluginPackageService
     from agent.plugins.manager import PluginManager
 
 from agent.config_models import Config, WiringConfig
@@ -93,6 +94,7 @@ class CoreRuntime:
     vl_provider: LLMProvider | None = None
     image_sync_service: ExternalImageSyncService | None = None
     agent_provider: LLMProvider | None = None
+    plugin_packages: "PluginPackageService | None" = None
     plugin_manager: "PluginManager | None" = None
     memory_optimizer: Any | None = None
     screen_observation: ScreenObservationService | None = None
@@ -151,7 +153,9 @@ class CoreRuntime:
         before_reasoning_modules = (
             manager.before_reasoning_modules if manager is not None else []
         )
-        prompt_render_modules = manager.prompt_render_modules if manager is not None else []
+        prompt_render_modules = (
+            manager.prompt_render_modules if manager is not None else []
+        )
         before_step_modules = manager.before_step_modules if manager is not None else []
         after_step_modules = manager.after_step_modules if manager is not None else []
         after_reasoning_modules = (
@@ -218,7 +222,10 @@ class CoreRuntime:
                 "after_turn",
                 default_after_turn_modules(
                     self.event_bus,
-                    cast(Any, getattr(pipeline, "_outbound_port", BusOutboundPort(self.bus))),
+                    cast(
+                        Any,
+                        getattr(pipeline, "_outbound_port", BusOutboundPort(self.bus)),
+                    ),
                     cast(Any, context),
                     cast(int, getattr(pipeline, "_history_window", 500)),
                     plugin_modules=cast(Any, after_turn_modules),
@@ -592,6 +599,20 @@ def build_core_runtime(
     )
 
     from agent.plugins.manager import PluginManager as _PluginManager
+    from agent.plugin_packages import (
+        GitHubPluginCatalog,
+        PluginPackageInstaller,
+        PluginPackageService,
+    )
+
+    plugin_packages = PluginPackageService(
+        GitHubPluginCatalog(
+            http_resources.external_default,
+            organization=config.plugin_distribution.organization,
+            api_version=config.plugin_distribution.api_version,
+        ),
+        PluginPackageInstaller(workspace, http_resources.external_default),
+    )
     plugin_light_provider, plugin_light_model = _resolve_plugin_llm_dependencies(
         config,
         provider,
@@ -631,6 +652,7 @@ def build_core_runtime(
         presence=presence,
         relationship_runtime=relationship_runtime,
         role_world_registry=role_world_registry,
+        plugin_packages=plugin_packages,
         plugin_manager=plugin_manager,
         screen_observation=screen_observation,
     )
