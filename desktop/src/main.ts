@@ -8,7 +8,11 @@ import { logDesktopDiagnostic } from "./diagnostics.js";
 import { registerDesktopIpc } from "./ipc.js";
 import { openGrantedLocalAsset } from "./localAssetOpen.js";
 import { LocalAssetRegistry, localAssetScheme } from "./localAssetRegistry.js";
-import { desktopRoot } from "./paths.js";
+import { desktopRoot, pluginPreloadScript } from "./paths.js";
+import { PluginDesktopHost } from "./plugins/host.js";
+import { registerPluginHostIpc } from "./plugins/ipc.js";
+import { pluginResourceSchemePrivileges, registerPluginResourceProtocol } from "./plugins/protocol.js";
+import { pluginResourceScheme } from "./plugins/resourceRegistry.js";
 import { createDesktopTray } from "./tray.js";
 import { createDesktopWindow, showDesktopWindow } from "./window.js";
 import {
@@ -36,6 +40,7 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 const bridge = new DesktopBridgeClient();
 const localAssets = new LocalAssetRegistry();
+const pluginHost = new PluginDesktopHost(pluginPreloadScript);
 const trayLifecycleEnabled = process.platform === "win32";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 let desktopWindow: BrowserWindow | null = null;
@@ -59,6 +64,10 @@ protocol.registerSchemesAsPrivileged([
   {
     scheme: localAssetScheme,
     privileges: localAssetSchemePrivileges,
+  },
+  {
+    scheme: pluginResourceScheme,
+    privileges: pluginResourceSchemePrivileges,
   },
 ]);
 
@@ -272,7 +281,11 @@ void app.whenReady().then(() => {
     process.env.MIRA_RENDERER_DEV_SERVER_URL,
   );
   registerLocalAssetProtocol(protocol, localAssets);
-  void startBridge(bridge);
+  registerPluginResourceProtocol(protocol, pluginHost.resources);
+  registerPluginHostIpc(pluginHost, bridge);
+  void startBridge(bridge).then(() => pluginHost.syncFromBridge(bridge)).catch((error) => {
+    logDesktopDiagnostic({ scope: "main", event: "plugin-host.sync.failed", payload: { error } });
+  });
   desktopPet = new DesktopPetController({
     getSettings: () => desktopPetSettings,
     saveSettings: persistDesktopPetSettings,
@@ -370,6 +383,9 @@ void app.whenReady().then(() => {
     voicePlayback: activeVoicePlayback,
     onVoiceSettingsChanged: reloadVoiceSettings,
     onPetVisibilityChanged: syncVoiceAvailability,
+    onPluginPackagesChanged: async () => {
+      await pluginHost.syncFromBridge(bridge);
+    },
   });
   getOrCreateDesktopWindow();
   if (trayLifecycleEnabled) {
@@ -429,6 +445,7 @@ app.on("before-quit", (event) => {
   voiceController?.dispose();
   voicePlayback?.dispose();
   voiceRecorder?.dispose();
+  pluginHost.shutdown();
   if (bridgeShutdownStarted || !bridge.isRunning()) {
     return;
   }

@@ -35,6 +35,7 @@ declare module "electron" {
     alwaysOnTop?: boolean;
     hasShadow?: boolean;
     backgroundColor?: string;
+    show?: boolean;
     webPreferences?: {
       preload?: string;
       contextIsolation?: boolean;

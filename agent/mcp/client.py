@@ -41,12 +41,15 @@ class McpClient:
         command: list[str],
         env: dict[str, str] | None = None,
         cwd: str | None = None,
+        *,
+        inherit_env: bool = True,
     ) -> None:
         self.name = name
         self.command = command
         self.env = env or {}
         # cwd 未指定时从 command 中推断，避免子进程继承 agent 工作目录
         self.cwd = cwd or _infer_cwd(command)
+        self.inherit_env = inherit_env
         self._process: asyncio.subprocess.Process | None = None
         self._next_id = 1
         self._tool_infos: list[McpToolInfo] = []
@@ -69,7 +72,7 @@ class McpClient:
 
     async def _connect_impl(self) -> list[McpToolInfo]:
         """启动子进程，完成握手，获取工具列表。"""
-        proc_env = {**os.environ, **self.env}
+        proc_env = {**os.environ, **self.env} if self.inherit_env else dict(self.env)
         logger.debug("[mcp] 启动 %r: %s  cwd=%s", self.name, self.command, self.cwd)
         self._process = await asyncio.create_subprocess_exec(
             *self.command,
@@ -171,6 +174,19 @@ class McpClient:
             logger.warning("[mcp] 断开 %r 时出错: %s", self.name, e)
         finally:
             self._process = None
+
+    @property
+    def is_running(self) -> bool:
+        """Returns whether the managed MCP subprocess is still running."""
+
+        return self._process is not None and self._process.returncode is None
+
+    async def wait_until_exit(self) -> int:
+        """Waits for the current MCP subprocess to exit and returns its code."""
+
+        if self._process is None:
+            return 0
+        return await self._process.wait()
 
     def _new_id(self) -> int:
         i = self._next_id

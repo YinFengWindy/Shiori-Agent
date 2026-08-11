@@ -46,3 +46,8 @@ class PluginPackageService:
         """Uninstalls one plugin package and optionally clears its user data."""
 
         return self._installer.uninstall(plugin_id, purge_data=purge_data)
+
+    def set_enabled(self, plugin_id: str, enabled: bool) -> dict[str, object]:
+        """Persists one installed plugin's runtime enablement state."""
+
+        return self._installer.set_enabled(plugin_id, enabled).to_dict()

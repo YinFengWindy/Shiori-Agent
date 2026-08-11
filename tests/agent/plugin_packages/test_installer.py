@@ -32,8 +32,29 @@ def _manifest(*, version: str = "1.0.0") -> PluginManifest:
                 "backend": "backend/main.py",
                 "desktop": "desktop/index.html",
             },
-            "capabilities": ["agent.tool", "desktop.overlay"],
+            "capabilities": ["agent.tool", "desktop.overlay", "plugin.rpc"],
             "permissions": ["plugin.storage"],
+            "tools": [
+                {
+                    "remote_name": "pet_action",
+                    "name": "pet_action",
+                    "always_on": True,
+                }
+            ],
+            "rpc_methods": [
+                {"method": "pet.state", "remote_name": "pet_state"},
+            ],
+            "desktop_contributions": [
+                {
+                    "id": "pet-overlay",
+                    "kind": "overlay",
+                    "entrypoint": "desktop/index.html",
+                    "width": 480,
+                    "height": 680,
+                    "transparent": True,
+                    "always_on_top": True,
+                }
+            ],
             "release": {
                 "asset": "desktop-pet.zip",
                 "checksums_asset": "checksums.json",
@@ -115,6 +136,7 @@ async def test_installer_atomically_selects_release_and_preserves_data_on_uninst
         tmp_path / "plugins" / "desktop-pet" / "versions" / "1.0.0"
     )
     assert installer.list_installed()[0].version == "1.0.0"
+    assert installer.set_enabled("desktop-pet", False).enabled is False
     assert installer.uninstall("desktop-pet") is True
     assert data_file.is_file()
 

@@ -8,6 +8,7 @@
   },
   "include": [
     "src/main.ts",
+    "src/plugins/**/*.ts",
     "src/pet/**/*.ts",
     "src/observation/**/*.ts",
     "src/voice/**/*.ts",

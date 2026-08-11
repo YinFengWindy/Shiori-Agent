@@ -36,6 +36,7 @@ class InstalledPlugin:
     version: str
     package_dir: Path
     manifest: PluginManifest
+    enabled: bool = True
 
     def to_dict(self) -> dict[str, object]:
         """Serializes installed plugin metadata for bridge responses."""
@@ -43,6 +44,7 @@ class InstalledPlugin:
         return {
             "plugin_id": self.plugin_id,
             "version": self.version,
+            "enabled": self.enabled,
             "package_dir": str(self.package_dir),
             "manifest": self.manifest.to_dict(),
         }
@@ -102,6 +104,11 @@ class PluginPackageInstaller:
             if not isinstance(current, Mapping):
                 continue
             version = str(current.get("version") or "").strip()
+            enabled = current.get("enabled", True)
+            if not isinstance(enabled, bool):
+                raise ValueError(
+                    f"installed plugin enabled state is invalid: {plugin_root.name}"
+                )
             package_dir = plugin_root / "versions" / version
             manifest_path = package_dir / "plugin.json"
             if not version or not manifest_path.is_file():
@@ -120,6 +127,7 @@ class PluginPackageInstaller:
                     version=version,
                     package_dir=package_dir,
                     manifest=manifest,
+                    enabled=enabled,
                 )
             )
         return installed
@@ -136,6 +144,28 @@ class PluginPackageInstaller:
             if data_root.exists():
                 shutil.rmtree(data_root)
         return existed
+
+    def set_enabled(self, plugin_id: str, enabled: bool) -> InstalledPlugin:
+        """Atomically changes whether one installed plugin starts with the runtime."""
+
+        installed = next(
+            (item for item in self.list_installed() if item.plugin_id == plugin_id),
+            None,
+        )
+        if installed is None:
+            raise KeyError(f"plugin is not installed: {plugin_id}")
+        atomic_save_json(
+            self._plugin_root(plugin_id) / "current.json",
+            {"version": installed.version, "enabled": enabled},
+            domain="plugin_packages",
+        )
+        return InstalledPlugin(
+            plugin_id=installed.plugin_id,
+            version=installed.version,
+            package_dir=installed.package_dir,
+            manifest=installed.manifest,
+            enabled=enabled,
+        )
 
     def _install_archive(
         self,
@@ -173,7 +203,10 @@ class PluginPackageInstaller:
                 os.replace(package_root, destination)
             atomic_save_json(
                 plugin_root / "current.json",
-                {"version": manifest.version},
+                {
+                    "version": manifest.version,
+                    "enabled": _current_enabled(plugin_root),
+                },
                 domain="plugin_packages",
             )
             return InstalledPlugin(
@@ -181,6 +214,7 @@ class PluginPackageInstaller:
                 version=manifest.version,
                 package_dir=destination,
                 manifest=manifest,
+                enabled=_current_enabled(plugin_root),
             )
         finally:
             shutil.rmtree(temporary, ignore_errors=True)
@@ -206,6 +240,18 @@ def _checksum_for_asset(raw: bytes, asset_name: str) -> str:
     if any(character not in "0123456789abcdef" for character in clean_digest):
         raise ValueError("plugin package checksum is invalid")
     return clean_digest
+
+
+def _current_enabled(plugin_root: Path) -> bool:
+    current = load_json(
+        plugin_root / "current.json",
+        default=None,
+        domain="plugin_packages",
+    )
+    if not isinstance(current, Mapping):
+        return True
+    enabled = current.get("enabled", True)
+    return enabled if isinstance(enabled, bool) else True
 
 
 def _validate_archive(archive: zipfile.ZipFile) -> None:
@@ -244,7 +290,11 @@ def _single_package_root(extracted: Path) -> Path:
 
 
 def _validate_entrypoints(package_root: Path, manifest: PluginManifest) -> None:
-    for entrypoint in (manifest.entrypoints.backend, manifest.entrypoints.desktop):
+    for entrypoint in (
+        manifest.entrypoints.backend,
+        manifest.entrypoints.desktop,
+        *(item.entrypoint for item in manifest.desktop_contributions),
+    ):
         if entrypoint is None:
             continue
         target = (package_root / entrypoint).resolve()

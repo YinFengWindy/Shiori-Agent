@@ -21,6 +21,13 @@ def _manifest(*, api_version: int = 1) -> dict[str, object]:
         "entrypoints": {"backend": "backend/main.py"},
         "capabilities": ["agent.tool"],
         "permissions": [],
+        "tools": [
+            {
+                "remote_name": "pet_action",
+                "name": "pet_action",
+                "always_on": True,
+            }
+        ],
         "release": {
             "asset": "desktop-pet.zip",
             "checksums_asset": "checksums.json",

@@ -28,3 +28,6 @@ export const rendererDevServerUrl = process.env.MIRA_RENDERER_DEV_SERVER_URL;
 
 /** Absolute path to the compiled preload script loaded by Electron. */
 export const preloadScript = resolve(here, "preload.js");
+
+/** Absolute path to the restricted preload used by sandboxed plugin pages. */
+export const pluginPreloadScript = resolve(here, "pluginPreload.js");

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable, cast
 
 if TYPE_CHECKING:
     from agent.plugin_packages import PluginPackageService
+    from agent.plugin_runtime import PluginRuntimeManager
     from agent.plugins.manager import PluginManager
 
 from agent.config_models import Config, WiringConfig
@@ -95,12 +96,15 @@ class CoreRuntime:
     image_sync_service: ExternalImageSyncService | None = None
     agent_provider: LLMProvider | None = None
     plugin_packages: "PluginPackageService | None" = None
+    plugin_runtime: "PluginRuntimeManager | None" = None
     plugin_manager: "PluginManager | None" = None
     memory_optimizer: Any | None = None
     screen_observation: ScreenObservationService | None = None
 
     async def start(self) -> None:
         self.mcp_registry.start_connect_all_background()
+        if self.plugin_runtime is not None:
+            await self.plugin_runtime.start_all()
         if self.plugin_manager is not None:
             await self.plugin_manager.load_all()
             logger.info("插件加载完成: %d 个", self.plugin_manager.loaded_count)
@@ -244,6 +248,8 @@ class CoreRuntime:
     async def stop(self) -> None:
         if self.plugin_manager is not None:
             await self.plugin_manager.terminate_all()
+        if self.plugin_runtime is not None:
+            await self.plugin_runtime.stop_all()
         await self.mcp_registry.shutdown()
         await self.event_bus.aclose()
 
@@ -604,15 +610,21 @@ def build_core_runtime(
         PluginPackageInstaller,
         PluginPackageService,
     )
+    from agent.plugin_runtime import PluginRuntimeManager
 
+    plugin_installer = PluginPackageInstaller(
+        workspace,
+        http_resources.external_default,
+    )
     plugin_packages = PluginPackageService(
         GitHubPluginCatalog(
             http_resources.external_default,
             organization=config.plugin_distribution.organization,
             api_version=config.plugin_distribution.api_version,
         ),
-        PluginPackageInstaller(workspace, http_resources.external_default),
+        plugin_installer,
     )
+    plugin_runtime = PluginRuntimeManager(workspace, plugin_installer, tools)
     plugin_light_provider, plugin_light_model = _resolve_plugin_llm_dependencies(
         config,
         provider,
@@ -653,6 +665,7 @@ def build_core_runtime(
         relationship_runtime=relationship_runtime,
         role_world_registry=role_world_registry,
         plugin_packages=plugin_packages,
+        plugin_runtime=plugin_runtime,
         plugin_manager=plugin_manager,
         screen_observation=screen_observation,
     )

@@ -40,6 +40,7 @@ type RegisterDesktopIpcOptions = {
   voicePlayback: BrowserVoicePlayback;
   onVoiceSettingsChanged?: () => void;
   onPetVisibilityChanged?: () => void;
+  onPluginPackagesChanged?: () => Promise<void> | void;
 };
 
 function assetTransport<T>(value: T, assets: LocalAssetReference[]): LocalAssetTransport<T> {
@@ -94,6 +95,7 @@ export function registerDesktopIpc({
   voicePlayback,
   onVoiceSettingsChanged,
   onPetVisibilityChanged,
+  onPluginPackagesChanged,
 }: RegisterDesktopIpcOptions): void {
   const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
 
@@ -102,6 +104,12 @@ export function registerDesktopIpc({
       throw new Error("observation bridge methods are restricted to the main process");
     }
     const response = await bridge.invoke(request);
+    if (
+      !response.error
+      && ["plugins.install", "plugins.uninstall", "plugins.enable", "plugins.disable"].includes(request.method)
+    ) {
+      await onPluginPackagesChanged?.();
+    }
     return assetTransport(response, localAssets.grantTrustedPayload(response.payload));
   });
   ipcMain.on("desktop:start-attachment-drag", (event: IpcMainInvokeEvent, request?: { path?: unknown }) => {

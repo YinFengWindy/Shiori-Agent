@@ -55,6 +55,7 @@ class DesktopBridgeServer:
             role_world_registry=getattr(runtime, "role_world_registry", None),
             image_tool=image_tool,
             plugin_packages=getattr(runtime, "plugin_packages", None),
+            plugin_runtime=getattr(runtime, "plugin_runtime", None),
         )
         self._pet_action_handler = self._handle_pet_action
         runtime.event_bus.on(DesktopPetActionRequested, self._pet_action_handler)

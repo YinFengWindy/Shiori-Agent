@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from agent.looping.core import AgentLoop
 from agent.plugin_packages import PluginPackageService
+from agent.plugin_runtime import PluginRuntimeManager
 from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
@@ -102,6 +103,7 @@ class DesktopBridgeService:
         story_director: Any | None = None,
         image_tool: Any | None = None,
         plugin_packages: PluginPackageService | None = None,
+        plugin_runtime: PluginRuntimeManager | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -242,7 +244,7 @@ class DesktopBridgeService:
             stories=self.story_simulation,
             observation=observation_service,
             plugin_packages=(
-                DesktopPluginPackageRequestHandler(plugin_packages)
+                DesktopPluginPackageRequestHandler(plugin_packages, plugin_runtime)
                 if plugin_packages is not None
                 else None
             ),
