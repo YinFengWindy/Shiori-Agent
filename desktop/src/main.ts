@@ -203,6 +203,11 @@ function syncVoiceAvailability(): void {
   voiceController?.cancel();
 }
 
+function syncDesktopPetRuntimeState(): void {
+  desktopTray?.refresh();
+  syncVoiceAvailability();
+}
+
 function reloadVoiceSettings(): void {
   voiceSettings = loadSettingsData().formData.voice;
   voiceHotkey?.setHotkey(voiceSettings.hotkey);
@@ -211,13 +216,13 @@ function reloadVoiceSettings(): void {
 
 async function hideDesktopPet(): Promise<void> {
   await desktopPet?.hide();
-  syncVoiceAvailability();
+  syncDesktopPetRuntimeState();
   await desktopObservation?.restore();
 }
 
 async function showDesktopPet(): Promise<void> {
   await desktopPet?.show();
-  syncVoiceAvailability();
+  syncDesktopPetRuntimeState();
   await desktopObservation?.restore();
 }
 
@@ -369,7 +374,7 @@ void app.whenReady().then(() => {
     voiceController: activeVoiceController,
     voicePlayback: activeVoicePlayback,
     onVoiceSettingsChanged: reloadVoiceSettings,
-    onPetVisibilityChanged: syncVoiceAvailability,
+    onPetVisibilityChanged: syncDesktopPetRuntimeState,
   });
   getOrCreateDesktopWindow();
   if (trayLifecycleEnabled) {
@@ -392,8 +397,7 @@ void app.whenReady().then(() => {
       },
     });
     void desktopPet.restore().then(async () => {
-      desktopTray?.refresh();
-      syncVoiceAvailability();
+      syncDesktopPetRuntimeState();
       await desktopObservation?.restore();
     }).catch((error) => {
       logDesktopDiagnostic({ scope: "main", event: "desktop-pet.restore.failed", payload: { error } });
