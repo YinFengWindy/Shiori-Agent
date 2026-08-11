@@ -18,6 +18,8 @@ const trustedSinglePathFields = new Set([
   "base_image_path",
   "chat_background_abs",
   "image_path",
+  "preview_abs",
+  "spritesheet_abs",
   // Story-owned background and CG resources expose their generated asset as path.
   "path",
 ]);

@@ -80,9 +80,10 @@ class RolePetPackageService:
                 raise ValueError(f"桌宠包已存在: {package_id}")
             self._validate_atlas(archive.read(self._archive_entry(root, sprite_name)))
             preview_data = None
+            preview_extension = None
             if preview_name is not None:
                 preview_data = archive.read(self._archive_entry(root, preview_name))
-                self._validate_preview(preview_data)
+                preview_extension = self._validate_preview(preview_data)
             destination = self._role_store.assets_dir / role_id / "pets" / package_id
             if destination.exists():
                 raise ValueError(f"桌宠包目录已存在: {package_id}")
@@ -92,8 +93,8 @@ class RolePetPackageService:
                 (temporary / "pet.json").write_bytes(archive.read(self._archive_entry(root, "pet.json")))
                 (temporary / "spritesheet.webp").write_bytes(archive.read(self._archive_entry(root, sprite_name)))
                 preview_filename = None
-                if preview_name is not None and preview_data is not None:
-                    preview_filename = f"preview{PurePosixPath(preview_name).suffix.lower()}"
+                if preview_data is not None and preview_extension is not None:
+                    preview_filename = f"preview{preview_extension}"
                     (temporary / preview_filename).write_bytes(preview_data)
                 os.replace(temporary, destination)
             except Exception:
@@ -202,13 +203,15 @@ class RolePetPackageService:
                 if column >= count and occupied:
                     raise ValueError("桌宠精灵图未使用单元必须透明")
 
-    def _validate_preview(self, data: bytes) -> None:
+    def _validate_preview(self, data: bytes) -> str:
         try:
             with Image.open(io.BytesIO(data)) as image:
                 if image.format not in {"PNG", "WEBP"}:
                     raise ValueError("桌宠预览图必须是 PNG 或 WebP")
+                extension = ".png" if image.format == "PNG" else ".webp"
                 width, height = image.size
         except OSError as error:
             raise ValueError("桌宠预览图无效") from error
         if not 64 <= width <= 2048 or not 64 <= height <= 2048:
             raise ValueError("桌宠预览图尺寸必须在 64 到 2048 像素之间")
+        return extension
