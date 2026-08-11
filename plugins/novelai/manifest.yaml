@@ -58,7 +58,7 @@ ui:
           config_path: integrations.novelaiNsfwEnabled
     - id: image-studio
       slot: navigation
-      title: 图像生成
+      title: 生图
       renderer: novelai.image-studio
       order: 40
     - id: prompt-tags
