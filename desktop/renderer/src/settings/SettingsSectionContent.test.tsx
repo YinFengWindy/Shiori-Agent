@@ -5,29 +5,6 @@ import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SettingsFormData } from "../../../src/shared.js";
 import { SettingsSectionContent } from "./SettingsSectionContent.js";
-import { PluginCatalogProvider } from "../plugins/PluginCatalogContext.js";
-import { createPluginCatalog } from "../plugins/pluginCatalog.js";
-
-const settingsCatalog = createPluginCatalog([
-  {
-    schema_version: 1,
-    plugin_id: "novelai",
-    name: "NovelAI",
-    version: "1.0.0",
-    description: "",
-    author: "",
-    capabilities: ["ui.settings"],
-    rpc_methods: [],
-    ui_contributions: [{
-      id: "settings",
-      slot: "settings",
-      title: "NovelAI",
-      renderer: "schema.settings",
-      order: 40,
-      settings_schema: [{ id: "token", label: "Token", type: "secret", config_path: "integrations.novelaiToken" }],
-    }],
-  },
-]);
 
 function createSettingsFormData(): SettingsFormData {
   return {
@@ -94,34 +71,22 @@ describe("SettingsSectionContent", () => {
       { sectionId: "models", subsectionId: "catalog", expected: "gpt-agent" },
       { sectionId: "channels", subsectionId: "qqbot", expected: "qq-app" },
       { sectionId: "memory", subsectionId: "embedding", expected: "embed-model" },
-      { sectionId: "integrations", subsectionId: "novelai:settings", expected: "novel-token" },
+      { sectionId: "integrations", subsectionId: "novelai", expected: "novel-token" },
       { sectionId: "voice", subsectionId: "provider", expected: "secret-id" },
       { sectionId: "advanced", subsectionId: "general", expected: "system prompt" },
     ] as const;
 
     cases.forEach(({ sectionId, subsectionId, expected }) => {
-      const content = (
+      const markup = renderToStaticMarkup(
         <SettingsSectionContent
           sectionId={sectionId}
           subsectionId={subsectionId}
           draft={draft}
           updateDraft={updateDraft}
-        />
-      );
-      const markup = renderToStaticMarkup(
-        sectionId === "integrations"
-          ? <PluginCatalogProvider catalog={settingsCatalog}>{content}</PluginCatalogProvider>
-          : content,
+        />,
       );
       assert.match(markup, new RegExp(expected));
     });
-  });
-
-  it("does not render plugin settings without a loaded manifest", () => {
-    const markup = renderToStaticMarkup(
-      <SettingsSectionContent sectionId="integrations" subsectionId="novelai:settings" draft={draft} updateDraft={updateDraft} />,
-    );
-    assert.equal(markup, "");
   });
 
   it("shows model registration previews without exposing detail fields", () => {

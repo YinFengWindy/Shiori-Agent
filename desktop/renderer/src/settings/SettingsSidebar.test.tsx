@@ -23,6 +23,5 @@ describe("SettingsSidebar", () => {
 
     assert.match(markup, /bg-\[#EFF4F9\]/);
     assert.doesNotMatch(markup, /bg-\[#EEF1F5\]/);
-    assert.doesNotMatch(markup, /集成/);
   });
 });

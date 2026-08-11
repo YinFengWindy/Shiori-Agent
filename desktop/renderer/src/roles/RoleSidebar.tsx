@@ -1,9 +1,10 @@
 import type React from "react";
+import novelAiLogoDark from "../assets/novelai-logo-dark.svg";
 import { toFileUrl } from "../shared/format";
 import { bodyTextClass, cx } from "../shared/styles";
 import { BookOpenText } from "@phosphor-icons/react";
+import { PromptLibraryIcon } from "../shared/icons";
 import type { RoleRecord } from "../shared/types";
-import { PluginNavigationHost } from "../plugins/PluginNavigationHost";
 
 type RoleSidebarProps = {
   roles: RoleRecord[];
@@ -82,11 +83,17 @@ export function RoleSidebar({
           </span>
           <span>故事</span>
         </button>
-        <PluginNavigationHost
-          buttonClass={sidebarTopEntryClass}
-          onOpenImageStudio={onOpenImageStudio}
-          onOpenPromptTagLibrary={onOpenPromptTagLibrary}
-        />
+        <div className="grid grid-cols-[minmax(0,1fr)_34px] gap-1">
+          <button className={sidebarTopEntryClass} type="button" onClick={onOpenImageStudio}>
+            <span className="sidebar-entry-icon sidebar-entry-image grid h-5 w-5 place-items-center" aria-hidden="true">
+              <img className="h-4 w-4" src={novelAiLogoDark} alt="" />
+            </span>
+            <span>生图</span>
+          </button>
+          <button className="grid min-h-[34px] place-items-center rounded-[10px] border border-transparent bg-transparent text-[#3f3f3f] transition-colors hover:border-[#D9E0E8] hover:bg-[#E2E8EF] focus-visible:border-[#D9E0E8] focus-visible:bg-[#E2E8EF]" type="button" aria-label="打开提示词库" title="打开提示词库" onClick={onOpenPromptTagLibrary}>
+            <PromptLibraryIcon className="h-4 w-4 fill-current" />
+          </button>
+        </div>
       </div>
       <div className={cx("role-list scrollbar-soft scrollbar-soft-accent grid min-h-0 content-start gap-1.5 overflow-x-hidden overflow-y-auto pr-0", bodyTextClass)} data-testid="role-list">
         {roles.length ? roles.map((role) => (

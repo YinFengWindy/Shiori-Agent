@@ -10,8 +10,6 @@ import {
 } from "./settingsSectionMetadata";
 import { useSettingsPageController } from "./useSettingsPageController";
 import { cardClass, cx } from "../shared/styles";
-import { usePluginCatalogContext } from "../plugins/PluginCatalogContext";
-import { pluginContributionKey } from "../plugins/pluginCatalog";
 
 type SettingsPageProps = {
   bridgeReady: boolean;
@@ -36,8 +34,6 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   );
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
   const controller = useSettingsPageController({ bridgeReady, onMetaChange });
-  const pluginCatalog = usePluginCatalogContext();
-  const pluginSettings = pluginCatalog.contributions("settings");
 
   if (controller.loadError) {
     return (
@@ -58,25 +54,17 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   }
 
   const visibleSections = settingsSections.filter((item) => (
-    (item.id !== "integrations" || pluginSettings.length > 0)
-    && (
-      !deferredSearch
-      || item.label.toLowerCase().includes(deferredSearch)
-      || item.id.toLowerCase().includes(deferredSearch)
-    )
+    !deferredSearch
+    || item.label.toLowerCase().includes(deferredSearch)
+    || item.id.toLowerCase().includes(deferredSearch)
   ));
   const currentSection = visibleSections.find((item) => item.id === section)
     ?? visibleSections[0]
     ?? null;
   const currentId = currentSection?.id ?? null;
-  const visibleSubsections = currentId === "integrations"
-    ? pluginSettings.map(({ plugin, contribution }) => ({
-      id: pluginContributionKey(plugin.plugin_id, contribution.id),
-      label: contribution.title,
-    }))
-    : (currentId ? settingsSubsections[currentId] : []);
+  const visibleSubsections = currentId ? settingsSubsections[currentId] : [];
   const currentSubsectionId = currentId
-    ? resolveSettingsSubsectionId(currentId, activeSubsections, visibleSubsections)
+    ? resolveSettingsSubsectionId(currentId, activeSubsections)
     : null;
 
   function updateActiveSubsection(nextId: string): void {

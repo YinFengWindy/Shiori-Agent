@@ -6,7 +6,6 @@ import shlex
 import shutil
 import tempfile
 import sqlite3
-import sys
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -17,17 +16,8 @@ import pytest
 
 # 预热 agent.core 导入链，避免 agent.lifecycle.types 触发循环导入
 from agent.core.passive_turn import ContextStore as _  # noqa: F401
-from agent.lifecycle.types import (
-    AfterStepCtx,
-    AfterToolResultCtx,
-    BeforeToolCallCtx,
-    BeforeTurnCtx,
-)
-from agent.plugins.manager import (
-    PluginManager,
-    PluginMethodDeniedError,
-    PluginUnavailableError,
-)
+from agent.lifecycle.types import AfterStepCtx, AfterToolResultCtx, BeforeToolCallCtx, BeforeTurnCtx
+from agent.plugins.manager import PluginManager
 from agent.plugins.registry import plugin_registry
 from agent.tool_hooks import ToolHook
 from agent.tools.registry import ToolRegistry
@@ -56,12 +46,8 @@ def _clean_registry():
     plugin_registry._instances.clear()
 
 
-def _make_manager(
-    plugin_dirs: list[Path], *, event_bus: EventBus, tools: ToolRegistry | None = None
-) -> PluginManager:
-    return PluginManager(
-        plugin_dirs=plugin_dirs, event_bus=event_bus, tool_registry=tools
-    )
+def _make_manager(plugin_dirs: list[Path], *, event_bus: EventBus, tools: ToolRegistry | None = None) -> PluginManager:
+    return PluginManager(plugin_dirs=plugin_dirs, event_bus=event_bus, tool_registry=tools)
 
 
 def _before_turn_ctx(**overrides: object) -> BeforeTurnCtx:
@@ -228,8 +214,10 @@ async def test_observe_plugin_writes_memory_domain_events(tmp_path: Path):
 
     conn = open_db(tmp_path / "observe" / "observe.db")
     try:
-        rag = conn.execute("""SELECT session_key, query, orig_query, injected_count
-               FROM rag_queries""").fetchone()
+        rag = conn.execute(
+            """SELECT session_key, query, orig_query, injected_count
+               FROM rag_queries"""
+        ).fetchone()
         memory_write = conn.execute(
             """SELECT session_key, action, source_ref, superseded_ids
                FROM memory_writes"""
@@ -278,10 +266,8 @@ async def test_after_step_tap_hook_fires():
 
     # 从已加载的 hello 模块取 after_step_calls，断言 handler 真实执行
     import sys
-
     hello_mod = next(
-        m
-        for k, m in sys.modules.items()
+        m for k, m in sys.modules.items()
         if k.startswith("akasic_plugin_") and k.endswith("_hello")
     )
     hello_mod.after_step_calls.clear()
@@ -618,9 +604,9 @@ async def test_plugin_config_json_overrides_defaults():
         await mgr.load_all()
         instance = _get_instance("configured")
         assert instance.context.config is not None
-        assert instance.context.config.api_key == "override-key"  # overridden
-        assert instance.context.config.max_results == 10  # still default
-        assert instance.context.config.enabled is False  # overridden
+        assert instance.context.config.api_key == "override-key"   # overridden
+        assert instance.context.config.max_results == 10            # still default
+        assert instance.context.config.enabled is False             # overridden
 
 
 @pytest.mark.asyncio
@@ -638,183 +624,6 @@ async def test_plugin_disabled_marker_skips_plugin():
 
 
 @pytest.mark.asyncio
-async def test_manifest_exposes_public_contract_and_guards_rpc(tmp_path: Path):
-    plugin_root = tmp_path / "plugins"
-    plugin_dir = plugin_root / "sample"
-    plugin_dir.mkdir(parents=True)
-    (plugin_dir / "plugin.py").write_text(
-        "from agent.plugins import Plugin\n"
-        "class SamplePlugin(Plugin):\n"
-        "    name = 'sample'\n",
-        encoding="utf-8",
-    )
-    (plugin_dir / "manifest.yaml").write_text(
-        "schema_version: 1\n"
-        "plugin_id: sample\n"
-        "display_name: Sample Plugin\n"
-        "capabilities: [ui.settings]\n"
-        "rpc:\n"
-        "  methods: [sample.read]\n"
-        "ui:\n"
-        "  contributions:\n"
-        "    - id: settings\n"
-        "      slot: settings\n"
-        "      title: Sample\n"
-        "      renderer: schema.settings\n"
-        "      schema:\n"
-        "        - id: enabled\n"
-        "          label: Enabled\n"
-        "          type: boolean\n"
-        "          config_path: integrations.sampleEnabled\n",
-        encoding="utf-8",
-    )
-    manager = PluginManager(
-        plugin_dirs=[plugin_root], event_bus=EventBus(), workspace=tmp_path
-    )
-
-    await manager.load_all()
-
-    assert manager.loaded_plugin_ids == ("sample",)
-    assert manager.public_manifests() == [
-        {
-            "schema_version": 1,
-            "plugin_id": "sample",
-            "name": "Sample Plugin",
-            "version": "",
-            "description": "",
-            "author": "",
-            "capabilities": ["ui.settings"],
-            "rpc_methods": ["sample.read"],
-            "ui_contributions": [
-                {
-                    "id": "settings",
-                    "slot": "settings",
-                    "title": "Sample",
-                    "renderer": "schema.settings",
-                    "order": 0,
-                    "settings_schema": [
-                        {
-                            "id": "enabled",
-                            "label": "Enabled",
-                            "type": "boolean",
-                            "config_path": "integrations.sampleEnabled",
-                        }
-                    ],
-                }
-            ],
-        }
-    ]
-    manager.authorize_rpc("sample.read")
-    with pytest.raises(PluginMethodDeniedError):
-        manager.authorize_rpc("sample.write")
-    await manager.unload("sample")
-    with pytest.raises(PluginUnavailableError):
-        manager.authorize_rpc("sample.read")
-
-
-@pytest.mark.asyncio
-async def test_manifest_rejects_schema_outside_the_generic_settings_renderer(
-    tmp_path: Path,
-):
-    plugin_root = tmp_path / "plugins"
-    plugin_dir = plugin_root / "sample"
-    plugin_dir.mkdir(parents=True)
-    (plugin_dir / "plugin.py").write_text(
-        "from agent.plugins import Plugin\n"
-        "class SamplePlugin(Plugin):\n"
-        "    name = 'sample'\n",
-        encoding="utf-8",
-    )
-    (plugin_dir / "manifest.yaml").write_text(
-        "plugin_id: sample\n"
-        "ui:\n"
-        "  contributions:\n"
-        "    - id: settings\n"
-        "      slot: settings\n"
-        "      title: Sample\n"
-        "      renderer: sample.settings\n"
-        "      schema:\n"
-        "        - id: enabled\n"
-        "          label: Enabled\n"
-        "          type: boolean\n"
-        "          config_path: integrations.sampleEnabled\n",
-        encoding="utf-8",
-    )
-    manager = PluginManager(plugin_dirs=[plugin_root], event_bus=EventBus())
-
-    await manager.load_all()
-
-    assert manager.loaded_count == 0
-
-
-@pytest.mark.asyncio
-async def test_unload_removes_handlers_and_keeps_state_outside_plugin_package(
-    tmp_path: Path,
-):
-    plugin_root = tmp_path / "plugins"
-    plugin_dir = plugin_root / "owned"
-    plugin_dir.mkdir(parents=True)
-    (plugin_dir / "plugin.py").write_text(
-        "from agent.plugins import Plugin, on_before_turn\n"
-        "class OwnedPlugin(Plugin):\n"
-        "    name = 'owned'\n"
-        "    async def initialize(self):\n"
-        "        self.context.kv_store.increment('starts')\n"
-        "    @on_before_turn()\n"
-        "    async def count(self, ctx):\n"
-        "        ctx.extra_metadata['owned_calls'] = ctx.extra_metadata.get('owned_calls', 0) + 1\n"
-        "        return ctx\n",
-        encoding="utf-8",
-    )
-    bus = EventBus()
-    manager = PluginManager(
-        plugin_dirs=[plugin_root], event_bus=bus, workspace=tmp_path
-    )
-    await manager.load_all()
-    first = await bus.emit(_before_turn_ctx())
-    assert first.extra_metadata["owned_calls"] == 1
-    assert (tmp_path / "private_runtime" / "plugins" / "owned" / "state.json").exists()
-    assert not (plugin_dir / ".kv.json").exists()
-
-    assert await manager.unload("owned") is True
-    assert await manager.unload("owned") is False
-    second = await bus.emit(_before_turn_ctx())
-    assert "owned_calls" not in second.extra_metadata
-
-
-@pytest.mark.asyncio
-async def test_failed_initialize_rolls_back_bound_event_handlers(tmp_path: Path):
-    plugin_root = tmp_path / "plugins"
-    plugin_dir = plugin_root / "broken"
-    plugin_dir.mkdir(parents=True)
-    (plugin_dir / "plugin.py").write_text(
-        "from agent.plugins import Plugin, on_before_turn\n"
-        "calls = 0\n"
-        "class BrokenPlugin(Plugin):\n"
-        "    name = 'broken'\n"
-        "    async def initialize(self):\n"
-        "        raise RuntimeError('boom')\n"
-        "    @on_before_turn()\n"
-        "    async def count(self, ctx):\n"
-        "        global calls\n"
-        "        calls += 1\n"
-        "        return ctx\n",
-        encoding="utf-8",
-    )
-    bus = EventBus()
-    manager = PluginManager(
-        plugin_dirs=[plugin_root], event_bus=bus, workspace=tmp_path
-    )
-
-    await manager.load_all()
-    await bus.emit(_before_turn_ctx())
-
-    module = sys.modules["akasic_plugin_plugins_broken"]
-    assert manager.loaded_count == 0
-    assert module.calls == 0
-
-
-@pytest.mark.asyncio
 async def test_no_plugin_config_json_keeps_original_defaults():
     """没有 plugin_config.json 时行为不变。"""
     bus = EventBus()
@@ -824,7 +633,7 @@ async def test_no_plugin_config_json_keeps_original_defaults():
         await mgr.load_all()
         instance = _get_instance("configured")
         assert instance.context.config is not None
-        assert instance.context.config.api_key == "test-key"  # from schema default
+        assert instance.context.config.api_key == "test-key"       # from schema default
         assert instance.context.config.max_results == 10
         assert instance.context.config.enabled is True
 
@@ -884,9 +693,7 @@ async def test_on_tool_result_fires_after_tool_execution():
         instance = _get_instance("audit")
         instance.after_tool_results.clear()  # type: ignore[union-attr]
 
-        await bus.fanout(
-            _after_tool_result_ctx(tool_name="get_weather", status="success")
-        )
+        await bus.fanout(_after_tool_result_ctx(tool_name="get_weather", status="success"))
         assert ("get_weather", "success") in instance.after_tool_results  # type: ignore[union-attr]
 
 
@@ -909,18 +716,12 @@ async def test_tool_hooks_fire_through_real_reasoner():
     class FakeProvider:
         _call = 0
 
-        async def chat(
-            self, messages, tools, model, max_tokens, **kwargs
-        ) -> LLMResponse:
+        async def chat(self, messages, tools, model, max_tokens, **kwargs) -> LLMResponse:
             self._call += 1
             if self._call == 1:
                 return LLMResponse(
                     content=None,
-                    tool_calls=[
-                        ToolCall(
-                            id="c1", name="get_weather", arguments={"city": "Tokyo"}
-                        )
-                    ],
+                    tool_calls=[ToolCall(id="c1", name="get_weather", arguments={"city": "Tokyo"})],
                 )
             return LLMResponse(content="Tokyo is sunny.")
 
@@ -978,7 +779,6 @@ async def test_on_tool_pre_rewrites_rm_to_mv():
 
         from agent.tool_hooks.executor import ToolExecutor
         from agent.tool_hooks.types import ToolExecutionRequest
-
         executor = ToolExecutor(mgr.tool_hooks)
 
         captured: dict[str, Any] = {}
@@ -1018,7 +818,6 @@ async def test_on_tool_pre_skips_non_shell_tool():
 
         from agent.tool_hooks.executor import ToolExecutor
         from agent.tool_hooks.types import ToolExecutionRequest
-
         executor = ToolExecutor(mgr.tool_hooks)
 
         captured: dict[str, Any] = {}
@@ -1049,7 +848,6 @@ async def test_on_tool_pre_skips_non_rm_command():
 
         from agent.tool_hooks.executor import ToolExecutor
         from agent.tool_hooks.types import ToolExecutionRequest
-
         executor = ToolExecutor(mgr.tool_hooks)
 
         captured: dict[str, Any] = {}
@@ -1080,7 +878,6 @@ async def test_on_tool_pre_rewrites_rm_rf():
 
         from agent.tool_hooks.executor import ToolExecutor
         from agent.tool_hooks.types import ToolExecutionRequest
-
         executor = ToolExecutor(mgr.tool_hooks)
 
         captured: dict[str, Any] = {}
@@ -1112,7 +909,6 @@ async def test_on_tool_pre_rewrites_sudo_rm():
 
         from agent.tool_hooks.executor import ToolExecutor
         from agent.tool_hooks.types import ToolExecutionRequest
-
         executor = ToolExecutor(mgr.tool_hooks)
 
         captured: dict[str, Any] = {}
@@ -1145,20 +941,12 @@ async def test_on_tool_pre_fires_through_real_reasoner():
     class FakeProvider:
         _called = False
 
-        async def chat(
-            self, messages, tools, model, max_tokens, **kwargs
-        ) -> LLMResponse:
+        async def chat(self, messages, tools, model, max_tokens, **kwargs) -> LLMResponse:
             if not self._called:
                 self._called = True
                 return LLMResponse(
                     content=None,
-                    tool_calls=[
-                        ToolCall(
-                            id="c1",
-                            name="shell",
-                            arguments={"command": "rm /tmp/a.txt"},
-                        )
-                    ],
+                    tool_calls=[ToolCall(id="c1", name="shell", arguments={"command": "rm /tmp/a.txt"})],
                 )
             return LLMResponse(content="done")
 
@@ -1171,11 +959,7 @@ async def test_on_tool_pre_fires_through_real_reasoner():
     class FakeShell(AgentTool):
         name = "shell"
         description = "fake shell"
-        parameters = {
-            "type": "object",
-            "properties": {"command": {"type": "string"}},
-            "required": ["command"],
-        }
+        parameters = {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}
 
         async def execute(self, **kwargs: Any) -> str:
             captured_commands.append(str(kwargs.get("command", "")))

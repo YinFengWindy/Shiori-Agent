@@ -13,7 +13,6 @@ import { formatTimestamp, toFileUrl } from "../shared/format";
 import { DocumentIcon } from "../shared/icons";
 import { cx, focusResetClass } from "../shared/styles";
 import type { RoleRecord, SessionMessage } from "../shared/types";
-import { EmptyPluginHost } from "../plugins/PluginHost";
 
 type ChatMessageListProps = {
   activeRole: RoleRecord | null;
@@ -165,7 +164,6 @@ export const ChatMessageList = React.memo(function ChatMessageList({
                     ) : null}
                     <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
                   </div>
-                  <EmptyPluginHost slot="message-decoration" />
                   {media.length ? (
                     <div className="mt-2 grid gap-2" data-message-media="separate">
                       {media.map((item, mediaIndex) => (

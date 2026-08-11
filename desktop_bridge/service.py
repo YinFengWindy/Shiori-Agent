@@ -6,11 +6,6 @@ from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from agent.looping.core import AgentLoop
-from agent.plugins.manager import (
-    PluginManager,
-    PluginMethodDeniedError,
-    PluginUnavailableError,
-)
 from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
@@ -104,7 +99,6 @@ class DesktopBridgeService:
         role_world_registry: RoleWorldRegistry | None = None,
         story_director: Any | None = None,
         image_tool: Any | None = None,
-        plugin_manager: PluginManager | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -244,7 +238,6 @@ class DesktopBridgeService:
             voice=self.voice_handler,
             stories=self.story_simulation,
             observation=observation_service,
-            plugin_manager=plugin_manager,
         )
         if push_tool is not None:
             self.register_desktop_push_channel(push_tool)
@@ -546,22 +539,6 @@ class DesktopBridgeService:
                 return self._ok(request_id, method, result)
         except KeyError as exc:
             return self._error(request_id, method, "role_not_found", str(exc))
-        except PluginUnavailableError as exc:
-            return self._error(
-                request_id,
-                method,
-                "plugin_unavailable",
-                str(exc),
-                details={"plugin_id": exc.plugin_id},
-            )
-        except PluginMethodDeniedError as exc:
-            return self._error(
-                request_id,
-                method,
-                "plugin_method_denied",
-                str(exc),
-                details={"plugin_id": exc.plugin_id},
-            )
         except VoiceServiceError as exc:
             metrics = getattr(exc, "metrics", None)
             details = {"metrics": metrics.to_dict()} if metrics is not None else {}

@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { DesktopAppFrame } from "./app/DesktopAppFrame";
 import {
@@ -48,9 +48,6 @@ import { useRightSidebarState } from "./shared/useRightSidebarState";
 import { createStoryBridgeClient } from "./story/storyBridgeClient";
 import { useStoryController } from "./story/useStoryController";
 import { StoryAppSurface } from "./story/StoryAppSurface";
-import { PluginCatalogProvider } from "./plugins/PluginCatalogContext";
-import { usePluginCatalog } from "./plugins/pluginCatalog";
-import { isPluginViewAvailable, shouldFallbackFromPluginView } from "./plugins/pluginViewAvailability";
 import type {
   AppMainView,
   EventLog,
@@ -81,7 +78,6 @@ function StoryRoute({ roles, onExit }: StoryRouteProps): React.ReactElement {
 
 function App(): React.ReactElement {
   const [health, setHealth] = useState("connecting");
-  const pluginCatalog = usePluginCatalog(health);
   const [promptTagWorkspaceSection, setPromptTagWorkspaceSection] = useState<PromptTagWorkspaceSectionId>("list");
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [activeRoleId, setActiveRoleId] = useState("");
@@ -160,10 +156,7 @@ function App(): React.ReactElement {
     || mainView.kind === "role-create"
     || mainView.kind === "role-detail"
     || mainView.kind === "role-assets";
-  const imageStudioAvailable = isPluginViewAvailable("image-studio", pluginCatalog);
-  const promptTagsAvailable = isPluginViewAvailable("image-prompt-tags", pluginCatalog);
-  const imageStudioViewActive = mainView.kind === "image-studio" && imageStudioAvailable;
-  const imagePromptTagsViewActive = mainView.kind === "image-prompt-tags" && promptTagsAvailable;
+  const imageStudioViewActive = mainView.kind === "image-studio";
   const roleWorkspaceSection: RoleWorkspaceSectionId =
     mainView.kind === "role-create"
       ? "role-create"
@@ -233,12 +226,6 @@ function App(): React.ReactElement {
     imageHistorySidebarOpen: imageHistorySidebar.open,
     applyRoleSnapshot,
   });
-
-  useEffect(() => {
-    if (shouldFallbackFromPluginView(health, mainView.kind, pluginCatalog)) {
-      openChatView();
-    }
-  }, [health, mainView.kind, openChatView, pluginCatalog]);
 
   const {
     cacheRoleSession,
@@ -367,7 +354,6 @@ function App(): React.ReactElement {
     selectPreviousChatImage,
     selectNextChatImage,
   } = useChatImageState({
-    regenerationAvailable: imageStudioAvailable,
     activeRoleId,
     activeRole,
     activeSessionKey,
@@ -505,8 +491,7 @@ function App(): React.ReactElement {
   }
 
   return (
-    <PluginCatalogProvider catalog={pluginCatalog}>
-      <DesktopAppFrame
+    <DesktopAppFrame
       sidebarCollapsed={leftSidebar.collapsed}
       windowMaximized={windowMaximized}
       canGoBack={canGoBack}
@@ -538,7 +523,7 @@ function App(): React.ReactElement {
       onBackToChat={() => openChatView()}
       onOpenSettingsSection={(section) => openSettingsWorkspace(section)}
       imageStudioViewActive={imageStudioViewActive}
-      imagePromptTagsViewActive={imagePromptTagsViewActive}
+      imagePromptTagsViewActive={mainView.kind === "image-prompt-tags"}
       promptTagWorkspaceSection={promptTagWorkspaceSection}
       onOpenPromptTagWorkspaceSection={setPromptTagWorkspaceSection}
       roleWorkspaceViewActive={roleWorkspaceViewActive}
@@ -669,7 +654,6 @@ function App(): React.ReactElement {
       canGoToPreviousLightboxImage={selectedChatImageIndex > 0}
       canLocateLightboxMessage={Boolean(activeRoleId && selectedChatImageEntry?.messageId)}
       canRegenerateLightboxImage={Boolean(activeSessionKey && selectedChatImageEntry?.messageId)}
-      chatImageRegenerationAvailable={imageStudioAvailable}
       addingChatImageToAssetLibrary={addingChatImageToAssetLibrary}
       regeneratingSelectedChatImage={regeneratingSelectedChatImage}
       chatImageLightboxOpen={chatImageLightboxOpen}
@@ -677,8 +661,7 @@ function App(): React.ReactElement {
       onCloseSelectedChatImageLightbox={closeSelectedChatImageLightbox}
       onLocateSelectedChatImageMessage={locateSelectedChatImageMessage}
       onRegenerateSelectedChatImage={() => void regenerateSelectedChatImage()}
-      />
-    </PluginCatalogProvider>
+    />
   );
 }
 

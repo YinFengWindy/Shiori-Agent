@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pydantic import BaseModel
     from agent.plugins.config import PluginConfig
-    from agent.plugins.resources import PluginResourceScope
 
 
 @dataclass
@@ -26,14 +25,6 @@ class PluginContext:
     session_manager: Any = None
     memory_engine: Any = None
     relationship_runtime: Any = None
-    resources: "PluginResourceScope | None" = None
-
-    def create_task(self, coroutine: Any, *, name: str | None = None) -> Any:
-        """Creates a task owned by this plugin's unload lifecycle."""
-
-        if self.resources is None:
-            raise RuntimeError("plugin resource scope is unavailable")
-        return self.resources.create_task(coroutine, name=name)
 
 
 class PluginKVStore:
