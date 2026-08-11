@@ -33,11 +33,11 @@ class ObservePlugin(Plugin):
             return
 
         self._writer = TraceWriter(workspace / "observe" / "observe.db")
-        self._writer_task = asyncio.create_task(
+        self._writer_task = self.context.create_task(
             self._writer.run(),
             name="observe_writer",
         )
-        self._retention_task = asyncio.create_task(
+        self._retention_task = self.context.create_task(
             run_retention_if_needed(workspace / "observe" / "observe.db"),
             name="observe_retention",
         )

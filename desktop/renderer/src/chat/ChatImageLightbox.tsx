@@ -19,6 +19,7 @@ type ChatImageLightboxProps = {
   imagePath: string;
   addingToAssetLibrary: boolean;
   regenerating: boolean;
+  regenerationAvailable: boolean;
   open: boolean;
   onAddToAssetLibrary: () => void;
   onClose: () => void;
@@ -38,6 +39,7 @@ export function ChatImageLightbox({
   imagePath,
   addingToAssetLibrary,
   regenerating,
+  regenerationAvailable,
   open,
   onAddToAssetLibrary,
   onClose,
@@ -257,7 +259,7 @@ export function ChatImageLightbox({
             </button>
           </div>
           <div className="pointer-events-none absolute bottom-4 right-4 z-[2] flex items-center gap-3">
-            <button
+            {regenerationAvailable ? <button
               className="pointer-events-auto grid h-11 w-11 place-items-center rounded-full border border-black/12 bg-white/94 text-[#272636] shadow-[0_10px_24px_rgba(15,23,42,0.12)] transition hover:border-black hover:bg-white disabled:cursor-default disabled:opacity-40"
               type="button"
               aria-label="重新生成图片"
@@ -266,7 +268,7 @@ export function ChatImageLightbox({
               disabled={!canRegenerate || regenerating}
             >
               <ArrowClockwise className={`h-5 w-5 ${regenerating ? "animate-spin" : ""}`} weight="bold" />
-            </button>
+            </button> : null}
             <button
               className="pointer-events-auto grid h-11 w-11 place-items-center rounded-full border border-black/12 bg-white/94 text-[#272636] shadow-[0_10px_24px_rgba(15,23,42,0.12)] transition hover:border-black hover:bg-white disabled:cursor-default disabled:opacity-40"
               type="button"

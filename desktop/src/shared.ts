@@ -23,6 +23,49 @@ export type BridgeEvent = {
   payload: Record<string, unknown>;
 };
 
+export type PluginUiSlot =
+  | "settings"
+  | "navigation"
+  | "toolbar"
+  | "message-decoration"
+  | "desktop-overlay"
+  | "role-capability";
+
+/** Renderer-safe contribution declared by a loaded plugin. */
+export type PluginUiContribution = {
+  id: string;
+  slot: PluginUiSlot;
+  title: string;
+  renderer: string;
+  order: number;
+  settings_schema?: PluginSettingField[];
+};
+
+export type PluginSettingValue = string | number | boolean;
+
+/** Declarative field rendered by the shared plugin settings form. */
+export type PluginSettingField = {
+  id: string;
+  label: string;
+  type: "boolean" | "number" | "secret" | "select" | "string";
+  config_path: string;
+  hint?: string;
+  options?: Array<{ label: string; value: string | number }>;
+};
+
+/** Renderer-safe manifest returned by the authoritative plugin runtime. */
+export type LoadedPluginManifest = {
+  schema_version: number;
+  plugin_id: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  capabilities: string[];
+  rpc_methods: string[];
+  ui_contributions: PluginUiContribution[];
+};
+
 /** Public desktop-pet voice state used by the pet and settings surfaces. */
 export type VoiceStatePayload = {
   status:

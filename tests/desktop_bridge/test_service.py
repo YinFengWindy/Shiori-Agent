@@ -9,6 +9,7 @@ import pytest
 
 from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
+from agent.plugins.manager import PluginManager
 from bus.events_lifecycle import ProactiveMessageCommitted, RoleDeleted, TurnCommitted
 from conversation.push_sync import ExternalImageSyncService
 from core.roles import RoleStore
@@ -152,6 +153,55 @@ async def test_observation_bridge_routes_only_through_the_owned_service(
     assert remembered.payload == {"item_id": "event-1"}
     observation.analyze.assert_awaited_once()
     observation.remember.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_plugins_list_returns_only_runtime_public_manifests(tmp_path) -> None:
+    plugin_manager = SimpleNamespace(
+        public_manifests=lambda: [{"plugin_id": "sample", "ui_contributions": []}],
+        authorize_rpc=lambda method, known_prefixes=None: None,
+    )
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+        plugin_manager=plugin_manager,  # type: ignore[arg-type]
+    )
+
+    response = await service.handle(
+        {"id": "plugins", "method": "plugins.list", "payload": {}},
+        emit_event=AsyncMock(),
+    )
+
+    assert response.error is None
+    assert response.payload == {
+        "plugins": [{"plugin_id": "sample", "ui_contributions": []}]
+    }
+
+
+@pytest.mark.asyncio
+async def test_disabled_plugin_rpc_is_rejected_before_domain_handler(tmp_path) -> None:
+    event_bus = EventBus()
+    plugin_manager = PluginManager(plugin_dirs=[], event_bus=event_bus)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=SessionManager(tmp_path),
+        agent_loop=SimpleNamespace(),
+        event_bus=event_bus,
+        plugin_manager=plugin_manager,
+    )
+
+    response = await service.handle(
+        {"id": "plugin-rpc", "method": "novelai.history", "payload": {}},
+        emit_event=AsyncMock(),
+    )
+
+    assert response.error is not None
+    assert response.error.code == "plugin_unavailable"
+    assert response.error.details == {"plugin_id": "novelai"}
 
 
 @pytest.mark.asyncio

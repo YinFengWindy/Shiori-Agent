@@ -1,0 +1,73 @@
+schema_version: 1
+plugin_id: novelai
+display_name: NovelAI
+version: 1.0.0
+description: NovelAI image generation, history, prompt tags, and automatic scene CG.
+capabilities:
+  - tool.image_generate
+  - ui.settings
+  - ui.navigation
+  - ui.role_capability
+rpc:
+  methods:
+    - novelai.generate
+    - novelai.regenerateMessageMedia
+    - novelai.history
+    - novelai.prompt_tags.list
+    - novelai.prompt_tags.upsert
+    - novelai.prompt_tags.delete
+ui:
+  contributions:
+    - id: settings
+      slot: settings
+      title: NovelAI
+      renderer: schema.settings
+      order: 40
+      schema:
+        - id: enabled
+          label: 启用 NovelAI
+          type: boolean
+          config_path: integrations.novelaiEnabled
+        - id: token
+          label: Token
+          type: secret
+          config_path: integrations.novelaiToken
+        - id: quality-tags
+          label: Add Quality Tags
+          type: boolean
+          config_path: integrations.novelaiAddQualityTags
+        - id: undesired-content-preset
+          label: 内容过滤预设
+          hint: 控制默认 undesired content 强度。
+          type: select
+          config_path: integrations.novelaiUndesiredContentPreset
+          options:
+            - label: "Undesired Content Preset: None"
+              value: 0
+            - label: "Undesired Content Preset: Light"
+              value: 1
+            - label: "Undesired Content Preset: Heavy"
+              value: 2
+        - id: auto-writeback-role-assets
+          label: 生成后自动写回角色素材
+          type: boolean
+          config_path: integrations.novelaiAutoWritebackRoleAssets
+        - id: nsfw-enabled
+          label: NSFW 模式（开启时使用 Full）
+          type: boolean
+          config_path: integrations.novelaiNsfwEnabled
+    - id: image-studio
+      slot: navigation
+      title: 图像生成
+      renderer: novelai.image-studio
+      order: 40
+    - id: prompt-tags
+      slot: navigation
+      title: 提示词库
+      renderer: novelai.prompt-tags
+      order: 41
+    - id: auto-scene-cg
+      slot: role-capability
+      title: 自动场景 CG
+      renderer: novelai.auto-scene-cg
+      order: 40

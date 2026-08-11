@@ -19,9 +19,7 @@ export const settingsSubsections: Record<SettingsSectionId, SettingsSubsection[]
     { id: "general", label: "基础" },
     { id: "embedding", label: "Embedding" },
   ],
-  integrations: [
-    { id: "novelai", label: "NovelAI" },
-  ],
+  integrations: [],
   voice: [
     { id: "provider", label: "供应商" },
     { id: "input", label: "输入" },
@@ -47,10 +45,10 @@ export function createInitialSettingsSubsectionState(): Record<SettingsSectionId
 export function resolveSettingsSubsectionId(
   sectionId: SettingsSectionId,
   activeSubsections: Record<SettingsSectionId, string>,
+  availableSubsections: SettingsSubsection[] = settingsSubsections[sectionId],
 ): string | null {
-  const subsections = settingsSubsections[sectionId];
   const activeId = activeSubsections[sectionId];
-  return subsections.some((item) => item.id === activeId)
+  return availableSubsections.some((item) => item.id === activeId)
     ? activeId
-    : (subsections[0]?.id ?? null);
+    : (availableSubsections[0]?.id ?? null);
 }

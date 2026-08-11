@@ -1,6 +1,7 @@
 import type React from "react";
 import { Brain, ChatCircleDots, GearSix, Microphone, PlugsConnected } from "@phosphor-icons/react";
 import { cx, inputClass, secondarySidebarSurfaceClass } from "../shared/styles";
+import { usePluginCatalogContext } from "../plugins/PluginCatalogContext";
 
 export type SettingsSectionId =
   | "models"
@@ -51,8 +52,13 @@ export function SettingsSidebar({
   onBeginResize,
   search,
 }: SettingsSidebarProps) {
+  const pluginCatalog = usePluginCatalogContext();
+  const hasPluginSettings = pluginCatalog.contributions("settings").length > 0;
   const query = search.trim().toLowerCase();
-  const visibleSections = settingsSections.filter((section) => sectionMatches(section, query));
+  const visibleSections = settingsSections.filter((section) => (
+    (section.id !== "integrations" || hasPluginSettings)
+    && sectionMatches(section, query)
+  ));
   const sidebarActionClass =
     "flex min-h-[38px] items-center justify-between rounded-md border border-transparent px-3 text-left text-sm text-[#32363C] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
   const sidebarBackClass =

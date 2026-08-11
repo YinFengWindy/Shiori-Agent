@@ -1,11 +1,11 @@
 import { AdvancedSettingsSection } from "./AdvancedSettingsSection";
 import { ChannelsSettingsSection } from "./ChannelsSettingsSection";
-import { IntegrationsSettingsSection } from "./IntegrationsSettingsSection";
 import { MemorySettingsSection } from "./MemorySettingsSection";
 import { ModelsSettingsSection } from "./ModelsSettingsSection";
 import { VoiceSettingsSection } from "./VoiceSettingsSection";
 import type { SettingsSectionId } from "./SettingsSidebar";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
+import { PluginSettingsHost } from "../plugins/PluginSettingsHost";
 
 type SettingsSectionContentProps = SettingsSectionEditorProps & {
   sectionId: SettingsSectionId;
@@ -24,7 +24,7 @@ export function SettingsSectionContent({
     case "memory":
       return <MemorySettingsSection {...editorProps} />;
     case "integrations":
-      return <IntegrationsSettingsSection {...editorProps} />;
+      return <PluginSettingsHost {...editorProps} />;
     case "voice":
       return <VoiceSettingsSection {...editorProps} />;
     case "advanced":

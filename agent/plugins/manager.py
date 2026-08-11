@@ -6,6 +6,7 @@ import inspect
 import json
 import logging
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any, cast
@@ -25,6 +26,13 @@ from agent.lifecycle.types import (
     PromptRenderCtx,
 )
 from agent.plugins.registry import MetadataKind, PluginEventType, plugin_registry
+from agent.plugins.manifest import (
+    PluginManifest,
+    PluginManifestError,
+    load_plugin_manifest,
+    peek_plugin_id,
+)
+from agent.plugins.resources import PluginResourceScope
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.types import HookContext, HookOutcome
 from agent.core.proactive_turn.gates import ProactiveGate
@@ -43,6 +51,41 @@ _EVENT_TYPE_MAP: dict[PluginEventType, type] = {
     PluginEventType.BEFORE_TOOL_CALL: BeforeToolCallCtx,
     PluginEventType.AFTER_TOOL_RESULT: AfterToolResultCtx,
 }
+
+
+@dataclass
+class _LoadedPlugin:
+    module_path: str
+    manifest: PluginManifest
+    instance: object
+    resources: PluginResourceScope
+    tool_hooks: tuple[ToolHook, ...]
+    proactive_gates: tuple[ProactiveGate, ...]
+    before_turn_modules: tuple[object, ...]
+    before_reasoning_modules: tuple[object, ...]
+    prompt_render_modules: tuple[object, ...]
+    before_step_modules: tuple[object, ...]
+    after_step_modules: tuple[object, ...]
+    after_reasoning_modules: tuple[object, ...]
+    after_turn_modules: tuple[object, ...]
+    channels: tuple[Channel, ...]
+
+
+class PluginUnavailableError(RuntimeError):
+    """Raised when an RPC targets a plugin that is not loaded."""
+
+    def __init__(self, plugin_id: str) -> None:
+        self.plugin_id = plugin_id
+        super().__init__(f"plugin unavailable: {plugin_id}")
+
+
+class PluginMethodDeniedError(RuntimeError):
+    """Raised when a loaded plugin did not declare an RPC method."""
+
+    def __init__(self, plugin_id: str, method: str) -> None:
+        self.plugin_id = plugin_id
+        self.method = method
+        super().__init__(f"plugin method denied: {method}")
 
 
 class PluginManager:
@@ -73,6 +116,8 @@ class PluginManager:
         self._light_model = light_model
         self._plugin_configs = plugin_configs or {}
         self._loaded: set[str] = set()
+        self._loaded_by_id: dict[str, _LoadedPlugin] = {}
+        self._known_plugin_ids: set[str] = set()
         self._channels: list[Channel] = []
         self._tool_hooks: list[ToolHook] = []
         self._proactive_gates: list[ProactiveGate] = []
@@ -87,6 +132,40 @@ class PluginManager:
     @property
     def loaded_count(self) -> int:
         return len(self._loaded)
+
+    @property
+    def loaded_plugin_ids(self) -> tuple[str, ...]:
+        """Returns loaded plugin IDs in stable order."""
+
+        return tuple(sorted(self._loaded_by_id))
+
+    def public_manifests(self) -> list[dict[str, object]]:
+        """Returns renderer-safe manifests for successfully loaded plugins."""
+
+        return [
+            self._loaded_by_id[plugin_id].manifest.to_public_dict()
+            for plugin_id in sorted(self._loaded_by_id)
+        ]
+
+    def authorize_rpc(
+        self,
+        method: str,
+        *,
+        known_prefixes: set[str] | None = None,
+    ) -> None:
+        """Rejects unavailable or undeclared plugin RPC methods."""
+
+        plugin_id, separator, _ = method.partition(".")
+        if not separator:
+            return
+        known = self._known_plugin_ids | (known_prefixes or set())
+        if plugin_id not in known:
+            return
+        loaded = self._loaded_by_id.get(plugin_id)
+        if loaded is None:
+            raise PluginUnavailableError(plugin_id)
+        if method not in loaded.manifest.rpc_methods:
+            raise PluginMethodDeniedError(plugin_id, method)
 
     @property
     def tool_hooks(self) -> list[ToolHook]:
@@ -147,6 +226,7 @@ class PluginManager:
     def discover(self) -> list[dict[str, str]]:
         mods: list[dict[str, str]] = []
         seen_names: set[str] = set()
+        self._known_plugin_ids.clear()
         for d in self._dirs:
             if not d.is_dir():
                 continue
@@ -163,12 +243,15 @@ class PluginManager:
                     logger.warning("插件名重复，跳过: %s (%s)", child.name, main)
                     continue
                 seen_names.add(child.name)
+                self._known_plugin_ids.add(peek_plugin_id(child, child.name))
                 # 3. import_path 带上 source 避免不同目录同名插件覆盖 sys.modules
-                mods.append({
-                    "name": child.name,
-                    "module_path": str(main),
-                    "import_path": f"akasic_plugin_{source}_{child.name}",
-                })
+                mods.append(
+                    {
+                        "name": child.name,
+                        "module_path": str(main),
+                        "import_path": f"akasic_plugin_{source}_{child.name}",
+                    }
+                )
         return mods
 
     async def load_all(self) -> None:
@@ -198,8 +281,21 @@ class PluginManager:
         # 4. 实例化，读 manifest 覆盖元信息，注入 PluginContext
         instance = cls()
         plugin_dir = Path(mod["module_path"]).parent
-        _apply_manifest(instance, plugin_dir)
-        plugin_id = str(instance.name) if instance.name else mod["name"]
+        try:
+            manifest = load_plugin_manifest(
+                plugin_dir,
+                fallback_id=mod["name"],
+                instance=instance,
+            )
+        except PluginManifestError as exc:
+            logger.warning("插件 %s manifest 无效，跳过: %s", mod["name"], exc)
+            plugin_registry.remove_plugin(mp)
+            return
+        plugin_id = manifest.plugin_id
+        if plugin_id in self._loaded_by_id:
+            logger.warning("插件 ID 重复，跳过: %s", plugin_id)
+            plugin_registry.remove_plugin(mp)
+            return
         try:
             plugin_config = _load_plugin_config(
                 plugin_dir,
@@ -210,12 +306,19 @@ class PluginManager:
             logger.warning("插件 %s 配置无效，跳过: %s", mod["name"], e)
             return
         from agent.plugins.context import PluginContext, PluginKVStore
+
+        resources = PluginResourceScope(self._event_bus, self._tool_registry)
+        state_path = (
+            self._workspace / "private_runtime" / "plugins" / plugin_id / "state.json"
+            if self._workspace is not None
+            else plugin_dir / ".kv.json"
+        )
         instance.context = PluginContext(  # type: ignore[attr-defined]
-            event_bus=self._event_bus,
-            tool_registry=self._tool_registry,
+            event_bus=resources.event_bus,
+            tool_registry=resources.tool_registry,
             plugin_id=plugin_id,
             plugin_dir=plugin_dir,
-            kv_store=PluginKVStore(plugin_dir / ".kv.json"),
+            kv_store=PluginKVStore(state_path),
             config=plugin_config,
             app_config=self._app_config,
             light_provider=self._light_provider,
@@ -224,27 +327,20 @@ class PluginManager:
             session_manager=self._session_manager,
             memory_engine=self._memory_engine,
             relationship_runtime=self._relationship_runtime,
+            resources=resources,
         )
         plugin_registry.register_instance(mp, instance)
-        self._bind_handlers(instance, mp)
-        tool_names = self._register_tools(instance, mp)
-        hook_count_before = len(self._tool_hooks)
+        starts = self._collection_starts()
+        self._bind_handlers(instance, mp, resources)
+        self._register_tools(instance, mp, resources)
         self._bind_tool_hooks(instance, mp)
-        proactive_gate_count_before = len(self._proactive_gates)
         self._collect_proactive_gates(instance)
-        before_turn_count_before = len(self._before_turn_modules)
         self._collect_before_turn_modules(instance)
-        before_reasoning_count_before = len(self._before_reasoning_modules)
         self._collect_before_reasoning_modules(instance)
-        prompt_render_count_before = len(self._prompt_render_modules)
         self._collect_prompt_render_modules(instance)
-        before_step_count_before = len(self._before_step_modules)
         self._collect_before_step_modules(instance)
-        after_step_count_before = len(self._after_step_modules)
         self._collect_after_step_modules(instance)
-        after_reasoning_count_before = len(self._after_reasoning_modules)
         self._collect_after_reasoning_modules(instance)
-        after_turn_count_before = len(self._after_turn_modules)
         self._collect_after_turn_modules(instance)
         # 5. 给插件机会做异步初始化；失败时回滚所有注册
         try:
@@ -252,22 +348,28 @@ class PluginManager:
                 await instance.initialize()
         except Exception as e:
             logger.warning("插件 %s 初始化失败，回滚: %s", mod["name"], e)
+            try:
+                if hasattr(instance, "terminate"):
+                    await instance.terminate()
+            except Exception as terminate_error:
+                logger.warning(
+                    "插件初始化回滚 terminate 失败 (%s): %s",
+                    plugin_id,
+                    terminate_error,
+                )
+            await resources.release()
+            self._rollback_collections(starts)
             plugin_registry.remove_plugin(mp)
-            for tn in tool_names:
-                if self._tool_registry is not None:
-                    self._tool_registry.unregister(tn)
-            del self._tool_hooks[hook_count_before:]
-            del self._proactive_gates[proactive_gate_count_before:]
-            del self._before_turn_modules[before_turn_count_before:]
-            del self._before_reasoning_modules[before_reasoning_count_before:]
-            del self._prompt_render_modules[prompt_render_count_before:]
-            del self._before_step_modules[before_step_count_before:]
-            del self._after_step_modules[after_step_count_before:]
-            del self._after_reasoning_modules[after_reasoning_count_before:]
-            del self._after_turn_modules[after_turn_count_before:]
             return
         self._loaded.add(mp)
         self._collect_channels(instance)
+        self._loaded_by_id[plugin_id] = self._build_loaded_plugin(
+            module_path=mp,
+            manifest=manifest,
+            instance=instance,
+            resources=resources,
+            starts=starts,
+        )
         logger.info("插件已加载: %s", mod["name"])
 
     def _import_plugin(self, module_name: str, path: Path) -> None:
@@ -284,11 +386,17 @@ class PluginManager:
         sys.modules[module_name] = module
         spec.loader.exec_module(module)  # type: ignore[union-attr]
 
-    def _register_tools(self, instance: Any, module_path: str) -> list[str]:
+    def _register_tools(
+        self,
+        instance: Any,
+        module_path: str,
+        resources: PluginResourceScope,
+    ) -> list[str]:
         tool_names: list[str] = []
         if self._tool_registry is None:
             return tool_names
         from agent.tools.base import Tool as AgentTool
+
         for md in plugin_registry.get_handlers_by_module_path(module_path):
             # 1. 只处理 TOOL 类型元数据
             if md.kind != MetadataKind.TOOL:
@@ -296,7 +404,11 @@ class PluginManager:
             bound = functools.partial(md.handler, instance, None)
             tool_name = md.tool_name or md.handler_name
             description = (md.handler.__doc__ or "").strip()
-            schema = md.tool_schema or {"type": "object", "properties": {}, "required": []}
+            schema = md.tool_schema or {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            }
             # 2. 动态创建 Tool 子类并绑定 execute
             ToolCls = type(
                 f"PluginTool_{tool_name}",
@@ -310,7 +422,8 @@ class PluginManager:
             )
             # 3. 注册到 ToolRegistry，标记来源为 plugin
             plugin_name = getattr(instance, "name", None) or module_path
-            self._tool_registry.register(
+            assert resources.tool_registry is not None
+            resources.tool_registry.register(
                 ToolCls(),
                 risk=md.tool_risk or "read-write",
                 always_on=bool(md.tool_always_on),
@@ -322,7 +435,12 @@ class PluginManager:
             logger.info("插件工具已注册: %s (来自 %s)", tool_name, plugin_name)
         return tool_names
 
-    def _bind_handlers(self, instance: Any, module_path: str) -> None:
+    def _bind_handlers(
+        self,
+        instance: Any,
+        module_path: str,
+        resources: PluginResourceScope,
+    ) -> None:
         for md in plugin_registry.get_handlers_by_module_path(module_path):
             # 1. Phase 1 只绑定生命周期 handler，TOOL 类型留给后续 phase
             if md.kind != MetadataKind.LIFECYCLE:
@@ -333,7 +451,7 @@ class PluginManager:
                 continue
             # 3. 绑定 instance 为第一个参数，EventBus 已处理 sync/async，直接注册
             bound = functools.partial(md.handler, instance)
-            self._event_bus.on(ctx_type, bound)
+            resources.event_bus.on(ctx_type, bound)
 
     def _bind_tool_hooks(self, instance: Any, module_path: str) -> None:
         for md in plugin_registry.get_handlers_by_module_path(module_path):
@@ -417,30 +535,101 @@ class PluginManager:
     ) -> None:
         target.extend(_load_module_list(instance, attr_name))
 
+    def _collection_starts(self) -> dict[str, int]:
+        return {
+            "tool_hooks": len(self._tool_hooks),
+            "proactive_gates": len(self._proactive_gates),
+            "before_turn_modules": len(self._before_turn_modules),
+            "before_reasoning_modules": len(self._before_reasoning_modules),
+            "prompt_render_modules": len(self._prompt_render_modules),
+            "before_step_modules": len(self._before_step_modules),
+            "after_step_modules": len(self._after_step_modules),
+            "after_reasoning_modules": len(self._after_reasoning_modules),
+            "after_turn_modules": len(self._after_turn_modules),
+            "channels": len(self._channels),
+        }
+
+    def _rollback_collections(self, starts: dict[str, int]) -> None:
+        del self._tool_hooks[starts["tool_hooks"] :]
+        del self._proactive_gates[starts["proactive_gates"] :]
+        del self._before_turn_modules[starts["before_turn_modules"] :]
+        del self._before_reasoning_modules[starts["before_reasoning_modules"] :]
+        del self._prompt_render_modules[starts["prompt_render_modules"] :]
+        del self._before_step_modules[starts["before_step_modules"] :]
+        del self._after_step_modules[starts["after_step_modules"] :]
+        del self._after_reasoning_modules[starts["after_reasoning_modules"] :]
+        del self._after_turn_modules[starts["after_turn_modules"] :]
+        del self._channels[starts["channels"] :]
+
+    def _build_loaded_plugin(
+        self,
+        *,
+        module_path: str,
+        manifest: PluginManifest,
+        instance: object,
+        resources: PluginResourceScope,
+        starts: dict[str, int],
+    ) -> _LoadedPlugin:
+        return _LoadedPlugin(
+            module_path=module_path,
+            manifest=manifest,
+            instance=instance,
+            resources=resources,
+            tool_hooks=tuple(self._tool_hooks[starts["tool_hooks"] :]),
+            proactive_gates=tuple(self._proactive_gates[starts["proactive_gates"] :]),
+            before_turn_modules=tuple(
+                self._before_turn_modules[starts["before_turn_modules"] :]
+            ),
+            before_reasoning_modules=tuple(
+                self._before_reasoning_modules[starts["before_reasoning_modules"] :]
+            ),
+            prompt_render_modules=tuple(
+                self._prompt_render_modules[starts["prompt_render_modules"] :]
+            ),
+            before_step_modules=tuple(
+                self._before_step_modules[starts["before_step_modules"] :]
+            ),
+            after_step_modules=tuple(
+                self._after_step_modules[starts["after_step_modules"] :]
+            ),
+            after_reasoning_modules=tuple(
+                self._after_reasoning_modules[starts["after_reasoning_modules"] :]
+            ),
+            after_turn_modules=tuple(
+                self._after_turn_modules[starts["after_turn_modules"] :]
+            ),
+            channels=tuple(self._channels[starts["channels"] :]),
+        )
+
+    async def unload(self, plugin_id: str) -> bool:
+        """Unloads one plugin and releases every manager-owned registration."""
+
+        loaded = self._loaded_by_id.pop(plugin_id, None)
+        if loaded is None:
+            return False
+        try:
+            if hasattr(loaded.instance, "terminate"):
+                await loaded.instance.terminate()  # type: ignore[attr-defined]
+        except Exception as exc:
+            logger.warning("插件 terminate 失败 (%s): %s", plugin_id, exc)
+        await loaded.resources.release()
+        _remove_owned(self._tool_hooks, loaded.tool_hooks)
+        _remove_owned(self._proactive_gates, loaded.proactive_gates)
+        _remove_owned(self._before_turn_modules, loaded.before_turn_modules)
+        _remove_owned(self._before_reasoning_modules, loaded.before_reasoning_modules)
+        _remove_owned(self._prompt_render_modules, loaded.prompt_render_modules)
+        _remove_owned(self._before_step_modules, loaded.before_step_modules)
+        _remove_owned(self._after_step_modules, loaded.after_step_modules)
+        _remove_owned(self._after_reasoning_modules, loaded.after_reasoning_modules)
+        _remove_owned(self._after_turn_modules, loaded.after_turn_modules)
+        _remove_owned(self._channels, loaded.channels)
+        self._loaded.discard(loaded.module_path)
+        plugin_registry.remove_plugin(loaded.module_path)
+        return True
+
     async def terminate_all(self) -> None:
-        for mp in list(self._loaded):
-            instance = plugin_registry.get_instance(mp)
-            if instance is not None and hasattr(instance, "terminate"):
-                try:
-                    await instance.terminate()
-                except Exception as e:
-                    logger.warning("插件 terminate 失败 (%s): %s", mp, e)
-            # 注销工具
-            for md in plugin_registry.get_handlers_by_module_path(mp):
-                if md.kind == MetadataKind.TOOL and self._tool_registry is not None:
-                    self._tool_registry.unregister(md.tool_name or md.handler_name)
-            plugin_registry.remove_plugin(mp)
-        self._loaded.clear()
-        self._tool_hooks.clear()
-        self._proactive_gates.clear()
-        self._before_turn_modules.clear()
-        self._before_reasoning_modules.clear()
-        self._prompt_render_modules.clear()
-        self._before_step_modules.clear()
-        self._after_step_modules.clear()
-        self._after_reasoning_modules.clear()
-        self._after_turn_modules.clear()
-        self._channels.clear()
+        for plugin_id in tuple(self.loaded_plugin_ids):
+            await self.unload(plugin_id)
 
 
 class _PluginConfigError(Exception):
@@ -459,6 +648,7 @@ def _load_plugin_config(
             raise _PluginConfigError(_format_validation_error(e)) from e
     # 1. 读取 _conf_schema.json，提取每个字段的 default 值
     from agent.plugins.config import PluginConfig
+
     schema_path = plugin_dir / "_conf_schema.json"
     if not schema_path.exists():
         return None
@@ -494,7 +684,9 @@ def _load_plugin_config(
                         continue
                     values[key] = value
             else:
-                logger.warning("plugin_config.json 格式错误，期望 dict (%s)", plugin_dir)
+                logger.warning(
+                    "plugin_config.json 格式错误，期望 dict (%s)", plugin_dir
+                )
     return PluginConfig(values)
 
 
@@ -511,43 +703,30 @@ def _load_module_list(instance: Any, method_name: str) -> list[object]:
     if provider is None:
         return []
     if not callable(provider):
-        logger.warning("插件 %s.%s 不是可调用对象", type(instance).__name__, method_name)
+        logger.warning(
+            "插件 %s.%s 不是可调用对象", type(instance).__name__, method_name
+        )
         return []
     try:
         loaded = provider()
     except Exception as e:
-        logger.warning("插件 %s.%s 加载失败: %s", type(instance).__name__, method_name, e)
+        logger.warning(
+            "插件 %s.%s 加载失败: %s", type(instance).__name__, method_name, e
+        )
         return []
     if loaded is None:
         return []
     if not isinstance(loaded, list):
-        logger.warning("插件 %s.%s 返回值不是 list", type(instance).__name__, method_name)
+        logger.warning(
+            "插件 %s.%s 返回值不是 list", type(instance).__name__, method_name
+        )
         return []
     return loaded
 
 
-_MANIFEST_FIELDS = ("name", "version", "desc", "author")
-
-
-def _apply_manifest(instance: Any, plugin_dir: Path) -> None:
-    manifest_path = plugin_dir / "manifest.yaml"
-    if not manifest_path.exists():
-        return
-    try:
-        import yaml
-        loaded = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
-    except Exception as e:
-        logger.warning("manifest.yaml 读取失败 (%s): %s", plugin_dir, e)
-        return
-    if not isinstance(loaded, dict):
-        logger.warning("manifest.yaml 格式错误，期望 dict (%s)", plugin_dir)
-        return
-    raw: dict[str, object] = cast("dict[str, object]", loaded)
-    # 逐字段覆盖实例属性，非字符串值转 str，缺失字段跳过
-    for field in _MANIFEST_FIELDS:
-        val = raw.get(field)
-        if val is not None:
-            setattr(instance, field, str(val))
+def _remove_owned(target: list[Any], owned: tuple[Any, ...]) -> None:
+    owned_ids = {id(item) for item in owned}
+    target[:] = [item for item in target if id(item) not in owned_ids]
 
 
 def _make_execute(bound: Any) -> Any:
@@ -564,6 +743,7 @@ def _make_execute(bound: Any) -> Any:
         if inspect.isawaitable(result):
             result = await result
         return str(result)
+
     return execute
 
 

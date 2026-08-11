@@ -28,6 +28,7 @@ import type {
   SessionPayload,
 } from "../shared/types";
 import { TitleBar } from "../shell/TitleBar";
+import { EmptyPluginHost } from "../plugins/PluginHost";
 import type { WorkspaceFeedback } from "./appState";
 
 type ImageStudioStateViewModel = ReturnType<typeof useImageStudioState>;
@@ -174,6 +175,7 @@ type DesktopAppFrameProps = {
   canGoToPreviousLightboxImage: boolean;
   canLocateLightboxMessage: boolean;
   canRegenerateLightboxImage: boolean;
+  chatImageRegenerationAvailable: boolean;
   addingChatImageToAssetLibrary: boolean;
   regeneratingSelectedChatImage: boolean;
   chatImageLightboxOpen: boolean;
@@ -309,6 +311,7 @@ export function DesktopAppFrame({
   canGoToPreviousLightboxImage,
   canLocateLightboxMessage,
   canRegenerateLightboxImage,
+  chatImageRegenerationAvailable,
   addingChatImageToAssetLibrary,
   regeneratingSelectedChatImage,
   chatImageLightboxOpen,
@@ -336,6 +339,7 @@ export function DesktopAppFrame({
         onRefreshBridge={onRefreshBridge}
         onRestartBridge={onRestartBridge}
       />
+      <EmptyPluginHost slot="toolbar" />
       <div
         className={cx(
           "desktop-shell grid min-h-0 overflow-hidden bg-transparent",
@@ -471,7 +475,7 @@ export function DesktopAppFrame({
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
             />
           ) : null}
-          {mainView.kind === "image-studio" ? (
+          {imageStudioViewActive ? (
             <ImageStudioPage
               activeRecord={imageStudioState.activeRecord}
               error={imageStudioState.error}
@@ -488,7 +492,7 @@ export function DesktopAppFrame({
               onBeginHistorySidebarResize={imageHistorySidebar.beginResize}
             />
           ) : null}
-          {mainView.kind === "image-prompt-tags" ? (
+          {imagePromptTagsViewActive ? (
             <PromptTagLibraryPage
               bridgeReady={bridgeReady}
               section={promptTagWorkspaceSection}
@@ -591,6 +595,7 @@ export function DesktopAppFrame({
         canGoToPrevious={canGoToPreviousLightboxImage}
         canLocateMessage={canLocateLightboxMessage}
         canRegenerate={canRegenerateLightboxImage}
+        regenerationAvailable={chatImageRegenerationAvailable}
         imagePath={chatLatestImagePath}
         addingToAssetLibrary={addingChatImageToAssetLibrary}
         regenerating={regeneratingSelectedChatImage}
@@ -602,6 +607,7 @@ export function DesktopAppFrame({
         onLocateMessage={onLocateSelectedChatImageMessage}
         onRegenerate={onRegenerateSelectedChatImage}
       />
+      <EmptyPluginHost slot="desktop-overlay" />
     </div>
   );
 }

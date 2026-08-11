@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChatImageLightbox } from "./ChatImageLightbox";
 
-function renderLightbox(regenerating: boolean): string {
+function renderLightbox(regenerating: boolean, regenerationAvailable = true): string {
   return renderToStaticMarkup(
     <ChatImageLightbox
       canAddToAssetLibrary
@@ -16,6 +16,7 @@ function renderLightbox(regenerating: boolean): string {
       imagePath="D:\\images\\scene.png"
       addingToAssetLibrary={false}
       regenerating={regenerating}
+      regenerationAvailable={regenerationAvailable}
       open
       onAddToAssetLibrary={() => undefined}
       onClose={() => undefined}
@@ -37,5 +38,9 @@ describe("ChatImageLightbox", () => {
 
     assert.match(markup, /aria-label="重新生成图片"[^>]*disabled/);
     assert.match(markup, /animate-spin/);
+  });
+
+  it("removes regeneration when the owning plugin is unavailable", () => {
+    assert.doesNotMatch(renderLightbox(false, false), /aria-label="重新生成图片"/);
   });
 });

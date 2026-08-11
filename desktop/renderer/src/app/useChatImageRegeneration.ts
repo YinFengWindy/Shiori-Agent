@@ -3,6 +3,7 @@ import type { ChatImageHistoryEntry } from "../chat/chatImageHistory";
 import type { SessionPayload } from "../shared/types";
 
 type UseChatImageRegenerationArgs = {
+  enabled: boolean;
   activeSessionKey: string;
   selectedChatImageEntry: ChatImageHistoryEntry | null;
   updateCommittedActiveSession: (
@@ -26,6 +27,7 @@ export function applyRegeneratedSession(
 
 /** Owns desktop-only NovelAI regeneration state for chat image history entries. */
 export function useChatImageRegeneration({
+  enabled,
   activeSessionKey,
   selectedChatImageEntry,
   updateCommittedActiveSession,
@@ -36,6 +38,7 @@ export function useChatImageRegeneration({
   const [regeneratingKeys, setRegeneratingKeys] = useState<ReadonlySet<string>>(new Set());
 
   async function regenerateSelectedChatImage(): Promise<void> {
+    if (!enabled) return;
     const target = selectedChatImageEntry;
     const targetSessionKey = activeSessionKey;
     if (!targetSessionKey || !target?.messageId || regeneratingKeysRef.current.has(target.historyKey)) {

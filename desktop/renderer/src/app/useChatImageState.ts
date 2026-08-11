@@ -4,6 +4,7 @@ import type { RoleRecord, SessionPayload } from "../shared/types";
 import { useChatImageRegeneration } from "./useChatImageRegeneration";
 
 type UseChatImageStateArgs = {
+  regenerationAvailable: boolean;
   activeRoleId: string;
   activeRole: RoleRecord | null;
   activeSessionKey: string;
@@ -28,6 +29,7 @@ type UseChatImageStateArgs = {
 
 /** Owns chat image preview, lightbox, and right-rail state for the desktop chat surface. */
 export function useChatImageState({
+  regenerationAvailable,
   activeRoleId,
   activeRole,
   activeSessionKey,
@@ -52,6 +54,7 @@ export function useChatImageState({
     regenerateSelectedChatImage,
     regeneratingSelectedChatImage,
   } = useChatImageRegeneration({
+    enabled: regenerationAvailable,
     activeSessionKey,
     selectedChatImageEntry,
     updateCommittedActiveSession,

@@ -1,0 +1,15 @@
+schema_version: 1
+plugin_id: desktop_pet
+display_name: 桌宠
+version: 1.0.0
+description: Role-facing desktop-pet actions and role capability controls.
+capabilities:
+  - tool.desktop_pet_action
+  - ui.role_capability
+ui:
+  contributions:
+    - id: desktop-pet
+      slot: role-capability
+      title: 桌宠
+      renderer: desktop-pet.role-capability
+      order: 50
