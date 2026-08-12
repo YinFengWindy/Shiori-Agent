@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from session.manager import Session
 
 
@@ -57,6 +58,49 @@ class DesktopSessionPresenter:
             "content": message.get("content"),
             "timestamp": message.get("timestamp"),
             "reasoning_content": message.get("reasoning_content"),
+            "tool_chain": DesktopSessionPresenter._sanitize_tool_chain(
+                message.get("tool_chain")
+            ),
             "media": list(message.get("media") or []),
             "metadata": merged_metadata,
         }
+
+    @staticmethod
+    def _sanitize_tool_chain(value: object) -> list[dict[str, Any]]:
+        if not isinstance(value, list):
+            return []
+        groups: list[dict[str, Any]] = []
+        for raw_group in value:
+            if not isinstance(raw_group, dict):
+                continue
+            calls: list[dict[str, Any]] = []
+            for raw_call in raw_group.get("calls") or []:
+                if not isinstance(raw_call, dict):
+                    continue
+                call_id = str(raw_call.get("call_id") or "").strip()
+                tool_name = str(raw_call.get("name") or "").strip()
+                if not call_id or not tool_name:
+                    continue
+                calls.append({
+                    "call_id": call_id,
+                    "name": tool_name,
+                    "status": str(raw_call.get("status") or "success"),
+                    "arguments": raw_call.get("arguments")
+                    if isinstance(raw_call.get("arguments"), dict)
+                    else {},
+                    "final_arguments": raw_call.get("final_arguments")
+                    if isinstance(raw_call.get("final_arguments"), dict)
+                    else {},
+                    "result": truncate_desktop_tool_result(
+                        raw_call.get("result")
+                    ),
+                })
+            if calls:
+                groups.append({
+                    "text": str(raw_group.get("text") or ""),
+                    "reasoning_content": str(
+                        raw_group.get("reasoning_content") or ""
+                    ),
+                    "calls": calls,
+                })
+        return groups

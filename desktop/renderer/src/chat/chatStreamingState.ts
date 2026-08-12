@@ -1,4 +1,4 @@
-import type { SessionPayload } from "../shared/types";
+import type { ChatToolCall, SessionMessage, SessionPayload } from "../shared/types";
 import { ensureChatMessageRenderId } from "./chatMessageIdentity";
 
 /** Applies one bridge delta to the current transient assistant message. */
@@ -40,4 +40,90 @@ export function finishChatStream(session: SessionPayload): SessionPayload {
     metadata: { ...last.metadata, streamed_reply: true },
   };
   return { ...session, messages };
+}
+
+type ToolStartedEvent = {
+  iteration: number;
+  callId: string;
+  toolName: string;
+  arguments: Record<string, unknown>;
+};
+
+type ToolCompletedEvent = ToolStartedEvent & {
+  finalArguments: Record<string, unknown>;
+  status: string;
+  resultPreview: string;
+};
+
+/** Adds one running tool call to the current transient assistant reply. */
+export function applyChatToolStarted(
+  session: SessionPayload,
+  event: ToolStartedEvent,
+): SessionPayload {
+  if (!event.callId.trim() || !event.toolName.trim()) return session;
+  return updateTransientAssistantTool(session, event.iteration, {
+    call_id: event.callId,
+    name: event.toolName,
+    status: "running",
+    arguments: event.arguments,
+    final_arguments: {},
+    result: "",
+  });
+}
+
+/** Completes one transient tool call using its sanitized result preview. */
+export function applyChatToolCompleted(
+  session: SessionPayload,
+  event: ToolCompletedEvent,
+): SessionPayload {
+  if (!event.callId.trim() || !event.toolName.trim()) return session;
+  return updateTransientAssistantTool(session, event.iteration, {
+    call_id: event.callId,
+    name: event.toolName,
+    status: event.status,
+    arguments: event.arguments,
+    final_arguments: event.finalArguments,
+    result: event.resultPreview,
+  });
+}
+
+function updateTransientAssistantTool(
+  session: SessionPayload,
+  iteration: number,
+  toolCall: ChatToolCall,
+): SessionPayload {
+  const messages = [...session.messages];
+  const last = messages[messages.length - 1];
+  const assistant = last?.role === "assistant" && !last.id
+    ? last
+    : ensureChatMessageRenderId({ role: "assistant", content: "", streaming: true });
+  const nextAssistant = mergeToolCall(assistant, iteration, toolCall);
+  if (assistant === last) {
+    messages[messages.length - 1] = nextAssistant;
+  } else {
+    messages.push(nextAssistant);
+  }
+  return { ...session, messages };
+}
+
+function mergeToolCall(
+  message: SessionMessage,
+  iteration: number,
+  toolCall: ChatToolCall,
+): SessionMessage {
+  const groups = [...(message.tool_chain ?? [])];
+  const groupIndex = Math.max(0, iteration - 1);
+  while (groups.length <= groupIndex) {
+    groups.push({ text: "", reasoning_content: "", calls: [] });
+  }
+  const group = groups[groupIndex]!;
+  const calls = [...group.calls];
+  const callIndex = calls.findIndex((call) => call.call_id === toolCall.call_id);
+  if (callIndex >= 0) {
+    calls[callIndex] = toolCall;
+  } else {
+    calls.push(toolCall);
+  }
+  groups[groupIndex] = { ...group, calls };
+  return { ...message, streaming: true, tool_chain: groups };
 }

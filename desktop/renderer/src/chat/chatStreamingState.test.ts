@@ -3,7 +3,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { SessionPayload } from "../shared/types";
-import { applyChatStreamDelta, finishChatStream } from "./chatStreamingState";
+import {
+  applyChatStreamDelta,
+  applyChatToolCompleted,
+  applyChatToolStarted,
+  finishChatStream,
+} from "./chatStreamingState";
 
 function session(): SessionPayload {
   return {
@@ -39,5 +44,60 @@ describe("chat streaming state", () => {
     assert.equal(finished.messages.at(-1)?.streaming, false);
     assert.equal(finished.messages.at(-1)?.metadata?.streamed_reply, true);
     assert.equal(finished.messages.at(-1)?.render_id, streaming.messages.at(-1)?.render_id);
+  });
+
+  it("merges tool lifecycle events by call id into the transient assistant message", () => {
+    const started = applyChatToolStarted(session(), {
+      iteration: 1,
+      callId: "call-1",
+      toolName: "web_search",
+      arguments: { query: "天气" },
+    });
+    const completed = applyChatToolCompleted(started, {
+      iteration: 1,
+      callId: "call-1",
+      toolName: "web_search",
+      arguments: { query: "天气" },
+      finalArguments: { query: "上海天气" },
+      status: "success",
+      resultPreview: "晴，28°C",
+    });
+
+    assert.deepEqual(completed.messages.at(-1)?.tool_chain, [{
+      text: "",
+      reasoning_content: "",
+      calls: [{
+        call_id: "call-1",
+        name: "web_search",
+        status: "success",
+        arguments: { query: "天气" },
+        final_arguments: { query: "上海天气" },
+        result: "晴，28°C",
+      }],
+    }]);
+    assert.equal(completed.messages.at(-1)?.streaming, true);
+  });
+
+  it("ignores tool lifecycle events without stable identifiers", () => {
+    const original = session();
+
+    const missingCallId = applyChatToolStarted(original, {
+      iteration: 1,
+      callId: "",
+      toolName: "web_search",
+      arguments: {},
+    });
+    const missingToolName = applyChatToolCompleted(original, {
+      iteration: 1,
+      callId: "call-1",
+      toolName: "",
+      arguments: {},
+      finalArguments: {},
+      status: "success",
+      resultPreview: "ignored",
+    });
+
+    assert.equal(missingCallId, original);
+    assert.equal(missingToolName, original);
   });
 });

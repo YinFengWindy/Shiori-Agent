@@ -1,5 +1,10 @@
 import { startTransition, useCallback, useEffect } from "react";
-import { applyChatStreamDelta, finishChatStream } from "../chat/chatStreamingState";
+import {
+  applyChatStreamDelta,
+  applyChatToolCompleted,
+  applyChatToolStarted,
+  finishChatStream,
+} from "../chat/chatStreamingState";
 import { useLatestRef } from "../shared/useLatestRef";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
@@ -211,6 +216,45 @@ export function useDesktopBridgeLifecycle({
           callbacks.updateCommittedActiveSession((current) => {
             if (!current) return current;
             return applyChatStreamDelta(current, delta, thinkingDelta);
+          });
+          return;
+        }
+
+        if (event.method === "chat.tool.started") {
+          const currentSession = activeSessionRef.current;
+          if (!currentSession || eventSessionKey !== currentSession.key) return;
+          const argumentsValue = event.payload.arguments;
+          if (!argumentsValue || typeof argumentsValue !== "object" || Array.isArray(argumentsValue)) return;
+          callbacks.updateCommittedActiveSession((current) => {
+            if (!current || current.key !== eventSessionKey) return current;
+            return applyChatToolStarted(current, {
+              iteration: Number(event.payload.iteration ?? 1),
+              callId: String(event.payload.call_id ?? ""),
+              toolName: String(event.payload.tool_name ?? ""),
+              arguments: argumentsValue as Record<string, unknown>,
+            });
+          });
+          return;
+        }
+
+        if (event.method === "chat.tool.completed") {
+          const currentSession = activeSessionRef.current;
+          if (!currentSession || eventSessionKey !== currentSession.key) return;
+          const argumentsValue = event.payload.arguments;
+          const finalArgumentsValue = event.payload.final_arguments;
+          if (!argumentsValue || typeof argumentsValue !== "object" || Array.isArray(argumentsValue)) return;
+          if (!finalArgumentsValue || typeof finalArgumentsValue !== "object" || Array.isArray(finalArgumentsValue)) return;
+          callbacks.updateCommittedActiveSession((current) => {
+            if (!current || current.key !== eventSessionKey) return current;
+            return applyChatToolCompleted(current, {
+              iteration: Number(event.payload.iteration ?? 1),
+              callId: String(event.payload.call_id ?? ""),
+              toolName: String(event.payload.tool_name ?? ""),
+              arguments: argumentsValue as Record<string, unknown>,
+              finalArguments: finalArgumentsValue as Record<string, unknown>,
+              status: String(event.payload.status ?? "error"),
+              resultPreview: String(event.payload.result_preview ?? ""),
+            });
           });
           return;
         }
