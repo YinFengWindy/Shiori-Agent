@@ -84,14 +84,16 @@ export const ChatToolCalls = React.memo(function ChatToolCalls({
                   >
                     <span className="relative flex size-4 shrink-0 items-center justify-center text-[#8B95A7]">
                       <ToolStatusIcon name={call.name} status={call.status} />
-                      <CaretDown
-                        size={12}
-                        className={cx(
-                          "chat-tool-expand-icon absolute inset-0 m-auto opacity-0 transition-[opacity,transform] duration-150 group-hover/tool-row:opacity-100",
-                          callExpanded ? "rotate-180" : "-rotate-90",
-                        )}
-                        aria-hidden="true"
-                      />
+                      {call.status !== "running" ? (
+                        <CaretDown
+                          size={12}
+                          className={cx(
+                            "chat-tool-expand-icon absolute inset-0 m-auto opacity-0 transition-[opacity,transform] duration-150 group-hover/tool-row:opacity-100",
+                            callExpanded ? "rotate-180" : "-rotate-90",
+                          )}
+                          aria-hidden="true"
+                        />
+                      ) : null}
                     </span>
                     <span className="shrink-0 text-[12.5px] font-medium text-[#343B47]">{call.name}</span>
                     <span className="chat-tool-argument-chip inline-flex h-[22px] min-w-0 flex-1 items-center truncate rounded-md bg-black/[0.045] px-1.5 font-mono text-[11.5px] text-[#606875] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.04)] transition-colors duration-100 group-hover/tool-row:bg-black/[0.065]">
@@ -122,7 +124,7 @@ export const ChatToolCalls = React.memo(function ChatToolCalls({
 
 function ToolStatusIcon({ name, status }: { name: string; status: ChatToolCall["status"] }) {
   if (status === "running") {
-    return <CircleNotch size={13} className="chat-tool-status-icon chat-tool-running absolute inset-0 m-auto transition-opacity duration-100 group-hover/tool-row:opacity-0" aria-label="执行中" />;
+    return <CircleNotch size={13} className="chat-tool-status-icon chat-tool-running absolute inset-0 m-auto" aria-label="执行中" />;
   }
   if (status !== "success") {
     return <WarningCircle size={13} weight="fill" className="chat-tool-status-icon absolute inset-0 m-auto text-[#B25D5D] transition-opacity duration-100 group-hover/tool-row:opacity-0" aria-label="执行失败" />;

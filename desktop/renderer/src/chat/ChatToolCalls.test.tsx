@@ -29,8 +29,21 @@ describe("ChatToolCalls", () => {
     assert.match(markup, /上海天气/);
     assert.match(markup, /chat-tool-argument-chip/);
     assert.match(markup, /chat-tool-status-icon[^\"]*absolute[^\"]*inset-0[^\"]*m-auto/);
-    assert.match(markup, /chat-tool-expand-icon[^\"]*absolute[^\"]*inset-0[^\"]*m-auto/);
+    assert.doesNotMatch(markup, /chat-tool-expand-icon/);
     assert.doesNotMatch(markup, /border-\[#E4E7EC\]/);
+  });
+
+  it("shows the hover expand arrow only after the tool stops running", () => {
+    const completedGroups = [{
+      ...groups[0],
+      calls: [{ ...groups[0]!.calls[0]!, status: "success", result: "晴" }],
+    }];
+
+    const markup = renderToStaticMarkup(
+      <ChatToolCalls groups={completedGroups} streaming={false} />,
+    );
+
+    assert.match(markup, /chat-tool-expand-icon[^\"]*absolute[^\"]*inset-0[^\"]*m-auto/);
   });
 
   it("starts collapsed for persisted history", () => {
