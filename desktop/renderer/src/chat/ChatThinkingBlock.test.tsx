@@ -19,10 +19,11 @@ describe("ChatThinkingBlock", () => {
 
   it("stops the streaming treatment after completion", () => {
     const markup = renderToStaticMarkup(
-      <ChatThinkingBlock content="分析完成" streaming={false} />,
+      <ChatThinkingBlock content="分析完成" streaming={false} thinkingDurationMs={6200} />,
     );
 
     assert.doesNotMatch(markup, /chat-thinking-label-streaming/);
     assert.doesNotMatch(markup, /chat-stream-cursor/);
+    assert.match(markup, /Thought for 6\.2s/);
   });
 });

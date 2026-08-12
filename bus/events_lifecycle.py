@@ -87,6 +87,8 @@ class TurnCommitted:
     role_id: str = ""
     request_id: str = ""
     thread_id: str = ""
+    total_tokens: int | None = None
+    thinking_duration_ms: int | None = None
 
 
 @dataclass(frozen=True)

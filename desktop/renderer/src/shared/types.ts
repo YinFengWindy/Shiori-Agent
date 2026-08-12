@@ -147,6 +147,11 @@ export type SessionMessage = {
   metadata?: Record<string, unknown>;
 };
 
+export type ChatTurnMetrics = {
+  total_tokens?: number;
+  thinking_duration_ms?: number;
+};
+
 /** Sanitized tool call record displayed inside one assistant reply. */
 export type ChatToolCall = {
   call_id: string;

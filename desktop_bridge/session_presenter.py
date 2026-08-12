@@ -37,6 +37,18 @@ class DesktopSessionPresenter:
     def _serialize_message(message: dict[str, Any]) -> dict[str, Any]:
         metadata = message.get("metadata")
         merged_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+        raw_turn_metrics = merged_metadata.get("turn_metrics")
+        if isinstance(raw_turn_metrics, dict):
+            turn_metrics = {
+                key: value
+                for key in ("total_tokens", "thinking_duration_ms")
+                if isinstance((value := raw_turn_metrics.get(key)), int)
+                and value >= 0
+            }
+            if turn_metrics:
+                merged_metadata["turn_metrics"] = turn_metrics
+            else:
+                merged_metadata.pop("turn_metrics", None)
         skip_keys = {
             "id",
             "session_key",

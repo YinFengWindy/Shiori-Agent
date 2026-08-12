@@ -1,16 +1,19 @@
 import React from "react";
 import { CaretDown, Sparkle } from "@phosphor-icons/react";
 import { cx } from "../shared/styles";
+import { formatThinkingDuration } from "./chatTurnMetrics";
 
 type ChatThinkingBlockProps = {
   content: string;
   streaming: boolean;
+  thinkingDurationMs?: number;
 };
 
 /** Renders the expandable Thinking trace used by streaming assistant replies. */
 export const ChatThinkingBlock = React.memo(function ChatThinkingBlock({
   content,
   streaming,
+  thinkingDurationMs,
 }: ChatThinkingBlockProps) {
   const [expanded, setExpanded] = React.useState(true);
   if (!content) return null;
@@ -25,7 +28,7 @@ export const ChatThinkingBlock = React.memo(function ChatThinkingBlock({
       >
         <Sparkle size={15} weight="fill" className="text-[#8B95A7]" aria-hidden="true" />
         <span className={cx("chat-thinking-label", streaming && "chat-thinking-label-streaming")}>
-          Thinking
+          {streaming || thinkingDurationMs === undefined ? "Thinking" : formatThinkingDuration(thinkingDurationMs)}
         </span>
         <CaretDown
           size={14}

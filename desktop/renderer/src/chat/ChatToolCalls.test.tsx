@@ -27,6 +27,8 @@ describe("ChatToolCalls", () => {
     assert.match(markup, /1 个执行中/);
     assert.match(markup, /web_search/);
     assert.match(markup, /上海天气/);
+    assert.match(markup, /chat-tool-argument-chip/);
+    assert.doesNotMatch(markup, /border-\[#E4E7EC\]/);
   });
 
   it("starts collapsed for persisted history", () => {

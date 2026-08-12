@@ -106,12 +106,14 @@ def test_default_reasoner_runs_tool_loop_and_returns_reasoner_result():
                 tool_calls=[ToolCall("c1", "dummy", {})],
                 cache_prompt_tokens=100,
                 cache_hit_tokens=40,
+                total_tokens=180,
             ),
             LLMResponse(
                 content="final",
                 tool_calls=[],
                 cache_prompt_tokens=120,
                 cache_hit_tokens=60,
+                total_tokens=220,
             ),
         ]
     )
@@ -138,6 +140,7 @@ def test_default_reasoner_runs_tool_loop_and_returns_reasoner_result():
     assert react_stats["final_call_input_tokens"] == react_stats["turn_input_peak_tokens"]
     assert react_stats["cache_prompt_tokens"] == 220
     assert react_stats["cache_hit_tokens"] == 100
+    assert react_stats["total_tokens"] == 400
     first_messages = provider.calls[0]["messages"]
     assert not any("未加载工具目录" in str(m.get("content", "")) for m in first_messages)
 
@@ -330,8 +333,12 @@ def test_default_reasoner_stops_on_context_pressure_after_tool_batch(monkeypatch
     monkeypatch.setattr(context_pressure_plugin, "_CONTEXT_PRESSURE_STOP_THRESHOLD_TOKENS", 1)
     provider = _Provider(
         [
-            LLMResponse(content="", tool_calls=[ToolCall("c1", "inflate_probe", {"value": 1})]),
-            LLMResponse(content="阶段性回复", tool_calls=[]),
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall("c1", "inflate_probe", {"value": 1})],
+                total_tokens=180,
+            ),
+            LLMResponse(content="阶段性回复", tool_calls=[], total_tokens=90),
         ]
     )
     tools = ToolRegistry()
@@ -368,6 +375,7 @@ def test_default_reasoner_stops_on_context_pressure_after_tool_batch(monkeypatch
     assert "还缺什么信息或步骤" in summary_messages
     assert "inflate_probe" in summary_messages
     assert len(result.metadata["tool_chain"]) == 1
+    assert result.metadata["react_stats"]["total_tokens"] == 270
 
 
 def test_default_reasoner_context_pressure_policy_lives_in_after_step_plugin(monkeypatch):

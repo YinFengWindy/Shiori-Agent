@@ -25,6 +25,29 @@ def test_session_presenter_serializes_formal_thread(tmp_path) -> None:
     assert payload["messages"][0]["content"] == "hello"
 
 
+def test_session_presenter_keeps_sanitized_turn_metrics(tmp_path) -> None:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.add_message(
+        "assistant",
+        "完成。",
+        metadata={
+            "turn_metrics": {
+                "total_tokens": 2438,
+                "thinking_duration_ms": 6200,
+                "internal": "ignored",
+            }
+        },
+    )
+
+    payload = DesktopSessionPresenter(ConversationService(manager)).serialize(session)
+
+    assert payload["messages"][0]["metadata"]["turn_metrics"] == {
+        "total_tokens": 2438,
+        "thinking_duration_ms": 6200,
+    }
+
+
 def test_session_presenter_serializes_sanitized_tool_chain(tmp_path) -> None:
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")

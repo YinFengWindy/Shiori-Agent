@@ -380,6 +380,8 @@ async def test_non_streamed_voice_reply_synthesizes_final_response() -> None:
                 persisted_user_message=None,
                 assistant_response="完整回复。",
                 tools_used=[],
+                total_tokens=2438,
+                thinking_duration_ms=6200,
             )
         )
 
@@ -409,6 +411,9 @@ async def test_non_streamed_voice_reply_synthesizes_final_response() -> None:
     await service.wait_for_tts()
 
     assert tts_service.calls == ["完整回复。"]
+    done = next(event for event in emitted if event["method"] == "chat.done")
+    assert done["payload"]["total_tokens"] == 2438
+    assert done["payload"]["thinking_duration_ms"] == 6200
     assert [
         event["method"] for event in emitted if event["method"].startswith("voice.")
     ] == [

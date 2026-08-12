@@ -2,6 +2,8 @@ import React from "react";
 import { ChatMessageImage } from "./ChatMessageImage";
 import { ChatThinkingBlock } from "./ChatThinkingBlock";
 import { ChatToolCalls } from "./ChatToolCalls";
+import { ChatReplyMetrics } from "./ChatReplyMetrics";
+import { parseChatTurnMetrics } from "./chatTurnMetrics";
 import {
   getChatAttachmentName,
   getChatMessageSourceLabel,
@@ -103,6 +105,8 @@ export const ChatMessageList = React.memo(function ChatMessageList({
           const thinking = isStreaming || wasStreamed || !message.id
             ? String(message.reasoning_content ?? "")
             : "";
+          const turnMetrics = parseChatTurnMetrics(message.metadata?.turn_metrics);
+          const thinkingDurationMs = turnMetrics.thinking_duration_ms;
           const toolChain = message.tool_chain ?? [];
           const hasToolCalls = toolChain.some((group) => group.calls.length > 0);
           const bubbleClass = isError
@@ -171,12 +175,13 @@ export const ChatMessageList = React.memo(function ChatMessageList({
                         </div>
                       )
                     ) : null}
-                    {thinking ? <ChatThinkingBlock content={thinking} streaming={isStreaming && !message.content} /> : null}
+                    {thinking ? <ChatThinkingBlock content={thinking} streaming={isStreaming && !message.content} thinkingDurationMs={thinkingDurationMs} /> : null}
                     {hasToolCalls ? <ChatToolCalls groups={toolChain} streaming={isStreaming} /> : null}
                     <div className="message-content whitespace-pre-wrap break-words">
                       {message.content}
                       {isStreaming && (message.content || !thinking) ? <span className="chat-stream-cursor ml-0.5" aria-hidden="true" /> : null}
                     </div>
+                    {!isStreaming ? <ChatReplyMetrics metrics={turnMetrics} hasThinking={Boolean(thinking)} /> : null}
                   </div>
                   {media.length ? (
                     <div className="mt-2 grid gap-2" data-message-media="separate">

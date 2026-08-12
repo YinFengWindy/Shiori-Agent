@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
@@ -273,6 +274,8 @@ class DefaultReasoner(
             self._prompt_render = self._build_prompt_render_phase(self._context)
 
         # 1. 先准备 retry trace、history 和 preload 工具集合。
+        turn_started_at = time.perf_counter()
+        first_content_at: float | None = None
         retry_attempts: list[dict[str, object]] = []
         retry_trace: dict[str, object] = {
             "attempts": retry_attempts,
@@ -297,6 +300,16 @@ class DefaultReasoner(
         stream_sink = (
             self._stream_sink_factory(msg) if self._stream_sink_factory is not None else None
         )
+        measured_stream_sink = stream_sink
+        if stream_sink is not None:
+            async def _measure_stream_delta(delta: dict[str, str] | str) -> None:
+                nonlocal first_content_at
+                payload = {"content_delta": delta} if isinstance(delta, str) else delta
+                if payload.get("content_delta") and first_content_at is None:
+                    first_content_at = time.perf_counter()
+                await stream_sink(delta)
+
+            measured_stream_sink = _measure_stream_delta
         disabled_tools = _disabled_tools_from_msg(msg)
         tool_execution_context = self._tools.get_context()
 
@@ -351,7 +364,7 @@ class DefaultReasoner(
                     preloaded_tools=preloaded,
                     preloaded_tool_order=preloaded_order,
                     preflight_injected=True,
-                    on_content_delta=stream_sink,
+                    on_content_delta=measured_stream_sink,
                     tool_event_session_key=session.key,
                     tool_event_channel=msg.channel,
                     tool_event_chat_id=msg.chat_id,
@@ -392,6 +405,17 @@ class DefaultReasoner(
                 if isinstance(llm_context_frame, str) and llm_context_frame.strip():
                     retry_trace["llm_context_frame"] = llm_context_frame
                 retry_trace["react_stats"] = dict(result.metadata.get("react_stats") or {})
+                thinking_finished_at = first_content_at or time.perf_counter()
+                turn_metrics: dict[str, int] = {
+                    "thinking_duration_ms": max(
+                        0,
+                        int((thinking_finished_at - turn_started_at) * 1000),
+                    )
+                }
+                total_tokens = retry_trace["react_stats"].get("total_tokens")
+                if isinstance(total_tokens, int) and total_tokens >= 0:
+                    turn_metrics["total_tokens"] = total_tokens
+                retry_trace["turn_metrics"] = turn_metrics
                 return TurnRunResult(
                     reply=result.reply,
                     tools_used=tools_used,

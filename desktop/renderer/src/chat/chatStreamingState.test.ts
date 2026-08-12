@@ -39,10 +39,17 @@ describe("chat streaming state", () => {
 
   it("finishes the transient assistant message without changing its identity", () => {
     const streaming = applyChatStreamDelta(session(), "你好。", "思考");
-    const finished = finishChatStream(streaming);
+    const finished = finishChatStream(streaming, {
+      total_tokens: 2438,
+      thinking_duration_ms: 6200,
+    });
 
     assert.equal(finished.messages.at(-1)?.streaming, false);
     assert.equal(finished.messages.at(-1)?.metadata?.streamed_reply, true);
+    assert.deepEqual(finished.messages.at(-1)?.metadata?.turn_metrics, {
+      total_tokens: 2438,
+      thinking_duration_ms: 6200,
+    });
     assert.equal(finished.messages.at(-1)?.render_id, streaming.messages.at(-1)?.render_id);
   });
 

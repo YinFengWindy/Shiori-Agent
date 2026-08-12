@@ -1,4 +1,4 @@
-import type { ChatToolCall, SessionMessage, SessionPayload } from "../shared/types";
+import type { ChatToolCall, ChatTurnMetrics, SessionMessage, SessionPayload } from "../shared/types";
 import { ensureChatMessageRenderId } from "./chatMessageIdentity";
 
 /** Applies one bridge delta to the current transient assistant message. */
@@ -29,7 +29,10 @@ export function applyChatStreamDelta(
 }
 
 /** Marks the transient assistant message complete after the bridge emits chat.done. */
-export function finishChatStream(session: SessionPayload): SessionPayload {
+export function finishChatStream(
+  session: SessionPayload,
+  metrics: ChatTurnMetrics = {},
+): SessionPayload {
   const lastIndex = session.messages.length - 1;
   const last = session.messages[lastIndex];
   if (!last || last.role !== "assistant" || !last.streaming) return session;
@@ -37,7 +40,18 @@ export function finishChatStream(session: SessionPayload): SessionPayload {
   messages[lastIndex] = {
     ...last,
     streaming: false,
-    metadata: { ...last.metadata, streamed_reply: true },
+    metadata: {
+      ...last.metadata,
+      streamed_reply: true,
+      ...(metrics.total_tokens !== undefined || metrics.thinking_duration_ms !== undefined
+        ? {
+            turn_metrics: {
+              ...(typeof metrics.total_tokens === "number" ? { total_tokens: metrics.total_tokens } : {}),
+              ...(typeof metrics.thinking_duration_ms === "number" ? { thinking_duration_ms: metrics.thinking_duration_ms } : {}),
+            },
+          }
+        : {}),
+    },
   };
   return { ...session, messages };
 }

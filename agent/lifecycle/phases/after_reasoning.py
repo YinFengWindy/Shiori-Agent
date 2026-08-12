@@ -106,6 +106,17 @@ class _BuildAfterReasoningCtxModule:
             raw_reply = "I've completed processing but have no response to give."
         tool_chain = cast(list[dict[str, object]], turn_result.tool_chain)
         parsed = parse_response(raw_reply, tool_chain=tool_chain)
+        raw_turn_metrics = turn_result.context_retry.get("turn_metrics")
+        turn_metrics = (
+            {
+                key: value
+                for key in ("total_tokens", "thinking_duration_ms")
+                if isinstance((value := raw_turn_metrics.get(key)), int)
+                and value >= 0
+            }
+            if isinstance(raw_turn_metrics, dict)
+            else {}
+        )
         frame.slots[_CTX_SLOT] = AfterReasoningCtx(
             session_key=input.state.session_key,
             channel=msg.channel,
@@ -124,6 +135,7 @@ class _BuildAfterReasoningCtxModule:
                 "tool_chain": list(tool_chain),
                 "context_retry": dict(turn_result.context_retry),
                 "streamed_reply": turn_result.streamed,
+                **({"turn_metrics": turn_metrics} if turn_metrics else {}),
             },
         )
         return frame

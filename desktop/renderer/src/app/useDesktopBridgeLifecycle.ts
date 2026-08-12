@@ -6,6 +6,7 @@ import {
   finishChatStream,
 } from "../chat/chatStreamingState";
 import { useLatestRef } from "../shared/useLatestRef";
+import { parseChatTurnMetrics } from "../chat/chatTurnMetrics";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
 import type { EventLog, RoleRecord, SessionPayload, AppMainView } from "../shared/types";
@@ -263,7 +264,10 @@ export function useDesktopBridgeLifecycle({
           callbacks.clearSessionSending(eventSessionKey);
           callbacks.updateCommittedActiveSession((current) => {
             if (!current || current.key !== eventSessionKey) return current;
-            return finishChatStream(current);
+            return finishChatStream(current, parseChatTurnMetrics({
+              total_tokens: event.payload.total_tokens,
+              thinking_duration_ms: event.payload.thinking_duration_ms,
+            }));
           });
           return;
         }

@@ -185,6 +185,8 @@ class DesktopChatService:
                     "reply": event.assistant_response,
                     "thinking": event.thinking,
                     "tools_used": list(event.tools_used),
+                    "total_tokens": event.total_tokens,
+                    "thinking_duration_ms": event.thinking_duration_ms,
                 },
             )
             collected.append(bridge_event)
