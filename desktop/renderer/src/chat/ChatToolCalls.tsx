@@ -87,7 +87,7 @@ export const ChatToolCalls = React.memo(function ChatToolCalls({
                       <CaretDown
                         size={12}
                         className={cx(
-                          "absolute opacity-0 transition-[opacity,transform] duration-150 group-hover/tool-row:opacity-100",
+                          "chat-tool-expand-icon absolute inset-0 m-auto opacity-0 transition-[opacity,transform] duration-150 group-hover/tool-row:opacity-100",
                           callExpanded ? "rotate-180" : "-rotate-90",
                         )}
                         aria-hidden="true"
@@ -122,10 +122,10 @@ export const ChatToolCalls = React.memo(function ChatToolCalls({
 
 function ToolStatusIcon({ name, status }: { name: string; status: ChatToolCall["status"] }) {
   if (status === "running") {
-    return <CircleNotch size={13} className="chat-tool-running transition-opacity duration-100 group-hover/tool-row:opacity-0" aria-label="执行中" />;
+    return <CircleNotch size={13} className="chat-tool-status-icon chat-tool-running absolute inset-0 m-auto transition-opacity duration-100 group-hover/tool-row:opacity-0" aria-label="执行中" />;
   }
   if (status !== "success") {
-    return <WarningCircle size={13} weight="fill" className="text-[#B25D5D] transition-opacity duration-100 group-hover/tool-row:opacity-0" aria-label="执行失败" />;
+    return <WarningCircle size={13} weight="fill" className="chat-tool-status-icon absolute inset-0 m-auto text-[#B25D5D] transition-opacity duration-100 group-hover/tool-row:opacity-0" aria-label="执行失败" />;
   }
   const normalized = name.toLowerCase();
   const Icon = normalized.includes("search")
@@ -137,7 +137,7 @@ function ToolStatusIcon({ name, status }: { name: string; status: ChatToolCall["
         : normalized.includes("shell") || normalized.includes("command")
           ? TerminalWindow
           : Wrench;
-  return <Icon size={13} className="transition-opacity duration-100 group-hover/tool-row:opacity-0" aria-label="执行成功" />;
+  return <Icon size={13} className="chat-tool-status-icon absolute inset-0 m-auto transition-opacity duration-100 group-hover/tool-row:opacity-0" aria-label="执行成功" />;
 }
 
 function formatToolArguments(value: Record<string, unknown>): string {

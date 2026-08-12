@@ -28,6 +28,8 @@ describe("ChatToolCalls", () => {
     assert.match(markup, /web_search/);
     assert.match(markup, /上海天气/);
     assert.match(markup, /chat-tool-argument-chip/);
+    assert.match(markup, /chat-tool-status-icon[^\"]*absolute[^\"]*inset-0[^\"]*m-auto/);
+    assert.match(markup, /chat-tool-expand-icon[^\"]*absolute[^\"]*inset-0[^\"]*m-auto/);
     assert.doesNotMatch(markup, /border-\[#E4E7EC\]/);
   });
 
