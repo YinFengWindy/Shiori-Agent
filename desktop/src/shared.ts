@@ -118,6 +118,7 @@ export type SettingsFormData = {
     maxTokens: number;
     maxIterations: number;
     devMode: boolean;
+    streamingEnabled: boolean;
     memoryWindow: number;
     searchEnabled: boolean;
     spawnEnabled: boolean;

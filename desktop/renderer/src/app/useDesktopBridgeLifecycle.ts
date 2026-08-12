@@ -1,5 +1,5 @@
 import { startTransition, useCallback, useEffect } from "react";
-import { ensureChatMessageRenderId } from "../chat/chatMessageIdentity";
+import { applyChatStreamDelta, finishChatStream } from "../chat/chatStreamingState";
 import { useLatestRef } from "../shared/useLatestRef";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
@@ -206,23 +206,21 @@ export function useDesktopBridgeLifecycle({
           const currentSession = activeSessionRef.current;
           if (!currentSession || eventSessionKey !== currentSession.key) return;
           const delta = String(event.payload.content_delta ?? "");
-          if (!delta) return;
+          const thinkingDelta = String(event.payload.thinking_delta ?? "");
+          if (!delta && !thinkingDelta) return;
           callbacks.updateCommittedActiveSession((current) => {
             if (!current) return current;
-            const messages = [...current.messages];
-            const last = messages[messages.length - 1];
-            if (last && last.role === "assistant" && !last.id) {
-              last.content += delta;
-            } else {
-              messages.push(ensureChatMessageRenderId({ role: "assistant", content: delta }));
-            }
-            return { ...current, messages };
+            return applyChatStreamDelta(current, delta, thinkingDelta);
           });
           return;
         }
 
         if (event.method === "chat.done") {
           callbacks.clearSessionSending(eventSessionKey);
+          callbacks.updateCommittedActiveSession((current) => {
+            if (!current || current.key !== eventSessionKey) return current;
+            return finishChatStream(current);
+          });
           return;
         }
 

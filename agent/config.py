@@ -57,6 +57,8 @@ def load_config(path: str | Path = "config.toml") -> Config:
     llm_agent = _as_dict(llm.get("agent"))
     llm_vl = _as_dict(llm.get("vl"))
     agent_cfg = _as_dict(data.get("agent"))
+    desktop_cfg = _as_dict(data.get("desktop"))
+    desktop_chat_cfg = _as_dict(desktop_cfg.get("chat"))
     agent_context = _as_dict(agent_cfg.get("context"))
     agent_tools = _as_dict(agent_cfg.get("tools"))
     agent_maintenance = _as_dict(agent_cfg.get("maintenance"))
@@ -130,6 +132,9 @@ def load_config(path: str | Path = "config.toml") -> Config:
                     data.get("dev_mode", data.get("dev_model", False)),
                 ),
             )
+        ),
+        desktop_streaming_enabled=bool(
+            desktop_chat_cfg.get("streaming_enabled", False)
         ),
         multimodal=bool(llm_main.get("multimodal", True)),
         vl_model=str(llm_vl.get("model") or data.get("vl_model", "")),

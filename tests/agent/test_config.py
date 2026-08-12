@@ -98,3 +98,27 @@ system_prompt = "system"
 
     assert [item.model for item in loaded.model_registrations] == ["first", "second"]
     assert all(not hasattr(item, "name") for item in loaded.model_registrations)
+
+
+def test_load_config_reads_desktop_chat_streaming_switch(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
+provider = "openai"
+model = "main"
+effort = "none"
+
+[agent]
+system_prompt = "system"
+
+[desktop.chat]
+streaming_enabled = true
+""".strip(),
+        encoding="utf-8",
+    )
+
+    loaded = config.load_config(config_path)
+
+    assert loaded.desktop_streaming_enabled is True

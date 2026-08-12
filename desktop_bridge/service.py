@@ -166,6 +166,7 @@ class DesktopBridgeService:
             emit_payload=self._emit_event,
             emit_session_updated=self._emit_session_updated,
             tts_service=self.voice_service,
+            streaming_enabled=bool(getattr(config, "desktop_streaming_enabled", True)),
         )
         self.voice_handler = DesktopVoiceHandler(
             workspace=workspace,

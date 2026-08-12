@@ -332,6 +332,36 @@ async def test_voice_reply_finishes_when_tts_is_disabled() -> None:
 
 
 @pytest.mark.asyncio
+async def test_chat_service_disables_model_stream_events_from_config() -> None:
+    event_bus = EventBus()
+    process_direct = AsyncMock()
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=process_direct),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(return_value=SimpleNamespace(metadata={}))
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=AsyncMock(),
+        emit_session_updated=AsyncMock(),
+        streaming_enabled=False,
+    )
+
+    await service.run_chat_turn(
+        request_id="request-no-stream",
+        session_key="role:role-1",
+        content="hello",
+        media=[],
+        metadata={},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+
+    assert process_direct.await_args.kwargs["stream_events"] is False
+
+
+@pytest.mark.asyncio
 async def test_chat_failure_terminates_voice_lifecycle() -> None:
     emitted: list[dict] = []
 

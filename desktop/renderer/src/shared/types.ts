@@ -141,6 +141,7 @@ export type SessionMessage = {
   content: string;
   timestamp?: string;
   reasoning_content?: string | null;
+  streaming?: boolean;
   media?: string[];
   metadata?: Record<string, unknown>;
 };

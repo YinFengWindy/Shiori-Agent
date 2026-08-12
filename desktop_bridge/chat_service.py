@@ -58,6 +58,7 @@ class DesktopChatService:
         ],
         emit_session_updated: EmitSessionUpdated,
         tts_service: VoiceService | None = None,
+        streaming_enabled: bool = True,
     ) -> None:
         self._agent_loop = agent_loop
         self._event_bus = event_bus
@@ -67,6 +68,7 @@ class DesktopChatService:
         self._emit_payload = emit_payload
         self._emit_session_updated = emit_session_updated
         self._tts_service = tts_service
+        self._streaming_enabled = bool(streaming_enabled)
         self._tasks_by_session: dict[str, asyncio.Task[None]] = {}
         self._voice_turn_tasks: dict[str, tuple[str, asyncio.Task[None]]] = {}
         self._tts_tasks: set[asyncio.Task[None]] = set()
@@ -201,7 +203,7 @@ class DesktopChatService:
                 omit_user_turn=omit_user_turn,
                 media=media,
                 metadata=metadata,
-                stream_events=True,
+                stream_events=self._streaming_enabled,
             )
             if tts is not None:
                 await _announce_voice_reply()

@@ -57,6 +57,10 @@ max_tokens = 8192
 max_iterations = 40
 dev_mode = false
 
+[desktop.chat]
+# 桌面端角色回复是否实时显示 Thinking 与正文增量。
+streaming_enabled = false
+
 [agent.context]
 memory_window = 40
 
