@@ -105,6 +105,11 @@ async def test_context_store_commit_persists_commits_and_dispatches():
                         "turn_input_sum_tokens": 42100,
                         "turn_input_peak_tokens": 18800,
                         "final_call_input_tokens": 17500,
+                        "total_tokens": 2438,
+                    },
+                    "turn_metrics": {
+                        "total_tokens": 2438,
+                        "thinking_duration_ms": 6200,
                     },
                 },
             )
@@ -155,6 +160,10 @@ async def test_context_store_commit_persists_commits_and_dispatches():
     session_manager.append_messages.assert_awaited_once()
     assert session.messages[-1]["content"] == "整理好了"
     assert session.messages[-1]["reasoning_content"] == "思考"
+    assert session.messages[-1]["metadata"]["turn_metrics"] == {
+        "total_tokens": 2438,
+        "thinking_duration_ms": 6200,
+    }
     assert session.messages[-1].get("cited_memory_ids", []) == []
     assert len(committed_events) == 1
     tc = committed_events[0]
@@ -164,6 +173,8 @@ async def test_context_store_commit_persists_commits_and_dispatches():
     assert tc.raw_reply == "整理好了"
     assert tc.post_reply_budget["history_window"] == 500
     assert tc.post_reply_budget["history_messages"] == 2
+    assert tc.total_tokens == 2438
+    assert tc.thinking_duration_ms == 6200
     await event_bus.aclose()
 
 

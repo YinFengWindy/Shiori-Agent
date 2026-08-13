@@ -131,6 +131,7 @@ async def test_provider_chat_and_retry_paths(monkeypatch: pytest.MonkeyPatch):
                 usage=SimpleNamespace(
                     prompt_cache_hit_tokens=12,
                     prompt_cache_miss_tokens=28,
+                    total_tokens=64,
                 ),
             )
         ]
@@ -141,6 +142,7 @@ async def test_provider_chat_and_retry_paths(monkeypatch: pytest.MonkeyPatch):
     )
     assert result.cache_prompt_tokens == 40
     assert result.cache_hit_tokens == 12
+    assert result.total_tokens == 64
 
     fake = _FakeClient(
         [
@@ -148,6 +150,7 @@ async def test_provider_chat_and_retry_paths(monkeypatch: pytest.MonkeyPatch):
                 content="mimo-cache-ok",
                 usage=SimpleNamespace(
                     prompt_tokens=100,
+                    completion_tokens=24,
                     prompt_tokens_details=SimpleNamespace(cached_tokens=76),
                 ),
             )
@@ -157,6 +160,7 @@ async def test_provider_chat_and_retry_paths(monkeypatch: pytest.MonkeyPatch):
     result = await LLMProvider(api_key="k").chat([], [], "mimo-v2.5", 1)
     assert result.cache_prompt_tokens == 100
     assert result.cache_hit_tokens == 76
+    assert result.total_tokens == 124
 
     fake = _FakeClient(
         [

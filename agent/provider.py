@@ -69,6 +69,7 @@ class LLMResponse:
     provider_fields: dict[str, Any] = field(default_factory=dict)
     cache_prompt_tokens: int | None = None
     cache_hit_tokens: int | None = None
+    total_tokens: int | None = None
 
 
 class ProviderStrategy:
@@ -304,7 +305,7 @@ class LLMProvider:
                 )
 
         raw, thinking, provider_fields = strategy.extract_message(msg, msg.content)
-        cache_prompt_tokens, cache_hit_tokens = _extract_cache_usage(
+        cache_prompt_tokens, cache_hit_tokens, total_tokens = _extract_usage(
             getattr(resp, "usage", None)
         )
         if tool_calls:
@@ -319,6 +320,7 @@ class LLMProvider:
             provider_fields=provider_fields,
             cache_prompt_tokens=cache_prompt_tokens,
             cache_hit_tokens=cache_hit_tokens,
+            total_tokens=total_tokens,
         )
 
     async def _chat_streaming(
@@ -342,6 +344,7 @@ class LLMProvider:
         tool_call_seen = False
         cache_prompt_tokens: int | None = None
         cache_hit_tokens: int | None = None
+        total_tokens: int | None = None
 
         stream_iter = aiter(stream)
         while True:
@@ -352,12 +355,14 @@ class LLMProvider:
                 )
             except StopAsyncIteration:
                 break
-            prompt_tokens, hit_tokens = _extract_cache_usage(
+            prompt_tokens, hit_tokens, chunk_total_tokens = _extract_usage(
                 getattr(chunk, "usage", None)
             )
             if prompt_tokens is not None:
                 cache_prompt_tokens = prompt_tokens
                 cache_hit_tokens = hit_tokens
+            if chunk_total_tokens is not None:
+                total_tokens = chunk_total_tokens
             choices = getattr(chunk, "choices", None) or []
             if not choices:
                 continue
@@ -423,6 +428,7 @@ class LLMProvider:
             provider_fields=provider_fields,
             cache_prompt_tokens=cache_prompt_tokens,
             cache_hit_tokens=cache_hit_tokens,
+            total_tokens=total_tokens,
         )
 
     async def _create_with_retry(
@@ -551,20 +557,29 @@ def _save_llm_payload_snapshot(
         return None
 
 
-def _extract_cache_usage(usage: Any) -> tuple[int | None, int | None]:
+def _extract_usage(
+    usage: Any,
+) -> tuple[int | None, int | None, int | None]:
+    total_tokens = _coerce_int(_get_field(usage, "total_tokens"))
+    if total_tokens is None:
+        prompt_tokens = _coerce_int(_get_field(usage, "prompt_tokens"))
+        completion_tokens = _coerce_int(_get_field(usage, "completion_tokens"))
+        if prompt_tokens is not None and completion_tokens is not None:
+            total_tokens = prompt_tokens + completion_tokens
+
     hit_tokens = _coerce_int(_get_field(usage, "prompt_cache_hit_tokens"))
     miss_tokens = _coerce_int(_get_field(usage, "prompt_cache_miss_tokens"))
     if hit_tokens is not None or miss_tokens is not None:
         hit = hit_tokens or 0
         miss = miss_tokens or 0
-        return hit + miss, hit
+        return hit + miss, hit, total_tokens
 
     prompt_tokens = _coerce_int(_get_field(usage, "prompt_tokens"))
     prompt_details = _get_field(usage, "prompt_tokens_details")
     cached_tokens = _coerce_int(_get_field(prompt_details, "cached_tokens"))
     if prompt_tokens is None or cached_tokens is None:
-        return None, None
-    return prompt_tokens, cached_tokens
+        return None, None, total_tokens
+    return prompt_tokens, cached_tokens, total_tokens
 
 
 def _iter_tool_call_deltas(delta: Any) -> list[dict[str, str | int]]:

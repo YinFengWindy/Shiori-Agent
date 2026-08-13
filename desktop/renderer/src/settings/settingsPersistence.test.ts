@@ -57,6 +57,7 @@ function createSettingsFormData(
       maxTokens: 4000,
       maxIterations: 10,
       devMode: false,
+      streamingEnabled: false,
       memoryWindow: 20,
       searchEnabled: true,
       spawnEnabled: true,

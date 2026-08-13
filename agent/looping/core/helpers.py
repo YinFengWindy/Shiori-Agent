@@ -26,7 +26,14 @@ def _is_positive_int(value: str) -> bool:
         return False
 
 
+def _is_desktop_session(value: str) -> bool:
+    """Accepts role-owned desktop session keys emitted by the bridge."""
+
+    return value.startswith("role:") and len(value) > len("role:")
+
+
 _STREAM_SUPPORT_POLICIES: dict[str, StreamSupportPolicy] = {
+    "desktop": _is_desktop_session,
     "telegram": _is_positive_int,
 }
 

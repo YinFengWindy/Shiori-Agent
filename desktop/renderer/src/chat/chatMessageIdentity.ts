@@ -61,12 +61,19 @@ function canReuseRenderIdForStreamingUpdate(current: SessionMessage, incoming: S
   }
   const currentContent = current.content;
   const incomingContent = incoming.content;
-  if (currentContent === incomingContent) {
+  const currentThinking = String(current.reasoning_content ?? "");
+  const incomingThinking = String(incoming.reasoning_content ?? "");
+  if (currentContent === incomingContent && currentThinking === incomingThinking) {
     return true;
   }
-  const shorterContent = currentContent.length <= incomingContent.length ? currentContent : incomingContent;
-  const longerContent = currentContent.length > incomingContent.length ? currentContent : incomingContent;
-  return Boolean(shorterContent) && longerContent.startsWith(shorterContent);
+  return isStreamingTextExtension(currentContent, incomingContent)
+    && isStreamingTextExtension(currentThinking, incomingThinking);
+}
+
+function isStreamingTextExtension(left: string, right: string): boolean {
+  const shorter = left.length <= right.length ? left : right;
+  const longer = left.length > right.length ? left : right;
+  return longer.startsWith(shorter);
 }
 
 function createLocalChatMessageRenderId(role: string): string {

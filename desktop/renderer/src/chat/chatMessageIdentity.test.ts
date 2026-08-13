@@ -128,6 +128,26 @@ describe("reconcileSessionMessageRenderIds", () => {
 
     assert.equal(reconciled?.messages[1]?.render_id, streamingAssistantMessage.render_id);
   });
+
+  it("reuses the streaming assistant render id when Thinking arrives before content", () => {
+    const streamingAssistantMessage = ensureChatMessageRenderId({
+      role: "assistant",
+      content: "",
+      reasoning_content: "先分析",
+      streaming: true,
+    });
+    const current = createSession([streamingAssistantMessage]);
+    const incoming = createSession([{
+      id: "assistant-1",
+      role: "assistant",
+      content: "正式回复",
+      reasoning_content: "先分析问题",
+    }]);
+
+    const reconciled = reconcileSessionMessageRenderIds(current, incoming);
+
+    assert.equal(reconciled?.messages[0]?.render_id, streamingAssistantMessage.render_id);
+  });
 });
 
 describe("getChatMessageDomKey", () => {

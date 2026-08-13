@@ -7,9 +7,15 @@ from typing import Any, Protocol
 
 from agent.looping.core import AgentLoop
 from bus.event_bus import EventBus
-from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
+from bus.events_lifecycle import (
+    StreamDeltaReady,
+    ToolCallCompleted,
+    ToolCallStarted,
+    TurnCommitted,
+)
 from desktop_bridge.models import BridgeEvent
 from desktop_bridge.role_tts_settings import resolve_role_tts_settings
+from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from desktop_bridge.tts_coordinator import TtsTurnCoordinator
 from desktop_bridge.voice_service import VoiceService
 from session.manager import Session, SessionManager
@@ -58,6 +64,7 @@ class DesktopChatService:
         ],
         emit_session_updated: EmitSessionUpdated,
         tts_service: VoiceService | None = None,
+        streaming_enabled: bool = True,
     ) -> None:
         self._agent_loop = agent_loop
         self._event_bus = event_bus
@@ -67,6 +74,7 @@ class DesktopChatService:
         self._emit_payload = emit_payload
         self._emit_session_updated = emit_session_updated
         self._tts_service = tts_service
+        self._streaming_enabled = bool(streaming_enabled)
         self._tasks_by_session: dict[str, asyncio.Task[None]] = {}
         self._voice_turn_tasks: dict[str, tuple[str, asyncio.Task[None]]] = {}
         self._tts_tasks: set[asyncio.Task[None]] = set()
@@ -177,6 +185,8 @@ class DesktopChatService:
                     "reply": event.assistant_response,
                     "thinking": event.thinking,
                     "tools_used": list(event.tools_used),
+                    "total_tokens": event.total_tokens,
+                    "thinking_duration_ms": event.thinking_duration_ms,
                 },
             )
             collected.append(bridge_event)
@@ -190,7 +200,59 @@ class DesktopChatService:
                 await _announce_voice_reply()
                 tts.push(event.assistant_response)
 
+        async def _on_tool_started(event: ToolCallStarted) -> None:
+            if event.session_key != session_key:
+                return
+            call_id = str(event.call_id or "").strip()
+            tool_name = str(event.tool_name or "").strip()
+            if not call_id or not tool_name:
+                return
+            bridge_event = BridgeEvent(
+                id=request_id,
+                type="event",
+                method="chat.tool.started",
+                payload={
+                    "session_key": event.session_key,
+                    "iteration": event.iteration,
+                    "call_id": call_id,
+                    "tool_name": tool_name,
+                    "arguments": dict(event.arguments),
+                },
+            )
+            collected.append(bridge_event)
+            await self._emit_payload(emit_event, bridge_event.to_dict())
+
+        async def _on_tool_completed(event: ToolCallCompleted) -> None:
+            if event.session_key != session_key:
+                return
+            call_id = str(event.call_id or "").strip()
+            tool_name = str(event.tool_name or "").strip()
+            if not call_id or not tool_name:
+                return
+            bridge_event = BridgeEvent(
+                id=request_id,
+                type="event",
+                method="chat.tool.completed",
+                payload={
+                    "session_key": event.session_key,
+                    "iteration": event.iteration,
+                    "call_id": call_id,
+                    "tool_name": tool_name,
+                    "arguments": dict(event.arguments),
+                    "final_arguments": dict(event.final_arguments),
+                    "status": event.status,
+                    "result_preview": truncate_desktop_tool_result(
+                        event.result_preview
+                    ),
+                },
+            )
+            collected.append(bridge_event)
+            await self._emit_payload(emit_event, bridge_event.to_dict())
+
         self._event_bus.on(StreamDeltaReady, _on_delta)
+        if self._streaming_enabled:
+            self._event_bus.on(ToolCallStarted, _on_tool_started)
+            self._event_bus.on(ToolCallCompleted, _on_tool_completed)
         self._event_bus.on(TurnCommitted, _on_done)
         try:
             _ = await self._agent_loop.process_direct(
@@ -201,7 +263,7 @@ class DesktopChatService:
                 omit_user_turn=omit_user_turn,
                 media=media,
                 metadata=metadata,
-                stream_events=True,
+                stream_events=self._streaming_enabled,
             )
             if tts is not None:
                 await _announce_voice_reply()
@@ -245,6 +307,9 @@ class DesktopChatService:
             raise
         finally:
             self._event_bus.off(StreamDeltaReady, _on_delta)
+            if self._streaming_enabled:
+                self._event_bus.off(ToolCallStarted, _on_tool_started)
+                self._event_bus.off(ToolCallCompleted, _on_tool_completed)
             self._event_bus.off(TurnCommitted, _on_done)
 
     def start_chat_turn(

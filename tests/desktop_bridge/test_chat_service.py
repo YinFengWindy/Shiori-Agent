@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from bus.event_bus import EventBus
-from bus.events_lifecycle import StreamDeltaReady, TurnCommitted
+from bus.events_lifecycle import (
+    StreamDeltaReady,
+    ToolCallCompleted,
+    ToolCallStarted,
+    TurnCommitted,
+)
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.voice_service import VoiceOperationMetrics, VoiceSynthesisResult
 
@@ -40,6 +45,184 @@ class _VoiceService:
                 character_count=len(text),
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_chat_service_bridges_tool_call_lifecycle_for_current_session() -> None:
+    event_bus = EventBus()
+    emitted: list[dict] = []
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        await event_bus.observe(ToolCallStarted(
+            session_key="role:role-1",
+            channel="desktop",
+            chat_id="role:role-1",
+            iteration=1,
+            call_id="call-1",
+            tool_name="web_search",
+            arguments={"query": "天气"},
+        ))
+        await event_bus.observe(ToolCallStarted(
+            session_key="role:other",
+            channel="desktop",
+            chat_id="role:other",
+            iteration=1,
+            call_id="other",
+            tool_name="shell",
+            arguments={},
+        ))
+        await event_bus.observe(ToolCallCompleted(
+            session_key="role:role-1",
+            channel="desktop",
+            chat_id="role:role-1",
+            iteration=1,
+            call_id="call-1",
+            tool_name="web_search",
+            arguments={"query": "天气"},
+            final_arguments={"query": "上海天气"},
+            status="success",
+            result_preview="晴，28°C",
+        ))
+
+    async def _emit_payload(_emit_event, payload: dict) -> None:
+        emitted.append(payload)
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(return_value=SimpleNamespace(metadata={}))
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=_emit_payload,
+        emit_session_updated=AsyncMock(),
+        streaming_enabled=True,
+    )
+
+    await service.run_chat_turn(
+        request_id="request-tools",
+        session_key="role:role-1",
+        content="查天气",
+        media=[],
+        metadata={},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+
+    tool_events = [event for event in emitted if event["method"].startswith("chat.tool.")]
+    assert [event["method"] for event in tool_events] == [
+        "chat.tool.started",
+        "chat.tool.completed",
+    ]
+    assert tool_events[0]["payload"] == {
+        "session_key": "role:role-1",
+        "iteration": 1,
+        "call_id": "call-1",
+        "tool_name": "web_search",
+        "arguments": {"query": "天气"},
+    }
+    assert tool_events[1]["payload"]["final_arguments"] == {"query": "上海天气"}
+    assert tool_events[1]["payload"]["result_preview"] == "晴，28°C"
+    assert event_bus._handlers == {}
+
+
+@pytest.mark.asyncio
+async def test_chat_service_truncates_tool_result_preview_for_desktop() -> None:
+    event_bus = EventBus()
+    emitted: list[dict] = []
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        await event_bus.observe(ToolCallCompleted(
+            session_key="role:role-1",
+            channel="desktop",
+            chat_id="role:role-1",
+            iteration=1,
+            call_id="call-1",
+            tool_name="read_file",
+            arguments={},
+            final_arguments={},
+            status="success",
+            result_preview="x" * 2500,
+        ))
+
+    async def _emit_payload(_emit_event, payload: dict) -> None:
+        emitted.append(payload)
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(return_value=SimpleNamespace(metadata={}))
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=_emit_payload,
+        emit_session_updated=AsyncMock(),
+        streaming_enabled=True,
+    )
+
+    await service.run_chat_turn(
+        request_id="request-long-tool-result",
+        session_key="role:role-1",
+        content="读取文件",
+        media=[],
+        metadata={},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+
+    completed = next(
+        event for event in emitted if event["method"] == "chat.tool.completed"
+    )
+    preview = completed["payload"]["result_preview"]
+    assert len(preview) == 2000
+    assert preview.endswith("...")
+
+
+@pytest.mark.asyncio
+async def test_chat_service_does_not_bridge_live_tool_events_when_streaming_disabled() -> None:
+    event_bus = EventBus()
+    emitted: list[dict] = []
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        await event_bus.observe(ToolCallStarted(
+            session_key="role:role-1",
+            channel="desktop",
+            chat_id="role:role-1",
+            iteration=1,
+            call_id="call-1",
+            tool_name="web_search",
+            arguments={"query": "天气"},
+        ))
+
+    async def _emit_payload(_emit_event, payload: dict) -> None:
+        emitted.append(payload)
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=_process_direct),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(return_value=SimpleNamespace(metadata={}))
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=_emit_payload,
+        emit_session_updated=AsyncMock(),
+        streaming_enabled=False,
+    )
+
+    await service.run_chat_turn(
+        request_id="request-tools-disabled",
+        session_key="role:role-1",
+        content="查天气",
+        media=[],
+        metadata={},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+
+    assert not any(event["method"].startswith("chat.tool.") for event in emitted)
 
 
 @pytest.mark.asyncio
@@ -197,6 +380,8 @@ async def test_non_streamed_voice_reply_synthesizes_final_response() -> None:
                 persisted_user_message=None,
                 assistant_response="完整回复。",
                 tools_used=[],
+                total_tokens=2438,
+                thinking_duration_ms=6200,
             )
         )
 
@@ -226,6 +411,9 @@ async def test_non_streamed_voice_reply_synthesizes_final_response() -> None:
     await service.wait_for_tts()
 
     assert tts_service.calls == ["完整回复。"]
+    done = next(event for event in emitted if event["method"] == "chat.done")
+    assert done["payload"]["total_tokens"] == 2438
+    assert done["payload"]["thinking_duration_ms"] == 6200
     assert [
         event["method"] for event in emitted if event["method"].startswith("voice.")
     ] == [
@@ -329,6 +517,36 @@ async def test_voice_reply_finishes_when_tts_is_disabled() -> None:
         "voice.tts.finished",
     ]
     assert voice_events[0]["payload"]["has_voice"] is False
+
+
+@pytest.mark.asyncio
+async def test_chat_service_disables_model_stream_events_from_config() -> None:
+    event_bus = EventBus()
+    process_direct = AsyncMock()
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(process_direct=process_direct),
+        event_bus=event_bus,
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(return_value=SimpleNamespace(metadata={}))
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=AsyncMock(),
+        emit_session_updated=AsyncMock(),
+        streaming_enabled=False,
+    )
+
+    await service.run_chat_turn(
+        request_id="request-no-stream",
+        session_key="role:role-1",
+        content="hello",
+        media=[],
+        metadata={},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+
+    assert process_direct.await_args.kwargs["stream_events"] is False
 
 
 @pytest.mark.asyncio

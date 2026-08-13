@@ -102,6 +102,7 @@ class Config:
     tool_search_enabled: bool = False
     spawn_enabled: bool = True
     dev_mode: bool = False
+    desktop_streaming_enabled: bool = False
     novelai: NovelAISettings = field(default_factory=NovelAISettings)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     wiring: WiringConfig = field(default_factory=WiringConfig)

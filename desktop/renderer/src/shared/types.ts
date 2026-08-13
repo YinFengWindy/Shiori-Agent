@@ -141,8 +141,32 @@ export type SessionMessage = {
   content: string;
   timestamp?: string;
   reasoning_content?: string | null;
+  streaming?: boolean;
+  tool_chain?: ChatToolCallGroup[];
   media?: string[];
   metadata?: Record<string, unknown>;
+};
+
+export type ChatTurnMetrics = {
+  total_tokens?: number;
+  thinking_duration_ms?: number;
+};
+
+/** Sanitized tool call record displayed inside one assistant reply. */
+export type ChatToolCall = {
+  call_id: string;
+  name: string;
+  status: "running" | "success" | "error" | string;
+  arguments: Record<string, unknown>;
+  final_arguments: Record<string, unknown>;
+  result: string;
+};
+
+/** One model iteration containing one or more tool calls. */
+export type ChatToolCallGroup = {
+  text: string;
+  reasoning_content: string;
+  calls: ChatToolCall[];
 };
 
 /** Referenced chat message shown above the composer before sending. */

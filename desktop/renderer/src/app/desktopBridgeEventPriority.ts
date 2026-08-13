@@ -1,6 +1,8 @@
 const synchronousDesktopBridgeEvents = new Set([
   "bridge.exit",
   "chat.delta",
+  "chat.tool.started",
+  "chat.tool.completed",
   "chat.done",
   "chat.error",
   "session.updated",

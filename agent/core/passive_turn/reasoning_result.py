@@ -88,7 +88,7 @@ class _PassiveReasoningResultMixin:
         reason: str,
         iteration: int,
         tools_used: list[str],
-    ) -> str:
+    ) -> tuple[str, int | None]:
         # 1. 先构造收尾总结 prompt。
         summary_prompt = (
             f"[收尾原因] {reason}\n"
@@ -113,7 +113,7 @@ class _PassiveReasoningResultMixin:
             )
             text = (response.content or "").strip()
             if text:
-                return text
+                return text, response.total_tokens
         except Exception as exc:
             logger.warning("生成预算收尾总结失败: %s", exc)
 
@@ -123,7 +123,7 @@ class _PassiveReasoningResultMixin:
         return (
             f"这次任务还没完全收束。{done}"
             "我先停在当前进度，后续会继续基于已有工具结果补齐缺失信息并给你最终结论。"
-        )
+        ), None
 
     def _build_result(
         self,
@@ -138,6 +138,8 @@ class _PassiveReasoningResultMixin:
         cache_prompt_tokens: int,
         cache_hit_tokens: int,
         cache_seen: bool,
+        total_tokens: int,
+        total_tokens_seen: bool,
         tools_unlocked: list[str] | None = None,
     ) -> ReasonerResult:
         # 1. 先把 tool_chain 扁平化成 invocations。
@@ -174,6 +176,8 @@ class _PassiveReasoningResultMixin:
                 cache_hit_tokens,
                 hit_rate * 100,
             )
+        if total_tokens_seen:
+            react_stats["total_tokens"] = total_tokens
         metadata = {
             "tools_used": list(tools_used),
             "tools_unlocked": list(tools_unlocked or []),

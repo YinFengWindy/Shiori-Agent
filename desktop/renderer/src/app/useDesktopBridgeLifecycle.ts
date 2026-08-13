@@ -1,6 +1,12 @@
 import { startTransition, useCallback, useEffect } from "react";
-import { ensureChatMessageRenderId } from "../chat/chatMessageIdentity";
+import {
+  applyChatStreamDelta,
+  applyChatToolCompleted,
+  applyChatToolStarted,
+  finishChatStream,
+} from "../chat/chatStreamingState";
 import { useLatestRef } from "../shared/useLatestRef";
+import { parseChatTurnMetrics } from "../chat/chatTurnMetrics";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
 import type { EventLog, RoleRecord, SessionPayload, AppMainView } from "../shared/types";
@@ -206,23 +212,63 @@ export function useDesktopBridgeLifecycle({
           const currentSession = activeSessionRef.current;
           if (!currentSession || eventSessionKey !== currentSession.key) return;
           const delta = String(event.payload.content_delta ?? "");
-          if (!delta) return;
+          const thinkingDelta = String(event.payload.thinking_delta ?? "");
+          if (!delta && !thinkingDelta) return;
           callbacks.updateCommittedActiveSession((current) => {
             if (!current) return current;
-            const messages = [...current.messages];
-            const last = messages[messages.length - 1];
-            if (last && last.role === "assistant" && !last.id) {
-              last.content += delta;
-            } else {
-              messages.push(ensureChatMessageRenderId({ role: "assistant", content: delta }));
-            }
-            return { ...current, messages };
+            return applyChatStreamDelta(current, delta, thinkingDelta);
+          });
+          return;
+        }
+
+        if (event.method === "chat.tool.started") {
+          const currentSession = activeSessionRef.current;
+          if (!currentSession || eventSessionKey !== currentSession.key) return;
+          const argumentsValue = event.payload.arguments;
+          if (!argumentsValue || typeof argumentsValue !== "object" || Array.isArray(argumentsValue)) return;
+          callbacks.updateCommittedActiveSession((current) => {
+            if (!current || current.key !== eventSessionKey) return current;
+            return applyChatToolStarted(current, {
+              iteration: Number(event.payload.iteration ?? 1),
+              callId: String(event.payload.call_id ?? ""),
+              toolName: String(event.payload.tool_name ?? ""),
+              arguments: argumentsValue as Record<string, unknown>,
+            });
+          });
+          return;
+        }
+
+        if (event.method === "chat.tool.completed") {
+          const currentSession = activeSessionRef.current;
+          if (!currentSession || eventSessionKey !== currentSession.key) return;
+          const argumentsValue = event.payload.arguments;
+          const finalArgumentsValue = event.payload.final_arguments;
+          if (!argumentsValue || typeof argumentsValue !== "object" || Array.isArray(argumentsValue)) return;
+          if (!finalArgumentsValue || typeof finalArgumentsValue !== "object" || Array.isArray(finalArgumentsValue)) return;
+          callbacks.updateCommittedActiveSession((current) => {
+            if (!current || current.key !== eventSessionKey) return current;
+            return applyChatToolCompleted(current, {
+              iteration: Number(event.payload.iteration ?? 1),
+              callId: String(event.payload.call_id ?? ""),
+              toolName: String(event.payload.tool_name ?? ""),
+              arguments: argumentsValue as Record<string, unknown>,
+              finalArguments: finalArgumentsValue as Record<string, unknown>,
+              status: String(event.payload.status ?? "error"),
+              resultPreview: String(event.payload.result_preview ?? ""),
+            });
           });
           return;
         }
 
         if (event.method === "chat.done") {
           callbacks.clearSessionSending(eventSessionKey);
+          callbacks.updateCommittedActiveSession((current) => {
+            if (!current || current.key !== eventSessionKey) return current;
+            return finishChatStream(current, parseChatTurnMetrics({
+              total_tokens: event.payload.total_tokens,
+              thinking_duration_ms: event.payload.thinking_duration_ms,
+            }));
+          });
           return;
         }
 

@@ -73,6 +73,25 @@ class _PassiveReasoningLoopMixin:
         react_cache_prompt_tokens = 0
         react_cache_hit_tokens = 0
         react_cache_seen = False
+        react_total_tokens = 0
+        react_total_tokens_seen = False
+
+        async def _summarize(
+            *,
+            reason: str,
+            summary_iteration: int,
+        ) -> str:
+            nonlocal react_total_tokens, react_total_tokens_seen
+            summary, summary_tokens = await self._summarize_incomplete_progress(
+                messages,
+                reason=reason,
+                iteration=summary_iteration,
+                tools_used=tools_used,
+            )
+            if summary_tokens is not None:
+                react_total_tokens_seen = True
+                react_total_tokens += summary_tokens
+            return summary
         disabled = set(disabled_tools or set())
         if self._tool_search_enabled:
             always_on = self._tools.get_always_on_names()
@@ -109,11 +128,9 @@ class _PassiveReasoningLoopMixin:
                 visible_names=visible_names,
             ))
             if step_ctx.early_stop:
-                summary = await self._summarize_incomplete_progress(
-                    messages,
+                summary = await _summarize(
                     reason="early_stop",
-                    iteration=iteration + 1,
-                    tools_used=tools_used,
+                    summary_iteration=iteration + 1,
                 )
                 return self._build_result(
                     reply=step_ctx.early_stop_reply or summary,
@@ -126,6 +143,8 @@ class _PassiveReasoningLoopMixin:
                     cache_prompt_tokens=react_cache_prompt_tokens,
                     cache_hit_tokens=react_cache_hit_tokens,
                     cache_seen=react_cache_seen,
+                    total_tokens=react_total_tokens,
+                    total_tokens_seen=react_total_tokens_seen,
                     tools_unlocked=tools_unlocked,
                 )
             # 4. 调用 LLM，带上当前可见工具 schema。
@@ -157,6 +176,9 @@ class _PassiveReasoningLoopMixin:
                 react_cache_seen = True
                 react_cache_prompt_tokens += response.cache_prompt_tokens
                 react_cache_hit_tokens += response.cache_hit_tokens or 0
+            if response.total_tokens is not None:
+                react_total_tokens_seen = True
+                react_total_tokens += response.total_tokens
 
             # 5. 模型返回 tool_calls 时，进入工具执行分支。
             if response.tool_calls:
@@ -291,11 +313,9 @@ class _PassiveReasoningLoopMixin:
                                     tool_name=skipped.name,
                                 )
                             tool_chain.append({"text": response.content, "calls": iter_calls})
-                            summary = await self._summarize_incomplete_progress(
-                                messages,
+                            summary = await _summarize(
                                 reason="tool_call_loop",
-                                iteration=iteration + 1,
-                                tools_used=tools_used,
+                                summary_iteration=iteration + 1,
                             )
                             return self._build_result(
                                 reply=summary,
@@ -308,6 +328,8 @@ class _PassiveReasoningLoopMixin:
                                 cache_prompt_tokens=react_cache_prompt_tokens,
                                 cache_hit_tokens=react_cache_hit_tokens,
                                 cache_seen=react_cache_seen,
+                                total_tokens=react_total_tokens,
+                                total_tokens_seen=react_total_tokens_seen,
                                 tools_unlocked=tools_unlocked,
                             )
                         logger.warning(
@@ -508,11 +530,9 @@ class _PassiveReasoningLoopMixin:
                                 tool_name=skipped.name,
                             )
                         tool_chain.append({"text": response.content, "calls": iter_calls})
-                        summary = await self._summarize_incomplete_progress(
-                            messages,
+                        summary = await _summarize(
                             reason="tool_call_loop",
-                            iteration=iteration + 1,
-                            tools_used=tools_used,
+                            summary_iteration=iteration + 1,
                         )
                         return self._build_result(
                             reply=summary,
@@ -525,6 +545,8 @@ class _PassiveReasoningLoopMixin:
                             cache_prompt_tokens=react_cache_prompt_tokens,
                             cache_hit_tokens=react_cache_hit_tokens,
                             cache_seen=react_cache_seen,
+                            total_tokens=react_total_tokens,
+                            total_tokens_seen=react_total_tokens_seen,
                             tools_unlocked=tools_unlocked,
                         )
 
@@ -555,11 +577,9 @@ class _PassiveReasoningLoopMixin:
                         reason,
                         pressure_tokens,
                     )
-                    summary = await self._summarize_incomplete_progress(
-                        messages,
+                    summary = await _summarize(
                         reason=reason,
-                        iteration=iteration + 1,
-                        tools_used=tools_used,
+                        summary_iteration=iteration + 1,
                     )
                     return self._build_result(
                         reply=summary,
@@ -572,6 +592,8 @@ class _PassiveReasoningLoopMixin:
                         cache_prompt_tokens=react_cache_prompt_tokens,
                         cache_hit_tokens=react_cache_hit_tokens,
                         cache_seen=react_cache_seen,
+                        total_tokens=react_total_tokens,
+                        total_tokens_seen=react_total_tokens_seen,
                         tools_unlocked=tools_unlocked,
                     )
                 continue
@@ -599,6 +621,9 @@ class _PassiveReasoningLoopMixin:
                     react_cache_seen = True
                     react_cache_prompt_tokens += retry_response.cache_prompt_tokens
                     react_cache_hit_tokens += retry_response.cache_hit_tokens or 0
+                if retry_response.total_tokens is not None:
+                    react_total_tokens_seen = True
+                    react_total_tokens += retry_response.total_tokens
                 if retry_response.content:
                     response = retry_response
                     if on_content_delta is not None:
@@ -639,6 +664,8 @@ class _PassiveReasoningLoopMixin:
                 cache_prompt_tokens=react_cache_prompt_tokens,
                 cache_hit_tokens=react_cache_hit_tokens,
                 cache_seen=react_cache_seen,
+                total_tokens=react_total_tokens,
+                total_tokens_seen=react_total_tokens_seen,
                 tools_unlocked=tools_unlocked,
             )
 
@@ -648,11 +675,9 @@ class _PassiveReasoningLoopMixin:
             iteration,
             tools_used if tools_used else "无",
         )
-        summary = await self._summarize_incomplete_progress(
-            messages,
+        summary = await _summarize(
             reason="max_iterations",
-            iteration=iteration,
-            tools_used=tools_used,
+            summary_iteration=iteration,
         )
         return self._build_result(
             reply=summary,
@@ -665,5 +690,7 @@ class _PassiveReasoningLoopMixin:
             cache_prompt_tokens=react_cache_prompt_tokens,
             cache_hit_tokens=react_cache_hit_tokens,
             cache_seen=react_cache_seen,
+            total_tokens=react_total_tokens,
+            total_tokens_seen=react_total_tokens_seen,
             tools_unlocked=tools_unlocked,
         )

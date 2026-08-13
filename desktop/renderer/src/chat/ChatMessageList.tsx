@@ -1,5 +1,9 @@
 import React from "react";
 import { ChatMessageImage } from "./ChatMessageImage";
+import { ChatThinkingBlock } from "./ChatThinkingBlock";
+import { ChatToolCalls } from "./ChatToolCalls";
+import { ChatReplyMetrics } from "./ChatReplyMetrics";
+import { parseChatTurnMetrics } from "./chatTurnMetrics";
 import {
   getChatAttachmentName,
   getChatMessageSourceLabel,
@@ -96,6 +100,15 @@ export const ChatMessageList = React.memo(function ChatMessageList({
           const sourceLabel = getChatMessageSourceLabel(message);
           const media = normalizeSessionMediaPaths(message.media);
           const storedReplyPreview = getStoredChatReplyPreview(message);
+          const isStreaming = Boolean(message.streaming);
+          const wasStreamed = Boolean(message.metadata?.streamed_reply);
+          const thinking = isStreaming || wasStreamed || !message.id
+            ? String(message.reasoning_content ?? "")
+            : "";
+          const turnMetrics = parseChatTurnMetrics(message.metadata?.turn_metrics);
+          const thinkingDurationMs = turnMetrics.thinking_duration_ms;
+          const toolChain = message.tool_chain ?? [];
+          const hasToolCalls = toolChain.some((group) => group.calls.length > 0);
           const bubbleClass = isError
             ? "message-bubble w-fit max-w-full rounded-[14px] border border-[rgba(176,58,58,0.22)] bg-[rgba(255,244,244,0.96)] px-3.5 py-2.5 text-left text-[#8f2d2d] shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
             : isUser
@@ -135,7 +148,7 @@ export const ChatMessageList = React.memo(function ChatMessageList({
                   ) : null}
                   <div className={cx(
                     bubbleClass,
-                    !message.content && !storedReplyPreview && "hidden",
+                    !message.content && !storedReplyPreview && !isStreaming && !thinking && !hasToolCalls && "hidden",
                     isHighlighted && "message-bubble-highlight ring-2 ring-[#111827]/10",
                   )}>
                     {storedReplyPreview ? (
@@ -162,7 +175,13 @@ export const ChatMessageList = React.memo(function ChatMessageList({
                         </div>
                       )
                     ) : null}
-                    <div className="message-content whitespace-pre-wrap break-words">{message.content}</div>
+                    {thinking ? <ChatThinkingBlock content={thinking} streaming={isStreaming && !message.content} thinkingDurationMs={thinkingDurationMs} /> : null}
+                    {hasToolCalls ? <ChatToolCalls groups={toolChain} streaming={isStreaming} /> : null}
+                    <div className="message-content whitespace-pre-wrap break-words">
+                      {message.content}
+                      {isStreaming && (message.content || !thinking) ? <span className="chat-stream-cursor ml-0.5" aria-hidden="true" /> : null}
+                    </div>
+                    {!isStreaming ? <ChatReplyMetrics metrics={turnMetrics} hasThinking={Boolean(thinking)} /> : null}
                   </div>
                   {media.length ? (
                     <div className="mt-2 grid gap-2" data-message-media="separate">
