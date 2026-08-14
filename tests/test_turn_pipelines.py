@@ -287,6 +287,7 @@ def _make_loop(
 
 
 def test_agent_loop_uses_custom_retrieval_pipeline(tmp_path: Path):
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
     custom_retrieval = _CustomRetrieval(block="MEM_BLOCK")
     loop = _make_loop(
         tmp_path,
@@ -295,7 +296,7 @@ def test_agent_loop_uses_custom_retrieval_pipeline(tmp_path: Path):
     session = MagicMock()
     session.key = "cli:1"
     session.messages = []
-    session.metadata = {}
+    session.metadata = {"role_id": "mira"}
     session.get_history = MagicMock(
         return_value=[{"role": "user", "content": f"m{i}"} for i in range(200)]
     )
@@ -315,6 +316,7 @@ def test_agent_loop_uses_custom_retrieval_pipeline(tmp_path: Path):
 
 
 def test_agent_loop_fanouts_turn_committed_from_passive_turn(tmp_path: Path):
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
     loop = _make_loop(
         tmp_path,
         retrieval_pipeline=_CustomRetrieval(block="MEM_BLOCK"),
@@ -324,7 +326,7 @@ def test_agent_loop_fanouts_turn_committed_from_passive_turn(tmp_path: Path):
     session = MagicMock()
     session.key = "cli:1"
     session.messages = []
-    session.metadata = {}
+    session.metadata = {"role_id": "mira"}
     session.get_history = MagicMock(return_value=[])
     session.add_message = MagicMock(
         side_effect=lambda role, content, **kwargs: session.messages.append(
@@ -423,6 +425,7 @@ async def test_resumed_interrupt_state_completes_normally(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_agent_loop_afterstep_fires_with_turn_lifecycle_wiring(tmp_path: Path):
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
     loop = _make_loop(tmp_path)
     session_key = "cli:123"
     loop._active_turn_states[session_key] = TurnInterruptState(
@@ -437,7 +440,7 @@ async def test_agent_loop_afterstep_fires_with_turn_lifecycle_wiring(tmp_path: P
     session = SimpleNamespace(
         key=session_key,
         messages=[],
-        metadata={},
+        metadata={"role_id": "mira"},
         last_consolidated=0,
         get_history=MagicMock(return_value=[]),
         add_message=MagicMock(),

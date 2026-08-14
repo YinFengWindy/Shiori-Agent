@@ -18,6 +18,7 @@ from agent.tools.web_search import WebSearchTool
 from bus.events import InboundMessage, OutboundMessage
 from bus.queue import MessageBus
 from core.common import timekit
+from core.roles import RoleStore
 from plugins.default_memory.engine import DefaultMemoryEngine
 from memory2.memorizer import Memorizer
 from memory2.store import MemoryStore2
@@ -162,10 +163,12 @@ async def test_memorize_tool_cover_branches(
         summary="记住这条流程",
         memory_kind="procedure",
         steps=["先查", "再做"],
+        role_id="mira",
     )
 
-    assert "item_id=mem-1" in result
-    assert "status=new" in result
+    payload = json.loads(result)
+    assert payload["item_id"] == "mem-1"
+    assert payload["status"] == "new"
     extra = memorizer.save_item_with_supersede.await_args.kwargs["extra"]
     assert extra["trigger_tags"] == {"scope": "task"}
     assert extra["rule_schema"]["required_tools"] == []
@@ -182,8 +185,8 @@ async def test_memorize_tool_cover_branches(
             tagger=cast(Any, _BadTagger()),
         )
     )
-    await bad.execute(summary="普通偏好", memory_kind="procedure")
-    await bad.execute(summary="偏好", memory_kind="preference")
+    await bad.execute(summary="普通偏好", memory_kind="procedure", role_id="mira")
+    await bad.execute(summary="偏好", memory_kind="preference", role_id="mira")
 
 
 @pytest.mark.asyncio
@@ -210,6 +213,7 @@ async def test_memorize_tool_should_not_create_second_active_procedure_when_incr
                 "使用 web_search 补充验证价格和评价",
             ],
             "tool_requirement": "steam_mcp",
+            "role_id": "mira",
         },
         source_ref="seed",
     )
@@ -219,6 +223,7 @@ async def test_memorize_tool_should_not_create_second_active_procedure_when_incr
         memory_kind="procedure",
         tool_requirement="steam_mcp",
         steps=["判断目标区服", "使用 steam_mcp 工具查询游戏详情"],
+        role_id="mira",
     )
 
     rows = store._db.execute(
@@ -309,6 +314,7 @@ async def test_memorize_tool_should_coerce_language_reply_rule_to_preference():
     await tool.execute(
         summary="之后跟我说话只用中文，不要夹杂英文，专有名词也尽量翻译。",
         memory_kind="procedure",
+        role_id="mira",
     )
 
     assert (
@@ -466,6 +472,16 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     image = tmp_path / "a.png"
     image.write_bytes(b"\x89PNG\r\n\x1a\n")
     now = datetime.now(timezone.utc)
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        description="desktop role",
+        system_prompt="你现在要用更温柔的风格说话。",
+        background="来自深海城的向导。",
+        runtime_config={"shared_memory_enabled": True, "model": "deepseek-chat"},
+    )
+    role_metadata = {"role_id": "mira"}
 
     builder = ContextBuilder(tmp_path, _Memory())  # type: ignore[arg-type]
     result = builder.render(
@@ -475,7 +491,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
             skill_names=["extra"],
             message_timestamp=now,
             retrieved_memory_block="retrieved",
-        )
+        ),
+        session_metadata=role_metadata,
     )
     prompt = result.system_prompt
     context_frame = result.messages[-2]["content"]
@@ -490,7 +507,11 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert "# Memes" not in prompt
     assert "<meme:shy>" not in prompt
     assert "catalog:skill summary" in prompt
-    assert [item.name for item in builder.last_debug_breakdown][:1] == ["identity"]
+    assert [item.name for item in builder.last_debug_breakdown][:3] == [
+        "role_cache_prefix",
+        "active_role",
+        "identity",
+    ]
 
     result2 = builder.render(
         ContextRequest(
@@ -499,7 +520,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
             skill_names=["extra"],
             message_timestamp=now,
             retrieved_memory_block="retrieved",
-        )
+        ),
+        session_metadata=role_metadata,
     )
     assert result2.system_prompt
     identity_meta = next(
@@ -515,7 +537,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
             skill_names=["extra"],
             channel="telegram",
             chat_id="42",
-        )
+        ),
+        session_metadata=role_metadata,
     ).messages
     assert messages[0]["role"] == "system"
     assert "## 环境" in messages[0]["content"]
@@ -543,7 +566,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
             chat_id="42",
             message_timestamp=now,
             turn_injection_prompt="pref",
-        )
+        ),
+        session_metadata=role_metadata,
     )
     assert render_result.system_prompt
     assert render_result.turn_injection_context == turn_injection
@@ -559,7 +583,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
             channel="telegram_work",
             chat_id="42",
             message_timestamp=now,
-        )
+        ),
+        session_metadata=role_metadata,
     )
     assert "telegram prompt" in custom_telegram.messages[0]["content"]
 
@@ -570,7 +595,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
             channel="qqbot",
             chat_id="c2c:user-1",
             message_timestamp=now,
-        )
+        ),
+        session_metadata=role_metadata,
     )
     assert "## 官方 QQBot 渠道规则（硬性）" in qqbot.messages[0]["content"]
     assert "必须使用 `message_push` 的 `channel=qqbot`" in qqbot.messages[0]["content"]
@@ -584,7 +610,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
             media=["https://img"],
             skill_names=["extra"],
             message_timestamp=now,
-        )
+        ),
+        session_metadata=role_metadata,
     ).messages
     media_only_text = media_only_messages[-1]["content"][-1]["text"]
     assert media_only_text.startswith("[当前消息时间:")
@@ -604,7 +631,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
             media=[str(image)],
             skill_names=["extra"],
             message_timestamp=now,
-        )
+        ),
+        session_metadata=role_metadata,
     ).messages
     text_media_content = text_media_messages[-1]["content"]
     assert isinstance(text_media_content, str)
@@ -621,7 +649,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
             media=[str(note_path)],
             skill_names=["extra"],
             message_timestamp=now,
-        )
+        ),
+        session_metadata=role_metadata,
     ).messages
     text_attachment_content = text_attachment_messages[-1]["content"]
     assert isinstance(text_attachment_content, str)
@@ -636,7 +665,8 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
             media=[str(image), str(note_path)],
             skill_names=["extra"],
             message_timestamp=now,
-        )
+        ),
+        session_metadata=role_metadata,
     ).messages
     mixed_media_content = mixed_media_messages[-1]["content"]
     assert isinstance(mixed_media_content, list)
@@ -644,17 +674,6 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert str(note_path) in mixed_media_content[-1]["text"]
     assert "read_file(path=" in mixed_media_content[-1]["text"]
 
-    from core.roles import RoleStore
-
-    role_store = RoleStore(tmp_path)
-    role_store.create_role(
-        role_id="mira",
-        name="Mira",
-        description="desktop role",
-        system_prompt="你现在要用更温柔的风格说话。",
-        background="来自深海城的向导。",
-        runtime_config={"shared_memory_enabled": True, "model": "deepseek-chat"},
-    )
     role_memory_root = tmp_path / "roles" / "mira" / "memory"
     role_memory_root.mkdir(parents=True, exist_ok=True)
     (role_memory_root / "SELF.md").write_text("# 角色背景\n\n来自深海城的向导。\n", encoding="utf-8")
@@ -674,9 +693,9 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     assert "[role_runtime_config]" in role_prompt
     assert "## Active Role: Mira" in role_prompt
     assert "你现在要用更温柔的风格说话。" in role_prompt
-    assert "你是一个用户创建的角色" in role_prompt
-    assert "Akashic 是用户的一位朋友" in role_prompt
-    assert "不要把他解释成你的内部底座" in role_prompt
+    assert "你是一个用户创建的角色" not in role_prompt
+    assert "Akashic 是用户的一位朋友" not in role_prompt
+    assert "不要把他解释成你的内部底座" not in role_prompt
     assert "tool_search" in role_prompt
 
     role_prompt_cross_channel = builder.render(
@@ -738,6 +757,11 @@ def test_context_builder_reproduces_temporal_conflict_baseline(
         '{"version":1,"categories":{}}',
         encoding="utf-8",
     )
+    RoleStore(tmp_path).create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="你是 Mira。",
+    )
 
     builder = ContextBuilder(tmp_path, _Memory())  # type: ignore[arg-type]
     request_time = datetime.fromisoformat("2026-04-08T17:57:00+08:00")
@@ -760,7 +784,8 @@ def test_context_builder_reproduces_temporal_conflict_baseline(
             chat_id="7674283004",
             message_timestamp=request_time,
             retrieved_memory_block=retrieved_memory_block,
-        )
+        ),
+        session_metadata={"role_id": "mira"},
     )
 
     system_prompt = result.messages[0]["content"]

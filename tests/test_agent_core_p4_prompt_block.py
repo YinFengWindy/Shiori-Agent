@@ -90,7 +90,9 @@ def test_static_identity_prompt_is_not_hardcoded_to_specific_user(tmp_path: Path
     prompt = build_agent_static_identity_prompt(workspace=tmp_path)
 
     assert "花月的长期 AI 伙伴" not in prompt
-    assert "用户的长期 AI 伙伴" in prompt
+    assert "用户的长期 AI 伙伴" not in prompt
+    assert "roles/<role_id>/memory/" in prompt
+    assert "不存在工作区级全局记忆兜底" in prompt
 
 
 def test_prompt_block_priorities_leave_spacing_for_future_inserts():

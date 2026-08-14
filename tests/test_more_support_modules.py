@@ -107,7 +107,6 @@ async def test_provider_chat_and_retry_paths(monkeypatch: pytest.MonkeyPatch):
     provider = LLMProvider(
         api_key="k",
         base_url="https://example.com",
-        system_prompt="system",
         extra_body={"x": 1},
         request_timeout_s=3,
         max_retries=1,
@@ -120,7 +119,7 @@ async def test_provider_chat_and_retry_paths(monkeypatch: pytest.MonkeyPatch):
     )
     assert result.content == "done"
     assert result.tool_calls[0].arguments == {"q": "x"}
-    assert fake.calls[-1]["messages"][0]["role"] == "system"
+    assert fake.calls[-1]["messages"][0]["role"] == "user"
     assert fake.calls[-1]["extra_body"] == {"x": 1}
     assert slept == [1.0]
 

@@ -730,18 +730,18 @@ def test_role_store_clears_selected_assets_when_underlying_asset_removed(
     assert updated.chat_background is None
 
 
-def test_role_aggregate_service_initializes_role_session_and_memory_space(
+def test_role_aggregate_service_initializes_role_first_memory_space(
     tmp_path: Path,
 ):
     class _SelfSeed:
         def generate(self, role) -> str:
             return (
-                "# 角色自我认知\n\n"
-                "## 人格与形象\n"
+                "# 我是谁\n\n"
+                "## 我的性格与形象\n"
                 f"- 我是{role.name}。\n\n"
-                "## 我对当前用户的理解\n"
-                "- 我会谨慎认识用户。\n\n"
-                "## 我们关系的定义\n"
+                "## 我对你的理解\n"
+                "- 我会谨慎认识你。\n\n"
+                "## 我们的关系\n"
                 "- 我们的关系仍在建立中。\n"
             )
 
@@ -763,11 +763,13 @@ def test_role_aggregate_service_initializes_role_session_and_memory_space(
     assert aggregate.session.metadata["role_id"] == aggregate.role.id
     assert aggregate.memory_root.is_dir()
     self_text = (aggregate.memory_root / "SELF.md").read_text(encoding="utf-8").strip()
-    assert self_text.startswith("# 角色自我认知")
-    assert "我是Mira。" in self_text
+    assert self_text.startswith("# 我是谁")
+    assert "来自深海城的向导。" in self_text
+    assert "## 我对你的理解" in self_text
+    assert "## 我们的关系" in self_text
     assert "内部底座" not in self_text
     assert (aggregate.memory_root / "MEMORY.md").read_text(encoding="utf-8")
-    assert aggregate.role.memory_init_state["seed_self_ready"] is True
+    assert aggregate.role.memory_init_state["seed_background_ready"] is True
     assert aggregate.role.memory_init_state["seed_first_impression_ready"] is True
     assert aggregate.role.runtime_config == {}
 
@@ -844,15 +846,15 @@ def test_role_aggregate_service_user_edit_first_impression_becomes_baseline(
 
     updated = service.update_relationship_baseline(
         aggregate.role.id,
-        content="用户给人的第一印象是谨慎而真诚。",
+        content="你给人的第一印象是谨慎而真诚。",
         source="user_edited",
     )
 
-    memory_text = (updated.memory_root / "MEMORY.md").read_text(encoding="utf-8")
+    self_text = (updated.memory_root / "SELF.md").read_text(encoding="utf-8")
     history_text = (updated.memory_root / "HISTORY.md").read_text(encoding="utf-8")
-    assert "来源: user_edited" in memory_text
-    assert "用户给人的第一印象是谨慎而真诚。" in memory_text
-    assert "关系基线修订" in history_text
+    assert "来源: user_edited" in self_text
+    assert "你给人的第一印象是谨慎而真诚。" in self_text
+    assert "关系基线完成修订" in history_text
 
 
 def test_role_aggregate_service_system_derived_cannot_override_user_relationship_baseline(
@@ -871,22 +873,22 @@ def test_role_aggregate_service_system_derived_cannot_override_user_relationship
     )
     edited = service.update_relationship_baseline(
         aggregate.role.id,
-        content="用户给人的第一印象是谨慎而真诚。",
+        content="你给人的第一印象是谨慎而真诚。",
         source="user_edited",
     )
 
     evolved = service.update_relationship_baseline(
         edited.role.id,
-        content="系统推断用户最近显得更放松。",
+        content="我推断你最近显得更放松。",
         source="system_derived",
     )
 
-    memory_text = (evolved.memory_root / "MEMORY.md").read_text(encoding="utf-8")
+    self_text = (evolved.memory_root / "SELF.md").read_text(encoding="utf-8")
     history_text = (evolved.memory_root / "HISTORY.md").read_text(encoding="utf-8")
-    assert "用户给人的第一印象是谨慎而真诚。" in memory_text
-    assert "系统推断用户最近显得更放松。" not in memory_text
-    assert "关系记忆演化建议" in history_text
-    assert "系统建议: 系统推断用户最近显得更放松。" in history_text
+    assert "你给人的第一印象是谨慎而真诚。" in self_text
+    assert "我推断你最近显得更放松。" not in self_text
+    assert "关系出现新的演化建议" in history_text
+    assert "系统建议: 我推断你最近显得更放松。" in history_text
 
 
 def test_role_binding_service_requires_explicit_binding(tmp_path: Path):

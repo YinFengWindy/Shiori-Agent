@@ -22,6 +22,7 @@ from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import TurnCommitted
+from core.roles import RoleStore
 from agent.lifecycle.types import (
     AfterReasoningCtx,
     AfterReasoningInput,
@@ -1155,6 +1156,7 @@ async def test_before_step_setup_records_token_estimate():
 
 @pytest.mark.asyncio
 async def test_prompt_render_chain_appends_bottom_section(tmp_path):
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
     bus = EventBus()
 
     async def append_section(ctx: PromptRenderCtx) -> PromptRenderCtx:
@@ -1193,6 +1195,7 @@ async def test_prompt_render_chain_appends_bottom_section(tmp_path):
             retrieved_memory_block="",
             disabled_sections=set(),
             turn_injection_prompt="",
+            session_metadata={"role_id": "mira"},
         )
     )
 
@@ -1201,6 +1204,7 @@ async def test_prompt_render_chain_appends_bottom_section(tmp_path):
 
 @pytest.mark.asyncio
 async def test_prompt_render_chain_respects_disabled_sections(tmp_path):
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
     class BottomModule:
         slot = "test.prompt.bottom"
         requires = ("prompt_render.emit", "prompt:ctx")
@@ -1246,6 +1250,7 @@ async def test_prompt_render_chain_respects_disabled_sections(tmp_path):
             retrieved_memory_block="",
             disabled_sections={"memes"},
             turn_injection_prompt="",
+            session_metadata={"role_id": "mira"},
         )
     )
 
@@ -1254,6 +1259,7 @@ async def test_prompt_render_chain_respects_disabled_sections(tmp_path):
 
 @pytest.mark.asyncio
 async def test_prompt_render_collects_export_slots(tmp_path):
+    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
     class SlotModule:
         slot = "test.prompt.slot"
         requires = ("prompt_render.emit", "prompt:ctx")
@@ -1297,6 +1303,7 @@ async def test_prompt_render_collects_export_slots(tmp_path):
             retrieved_memory_block="",
             disabled_sections=set(),
             turn_injection_prompt="",
+            session_metadata={"role_id": "mira"},
         )
     )
     rendered = str(result.messages)

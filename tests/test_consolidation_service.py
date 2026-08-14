@@ -103,7 +103,7 @@ def test_consolidation_service_archive_all_and_profile_extract():
     event_prompt = next(
         _message_text(call.kwargs)
         for call in provider.chat.await_args_list
-        if "记忆提取代理" in _message_text(call.kwargs)
+        if "中性的 Markdown 记忆提取器" in _message_text(call.kwargs)
     )
     assert "## 最近三次 consolidation event" in event_prompt
     assert "用户准备下单 Zigbee 网关" in event_prompt
@@ -172,7 +172,7 @@ def test_consolidation_service_abstracts_nsfw_memory_conversation():
 
     assert draft is not None
     event_prompt = next(
-        prompt for prompt in captured_prompts if "记忆提取代理" in prompt
+        prompt for prompt in captured_prompts if "中性的 Markdown 记忆提取器" in prompt
     )
     assert "主动推进更高强度的亲密互动" in event_prompt
     assert "表达爱意与依恋" in event_prompt
@@ -492,10 +492,10 @@ def test_consolidation_recent_context_formats_user_full_and_assistant_preview():
 
     assert draft is not None
     written = draft.recent_context_text
-    assert "# Recent Context" in written
+    assert "# 最近发生的事" in written
     assert "until: 2026-03-15T09:59:00" in written
     assert "用户最近在讨论 recent context 设计" in written
-    assert "## Ongoing Threads" in written
+    assert "## 还在继续的事" in written
     assert "用户正在推进 recent context 设计" in written
     assert "<!-- a-preview = assistant reply preview only -->" in written
     assert "[user] 我更想要一个轻量 recent context 文件，不要太重。" in written
