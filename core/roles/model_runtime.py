@@ -38,7 +38,6 @@ class RoleModelRuntime:
         *,
         role_store: RoleStore,
         registrations: list[ModelRegistration],
-        system_prompt: str,
         dev_mode: bool = False,
     ) -> None:
         if not registrations:
@@ -46,7 +45,6 @@ class RoleModelRuntime:
         self._roles = role_store
         self._registrations = {item.id: item for item in registrations}
         self._first_registration_id = registrations[0].id
-        self._system_prompt = system_prompt
         self._dev_mode = dev_mode
 
     @property
@@ -84,7 +82,6 @@ class RoleModelRuntime:
         provider = LLMProvider(
             api_key=registration.api_key,
             base_url=registration.base_url,
-            system_prompt=self._system_prompt,
             extra_body=extra_body,
             provider_name=registration.provider,
             payload_snapshot_enabled=self._dev_mode,

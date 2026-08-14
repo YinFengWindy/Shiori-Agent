@@ -38,6 +38,7 @@ async def test_injected_role_service_publishes_role_deleted(tmp_path) -> None:
     )
     event_bus = EventBus()
     deleted_role_ids: list[str] = []
+    invalidate_role_memories = Mock(return_value=1)
     event_bus.on(RoleDeleted, lambda event: deleted_role_ids.append(event.role_id))
     service = DesktopBridgeService(
         workspace=tmp_path,
@@ -46,6 +47,9 @@ async def test_injected_role_service_publishes_role_deleted(tmp_path) -> None:
         agent_loop=SimpleNamespace(),
         event_bus=event_bus,
         role_service=role_service,
+        memory_engine=SimpleNamespace(
+            invalidate_role_memories=invalidate_role_memories,
+        ),
     )
 
     response = await service.handle(
@@ -60,6 +64,7 @@ async def test_injected_role_service_publishes_role_deleted(tmp_path) -> None:
 
     assert response.error is None
     assert deleted_role_ids == ["mira"]
+    invalidate_role_memories.assert_called_once_with("mira")
     await service.aclose()
 
 

@@ -414,7 +414,8 @@ class Retriever:
         if forced:
             parts.append(
                 (
-                    "## 【强制约束】记忆规则（必须执行）\n"
+                    "## 我可能记得的长期做事方式\n"
+                    "这些线索不能替代实时 ToolRegistry / SkillsCatalog 能力检查。\n"
                     + "\n".join(line for _, line in forced),
                     [item_id for item_id, _ in forced if item_id],
                 )
@@ -422,7 +423,8 @@ class Retriever:
         if norms:
             parts.append(
                 (
-                    "## 【流程规范】用户偏好与规则\n"
+                    "## 我可能记得的偏好与做事方式\n"
+                    "低置信度线索不得当作确定事实；与当前原话冲突时以当前原话为准。\n"
                     + "\n".join(line for _, line in norms),
                     [item_id for item_id, _ in norms if item_id],
                 )
@@ -430,7 +432,8 @@ class Retriever:
         if events:
             parts.append(
                 (
-                    "## 【相关历史】你与当前用户的过往对话（来自记忆检索，时间戳可信，可直接引用，不得自行否定；数字/金额/地名等具体值以记录为准，不得用常识替换；可根据上下文合理推断，如去某城市探望姐姐可推断姐姐住在该城市）\n"
+                    "## 我可能记得的历史线索\n"
+                    "这些是检索线索，不得覆盖你当前的原话或角色设定；需要原话细节时必须用 fetch_messages 回源。\n"
                     + "\n".join(line for _, line in events),
                     [item_id for item_id, _ in events if item_id],
                 )

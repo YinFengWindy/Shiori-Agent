@@ -76,10 +76,6 @@ def load_config(path: str | Path = "config.toml") -> Config:
         provider=primary_registration.provider,
         model=primary_registration.model,
         api_key=primary_registration.api_key,
-        system_prompt=str(
-            agent_cfg.get("system_prompt")
-            or data.get("system_prompt", "You are a helpful assistant.")
-        ),
         max_tokens=int(agent_cfg.get("max_tokens", data.get("max_tokens", 8192))),
         max_iterations=int(
             agent_cfg.get("max_iterations", data.get("max_iterations", 10))

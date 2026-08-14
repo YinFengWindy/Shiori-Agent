@@ -32,6 +32,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger("memory.markdown")
 
 _EVENT_EXTRACTION_TIMEOUT_S = 300.0
+_CONSOLIDATION_SYSTEM = (
+    "你是中性的 Markdown 记忆提取器，不扮演角色，也不生成用户可见回复。"
+    "USER 是当前角色交流对象“你”，ASSISTANT 是当前角色“我”。"
+    "自然语言输出必须使用“我 / 你 / 我们”。"
+)
 
 class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
     def __init__(
@@ -175,7 +180,7 @@ class _MarkdownConsolidationWorker(_RecentContextWorkerMixin):
         scope_channel = getattr(session, "_channel", "")
         scope_chat_id = getattr(session, "_chat_id", "")
 
-        prompt = f"""你是记忆提取代理（Memory Extraction Agent）。从对话中精确提取结构化信息，返回 JSON。
+        prompt = f"""从对话中精确提取结构化信息，返回 JSON。
 
 ## 字段说明
 
@@ -192,7 +197,7 @@ history_entries.emotional_weight 规则：
 
 **history_entries 提取规则（严格遵守）**：
 1. 只提取 USER 明确表达的行动、经历、计划和状态；ASSISTANT 的建议、推荐、解释一律不写入，即使其中提到了地名、店名或活动。
-2. 每条必须是简洁的第三人称摘要句，绝对不能包含 "USER:" 或 "ASSISTANT:" 等原始对话标记，不得复制粘贴原始对话文本。
+2. 每条必须使用角色相对视角：当前角色是“我”，USER 是“你”，共同关系是“我们”；绝对不能包含 "USER:" 或 "ASSISTANT:" 等原始对话标记，不得复制粘贴原始对话文本。
 3. 商家名称、地点、人名、数量、价格、型号等具体细节必须保留，不得用"某商店""某地方"概括。
 4. 先判断当前 USER 内容的材料类型：是“用户此刻直接自述”，还是“用户正在展示一段外部聊天记录、截图 OCR、转贴 transcript 给助手看”。
 5. 若 USER 内容属于外部聊天记录 / transcript，必须先做层级理解：
@@ -200,7 +205,7 @@ history_entries.emotional_weight 规则：
    - 内层：材料中可能有多个 speaker；这些 speaker 不自动等于当前 USER。
    - 只有当材料中某个 speaker 与当前 USER 的映射在当前会话里被明确确认时，才允许把该 speaker 的事实写入摘要。
 6. 对 transcript 场景，默认认为 speaker 映射不明确；除非当前会话中有非常明确的显式说明，否则不要尝试判断材料里的某个昵称/说话人就是用户或对方。
-7. 若 speaker 映射不明确，history_entries 只允许写 1 条高层 event，例如“用户向助手展示了一段与某人的聊天记录，内容涉及求职、学校、兴趣等话题”。
+7. 若 speaker 映射不明确，history_entries 只允许写 1 条高层 event，例如“你向我展示了一段与某人的聊天记录，内容涉及求职、学校、兴趣等话题”。
 8. 对 transcript 场景，禁止输出任何未确认关系的句子，例如：
    - “用户向对方透露……”
    - “对方是……”
@@ -213,20 +218,19 @@ history_entries.emotional_weight 规则：
 - 错误：用户贴出一段聊天记录，直接写成“对方位于北京大兴区，就读于二外 MPAcc 专业”。
 - 错误：用户贴出一段聊天记录，直接写成“对方昵称为‘一只快乐的小奶龙’”。
 - 错误：用户贴出一段聊天记录，直接写成“用户曾为打 FGO 日服选修日语”。
-- 正确：用户向助手展示了一段与匹配对象的聊天记录，聊天内容涉及学校背景、兴趣爱好和求职话题。
+- 正确：你向我展示了一段与匹配对象的聊天记录，聊天内容涉及学校背景、兴趣爱好和求职话题。
 
 ### 2. "pending_items" → PENDING.md 候选缓冲
 只写用户的长期记忆候选，返回对象数组。每个对象格式：
 {{"tag": "<tag>", "content": "<string>"}}
 
-允许的 tag 只有 7 个：
+允许的 tag 只有 6 个：
 - "identity"：稳定背景事实，如身份、学校/专业、长期技术方向、实习/工作经历、长期设备、长期维护项目
 - "preference"：稳定偏好、禁忌、审美、游戏口味、价值取向
 - "key_info"：用户明确允许保存的 key / token / id / 账号信息
 - "health_long_term"：长期健康状态的一阶事实，只写长期状态，不写动态指标、基线、最近波动
 - "requested_memory"：用户明确要求"长期记住"的关键内容，可比普通事实更连贯
 - "correction"：对当前 MEMORY.md 现有事实的明确纠正
-- "agent_context"：助手操作用户环境所需的工具性配置，如已部署服务的端口、环境变量名、工具分工约定、常用登录站点列表；不是用户画像，但对助手执行操作有长期价值；具体参数（端口号、变量名）必须完整保留。**硬规则：只有当对话明确表明该配置当前有效且助手已被授权使用时才提取；方案讨论、架构设计、网络诊断中出现的端口和地址一律不提取**
 
 必须遵守：
 - 只写跨对话仍有长期价值的内容
@@ -259,26 +263,11 @@ history_entries.emotional_weight 规则：
 ✗ "偏好搜索结果按来源可信度分层展示" → 不提取为 pending_item（agent 输出规范）
 ✗ "希望以后推荐前先查最新评测和社区反馈" → 不提取为 pending_item（agent 执行规则）
 
-5. **agent_context 只提取已部署的配置，不提取方案讨论**
-判断标准：对话中是否明确表明该服务/工具**当前已在运行**，且助手**已被告知可以使用**。
-对话中提出的架构方案、网络诊断信息、假设性配置，即使出现了具体端口、地址或变量名，也不提取。
-
-<example id="agent_context_proposal_vs_deployed">
-反例（方案讨论 → 不提取）：
-- 用户在讨论"可以搭一个 X 服务监听某端口"或"我们可以用 Y 工具穿透"——这是在设计方案，不是在告知助手已有的可用工具
-- 用户问助手"这个配置怎么搭"——这是提问，不是已部署事实
-- 对话中出现了 IP 地址或端口是为了排查问题、讲解原理——这是诊断/教学内容，不是可调用的配置
-
-正例（已部署、已授权 → 提取）：
-- 用户明确告知助手"X 服务现在跑着，你可以直接用"或"以后遇到 Y 场景就调这个接口"
-- 用户描述了某个长期运行的工具，并期望助手在后续任务中利用它
-</example>
-
 若没有合格条目，返回空数组 []。
 
 ---
 
-## 当前用户档案（用于查重）
+## 当前长期记忆（用于查重）
 {current_memory or "（空）"}
 
 ## 最近三次 consolidation event（仅用于主题延续参考）
@@ -299,7 +288,10 @@ history_entries.emotional_weight 规则：
             step="event_extract",
             provider=self._provider,
             model=self._model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": _CONSOLIDATION_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
             max_tokens=1024,
             timeout_s=_EVENT_EXTRACTION_TIMEOUT_S,
         )

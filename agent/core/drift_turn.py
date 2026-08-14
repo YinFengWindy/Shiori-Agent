@@ -24,7 +24,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from agent.persona import AKASHIC_IDENTITY, PERSONALITY_RULES
 from agent.prompting import (
     PromptSectionRender,
     build_context_frame_content,
@@ -49,10 +48,12 @@ logger = logging.getLogger(__name__)
 
 # ── Pipeline 依赖容器 ─────────────────────────────────────────────────────
 
+
 @dataclass
 class DriftTurnPipelineDeps:
     store: DriftStateStore
     tool_deps: DriftToolDeps
+    role_prompt_fn: Callable[[], str]
     max_steps: int = 20
     step_recorder: StepRecorder | None = None
     tool_hooks: list[ToolHook] = field(default_factory=list)
@@ -75,11 +76,13 @@ class DriftTurnPipelineDeps:
 # │        └─ 记录退出状态日志
 # └─ done
 
+
 class DriftTurnPipeline:
 
     def __init__(self, deps: DriftTurnPipelineDeps) -> None:
         self._store = deps.store
         self._tool_deps = deps.tool_deps
+        self._role_prompt_fn = deps.role_prompt_fn
         self._max_steps = deps.max_steps
         self.step_recorder = deps.step_recorder
         self._tool_executor = ToolExecutor(deps.tool_hooks)
@@ -121,7 +124,8 @@ class DriftTurnPipeline:
         shared = self._tool_deps.shared_tools
         connected_servers = shared.get_mcp_server_names() if shared else set()
         skills = [
-            s for s in skills
+            s
+            for s in skills
             if not s.requires_mcp or set(s.requires_mcp) <= connected_servers
         ]
         if not skills:
@@ -198,8 +202,7 @@ class DriftTurnPipeline:
             if ctx.drift_message_sent:
                 allowed_after_send = {"write_file", "edit_file", "finish_drift"}
                 schemas = [
-                    s for s in schemas
-                    if s["function"]["name"] in allowed_after_send
+                    s for s in schemas if s["function"]["name"] in allowed_after_send
                 ]
                 logger.info(
                     "[drift] message_push already used, "
@@ -209,7 +212,9 @@ class DriftTurnPipeline:
             # 3.3 调 LLM 拿工具调用。
             if "disable_thinking" in inspect.signature(llm_fn).parameters:
                 tool_call = await cast(Any, llm_fn)(
-                    messages, schemas, tool_choice,
+                    messages,
+                    schemas,
+                    tool_choice,
                     disable_thinking=True,
                 )
             else:
@@ -252,7 +257,9 @@ class DriftTurnPipeline:
 
             # 3.6 错误处理。
             if result.status == "error":
-                logger.warning("[drift] tool executor error at step=%d: %s", steps, result.output)
+                logger.warning(
+                    "[drift] tool executor error at step=%d: %s", steps, result.output
+                )
                 if self.step_recorder is not None:
                     self.step_recorder(
                         ctx,
@@ -311,6 +318,7 @@ class DriftTurnPipeline:
     ) -> dict[str, str]:
         """构建 runtime context frame，包含记忆、skill 列表、近期 run 记录。"""
 
+        self_text = ""
         memory_text = ""
         recent_context_text = ""
         if self._tool_deps.memory is not None:
@@ -323,18 +331,9 @@ class DriftTurnPipeline:
                     role_id = session_key.split(":", 1)[1]
             if callable(bind_session_metadata):
                 bind_session_metadata({"role_id": role_id} if role_id else None)
-            try:
-                raw = str(memory.read_long_term() or "").strip()
-                if raw:
-                    memory_text = raw
-            except Exception:
-                memory_text = ""
-            try:
-                rc = str(memory.read_recent_context() or "").strip()
-                if rc:
-                    recent_context_text = rc
-            except Exception:
-                pass
+            self_text = str(memory.read_self() or "").strip()
+            memory_text = str(memory.read_long_term() or "").strip()
+            recent_context_text = str(memory.read_recent_context() or "").strip()
 
         lines = []
         for skill in skills[:8]:
@@ -374,15 +373,19 @@ class DriftTurnPipeline:
                 tool_count = len(shared.get_tool_names_by_source("mcp", srv))
                 mcp_lines.append(f"- {srv}（{tool_count} 个工具）")
             mcp_block = (
-                "【可挂载的外部能力】\n"
-                + "\n".join(mcp_lines) + "\n"
-                "使用 mount_server(server=\"名称\") 挂载后即可调用其中的工具。"
+                "【可挂载的外部能力】\n" + "\n".join(mcp_lines) + "\n"
+                '使用 mount_server(server="名称") 挂载后即可调用其中的工具。'
             )
 
         sections = [
             PromptSectionRender(
                 name="drift_runtime_state",
                 content=f"【Drift 工作区绝对路径】\n{self._store.drift_dir}",
+                is_static=False,
+            ),
+            PromptSectionRender(
+                name="self_model",
+                content=self_text or "（空）",
                 is_static=False,
             ),
             PromptSectionRender(
@@ -422,9 +425,11 @@ class DriftTurnPipeline:
         return build_context_frame_message(build_context_frame_content(sections))
 
     def _build_system_prompt(self) -> str:
+        identity = str(self._role_prompt_fn() or "").strip()
+        if not identity:
+            raise ValueError("role.system_prompt required for drift generation")
         return (
-            f"{AKASHIC_IDENTITY}\n\n"
-            f"{PERSONALITY_RULES}\n\n"
+            f"{identity}\n\n"
             "你现在有一段空闲时间（Drift 模式）。没有外部内容需要推送，\n"
             "你可以自主决定做一件有意义的事。本轮记忆、skill 和工作区信息会在后续 system context frame 里提供。\n\n"
             "【执行规则】\n"
@@ -487,4 +492,6 @@ class DriftTurnPipeline:
                 ],
             }
         )
-        messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": result})
+        messages.append(
+            {"role": "tool", "tool_call_id": tool_call_id, "content": result}
+        )

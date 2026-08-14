@@ -10,11 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from agent.scheduler import (
     DEFAULT_SCHEDULE_TIMEZONE,
-    ScheduledJob,
     SchedulerService,
-    compute_fire_at,
-    is_cron_expr,
-    parse_duration,
 )
 from agent.tools.base import Tool
 
@@ -122,51 +118,34 @@ class ScheduleTool(Tool):
             return "错误：tier=soft 时 prompt 为必填项"
         if not channel or not chat_id:
             return "错误：channel 和 chat_id 为必填项"
+        if not role_id:
+            return "错误：计划任务缺少 role_id"
 
         try:
             ZoneInfo(tz)
         except ZoneInfoNotFoundError:
             return f"错误：无效的时区 {tz!r}"
 
-        # ── compute fire_at ──
         try:
-            fire_at = compute_fire_at(trigger, when, tz, request_time)
+            job = self._service.create_job(
+                name=str(name or "计划任务"),
+                tier=tier,
+                trigger=trigger,
+                when=when,
+                content=str(message if tier == "instant" else prompt),
+                timezone_name=tz,
+                channel=str(channel),
+                chat_id=chat_id,
+                role_id=role_id,
+                role_config_version=role_config_version,
+                thread_id=thread_id,
+                delivery_key=delivery_key,
+                request_time=request_time,
+            )
         except ValueError as e:
             return f"错误：{e}"
 
-        # ── parse every spec ──
-        interval_seconds = None
-        cron_expr = None
-        if trigger == "every":
-            try:
-                if is_cron_expr(when):
-                    cron_expr = when.strip()
-                else:
-                    iv = parse_duration(when)
-                    interval_seconds = int(iv.total_seconds())
-            except ValueError as e:
-                return f"错误：{e}"
-
-        # ── build & register ──
-        job = ScheduledJob(
-            trigger=trigger,
-            tier=tier,
-            fire_at=fire_at,
-            channel=channel,
-            chat_id=chat_id,
-            role_id=role_id,
-            role_config_version=role_config_version,
-            thread_id=thread_id,
-            delivery_key=delivery_key,
-            interval_seconds=interval_seconds,
-            cron_expr=cron_expr,
-            message=message,
-            prompt=prompt,
-            name=name,
-            timezone=tz,
-            when=when,
-        )
-        self._service.add_job(job)
+        fire_at = job.fire_at
 
         # 优先用 fire_at 自带的时区（来自 request_time 的 offset），
         # 让用户看到本地时间而不是 UTC
@@ -199,7 +178,10 @@ class ListSchedulesTool(Tool):
         self._service = service
 
     async def execute(self, **kwargs: Any) -> str:
-        jobs = self._service.list_jobs()
+        role_id = str(kwargs.get("role_id") or "").strip()
+        if not role_id:
+            return "错误：计划任务缺少 role_id"
+        jobs = [job for job in self._service.list_jobs() if job.role_id == role_id]
         if not jobs:
             return "当前没有待执行的定时任务"
 
@@ -249,12 +231,20 @@ class CancelScheduleTool(Tool):
     async def execute(self, **kwargs: Any) -> str:
         job_id = kwargs.get("id", "")
         name = kwargs.get("name", "")
+        role_id = str(kwargs.get("role_id") or "").strip()
+
+        if not role_id:
+            return "错误：计划任务缺少 role_id"
 
         if not job_id and not name:
             return "错误：id 或 name 至少提供一个"
 
         if job_id:
-            all_ids = list(self._service._jobs.keys())
+            all_ids = [
+                job.id
+                for job in self._service.list_jobs()
+                if job.role_id == role_id
+            ]
             matches = [
                 jid for jid in all_ids if jid == job_id or jid.startswith(job_id)
             ]
@@ -265,9 +255,15 @@ class CancelScheduleTool(Tool):
             return f"已取消 {len(matches)} 个任务"
 
         if name:
-            cancelled = self._service.cancel_job_by_name(name)
+            cancelled = [
+                job.id
+                for job in self._service.list_jobs()
+                if job.role_id == role_id and job.name == name
+            ]
             if not cancelled:
                 return f"未找到名称为 {name!r} 的任务"
+            for matched_id in cancelled:
+                self._service.cancel_job(matched_id)
             return f"已取消 {len(cancelled)} 个名为 {name!r} 的任务"
 
         return "未指定有效的取消条件"

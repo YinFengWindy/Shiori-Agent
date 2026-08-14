@@ -133,6 +133,7 @@ async def test_loop_stops_after_partial_sequence_then_none():
         # 之后 None，loop 结束
     ])
     tick = make_proactive_pipeline(
+        session_key="role:mira",
         llm_fn=llm,
         gateway_deps=GatewayDeps(
             alert_fn=AsyncMock(return_value=[]),
@@ -482,6 +483,7 @@ async def test_recall_memory_in_loop():
         ("finish_turn", {"decision": "reply"}),
     ])
     tick = make_proactive_pipeline(
+        session_key="role:mira",
         llm_fn=llm,
         tool_deps=ToolDeps(memory=memory),
     )

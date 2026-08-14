@@ -134,7 +134,7 @@ async def test_web_fetch_truncates_to_max_chars():
         "truncated": False,
     })
     result = json.loads(await _web_fetch(
-        ctx=AgentTickContext(),
+        ctx=AgentTickContext(session_key="role:mira"),
         args={"url": "https://example.com"},
         web_fetch_tool=fake_tool,
         max_chars=8_000,
@@ -152,7 +152,7 @@ async def test_web_fetch_short_text_not_truncated():
         "truncated": False,
     })
     result = json.loads(await _web_fetch(
-        ctx=AgentTickContext(),
+        ctx=AgentTickContext(session_key="role:mira"),
         args={"url": "https://example.com"},
         web_fetch_tool=fake_tool,
         max_chars=8_000,
@@ -170,7 +170,7 @@ async def test_web_fetch_exact_max_chars_not_truncated():
         "truncated": False,
     })
     result = json.loads(await _web_fetch(
-        ctx=AgentTickContext(),
+        ctx=AgentTickContext(session_key="role:mira"),
         args={"url": "https://example.com"},
         web_fetch_tool=fake_tool,
         max_chars=8_000,
@@ -185,7 +185,7 @@ async def test_web_fetch_error_passthrough():
     error_payload = json.dumps({"error": "timeout", "status": 504})
     fake_tool.execute.return_value = error_payload
     result = json.loads(await _web_fetch(
-        ctx=AgentTickContext(),
+        ctx=AgentTickContext(session_key="role:mira"),
         args={"url": "https://example.com"},
         web_fetch_tool=fake_tool,
         max_chars=8_000,
@@ -255,7 +255,7 @@ async def test_recall_memory_empty_hits():
     fake_memory = MagicMock()
     fake_memory.query = AsyncMock(return_value=SimpleNamespace(records=[]))
     result = json.loads(await _recall_memory(
-        ctx=AgentTickContext(),
+        ctx=AgentTickContext(session_key="role:mira"),
         args={"query": "game news"},
         memory=fake_memory,
     ))
@@ -274,7 +274,7 @@ async def test_recall_memory_joins_texts():
         )
     )
     result = json.loads(await _recall_memory(
-        ctx=AgentTickContext(),
+        ctx=AgentTickContext(session_key="role:mira"),
         args={"query": "game"},
         memory=fake_memory,
     ))
@@ -295,7 +295,7 @@ async def test_recall_memory_skips_empty_text():
         )
     )
     result = json.loads(await _recall_memory(
-        ctx=AgentTickContext(),
+        ctx=AgentTickContext(session_key="role:mira"),
         args={"query": "test"},
         memory=fake_memory,
     ))
@@ -343,7 +343,7 @@ async def test_recall_memory_prefers_facade_interest_block():
     )
 
     result = json.loads(await _recall_memory(
-        ctx=AgentTickContext(),
+        ctx=AgentTickContext(session_key="role:mira"),
         args={"query": "q"},
         memory=fake_memory,
     ))
@@ -365,7 +365,7 @@ async def test_recall_memory_separator_between_hits():
         )
     )
     result = json.loads(await _recall_memory(
-        ctx=AgentTickContext(), args={"query": "q"}, memory=fake_memory
+        ctx=AgentTickContext(session_key="role:mira"), args={"query": "q"}, memory=fake_memory
     ))
     assert "---" in result["result"]
 
@@ -373,7 +373,7 @@ async def test_recall_memory_separator_between_hits():
 # ── _message_push / _finish_turn 终止语义 ────────────────────────────────
 
 def test_message_push_writes_draft_not_final():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(session_key="role:mira")
     ctx.fetched_contents = [{"ack_server": "feed-mcp", "event_id": "1"}]
     result = json.loads(_message_push(ctx, {"message": "hello", "evidence": ["feed-mcp:1"]}))
     assert result["ok"] is True
@@ -384,7 +384,7 @@ def test_message_push_writes_draft_not_final():
 
 
 def test_message_push_decodes_escaped_newlines_for_outbound_text():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(session_key="role:mira")
     result = json.loads(_message_push(ctx, {"message": "第一段\\n\\n第二段\\n第三段"}))
     assert result["ok"] is True
     assert ctx.draft_message == "第一段\n\n第二段\n第三段"
@@ -728,7 +728,7 @@ async def test_execute_recall_memory_uses_memory_from_deps():
             records=[SimpleNamespace(id="m1", summary="pref", score=0.9)]
         )
     )
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(session_key="role:mira")
     deps = ToolDeps(memory=fake_memory)
     raw = await execute("recall_memory", {"query": "test"}, ctx, deps)
     result = json.loads(raw)

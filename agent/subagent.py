@@ -9,7 +9,7 @@ SubAgent — 通用子 Agent
         provider=provider,
         model="deepseek-chat",
         tools=[WebSearchTool(), WebFetchTool()],
-        system_prompt="你是后台研究助手...",
+        system_prompt="你是中性的后台研究处理器，不扮演角色，也不生成用户可见回复。",
     )
     result = await agent.run("调研最新的 agent 相关论文，总结后发给我")
 """

@@ -78,7 +78,6 @@ class Config:
     provider: str
     model: str
     api_key: str
-    system_prompt: str
     max_tokens: int = 8192
     max_iterations: int = 10
     memory_window: int = 40

@@ -88,6 +88,7 @@ class TestJobStoreLoadSave:
             fire_at=datetime(2025, 6, 1, 9, 0, tzinfo=timezone.utc),
             channel="telegram",
             chat_id="456",
+            role_id="mira",
             interval_seconds=3600,
             cron_expr=None,
             message=None,

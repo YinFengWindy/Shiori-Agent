@@ -97,6 +97,7 @@ class ProactiveTurnPipeline:
         self._tool_deps = deps.tool_deps
         self._gateway_deps = deps.gateway_deps
         self._workspace_context_fn = deps.workspace_context_fn
+        self._role_prompt_fn = deps.role_prompt_fn
         self._llm_fn = deps.llm_fn
         self._rng = deps.rng if deps.rng is not None else _random_module.Random()
         self._recent_proactive_fn = deps.recent_proactive_fn
@@ -350,7 +351,7 @@ class ProactiveTurnPipeline:
         )
 
     def _build_system_prompt(self) -> str:
-        return _build_system_prompt()
+        return _build_system_prompt(self._role_prompt_fn())
 
     def _build_runtime_context_message(
         self,

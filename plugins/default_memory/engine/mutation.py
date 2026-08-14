@@ -142,6 +142,7 @@ class _MutationMixin:
         # 1. procedure 必须有执行条件，否则降级为 preference。
         if self._memorizer is None:
             raise RuntimeError("memorizer unavailable")
+        scope = resolve_memory_scope(request.scope)
 
         raw_steps = request.metadata.get("steps")
         steps = (
@@ -158,12 +159,11 @@ class _MutationMixin:
             "tool_requirement": request.metadata.get("tool_requirement"),
             "steps": list(steps or []),
         }
-        if request.scope.role_id:
-            extra["role_id"] = request.scope.role_id
+        extra["role_id"] = scope.role_id
         memory_domain = self._resolve_memory_domain_for_write(request, memory_type)
         self._ensure_memory_domain_allowed(
             memory_domain,
-            role_id=request.scope.role_id,
+            role_id=scope.role_id,
         )
         if memory_domain:
             extra["memory_domain"] = memory_domain

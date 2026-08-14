@@ -491,6 +491,6 @@ class RoleRelationshipRuntimeService(_RelationshipPersistenceMixin):
         if not recent_messages:
             return "（暂无近期互动）"
         return "\n".join(
-            f"{'我' if item['role'] == 'assistant' else '用户'}：{item['content']}"
+            f"{'我' if item['role'] == 'assistant' else '你'}：{item['content']}"
             for item in recent_messages
         )

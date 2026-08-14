@@ -525,6 +525,7 @@ async def test_drift_interval_allows_after_window():
                         store=DriftStateStore(tmp_path),
                     ),
                     max_steps=5,
+                    role_prompt_fn=lambda: "测试角色提示词",
                 )
             ),
             proactive_gates=ProactiveGateChain(),

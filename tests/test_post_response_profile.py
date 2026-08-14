@@ -27,8 +27,8 @@ class _DummyMemorizer:
         self._store = store
 
 
-def test_worker_run_does_not_call_profile_extractor_per_turn():
-    """per-turn run() 不再做 profile 提取；profile 已移至 consolidation 窗口期一次性提取。"""
+def test_worker_without_implicit_handler_does_not_extract_profile():
+    """A worker without an implicit handler only performs invalidation work."""
     memorizer = _DummyMemorizer()
     retriever = _DummyRetriever([])
     worker = PostResponseMemoryWorker(
@@ -37,7 +37,9 @@ def test_worker_run_does_not_call_profile_extractor_per_turn():
         light_provider=cast(Any, _DummyProvider()),
         light_model="test",
     )
-    worker._handle_invalidations = AsyncMock(side_effect=lambda *args, **kwargs: args[-1])
+    worker._handle_invalidations = AsyncMock(
+        side_effect=lambda *args, **kwargs: args[-1]
+    )
 
     asyncio.run(
         worker.run(
@@ -45,6 +47,7 @@ def test_worker_run_does_not_call_profile_extractor_per_turn():
             agent_response="记住了",
             tool_chain=[],
             source_ref="test@post_response",
+            role_id="mira",
         )
     )
 

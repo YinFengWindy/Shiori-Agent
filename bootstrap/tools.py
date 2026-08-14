@@ -487,7 +487,6 @@ def build_core_runtime(
     role_model_resolver = RoleModelRuntime(
         role_store=role_store,
         registrations=config.model_registrations,
-        system_prompt=config.system_prompt,
         dev_mode=config.dev_mode,
     )
     role_repository = RoleRepository(role_store)

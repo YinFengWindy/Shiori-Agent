@@ -48,6 +48,7 @@ def _make_default_engine(
     tagger=None,
     post_response_worker=None,
     event_publisher=None,
+    v2_store=None,
 ):
     engine = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
     engine._config = config or SimpleNamespace(model="lm")
@@ -55,7 +56,7 @@ def _make_default_engine(
     engine._provider = provider
     engine._light_provider = None
     engine._light_model = ""
-    engine._v2_store = None
+    engine._v2_store = v2_store
     engine._embedder = None
     engine._memorizer = memorizer
     engine._retriever = retriever
@@ -224,7 +225,6 @@ async def test_default_memory_engine_role_query_excludes_legacy_unscoped_memory(
             provider="test",
             model="gpt-test",
             api_key="k",
-            system_prompt="hi",
             memory=MemoryConfig(enabled=True),
         ),
         workspace=tmp_path,
@@ -275,7 +275,6 @@ async def test_default_memory_engine_isolates_relationship_memory_between_roles(
             provider="test",
             model="gpt-test",
             api_key="k",
-            system_prompt="hi",
             memory=MemoryConfig(enabled=True),
         ),
         workspace=tmp_path,
@@ -474,7 +473,9 @@ def test_markdown_maintenance_respects_skip_post_memory_event_flag():
 
 
 @pytest.mark.asyncio
-async def test_markdown_maintenance_records_background_consolidation_failure(tmp_path: Path):
+async def test_markdown_maintenance_records_background_consolidation_failure(
+    tmp_path: Path,
+):
     session = SimpleNamespace(
         key="role:mira",
         metadata={"role_id": "mira"},
@@ -645,7 +646,8 @@ async def test_default_memory_engine_refreshes_role_recent_context_in_role_memor
     assert role_recent_context_path.exists()
     assert "你好" in role_recent_context_path.read_text(encoding="utf-8")
     assert "嗯。" in role_recent_context_path.read_text(encoding="utf-8")
-    assert not global_recent_context_path.exists()
+    assert global_recent_context_path.exists()
+    assert "# 最近发生的事" in global_recent_context_path.read_text(encoding="utf-8")
     save_session.assert_not_awaited()
     await event_bus.aclose()
 
@@ -1382,6 +1384,7 @@ async def test_default_memory_engine_consumes_markdown_consolidation_event():
     engine = _make_default_engine(
         provider=cast(Any, provider),
         memorizer=cast(Any, memorizer),
+        v2_store=SimpleNamespace(list_items_for_admin=lambda **_kwargs: ([], 0)),
     )
 
     await engine._on_consolidation_committed(
@@ -1414,6 +1417,7 @@ async def test_default_memory_engine_consolidation_role_scope_persists_role_id()
     engine = _make_default_engine(
         provider=cast(Any, provider),
         memorizer=cast(Any, memorizer),
+        v2_store=SimpleNamespace(list_items_for_admin=lambda **_kwargs: ([], 0)),
     )
 
     await engine._on_consolidation_committed(
@@ -1445,6 +1449,7 @@ async def test_default_memory_engine_reports_implicit_extraction_failure():
     engine = _make_default_engine(
         provider=cast(Any, provider),
         memorizer=cast(Any, memorizer),
+        v2_store=SimpleNamespace(list_items_for_admin=lambda **_kwargs: ([], 0)),
     )
 
     with pytest.raises(RuntimeError, match="long_term extraction failed"):
@@ -1455,6 +1460,7 @@ async def test_default_memory_engine_reports_implicit_extraction_failure():
                 scope_channel="cli",
                 scope_chat_id="1",
                 conversation="USER: 我买了 Zigbee 网关",
+                role_id="mira",
             )
         )
 
@@ -1597,7 +1603,6 @@ def test_build_memory_runtime_uses_memory_plugin(monkeypatch, tmp_path: Path):
             provider="test",
             model="gpt-test",
             api_key="k",
-            system_prompt="hi",
             memory=MemoryConfig(enabled=True, engine="custom"),
         ),
         workspace=tmp_path,
@@ -1697,7 +1702,6 @@ def test_build_memory_runtime_exposes_default_memory_engine(
             provider="test",
             model="gpt-test",
             api_key="k",
-            system_prompt="hi",
             memory=MemoryConfig(enabled=True),
         ),
         workspace=tmp_path,

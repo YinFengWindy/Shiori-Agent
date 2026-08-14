@@ -200,7 +200,6 @@ class LLMProvider:
         self,
         api_key: str,
         base_url: str | None = None,
-        system_prompt: str = "",
         extra_body: dict | None = None,
         request_timeout_s: float = 90.0,
         stream_idle_timeout_s: float | None = None,
@@ -218,7 +217,6 @@ class LLMProvider:
         )
         self._base_url = normalized_base_url or ""
         self._provider_name = provider_name
-        self._system = system_prompt
         self._extra_body = extra_body or {}
         self._request_timeout_s = max(1.0, float(request_timeout_s))
         self._stream_idle_timeout_s = max(
@@ -254,14 +252,7 @@ class LLMProvider:
             base_url=self._base_url,
             model=model,
         )
-        # 系统提示作为第一条消息（若 messages 已自带 system 消息则不再重复添加）
-        already_has_system = messages and messages[0].get("role") == "system"
-        full_messages = (
-            [{"role": "system", "content": self._system}, *messages]
-            if self._system and not already_has_system
-            else messages
-        )
-        full_messages = _merge_leading_system_messages(full_messages)
+        full_messages = _merge_leading_system_messages(messages)
         full_messages = strategy.normalize_messages(full_messages)
         kwargs: dict = dict(model=model, max_tokens=max_tokens, messages=full_messages)
         if tools:

@@ -36,10 +36,17 @@ def test_snapshot_and_rollback_merges_new_pending(tmp_path):
 
 def test_get_memory_context_empty_and_nonempty(tmp_path):
     store = MemoryStore(tmp_path)
-    assert store.get_memory_context() == ""
+    assert "# 我的长期记忆" in store.get_memory_context()
 
-    store.write_long_term("- user profile")
+    store.write_long_term(
+        "# 我的长期记忆\n\n"
+        "## 关于你\n\n"
+        "- user profile\n\n"
+        "## 你的偏好\n\n"
+        "## 你希望我记住的事\n"
+    )
     assert store.get_memory_context().startswith("## Long-term Memory")
+    assert "user profile" in store.get_memory_context()
 
 
 def test_append_pending_once_is_idempotent_and_hidden_from_read(tmp_path):

@@ -257,7 +257,7 @@ async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path:
 
 
 @pytest.mark.asyncio
-async def test_desktop_bridge_role_create_generates_initial_self(tmp_path: Path):
+async def test_desktop_bridge_role_create_initializes_role_first_self(tmp_path: Path):
     role_store = RoleStore(tmp_path)
     session_manager = SessionManager(tmp_path)
     event_bus = EventBus()
@@ -265,12 +265,12 @@ async def test_desktop_bridge_role_create_generates_initial_self(tmp_path: Path)
     class _SelfSeed:
         def generate(self, role) -> str:
             return (
-                "# 角色自我认知\n\n"
-                "## 人格与形象\n"
+                "# 我是谁\n\n"
+                "## 我的性格与形象\n"
                 f"- 我是{role.name}。\n\n"
-                "## 我对当前用户的理解\n"
-                "- 我会谨慎认识用户。\n\n"
-                "## 我们关系的定义\n"
+                "## 我对你的理解\n"
+                "- 我会谨慎认识你。\n\n"
+                "## 我们的关系\n"
                 "- 我们的关系仍在建立中。\n"
             )
 
@@ -307,12 +307,14 @@ async def test_desktop_bridge_role_create_generates_initial_self(tmp_path: Path)
     self_path = tmp_path / "roles" / role_id / "memory" / "SELF.md"
     self_text = self_path.read_text(encoding="utf-8")
 
-    assert self_text.startswith("# 角色自我认知")
-    assert "我是Mira。" in self_text
+    assert self_text.startswith("# 我是谁")
+    assert "## 我的性格与形象" in self_text
+    assert "## 我对你的理解" in self_text
+    assert "## 我们的关系" in self_text
 
 
 @pytest.mark.asyncio
-async def test_desktop_bridge_role_create_supports_async_self_seed_generator(
+async def test_desktop_bridge_role_create_initializes_self_with_async_seed_configured(
     tmp_path: Path,
 ):
     role_store = RoleStore(tmp_path)
@@ -323,12 +325,12 @@ async def test_desktop_bridge_role_create_supports_async_self_seed_generator(
         async def agenerate(self, role) -> str:
             await asyncio.sleep(0)
             return (
-                "# 角色自我认知\n\n"
-                "## 人格与形象\n"
+                "# 我是谁\n\n"
+                "## 我的性格与形象\n"
                 f"- 我是{role.name}。\n\n"
-                "## 我对当前用户的理解\n"
-                "- 我会谨慎认识用户。\n\n"
-                "## 我们关系的定义\n"
+                "## 我对你的理解\n"
+                "- 我会谨慎认识你。\n\n"
+                "## 我们的关系\n"
                 "- 我们的关系仍在建立中。\n"
             )
 
@@ -369,8 +371,10 @@ async def test_desktop_bridge_role_create_supports_async_self_seed_generator(
     self_path = tmp_path / "roles" / role_id / "memory" / "SELF.md"
     self_text = self_path.read_text(encoding="utf-8")
 
-    assert self_text.startswith("# 角色自我认知")
-    assert "我是Mira。" in self_text
+    assert self_text.startswith("# 我是谁")
+    assert "## 我的性格与形象" in self_text
+    assert "## 我对你的理解" in self_text
+    assert "## 我们的关系" in self_text
 
 
 @pytest.mark.asyncio

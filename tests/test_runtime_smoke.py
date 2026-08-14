@@ -320,7 +320,6 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
         provider="openai",
         model="m",
         api_key="k",
-        system_prompt="s",
         channels=ChannelsConfig(
             telegram=TelegramChannelConfig(token="tg-token"),
             qq=QQChannelConfig(bot_uin="10001"),
@@ -391,7 +390,6 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
         provider="openai",
         model="m",
         api_key="k",
-        system_prompt="s",
         channels=ChannelsConfig(
             telegram=None,
             qq=None,
@@ -439,7 +437,6 @@ async def test_start_channels_skips_channel_constructor_failures(monkeypatch):
         provider="openai",
         model="m",
         api_key="k",
-        system_prompt="s",
         channels=ChannelsConfig(
             telegram=TelegramChannelConfig(token="tg-token"),
             qq=QQChannelConfig(bot_uin="10001"),
@@ -488,7 +485,6 @@ async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
         provider="openai",
         model="m",
         api_key="k",
-        system_prompt="s",
         channels=ChannelsConfig(
             telegram=TelegramChannelConfig(token="tg-token"),
             qq=QQChannelConfig(bot_uin="10001"),

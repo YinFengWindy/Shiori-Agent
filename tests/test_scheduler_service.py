@@ -55,7 +55,7 @@ async def test_instant_push_receives_correct_args(
     await drain_tasks()
 
     mock_push.execute.assert_called_once_with(
-        channel="telegram", chat_id="999", message="喝水了"
+        channel="telegram", chat_id="999", message="喝水了", role_id="mira"
     )
 
 
@@ -111,7 +111,10 @@ async def test_soft_sends_ai_response_via_push(
     await drain_tasks()
 
     mock_push.execute.assert_called_once_with(
-        channel=job.channel, chat_id=job.chat_id, message="北京今天晴，15°C"
+        channel=job.channel,
+        chat_id=job.chat_id,
+        message="北京今天晴，15°C",
+        role_id="mira",
     )
 
 
@@ -385,7 +388,7 @@ def test_misfire_within_grace_loaded(tmp_path, mock_push, mock_loop, fixed_now):
     assert job.id in svc._jobs
 
 
-def test_job_store_restores_legacy_desktop_role_ownership(tmp_path):
+def test_job_store_rejects_legacy_desktop_job_without_role_id(tmp_path):
     path = tmp_path / "jobs.json"
     path.write_text(
         json.dumps(
@@ -404,12 +407,11 @@ def test_job_store_restores_legacy_desktop_role_ownership(tmp_path):
         encoding="utf-8",
     )
 
-    jobs = JobStore(path).load()
+    with pytest.raises(ValueError, match="role_id"):
+        JobStore(path).load()
 
-    assert jobs[0].role_id == "mira"
 
-
-def test_job_store_keeps_ambiguous_legacy_transport_unowned(tmp_path):
+def test_job_store_rejects_legacy_transport_job_without_role_id(tmp_path):
     path = tmp_path / "jobs.json"
     path.write_text(
         json.dumps(
@@ -428,9 +430,8 @@ def test_job_store_keeps_ambiguous_legacy_transport_unowned(tmp_path):
         encoding="utf-8",
     )
 
-    jobs = JobStore(path).load()
-
-    assert jobs[0].role_id == ""
+    with pytest.raises(ValueError, match="role_id"):
+        JobStore(path).load()
 
 
 def test_create_job_validates_and_persists_complete_schedule(

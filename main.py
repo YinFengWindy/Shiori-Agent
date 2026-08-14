@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 def _build_argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="启动 Mira-Agent runtime")
+    parser = argparse.ArgumentParser(description="启动 Shiori runtime")
     parser.add_argument(
         "command",
         nargs="?",

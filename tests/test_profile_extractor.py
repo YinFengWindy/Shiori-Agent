@@ -5,6 +5,10 @@ import pytest
 from memory2.profile_extractor import ProfileFact, ProfileFactExtractor
 
 
+def _joined_prompt(messages) -> str:
+    return "\n".join(str(message.get("content", "")) for message in messages)
+
+
 def _make_extractor(llm_response: str) -> ProfileFactExtractor:
     client = MagicMock()
     client.chat = AsyncMock(return_value=llm_response)
@@ -84,7 +88,7 @@ async def test_conversation_appears_in_prompt():
     captured: list[str] = []
 
     async def _cap(*, messages, **kwargs):
-        captured.append(messages[0]["content"])
+        captured.append(_joined_prompt(messages))
         return "<facts></facts>"
 
     client.chat = AsyncMock(side_effect=_cap)
@@ -99,7 +103,7 @@ async def test_existing_profile_appears_in_prompt():
     captured: list[str] = []
 
     async def _cap(*, messages, **kwargs):
-        captured.append(messages[0]["content"])
+        captured.append(_joined_prompt(messages))
         return "<facts></facts>"
 
     client.chat = AsyncMock(side_effect=_cap)
@@ -189,7 +193,7 @@ async def test_extract_from_exchange_includes_both_user_and_agent_in_prompt():
     captured: list[str] = []
 
     async def _cap(*, messages, **kwargs):
-        captured.append(messages[0]["content"])
+        captured.append(_joined_prompt(messages))
         return "<facts></facts>"
 
     client.chat = AsyncMock(side_effect=_cap)
@@ -211,7 +215,7 @@ def _capture_prompt(method_name: str = "extract") -> tuple["ProfileFactExtractor
     captured: list[str] = []
 
     async def _cap(*, messages, **kwargs):
-        captured.append(messages[0]["content"])
+        captured.append(_joined_prompt(messages))
         return "<facts></facts>"
 
     client.chat = AsyncMock(side_effect=_cap)

@@ -485,7 +485,6 @@ def _render_model_registration(
 def _render_agent() -> str:
     return """\
 [agent]
-system_prompt = "You are a helpful AI assistant with access to tools. Always respond in the same language the user uses."
 max_tokens = 8192
 # 设为 0 表示不限制迭代轮数；长任务仍可用 /stop 中断。
 max_iterations = 40

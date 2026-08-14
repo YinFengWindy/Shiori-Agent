@@ -197,6 +197,7 @@ def make_job(
     interval_seconds=None,
     cron_expr=None,
     timezone_="UTC",
+    role_id="mira",
 ) -> ScheduledJob:
     if fire_at is None:
         fire_at = datetime.now(timezone.utc) + timedelta(minutes=5)
@@ -206,6 +207,7 @@ def make_job(
         fire_at=fire_at,
         channel=channel,
         chat_id=chat_id,
+        role_id=role_id,
         message=message,
         prompt=prompt,
         name=name,
@@ -226,6 +228,11 @@ def mock_push():
 def mock_loop():
     m = AsyncMock()
     m.process_direct = AsyncMock(return_value="AI response")
+
+    async def _run_role_operation(_metadata, operation):
+        return await operation()
+
+    m.run_role_operation = AsyncMock(side_effect=_run_role_operation)
     return m
 
 

@@ -77,7 +77,6 @@ def test_plugin_llm_dependencies_fall_back_to_main_model() -> None:
         provider="openai",
         model="main-model",
         api_key="key",
-        system_prompt="system",
     )
     provider = object()
 
@@ -544,7 +543,6 @@ def test_build_registered_tools_respects_toolset_order_and_subset(monkeypatch, t
         provider="openai",
         model="m",
         api_key="k",
-        system_prompt="s",
         wiring=WiringConfig(toolsets=["schedule", "mcp"]),
     )
     build_registered_tools(
@@ -583,7 +581,6 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
         provider="openai",
         model="m",
         api_key="k",
-        system_prompt="s",
         wiring=WiringConfig(context="default"),
     )
     deps = _build_loop_deps(
@@ -756,7 +753,6 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
         provider="openai",
         model="m",
         api_key="k",
-        system_prompt="s",
         wiring=WiringConfig(toolsets=["schedule"]),
     )
     _, _, _, mcp_registry, _, _ = build_registered_tools(

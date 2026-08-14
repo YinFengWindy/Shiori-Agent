@@ -1,5 +1,5 @@
 import { SettingsField as Field } from "./SettingsField";
-import { SettingsSectionCard, SettingsToggleField, settingsInputClass, settingsTextareaClass } from "./SettingsFieldPrimitives";
+import { SettingsSectionCard, SettingsToggleField, settingsInputClass } from "./SettingsFieldPrimitives";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";
 import { parseSettingsNumber } from "./settingsSectionUtils";
 
@@ -12,9 +12,6 @@ export function AdvancedSettingsSection({
   if (subsectionId !== "general") return null;
   return (
     <SettingsSectionCard>
-      <Field label="System Prompt" hint="全局系统提示词">
-        <textarea className={settingsTextareaClass} value={draft.advanced.systemPrompt} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, systemPrompt: event.target.value } }))} />
-      </Field>
       <Field label="max_tokens" hint="限制单轮响应可使用的最大 token 数。">
         <input className={settingsInputClass} value={String(draft.advanced.maxTokens)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, maxTokens: parseSettingsNumber(event.target.value, current.advanced.maxTokens) } }))} placeholder="最大令牌数" />
       </Field>

@@ -138,7 +138,6 @@ def test_akasha_engine_passes_embedding_dimension_to_embedder(
             provider="openai",
             model="chat-model",
             api_key="chat-key",
-            system_prompt="system",
             memory=MemoryConfig(
                 embedding=MemoryEmbeddingConfig(
                     model="embedding-model",

@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 
 def _build_proactive_provider(config: Config, provider: LLMProvider) -> LLMProvider:
     api_key = str(getattr(config, "api_key", "") or "").strip()
-    system_prompt = str(getattr(config, "system_prompt", "") or "")
     base_url = getattr(config, "base_url", None)
     if not api_key:
         return provider
@@ -40,7 +39,6 @@ def _build_proactive_provider(config: Config, provider: LLMProvider) -> LLMProvi
     return LLMProvider(
         api_key=api_key,
         base_url=base_url,
-        system_prompt=system_prompt,
         extra_body=extra_body,
         provider_name=str(getattr(config, "provider", "") or ""),
         force_disable_thinking=True,
@@ -97,6 +95,7 @@ def build_proactive_runtime(
             tool_hooks=tool_hooks,
             proactive_gates=proactive_gates,
             event_bus=event_bus,
+            role_prompt_fn=_build_role_prompt_resolver(workspace, role.id),
             tick_dispatcher=_build_role_tick_dispatcher(
                 role_id=role.id,
                 channel=target.target_channel,
@@ -107,6 +106,19 @@ def build_proactive_runtime(
         loops[role.id] = loop
         tasks.append(loop.run())
     return tasks, loops
+
+
+def _build_role_prompt_resolver(workspace: Path, role_id: str):
+    def resolve() -> str:
+        role = RoleStore(workspace).get_role(role_id)
+        if role is None:
+            raise ValueError(f"role not found for proactive generation: {role_id}")
+        prompt = role.system_prompt.strip()
+        if not prompt:
+            raise ValueError(f"role.system_prompt required: {role_id}")
+        return prompt
+
+    return resolve
 
 
 def _build_role_proactive_config(role: RoleRecord):

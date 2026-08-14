@@ -26,7 +26,12 @@ from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.mcp_sources import McpClientPool
 from proactive_v2.tools import ToolDeps
-from tests.proactive_v2.conftest import FakeLLM, FakeRng, cfg_with, make_proactive_pipeline
+from tests.proactive_v2.conftest import (
+    FakeLLM,
+    FakeRng,
+    cfg_with,
+    make_proactive_pipeline,
+)
 
 
 def _write_skill(root: Path, name: str = "explore-curiosity") -> Path:
@@ -134,6 +139,7 @@ def _make_drift_pipeline(
             store=store,
             tool_deps=tool_deps,
             max_steps=max_steps,
+            role_prompt_fn=lambda: "测试角色提示词",
         )
     )
 
@@ -172,7 +178,9 @@ def test_drift_message_push_schema_supports_media(tmp_path: Path):
         ),
     ).get_schemas()
     message_push = next(
-        schema["function"] for schema in schemas if schema["function"]["name"] == "message_push"
+        schema["function"]
+        for schema in schemas
+        if schema["function"]["name"] == "message_push"
     )
     props = message_push["parameters"]["properties"]
     assert "image" in props
@@ -196,10 +204,14 @@ async def test_drift_message_push_sends_media(tmp_path: Path):
         send_message_fn=send_message,
     )
     assert json.loads(cast(Any, raw))["ok"] is True
-    send_message.assert_awaited_once_with("新表情来啦", ["/tmp/one.png", "/tmp/two.png"])
+    send_message.assert_awaited_once_with(
+        "新表情来啦", ["/tmp/one.png", "/tmp/two.png"]
+    )
 
 
-def test_drift_system_prompt_discourages_stuck_skill_and_lists_new_tools(tmp_path: Path):
+def test_drift_system_prompt_discourages_stuck_skill_and_lists_new_tools(
+    tmp_path: Path,
+):
     _write_skill(tmp_path)
     store = DriftStateStore(tmp_path)
     pipeline = _make_drift_pipeline(
@@ -218,7 +230,10 @@ def test_drift_system_prompt_discourages_stuck_skill_and_lists_new_tools(tmp_pat
         )["content"]
     )
     assert "不要因为某个 skill 最近刚运行过" in prompt
-    assert "如果这个 skill 当前明显处于“等待用户回复/等待外部条件”的状态，就不要选它" in prompt
+    assert (
+        "如果这个 skill 当前明显处于“等待用户回复/等待外部条件”的状态，就不要选它"
+        in prompt
+    )
     assert "对用户的表达要像此刻自然想到的一句聊天" in prompt
     assert "先把内部依据转写成自然联想，再说出口" in prompt
     assert "message_result" in prompt
@@ -227,6 +242,20 @@ def test_drift_system_prompt_discourages_stuck_skill_and_lists_new_tools(tmp_pat
     assert "shell" in prompt
     assert is_context_frame(runtime)
     assert "drift_skills" in runtime
+
+
+def test_drift_system_prompt_rejects_missing_role_identity(tmp_path: Path):
+    store = DriftStateStore(tmp_path)
+    pipeline = DriftTurnPipeline(
+        DriftTurnPipelineDeps(
+            store=store,
+            tool_deps=DriftToolDeps(drift_dir=tmp_path, store=store),
+            role_prompt_fn=lambda: "",
+        )
+    )
+
+    with pytest.raises(ValueError, match="role.system_prompt required"):
+        pipeline._build_system_prompt()
 
 
 def test_drift_runtime_context_binds_role_memory_from_ctx(tmp_path: Path):
@@ -239,6 +268,10 @@ def test_drift_runtime_context_binds_role_memory_from_ctx(tmp_path: Path):
 
         def bind_session_metadata(self, metadata):
             self.bound = metadata
+
+        def read_self(self) -> str:
+            role_id = str((self.bound or {}).get("role_id") or "")
+            return f"self:{role_id}"
 
         def read_long_term(self) -> str:
             role_id = str((self.bound or {}).get("role_id") or "")
@@ -269,6 +302,51 @@ def test_drift_runtime_context_binds_role_memory_from_ctx(tmp_path: Path):
     assert memory.bound == {"role_id": "mira"}
     assert "memory:mira" in content
     assert "recent:mira" in content
+
+
+@pytest.mark.parametrize(
+    "failing_reader", ["read_self", "read_long_term", "read_recent_context"]
+)
+def test_drift_stops_when_role_memory_read_fails(
+    tmp_path: Path,
+    failing_reader: str,
+):
+    store = DriftStateStore(tmp_path)
+
+    class _Memory:
+        def bind_session_metadata(self, _metadata):
+            return None
+
+        def read_self(self) -> str:
+            return "SELF"
+
+        def read_long_term(self) -> str:
+            return "MEMORY"
+
+        def read_recent_context(self) -> str:
+            return "RECENT"
+
+    memory = _Memory()
+    setattr(
+        memory,
+        failing_reader,
+        MagicMock(side_effect=RuntimeError("memory unavailable")),
+    )
+    pipeline = _make_drift_pipeline(
+        store=store,
+        tool_deps=DriftToolDeps(
+            drift_dir=tmp_path,
+            store=store,
+            memory=memory,
+            shared_tools=_build_shared_tools(),
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="memory unavailable"):
+        pipeline._build_runtime_context_message(
+            AgentTickContext(session_key="role:mira"),
+            [],
+        )
 
 
 @pytest.mark.asyncio
@@ -331,14 +409,21 @@ async def test_finish_drift_rejects_unknown_skill(tmp_path: Path):
         tmp_path,
         ctx,
         "finish_drift",
-        {"skill_used": "missing", "one_line": "x", "next": "y", "message_result": "silent"},
+        {
+            "skill_used": "missing",
+            "one_line": "x",
+            "next": "y",
+            "message_result": "silent",
+        },
         store=store,
     )
     assert json.loads(cast(Any, raw))["error"] == "unknown skill: missing"
 
 
 @pytest.mark.asyncio
-async def test_finish_drift_requires_message_result_to_match_actual_send(tmp_path: Path):
+async def test_finish_drift_requires_message_result_to_match_actual_send(
+    tmp_path: Path,
+):
     _write_skill(tmp_path)
     store = DriftStateStore(tmp_path)
     ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
@@ -355,7 +440,9 @@ async def test_finish_drift_requires_message_result_to_match_actual_send(tmp_pat
         store=store,
     )
     payload = json.loads(cast(Any, raw))
-    assert payload["error"] == "message_result=sent requires successful message_push first"
+    assert (
+        payload["error"] == "message_result=sent requires successful message_push first"
+    )
     assert ctx.drift_finished is False
 
 
@@ -395,7 +482,10 @@ async def test_finish_drift_rejects_silent_after_message_sent(tmp_path: Path):
         store=store,
     )
     payload = json.loads(cast(Any, raw))
-    assert payload["error"] == "message_result=silent conflicts with successful message_push"
+    assert (
+        payload["error"]
+        == "message_result=silent conflicts with successful message_push"
+    )
     assert ctx.drift_finished is False
 
 
@@ -523,15 +613,23 @@ async def test_drift_pipeline_does_not_force_finish_at_step_limit(tmp_path: Path
     store = DriftStateStore(tmp_path)
     captured: list[tuple[list[str], str | dict]] = []
 
-    async def llm(messages: list[dict], schemas: list[dict], tool_choice: str | dict = "auto"):
+    async def llm(
+        messages: list[dict], schemas: list[dict], tool_choice: str | dict = "auto"
+    ):
         captured.append(([s["function"]["name"] for s in schemas], tool_choice))
         step = len(captured)
         if step == 1:
-            return {"name": "read_file", "input": {"path": "skills/explore-curiosity/SKILL.md"}}
+            return {
+                "name": "read_file",
+                "input": {"path": "skills/explore-curiosity/SKILL.md"},
+            }
         if step == 2:
             return {
                 "name": "write_file",
-                "input": {"path": "skills/explore-curiosity/state.json", "content": "{}"},
+                "input": {
+                    "path": "skills/explore-curiosity/state.json",
+                    "content": "{}",
+                },
             }
         if step == 3:
             return {
@@ -638,7 +736,9 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
         TurnOrchestratorDeps(
             session=SessionServices(
                 session_manager=cast(Any, session_manager),
-                presence=cast(Any, SimpleNamespace(record_proactive_sent=lambda _key: None)),
+                presence=cast(
+                    Any, SimpleNamespace(record_proactive_sent=lambda _key: None)
+                ),
             ),
             outbound=_Outbound(),
         )
@@ -648,7 +748,9 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
         return await orchestrator.handle_proactive_turn(
             result=TurnResult(
                 decision="reply",
-                outbound=TurnOutbound(session_key="test_session", content=content, media=list(media or [])),
+                outbound=TurnOutbound(
+                    session_key="test_session", content=content, media=list(media or [])
+                ),
                 trace=TurnTrace(source="proactive", extra={"source_mode": "drift"}),
             ),
             session_key="test_session",
@@ -702,6 +804,7 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
                 feed_fn=AsyncMock(return_value=[]),
                 context_fn=AsyncMock(return_value=[]),
             ),
+            role_prompt_fn=lambda: "测试角色提示词",
             workspace_context_fn=None,
             llm_fn=llm,
             rng=FakeRng(value=1.0),
@@ -728,7 +831,9 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
 
 
 def _write_skill_with_mcp(
-    root: Path, name: str, requires_mcp: str,
+    root: Path,
+    name: str,
+    requires_mcp: str,
 ) -> Path:
     skill_dir = root / "skills" / name
     skill_dir.mkdir(parents=True, exist_ok=True)
@@ -752,7 +857,9 @@ def _build_shared_tools_with_mcp(*server_names: str) -> ToolRegistry:
     for srv in server_names:
         for suffix in ("tool_a", "tool_b"):
             tool = _DummyTool(f"mcp_{srv}__{suffix}")
-            reg.register(tool, risk="external-side-effect", source_type="mcp", source_name=srv)
+            reg.register(
+                tool, risk="external-side-effect", source_type="mcp", source_name=srv
+            )
     return reg
 
 
@@ -806,7 +913,9 @@ def test_drift_state_store_includes_builtin_skills_when_enabled(tmp_path: Path):
     names = {skill.name for skill in skills}
     assert "meme-manage" in names
     assert "create-drift-skill" in names
-    assert next(skill for skill in skills if skill.name == "meme-manage").builtin is True
+    assert (
+        next(skill for skill in skills if skill.name == "meme-manage").builtin is True
+    )
 
 
 @pytest.mark.asyncio
@@ -854,18 +963,20 @@ async def test_drift_pipeline_keeps_skills_when_mcp_available(tmp_path: Path):
     _write_skill_with_mcp(tmp_path, "needs-cal", "calendar")
     store = DriftStateStore(tmp_path)
     shared = _build_shared_tools_with_mcp("calendar")
-    llm = FakeLLM([
-        ("read_file", {"path": "skills/needs-cal/SKILL.md"}),
-        (
-            "finish_drift",
-            {
-                "skill_used": "needs-cal",
-                "one_line": "done",
-                "next": "next",
-                "message_result": "silent",
-            },
-        ),
-    ])
+    llm = FakeLLM(
+        [
+            ("read_file", {"path": "skills/needs-cal/SKILL.md"}),
+            (
+                "finish_drift",
+                {
+                    "skill_used": "needs-cal",
+                    "one_line": "done",
+                    "next": "next",
+                    "message_result": "silent",
+                },
+            ),
+        ]
+    )
     pipeline = _make_drift_pipeline(
         store=store,
         tool_deps=DriftToolDeps(drift_dir=tmp_path, store=store, shared_tools=shared),
@@ -909,7 +1020,9 @@ async def test_mount_server_idempotent(tmp_path: Path):
     ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
     reg = build_drift_tool_registry(
         ctx=ctx,
-        deps=DriftToolDeps(drift_dir=tmp_path, store=DriftStateStore(tmp_path), shared_tools=shared),
+        deps=DriftToolDeps(
+            drift_dir=tmp_path, store=DriftStateStore(tmp_path), shared_tools=shared
+        ),
         mounted_tool_names=mounted,
     )
     await reg.execute("mount_server", {"server": "calendar"})
@@ -926,7 +1039,9 @@ async def test_mount_server_rejects_unknown_server(tmp_path: Path):
     ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
     reg = build_drift_tool_registry(
         ctx=ctx,
-        deps=DriftToolDeps(drift_dir=tmp_path, store=DriftStateStore(tmp_path), shared_tools=shared),
+        deps=DriftToolDeps(
+            drift_dir=tmp_path, store=DriftStateStore(tmp_path), shared_tools=shared
+        ),
         mounted_tool_names=mounted,
     )
     # mount_server not registered when no MCP servers exist
@@ -940,7 +1055,9 @@ async def test_mount_server_not_registered_without_mcp(tmp_path: Path):
     ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
     reg = build_drift_tool_registry(
         ctx=ctx,
-        deps=DriftToolDeps(drift_dir=tmp_path, store=DriftStateStore(tmp_path), shared_tools=shared),
+        deps=DriftToolDeps(
+            drift_dir=tmp_path, store=DriftStateStore(tmp_path), shared_tools=shared
+        ),
     )
     assert not reg.has_tool("mount_server")
 
@@ -997,8 +1114,7 @@ def test_system_prompt_includes_mcp_directory(tmp_path: Path):
     )
     content = str(
         pipeline._build_runtime_context_message(
-            None,
-            store.scan_skills(), shared.get_mcp_server_names()
+            None, store.scan_skills(), shared.get_mcp_server_names()
         )["content"]
     )
     assert "可挂载的外部能力" in content
@@ -1015,7 +1131,9 @@ def test_system_prompt_no_mcp_block_without_servers(tmp_path: Path):
     store = DriftStateStore(tmp_path)
     pipeline = _make_drift_pipeline(
         store=store,
-        tool_deps=DriftToolDeps(drift_dir=tmp_path, store=store, shared_tools=_build_shared_tools()),
+        tool_deps=DriftToolDeps(
+            drift_dir=tmp_path, store=store, shared_tools=_build_shared_tools()
+        ),
     )
     content = str(
         pipeline._build_runtime_context_message(
@@ -1038,8 +1156,7 @@ def test_system_prompt_skill_requires_mcp_annotation(tmp_path: Path):
     )
     content = str(
         pipeline._build_runtime_context_message(
-            None,
-            store.scan_skills(), shared.get_mcp_server_names()
+            None, store.scan_skills(), shared.get_mcp_server_names()
         )["content"]
     )
     assert "[需要: calendar]" in content
@@ -1076,7 +1193,9 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
         TurnOrchestratorDeps(
             session=SessionServices(
                 session_manager=cast(Any, session_manager),
-                presence=cast(Any, SimpleNamespace(record_proactive_sent=lambda _key: None)),
+                presence=cast(
+                    Any, SimpleNamespace(record_proactive_sent=lambda _key: None)
+                ),
             ),
             outbound=_Outbound(),
         )
@@ -1106,6 +1225,7 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
         deduper=None,
         rng=SimpleNamespace(),
         workspace_context_fn=lambda: "",
+        role_prompt_fn=lambda: "测试角色提示词",
         shared_tools=_build_shared_tools(),
         turn_orchestrator=orchestrator,
         pool=McpClientPool(),
@@ -1115,7 +1235,9 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
 
 @pytest.mark.asyncio
 async def test_factory_drift_send_message_returns_false_when_send_fails(tmp_path: Path):
-    state = SimpleNamespace(path=tmp_path / "proactive_state.json", mark_delivery=MagicMock())
+    state = SimpleNamespace(
+        path=tmp_path / "proactive_state.json", mark_delivery=MagicMock()
+    )
     factory, sender = _build_factory(tmp_path, sender_ok=False, state_store=state)
     send_message = factory._build_drift_send_message_fn()
     assert send_message is not None
@@ -1127,7 +1249,9 @@ async def test_factory_drift_send_message_returns_false_when_send_fails(tmp_path
 
 @pytest.mark.asyncio
 async def test_factory_drift_send_message_marks_delivery_on_success(tmp_path: Path):
-    state = SimpleNamespace(path=tmp_path / "proactive_state.json", mark_delivery=MagicMock())
+    state = SimpleNamespace(
+        path=tmp_path / "proactive_state.json", mark_delivery=MagicMock()
+    )
     factory, sender = _build_factory(tmp_path, sender_ok=True, state_store=state)
     send_message = factory._build_drift_send_message_fn()
     assert send_message is not None
@@ -1138,8 +1262,12 @@ async def test_factory_drift_send_message_marks_delivery_on_success(tmp_path: Pa
 
 
 @pytest.mark.asyncio
-async def test_factory_drift_send_message_uses_bound_transport_from_role(tmp_path: Path):
-    state = SimpleNamespace(path=tmp_path / "proactive_state.json", mark_delivery=MagicMock())
+async def test_factory_drift_send_message_uses_bound_transport_from_role(
+    tmp_path: Path,
+):
+    state = SimpleNamespace(
+        path=tmp_path / "proactive_state.json", mark_delivery=MagicMock()
+    )
     factory, sender = _build_factory(tmp_path, sender_ok=True, state_store=state)
     factory._deps.cfg.default_role_id = "mira"
     factory._deps.sense = SimpleNamespace(

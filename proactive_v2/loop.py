@@ -89,6 +89,7 @@ class ProactiveLoop:
         proactive_gates: list[ProactiveGate] | None = None,
         tick_dispatcher: Callable[[Callable[[], Any]], Any] | None = None,
         event_bus: EventBus | None = None,
+        role_prompt_fn: Callable[[], str] | None = None,
     ) -> None:
         self._sessions = session_manager
         self._provider = provider
@@ -108,6 +109,9 @@ class ProactiveLoop:
         self._proactive_gates = ProactiveGateChain(proactive_gates)
         self._tick_dispatcher = tick_dispatcher
         self._event_bus = event_bus
+        if role_prompt_fn is None:
+            raise ValueError("role_prompt_fn required for proactive loop")
+        self._role_prompt_fn = role_prompt_fn
         self._turn_started_handler = self._handle_turn_started
         self._workspace_context_mtime_ns: int | None = None
         self._workspace_context_text: str = ""
@@ -201,6 +205,7 @@ class ProactiveLoop:
                 deduper=self._message_deduper,
                 rng=self._rng,
                 workspace_context_fn=self._read_workspace_proactive_context,
+                role_prompt_fn=self._role_prompt_fn,
                 shared_tools=self._shared_tools,
                 pool=self._mcp_pool,
                 tool_hooks=self._tool_hooks,

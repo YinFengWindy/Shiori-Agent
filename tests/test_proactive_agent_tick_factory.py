@@ -47,6 +47,7 @@ def _build_deps(*, with_pool: bool):
         deduper=None,
         rng=SimpleNamespace(),
         workspace_context_fn=lambda: "",
+        role_prompt_fn=lambda: "测试角色提示词",
         pool=McpClientPool() if with_pool else None,
     )
 

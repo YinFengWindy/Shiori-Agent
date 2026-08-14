@@ -101,7 +101,7 @@ async def test_decide_cleans_empty_procedure_query_sentinels():
     client = MagicMock()
 
     async def _chat(*, messages, **kwargs):
-        prompt = messages[0]["content"]
+        prompt = "\n".join(str(message.get("content", "")) for message in messages)
         if "只输出一行检索 query" in prompt:
             return "None."
         return """
@@ -139,7 +139,9 @@ async def test_recent_history_injected_into_llm_prompt():
     captured_prompt: list[str] = []
 
     async def _capture(*, messages, **kwargs):
-        captured_prompt.append(messages[0]["content"])
+        captured_prompt.append(
+            "\n".join(str(message.get("content", "")) for message in messages)
+        )
         return (
             "<decision>RETRIEVE</decision>"
             "<history_query>q</history_query>"

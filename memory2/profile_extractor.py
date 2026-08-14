@@ -6,6 +6,13 @@ from dataclasses import dataclass
 from typing import Any
 
 
+_PROFILE_EXTRACTOR_SYSTEM = (
+    "你是中性的 profile 事实提取器，不扮演角色，也不生成用户可见回复。"
+    "USER 是当前角色交流对象“你”，ASSISTANT 是当前角色“我”。"
+    "输出正文必须使用“我 / 你 / 我们”，不得用“用户 / 助手”代称。"
+)
+
+
 @dataclass
 class ProfileFact:
     summary: str
@@ -79,7 +86,10 @@ class ProfileFactExtractor:
         try:
             response = await asyncio.wait_for(
                 self._llm_client.chat(
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[
+                        {"role": "system", "content": _PROFILE_EXTRACTOR_SYSTEM},
+                        {"role": "user", "content": prompt},
+                    ],
                     tools=[],
                     model=self._model,
                     max_tokens=min(self._max_tokens, 200),
@@ -104,7 +114,10 @@ class ProfileFactExtractor:
         try:
             response = await asyncio.wait_for(
                 self._llm_client.chat(
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[
+                        {"role": "system", "content": _PROFILE_EXTRACTOR_SYSTEM},
+                        {"role": "user", "content": prompt},
+                    ],
                     tools=[],
                     model=self._model,
                     max_tokens=max_tokens,
@@ -150,7 +163,7 @@ class ProfileFactExtractor:
 
     @staticmethod
     def _build_prompt(*, conversation: str, existing_profile: str) -> str:
-        return f"""你是 profile 事实提取器。请只从对话里提取用户长期可检索的 profile 事实，并输出 XML。
+        return f"""请只从对话里提取关于“你”的长期可检索 profile 事实，并输出 XML。
 
 profile 的语义是：关于用户本人或其客观处境的事实。
 例如：身份背景、拥有/持有的东西、爱好、长期健康事实、长期状态、重要个人决定。
@@ -191,10 +204,10 @@ profile 的语义是：关于用户本人或其客观处境的事实。
 - summary 不要带时间戳；时间放到 happened_at
 - personal_fact 默认不写 happened_at。只有 purchase / status / decision 这类确实带时间语义的事实，才填写 happened_at
 - 每一件具体的事单独一条，绝对不要合并
-  ✗ 错误："用户购买了多件商品"
+  ✗ 错误："你购买了多件商品"
   ✓ 正确：每件商品单独一条，写出具体名称/型号
 - 涉及列举时（多件购买、多个决定）每项单独输出
-- summary 写出具体内容而非概括：写"用户购买了罗技 MX Master 3 鼠标"而非"用户购买了外设"
+- summary 写出具体内容而非概括：写"你购买了罗技 MX Master 3 鼠标"而非"你购买了外设"
 - 若多个候选只是同一事实的近似改写，只保留一条最直接、最贴近 USER 原话的版本
 - 若存在冲突，保留更新、更确定的那条
 
@@ -228,20 +241,20 @@ profile 的语义是：关于用户本人或其客观处境的事实。
 正例（应该提取）：
 - USER: 我有一块 Fitbit 手表，我的爱好是弹钢琴。
   输出：
-  · 用户有一块 Fitbit 手表 | personal_fact
-  · 用户的爱好是弹钢琴 | personal_fact
+  · 你有一块 Fitbit 手表 | personal_fact
+  · 你的爱好是弹钢琴 | personal_fact
 - USER: 我在互联网公司做产品经理，今年30岁。下班后我喜欢自己研究做饭。另外我下周末要去旅行，但我还没开始收拾行李。
   输出：
-  · 用户在互联网公司做产品经理 | personal_fact
-  · 用户今年30岁 | personal_fact
-  · 用户喜欢下班后自己研究做饭 | personal_fact
+  · 你在互联网公司做产品经理 | personal_fact
+  · 你今年30岁 | personal_fact
+  · 你喜欢下班后自己研究做饭 | personal_fact
   不输出：
   · 下周末要去旅行
   · 还没开始收拾行李
 - USER: 我其实不常徒步，不知道该买什么装备。
   输出：
-  · 用户不常徒步 | personal_fact
-  · 用户目前缺少徒步相关装备准备 | personal_fact
+  · 你不常徒步 | personal_fact
+  · 你目前缺少徒步相关装备准备 | personal_fact
 
 反例（不该提取）：
 - USER: 你给我讲内容的时候最好附带一个很棒的例子，并且最好贯穿始终。
@@ -278,7 +291,7 @@ profile 的语义是：关于用户本人或其客观处境的事实。
         agent_response: str,
         existing_profile: str,
     ) -> str:
-        return f"""你是单轮 profile 事实提取器。只看这一轮对话（1 条 USER + 1 条 ASSISTANT），不要推断、不要联想。
+        return f"""只看这一轮对话（1 条 USER + 1 条 ASSISTANT），不要推断、不要联想。
 
 只允许提取以下 3 类：
 - purchase：用户刚购买/下单了什么
@@ -310,8 +323,8 @@ profile 的语义是：关于用户本人或其客观处境的事实。
 提取粒度要求：
 - 每一件具体的事单独一条，不要合并
 - 写出具体名称/型号/数量，不要用概括性词语
-  ✗ 错误："用户购买了游戏外设"
-  ✓ 正确："用户购买了罗技 G Pro X 耳机"
+  ✗ 错误："你购买了游戏外设"
+  ✓ 正确："你购买了罗技 G Pro X 耳机"
 
 当前已有 profile（用于查重）：
 {existing_profile or "（空）"}

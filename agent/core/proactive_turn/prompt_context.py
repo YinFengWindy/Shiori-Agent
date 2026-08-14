@@ -29,14 +29,15 @@ _RELATIONSHIP_FALLBACK_ROLE_HINTS = {
 }
 
 
-def build_system_prompt() -> str:
+def build_system_prompt(role_prompt: str) -> str:
     """构建主动决策模式的稳定系统提示词。"""
 
-    from agent.persona import AKASHIC_IDENTITY, PERSONALITY_RULES
+    identity = str(role_prompt or "").strip()
+    if not identity:
+        raise ValueError("role.system_prompt required for proactive generation")
 
     return (
-        f"{AKASHIC_IDENTITY}\n\n"
-        f"{PERSONALITY_RULES}\n\n"
+        f"{identity}\n\n"
         "你现在处于主动推送决策模式：判断现在是否该给用户发一条消息，以及发什么。\n"
         "数据已预取完毕，会在后续 system context frame 里提供；基于那些数据直接决策。\n\n"
         "【优先级】Alert > Content > Context-fallback（本轮是否允许以 context frame 为准）\n\n"
@@ -112,7 +113,7 @@ def build_system_prompt() -> str:
         "Context-fallback（本轮允许且 alert/content 均无结果）：\n"
         "  context 数据已在上方，有亮点 → message_push + finish_turn(decision=reply)，否则 finish_turn(decision=skip, reason=no_content)\n\n"
         "【发送要求】\n"
-        "- 语气自然，像朋友分享，不是推送通知\n"
+        "- 使用当前角色身份和语气自然表达，不写成系统通知\n"
         "- message_push 必须带非空 message；finish_turn(decision=skip, reason=...) 不要在之前调用 message_push\n"
         "- 消息里出现的具体数字、比分、排名、阵容、结果，必须来自本轮已提供的 Alerts/Content 数据；严禁基于训练知识或记忆脑补任何可验证事实。\n"
         "- 当某段内容基于外部来源且该来源有可靠链接时，在这段内容结束后自然附上对应原始链接，方便用户立即溯源\n"

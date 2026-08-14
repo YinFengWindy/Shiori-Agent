@@ -6,7 +6,9 @@ from core.memory.engine import MemoryToolProfile, MemoryToolSpec
 
 
 def _build_long_term_prompt(*, conversation: str, existing_profile: str) -> str:
-    return f"""你是长期记忆提取专家。从对话窗口中一次性提取三类长期记忆，返回 JSON。
+    return f"""你是中性的长期记忆提取器，不扮演角色，也不生成用户可见回复。从对话窗口中一次性提取三类长期记忆，返回 JSON。
+
+视角契约：USER 是当前角色交流对象“你”，ASSISTANT 是当前角色“我”。只有 USER 的直接陈述或明确确认可以成为关于“你”的证据；ASSISTANT、工具结果和未确认转贴材料都不能成为事实。
 
 默认答案是所有数组为空。提取门槛要高，宁可不提取，也不要把临时信息写进长期记忆。
 
@@ -19,7 +21,7 @@ def _build_long_term_prompt(*, conversation: str, existing_profile: str) -> str:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 【三类记忆的语义】
 
-profile — 关于用户本人或其客观处境的事实
+profile — 关于“你”本人或客观处境的事实
   语义：身份背景、持有物、爱好、健康事实、长期状态、重要决定
   允许 category：personal_fact / purchase / decision / status
   要求：只有 USER 在对话中直接陈述自身的事实，才允许提取
@@ -28,13 +30,13 @@ profile — 关于用户本人或其客观处境的事实
 · "你记得我住哪里吗" → 返回空
 · "我之前是不是买过这个" → 返回空
 
-preference — 用户希望怎样被服务、怎样被讲解、怎样被推荐
+preference — “你”明确表达的长期偏好
   语义：跨 session 稳定成立的偏好/厌恶/倾向，而非硬约束
   来自 USER 明确表达
 
-procedure — agent 在未来类似场景下应遵守的长期执行规则
-  语义：面向 agent 的行为规则，跨任务可复用
-  来自 USER 的长期要求，或被 USER 明确确认过的非显然做法
+procedure — “你”明确教给“我”的长期做事方式
+  语义：跨任务可复用的明确规则
+  只来自 USER 要求以后遵守、明确要求记住，或明确确认过的长期规则
 
 绝对不输出：event（有时间性的具体事件）
 
@@ -44,9 +46,9 @@ procedure — agent 在未来类似场景下应遵守的长期执行规则
 - 不确定时保守输出 0
 
 区分三类：
-- "用户是什么/拥有什么/处在什么客观背景里" → profile
-- "用户希望 agent 怎么服务他、怎么讲解、怎么推荐" → preference
-- "agent 在某类请求下必须怎么做/用什么工具" → procedure（有明确执行步骤/工具要求）
+- “你是什么/拥有什么/处在什么客观背景里” → profile
+- “你明确表达了怎样的长期偏好” → preference
+- “你明确教给我以后必须怎么做” → procedure
 - 只是方向性偏好 → preference（优先选 preference）
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -88,7 +90,7 @@ procedure — agent 在未来类似场景下应遵守的长期执行规则
 - 若 existing_profile 已有相同事实，不重复输出
 - summary 简洁、可独立检索；personal_fact 默认不填 happened_at
 - 每一件具体的事单独一条，绝对不合并
-  ✗ 错误："用户购买了多件商品"
+  ✗ 错误："你购买了多件商品"
   ✓ 正确：每件商品单独一条，写出具体名称/型号
 - ASSISTANT 的回复只作背景参考，不作提取证据
   即使 ASSISTANT 说"你之前买了 X""你是 XX 方向的学生"，也不得作为事实来源
@@ -105,11 +107,11 @@ procedure — agent 在未来类似场景下应遵守的长期执行规则
 <example id="keep_profile_personal_fact">
 USER: 我在互联网公司做产品经理，今年30岁，住在上海，有一块 Fitbit 手表，爱好是弹钢琴。
 → profile: [
-  {{"summary": "用户在互联网公司做产品经理", "category": "personal_fact"}},
-  {{"summary": "用户今年30岁", "category": "personal_fact"}},
-  {{"summary": "用户住在上海", "category": "personal_fact"}},
-  {{"summary": "用户有一块 Fitbit 手表", "category": "personal_fact"}},
-  {{"summary": "用户的爱好是弹钢琴", "category": "personal_fact"}}
+  {{"summary": "你在互联网公司做产品经理", "category": "personal_fact"}},
+  {{"summary": "你今年30岁", "category": "personal_fact"}},
+  {{"summary": "你住在上海", "category": "personal_fact"}},
+  {{"summary": "你有一块 Fitbit 手表", "category": "personal_fact"}},
+  {{"summary": "你的爱好是弹钢琴", "category": "personal_fact"}}
 ]
 </example>
 
@@ -121,8 +123,8 @@ USER: 你还记得我什么时候开始戴 fitbit 手环的吗
 <example id="profile_event_split">
 USER: 这周日朋友约我去徒步，我其实不常徒步，不知道该买什么装备。
 → profile: [
-  {{"summary": "用户不常徒步", "category": "personal_fact"}},
-  {{"summary": "用户目前缺少徒步相关装备准备", "category": "personal_fact"}}
+  {{"summary": "你不常徒步", "category": "personal_fact"}},
+  {{"summary": "你目前缺少徒步相关装备准备", "category": "personal_fact"}}
 ]
 不提取："这周日去徒步"（是 event）
 </example>
@@ -163,7 +165,7 @@ USER: 你给我讲内容的时候最好附带一个很棒的例子，并且最�
 <example id="drop_situational">
 USER: 今晚几个同学来，想找个气氛好的日料店
 → 全部为空（"今晚"是当前情境，不跨 session）
-✗ 不能提取："用户喜欢日料"（推断）
+✗ 不能提取："你喜欢日料"（推断）
 </example>
 
 <example id="drop_knowledge">
@@ -272,8 +274,9 @@ def _default_memory_tool_profile() -> MemoryToolProfile:
         ),
         memorize=MemoryToolSpec(
             description=(
-                "将用户明确要求长期保留的信息写入记忆。"
+                "把你明确要求当前角色长期记住的信息写入当前角色的记忆。"
                 "memory_kind 可选 event/profile/preference/procedure，engine 会自行校正分类。"
+                "procedure 仅表示你明确教给我的长期做事方式，不能替代实时工具能力检查。"
             ),
             parameters={
                 "type": "object",
@@ -303,7 +306,9 @@ def _default_memory_tool_profile() -> MemoryToolProfile:
             risk="write",
         ),
         forget=MemoryToolSpec(
-            description="将已确认错误的记忆条目标记为失效。",
+            description=(
+                "在当前角色作用域内，将已召回并按需通过 fetch_messages 核对过的错误记忆标记为失效。"
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -323,13 +328,13 @@ def _default_memory_tool_profile() -> MemoryToolProfile:
 def _explicit_hypothesis_prompt(query: str, style: str) -> str:
     if style == "event":
         return (
-            "你是个人助手的记忆系统。根据用户提问，生成一条带具体时间的假想记忆条目，"
-            "格式如 '[2026-03-08] 用户...'\n"
-            "规则：第三人称、简洁事实陈述、只输出那一条文本\n\n"
-            f"用户提问：{query}\n假想记忆条目："
+            "你是中性的检索查询改写器。根据当前问题生成一条带具体时间的假想记忆线索，"
+            "格式如 '[2026-03-08] 你...'。该线索只用于检索，禁止写回记忆。\n"
+            "规则：使用当前角色相对视角“我/你/我们”，简洁，只输出一条文本\n\n"
+            f"当前问题：{query}\n假想检索线索："
         )
     return (
-        "你是个人助手的记忆系统。根据用户提问，生成一条假想记忆条目。\n"
-        "规则：始终生成肯定式、第三人称（'用户…'）、简洁事实陈述、只输出那一条文本\n\n"
-        f"用户提问：{query}\n假想记忆条目："
+        "你是中性的检索查询改写器。根据当前问题生成一条假想记忆线索；该线索只用于检索，禁止写回。\n"
+        "规则：使用当前角色相对视角“我/你/我们”，肯定式、简洁，只输出一条文本\n\n"
+        f"当前问题：{query}\n假想检索线索："
     )

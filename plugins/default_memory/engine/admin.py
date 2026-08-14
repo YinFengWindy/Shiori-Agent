@@ -147,6 +147,7 @@ class _AdminMixin:
         return (
             store.keyword_match_procedures(action_tokens) if store is not None else []
         )
+
     def list_events_by_time_range(
         self,
         time_start: datetime,
@@ -228,6 +229,11 @@ class _AdminMixin:
 
     def delete_items_batch(self, ids: list[str]) -> int:
         return self._require_v2_store().delete_items_batch(ids)
+
+    def invalidate_role_memories(self, role_id: str) -> int:
+        """Supersedes every structured item owned by one deleted role."""
+
+        return self._require_v2_store().invalidate_role_memories(role_id)
 
     def undo_by_message_sources(
         self,

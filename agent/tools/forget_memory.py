@@ -38,6 +38,9 @@ class ForgetMemoryTool(Tool):
         session_key: str | None = None,
         **_: Any,
     ) -> str:
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for forget_memory")
         clean_ids = _clean_ids(ids)
         if not clean_ids:
             return _render_forget_result(clean_ids, [], [], [])
@@ -50,7 +53,7 @@ class ForgetMemoryTool(Tool):
                 kind="forget",
                 ids=tuple(clean_ids),
                 scope=MemoryScope(
-                    role_id=str(role_id or "").strip(),
+                    role_id=clean_role_id,
                     session_key=resolved_session_key,
                     channel=channel or "",
                     chat_id=chat_id or "",
