@@ -229,6 +229,27 @@ class _AdminMixin:
     def delete_items_batch(self, ids: list[str]) -> int:
         return self._require_v2_store().delete_items_batch(ids)
 
+    def invalidate_role_memories(self, role_id: str) -> int:
+        """Supersedes every structured item owned by one deleted role."""
+
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for memory invalidation")
+        store = self._require_v2_store()
+        now = datetime.now().astimezone().isoformat()
+        with store._lock:
+            cursor = store._db.execute(
+                """
+                UPDATE memory_items
+                SET status='superseded', updated_at=?
+                WHERE status!='superseded'
+                  AND json_extract(extra_json, '$.role_id')=?
+                """,
+                (now, clean_role_id),
+            )
+            store._db.commit()
+        return int(cursor.rowcount or 0)
+
     def undo_by_message_sources(
         self,
         message_ids: list[str],

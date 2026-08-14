@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import inspect
+import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from bus.events import OutboundMessage
+
+_INTERNAL_CITATION_RE = re.compile(r"\s*§cited:\[[^\]]*\]§\s*")
+
+
+def sanitize_user_visible_content(content: str) -> str:
+    """Consumes internal memory citation markers before transport delivery."""
+
+    return _INTERNAL_CITATION_RE.sub(" ", str(content or "")).strip()
 
 
 @dataclass
@@ -26,11 +35,12 @@ class BusOutboundPort:
         self._bus = bus
 
     async def dispatch(self, outbound: OutboundDispatch) -> bool:
+        content = sanitize_user_visible_content(outbound.content)
         maybe = self._bus.publish_outbound(
             OutboundMessage(
                 channel=outbound.channel,
                 chat_id=outbound.chat_id,
-                content=outbound.content,
+                content=content,
                 thinking=outbound.thinking,
                 metadata=dict(outbound.metadata or {}),
                 media=list(outbound.media or []),
@@ -52,7 +62,7 @@ class PushToolOutboundPort:
         self._execution_context = dict(execution_context or {})
 
     async def dispatch(self, outbound: OutboundDispatch) -> bool:
-        message = str(outbound.content or "").strip()
+        message = sanitize_user_visible_content(outbound.content)
         channel = str(outbound.channel or "").strip()
         chat_id = str(outbound.chat_id or "").strip()
         media = [str(item).strip() for item in outbound.media if str(item).strip()]

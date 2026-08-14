@@ -134,6 +134,7 @@ def _make_drift_pipeline(
             store=store,
             tool_deps=tool_deps,
             max_steps=max_steps,
+            role_prompt_fn=lambda: "测试角色提示词",
         )
     )
 
@@ -581,7 +582,7 @@ async def test_agent_tick_enters_drift_and_records_steps(tmp_path: Path):
         any_action_gate=gate,
         llm_fn=llm,
         tool_deps=ToolDeps(recent_chat_fn=AsyncMock(return_value=[])),
-        gateway_deps=GatewayDeps(
+                gateway_deps=GatewayDeps(
             alert_fn=AsyncMock(return_value=[]),
             feed_fn=AsyncMock(return_value=[]),
             context_fn=AsyncMock(return_value=[]),
@@ -700,9 +701,10 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
             gateway_deps=GatewayDeps(
                 alert_fn=AsyncMock(return_value=[]),
                 feed_fn=AsyncMock(return_value=[]),
-                context_fn=AsyncMock(return_value=[]),
-            ),
-            workspace_context_fn=None,
+                    context_fn=AsyncMock(return_value=[]),
+                ),
+                role_prompt_fn=lambda: "测试角色提示词",
+                workspace_context_fn=None,
             llm_fn=llm,
             rng=FakeRng(value=1.0),
             recent_proactive_fn=lambda: [],
@@ -1106,6 +1108,7 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
         deduper=None,
         rng=SimpleNamespace(),
         workspace_context_fn=lambda: "",
+        role_prompt_fn=lambda: "测试角色提示词",
         shared_tools=_build_shared_tools(),
         turn_orchestrator=orchestrator,
         pool=McpClientPool(),

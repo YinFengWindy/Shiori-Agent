@@ -4,6 +4,12 @@ import sqlite3
 import threading
 from pathlib import Path
 
+from core.memory.markdown_schema import (
+    DOCUMENT_DEFAULTS,
+    ensure_memory_documents,
+    normalize_memory_document,
+    pending_body,
+)
 from utils.helpers import ensure_dir
 
 logger = logging.getLogger(__name__)
@@ -12,18 +18,7 @@ _CONSOLIDATION_MARKER_PREFIX = "<!-- consolidation:"
 _CONSOLIDATION_MARKER_SUFFIX = " -->"
 _CONSOLIDATION_TAIL_BYTES = 1024 * 1024
 _JOURNAL_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-DEFAULT_SELF_MD = """# 角色自我认知
-
-## 人格与形象
-- 我以当前角色的身份与用户互动，保持稳定的人格、语气和边界。
-- 我会在角色设定允许的范围内自然表达自己，不把自己写成系统底座、执行框架或抽象工具。
-
-## 我对当前用户的理解
-- 我会从长期记忆中逐步形成对当前用户的理解，不在缺少证据时编造画像。
-
-## 我们关系的定义
-- 我与当前用户的关系以透明、尊重边界和持续协作为基础。
-"""
+DEFAULT_SELF_MD = DOCUMENT_DEFAULTS["SELF.md"]
 
 
 class MemoryStore:
@@ -53,9 +48,7 @@ class MemoryStore:
         self.self_file = self.memory_dir / "SELF.md"
         self._consolidation_db = self.memory_dir / "consolidation_writes.db"
         self._consolidation_lock = threading.Lock()
-        # 确保 PENDING.md 始终存在，避免首次运行时找不到文件
-        if not self.pending_file.exists():
-            self.pending_file.touch()
+        ensure_memory_documents(self.memory_dir)
         self._init_consolidation_db()
         # 崩溃恢复：启动时若遗留 snapshot，回滚合并
         self._recover_pending_snapshot()
@@ -68,7 +61,10 @@ class MemoryStore:
         return ""
 
     def write_long_term(self, content: str) -> None:
-        self.memory_file.write_text(content, encoding="utf-8")
+        self.memory_file.write_text(
+            normalize_memory_document("MEMORY.md", content),
+            encoding="utf-8",
+        )
 
     def append_history(self, entry: str) -> None:
         with open(self.history_file, "a", encoding="utf-8") as f:
@@ -140,7 +136,10 @@ class MemoryStore:
         return ""
 
     def write_recent_context(self, content: str) -> None:
-        self.recent_context_file.write_text(content, encoding="utf-8")
+        self.recent_context_file.write_text(
+            normalize_memory_document("RECENT_CONTEXT.md", content),
+            encoding="utf-8",
+        )
 
     # ── SELF.md (role self-model) ──────────────────────────────
 
@@ -150,14 +149,19 @@ class MemoryStore:
         return ""
 
     def write_self(self, content: str) -> None:
-        self.self_file.write_text(content, encoding="utf-8")
+        self.self_file.write_text(
+            normalize_memory_document("SELF.md", content),
+            encoding="utf-8",
+        )
 
     # ── pending facts (conversation → optimizer buffer) ───────────
 
     def read_pending(self) -> str:
         if self.pending_file.exists():
-            return self._strip_consolidation_markers(
-                self.pending_file.read_text(encoding="utf-8")
+            return pending_body(
+                self._strip_consolidation_markers(
+                    self.pending_file.read_text(encoding="utf-8")
+                )
             )
         return ""
 
@@ -189,7 +193,7 @@ class MemoryStore:
 
     def clear_pending(self) -> None:
         """optimizer 归档后清空 PENDING.md。"""
-        self.pending_file.write_text("", encoding="utf-8")
+        self.pending_file.write_text(DOCUMENT_DEFAULTS["PENDING.md"], encoding="utf-8")
 
     # ── 两阶段提交（供 MemoryOptimizer 使用）──────────────────────
 
@@ -205,12 +209,14 @@ class MemoryStore:
         调用前会自动处理上次崩溃遗留的 snapshot。
         """
         self._recover_pending_snapshot()
-        if not self.pending_file.exists() or self.pending_file.stat().st_size == 0:
+        if not self.pending_file.exists() or not self.read_pending():
             return ""
         # POSIX rename 是原子操作：rename 完成后新追加写入全新的 PENDING.md
         self.pending_file.rename(self._snapshot_path)
-        return self._strip_consolidation_markers(
-            self._snapshot_path.read_text(encoding="utf-8")
+        return pending_body(
+            self._strip_consolidation_markers(
+                self._snapshot_path.read_text(encoding="utf-8")
+            )
         )
 
     def commit_pending_snapshot(self) -> None:
@@ -219,7 +225,7 @@ class MemoryStore:
             self._snapshot_path.unlink()
         # 保持 PENDING.md 常驻，避免“已归档后文件消失”带来的状态歧义
         if not self.pending_file.exists():
-            self.pending_file.touch()
+            self.pending_file.write_text(DOCUMENT_DEFAULTS["PENDING.md"], encoding="utf-8")
 
     def rollback_pending_snapshot(self) -> None:
         """Phase-2 失败：将快照内容合并回 PENDING.md，不丢失任何数据。

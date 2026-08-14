@@ -99,6 +99,7 @@ class DesktopBridgeService:
         role_world_registry: RoleWorldRegistry | None = None,
         story_director: Any | None = None,
         image_tool: Any | None = None,
+        memory_engine: Any | None = None,
     ) -> None:
         self.workspace = workspace
         self.role_store = role_store
@@ -114,13 +115,12 @@ class DesktopBridgeService:
         )
         self.config = config
         self.role_world_registry = role_world_registry
+        self.memory_engine = memory_engine
         self._event_listeners: set[
             Callable[[dict[str, Any]], Awaitable[None] | None]
         ] = set()
         self._self_seed_generator = self._build_self_seed_generator()
-        self._role_deleted_listener = lambda role_id: event_bus.enqueue(
-            RoleDeleted(role_id)
-        )
+        self._role_deleted_listener = self._on_role_deleted
         self.role_service = role_service or RoleAggregateService.from_runtime(
             workspace=workspace,
             role_store=role_store,
@@ -282,6 +282,17 @@ class DesktopBridgeService:
         listener: Callable[[dict[str, Any]], Awaitable[None] | None],
     ) -> None:
         self._event_listeners.add(listener)
+
+    def _on_role_deleted(self, role_id: str) -> None:
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for role deletion lifecycle")
+        if self.memory_engine is not None:
+            invalidate = getattr(self.memory_engine, "invalidate_role_memories", None)
+            if not callable(invalidate):
+                raise RuntimeError("memory engine lacks role invalidation capability")
+            invalidate(clean_role_id)
+        self.event_bus.enqueue(RoleDeleted(clean_role_id))
 
     def remove_event_listener(
         self,

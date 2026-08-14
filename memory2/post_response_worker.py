@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Awaitable, Callable
 
 from agent.provider import LLMProvider
 from agent.llm_json import load_json_array_loose
@@ -48,12 +48,14 @@ class PostResponseMemoryWorker:
         light_provider: LLMProvider,
         light_model: str,
         event_publisher: "EventPublisher | None" = None,
+        implicit_memory_handler: Callable[..., Awaitable[None]] | None = None,
     ) -> None:
         self._memorizer = memorizer
         self._retriever = retriever
         self._provider = light_provider
         self._model = light_model
         self._event_publisher = event_publisher
+        self._implicit_memory_handler = implicit_memory_handler
 
     async def handle(self, event: TurnIngested) -> None:
         await self.run(
@@ -85,6 +87,8 @@ class PostResponseMemoryWorker:
             chat_id=chat_id,
             role_id=role_id,
         )
+        if not run_context.role_id.strip():
+            raise ValueError("role_id required for post-response memory worker")
         token_budget = self.TOKEN_BUDGET_PER_RUN
         logger.debug(
             "post_response_memorize start session=%s source_ref=%s user_len=%d resp_len=%d tool_steps=%d",
@@ -116,6 +120,16 @@ class PostResponseMemoryWorker:
                 token_budget,
                 run_context=run_context,
             )
+
+            if self._implicit_memory_handler is not None:
+                await self._implicit_memory_handler(
+                    user_msg=user_msg,
+                    assistant_response=agent_response,
+                    source_ref=source_ref,
+                    channel=channel,
+                    chat_id=chat_id,
+                    role_id=role_id,
+                )
 
             logger.debug(
                 "post_response_memorize done session=%s source_ref=%s remain_budget=%d",

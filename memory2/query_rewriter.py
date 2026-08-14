@@ -85,7 +85,13 @@ class QueryRewriter:
 
     async def _call_llm(self, prompt: str) -> str:
         response = await self._llm_client.chat(
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {
+                    "role": "system",
+                    "content": "你是中性的记忆查询改写器，不扮演角色，也不生成用户可见回复。",
+                },
+                {"role": "user", "content": prompt},
+            ],
             tools=[],
             model=self._model,
             max_tokens=self._max_tokens,
@@ -145,7 +151,7 @@ class QueryRewriter:
     @staticmethod
     def _build_prompt(*, user_msg: str, recent_history: str) -> str:
         history_block = recent_history.strip() or "（无）"
-        return f"""你是记忆检索决策器。根据近期对话和当前用户消息，判断是否需要检索用户个人事实或历史事件，并输出查询。
+        return f"""根据近期对话和当前消息，判断是否需要检索关于“你”的事实或共同历史事件，并输出查询。
 
 近期对话：
 {history_block}
@@ -181,7 +187,7 @@ class QueryRewriter:
 用户消息：你还记得我用的是哪个 Fitbit 吗
 输出：
 <decision>RETRIEVE</decision>
-<history_query>用户使用的 Fitbit 设备型号</history_query>
+<history_query>你使用的 Fitbit 设备型号</history_query>
 </example>
 
 只输出 XML，不要解释：
@@ -204,52 +210,52 @@ class QueryRewriter:
 
 <example id="procedure_explicit_command">
 用户消息：把这个资源下载下来
-输出：用户要求 agent 下载外部资源
+输出：你要求我下载外部资源
 </example>
 
 <example id="procedure_direct_action">
 用户消息：帮我把这个内容整理成表格
-输出：用户要求 agent 整理内容
+输出：你要求我整理内容
 </example>
 
 <example id="procedure_resource_share">
 用户消息：【视频标题-哔哩哔哩】 https://short.example/item
-输出：用户发送哔哩哔哩视频链接时 agent 应如何处理
+输出：你发送哔哩哔哩视频链接时我应如何处理
 </example>
 
 <example id="procedure_document_link">
 用户消息：这个文档链接你看一下 https://docs.example.com/item
-输出：用户发送文档链接时 agent 应如何处理
+输出：你发送文档链接时我应如何处理
 </example>
 
 <example id="procedure_attachment">
 用户消息：这是文件，帮我处理一下
-输出：用户发送文件并要求 agent 处理
+输出：你发送文件并要求我处理
 </example>
 
 <example id="procedure_media">
 用户消息：帮我看看这张图
-输出：用户发送图片并要求 agent 分析
+输出：你发送图片并要求我分析
 </example>
 
 <example id="preference_service_style">
 用户消息：以后讲复杂问题先给我一个能贯穿始终的例子
-输出：用户希望 agent 讲解复杂问题时先给贯穿始终的例子
+输出：你希望我讲解复杂问题时先给贯穿始终的例子
 </example>
 
 <example id="preference_future_rule">
 用户消息：以后遇到这种问题先给结论再解释
-输出：用户希望 agent 回答时先给结论再解释
+输出：你希望我回答时先给结论再解释
 </example>
 
 <example id="memory_answer_rule">
 用户消息：你还记得我之前告诉你的设备型号吗
-输出：用户询问记忆内容时 agent 应如何查找依据
+输出：你询问记忆内容时我应如何查找依据
 </example>
 
 <example id="answer_style_rule">
 用户消息：解释一下这两个协议有什么区别
-输出：用户询问知识问题时 agent 应如何组织回答
+输出：你询问知识问题时我应如何组织回答
 </example>
 
 用户消息：{user_msg}

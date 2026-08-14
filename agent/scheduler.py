@@ -170,7 +170,7 @@ class ScheduledJob:
     fire_at: datetime  # 下次名义触发时间（UTC-aware）
     channel: str
     chat_id: str
-    role_id: str = ""
+    role_id: str
     role_config_version: str = ""
     thread_id: str = ""
     delivery_key: str = ""
@@ -189,6 +189,13 @@ class ScheduledJob:
     run_count: int = 0
     enabled: bool = True
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+    def __post_init__(self) -> None:
+        """Normalizes and validates the role ownership persisted with the job."""
+
+        self.role_id = str(self.role_id or "").strip()
+        if not self.role_id:
+            raise ValueError("计划任务缺少 role_id")
 
 
 # ── JobStore ─────────────────────────────────────────────────────
@@ -228,14 +235,8 @@ class JobStore:
 
     def _from_dict(self, d: dict[str, Any]) -> ScheduledJob:
         d = dict(d)
-        channel = str(d.get("channel") or "").strip()
-        chat_id = str(d.get("chat_id") or "").strip()
-        if (
-            not str(d.get("role_id") or "").strip()
-            and channel == "desktop"
-            and chat_id.startswith("role:")
-        ):
-            d["role_id"] = chat_id.removeprefix("role:").strip()
+        if not str(d.get("role_id") or "").strip():
+            raise ValueError("计划任务缺少 role_id")
         d["fire_at"] = self._parse_dt(d["fire_at"])
         d["created_at"] = self._parse_dt(d["created_at"])
         return ScheduledJob(**d)
@@ -297,6 +298,7 @@ class SchedulerService:
             self._active_tasks.pop(job_id, None)
 
     def add_job(self, job: ScheduledJob) -> None:
+        self._require_role_id(job.role_id)
         # Ensure fire_at is UTC-aware
         if job.fire_at.tzinfo is None:
             job.fire_at = job.fire_at.replace(tzinfo=timezone.utc)
@@ -318,7 +320,7 @@ class SchedulerService:
         timezone_name: str,
         channel: str,
         chat_id: str,
-        role_id: str = "",
+        role_id: str,
         role_config_version: str = "",
         thread_id: str = "",
         delivery_key: str = "",
@@ -488,6 +490,7 @@ class SchedulerService:
         normalized_when = when.strip()
         normalized_content = content.strip()
         normalized_timezone = timezone_name.strip()
+        normalized_role_id = self._require_role_id(role_id)
         if not normalized_name:
             raise ValueError("任务名称不能为空")
         if tier not in ("instant", "soft"):
@@ -526,7 +529,7 @@ class SchedulerService:
             fire_at=fire_at,
             channel=channel.strip(),
             chat_id=chat_id.strip(),
-            role_id=role_id.strip(),
+            role_id=normalized_role_id,
             role_config_version=role_config_version.strip(),
             thread_id=thread_id.strip(),
             delivery_key=delivery_key.strip(),
@@ -603,6 +606,7 @@ class SchedulerService:
             self._active_tasks.pop(job_id, None)
 
     async def _execute(self, job: ScheduledJob) -> None:
+        self._require_role_id(job.role_id)
         label = job.name or job.id[:8]
         if job.tier == "instant":
             result = await self._run_role_scoped(
@@ -611,7 +615,7 @@ class SchedulerService:
                     channel=job.channel,
                     chat_id=job.chat_id,
                     message=job.message,
-                    **({"role_id": job.role_id} if job.role_id else {}),
+                    role_id=job.role_id,
                 ),
             )
             logger.info(f"[scheduler] instant 推送完成 {label!r}: {result}")
@@ -646,7 +650,7 @@ class SchedulerService:
                         channel=job.channel,
                         chat_id=job.chat_id,
                         message=content,
-                        **({"role_id": job.role_id} if job.role_id else {}),
+                        role_id=job.role_id,
                     ),
                 )
                 logger.info(f"[scheduler] soft 推送完成 {label!r}: {result}")
@@ -664,8 +668,7 @@ class SchedulerService:
         return loop
 
     def _job_role_metadata(self, job: ScheduledJob) -> dict[str, str]:
-        if not job.role_id:
-            return {}
+        self._require_role_id(job.role_id)
         return {
             "role_id": job.role_id,
             "role_config_version": job.role_config_version,
@@ -680,13 +683,19 @@ class SchedulerService:
         }
 
     async def _run_role_scoped(self, job: ScheduledJob, operation):
-        if not job.role_id:
-            return await operation()
+        self._require_role_id(job.role_id)
         loop = self._get_agent_loop()
         return await loop.run_role_operation(
             self._job_role_metadata(job),
             operation,
         )
+
+    @staticmethod
+    def _require_role_id(role_id: str) -> str:
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("计划任务缺少 role_id")
+        return clean_role_id
 
     def _advance_every(self, job: ScheduledJob, after: datetime) -> datetime:
         """将 every job 的 fire_at 推进到 after 之后的下一个触发时间。"""

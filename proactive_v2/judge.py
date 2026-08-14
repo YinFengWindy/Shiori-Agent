@@ -5,10 +5,51 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from agent.provider import LLMProvider
-from prompts.proactive import build_post_judge_prompt_messages
 from proactive_v2.json_utils import extract_json_object
 
 logger = logging.getLogger(__name__)
+
+
+def _build_post_judge_prompt_messages(
+    *,
+    recent_summary: str,
+    last_proactive: str,
+    composed_message: str,
+    preference_block: str = "",
+) -> tuple[str, str]:
+    """Builds the neutral prompt owned by the proactive message scorer."""
+
+    system_msg = (
+        "你是主动消息评分器。"
+        "仅对信息价值维度打分，不扮演角色，不生成用户可见消息。"
+        "只输出 JSON。"
+    )
+    preference = (
+        f"你明确表达的偏好与禁推规则：\n{preference_block}\n\n"
+        if preference_block
+        else ""
+    )
+    user_msg = f"""最近对话摘要：
+{recent_summary}
+
+最近已发送的主动消息：
+{last_proactive}
+
+{preference}待评分消息：
+{composed_message}
+
+对以下三个维度打分（1=很低，5=很高）：
+- information_gap：是否包含对方尚不知道的新信息
+- relevance：是否匹配对方当前关注内容
+- expected_impact：收到后是否有实际价值
+
+硬规则：
+- 违反明确禁推规则时，relevance 和 expected_impact 必须为 1
+- 新资讯本身不能抵消禁推规则
+- 主要内容超过一半符合明确偏好时，不因次要内容降低分数
+
+只输出 JSON：{{"information_gap": int, "relevance": int, "expected_impact": int}}"""
+    return system_msg, user_msg
 
 
 def _format_recent_proactive_entries(recent_proactive: list[object]) -> str:
@@ -182,7 +223,7 @@ class Judge:
         recent_proactive_text: str,
         preference_block: str,
     ) -> tuple[dict[str, float], dict[str, int]]:
-        system_msg, user_msg = build_post_judge_prompt_messages(
+        system_msg, user_msg = _build_post_judge_prompt_messages(
             recent_summary=self._format_recent(recent) or "（无近期对话）",
             last_proactive=recent_proactive_text or "（无近期主动消息）",
             composed_message=message,

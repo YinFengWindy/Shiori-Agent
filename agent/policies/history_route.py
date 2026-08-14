@@ -105,7 +105,13 @@ class HistoryRoutePolicy:
             timeout_s = max(0.1, self._llm_timeout_ms / 1000.0)
             resp = await asyncio.wait_for(
                 self._light_provider.chat(
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "你是中性的历史检索路由器，不扮演角色，也不生成用户可见回复。",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
                     tools=[],
                     model=self._light_model,
                     max_tokens=self._max_tokens,

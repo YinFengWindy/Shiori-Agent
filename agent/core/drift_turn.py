@@ -24,7 +24,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from agent.persona import AKASHIC_IDENTITY, PERSONALITY_RULES
 from agent.prompting import (
     PromptSectionRender,
     build_context_frame_content,
@@ -53,6 +52,7 @@ logger = logging.getLogger(__name__)
 class DriftTurnPipelineDeps:
     store: DriftStateStore
     tool_deps: DriftToolDeps
+    role_prompt_fn: Callable[[], str]
     max_steps: int = 20
     step_recorder: StepRecorder | None = None
     tool_hooks: list[ToolHook] = field(default_factory=list)
@@ -80,6 +80,7 @@ class DriftTurnPipeline:
     def __init__(self, deps: DriftTurnPipelineDeps) -> None:
         self._store = deps.store
         self._tool_deps = deps.tool_deps
+        self._role_prompt_fn = deps.role_prompt_fn
         self._max_steps = deps.max_steps
         self.step_recorder = deps.step_recorder
         self._tool_executor = ToolExecutor(deps.tool_hooks)
@@ -311,6 +312,7 @@ class DriftTurnPipeline:
     ) -> dict[str, str]:
         """构建 runtime context frame，包含记忆、skill 列表、近期 run 记录。"""
 
+        self_text = ""
         memory_text = ""
         recent_context_text = ""
         if self._tool_deps.memory is not None:
@@ -323,6 +325,12 @@ class DriftTurnPipeline:
                     role_id = session_key.split(":", 1)[1]
             if callable(bind_session_metadata):
                 bind_session_metadata({"role_id": role_id} if role_id else None)
+            try:
+                value = str(memory.read_self() or "").strip()
+                if value:
+                    self_text = value
+            except Exception:
+                self_text = ""
             try:
                 raw = str(memory.read_long_term() or "").strip()
                 if raw:
@@ -386,6 +394,11 @@ class DriftTurnPipeline:
                 is_static=False,
             ),
             PromptSectionRender(
+                name="self_model",
+                content=self_text or "（空）",
+                is_static=False,
+            ),
+            PromptSectionRender(
                 name="long_term_memory",
                 content=memory_text or "（空）",
                 is_static=False,
@@ -422,9 +435,11 @@ class DriftTurnPipeline:
         return build_context_frame_message(build_context_frame_content(sections))
 
     def _build_system_prompt(self) -> str:
+        identity = str(self._role_prompt_fn() or "").strip()
+        if not identity:
+            raise ValueError("role.system_prompt required for drift generation")
         return (
-            f"{AKASHIC_IDENTITY}\n\n"
-            f"{PERSONALITY_RULES}\n\n"
+            f"{identity}\n\n"
             "你现在有一段空闲时间（Drift 模式）。没有外部内容需要推送，\n"
             "你可以自主决定做一件有意义的事。本轮记忆、skill 和工作区信息会在后续 system context frame 里提供。\n\n"
             "【执行规则】\n"

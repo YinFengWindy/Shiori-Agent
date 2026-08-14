@@ -14,16 +14,16 @@ def build_role_system_section(
     metadata = session_metadata if isinstance(session_metadata, dict) else {}
     role_id = str(metadata.get("role_id") or "").strip()
     if not role_id:
-        return None
+        raise ValueError("role_id required for user-visible prompt")
 
     role = RoleStore(workspace).get_role(role_id)
     if role is None:
-        return None
+        raise ValueError(f"role not found for user-visible prompt: {role_id}")
 
     role_name = role.name.strip() or role_id
     prompt = role.system_prompt.strip()
     if not prompt:
-        return None
+        raise ValueError(f"role.system_prompt required: {role_id}")
     runtime_config = role.runtime_config if isinstance(role.runtime_config, dict) else {}
     mood_contract = _build_role_mood_output_contract(runtime_config)
     merged_prompt = prompt

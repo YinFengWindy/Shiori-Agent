@@ -347,6 +347,7 @@ def make_proactive_pipeline(
             deduper=deduper,
             tool_deps=tool_deps,
             gateway_deps=gateway_deps,
+            role_prompt_fn=lambda: "测试角色提示词",
             llm_fn=llm_fn,
             rng=rng,
             recent_proactive_fn=recent_proactive_fn,

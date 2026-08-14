@@ -114,7 +114,6 @@ export type SettingsFormData = {
     ttsVolume: number;
   };
   advanced: {
-    systemPrompt: string;
     maxTokens: number;
     maxIterations: number;
     devMode: boolean;

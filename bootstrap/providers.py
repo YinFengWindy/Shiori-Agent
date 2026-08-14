@@ -20,7 +20,6 @@ def build_providers(
     provider = LLMProvider(
         api_key=config.api_key,
         base_url=config.base_url,
-        system_prompt=config.system_prompt,
         extra_body=main_extra,
         request_timeout_s=_MAIN_PROVIDER_TIMEOUT_S,
         stream_idle_timeout_s=_MAIN_STREAM_IDLE_TIMEOUT_S,

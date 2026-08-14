@@ -53,7 +53,6 @@ function createSettingsFormData(
       ttsVolume: 2,
     },
     advanced: {
-      systemPrompt: "",
       maxTokens: 4000,
       maxIterations: 10,
       devMode: false,

@@ -155,6 +155,7 @@ class DefaultMemoryEngine(
             light_provider=self._light_provider,
             light_model=self._light_model,
             event_publisher=event_publisher,
+            implicit_memory_handler=self._extract_and_save_post_response,
         )
         self._wire_memory2_events()
         self.closeables = [self._v2_store, self._embedder]
@@ -206,6 +207,8 @@ class DefaultMemoryEngine(
         self,
         event: ConsolidationCommitted,
     ) -> None:
+        if not str(event.role_id or "").strip():
+            raise ValueError("role_id required for consolidation memory extraction")
         save_coros = [
             self._save_from_consolidation(
                 history_entry=entry,
@@ -233,6 +236,33 @@ class DefaultMemoryEngine(
                 role_id=event.role_id,
             )
 
+    async def _extract_and_save_post_response(
+        self,
+        *,
+        user_msg: str,
+        assistant_response: str,
+        source_ref: str,
+        channel: str,
+        chat_id: str,
+        role_id: str,
+    ) -> None:
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for post-response memory extraction")
+        conversation = f"USER: {user_msg}\nASSISTANT: {assistant_response}"
+        result = await self._extract_implicit_long_term(
+            conversation=conversation,
+            existing_profile="",
+        )
+        if result:
+            await self._save_implicit_long_term(
+                result,
+                source_ref=source_ref,
+                scope_channel=channel,
+                scope_chat_id=chat_id,
+                role_id=clean_role_id,
+            )
+
     async def _extract_implicit_long_term(
         self,
         *,
@@ -246,7 +276,13 @@ class DefaultMemoryEngine(
                 existing_profile=existing_profile,
             )
             resp = await self._provider.chat(
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "你是中性的长期记忆提取器，不扮演角色，也不生成用户可见回复。",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
                 tools=[],
                 model=self._config.model,
                 max_tokens=600,

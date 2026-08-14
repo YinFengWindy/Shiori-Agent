@@ -223,6 +223,8 @@ async def _recall_memory(ctx: AgentTickContext, args: dict, *, memory) -> str:
 def _memory_scope_from_tick_context(ctx: AgentTickContext) -> MemoryScope:
     session_key = str(ctx.session_key or "").strip()
     role_id = session_key.split(":", 1)[1] if session_key.startswith("role:") else ""
+    if not role_id:
+        raise ValueError("role_id required for proactive memory access")
     return MemoryScope(
         role_id=role_id,
         session_key=session_key,

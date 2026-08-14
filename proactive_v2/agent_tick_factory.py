@@ -54,6 +54,7 @@ class AgentTickDeps:
     deduper: Any | None
     rng: Any
     workspace_context_fn: Callable[[], str]
+    role_prompt_fn: Callable[[], str]
     shared_tools: ToolRegistry | None = None
     turn_orchestrator: TurnOrchestrator | None = None
     pool: McpClientPool | None = None
@@ -94,6 +95,7 @@ class AgentTickFactory:
                 tool_deps=tool_deps,
                 gateway_deps=gateway_deps,
                 workspace_context_fn=self._deps.workspace_context_fn,
+                role_prompt_fn=self._deps.role_prompt_fn,
                 llm_fn=self._build_llm_fn(),
                 rng=self._deps.rng,
                 recent_proactive_fn=recent_proactive_fn,
@@ -280,6 +282,7 @@ class AgentTickFactory:
                     send_message_fn=self._build_drift_send_message_fn(),
                     max_web_fetch_chars=tool_deps.max_chars,
                 ),
+                role_prompt_fn=self._deps.role_prompt_fn,
                 max_steps=getattr(self._deps.cfg, "drift_max_steps", 20),
                 tool_hooks=self._deps.tool_hooks,
             )

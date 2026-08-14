@@ -61,6 +61,9 @@ class RecallMemoryTool(Tool):
         session_key: str | None = None,
         **extra: Any,
     ) -> str:
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for recall_memory")
         text = (query or "").strip()
         if not text:
             return _render_records([], trace={})
@@ -78,7 +81,7 @@ class RecallMemoryTool(Tool):
                 text=text,
                 intent=_normalize_intent(intent),
                 scope=MemoryScope(
-                    role_id=str(role_id or "").strip(),
+                    role_id=clean_role_id,
                     session_key=resolved_session_key,
                     channel=channel or "",
                     chat_id=chat_id or "",

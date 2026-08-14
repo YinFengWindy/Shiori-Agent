@@ -143,12 +143,13 @@ def test_agent_tick_prompt_keeps_self_block_with_facade():
                 ),
                 recent_chat_fn=None,
             )),
-            gateway_deps=GatewayDeps(
+                gateway_deps=GatewayDeps(
                 alert_fn=MagicMock(),
                 feed_fn=MagicMock(),
                 context_fn=MagicMock(),
-            ),
-            workspace_context_fn=None,
+                ),
+                role_prompt_fn=lambda: "测试角色提示词",
+                workspace_context_fn=None,
             llm_fn=None,
             rng=None,
             recent_proactive_fn=None,
@@ -191,12 +192,13 @@ def test_agent_tick_prompt_binds_role_metadata_for_memory_reads():
                 ),
                 recent_chat_fn=None,
             )),
-            gateway_deps=GatewayDeps(
+                gateway_deps=GatewayDeps(
                 alert_fn=MagicMock(),
                 feed_fn=MagicMock(),
                 context_fn=MagicMock(),
-            ),
-            workspace_context_fn=None,
+                ),
+                role_prompt_fn=lambda: "测试角色提示词",
+                workspace_context_fn=None,
             llm_fn=None,
             rng=None,
             recent_proactive_fn=None,

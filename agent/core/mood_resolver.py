@@ -35,9 +35,12 @@ async def resolve_role_mood(
     response = await provider.chat(
         messages=[
             {
+                "role": "system",
+                "content": "你是中性的情绪分类器，不扮演角色，也不生成用户可见回复。",
+            },
+            {
                 "role": "user",
                 "content": (
-                    "你是一个情绪分类器。"
                     "你只能从给定候选里选择一个 mood，绝对不能输出候选之外的词。"
                     "请只输出 JSON，不要输出解释。\n\n"
                     f"reply_text:\n{normalized_reply}\n\n"

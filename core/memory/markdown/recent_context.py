@@ -61,16 +61,17 @@ def _format_recent_context_messages(
 
 def _replace_recent_turns_block(existing_text: str, recent_turns: str) -> str:
     block_lines = [
-        "## Recent Turns",
+        "## 最近的对话",
         "<!-- a-preview = assistant reply preview only -->",
         recent_turns.strip() or "- none",
     ]
     block = "\n".join(block_lines).rstrip() + "\n"
-    marker = "\n## Recent Turns\n"
+    markers = ("\n## 最近的对话\n", "\n## Recent Turns\n")
     text = (existing_text or "").strip()
-    if marker in text:
-        prefix, _ = text.split(marker, 1)
-        return prefix.rstrip() + "\n\n" + block
+    for marker in markers:
+        if marker in text:
+            prefix, _ = text.split(marker, 1)
+            return prefix.rstrip() + "\n\n" + block
     if text:
         return text + "\n\n" + block
     return _render_recent_context(
@@ -122,7 +123,7 @@ def _render_recent_context(
         ("最近待延续话题", compression.get("follow_ups") or []),
         ("最近避免事项", compression.get("avoidances") or []),
     ]
-    lines = ["# Recent Context", "", "## Compression", f"until: {compression_until or 'none'}"]
+    lines = ["# 最近发生的事", "", "## 最近聊过的事", f"until: {compression_until or 'none'}"]
     rendered_any = False
     for title, items in sections:
         cleaned = [str(item).strip() for item in items if str(item).strip()]
@@ -132,13 +133,13 @@ def _render_recent_context(
         lines.append(f"- {title}：{'；'.join(cleaned[:3])}")
     if not rendered_any:
         lines.append("- none")
-    lines.extend(["", "## Ongoing Threads"])
+    lines.extend(["", "## 还在继续的事"])
     if ongoing_threads:
         for item in ongoing_threads[:3]:
             lines.append(f"- {item}")
     else:
         lines.append("- none")
-    lines.extend(["", "## Recent Turns", "<!-- a-preview = assistant reply preview only -->"])
+    lines.extend(["", "## 最近的对话", "<!-- a-preview = assistant reply preview only -->"])
     if recent_turns.strip():
         lines.append(recent_turns.strip())
     else:
@@ -238,7 +239,7 @@ ongoing_threads 严格限制：
         if not text.strip():
             return None
         section_match = re.search(
-            r"## Compression\n(?P<body>.*?)(?:\n## Ongoing Threads\n|\Z)",
+            r"## (?:最近聊过的事|Compression)\n(?P<body>.*?)(?:\n## (?:还在继续的事|Ongoing Threads)\n|\Z)",
             text,
             flags=re.S,
         )
@@ -274,7 +275,7 @@ ongoing_threads 严格限制：
             items = [part.strip() for part in value.split("；") if part.strip()]
             parsed[key] = items[:3]
         ongoing_match = re.search(
-            r"## Ongoing Threads\n(?P<body>.*?)(?:\n## Recent Turns\n|\Z)",
+            r"## (?:还在继续的事|Ongoing Threads)\n(?P<body>.*?)(?:\n## (?:最近的对话|Recent Turns)\n|\Z)",
             text,
             flags=re.S,
         )

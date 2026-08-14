@@ -62,6 +62,7 @@ class ProactiveTurnPipelineDeps:
     tool_deps: ToolDeps
     gateway_deps: GatewayDeps | None
     workspace_context_fn: Callable[[], str] | None
+    role_prompt_fn: Callable[[], str]
     llm_fn: Any | None
     rng: Any | None
     recent_proactive_fn: Callable[[], list] | None

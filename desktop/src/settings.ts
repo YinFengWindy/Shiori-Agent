@@ -214,7 +214,6 @@ export function loadSettingsData(): SettingsSnapshot {
         ttsVolume: Number(voiceTts.volume ?? 2.0),
       },
       advanced: {
-        systemPrompt: String(agent.system_prompt ?? ""),
         maxTokens: Number(agent.max_tokens ?? 8192),
         maxIterations: Number(agent.max_iterations ?? 40),
         devMode: Boolean(agent.dev_mode),
@@ -256,7 +255,6 @@ function renderSettingsToml(formData: SettingsFormData): string {
       "",
     ]),
     "[agent]",
-    `system_prompt = ${quote(formData.advanced.systemPrompt)}`,
     `max_tokens = ${formData.advanced.maxTokens}`,
     `max_iterations = ${formData.advanced.maxIterations}`,
     `dev_mode = ${formData.advanced.devMode ? "true" : "false"}`,

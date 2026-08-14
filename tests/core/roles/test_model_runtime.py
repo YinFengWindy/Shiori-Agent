@@ -24,7 +24,6 @@ def test_runtime_resolves_dialogue_and_visual_fallback(tmp_path) -> None:
     runtime = RoleModelRuntime(
         role_store=store,
         registrations=[dialogue, visual],
-        system_prompt="system",
     )
 
     assert runtime.resolve("mira", "chat").model == "chat-model"
@@ -50,7 +49,6 @@ def test_runtime_snapshot_stays_stable_after_role_selection_changes(tmp_path) ->
     runtime = RoleModelRuntime(
         role_store=store,
         registrations=[first, second],
-        system_prompt="system",
     )
 
     in_flight = runtime.resolve("mira", "chat")
@@ -83,7 +81,6 @@ def test_runtime_uses_role_dialogue_effort_override(tmp_path) -> None:
     runtime = RoleModelRuntime(
         role_store=store,
         registrations=[dialogue, visual],
-        system_prompt="system",
     )
 
     role = store.get_role("mira")

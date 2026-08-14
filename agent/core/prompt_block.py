@@ -174,9 +174,13 @@ class RecentContextPromptBlock:
         content = ctx.memory.read_recent_context()
         if not content:
             return None
-        # Strip ## Recent Turns section — it mirrors the sliding window and causes overlap.
-        marker = "\n## Recent Turns"
-        cut = content.find(marker)
+        # The recent-turn section mirrors the sliding window and would duplicate it.
+        cuts = [
+            cut
+            for marker in ("\n## 最近的对话", "\n## Recent Turns")
+            if (cut := content.find(marker)) != -1
+        ]
+        cut = min(cuts) if cuts else -1
         trimmed = content[:cut].strip() if cut != -1 else content.strip()
         return trimmed if trimmed else None
 

@@ -7,6 +7,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Protocol, cast
 
+from core.memory.markdown_schema import (
+    ensure_memory_documents,
+    normalize_memory_document,
+    replace_memory_section,
+)
+
 from core.common.channel_identifiers import chat_ids_equal, normalize_chat_id
 from session.manager import Session, SessionManager
 
@@ -242,11 +248,7 @@ class RoleMemoryService:
 
     def ensure_initialized(self, role: RoleRecord) -> Path:
         root = self.memory_root(role.id)
-        root.mkdir(parents=True, exist_ok=True)
-        for filename in self._FILES:
-            path = root / filename
-            if not path.exists():
-                path.write_text("", encoding="utf-8")
+        ensure_memory_documents(root)
         return root
 
     def seed_role_memory(self, role: RoleRecord) -> dict[str, Any]:
@@ -262,7 +264,10 @@ class RoleMemoryService:
         if not self_text and self._self_seed_generator is not None:
             seeded_self = str(self._self_seed_generator.generate(role) or "").strip()
             if seeded_self:
-                self_path.write_text(seeded_self + "\n", encoding="utf-8")
+                self_path.write_text(
+                    normalize_memory_document("SELF.md", seeded_self),
+                    encoding="utf-8",
+                )
                 state["seed_self_ready"] = True
                 changed = True
 
@@ -281,7 +286,10 @@ class RoleMemoryService:
         if not self_text and self._self_seed_generator is not None:
             seeded_self = str(await self._generate_self_async(role) or "").strip()
             if seeded_self:
-                self_path.write_text(seeded_self + "\n", encoding="utf-8")
+                self_path.write_text(
+                    normalize_memory_document("SELF.md", seeded_self),
+                    encoding="utf-8",
+                )
                 state["seed_self_ready"] = True
                 changed = True
 
@@ -306,10 +314,10 @@ class RoleMemoryService:
                 self._append_once(
                     root / "HISTORY.md",
                     (
-                        "# 角色背景修订\n\n"
-                        f"来源: user_edited\n"
-                        f"旧版本: {previous_background}\n"
-                        f"新版本: {background}\n"
+                        f"- [{_now_iso()}] 我的角色背景完成修订。\n"
+                        f"  - 来源: user_edited\n"
+                        f"  - 旧版本: {previous_background}\n"
+                        f"  - 新版本: {background}\n"
                     ),
                 )
             state["seed_background_ready"] = True
@@ -360,7 +368,7 @@ class RoleMemoryService:
 
         state = dict(current_state or role.memory_init_state or {})
         root = self.ensure_initialized(role)
-        path = root / "MEMORY.md"
+        path = root / "SELF.md"
         current_value = str(state.get("relationship_baseline_value") or "").strip()
         current_source = str(state.get("relationship_baseline_source") or "").strip()
         normalized_source = "seed" if clean_source.startswith("seed") else clean_source
@@ -369,10 +377,10 @@ class RoleMemoryService:
             self._append_once(
                 root / "HISTORY.md",
                 (
-                    "# 关系记忆演化建议\n\n"
-                    f"来源: {clean_source}\n"
-                    f"保留当前人工基线: {current_value}\n"
-                    f"系统建议: {clean_content}\n"
+                    f"- [{_now_iso()}] 我们的关系出现新的演化建议。\n"
+                    f"  - 来源: {clean_source}\n"
+                    f"  - 保留当前人工基线: {current_value}\n"
+                    f"  - 系统建议: {clean_content}\n"
                 ),
             )
             state["relationship_revision_count"] = (
@@ -387,11 +395,11 @@ class RoleMemoryService:
             self._append_once(
                 root / "HISTORY.md",
                 (
-                    "# 关系基线修订\n\n"
-                    f"来源: {clean_source}\n"
-                    f"旧版本来源: {current_source or 'unknown'}\n"
-                    f"旧版本内容: {current_value}\n"
-                    f"新版本内容: {clean_content}\n"
+                    f"- [{_now_iso()}] 我们的关系基线完成修订。\n"
+                    f"  - 来源: {clean_source}\n"
+                    f"  - 旧版本来源: {current_source or 'unknown'}\n"
+                    f"  - 旧版本内容: {current_value}\n"
+                    f"  - 新版本内容: {clean_content}\n"
                 ),
             )
             if normalized_source != "seed":
@@ -417,7 +425,7 @@ class RoleMemoryService:
             )
 
     def _write_stable_background(self, path: Path, background: str) -> None:
-        path.write_text(f"# 角色背景\n\n{background.strip()}\n", encoding="utf-8")
+        replace_memory_section(path, "## 我的性格与形象", background.strip())
 
     def _write_relationship_baseline(
         self,
@@ -425,9 +433,10 @@ class RoleMemoryService:
         content: str,
         source: str,
     ) -> None:
-        path.write_text(
-            ("# 关系基线\n\n" f"来源: {source}\n\n" f"{content.strip()}\n"),
-            encoding="utf-8",
+        replace_memory_section(
+            path,
+            "## 我们的关系",
+            f"来源: {source}\n\n{content.strip()}",
         )
 
     def _build_first_impression(self, role: RoleRecord) -> str:

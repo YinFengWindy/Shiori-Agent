@@ -52,7 +52,8 @@ def test_optimize_rewrites_memory_from_first_llm_call(tmp_path):
     optimizer._STEP_DELAY_SECONDS = 0
     asyncio.run(optimizer.optimize(role_id="mira"))
 
-    assert role_memory.read_long_term().strip() == "## 用户画像\n- 新版本"
+    assert role_memory.read_long_term().startswith("# 我的长期记忆")
+    assert "新版本" in role_memory.read_long_term()
 
 
 def test_optimize_uses_the_role_dialogue_model_snapshot(tmp_path):
@@ -126,7 +127,7 @@ def test_optimize_updates_self_using_pending_only(tmp_path):
     optimizer._STEP_DELAY_SECONDS = 0
     asyncio.run(optimizer.optimize(role_id="mira"))
 
-    assert role_memory.read_self().strip().startswith("# 角色自我认知")
+    assert role_memory.read_self().strip().startswith("# 我是谁")
     assert "新版理解" in role_memory.read_self()
 
     self_prompt = provider.chat.await_args_list[1].kwargs["messages"][1]["content"]

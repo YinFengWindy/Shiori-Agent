@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -49,6 +50,9 @@ class MemorizeTool(Tool):
         chat_id: str | None = None,
         **extra_kwargs: Any,
     ) -> str:
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for memorize")
         kind = memory_kind.strip()
         extra = dict(metadata or {})
         extra.update(extra_kwargs)
@@ -64,7 +68,7 @@ class MemorizeTool(Tool):
                 memory_domain=str(memory_domain or "").strip(),
                 source_ref=str(current_user_source_ref or "").strip(),
                 scope=MemoryScope(
-                    role_id=str(role_id or "").strip(),
+                    role_id=clean_role_id,
                     session_key=f"{channel}:{chat_id}" if channel and chat_id else "",
                     channel=channel or "",
                     chat_id=chat_id or "",
@@ -80,6 +84,12 @@ def _format_result(item_id: str, status: str, actual_kind: str, summary: str) ->
     value = (item_id or "").strip()
     write_status = (status or "new").strip()
     kind = (actual_kind or "").strip()
-    if kind:
-        return f"已记住（item_id={value}；kind={kind}；status={write_status}）：{summary}"
-    return f"已记住（item_id={value}；status={write_status}）：{summary}"
+    return json.dumps(
+        {
+            "item_id": value,
+            "memory_kind": kind,
+            "status": write_status,
+            "summary": summary,
+        },
+        ensure_ascii=False,
+    )

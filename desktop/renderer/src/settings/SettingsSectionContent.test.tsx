@@ -48,7 +48,6 @@ function createSettingsFormData(): SettingsFormData {
       ttsVolume: 2,
     },
     advanced: {
-      systemPrompt: "system prompt",
       maxTokens: 4000,
       maxIterations: 10,
       devMode: false,
@@ -74,7 +73,7 @@ describe("SettingsSectionContent", () => {
       { sectionId: "memory", subsectionId: "embedding", expected: "embed-model" },
       { sectionId: "integrations", subsectionId: "novelai", expected: "novel-token" },
       { sectionId: "voice", subsectionId: "provider", expected: "secret-id" },
-      { sectionId: "advanced", subsectionId: "general", expected: "system prompt" },
+      { sectionId: "advanced", subsectionId: "general", expected: "max_tokens" },
     ] as const;
 
     cases.forEach(({ sectionId, subsectionId, expected }) => {
