@@ -1,4 +1,4 @@
-﻿# AGENTS.md
+# AGENTS.md
 
 ## 任务完成要求
 
@@ -6,7 +6,7 @@
 
 ## 项目概览
 
-- Mira-Agent是一个以角色为基底进行角色扮演的Agent助手，以Akashic为Agent基座。
+- Shiori 是一个以角色为基底进行角色扮演的 Agent 助手，以 Akashic 为 Agent 基座。
 
 ## 工作原则
 
