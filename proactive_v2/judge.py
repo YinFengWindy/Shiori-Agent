@@ -43,10 +43,18 @@ def _build_post_judge_prompt_messages(
 - relevance：是否匹配对方当前关注内容
 - expected_impact：收到后是否有实际价值
 
+评分标尺（请严格使用）：
+- 1：明显不成立/几乎没有价值
+- 2：偏弱，价值不足
+- 3：一般，价值不确定
+- 4：较强，明显有价值
+- 5：很强，强价值且很贴合
+
 硬规则：
 - 违反明确禁推规则时，relevance 和 expected_impact 必须为 1
 - 新资讯本身不能抵消禁推规则
 - 主要内容超过一半符合明确偏好时，不因次要内容降低分数
+- 对于 CS2/电竞相关消息：如果提到的队伍或选手在对方关注范围内（如 HLTV Top 15 队伍），即使顺带提及其他队伍，也应正常打分
 
 只输出 JSON：{{"information_gap": int, "relevance": int, "expected_impact": int}}"""
     return system_msg, user_msg

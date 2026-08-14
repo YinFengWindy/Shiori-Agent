@@ -15,10 +15,10 @@ def test_new_role_documents_use_canonical_schema(tmp_path: Path) -> None:
         assert (tmp_path / filename).read_text(encoding="utf-8") == default
 
 
-def test_legacy_role_documents_migrate_without_conflicting_headings(tmp_path: Path) -> None:
-    (tmp_path / "SELF.md").write_text(
-        "# 角色背景\n\n沉稳、克制。\n", encoding="utf-8"
-    )
+def test_legacy_role_documents_migrate_without_conflicting_headings(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "SELF.md").write_text("# 角色背景\n\n沉稳、克制。\n", encoding="utf-8")
     (tmp_path / "MEMORY.md").write_text(
         "# 关系基线\n\n来源: user_edited\n\n我们正在逐步建立信任。\n",
         encoding="utf-8",
@@ -60,3 +60,21 @@ def test_legacy_recent_context_and_pending_are_read_compatibly() -> None:
     assert "## 最近的对话" in recent
     pending = "# 待整理的记忆\n- [preference] 保持简洁\n"
     assert pending_body(pending) == "- [preference] 保持简洁"
+
+
+def test_legacy_prose_migrates_to_role_relative_perspective() -> None:
+    migrated = normalize_memory_document(
+        "MEMORY.md",
+        (
+            "# 用户长期记忆\n\n"
+            "## 用户事实\n"
+            "- 用户购买了咖啡，用户觉得味道不错。\n"
+            "- 助手建议下次尝试拿铁。\n"
+            "[assistant] 机器标记中的助手原文保持不变\n"
+        ),
+    )
+
+    assert "你购买了咖啡，你觉得味道不错。" in migrated
+    assert "我建议下次尝试拿铁。" in migrated
+    assert "[assistant] 机器标记中的助手原文保持不变" in migrated
+    assert "用户购买了" not in migrated

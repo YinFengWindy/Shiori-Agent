@@ -24,7 +24,9 @@ related:
 
 ## 典型数据流
 
-回合前根据角色、会话和当前输入构建 `MemoryQuery`，召回结果经过过滤、重排或注入规划进入上下文。回合后由后台 worker 判断是否写入、合并或 supersede 旧记忆。显式的 `memorize`、`forget_memory`、`recall_memory` 工具复用同一记忆契约。
+回合前根据角色、会话和当前输入构建 `MemoryQuery`，召回结果经过过滤、重排或注入规划进入上下文。回合后由后台 worker 判断是否写入、合并或 supersede 旧记忆。post-response 与 consolidation 两条隐式长期记忆提取链路共用当前角色的 active `profile / preference / procedure` 作为去重上下文；每轮提取受 worker token 预算约束。显式的 `memorize`、`forget_memory`、`recall_memory` 工具复用同一记忆契约。
+
+`memorize` 返回结构化 JSON；post-response worker 优先解析该结构获取本轮受保护的 `item_id`，同时保留旧文本结果的读取兼容。角色删除通过 `MemoryStore2.invalidate_role_memories()` 失效该角色的结构化记忆，不影响其他角色。
 
 ## 修改影响
 
@@ -38,3 +40,4 @@ related:
 - 角色和会话的记忆域必须显式过滤，不能依赖提示词约束实现隔离。
 - 召回结果与持久化记录分离；派生分数不应破坏原始证据。
 - 后台整理失败必须留下可查询的明确原因。
+- post-response 处理失败必须向生命周期边界冒泡，不能静默跳过角色记忆错误。

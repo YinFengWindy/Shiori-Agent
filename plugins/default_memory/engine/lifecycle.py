@@ -225,7 +225,7 @@ class DefaultMemoryEngine(
             await asyncio.gather(*save_coros)
         implicit_result = await self._extract_implicit_long_term(
             conversation=event.conversation,
-            existing_profile="",
+            existing_profile=self._existing_long_term_memory(event.role_id),
         )
         if implicit_result:
             await self._save_implicit_long_term(
@@ -252,7 +252,7 @@ class DefaultMemoryEngine(
         conversation = f"USER: {user_msg}\nASSISTANT: {assistant_response}"
         result = await self._extract_implicit_long_term(
             conversation=conversation,
-            existing_profile="",
+            existing_profile=self._existing_long_term_memory(clean_role_id),
         )
         if result:
             await self._save_implicit_long_term(
@@ -262,6 +262,26 @@ class DefaultMemoryEngine(
                 scope_chat_id=chat_id,
                 role_id=clean_role_id,
             )
+
+    def _existing_long_term_memory(self, role_id: str) -> str:
+        """Builds a bounded role-local deduplication context for extraction."""
+
+        items, _ = self._require_v2_store().list_items_for_admin(
+            role_id=role_id,
+            status="active",
+            page=1,
+            page_size=100,
+            sort_by="updated_at",
+            sort_order="desc",
+        )
+        lines = [
+            f"- [{item['memory_type']}] {item['summary']}"
+            for item in items
+            if str(item.get("memory_type") or "")
+            in {"profile", "preference", "procedure"}
+            and str(item.get("summary") or "").strip()
+        ]
+        return "\n".join(lines)[:6000]
 
     async def _extract_implicit_long_term(
         self,

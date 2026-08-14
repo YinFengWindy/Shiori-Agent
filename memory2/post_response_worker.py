@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Awaitable, Callable
@@ -31,8 +32,7 @@ class PostResponseMemoryWorker:
     回复后异步执行：
     1. 检测并退休用户明确否定的旧行为（invalidation）。
 
-    隐式 procedure/preference/profile 提炼已移至 consolidation 窗口期，
-    与 event 提取并行、用主模型处理，不再在每轮 post-response 里跑。
+    2. 在预算允许时，从本轮直接对话提取隐式长期记忆。
     """
 
     SUPERSEDE_THRESHOLD = 0.82
@@ -40,6 +40,7 @@ class PostResponseMemoryWorker:
     TOKEN_BUDGET_PER_RUN = 1000
     TOKENS_EXTRACT_INVALIDATION = 96
     TOKENS_CHECK_INVALIDATE = 96
+    TOKENS_EXTRACT_IMPLICIT = 600
 
     def __init__(
         self,
@@ -111,8 +112,6 @@ class PostResponseMemoryWorker:
             )
 
             # 3. 处理"旧的有误/需要遗忘"的显式废弃信号，优先退休旧记忆。
-            # 隐式 procedure/preference/profile 提炼已移至 consolidation 窗口期，
-            # 与 event 提取并行、用主模型处理，不再在每轮 post-response 里跑。
             token_budget = await self._handle_invalidations(
                 user_msg,
                 source_ref,
@@ -122,14 +121,19 @@ class PostResponseMemoryWorker:
             )
 
             if self._implicit_memory_handler is not None:
-                await self._implicit_memory_handler(
-                    user_msg=user_msg,
-                    assistant_response=agent_response,
-                    source_ref=source_ref,
-                    channel=channel,
-                    chat_id=chat_id,
-                    role_id=role_id,
+                allowed, token_budget = self._consume_budget(
+                    token_budget,
+                    self.TOKENS_EXTRACT_IMPLICIT,
                 )
+                if allowed:
+                    await self._implicit_memory_handler(
+                        user_msg=user_msg,
+                        assistant_response=agent_response,
+                        source_ref=source_ref,
+                        channel=channel,
+                        chat_id=chat_id,
+                        role_id=role_id,
+                    )
 
             logger.debug(
                 "post_response_memorize done session=%s source_ref=%s remain_budget=%d",
@@ -138,7 +142,8 @@ class PostResponseMemoryWorker:
                 token_budget,
             )
         except Exception as e:
-            logger.warning(f"post_response_memorize run failed: {e}")
+            logger.warning("post_response_memorize run failed: %s", e)
+            raise
 
     @staticmethod
     def _consume_budget(remain: int, cost: int) -> tuple[bool, int]:
@@ -170,6 +175,7 @@ class PostResponseMemoryWorker:
             r"(?:new|reinforced|merged):([A-Za-z0-9_-]{1,128})"
         )
         _explicit_pattern = _re.compile(r"item_id=([A-Za-z0-9:_-]{1,128})")
+        _structured_item_id_pattern = _re.compile(r"[A-Za-z0-9:_-]{1,128}")
 
         summaries: list[str] = []
         protected_ids: set[str] = set()
@@ -187,7 +193,16 @@ class PostResponseMemoryWorker:
                     if summary:
                         summaries.append(summary)
                 # 3. 再从工具结果文本里解析真实写入的 DB id，避免后续误删本轮新记忆。
-                result = call.get("result") or ""
+                result = str(call.get("result") or "")
+                try:
+                    payload = json.loads(result)
+                except (TypeError, ValueError):
+                    payload = None
+                if isinstance(payload, dict):
+                    item_id = str(payload.get("item_id") or "").strip()
+                    if _structured_item_id_pattern.fullmatch(item_id):
+                        protected_ids.add(item_id)
+                        continue
                 m = _legacy_pattern.search(result)
                 if m:
                     protected_ids.add(m.group(1))

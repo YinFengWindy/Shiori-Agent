@@ -2,6 +2,8 @@ import asyncio
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
+import pytest
+
 from core.memory.events import MemoryWritten, TurnIngested
 from memory2.memorizer import Memorizer
 from memory2.post_response_worker import PostResponseMemoryWorker
@@ -46,10 +48,7 @@ class _StaticEmbedder:
         return list(self._mapping.get(text, [0.0, 0.0]))
 
 
-def test_post_worker_run_only_handles_invalidations_no_implicit_save():
-    """per-turn run() 只做 invalidation 处理，不再做隐式 procedure/preference/profile 提取。
-    隐式提取已移至 consolidation 窗口期（与 event 提取并行，用主模型处理）。
-    """
+def test_post_worker_without_implicit_handler_only_handles_invalidations():
     from unittest.mock import AsyncMock
 
     memorizer = _DummyMemorizer()
@@ -70,6 +69,7 @@ def test_post_worker_run_only_handles_invalidations_no_implicit_save():
             agent_response="好的",
             tool_chain=[],
             source_ref="test@post_response",
+            role_id="mira",
         )
     )
 
@@ -77,6 +77,91 @@ def test_post_worker_run_only_handles_invalidations_no_implicit_save():
     memorizer.save_item.assert_not_called()
     # 但 invalidation 检查仍然运行
     worker._handle_invalidations.assert_awaited_once()
+
+
+def test_post_worker_protects_item_id_from_structured_memorize_result():
+    worker = PostResponseMemoryWorker(
+        memorizer=cast(Any, _DummyMemorizer()),
+        retriever=cast(Any, _DummyRetriever([])),
+        light_provider=cast(Any, _DummyProvider()),
+        light_model="test",
+    )
+    worker._handle_invalidations = AsyncMock(return_value=worker.TOKEN_BUDGET_PER_RUN)
+
+    asyncio.run(
+        worker.run(
+            user_msg="记住我喜欢拿铁",
+            agent_response="好",
+            tool_chain=[
+                {
+                    "calls": [
+                        {
+                            "name": "memorize",
+                            "arguments": {"summary": "你喜欢拿铁"},
+                            "result": (
+                                '{"item_id":"memu_12345","memory_kind":"preference",'
+                                '"status":"new","summary":"你喜欢拿铁"}'
+                            ),
+                        }
+                    ]
+                }
+            ],
+            source_ref="test@post_response",
+            role_id="mira",
+        )
+    )
+
+    protected_ids = worker._handle_invalidations.await_args.args[2]
+    assert protected_ids == {"memu_12345"}
+
+
+def test_post_worker_skips_implicit_extraction_when_budget_is_exhausted():
+    implicit_handler = AsyncMock()
+    worker = PostResponseMemoryWorker(
+        memorizer=cast(Any, _DummyMemorizer()),
+        retriever=cast(Any, _DummyRetriever([])),
+        light_provider=cast(Any, _DummyProvider()),
+        light_model="test",
+        implicit_memory_handler=implicit_handler,
+    )
+    worker._handle_invalidations = AsyncMock(
+        return_value=worker.TOKENS_EXTRACT_IMPLICIT - 1
+    )
+
+    asyncio.run(
+        worker.run(
+            user_msg="我喜欢拿铁",
+            agent_response="记住了",
+            tool_chain=[],
+            source_ref="test@post_response",
+            role_id="mira",
+        )
+    )
+
+    implicit_handler.assert_not_awaited()
+
+
+def test_post_worker_propagates_implicit_extraction_failure():
+    implicit_handler = AsyncMock(side_effect=RuntimeError("extract failed"))
+    worker = PostResponseMemoryWorker(
+        memorizer=cast(Any, _DummyMemorizer()),
+        retriever=cast(Any, _DummyRetriever([])),
+        light_provider=cast(Any, _DummyProvider()),
+        light_model="test",
+        implicit_memory_handler=implicit_handler,
+    )
+    worker._handle_invalidations = AsyncMock(return_value=worker.TOKEN_BUDGET_PER_RUN)
+
+    with pytest.raises(RuntimeError, match="extract failed"):
+        asyncio.run(
+            worker.run(
+                user_msg="我喜欢拿铁",
+                agent_response="记住了",
+                tool_chain=[],
+                source_ref="test@post_response",
+                role_id="mira",
+            )
+        )
 
 
 def test_post_worker_handle_delegates_turn_ingested_event():

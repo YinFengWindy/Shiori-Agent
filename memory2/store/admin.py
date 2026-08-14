@@ -13,6 +13,25 @@ from .common import (
 
 
 class _StoreAdminMixin:
+    def invalidate_role_memories(self, role_id: str) -> int:
+        """Supersedes all active structured memories owned by one role."""
+
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for memory invalidation")
+        with self._lock:
+            cursor = self._db.execute(
+                """
+                UPDATE memory_items
+                SET status='superseded', updated_at=?
+                WHERE status!='superseded'
+                  AND json_extract(extra_json, '$.role_id')=?
+                """,
+                (_now_iso(), clean_role_id),
+            )
+            self._db.commit()
+        return int(cursor.rowcount or 0)
+
     def list_items_for_admin(
         self,
         *,
@@ -31,14 +50,19 @@ class _StoreAdminMixin:
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         with self._lock:
-            safe_sort_by = sort_by if sort_by in {
-                "updated_at",
-                "created_at",
-                "happened_at",
-                "reinforcement",
-                "emotional_weight",
-                "memory_type",
-            } else "created_at"
+            safe_sort_by = (
+                sort_by
+                if sort_by
+                in {
+                    "updated_at",
+                    "created_at",
+                    "happened_at",
+                    "reinforcement",
+                    "emotional_weight",
+                    "memory_type",
+                }
+                else "created_at"
+            )
             safe_sort_order = "asc" if sort_order == "asc" else "desc"
             safe_page = max(1, page)
             safe_page_size = max(1, min(page_size, 200))
@@ -48,7 +72,9 @@ class _StoreAdminMixin:
             params: list[object] = []
 
             if q:
-                where_parts.append("(id LIKE ? OR summary LIKE ? OR COALESCE(source_ref, '') LIKE ?)")
+                where_parts.append(
+                    "(id LIKE ? OR summary LIKE ? OR COALESCE(source_ref, '') LIKE ?)"
+                )
                 like = f"%{q}%"
                 params.extend([like, like, like])
             if memory_type:
@@ -120,9 +146,9 @@ class _StoreAdminMixin:
                 items.append(
                     {
                         "id": str(row_id),
-                    "memory_type": row_memory_type,
-                    "memory_domain": str(extra.get("memory_domain", "") or ""),
-                    "summary": summary,
+                        "memory_type": row_memory_type,
+                        "memory_domain": str(extra.get("memory_domain", "") or ""),
+                        "summary": summary,
                         "source_ref": row_source_ref,
                         "happened_at": happened_at,
                         "status": row_status,

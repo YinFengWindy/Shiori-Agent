@@ -48,6 +48,7 @@ def _make_default_engine(
     tagger=None,
     post_response_worker=None,
     event_publisher=None,
+    v2_store=None,
 ):
     engine = DefaultMemoryEngine.__new__(DefaultMemoryEngine)
     engine._config = config or SimpleNamespace(model="lm")
@@ -55,7 +56,7 @@ def _make_default_engine(
     engine._provider = provider
     engine._light_provider = None
     engine._light_model = ""
-    engine._v2_store = None
+    engine._v2_store = v2_store
     engine._embedder = None
     engine._memorizer = memorizer
     engine._retriever = retriever
@@ -472,7 +473,9 @@ def test_markdown_maintenance_respects_skip_post_memory_event_flag():
 
 
 @pytest.mark.asyncio
-async def test_markdown_maintenance_records_background_consolidation_failure(tmp_path: Path):
+async def test_markdown_maintenance_records_background_consolidation_failure(
+    tmp_path: Path,
+):
     session = SimpleNamespace(
         key="role:mira",
         metadata={"role_id": "mira"},
@@ -1381,6 +1384,7 @@ async def test_default_memory_engine_consumes_markdown_consolidation_event():
     engine = _make_default_engine(
         provider=cast(Any, provider),
         memorizer=cast(Any, memorizer),
+        v2_store=SimpleNamespace(list_items_for_admin=lambda **_kwargs: ([], 0)),
     )
 
     await engine._on_consolidation_committed(
@@ -1413,6 +1417,7 @@ async def test_default_memory_engine_consolidation_role_scope_persists_role_id()
     engine = _make_default_engine(
         provider=cast(Any, provider),
         memorizer=cast(Any, memorizer),
+        v2_store=SimpleNamespace(list_items_for_admin=lambda **_kwargs: ([], 0)),
     )
 
     await engine._on_consolidation_committed(
@@ -1444,6 +1449,7 @@ async def test_default_memory_engine_reports_implicit_extraction_failure():
     engine = _make_default_engine(
         provider=cast(Any, provider),
         memorizer=cast(Any, memorizer),
+        v2_store=SimpleNamespace(list_items_for_admin=lambda **_kwargs: ([], 0)),
     )
 
     with pytest.raises(RuntimeError, match="long_term extraction failed"):

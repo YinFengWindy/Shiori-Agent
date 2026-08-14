@@ -240,7 +240,4 @@ def _role_relative_line(line: str) -> str:
     stripped = line.lstrip()
     if stripped.startswith(_MACHINE_LINE_PREFIXES) or stripped.startswith("#"):
         return line
-    line = line.replace("当前用户", "你")
-    line = re.sub(r"(?<![\w])用户(?=[的向与在是曾会希明偏喜需]|$)", "你", line)
-    line = re.sub(r"(?<![\w])助手(?=[的向与在是曾会希明]|$)", "我", line)
-    return line
+    return line.replace("当前用户", "你").replace("用户", "你").replace("助手", "我")

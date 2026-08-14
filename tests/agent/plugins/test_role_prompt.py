@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from agent.plugins.role_prompt import (
     build_role_cache_prefix_section,
     build_role_system_section,
@@ -22,7 +24,9 @@ def _create_role_workspace(tmp_path):
     return {"role_id": role.id}
 
 
-def test_role_system_section_contains_only_role_prompt_and_mood_contract(tmp_path) -> None:
+def test_role_system_section_contains_only_role_prompt_and_mood_contract(
+    tmp_path,
+) -> None:
     metadata = _create_role_workspace(tmp_path)
 
     section = build_role_system_section(
@@ -52,3 +56,11 @@ def test_role_cache_prefix_does_not_duplicate_memory_sections(tmp_path) -> None:
     assert "角色关系记忆" not in section.content
     assert "role_self_memory" not in section.content
     assert "role_relationship_baseline" not in section.content
+
+
+def test_role_system_section_rejects_missing_role_context(tmp_path) -> None:
+    with pytest.raises(ValueError, match="role_id required"):
+        build_role_system_section(
+            workspace=tmp_path,
+            session_metadata=None,
+        )

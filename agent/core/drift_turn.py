@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 # ── Pipeline 依赖容器 ─────────────────────────────────────────────────────
 
+
 @dataclass
 class DriftTurnPipelineDeps:
     store: DriftStateStore
@@ -74,6 +75,7 @@ class DriftTurnPipelineDeps:
 # │     └─ 4. Finish ── _finish
 # │        └─ 记录退出状态日志
 # └─ done
+
 
 class DriftTurnPipeline:
 
@@ -122,7 +124,8 @@ class DriftTurnPipeline:
         shared = self._tool_deps.shared_tools
         connected_servers = shared.get_mcp_server_names() if shared else set()
         skills = [
-            s for s in skills
+            s
+            for s in skills
             if not s.requires_mcp or set(s.requires_mcp) <= connected_servers
         ]
         if not skills:
@@ -199,8 +202,7 @@ class DriftTurnPipeline:
             if ctx.drift_message_sent:
                 allowed_after_send = {"write_file", "edit_file", "finish_drift"}
                 schemas = [
-                    s for s in schemas
-                    if s["function"]["name"] in allowed_after_send
+                    s for s in schemas if s["function"]["name"] in allowed_after_send
                 ]
                 logger.info(
                     "[drift] message_push already used, "
@@ -210,7 +212,9 @@ class DriftTurnPipeline:
             # 3.3 调 LLM 拿工具调用。
             if "disable_thinking" in inspect.signature(llm_fn).parameters:
                 tool_call = await cast(Any, llm_fn)(
-                    messages, schemas, tool_choice,
+                    messages,
+                    schemas,
+                    tool_choice,
                     disable_thinking=True,
                 )
             else:
@@ -253,7 +257,9 @@ class DriftTurnPipeline:
 
             # 3.6 错误处理。
             if result.status == "error":
-                logger.warning("[drift] tool executor error at step=%d: %s", steps, result.output)
+                logger.warning(
+                    "[drift] tool executor error at step=%d: %s", steps, result.output
+                )
                 if self.step_recorder is not None:
                     self.step_recorder(
                         ctx,
@@ -325,24 +331,9 @@ class DriftTurnPipeline:
                     role_id = session_key.split(":", 1)[1]
             if callable(bind_session_metadata):
                 bind_session_metadata({"role_id": role_id} if role_id else None)
-            try:
-                value = str(memory.read_self() or "").strip()
-                if value:
-                    self_text = value
-            except Exception:
-                self_text = ""
-            try:
-                raw = str(memory.read_long_term() or "").strip()
-                if raw:
-                    memory_text = raw
-            except Exception:
-                memory_text = ""
-            try:
-                rc = str(memory.read_recent_context() or "").strip()
-                if rc:
-                    recent_context_text = rc
-            except Exception:
-                pass
+            self_text = str(memory.read_self() or "").strip()
+            memory_text = str(memory.read_long_term() or "").strip()
+            recent_context_text = str(memory.read_recent_context() or "").strip()
 
         lines = []
         for skill in skills[:8]:
@@ -382,9 +373,8 @@ class DriftTurnPipeline:
                 tool_count = len(shared.get_tool_names_by_source("mcp", srv))
                 mcp_lines.append(f"- {srv}（{tool_count} 个工具）")
             mcp_block = (
-                "【可挂载的外部能力】\n"
-                + "\n".join(mcp_lines) + "\n"
-                "使用 mount_server(server=\"名称\") 挂载后即可调用其中的工具。"
+                "【可挂载的外部能力】\n" + "\n".join(mcp_lines) + "\n"
+                '使用 mount_server(server="名称") 挂载后即可调用其中的工具。'
             )
 
         sections = [
@@ -502,4 +492,6 @@ class DriftTurnPipeline:
                 ],
             }
         )
-        messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": result})
+        messages.append(
+            {"role": "tool", "tool_call_id": tool_call_id, "content": result}
+        )
