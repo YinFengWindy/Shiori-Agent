@@ -313,6 +313,8 @@ GET /api.php
 
 这些限制可能随站点策略变化。集成时应做 capability probe，并在缓存中记录探测日期，不能把本次结果硬编码为永久事实。
 
+兼容性提醒：任何工具若通过 `prop=revisions&rvprop=content&rvslots=main` 实现 `--wikitext`，在萌百当前匿名 API 下都会失败。Character Skill Producer 一类依赖原始 wikitext 的抓取脚本不能直接复用，需要切换到开放的 extracts 路径，或把官方/用户提供文本作为主要输入；不能用页面 HTML 抓取去绕过站点的 API 与机器人策略。
+
 ## 时间线和角色行为能否可靠抽取
 
 ### 能辅助抽取，但不能单源可靠定稿
@@ -364,7 +366,7 @@ GET /api.php
 
 推荐流程：
 
-1. 用 `opensearch` 找候选页。
+1. 用 `generator=prefixsearch` 或 `opensearch` 找候选页。
 2. 用导语、分类和作品链接确认角色身份。
 3. 从完整 extract 的标题和有限片段生成候选剧情节点。
 4. 用官方角色页、官方剧情简介或用户提供的原作文本交叉验证关键节点。
@@ -448,7 +450,7 @@ search=yes, ai-train=no, use=reference
 
 可以做：
 
-1. 用户说角色名后调用 `opensearch`，展示候选标题和作品。
+1. 用户说角色名后调用 `generator=prefixsearch` 或 `opensearch`，展示候选标题和作品。
 2. 取得 `info + exintro + pageprops + pageimages` 做身份确认和有限预览。
 3. 取得分类、链接和完整 extract 的标题，生成少量“待确认的特征/关系/剧情节点”。
 4. 明示来源是萌娘百科摘要，并提供原页链接。
