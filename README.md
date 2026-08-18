@@ -1,3 +1,5 @@
+
+
 # Shiori
 
 Shiori 是一个以角色为核心的本地 Agent 应用，当前以 **Windows 桌面端 + Python Agent Runtime** 为主要形态。
@@ -186,7 +188,7 @@ pytest tests/                            # Python 测试
 npm test                                # 桌面端单元测试
 npm run lint                            # ESLint
 npm run typecheck                       # TypeScript 类型检查
-npm run desktop:smoke                   # 桌面主链 smoke
+npm run desktop:build                   # 桌面端构建
 ```
 
 默认只需运行与当前改动范围直接相关的测试；改动影响多个边界时，再补充更大范围回归。
