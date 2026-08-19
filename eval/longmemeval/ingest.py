@@ -4,34 +4,35 @@ from __future__ import annotations
 
 import logging
 import json
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
+
+from core.memory.engine import MemoryIngestRequest, MemoryScope
 
 from .dataset import LMEInstance
 from .runtime import BenchmarkRuntime
 
 logger = logging.getLogger(__name__)
-_FINALIZE_CHUNK_SIZE = 80
 
 
-def _last_dialogue_pair(turns) -> tuple[str, str]:
-    last_user = ""
-    last_assistant = ""
+@dataclass(frozen=True)
+class IngestFailure:
+    """A recoverable per-pair memory-ingest failure in a benchmark run."""
 
-    for turn in reversed(turns):
-        role = str(getattr(turn, "role", "") or "")
-        content = str(getattr(turn, "content", "") or "").strip()
-        if not content:
-            continue
-        if not last_assistant and role == "assistant":
-            last_assistant = content
-            continue
-        if role == "user":
-            last_user = content
-            break
+    pair_index: int
+    source_ref: str
+    error: str
 
-    return last_user, last_assistant
+
+@dataclass(frozen=True)
+class IngestTurnResult:
+    """Outcome of replaying one LongMemEval dialogue session."""
+
+    accepted_pairs: int = 0
+    rejected_pairs: int = 0
+    failures: tuple[IngestFailure, ...] = ()
 
 
 def _parse_date(raw: str) -> str:
@@ -69,6 +70,9 @@ def _write_ingest_state(
     completed: bool,
     expected_turns: int,
     ingested_turns: int,
+    accepted_pairs: int,
+    rejected_pairs: int,
+    failures: list[IngestFailure],
 ) -> None:
     _ingest_state_path(rt, question_id).write_text(
         json.dumps(
@@ -77,6 +81,10 @@ def _write_ingest_state(
                 "completed": completed,
                 "expected_turns": expected_turns,
                 "ingested_turns": ingested_turns,
+                "accepted_pairs": accepted_pairs,
+                "rejected_pairs": rejected_pairs,
+                "failed_pairs": len(failures),
+                "failures": [asdict(failure) for failure in failures],
             },
             ensure_ascii=False,
             indent=2,
@@ -90,21 +98,80 @@ def _is_ingested(rt: BenchmarkRuntime, question_id: str) -> bool:
     return bool(state and state.get("completed") is True)
 
 
-async def _finalize_tail_chunks(rt: BenchmarkRuntime, session) -> None:
-    remaining = session.messages[session.last_consolidated :]
-    if not remaining:
-        return
+async def _ingest_turns(
+    rt: BenchmarkRuntime,
+    session_key: str,
+    session_index: int,
+    turns,
+) -> IngestTurnResult:
+    """Write conversation turns into the memory engine (pair-wise ingest).
 
-    session_cls = session.__class__
-    for start in range(0, len(remaining), _FINALIZE_CHUNK_SIZE):
-        chunk = remaining[start : start + _FINALIZE_CHUNK_SIZE]
-        temp_session = session_cls(key=session.key)
-        temp_session.messages = list(chunk)
-        temp_session.last_consolidated = 0
-        for attr in ("_channel", "_chat_id"):
-            if hasattr(session, attr):
-                setattr(temp_session, attr, getattr(session, attr))
-        await rt.consolidation.consolidate(temp_session, archive_all=True)
+    The default_memory engine consumes one (user, assistant) pair per
+    ingest call via its post_response_worker; LongMemEval history is a
+    flat dialogue, so we chunk it into pairs and ingest each one.
+    """
+    engine = rt.core.memory_runtime.engine
+    scope = MemoryScope(
+        role_id="benchmark",
+        session_key=session_key,
+        channel="benchmark",
+    )
+
+    pairs: list[list[dict]] = []
+    for turn in turns:
+        if isinstance(turn, dict):
+            role = str(turn.get("role", "") or "")
+            content = str(turn.get("content", "") or "")
+        else:
+            role = str(getattr(turn, "role", "") or "")
+            content = str(getattr(turn, "content", "") or "")
+        if role == "user" and content:
+            pairs.append([{"role": "user", "content": content}])
+        elif role == "assistant" and content and pairs:
+            pairs[-1].append({"role": "assistant", "content": content})
+
+    accepted_pairs = 0
+    rejected_pairs = 0
+    failures: list[IngestFailure] = []
+    for i, pair in enumerate(pairs):
+        source_ref = f"{session_key}#ingest:{session_index}:{i}"
+        request = MemoryIngestRequest(
+            content=pair,
+            source_kind="conversation_turn",
+            scope=scope,
+            metadata={"source_ref": source_ref},
+        )
+        try:
+            result = await engine.ingest(request)
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            logger.warning(
+                "memory ingest failed: session=%s pair=%d source_ref=%s error=%s",
+                session_key,
+                i,
+                source_ref,
+                error,
+            )
+            failures.append(
+                IngestFailure(pair_index=i, source_ref=source_ref, error=error)
+            )
+            continue
+        if result.accepted:
+            accepted_pairs += 1
+        else:
+            rejected_pairs += 1
+            logger.warning(
+                "memory ingest rejected: session=%s pair=%d source_ref=%s summary=%s",
+                session_key,
+                i,
+                source_ref,
+                result.summary,
+            )
+    return IngestTurnResult(
+        accepted_pairs=accepted_pairs,
+        rejected_pairs=rejected_pairs,
+        failures=tuple(failures),
+    )
 
 
 async def ingest_instance(
@@ -137,6 +204,9 @@ async def ingest_instance(
         dates.append("")
 
     total_turns = 0
+    accepted_pairs = 0
+    rejected_pairs = 0
+    failures: list[IngestFailure] = []
     n = len(sessions)
     _write_ingest_state(
         rt,
@@ -144,6 +214,9 @@ async def ingest_instance(
         completed=False,
         expected_turns=expected_turns,
         ingested_turns=0,
+        accepted_pairs=0,
+        rejected_pairs=0,
+        failures=[],
     )
 
     for idx, (date, turns) in enumerate(zip(dates, sessions)):
@@ -161,43 +234,44 @@ async def ingest_instance(
         sm._cache.pop(session_key, None)
         session = sm.get_or_create(session_key)
 
-        await rt.consolidation.consolidate(session, archive_all=False)
+        ingest_result = await _ingest_turns(rt, session_key, idx, turns)
+        accepted_pairs += ingest_result.accepted_pairs
+        rejected_pairs += ingest_result.rejected_pairs
+        failures.extend(ingest_result.failures)
         sm.save(session)
 
-        worker = getattr(rt.core.memory_runtime, "post_response_worker", None)
-        if worker is not None:
-            user_msg, agent_response = _last_dialogue_pair(turns)
-            if user_msg:
-                await worker.run(
-                    user_msg,
-                    agent_response,
-                    [],
-                    source_ref=f"{session_key}#post:{idx}",
-                    session_key=session_key,
-                )
+        _write_ingest_state(
+            rt,
+            instance.question_id,
+            completed=False,
+            expected_turns=expected_turns,
+            ingested_turns=total_turns,
+            accepted_pairs=accepted_pairs,
+            rejected_pairs=rejected_pairs,
+            failures=failures,
+        )
 
         if on_progress:
             on_progress(idx + 1, n)
 
-    # Finalize the unarchived tail in bounded chunks so the benchmark
-    # does not lose late-session facts while still avoiding giant prompts.
-    sm._cache.pop(session_key, None)
-    session = sm.get_or_create(session_key)
-    await _finalize_tail_chunks(rt, session)
-    session.last_consolidated = len(session.messages)
-    sm.save(session)
     _write_ingest_state(
         rt,
         instance.question_id,
         completed=True,
         expected_turns=expected_turns,
         ingested_turns=total_turns,
+        accepted_pairs=accepted_pairs,
+        rejected_pairs=rejected_pairs,
+        failures=failures,
     )
 
     logger.info(
-        "ingest done: %s  sessions=%d  turns=%d",
+        "ingest done: %s sessions=%d turns=%d accepted_pairs=%d rejected_pairs=%d failed_pairs=%d",
         session_key,
         len(sessions),
         total_turns,
+        accepted_pairs,
+        rejected_pairs,
+        len(failures),
     )
     return total_turns

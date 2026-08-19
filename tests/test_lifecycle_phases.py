@@ -362,6 +362,40 @@ async def test_before_turn_setup_fills_turn_state():
 
 
 @pytest.mark.asyncio
+async def test_before_turn_binds_message_role_id_to_session_before_context_prepare():
+    bus = EventBus()
+    session = _DummySession("lme:e47becba:qa")
+    saved: list[_DummySession] = []
+    session_mgr = SimpleNamespace(
+        get_or_create=lambda key: session,
+        save=lambda value: saved.append(value),
+    )
+    ctx_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
+    phase = Phase(
+        default_before_turn_modules(
+            bus,
+            cast(SessionManager, session_mgr),
+            cast(ContextStore, ctx_store),
+        ),
+        frame_factory=BeforeTurnFrame,
+    )
+    msg = InboundMessage(
+        channel="benchmark",
+        sender="user",
+        chat_id="e47becba",
+        content="What degree did I graduate with?",
+        metadata={"role_id": "benchmark"},
+    )
+
+    await phase.run(
+        TurnState(msg=msg, session_key="lme:e47becba:qa", dispatch_outbound=False)
+    )
+
+    assert session.metadata["role_id"] == "benchmark"
+    assert saved == [session]
+
+
+@pytest.mark.asyncio
 async def test_before_turn_uses_cli_session_override_context():
     bus = EventBus()
     session = _DummySession("telegram:7674283004")

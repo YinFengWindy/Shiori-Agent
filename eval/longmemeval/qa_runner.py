@@ -117,6 +117,7 @@ async def run_qa_instance(
             chat_id=instance.question_id,
             content=instance.question + "\n\n[Respond in English only. One sentence or short phrase.]",
             timestamp=question_dt,
+            metadata={"role_id": "benchmark"},
         )
         outbound = await asyncio.wait_for(
             loop._process(msg, session_key=qa_key, dispatch_outbound=False),
