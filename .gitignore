@@ -60,6 +60,7 @@ plugins/**/.data/
 # Benchmark 运行产物
 benchmark/result*.json
 benchmark/data/
+/eval/longmemeval/workspace_smoke/
 /eval/local_testsets/
 qa_error_log_*.txt
 lme_error_log_*.txt
