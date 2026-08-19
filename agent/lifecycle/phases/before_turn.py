@@ -61,6 +61,22 @@ class _AcquireSessionModule:
     async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
         state = frame.input
         session = self._session_manager.get_or_create(state.session_key)
+        message_role_id = str((state.msg.metadata or {}).get("role_id") or "").strip()
+        session_metadata = getattr(session, "metadata", None)
+        if not isinstance(session_metadata, dict):
+            session_metadata = {}
+            session.metadata = session_metadata
+        session_role_id = str(session_metadata.get("role_id") or "").strip()
+        if message_role_id and session_role_id and message_role_id != session_role_id:
+            raise ValueError(
+                "session role scope mismatch: "
+                f"session={session_role_id!r} message={message_role_id!r}"
+            )
+        if message_role_id and not session_role_id:
+            session_metadata["role_id"] = message_role_id
+            save = getattr(self._session_manager, "save", None)
+            if callable(save):
+                save(session)
         state.session = session
         frame.slots[_SESSION_SLOT] = session
         return frame
