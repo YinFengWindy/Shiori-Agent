@@ -2,13 +2,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { BridgeEvent, BridgeRequest, BridgeResponse } from "./shared.js";
-
-const here = dirname(fileURLToPath(import.meta.url));
-const desktopRoot = resolve(here, "..");
-const repoRoot = resolve(desktopRoot, "..");
+import type { DesktopBridgeCommand } from "./runtimePaths.js";
 const HEALTH_REQUEST_TIMEOUT_MS = 5_000;
 const BRIDGE_START_TIMEOUT_MS = 60_000;
 const BRIDGE_START_RETRY_DELAY_MS = 250;
@@ -43,6 +38,10 @@ export class DesktopBridgeClient extends EventEmitter {
   private session: BridgeProcessSession | null = null;
   private lastError: string | null = null;
 
+  constructor(private readonly command: DesktopBridgeCommand) {
+    super();
+  }
+
   private cleanupStaleBridgeProcesses(): void {
     if (process.platform !== "win32") {
       return;
@@ -52,7 +51,7 @@ export class DesktopBridgeClient extends EventEmitter {
       [
         "-NoProfile",
         "-Command",
-        `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.ParentProcessId -eq ${process.pid} -and $_.CommandLine -like '*main.py bridge*' } | Select-Object -ExpandProperty ProcessId`,
+        `Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${process.pid} -and $_.CommandLine -like '*${this.command.args[0]}*bridge*' } | Select-Object -ExpandProperty ProcessId`,
       ],
       { encoding: "utf-8" },
     );
@@ -271,12 +270,11 @@ export class DesktopBridgeClient extends EventEmitter {
     }
     this.cleanupStaleBridgeProcesses();
     this.lastError = null;
-    const pythonExe = resolve(repoRoot, ".venv", "Scripts", "python.exe");
-    if (!existsSync(pythonExe)) {
-      throw new Error(`Python bridge runtime not found: ${pythonExe}`);
+    if (!existsSync(this.command.executable)) {
+      throw new Error(`Python bridge runtime not found: ${this.command.executable}`);
     }
-    const child = spawn(pythonExe, ["main.py", "bridge"], {
-      cwd: repoRoot,
+    const child = spawn(this.command.executable, this.command.args, {
+      cwd: this.command.cwd,
       stdio: ["pipe", "pipe", "pipe"],
     });
     const session = this.createSession(child);

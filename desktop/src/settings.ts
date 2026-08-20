@@ -20,7 +20,12 @@ type BridgeHealthChecker = () => Promise<{
   message: string;
 }>;
 
-const configPath = resolve(import.meta.dirname, "..", "..", "config.toml");
+let configPath = resolve(import.meta.dirname, "..", "..", "config.toml");
+
+/** Sets the user-writable configuration path before settings or the bridge are initialized. */
+export function configureSettingsConfigPath(path: string): void {
+  configPath = resolve(path);
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
