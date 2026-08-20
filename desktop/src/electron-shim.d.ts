@@ -87,10 +87,12 @@ declare module "electron" {
   };
 
   export const app: {
+    readonly isPackaged: boolean;
     whenReady(): Promise<void>;
     on(event: string, handler: (...args: unknown[]) => void): void;
     setPath(name: string, path: string): void;
     getPath(name: string): string;
+    getAppPath(): string;
     requestSingleInstanceLock(): boolean;
     quit(): void;
     exit(code?: number): void;
@@ -186,4 +188,12 @@ declare module "electron" {
   export const nativeImage: {
     createFromDataURL(dataURL: string): NativeImage;
   };
+}
+
+declare global {
+  namespace NodeJS {
+    interface Process {
+      resourcesPath?: string;
+    }
+  }
 }
