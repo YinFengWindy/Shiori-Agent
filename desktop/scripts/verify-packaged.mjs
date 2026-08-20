@@ -2,6 +2,7 @@ import { access, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveReleaseOutputDirectory } from "./release-paths.mjs";
 
 async function requireFile(path) {
   await access(path, constants.R_OK);
@@ -39,6 +40,6 @@ if (invokedDirectly) {
   const here = dirname(fileURLToPath(import.meta.url));
   const appOutDir = process.argv[2]
     ? resolve(process.argv[2])
-    : resolve(here, "..", "release", "installer", "win-unpacked");
+    : resolve(resolveReleaseOutputDirectory(), "win-unpacked");
   await verifyPackagedDesktop(appOutDir);
 }

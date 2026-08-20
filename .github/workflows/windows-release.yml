@@ -12,6 +12,8 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
+    env:
+      SHIORI_RELEASE_OUTPUT: desktop/release/installer
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
