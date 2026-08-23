@@ -86,7 +86,7 @@ class MyPlugin(Plugin):
 | AfterReasoning | `after_reasoning_modules()` | `after_reasoning.build_ctx`（emit 前改 reply）<br>`after_reasoning.emit`（emit 后清理）<br>`after_reasoning.persist_user`（持久化前写 slot） | 回复后处理 |
 | AfterTurn | `after_turn_modules()` | `after_turn.build_work`（commit 前写 extra）<br>`after_turn.fanout_committed`（fanout 前写 telemetry） | 收尾 |
 
-**完整的内置模块 slot 列表**可通过 `python main.py --inspect-modules` 打印 ASCII 依赖树查看。
+**完整的内置模块 slot 列表**可通过 `uv run python main.py --inspect-modules` 打印 ASCII 依赖树查看。
 
 ---
 
