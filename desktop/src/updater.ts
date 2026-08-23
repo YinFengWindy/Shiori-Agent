@@ -1,4 +1,4 @@
-import { autoUpdater } from "electron-updater";
+import * as electronUpdater from "electron-updater";
 
 /** Starts the packaged-only GitHub Releases update check without blocking desktop startup. */
 export function checkForDesktopUpdates(
@@ -8,7 +8,7 @@ export function checkForDesktopUpdates(
   if (!packaged) {
     return;
   }
-  autoUpdater.autoDownload = true;
-  autoUpdater.on("error", onError);
-  void autoUpdater.checkForUpdatesAndNotify().catch(onError);
+  electronUpdater.autoUpdater.autoDownload = true;
+  electronUpdater.autoUpdater.on("error", onError);
+  void electronUpdater.autoUpdater.checkForUpdatesAndNotify().catch(onError);
 }
