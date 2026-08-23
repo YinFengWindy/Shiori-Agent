@@ -2,7 +2,7 @@
 title: 桌面端与桥接
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 9cd8526e
+last_verified_commit: 9aea4b75
 source_paths:
   - desktop/src/
   - desktop/scripts/
