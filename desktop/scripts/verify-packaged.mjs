@@ -20,6 +20,7 @@ async function requireDirectory(path) {
   }
 }
 
+/** Verifies the files and native module directory required by a packaged desktop app. */
 export async function verifyPackagedDesktop(appOutDir) {
   const resources = join(appOutDir, "resources");
   await Promise.all([
@@ -31,6 +32,7 @@ export async function verifyPackagedDesktop(appOutDir) {
   ]);
 }
 
+/** Electron-builder hook that fails packaging when the unpacked layout is incomplete. */
 export default async function afterPack(context) {
   await verifyPackagedDesktop(context.appOutDir);
 }

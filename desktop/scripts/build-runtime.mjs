@@ -9,8 +9,10 @@ const desktopRoot = resolve(here, "..");
 const repositoryRoot = resolve(desktopRoot, "..");
 const runtimeRoot = resolve(repositoryRoot, "release", "runtime");
 const workRoot = resolve(repositoryRoot, "release", "pyinstaller-work");
-const workspacePython = resolve(repositoryRoot, ".venv", "Scripts", "python.exe");
-const python = process.env.PYTHON ?? (existsSync(workspacePython) ? workspacePython : "python");
+const python = resolve(repositoryRoot, ".venv", "Scripts", "python.exe");
+if (!existsSync(python)) {
+  throw new Error(`Repository Python environment not found: ${python}`);
+}
 
 await rm(runtimeRoot, { recursive: true, force: true });
 await rm(workRoot, { recursive: true, force: true });

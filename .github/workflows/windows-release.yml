@@ -30,10 +30,20 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - name: Resolve release version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_NAME -match '^v(.+)$') {
+            "SHIORI_RELEASE_VERSION=$($Matches[1])" >> $env:GITHUB_ENV
+          } else {
+            "SHIORI_RELEASE_VERSION=" >> $env:GITHUB_ENV
+          }
+
       - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt -r requirements-dev.txt
+          python -m venv .venv
+          .venv\Scripts\python.exe -m pip install --upgrade pip
+          .venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Install desktop dependencies
         run: |
@@ -42,7 +52,7 @@ jobs:
 
       - name: Run focused release checks
         run: |
-          python -m pytest -q tests/test_main.py
+          .venv\Scripts\pytest.exe -q tests/test_main.py
           npm --prefix desktop run typecheck
           npm test
           npm --prefix desktop run test:package
@@ -52,6 +62,25 @@ jobs:
 
       - name: Verify packaged layout
         run: npm --prefix desktop run verify:package
+
+      - name: Generate release checksums
+        run: npm --prefix desktop run hash:release
+
+      - name: Verify release checksums
+        shell: pwsh
+        run: |
+          $checksumPath = "desktop/release/installer/SHA256SUMS.txt"
+          foreach ($line in Get-Content $checksumPath) {
+            if ($line -notmatch '^([0-9a-fA-F]{64})  (.+)$') {
+              throw "Invalid checksum line: $line"
+            }
+            $expected = $Matches[1].ToLowerInvariant()
+            $filePath = Join-Path (Split-Path $checksumPath) $Matches[2]
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $filePath).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) {
+              throw "Checksum mismatch for $filePath"
+            }
+          }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
