@@ -160,7 +160,9 @@ async def test_context_store_commit_persists_commits_and_dispatches():
     session_manager.append_messages.assert_awaited_once()
     assert session.messages[-1]["content"] == "整理好了"
     assert session.messages[-1]["reasoning_content"] == "思考"
-    assert session.messages[-1]["metadata"]["turn_metrics"] == {
+    metadata = session.messages[-1]["metadata"]
+    assert isinstance(metadata, dict)
+    assert metadata["turn_metrics"] == {
         "total_tokens": 2438,
         "thinking_duration_ms": 6200,
     }

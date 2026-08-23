@@ -9,6 +9,12 @@ import pytest
 from desktop_bridge.role_task_service import RoleTaskService
 
 
+def _schedule(task: dict[str, object]) -> dict[str, object]:
+    schedule = task["schedule"]
+    assert isinstance(schedule, dict)
+    return schedule
+
+
 class _Scheduler:
     def __init__(self, jobs, *, active_ids=()) -> None:
         self._jobs = list(jobs)
@@ -122,7 +128,7 @@ def test_role_task_service_lists_only_tasks_owned_by_role():
     }
     assert next(task for task in tasks if task["id"] == "schedule-a")["status"] == "running"
     assert next(task for task in tasks if task["id"] == "schedule-a")["editable"] is False
-    assert next(task for task in tasks if task["id"] == "schedule-a")["schedule"]["tier"] == "instant"
+    assert _schedule(next(task for task in tasks if task["id"] == "schedule-a"))["tier"] == "instant"
     assert next(task for task in tasks if task["kind"] == "memory_maintenance")["cancellable"] is False
 
 
@@ -159,8 +165,8 @@ def test_role_task_service_creates_and_updates_desktop_schedule_binding():
     assert scheduler.last_create["timezone_name"] == "Asia/Shanghai"
     assert scheduler.last_update["timezone_name"] == "Asia/Shanghai"
     assert scheduler.last_update["role_id"] == "mira"
-    assert created["schedule"]["content"] == "喝水"
-    assert updated["schedule"]["tier"] == "soft"
+    assert _schedule(created)["content"] == "喝水"
+    assert _schedule(updated)["tier"] == "soft"
 
 
 @pytest.mark.asyncio

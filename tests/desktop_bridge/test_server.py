@@ -5,8 +5,10 @@ import base64
 import io
 import json
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -94,8 +96,9 @@ async def test_serve_stdio_forces_utf8_for_all_bridge_streams(
         stream.reconfigure_calls == [{"encoding": "utf-8", "errors": "strict"}]
         for stream in streams.values()
     )
-    write_payload = captured["write_payload"]
-    assert callable(write_payload)
+    write_payload = cast(
+        Callable[[dict[str, object]], Awaitable[None]], captured["write_payload"]
+    )
     await write_payload({"message": "你好"})
     assert json.loads(streams["stdout"].buffer.getvalue().decode("utf-8")) == {
         "message": "你好"
