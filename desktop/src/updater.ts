@@ -1,4 +1,4 @@
-import * as electronUpdater from "electron-updater";
+import electronUpdater from "electron-updater";
 
 /** Starts the packaged-only GitHub Releases update check without blocking desktop startup. */
 export function checkForDesktopUpdates(
