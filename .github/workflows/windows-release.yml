@@ -12,8 +12,10 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
+    # npm --prefix desktop runs scripts with desktop/ as cwd, so this path
+    # resolves to desktop/release/installer in the repository root.
     env:
-      SHIORI_RELEASE_OUTPUT: desktop/release/installer
+      SHIORI_RELEASE_OUTPUT: release/installer
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
