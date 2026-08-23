@@ -299,9 +299,9 @@ def test_restricted_shell_blocks_windows_paths(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    import agent.tools.shell as shell_mod
+    import agent.tools.shell.validation as validation_mod
 
-    monkeypatch.setattr(shell_mod, "_IS_WINDOWS", True)
+    monkeypatch.setattr(validation_mod, "_IS_WINDOWS", True)
 
     outside_err = _validate_command(
         r'type "C:\Users\alice\secret.txt"',
