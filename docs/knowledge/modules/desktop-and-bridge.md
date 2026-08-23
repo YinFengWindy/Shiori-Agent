@@ -2,9 +2,11 @@
 title: 桌面端与桥接
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 30920f04
+last_verified_commit: 9aea4b75
 source_paths:
   - desktop/src/
+  - desktop/scripts/
+  - .github/workflows/windows-release.yml
   - desktop/renderer/src/
   - desktop_bridge/
   - story_simulation/
@@ -26,11 +28,13 @@ related:
 
 `DesktopAppFrame.tsx` 只应装配状态、依赖与视图。bridge lifecycle、会话切换、角色管理、聊天交互、图片状态、UI effect 和导航历史已经按 hook 边界分离，新增行为应进入对应 hook/service，而不是重新堆回入口组件。
 
+Windows packaged desktop uses an Electron-builder NSIS bundle with a PyInstaller onedir runtime under `resources/runtime`. The main process resolves packaged resources from `process.resourcesPath`, keeps the workspace and `config.toml` under `%USERPROFILE%\.shiori\workspace`, and starts the sidecar with explicit `bridge`, `--workspace`, and `--config` arguments. Release tags provide the application version and CI emits `SHA256SUMS.txt` alongside the installer; clean Windows installation, upgrade, uninstall, and feature smoke remain release-owner acceptance work.
+
 桌宠语音的 Electron 主进程控制、隐藏 renderer 采集/播放与 Python provider 协调边界见 [桌宠语音交互](voice.md)。通用 `ipc.ts` 不拥有语音业务，语音 IPC 统一注册在 `desktop/src/voice/ipc.ts`。
 
 ## 数据流
 
-renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatcher.py`，再由 `DesktopBridgeRequestRouter` 交给单一领域 handler；handler 调用 owning service，presenter 将结果转换为共享类型。后端事件沿反方向更新 renderer state。图片等本地资产通过专门的 registry/transport 暴露，不直接把任意文件路径交给视图。Story 生成的背景和 CG 资源使用资源模型的 `path` 字段进入授权集合，由 preload 缓存转换成 `shiori-asset://` URL 后再渲染；资源文件本身仍由 `LocalAssetRegistry` 和资产协议校验。
+renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatcher.py`，再由 `DesktopBridgeRequestRouter` 交给单一领域 handler；handler 调用 owning service，presenter 将结果转换为共享类型。后端事件沿反方向更新 renderer state。Electron 与 Python bridge 的 JSON-lines stdio 协议固定使用 UTF-8：`DesktopBridgeServer.serve_stdio()` 会在首次读写前重配置 stdin/stdout/stderr，避免 Windows 活动代码页（例如 CP936）在关闭全局 UTF-8 时破坏中文 payload。图片等本地资产通过专门的 registry/transport 暴露，不直接把任意文件路径交给视图。Story 生成的背景和 CG 资源使用资源模型的 `path` 字段进入授权集合，由 preload 缓存转换成 `shiori-asset://` URL 后再渲染；资源文件本身仍由 `LocalAssetRegistry` 和资产协议校验。
 
 Story 进入独立路由时才挂载 `StoryRoute`、`useStoryController` 和 `useStoryWorkspacePresentation`；首次读取故事列表的过程直接呈现主菜单加载页，不额外再发起一次主菜单加载。主菜单阶段只有“Read story list”和“Prepare menu”两项，进入已保存剧情时依次使用“Read story”“Restore progress”和“Prepare stage”，不把“Complete”当作额外阶段。加载页的标题、阶段、状态、进度和重试文案统一使用英文。每个真实阶段至少保持 900ms：当前阶段显示旋转箭头，阶段完成后才切到下一阶段并显示勾选；进入 `menu-ready` 或 `opening-ready` 后再短暂停留 420ms，把全部真实阶段显示为勾选，等待阶段保持静止。游戏页左上角时间信息右侧同步显示持久化的当前场景中文名。Director 每次提交同时产生持久化的 `current_scene`（稳定 `key`、中文 `name` 与实际在场 `character_ids`），每个 Story 视觉资源保存 `sceneKey`；舞台只接受属于当前场景的资源，场景切换后不会继续显示上一场景 CG。当前场景的 `character` CG 只显示 CG；当前场景的 `scene` CG 在正式角色属于该场景时叠加当前差分立绘；当前场景没有可用 CG 时使用纯黑舞台，不显示菜单默认背景或角色立绘。同一场景已有成功的角色 CG 后，后续自动角色视觉请求不再重复创建资源，继续显示当前角色 CG；只有新的 `scene` 视觉资源才会把舞台切回无角色场景 CG。载入剧情列表在标题下显示持久化的当前故事日期、时间段和中文场景名。Director 和 Story 读模型都会拒绝或兜底非中文场景名，界面不会显示内部英文 key。进入 Story 时会等待开场 `background` 资源完成；后续 Director 在重要视觉节点返回 `visual_prompt` 后异步创建 `cg` 资源，不阻塞已提交剧情。两类资源共用 Story 图片生成链路，完成后都进入 Story visual gallery；失败可单独重试且不影响已提交剧情。CG 重试和重新生成都会先把资源持久化为 `generating` 并广播状态，但保留该资源最近一次成功的 `path`，因此同一场景的当前 CG 会一直显示到新图完成；生成成功后再原地写入新路径，生成失败则保留旧图并持久化错误码。加载页不提供额外返回入口，错误状态只保留重试操作。阶段仍由真实 bridge 操作推进，而不是用展示层计时器伪造完成状态。
 
@@ -41,6 +45,8 @@ Story 进入独立路由时才挂载 `StoryRoute`、`useStoryController` 和 `us
 屏幕识别是每个角色默认拥有的 Agent 工具，由核心 runtime 注册，桌面端和 Telegram/QQ 等渠道共用同一能力。`desktop_bridge` 只负责桌面 IPC 的观察分析/记忆接口和环境状态；主屏捕获由 `infra/screen_capture.py` 提供，不读取桌宠绑定配置。Electron 的 `DesktopObservationController` 仍负责桌面端的定时观察、持久化开关和桌宠提示，但不决定 Agent 是否拥有 `observe_screen`。
 
 ## 修改影响
+
+- 修改 Windows 发版链路：同步检查 `desktop/scripts/`、`.github/workflows/windows-release.yml`、Electron runtime paths、sidecar 启动参数、版本元数据和 checksum 产物；不要把真实 Windows 安装/升级/卸载验收误认为布局校验。
 
 - 修改 bridge 请求：同步检查 dispatcher、request router、所属 request handler/service、presenter、Electron client 和 renderer 调用方；不要把领域分支重新加入 `DesktopBridgeService.handle()`。
 - 修改共享类型：检查 Python models/presenter、`desktop/src/shared.ts`、renderer `shared/types.ts`。

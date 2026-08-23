@@ -170,7 +170,7 @@ npm run build
 npm run start
 ```
 
-桌面端会自动启动 Python bridge。关闭主窗口后，应用会进入系统托盘；如果已配置外部渠道，角色仍可继续收发消息。
+桌面端会自动启动 Python bridge。开发模式下 bridge 固定使用项目 `.venv` 中的 Python，不依赖系统 PATH 里的 Python。关闭主窗口后，应用会进入系统托盘；如果已配置外部渠道，角色仍可继续收发消息。
 
 ## 开发者入口
 
@@ -182,7 +182,7 @@ uv run python main.py bridge             # 只启动桌面桥接层
 uv run python main.py --inspect-modules  # 检查模块装配
 uv run python main.py --help             # 查看命令行帮助
 
-pytest tests/                            # Python 测试
+uv run pytest tests/                     # Python 测试（使用项目 .venv）
 npm test                                # 桌面端单元测试
 npm run lint                            # ESLint
 npm run typecheck                       # TypeScript 类型检查

@@ -148,6 +148,11 @@ class DisabledMemoryEngine(MemoryEngine):
     def delete_items_batch(self, ids: list[str]) -> int:
         return 0
 
+    def invalidate_role_memories(self, role_id: str) -> int:
+        """Treat disabled memory invalidation as a successful no-op."""
+
+        return 0
+
     def find_similar_items_for_admin(
         self,
         item_id: str,

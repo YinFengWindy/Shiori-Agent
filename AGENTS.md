@@ -63,6 +63,9 @@
 - 文本文件统一使用 UTF-8 保存。
 - 通过脚本或命令写文件时显式指定编码，避免默认 ANSI 或 GBK 造成乱码。
 - 发现乱码先检查文件编码与终端解码设置，必要时重存为 UTF-8。
+- Python 命令、测试和质量工具必须使用仓库 `.venv`，禁止依赖 PATH 中的系统 Python：Windows 使用 `.venv\\Scripts\\python.exe`、`.venv\\Scripts\\pytest.exe`、`.venv\\Scripts\\ruff.exe` 等；跨平台文档和脚本统一使用 `uv run ...`。
+- 不要直接运行裸 `python`、`pytest`、`ruff` 或 `pyright` 来验证 Shiori；先确认 `python -c \"import sys; print(sys.executable)\"` 指向仓库 `.venv`，否则使用 `.venv` 的绝对/相对路径。
+- `npm run dev` 的 Python bridge 必须继续由 `desktop/src/bridgeClient.ts` 启动项目 `.venv` 中的解释器，不得改成依赖系统 PATH 的 `python`。
 
 ## 仓库特定约束
 

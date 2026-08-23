@@ -1,10 +1,10 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import { copyFile, mkdir, stat } from "node:fs/promises";
-import { resolve } from "node:path";
 import { basename, extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { IpcMainInvokeEvent } from "electron";
 import { logDesktopDiagnostic } from "./diagnostics.js";
+import { desktopDragFileIcon } from "./paths.js";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
 import { importLocalAssets } from "./localAssetImport.js";
 import type { LocalAssetRegistry } from "./localAssetRegistry.js";
@@ -27,7 +27,6 @@ import type { WindowControlAction } from "./shared.js";
 
 type RegisterDesktopIpcOptions = {
   bridge: DesktopBridgeClient;
-  desktopRoot: string;
   localAssets: LocalAssetRegistry;
   localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
@@ -81,7 +80,6 @@ async function importPetPackageSelection(paths: string[], importsRoot: string): 
 /** Registers all IPC handlers exposed through the desktop preload bridge. */
 export function registerDesktopIpc({
   bridge,
-  desktopRoot,
   localAssets,
   localAssetImportsRoot,
   openLocalAttachment,
@@ -95,8 +93,6 @@ export function registerDesktopIpc({
   onVoiceSettingsChanged,
   onPetVisibilityChanged,
 }: RegisterDesktopIpcOptions): void {
-  const dragPreviewIconPath = resolve(desktopRoot, "..", "assets", "drag-file-icon.png");
-
   ipcMain.handle("desktop:invoke", async (_event: IpcMainInvokeEvent, request: { method: string; payload: Record<string, unknown> }) => {
     if (request.method.startsWith("observation.")) {
       throw new Error("observation bridge methods are restricted to the main process");
@@ -112,7 +108,7 @@ export function registerDesktopIpc({
     }
     event.sender.startDrag({
       file: grant.canonicalPath,
-      icon: dragPreviewIconPath,
+      icon: desktopDragFileIcon,
     });
   });
   ipcMain.on("desktop:renderer-diagnostic", (_event: IpcMainInvokeEvent, payload?: RendererDiagnosticPayload) => {

@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { app, BrowserWindow, Menu, powerMonitor, protocol, screen, session, shell } from "electron";
 import { localAssetSchemePrivileges, registerLocalAssetProtocol } from "./assetProtocol.js";
@@ -8,7 +8,8 @@ import { logDesktopDiagnostic } from "./diagnostics.js";
 import { registerDesktopIpc } from "./ipc.js";
 import { openGrantedLocalAsset } from "./localAssetOpen.js";
 import { LocalAssetRegistry, localAssetScheme } from "./localAssetRegistry.js";
-import { desktopRoot } from "./paths.js";
+import { ensureDesktopRuntimeConfig, resolveDesktopRuntimePaths } from "./runtimePaths.js";
+import { checkForDesktopUpdates } from "./updater.js";
 import { createDesktopTray } from "./tray.js";
 import { createDesktopWindow, showDesktopWindow } from "./window.js";
 import {
@@ -28,13 +29,18 @@ import { DesktopVoiceController } from "./voice/controller.js";
 import { VoiceHotkeyController } from "./voice/hotkey.js";
 import { BrowserVoicePlayback } from "./voice/playback.js";
 import { cancelVoiceTurn, createVoicePlaybackCallbacks, handleVoiceBridgeEvent, selectVoiceTurn } from "./voice/bridgeEvents.js";
-import { loadSettingsData } from "./settings.js";
+import { configureSettingsConfigPath, loadSettingsData } from "./settings.js";
 import type { SettingsFormData, VoiceStatePayload } from "./shared.js";
 
 // Voice replies are played from a trusted hidden renderer without a DOM user gesture.
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
-const bridge = new DesktopBridgeClient();
+const runtimePaths = resolveDesktopRuntimePaths({
+  packaged: app.isPackaged,
+  appPath: app.getAppPath(),
+  homePath: app.getPath("home"),
+});
+const bridge = new DesktopBridgeClient(runtimePaths.bridge);
 const localAssets = new LocalAssetRegistry();
 const trayLifecycleEnabled = process.platform === "win32";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -116,15 +122,6 @@ app.on("second-instance", () => {
   });
   showOrCreateDesktopWindow();
 });
-
-function ensureDesktopConfig(): void {
-  const configPath = resolve(desktopRoot, "..", "config.toml");
-  if (existsSync(configPath)) {
-    return;
-  }
-  const templatePath = resolve(desktopRoot, "..", "config.example.toml");
-  copyFileSync(templatePath, configPath);
-}
 
 async function openLocalAttachment(value: string) {
   const result = await openGrantedLocalAsset(localAssets, value, (path) => shell.openPath(path));
@@ -263,13 +260,14 @@ function showOrCreateDesktopWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
-  ensureDesktopConfig();
+  ensureDesktopRuntimeConfig(runtimePaths);
+  configureSettingsConfigPath(runtimePaths.configPath);
   reloadVoiceSettings();
   process.env.MIRA_DESKTOP_USER_DATA_DIR = app.getPath("userData");
   desktopPetSettings = loadDesktopPetSettings(desktopPetSettingsPath());
   const activeVoiceRecorder = new BrowserVoiceRecorder(createVoiceCaptureWindow);
   voiceRecorder = activeVoiceRecorder;
-  const privateWorkspaceRoot = resolve(app.getPath("home"), ".shiori", "workspace");
+  const privateWorkspaceRoot = runtimePaths.workspacePath;
   const localAssetImportsRoot = resolve(privateWorkspaceRoot, "private_runtime", "imports");
   localAssets.addTrustedRoot(privateWorkspaceRoot);
   registerDesktopContentSecurityPolicy(
@@ -278,6 +276,9 @@ void app.whenReady().then(() => {
   );
   registerLocalAssetProtocol(protocol, localAssets);
   void startBridge(bridge);
+  checkForDesktopUpdates(app.isPackaged, (error) => {
+    logDesktopDiagnostic({ scope: "main", event: "updater.check.failed", payload: { error } });
+  });
   desktopPet = new DesktopPetController({
     getSettings: () => desktopPetSettings,
     saveSettings: persistDesktopPetSettings,
@@ -357,7 +358,6 @@ void app.whenReady().then(() => {
   });
   registerDesktopIpc({
     bridge,
-    desktopRoot,
     localAssets,
     localAssetImportsRoot,
     openLocalAttachment,

@@ -7,6 +7,12 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import type { BridgeResponse } from "./shared.js";
 import { DesktopBridgeClient } from "./bridgeClient.js";
 
+const bridgeCommand = {
+  executable: "C:/runtime/shiori-runtime.exe",
+  args: ["bridge"],
+  cwd: "C:/runtime",
+};
+
 type PendingRequest = {
   id: string;
   method: string;
@@ -101,7 +107,7 @@ function createReadyClient(timeoutMs = 20): {
   child: FakeChild;
   session: TestSession;
 } {
-  const client = new DesktopBridgeClient();
+  const client = new DesktopBridgeClient(bridgeCommand);
   const mutableClient = client as unknown as MutableBridgeClient;
   const child = new FakeChild();
   const session = mutableClient.createSession(
@@ -117,7 +123,7 @@ function createReadyClient(timeoutMs = 20): {
 
 describe("DesktopBridgeClient", () => {
   it("uses short health, default, and extended image generation timeouts", () => {
-    const client = new DesktopBridgeClient() as unknown as MutableBridgeClient;
+    const client = new DesktopBridgeClient(bridgeCommand) as unknown as MutableBridgeClient;
 
     assert.equal(client.invokeTimeoutMs("health"), 5_000);
     assert.equal(client.invokeTimeoutMs("roles.list"), 30_000);

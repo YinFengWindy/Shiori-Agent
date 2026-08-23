@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { UiohookKey, type UiohookKeyboardEvent } from "uiohook-napi";
-import { VoiceHotkeyController, parseHotkey } from "./hotkey.js";
+import type { UiohookKeyboardEvent } from "uiohook-napi";
+import { UiohookKey, VoiceHotkeyController, parseHotkey } from "./hotkey.js";
 
 class FakeHook {
   private listeners = new Map<string, Set<(event: UiohookKeyboardEvent) => void>>();

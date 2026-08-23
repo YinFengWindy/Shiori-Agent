@@ -1,0 +1,98 @@
+name: Windows release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+    env:
+      SHIORI_RELEASE_OUTPUT: desktop/release/installer
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Resolve release version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_NAME -match '^v(.+)$') {
+            "SHIORI_RELEASE_VERSION=$($Matches[1])" >> $env:GITHUB_ENV
+          } else {
+            "SHIORI_RELEASE_VERSION=" >> $env:GITHUB_ENV
+          }
+
+      - name: Install Python dependencies
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python.exe -m pip install --upgrade pip
+          .venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install desktop dependencies
+        run: |
+          npm ci
+          npm --prefix desktop ci --no-audit --no-fund
+
+      - name: Run focused release checks
+        run: |
+          .venv\Scripts\pytest.exe -q tests/test_main.py
+          npm --prefix desktop run typecheck
+          npm test
+          npm --prefix desktop run test:package
+
+      - name: Build Windows installer and unpacked artifact
+        run: npm --prefix desktop run package:win
+
+      - name: Verify packaged layout
+        run: npm --prefix desktop run verify:package
+
+      - name: Generate release checksums
+        run: npm --prefix desktop run hash:release
+
+      - name: Verify release checksums
+        shell: pwsh
+        run: |
+          $checksumPath = "desktop/release/installer/SHA256SUMS.txt"
+          foreach ($line in Get-Content $checksumPath) {
+            if ($line -notmatch '^([0-9a-fA-F]{64})  (.+)$') {
+              throw "Invalid checksum line: $line"
+            }
+            $expected = $Matches[1].ToLowerInvariant()
+            $filePath = Join-Path (Split-Path $checksumPath) $Matches[2]
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $filePath).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) {
+              throw "Checksum mismatch for $filePath"
+            }
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shiori-Windows-x64
+          path: desktop/release/installer/*
+          if-no-files-found: error
+
+      - name: Create draft GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: desktop/release/installer/*

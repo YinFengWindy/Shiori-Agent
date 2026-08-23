@@ -323,40 +323,6 @@ def test_should_trigger_proactive_reports_active_cooldown(tmp_path: Path):
     }
 
 
-def test_should_trigger_proactive_reports_active_cooldown(tmp_path: Path):
-    _seed_role(tmp_path)
-    runtime, session_manager, _ = _runtime(tmp_path)
-    runtime.write_snapshot("mira", _snapshot_payload())
-    runtime.write_loneliness_runtime(
-        "mira",
-        {
-            "role_id": "mira",
-            "loneliness_value": 100,
-            "last_calculated_at": "2026-07-06T12:00:00+00:00",
-            "last_user_at": "",
-            "last_proactive_at": "2026-07-06T11:00:00+00:00",
-            "awaiting_reply_after_proactive": False,
-            "awaiting_reply_since": "",
-            "last_triggered_at": "2026-07-06T11:00:00+00:00",
-            "cooldown_until": "2026-07-06T13:00:00+00:00",
-        },
-    )
-
-    should_trigger, meta = runtime.should_trigger_proactive(
-        session_manager.role_session_key("mira"),
-        now=_utc(2026, 7, 6, 12, 0),
-    )
-
-    assert should_trigger is False
-    assert meta == {
-        "reason": "cooldown",
-        "loneliness_value": 100.0,
-        "effective_loneliness_value": 100.0,
-        "trigger_threshold": 60.0,
-        "cooldown_until": "2026-07-06T13:00:00+00:00",
-    }
-
-
 def test_should_trigger_proactive_accepts_positional_now_argument(tmp_path: Path):
     _seed_role(tmp_path)
     runtime, session_manager, _ = _runtime(tmp_path)
