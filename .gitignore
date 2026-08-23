@@ -45,6 +45,8 @@ plugins/**/.data/
 /data
 /memory/
 /roles
+/release/
+/desktop/release/
 
 # IDE
 .idea/

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -17,6 +19,28 @@ from desktop_bridge.server import DesktopBridgeServer
 from desktop_bridge.service import DesktopBridgeService
 from session.manager import SessionManager
 from agent.tools.registry import ToolRegistry
+
+
+class _ReconfigurableTextStream:
+    def __init__(self, encoding: str) -> None:
+        self.encoding = encoding
+        self.reconfigure_calls: list[dict[str, str]] = []
+        self.buffer = io.BytesIO()
+
+    def reconfigure(self, **kwargs: str) -> None:
+        self.reconfigure_calls.append(kwargs)
+        self.encoding = kwargs["encoding"]
+
+    def readline(self) -> str:
+        return ""
+
+    def write(self, text: str) -> int:
+        encoded = text.encode(self.encoding)
+        self.buffer.write(encoded)
+        return len(text)
+
+    def flush(self) -> None:
+        return None
 
 
 def _build_observation_service(runtime, role_store):
@@ -41,6 +65,41 @@ def _build_server(tmp_path: Path) -> DesktopBridgeServer:
         provider=None,
     )
     return DesktopBridgeServer(runtime)
+
+
+@pytest.mark.asyncio
+async def test_serve_stdio_forces_utf8_for_all_bridge_streams(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    server = _build_server(tmp_path)
+    streams = {
+        "stdin": _ReconfigurableTextStream("cp936"),
+        "stdout": _ReconfigurableTextStream("cp936"),
+        "stderr": _ReconfigurableTextStream("cp936"),
+    }
+    captured: dict[str, object] = {}
+
+    async def _serve_streams(**kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(server, "serve_streams", _serve_streams)
+    monkeypatch.setattr(sys, "stdin", streams["stdin"])
+    monkeypatch.setattr(sys, "stdout", streams["stdout"])
+    monkeypatch.setattr(sys, "stderr", streams["stderr"])
+
+    await server.serve_stdio()
+
+    assert all(stream.encoding == "utf-8" for stream in streams.values())
+    assert all(
+        stream.reconfigure_calls == [{"encoding": "utf-8", "errors": "strict"}]
+        for stream in streams.values()
+    )
+    write_payload = captured["write_payload"]
+    assert callable(write_payload)
+    await write_payload({"message": "你好"})
+    assert json.loads(streams["stdout"].buffer.getvalue().decode("utf-8")) == {
+        "message": "你好"
+    }
 
 
 def test_server_forwards_the_role_world_registry_to_story(tmp_path: Path) -> None:

@@ -180,6 +180,12 @@ class DesktopBridgeServer:
     async def serve_stdio(self) -> None:
         """Runs the bridge against process stdin and stdout."""
 
+        # The Electron side always sends and decodes UTF-8 JSON lines.  Windows
+        # otherwise gives these streams the active console code page (usually
+        # CP936), which corrupts Chinese payloads when global UTF-8 is disabled.
+        for stream in (sys.stdin, sys.stdout, sys.stderr):
+            stream.reconfigure(encoding="utf-8", errors="strict")
+
         async def _read_line() -> str | None:
             line = await asyncio.to_thread(sys.stdin.readline)
             if not line:
