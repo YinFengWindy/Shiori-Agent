@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
 import sys
 from pathlib import Path
@@ -24,6 +25,7 @@ class _ReconfigurableTextStream:
     def __init__(self, encoding: str) -> None:
         self.encoding = encoding
         self.reconfigure_calls: list[dict[str, str]] = []
+        self.buffer = io.BytesIO()
 
     def reconfigure(self, **kwargs: str) -> None:
         self.reconfigure_calls.append(kwargs)
@@ -32,8 +34,10 @@ class _ReconfigurableTextStream:
     def readline(self) -> str:
         return ""
 
-    def write(self, _text: str) -> int:
-        return 0
+    def write(self, text: str) -> int:
+        encoded = text.encode(self.encoding)
+        self.buffer.write(encoded)
+        return len(text)
 
     def flush(self) -> None:
         return None
@@ -90,6 +94,12 @@ async def test_serve_stdio_forces_utf8_for_all_bridge_streams(
         stream.reconfigure_calls == [{"encoding": "utf-8", "errors": "strict"}]
         for stream in streams.values()
     )
+    write_payload = captured["write_payload"]
+    assert callable(write_payload)
+    await write_payload({"message": "你好"})
+    assert json.loads(streams["stdout"].buffer.getvalue().decode("utf-8")) == {
+        "message": "你好"
+    }
 
 
 def test_server_forwards_the_role_world_registry_to_story(tmp_path: Path) -> None:
