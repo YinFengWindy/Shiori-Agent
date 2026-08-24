@@ -10,7 +10,7 @@ from agent.screen_observation.memory import ObservationMemoryWriter
 from agent.screen_observation.model import ObservationModelAdapter
 
 if TYPE_CHECKING:
-    from core.roles.world import RoleWorldRegistry
+    from core.roles.role_runtime import RoleRuntimeRegistry
 
 
 class ScreenObservationService:
@@ -23,13 +23,13 @@ class ScreenObservationService:
         provider: LLMProvider | None,
         model: str,
         memory: MemoryWriteApi,
-        world_registry: RoleWorldRegistry | None = None,
+        role_runtime_registry: RoleRuntimeRegistry | None = None,
     ) -> None:
         self._model_adapter = ObservationModelAdapter(
             roles=roles,
             provider=provider,
             model=model,
-            world_registry=world_registry,
+            role_runtime_registry=role_runtime_registry,
         )
         self._memory_writer = ObservationMemoryWriter(
             roles=roles,
@@ -54,7 +54,7 @@ def build_screen_observation_service(
     provider: LLMProvider,
     vl_provider: LLMProvider | None,
     memory: MemoryWriteApi,
-    world_registry: RoleWorldRegistry | None = None,
+    role_runtime_registry: RoleRuntimeRegistry | None = None,
 ) -> ScreenObservationService:
     """Builds the default role capability with the configured visual model."""
 
@@ -70,5 +70,5 @@ def build_screen_observation_service(
         provider=selected_provider,
         model=selected_model,
         memory=memory,
-        world_registry=world_registry,
+        role_runtime_registry=role_runtime_registry,
     )

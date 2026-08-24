@@ -19,8 +19,8 @@ related:
 
 | 领域 | Owning module | 主要下游 |
 | --- | --- | --- |
-| 应用启动与装配 | `main.py`、`bootstrap/app.py`、`bootstrap/wiring.py` | 渠道、Agent、角色世界、主动循环、桌面桥接 |
-| 角色聚合 | `core/roles/store.py`、`core/roles/services.py`、`core/roles/world.py` | 会话绑定、关系、记忆、主动行为、桌面 UI |
+| 应用启动与装配 | `main.py`、`bootstrap/app.py`、`bootstrap/wiring.py` | 渠道、Agent、角色运行时、主动循环、桌面桥接 |
+| 角色聚合 | `core/roles/store.py`、`core/roles/services.py`、`core/roles/role_runtime.py` | 会话绑定、关系、记忆、主动行为、桌面 UI |
 | 关系与场景 | `core/roles/relationship_runtime/`、`core/roles/scene_followup_runtime.py` | 心情/寂寞、主动触发、场景追问、自动 CG |
 | 会话 | `session/` | Agent 回合、在线状态、消息历史、搜索 |
 | 对话持久化 | `conversation/` | 线程投影、旧数据迁移、跨入口消息连续性 |
@@ -44,7 +44,7 @@ flowchart LR
     Channel["渠道 / 桌面端"] --> Bus["消息总线"]
     Bus --> Session["Session / Conversation"]
     Session --> Agent["Agent 回合"]
-    Role["角色世界"] --> Agent
+    Role["角色运行时"] --> Agent
     Memory["记忆"] --> Agent
     Agent --> Tools["工具 / 插件 / MCP"]
     Agent --> Output["输出分发"]

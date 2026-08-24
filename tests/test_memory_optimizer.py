@@ -67,7 +67,7 @@ def test_optimize_uses_the_role_dialogue_model_snapshot(tmp_path):
     fallback_provider = types.SimpleNamespace(chat=AsyncMock(side_effect=AssertionError("fallback")))
     activations: list[tuple[str, str]] = []
 
-    class _WorldRegistry:
+    class _RoleRuntimeRegistry:
         async def get(self, role_id: str):
             self.role_id = role_id
             return self
@@ -82,7 +82,7 @@ def test_optimize_uses_the_role_dialogue_model_snapshot(tmp_path):
         cast(Any, fallback_provider),
         "base-model",
         tmp_path,
-        world_registry=_WorldRegistry(),
+        role_runtime_registry=_RoleRuntimeRegistry(),
     )
     optimizer._STEP_DELAY_SECONDS = 0
 

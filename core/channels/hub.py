@@ -8,7 +8,7 @@ from core.common.channel_identifiers import chat_ids_equal
 from conversation.service import ConversationService, LegacySessionDescriptor
 from core.roles.services import RoleAggregateService
 from core.roles.store import RoleStore
-from core.roles.world import RoleExecutionContext
+from core.roles.role_runtime import RoleExecutionContext
 
 
 class ChannelHub:

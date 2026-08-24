@@ -72,7 +72,7 @@ class SpawnToolsetProvider(ToolsetProvider):
             max_tokens=config.max_tokens,
             fetch_requester=http_resources.external_default,
             multimodal=config.multimodal,
-            world_registry=deps.role_world_registry,
+            role_runtime_registry=deps.role_runtime_registry,
         )
         if config.spawn_enabled:
             registry.register(

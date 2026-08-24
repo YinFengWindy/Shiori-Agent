@@ -174,7 +174,7 @@ class RecordingStoryProvider:
         )
 
 
-class RecordingStoryWorldRegistry:
+class RecordingRoleRuntimeRegistry:
     def __init__(self, *, model: str = "first-model", block_call: int | None = None) -> None:
         self.model = model
         self.provider = RecordingStoryProvider(block_call=block_call)
@@ -191,7 +191,7 @@ class RecordingStoryWorldRegistry:
         yield snapshot
 
 
-class MissingStoryWorldRegistry:
+class MissingRoleRuntimeRegistry:
     async def get(self, _role_id: str):
         return self
 
@@ -253,11 +253,11 @@ async def test_story_turns_capture_the_role_dialogue_model_inside_each_task(tmp_
         id="role-1",
         to_dict=lambda: {"id": "role-1", "name": "澪", "system_prompt": "保持克制"},
     )
-    world_registry = RecordingStoryWorldRegistry(block_call=2)
+    role_runtime_registry = RecordingRoleRuntimeRegistry(block_call=2)
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
-        world_registry=world_registry,
+        role_runtime_registry=role_runtime_registry,
     )
     payload = {
         "title": "夏日来信",
@@ -292,9 +292,9 @@ async def test_story_turns_capture_the_role_dialogue_model_inside_each_task(tmp_
         request_id="input-1",
         emit_event=lambda _event: None,
     )
-    await world_registry.provider.started.wait()
-    world_registry.model = "second-model"
-    world_registry.provider.release.set()
+    await role_runtime_registry.provider.started.wait()
+    role_runtime_registry.model = "second-model"
+    role_runtime_registry.provider.release.set()
     await _wait_for_director_tasks(handler)
     story = (
         await handler.handle(
@@ -313,12 +313,12 @@ async def test_story_turns_capture_the_role_dialogue_model_inside_each_task(tmp_
     )
     await _wait_for_director_tasks(handler)
 
-    assert world_registry.activations == [
+    assert role_runtime_registry.activations == [
         ("role-1", "chat", "first-model"),
         ("role-1", "chat", "first-model"),
         ("role-1", "chat", "second-model"),
     ]
-    assert world_registry.provider.calls == ["first-model", "first-model", "second-model"]
+    assert role_runtime_registry.provider.calls == ["first-model", "first-model", "second-model"]
     await handler.aclose()
 
 
@@ -331,7 +331,7 @@ async def test_story_turn_fails_when_the_role_model_registration_is_missing(tmp_
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
-        world_registry=MissingStoryWorldRegistry(),
+        role_runtime_registry=MissingRoleRuntimeRegistry(),
     )
     events: list[dict] = []
 
@@ -795,14 +795,14 @@ async def test_story_recovery_restarts_an_interrupted_player_turn(tmp_path) -> N
     repository.close()
     catalog.close()
 
-    world_registry = RecordingStoryWorldRegistry(block_call=1)
+    role_runtime_registry = RecordingRoleRuntimeRegistry(block_call=1)
     handler = StorySimulationHandler(
         workspace=tmp_path,
         role_store=SimpleNamespace(get_role=lambda _role_id: role),
-        world_registry=world_registry,
+        role_runtime_registry=role_runtime_registry,
     )
     await handler.handle("stories.list", {}, request_id="list-1", emit_event=lambda _event: None)
-    await world_registry.provider.started.wait()
+    await role_runtime_registry.provider.started.wait()
     recovered = (
         await handler.handle(
             "stories.get",
@@ -814,8 +814,8 @@ async def test_story_recovery_restarts_an_interrupted_player_turn(tmp_path) -> N
 
     assert recovered["turns"][1]["status"] == "generating"
     assert recovered["turns"][1]["attemptId"] != original_attempt["attempt_id"]
-    assert world_registry.activations == [("role-1", "chat", "first-model")]
-    world_registry.provider.release.set()
+    assert role_runtime_registry.activations == [("role-1", "chat", "first-model")]
+    role_runtime_registry.provider.release.set()
     await handler.aclose()
 
 

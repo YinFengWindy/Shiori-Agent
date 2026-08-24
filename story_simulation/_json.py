@@ -1,4 +1,4 @@
-"""JSON helpers kept local so Story does not import the retired World domain."""
+"""JSON helpers kept local so Story does not import retired role runtime details."""
 
 from __future__ import annotations
 

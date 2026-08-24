@@ -65,10 +65,10 @@ class _ProcessingMixin:
         return self._processing_state
 
     @property
-    def role_world_registry(self):
+    def role_runtime_registry(self):
         """Returns the registry used by direct turns and role-owned background work."""
 
-        return self._role_world_registry
+        return self._role_runtime_registry
 
     @property
     def active_turn_states(self) -> dict[str, TurnInterruptState]:
@@ -147,7 +147,7 @@ class _ProcessingMixin:
         if self._processing_state:
             self._processing_state.enter(key)
         try:
-            registry = getattr(self, "_role_world_registry", None)
+            registry = getattr(self, "_role_runtime_registry", None)
             metadata = getattr(msg, "metadata", None)
             metadata = metadata if isinstance(metadata, dict) else {}
             role_id = str(metadata.get("role_id") or "").strip()
@@ -155,8 +155,8 @@ class _ProcessingMixin:
                 role_id = key.removeprefix("role:").strip()
             if registry is not None and role_id:
                 purpose = "vision" if getattr(msg, "media", None) else "chat"
-                world = await registry.get(role_id)
-                with world.activate_model(purpose):
+                runtime = await registry.get(role_id)
+                with runtime.activate_model(purpose):
                     outbound = await self._core_runner.process(
                         msg,
                         key,
@@ -184,9 +184,9 @@ class _ProcessingMixin:
         *,
         dispatch_outbound: bool = True,
     ) -> OutboundMessage:
-        """Dispatches role-bound messages through their owning world before a turn."""
+        """Dispatches role-bound messages through their owning role runtime before a turn."""
 
-        registry = getattr(self, "_role_world_registry", None)
+        registry = getattr(self, "_role_runtime_registry", None)
         metadata = getattr(item, "metadata", None)
         if registry is None or not isinstance(metadata, dict):
             return await self._process(
@@ -285,7 +285,7 @@ class _ProcessingMixin:
     ) -> None:
         """Adds a role context to direct entrypoints backed by a formal role session."""
 
-        registry = getattr(self, "_role_world_registry", None)
+        registry = getattr(self, "_role_runtime_registry", None)
         if registry is None or registry.context_from_metadata(metadata) is not None:
             return
         session = self.session_manager.get_or_create(session_key)
@@ -315,11 +315,11 @@ class _ProcessingMixin:
         metadata.update(context.to_metadata())
 
     async def run_role_operation(self, metadata: dict[str, str], operation):
-        """Runs non-turn role work through the world's thread execution boundary."""
+        """Runs non-turn role work through the role runtime's thread execution boundary."""
 
-        registry = self._role_world_registry
+        registry = self._role_runtime_registry
         if registry is None:
-            raise RuntimeError("RoleWorldRegistry 未配置")
+            raise RuntimeError("RoleRuntimeRegistry 未配置")
         context = registry.context_from_metadata(metadata)
         if context is None:
             role_id = str(metadata.get("role_id") or "").strip()

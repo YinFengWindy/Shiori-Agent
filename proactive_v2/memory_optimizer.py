@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from core.memory.markdown import MarkdownMemoryStore
-    from core.roles.world import RoleWorldRegistry
+    from core.roles.role_runtime import RoleRuntimeRegistry
 
 from agent.memory import DEFAULT_SELF_MD
 from agent.provider import LLMProvider
@@ -214,12 +214,12 @@ class MemoryOptimizer:
         model: str,
         workspace: Path,
         max_tokens: int = 16384,
-        world_registry: RoleWorldRegistry | None = None,
+        role_runtime_registry: RoleRuntimeRegistry | None = None,
     ) -> None:
         self._memory = memory
         self._provider = provider
         self._model = model
-        self._world_registry = world_registry
+        self._role_runtime_registry = role_runtime_registry
         self._workspace = Path(workspace)
         self._max_tokens = max_tokens
         self._lock = asyncio.Lock()
@@ -254,11 +254,11 @@ class MemoryOptimizer:
             self._active_role_id = clean_role_id
             self._active_started_at = datetime.now().astimezone().isoformat()
             try:
-                if self._world_registry is None:
+                if self._role_runtime_registry is None:
                     await self._optimize(role_id=clean_role_id)
                 else:
-                    world = await self._world_registry.get(clean_role_id)
-                    with world.activate_model("chat") as snapshot:
+                    runtime = await self._role_runtime_registry.get(clean_role_id)
+                    with runtime.activate_model("chat") as snapshot:
                         await self._optimize(
                             role_id=clean_role_id,
                             provider=snapshot.provider,

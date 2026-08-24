@@ -162,7 +162,7 @@ class AppRuntime:
                 self.config,
                 provider=self.provider,
                 memory_store=self.memory_runtime.markdown.store,
-                world_registry=getattr(self.core, "role_world_registry", None),
+                role_runtime_registry=getattr(self.core, "role_runtime_registry", None),
             )
             self.core.memory_optimizer = self._memory_optimizer
             self._background_tasks.extend(

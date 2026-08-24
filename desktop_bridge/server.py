@@ -52,7 +52,7 @@ class DesktopBridgeServer:
             subagent_manager=getattr(spawn_tool, "manager", None),
             memory_optimizer=getattr(runtime, "memory_optimizer", None),
             observation_service=observation_service,
-            role_world_registry=getattr(runtime, "role_world_registry", None),
+            role_runtime_registry=getattr(runtime, "role_runtime_registry", None),
             image_tool=image_tool,
             memory_engine=getattr(
                 getattr(runtime, "memory_runtime", None),

@@ -26,7 +26,7 @@ from .models import (
 from .store import RoleStore
 from .pet_packages import RolePetPackageService
 from .config_migration import RoleConfigMigrationSummary, RoleConfigMigrator
-from .world import RoleExecutionContext, RoleWorld, RoleWorldRegistry
+from .role_runtime import RoleExecutionContext, RoleRuntime, RoleRuntimeRegistry
 
 __all__ = [
     "InboundRoleRouter",
@@ -54,8 +54,8 @@ __all__ = [
     "RelationshipSnapshotOptimizer",
     "RoleSessionService",
     "RoleStore",
-    "RoleWorld",
-    "RoleWorldRegistry",
+    "RoleRuntime",
+    "RoleRuntimeRegistry",
     "route_inbound_by_role",
 ]
 

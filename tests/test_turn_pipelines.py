@@ -23,7 +23,7 @@ from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import TurnCommitted
 from core.memory.engine import MemoryQueryResult
-from core.roles import RoleRepository, RoleStore, RoleWorldRegistry
+from core.roles import RoleRepository, RoleStore, RoleRuntimeRegistry
 from bootstrap.wiring import wire_turn_lifecycle
 
 
@@ -200,7 +200,7 @@ async def test_run_role_operation_repairs_legacy_scheduled_context(tmp_path: Pat
     repository = RoleRepository(RoleStore(tmp_path))
     repository.create_role(role_id="mira", name="Mira", system_prompt="test")
     loop = object.__new__(AgentLoop)
-    loop._role_world_registry = RoleWorldRegistry(repository)
+    loop._role_runtime_registry = RoleRuntimeRegistry(repository)
     operation = AsyncMock(return_value="done")
 
     result = await loop.run_role_operation(
@@ -226,7 +226,7 @@ async def test_run_role_operation_repairs_legacy_scheduled_context(tmp_path: Pat
 async def test_role_scoped_scheduled_turn_uses_background_capability(tmp_path: Path):
     repository = RoleRepository(RoleStore(tmp_path))
     repository.create_role(role_id="mira", name="Mira", system_prompt="test")
-    registry = RoleWorldRegistry(repository)
+    registry = RoleRuntimeRegistry(repository)
     context = registry.create_context(
         role_id="mira",
         thread_id="thread:mira:scheduler:job-1",
@@ -238,7 +238,7 @@ async def test_role_scoped_scheduled_turn_uses_background_capability(tmp_path: P
         delivery_key="job-1",
     )
     loop = object.__new__(AgentLoop)
-    loop._role_world_registry = registry
+    loop._role_runtime_registry = registry
     loop._process = AsyncMock(
         return_value=OutboundMessage(
             channel="desktop",

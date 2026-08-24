@@ -8,7 +8,7 @@ import pytest
 
 from core.roles.services import RoleRepository
 from core.roles.store import RoleStore
-from core.roles.world import RoleExecutionContext, RoleWorldRegistry
+from core.roles.role_runtime import RoleExecutionContext, RoleRuntimeRegistry
 
 
 def _context(role, *, thread_id: str = "thread:mira:desktop"):
@@ -32,7 +32,7 @@ async def test_registry_serializes_work_in_the_same_thread(tmp_path):
         name="Mira",
         system_prompt="test",
     )
-    registry = RoleWorldRegistry(repository)
+    registry = RoleRuntimeRegistry(repository)
     context = _context(role)
     events: list[str] = []
     first_started = asyncio.Event()
@@ -65,7 +65,7 @@ async def test_registry_serializes_work_in_the_same_thread(tmp_path):
 async def test_registry_serializes_different_transport_threads_for_one_role(tmp_path):
     repository = RoleRepository(RoleStore(tmp_path))
     role = repository.create_role(role_id="mira", name="Mira", system_prompt="test")
-    registry = RoleWorldRegistry(repository)
+    registry = RoleRuntimeRegistry(repository)
     events: list[str] = []
     first_started = asyncio.Event()
     release_first = asyncio.Event()
@@ -111,7 +111,7 @@ async def test_registry_allows_different_roles_to_execute_independently(tmp_path
         name="Shiori",
         system_prompt="test",
     )
-    registry = RoleWorldRegistry(repository)
+    registry = RoleRuntimeRegistry(repository)
     mira_started = asyncio.Event()
     shiori_started = asyncio.Event()
     release = asyncio.Event()
@@ -132,7 +132,7 @@ async def test_registry_allows_different_roles_to_execute_independently(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_world_owns_role_model_activation(tmp_path):
+async def test_role_runtime_owns_role_model_activation(tmp_path):
     repository = RoleRepository(RoleStore(tmp_path))
     role = repository.create_role(role_id="mira", name="Mira", system_prompt="test")
     activations: list[tuple[str, str]] = []
@@ -143,23 +143,23 @@ async def test_world_owns_role_model_activation(tmp_path):
             activations.append((role_id, purpose))
             yield SimpleNamespace(model="role-model")
 
-    registry = RoleWorldRegistry(repository, model_resolver=_ModelRuntime())
-    world = await registry.get(role.id)
+    registry = RoleRuntimeRegistry(repository, model_resolver=_ModelRuntime())
+    runtime = await registry.get(role.id)
 
-    with world.activate_model("vision") as snapshot:
+    with runtime.activate_model("vision") as snapshot:
         assert snapshot.model == "role-model"
 
     assert activations == [("mira", "vision")]
 
 
 @pytest.mark.asyncio
-async def test_world_rejects_model_activation_when_capability_is_missing(tmp_path):
+async def test_role_runtime_rejects_model_activation_when_capability_is_missing(tmp_path):
     repository = RoleRepository(RoleStore(tmp_path))
     role = repository.create_role(role_id="mira", name="Mira", system_prompt="test")
-    world = await RoleWorldRegistry(repository).get(role.id)
+    runtime = await RoleRuntimeRegistry(repository).get(role.id)
 
     with pytest.raises(RuntimeError, match="未配置模型能力"):
-        with world.activate_model("chat"):
+        with runtime.activate_model("chat"):
             pass
 
 
@@ -167,30 +167,30 @@ async def test_world_rejects_model_activation_when_capability_is_missing(tmp_pat
 async def test_role_capabilities_reject_the_wrong_work_kind(tmp_path):
     repository = RoleRepository(RoleStore(tmp_path))
     role = repository.create_role(role_id="mira", name="Mira", system_prompt="test")
-    registry = RoleWorldRegistry(repository)
+    registry = RoleRuntimeRegistry(repository)
 
     with pytest.raises(ValueError, match="不接受工作类型"):
         await registry.dispatch_proactive_tick(_context(role), _return_none)
 
 
 @pytest.mark.asyncio
-async def test_registry_refreshes_configuration_without_replacing_the_world(tmp_path):
+async def test_registry_refreshes_configuration_without_replacing_the_runtime(tmp_path):
     repository = RoleRepository(RoleStore(tmp_path))
     role = repository.create_role(
         role_id="mira",
         name="Mira",
         system_prompt="test",
     )
-    registry = RoleWorldRegistry(repository)
+    registry = RoleRuntimeRegistry(repository)
     context = _context(role)
-    first_world = await registry.get(role.id)
+    first_runtime = await registry.get(role.id)
     updated = repository.update_role(role.id, description="updated")
-    refreshed_world = await registry.get(role.id)
+    refreshed_runtime = await registry.get(role.id)
 
-    assert refreshed_world is first_world
-    assert refreshed_world.config_version != context.role_config_version
+    assert refreshed_runtime is first_runtime
+    assert refreshed_runtime.config_version != context.role_config_version
     await registry.dispatch_thread(context, lambda: _return_none())
-    assert refreshed_world.config_version == RoleExecutionContext.create(
+    assert refreshed_runtime.config_version == RoleExecutionContext.create(
         role=updated,
         thread_id=context.thread_id,
         transport_channel=context.transport_channel,
@@ -211,7 +211,7 @@ def test_registry_builds_direct_context_from_authoritative_role(tmp_path):
         name="Mira",
         system_prompt="test",
     )
-    registry = RoleWorldRegistry(repository)
+    registry = RoleRuntimeRegistry(repository)
 
     context = registry.create_context(
         role_id=role.id,
