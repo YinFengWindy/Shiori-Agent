@@ -1,6 +1,6 @@
 # Windows 安装与更新
 
-Shiori 的 Windows 安装包面向 x64 Windows 11。安装和首次启动不需要 Node.js、npm、Python、uv 或 Git。
+Shiori 的 Windows 安装包面向 x64 Windows 11。安装和首次启动不需要 Node.js、pnpm、Python、uv 或 Git。
 
 安装器采用当前用户安装方式。升级会替换程序和内置 runtime，但不会覆盖 `%USERPROFILE%\.shiori\workspace` 中的 `config.toml`、角色、会话、记忆、Story 或素材；卸载也不会删除这些用户数据。
 
@@ -10,4 +10,4 @@ Shiori 的 Windows 安装包面向 x64 Windows 11。安装和首次启动不需�
 
 应用只在正式打包版本中从 GitHub Releases 检查更新。更新缓存、窗口状态和桌面日志位于 `%APPDATA%\Shiori`。
 
-开发者在本机运行 `npm --prefix desktop run package:win` 时，构建产物默认写入 `%LOCALAPPDATA%\Shiori\release`。CI 通过 `SHIORI_RELEASE_OUTPUT` 显式写入仓库内的 artifact 目录，并生成 `SHA256SUMS.txt`。带 `vX.Y.Z` tag 的构建会把 tag 版本写入 Electron 应用和更新元数据。
+开发者在本机运行 `pnpm --filter shiori-desktop run package:win` 时，构建产物默认写入 `%LOCALAPPDATA%\Shiori\release`。CI 通过 `SHIORI_RELEASE_OUTPUT` 显式写入仓库内的 artifact 目录，并生成 `SHA256SUMS.txt`。带 `vX.Y.Z` tag 的构建会把 tag 版本写入 Electron 应用和更新元数据。

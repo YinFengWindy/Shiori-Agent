@@ -12,7 +12,7 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
-    # npm --prefix desktop runs scripts with desktop/ as cwd, so this path
+    # pnpm --filter shiori-desktop runs scripts with desktop/ as cwd, so this path
     # resolves to desktop/release/installer in the repository root.
     env:
       SHIORI_RELEASE_OUTPUT: release/installer
@@ -26,11 +26,17 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Resolve release version
         shell: pwsh
@@ -48,25 +54,23 @@ jobs:
           .venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Install desktop dependencies
-        run: |
-          npm ci
-          npm --prefix desktop ci --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       - name: Run focused release checks
         run: |
           .venv\Scripts\pytest.exe -q tests/test_main.py
-          npm --prefix desktop run typecheck
-          npm test
-          npm --prefix desktop run test:package
+          pnpm --filter shiori-desktop run typecheck
+          pnpm test
+          pnpm --filter shiori-desktop run test:package
 
       - name: Build Windows installer and unpacked artifact
-        run: npm --prefix desktop run package:win
+        run: pnpm --filter shiori-desktop run package:win
 
       - name: Verify packaged layout
-        run: npm --prefix desktop run verify:package
+        run: pnpm --filter shiori-desktop run verify:package
 
       - name: Generate release checksums
-        run: npm --prefix desktop run hash:release
+        run: pnpm --filter shiori-desktop run hash:release
 
       - name: Verify release checksums
         shell: pwsh
