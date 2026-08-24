@@ -1,5 +1,5 @@
 {
-  "name": "akashic-agent-frontend",
+  "name": "shiori",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.33.0",
