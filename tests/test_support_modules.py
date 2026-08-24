@@ -850,8 +850,8 @@ def test_repository_entrypoints_are_desktop_first():
     package_json = json.loads((repo_root / "package.json").read_text(encoding="utf-8"))
     scripts = package_json["scripts"]
 
-    assert scripts["start"] == "npm run desktop:start"
-    assert scripts["dev"] == "npm run desktop:dev"
+    assert scripts["start"] == "pnpm run desktop:start"
+    assert scripts["dev"] == "pnpm run desktop:dev"
     assert "dashboard:dev" not in scripts
     assert "dashboard:build" not in scripts
     assert "build:dashboard" not in scripts

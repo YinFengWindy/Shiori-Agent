@@ -1,20 +1,28 @@
 {
-  "name": "akashic-agent-frontend",
+  "name": "shiori",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "electron-winstaller",
+      "uiohook-napi"
+    ]
+  },
   "scripts": {
-    "start": "npm run desktop:start",
-    "build": "npm run build:desktop",
-    "build:desktop": "npm --prefix desktop run build",
-    "desktop:build": "npm run build:desktop",
-    "desktop:dev": "npm --prefix desktop run dev",
-    "desktop:start": "npm --prefix desktop run start:built",
+    "start": "pnpm run desktop:start",
+    "build": "pnpm run build:desktop",
+    "build:desktop": "pnpm --filter shiori-desktop run build",
+    "desktop:build": "pnpm run build:desktop",
+    "desktop:dev": "pnpm --filter shiori-desktop run dev",
+    "desktop:start": "pnpm --filter shiori-desktop run start:built",
     "desktop:test": "node desktop/scripts/test-unit.mjs",
-    "desktop:typecheck": "npm --prefix desktop run typecheck",
-    "dev": "npm run desktop:dev",
+    "desktop:typecheck": "pnpm --filter shiori-desktop run typecheck",
+    "dev": "pnpm run desktop:dev",
     "lint": "eslint desktop/src desktop/renderer/src",
-    "test": "npm run desktop:test",
-    "typecheck": "npm --prefix desktop run typecheck"
+    "test": "pnpm run desktop:test",
+    "typecheck": "pnpm --filter shiori-desktop run typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

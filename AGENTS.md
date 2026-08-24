@@ -65,10 +65,11 @@
 - 发现乱码先检查文件编码与终端解码设置，必要时重存为 UTF-8。
 - Python 命令、测试和质量工具必须使用仓库 `.venv`，禁止依赖 PATH 中的系统 Python：Windows 使用 `.venv\\Scripts\\python.exe`、`.venv\\Scripts\\pytest.exe`、`.venv\\Scripts\\ruff.exe` 等；跨平台文档和脚本统一使用 `uv run ...`。
 - 不要直接运行裸 `python`、`pytest`、`ruff` 或 `pyright` 来验证 Shiori；先确认 `python -c \"import sys; print(sys.executable)\"` 指向仓库 `.venv`，否则使用 `.venv` 的绝对/相对路径。
-- `npm run dev` 的 Python bridge 必须继续由 `desktop/src/bridgeClient.ts` 启动项目 `.venv` 中的解释器，不得改成依赖系统 PATH 的 `python`。
+- `pnpm dev` 的 Python bridge 必须继续由 `desktop/src/bridgeClient.ts` 启动项目 `.venv` 中的解释器，不得改成依赖系统 PATH 的 `python`。
 
 ## 仓库特定约束
 
+- Node 依赖统一通过根目录的固定版本 pnpm workspace 管理；只维护 `pnpm-lock.yaml`，不要新增根目录或 `desktop/` 的 `package-lock.json`。
 - 每完成一轮答复（实现、修改、修复）后，对当轮对话变更的代码立即进行 git commit。
 - 涉及代码变更的功能分支，默认先推送远端并创建 Draft PR；未经用户明确要求，不得直接推送或合并到 `main`。
 - PR 必须关联对应 Issue，并写明变更摘要、实际验证结果和已知阻塞项；相关测试与构建通过且阻塞项清零后，才可转为 Ready 或合并。
