@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
-from ._json import dump, load
-from ._schema import SCHEMA
+from .internal._json import dump, load
+from .internal._schema import SCHEMA
 from .errors import (
     StoryInvalidStateError,
     StoryNotFoundError,

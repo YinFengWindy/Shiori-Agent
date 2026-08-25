@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from uuid import uuid4
 
-from ._json import dump, load
+from .internal._json import dump, load
 from .story_time import (
     legacy_story_date,
     legacy_story_time_band,
