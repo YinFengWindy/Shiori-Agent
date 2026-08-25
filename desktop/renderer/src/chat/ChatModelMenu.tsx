@@ -120,7 +120,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
         <span className="truncate">{chatModel?.model ?? "选择聊天模型"}</span>
       </button>
       {open && selection && menuPosition ? createPortal(
-        <div ref={menuRef} className="fixed z-50 flex items-start gap-1.5" style={menuPosition}>
+        <div ref={menuRef} className="fixed z-50 flex items-end gap-1.5" style={menuPosition}>
           <div className="grid w-[112px] content-start gap-1 rounded-md border border-[#DDE3EA] bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
             {(["dialogue", "visual"] as const).map((kind) => (
               <button key={kind} type="button" className={`flex h-9 items-center justify-between rounded-md px-2 text-left text-xs transition ${submenu === kind ? "bg-[#EEF2F6] text-[#182230]" : "text-[#344054] hover:bg-[#F3F5F7]"}`} aria-current={submenu === kind ? "true" : undefined} onMouseEnter={() => { setSubmenu(kind); setHoveredModelId(null); }} onClick={() => { setSubmenu(kind); setHoveredModelId(null); }}>
