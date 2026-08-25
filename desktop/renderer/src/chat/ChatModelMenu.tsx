@@ -9,6 +9,7 @@ import {
   type ModelEffort,
   type RoleModelSelection,
 } from "./chatModelSelection";
+import { getChatModelMenuPosition } from "./chatModelMenuLayout";
 
 type ChatModelMenuProps = {
   activeRoleId: string;
@@ -70,7 +71,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
     const updatePosition = () => {
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
-      setMenuPosition({ left: rect.left, bottom: window.innerHeight - rect.bottom + 4 });
+      setMenuPosition(getChatModelMenuPosition(rect, window.innerHeight));
     };
     updatePosition();
     window.addEventListener("resize", updatePosition);
