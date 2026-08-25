@@ -1,4 +1,4 @@
-type ChatModelMenuAnchorRect = Pick<DOMRect, "left" | "top">;
+type ChatModelMenuAnchorRect = Pick<DOMRect, "left" | "bottom">;
 
 /** Positions the menu above the model button with a stable visual gap. */
 export function getChatModelMenuPosition(
@@ -8,6 +8,6 @@ export function getChatModelMenuPosition(
 ) {
   return {
     left: anchor.left,
-    bottom: viewportHeight - anchor.top + gap,
+    bottom: viewportHeight - anchor.bottom + gap,
   };
 }
