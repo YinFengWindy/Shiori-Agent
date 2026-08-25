@@ -4,7 +4,7 @@ import { CodexSpritePetRenderer } from "./CodexSpritePetRenderer";
 import { spriteAnimations, type SpriteState } from "./spriteContract";
 import { usePetActivityState } from "./usePetActivityState";
 import type { PetBubbleLayout, PetObservationPayload } from "../../../src/observation/types";
-import type { VoiceStatePayload } from "../../../src/shared";
+import type { VoiceStatePayload } from "../../../src/bridge/shared";
 import "./styles.css";
 
 type PetPackagePayload = { spritesheetUrl: string };

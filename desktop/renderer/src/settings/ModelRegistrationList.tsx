@@ -1,5 +1,5 @@
 import { CaretRight, Plus } from "@phosphor-icons/react";
-import type { ModelRegistrationFormData } from "../../../src/shared";
+import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 
 type ModelRegistrationListProps = {
   registrations: ModelRegistrationFormData[];

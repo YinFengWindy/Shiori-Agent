@@ -5,8 +5,8 @@ import threading
 
 import pytest
 
-from desktop_bridge.voice_handler import DesktopVoiceHandler
-from desktop_bridge.voice_models import VoiceServiceError
+from desktop_bridge.voice.voice_handler import DesktopVoiceHandler
+from desktop_bridge.voice.voice_models import VoiceServiceError
 
 
 @pytest.mark.asyncio

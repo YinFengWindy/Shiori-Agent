@@ -4,8 +4,8 @@ import urllib.request
 
 import pytest
 
-from desktop_bridge.voice_http import _PreviewRedirectHandler, request_binary
-from desktop_bridge.voice_models import VoiceServiceError
+from desktop_bridge.voice.voice_http import _PreviewRedirectHandler, request_binary
+from desktop_bridge.voice.voice_models import VoiceServiceError
 
 
 class _Response:
@@ -28,7 +28,7 @@ class _Opener:
 
 def test_request_binary_allows_trusted_minimax_https(monkeypatch) -> None:
     monkeypatch.setattr(
-        "desktop_bridge.voice_http.socket.getaddrinfo",
+        "desktop_bridge.voice.voice_http.socket.getaddrinfo",
         lambda *_args, **_kwargs: [(2, 1, 6, "", ("93.184.216.34", 443))],
     )
     monkeypatch.setattr(urllib.request, "build_opener", lambda *_args: _Opener())
@@ -52,7 +52,7 @@ def test_request_binary_rejects_untrusted_or_local_urls(url: str) -> None:
 
 def test_request_binary_rejects_private_dns_targets(monkeypatch) -> None:
     monkeypatch.setattr(
-        "desktop_bridge.voice_http.socket.getaddrinfo",
+        "desktop_bridge.voice.voice_http.socket.getaddrinfo",
         lambda *_args, **_kwargs: [(2, 1, 6, "", ("10.0.0.2", 443))],
     )
 

@@ -1,5 +1,5 @@
-import type { DesktopBridgeClient } from "../bridgeClient.js";
-import type { BridgeEvent } from "../shared.js";
+import type { DesktopBridgeClient } from "../bridge/bridgeClient.js";
+import type { BridgeEvent } from "../bridge/shared.js";
 
 type RoleObservationBubbleTarget = {
   acceptRoleReply(roleId: string, reply: string): void;

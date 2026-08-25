@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import type { BridgeEvent, BridgeRequest, BridgeResponse } from "./shared.js";
-import type { DesktopBridgeCommand } from "./runtimePaths.js";
+import type { DesktopBridgeCommand } from "../runtimePaths.js";
 const HEALTH_REQUEST_TIMEOUT_MS = 5_000;
 const BRIDGE_START_TIMEOUT_MS = 60_000;
 const BRIDGE_START_RETRY_DELAY_MS = 250;

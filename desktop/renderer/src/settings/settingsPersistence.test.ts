@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { DesktopApi, SettingsFormData, SettingsSnapshot } from "../../../src/shared.js";
+import type { DesktopApi, SettingsFormData, SettingsSnapshot } from "../../../src/bridge/shared.js";
 import {
   loadSettingsPageData,
   saveSettingsPageData,

@@ -1,21 +1,6 @@
-"""JSON helpers kept local so Story does not import retired role runtime details."""
+"""Compatibility exports for the moved Story JSON helpers."""
 
-from __future__ import annotations
+from .internal._json import dump, load
 
-import json
-from typing import Any
+__all__ = ["dump", "load"]
 
-
-def dump(value: Any) -> str:
-    """Serialize durable Story payloads deterministically."""
-
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
-def load(value: str, default: Any) -> Any:
-    """Deserialize a durable payload and preserve a caller-provided default."""
-
-    try:
-        return json.loads(value)
-    except (TypeError, ValueError):
-        return default

@@ -1,5 +1,5 @@
 import type { LocalAssetRegistry } from "./localAssetRegistry.js";
-import type { LocalAssetOpenResult } from "./shared.js";
+import type { LocalAssetOpenResult } from "../bridge/shared.js";
 
 /** Opens an authorized local asset through an injected operating-system boundary. */
 export async function openGrantedLocalAsset(

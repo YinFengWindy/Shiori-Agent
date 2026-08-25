@@ -1,4 +1,4 @@
-import type { VoicePlaybackCommand } from "../../../src/shared.js";
+import type { VoicePlaybackCommand } from "../../../src/bridge/shared.js";
 
 const PLAYBACK_RESUME_TIMEOUT_MS = 2_000;
 

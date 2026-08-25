@@ -1,5 +1,5 @@
 import type { BrowserWindow, WebContents } from "electron";
-import type { VoicePlaybackCommand } from "../shared.js";
+import type { VoicePlaybackCommand } from "../bridge/shared.js";
 import type { VoiceWindowSurface } from "./window.js";
 
 /** One complete synthesized sentence owned by a specific voice turn. */

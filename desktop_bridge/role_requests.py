@@ -7,7 +7,7 @@ from core.roles import RoleAggregateService, RolePetPackageService, RoleStore
 
 from .role_presenter import DesktopRolePresenter
 from .role_difference_service import RoleDifferenceGenerationService
-from .voice_handler import DesktopVoiceHandler
+from .voice.voice_handler import DesktopVoiceHandler
 
 
 class DesktopRoleRequestHandler:

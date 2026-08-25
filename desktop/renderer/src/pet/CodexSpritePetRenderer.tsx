@@ -3,7 +3,7 @@ import { X } from "@phosphor-icons/react";
 import { spriteActionDurationMs, spriteCell, spriteFramePosition, spritePlaybackFrameAt, type SpriteState } from "./spriteContract";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 import type { PetBubbleLayout, PetObservationPayload } from "../../../src/observation/types";
-import type { VoiceStatePayload } from "../../../src/shared";
+import type { VoiceStatePayload } from "../../../src/bridge/shared";
 
 type CodexSpritePetRendererProps = {
   spritesheetUrl: string;

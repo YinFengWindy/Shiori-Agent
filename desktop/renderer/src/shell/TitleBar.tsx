@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { WindowControlAction } from "../../../src/shared";
+import type { WindowControlAction } from "../../../src/bridge/shared";
 import { DeleteIcon, ResetIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 

@@ -3,18 +3,18 @@ import { copyFile, mkdir, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { IpcMainInvokeEvent } from "electron";
-import { logDesktopDiagnostic } from "./diagnostics.js";
-import { desktopDragFileIcon } from "./paths.js";
+import { logDesktopDiagnostic } from "../diagnostics.js";
+import { desktopDragFileIcon } from "../paths.js";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
-import { importLocalAssets } from "./localAssetImport.js";
-import type { LocalAssetRegistry } from "./localAssetRegistry.js";
-import { loadSettingsData, saveSettings } from "./settings.js";
-import type { DesktopPetController } from "./pet/controller.js";
-import type { DesktopObservationController } from "./observation/controller.js";
-import type { BrowserVoiceRecorder } from "./voice/recorder.js";
-import type { DesktopVoiceController } from "./voice/controller.js";
-import type { BrowserVoicePlayback } from "./voice/playback.js";
-import { registerVoiceIpc } from "./voice/ipc.js";
+import { importLocalAssets } from "../assets/localAssetImport.js";
+import type { LocalAssetRegistry } from "../assets/localAssetRegistry.js";
+import { loadSettingsData, saveSettings } from "../settings.js";
+import type { DesktopPetController } from "../pet/controller.js";
+import type { DesktopObservationController } from "../observation/controller.js";
+import type { BrowserVoiceRecorder } from "../voice/recorder.js";
+import type { DesktopVoiceController } from "../voice/controller.js";
+import type { BrowserVoicePlayback } from "../voice/playback.js";
+import { registerVoiceIpc } from "../voice/ipc.js";
 import type {
   LocalAssetOpenRequest,
   LocalAssetOpenResult,

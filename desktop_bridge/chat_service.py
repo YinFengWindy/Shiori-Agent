@@ -14,10 +14,10 @@ from bus.events_lifecycle import (
     TurnCommitted,
 )
 from desktop_bridge.models import BridgeEvent
-from desktop_bridge.role_tts_settings import resolve_role_tts_settings
+from desktop_bridge.voice.role_tts_settings import resolve_role_tts_settings
 from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
-from desktop_bridge.tts_coordinator import TtsTurnCoordinator
-from desktop_bridge.voice_service import VoiceService
+from desktop_bridge.voice.tts_coordinator import TtsTurnCoordinator
+from desktop_bridge.voice.voice_service import VoiceService
 from session.manager import Session, SessionManager
 
 logger = logging.getLogger("desktop.bridge.chat")

@@ -1,4 +1,4 @@
-from desktop_bridge.tts_text import TtsSentenceBuffer, split_tts_sentences
+from desktop_bridge.voice.tts_text import TtsSentenceBuffer, split_tts_sentences
 
 
 def test_split_tts_sentences_removes_markdown_and_limits_chunks() -> None:

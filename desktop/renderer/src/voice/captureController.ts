@@ -1,4 +1,4 @@
-import type { VoiceCaptureCommand } from "../../../src/shared.js";
+import type { VoiceCaptureCommand } from "../../../src/bridge/shared.js";
 import { capturedChunksToPcm16 } from "./captureAudio";
 
 /** Opens the configured microphone exactly once so a stale device id fails visibly. */

@@ -10,7 +10,7 @@ from unittest.mock import Mock
 import pytest
 
 from agent.voice_config import VoiceAsrConfig, VoiceConfig, VoiceTtsConfig
-from desktop_bridge.voice_service import (
+from desktop_bridge.voice.voice_service import (
     MiniMaxTtsClient,
     TencentAsrClient,
     VoiceService,

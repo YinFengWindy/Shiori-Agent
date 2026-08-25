@@ -44,11 +44,11 @@ from desktop_bridge.role_difference_service import RoleDifferenceGenerationServi
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_task_requests import DesktopSessionTaskRequestHandler
 from desktop_bridge.session_presenter import DesktopSessionPresenter
-from desktop_bridge.voice_handler import DesktopVoiceHandler
+from desktop_bridge.voice.voice_handler import DesktopVoiceHandler
 from desktop_bridge.story_simulation_handler import StorySimulationHandler
 from story_simulation.errors import StorySimulationError
 from agent.voice_config import VoiceConfig
-from desktop_bridge.voice_service import VoiceService, VoiceServiceError
+from desktop_bridge.voice.voice_service import VoiceService, VoiceServiceError
 from session.manager import Session, SessionManager
 
 logger = logging.getLogger("desktop.bridge")

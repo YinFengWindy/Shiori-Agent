@@ -1,4 +1,4 @@
-import type { SaveSettingsResult } from "../../../src/shared";
+import type { SaveSettingsResult } from "../../../src/bridge/shared";
 import type { SettingsSavePhase } from "./settingsPageTypes";
 
 export type SettingsSaveFeedback = {

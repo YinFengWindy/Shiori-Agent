@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ModelRegistrationFormData } from "../../../src/shared";
+import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { ModelRegistrationDetails } from "./ModelRegistrationDetails";
 import { ModelRegistrationList } from "./ModelRegistrationList";
 import { prepareModelRegistrationRemoval } from "./modelRegistrationRemoval";

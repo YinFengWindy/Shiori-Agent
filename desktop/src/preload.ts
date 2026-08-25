@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { PreloadLocalAssetCache } from "./preloadLocalAssetCache.js";
+import { PreloadLocalAssetCache } from "./assets/preloadLocalAssetCache.js";
 import type {
   BridgeEvent,
   BridgeResponse,
@@ -10,7 +10,7 @@ import type {
   WindowState,
   VoiceInputDevice,
   VoicePlaybackCommand,
-} from "./shared.js";
+} from "./bridge/shared.js";
 
 const localAssets = new PreloadLocalAssetCache();
 
@@ -58,7 +58,7 @@ const api: DesktopApi = {
     ipcRenderer.send("desktop:start-attachment-drag", request);
   },
   openAttachment(request) {
-    return ipcRenderer.invoke("desktop:open-attachment", request) as Promise<import("./shared.js").LocalAssetOpenResult>;
+    return ipcRenderer.invoke("desktop:open-attachment", request) as Promise<import("./bridge/shared.js").LocalAssetOpenResult>;
   },
   reportRendererDiagnostic(payload: RendererDiagnosticPayload) {
     ipcRenderer.send("desktop:renderer-diagnostic", payload);
@@ -70,10 +70,10 @@ const api: DesktopApi = {
     return ipcRenderer.invoke("desktop:bridge-restart") as Promise<{ ok: boolean; running: boolean; lastError: string | null }>;
   },
   readSettings() {
-    return ipcRenderer.invoke("desktop:settings-read") as Promise<import("./shared.js").SettingsSnapshot>;
+    return ipcRenderer.invoke("desktop:settings-read") as Promise<import("./bridge/shared.js").SettingsSnapshot>;
   },
   saveSettings(formData) {
-    return ipcRenderer.invoke("desktop:settings-save", formData) as Promise<import("./shared.js").SaveSettingsResult>;
+    return ipcRenderer.invoke("desktop:settings-save", formData) as Promise<import("./bridge/shared.js").SaveSettingsResult>;
   },
   listVoiceInputDevices() {
     return ipcRenderer.invoke("desktop:voice-input-devices-list") as Promise<VoiceInputDevice[]>;
@@ -217,7 +217,7 @@ const api: DesktopApi = {
   onVoiceState(listener) {
     const wrapped = (_event: unknown, value: unknown) => {
       if (!value || typeof value !== "object") return;
-      listener(value as import("./shared.js").VoiceStatePayload);
+      listener(value as import("./bridge/shared.js").VoiceStatePayload);
     };
     ipcRenderer.on("desktop:voice-state", wrapped);
     return () => ipcRenderer.off("desktop:voice-state", wrapped);

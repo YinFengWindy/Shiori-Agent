@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { BridgeResponse } from "../../../src/shared";
+import type { BridgeResponse } from "../../../src/bridge/shared";
 import { createStoryBridgeClient } from "./storyBridgeClient";
 import { StoryBridgeError } from "./types";
 

@@ -3,7 +3,7 @@ import type {
   SaveSettingsResult,
   SettingsFormData,
   SettingsSnapshot,
-} from "../../../src/shared.js";
+} from "../../../src/bridge/shared.js";
 
 type SettingsLoadApi = Pick<DesktopApi, "readSettings">;
 type SettingsSaveApi = Pick<DesktopApi, "readSettings" | "saveSettings" | "invoke">;

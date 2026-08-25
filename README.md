@@ -202,14 +202,16 @@ pnpm run desktop:smoke                  # 桌面主链 smoke
 
 | 目录 | 职责 |
 | --- | --- |
-| `desktop/` | Electron 主进程、preload 与 React 渲染端 |
-| `desktop_bridge/` | 桌面端与 Python Runtime 的 RPC 边界 |
-| `agent/` | 回合编排、推理循环与工具执行 |
-| `core/roles/` | 角色、关系状态与角色服务 |
-| `session/` | 会话、消息、在线状态与搜索 |
-| `memory2/`、`core/memory/` | 语义记忆与 Markdown 记忆 |
-| `proactive_v2/` | 主动任务调度与执行 |
-| `plugins/` | NovelAI、渠道与其他可扩展能力 |
+| `desktop/src/` | Electron 主进程、preload 与本地桌面能力；`src/bridge/` 是桥接协议与 IPC，`src/assets/` 是本地资源授权与协议 |
+| `desktop/renderer/src/` | React 渲染端，按 `chat/`、`roles/`、`story/`、`settings/`、`image/`、`pet/`、`voice/` 等功能域组织 |
+| `desktop_bridge/` | 桌面端与 Python Runtime 的 RPC 边界；`desktop_bridge/voice/` 集中语音、TTS 与音频资源服务 |
+| `agent/` | 回合编排、推理循环、工具执行、插件生命周期与 MCP 接入 |
+| `core/` | 角色、记忆、渠道、集成和其他核心领域服务；角色实现位于 `core/roles/` |
+| `session/` | 会话、消息、在线状态与搜索持久化 |
+| `memory2/`、`core/memory/` | 语义记忆实现与 Core 记忆契约 |
+| `proactive_v2/` | 主动任务调度、裁定、Agent tick 与 Drift 状态 |
+| `story_simulation/` | 单角色剧情领域；`story_simulation/internal/` 仅存放内部 JSON/SQLite schema helper |
+| `plugins/` | NovelAI、渠道、记忆和其他可扩展能力 |
 | `bootstrap/` | Runtime 依赖装配与启动配置 |
 
 ### 本地数据

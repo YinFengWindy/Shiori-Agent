@@ -8,7 +8,7 @@ import {
   type LocalAssetCandidate,
   type LocalAssetKind,
 } from "./localAssetPolicy.js";
-import type { LocalAssetReference } from "./shared.js";
+import type { LocalAssetReference } from "../bridge/shared.js";
 
 export const localAssetScheme = "shiori-asset";
 export const maxLocalAssetBytes = 32 * 1024 * 1024;

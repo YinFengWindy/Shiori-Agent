@@ -1,6 +1,6 @@
-import { unavailableLocalAssetUrl, type LocalAssetTransport } from "./shared.js";
+import { unavailableLocalAssetUrl, type LocalAssetTransport } from "../bridge/shared.js";
 
-export { unavailableLocalAssetUrl } from "./shared.js";
+export { unavailableLocalAssetUrl } from "../bridge/shared.js";
 
 const opaqueLocalAssetUrlPattern = /^shiori-asset:\/\/local\/[^/?#]+$/;
 

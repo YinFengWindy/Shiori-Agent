@@ -9,7 +9,7 @@ from .chat_requests import DesktopChatRequestHandler
 from .image_requests import DesktopImageRequestHandler
 from .role_requests import DesktopRoleRequestHandler
 from .session_task_requests import DesktopSessionTaskRequestHandler
-from .voice_handler import DesktopVoiceHandler
+from .voice.voice_handler import DesktopVoiceHandler
 from .story_simulation_handler import StorySimulationHandler
 
 EventEmitter = Callable[[dict[str, Any]], Awaitable[None] | None]

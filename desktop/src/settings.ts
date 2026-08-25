@@ -6,7 +6,7 @@ import type {
   SaveSettingsResult,
   SettingsFormData,
   SettingsSnapshot,
-} from "./shared.js";
+} from "./bridge/shared.js";
 import { parseHotkey } from "./voice/hotkey.js";
 
 type BridgeRestarter = () => Promise<{

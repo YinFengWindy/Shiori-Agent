@@ -1,6 +1,6 @@
 import pytest
 
-from desktop_bridge.voice_assets import VoiceAssetLifecycle
+from desktop_bridge.voice.voice_assets import VoiceAssetLifecycle
 
 
 def runtime_config(voice_id: str) -> dict:
