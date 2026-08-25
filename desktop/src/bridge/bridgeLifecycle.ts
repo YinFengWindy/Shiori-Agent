@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
-import type { LocalAssetRegistry } from "./localAssetRegistry.js";
+import type { LocalAssetRegistry } from "../assets/localAssetRegistry.js";
 import type { BridgeEvent, LocalAssetTransport } from "./shared.js";
 
 /** Starts the Python bridge process and logs startup failures at the app boundary. */

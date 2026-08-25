@@ -2,7 +2,7 @@ import type { BrowserWindow, WebContents } from "electron";
 import { encodeVoiceWav } from "./wav.js";
 import { createDeferred, type Deferred } from "./deferred.js";
 import type { VoiceRecorder } from "./controller.js";
-import type { VoiceCaptureCommand, VoiceInputDevice } from "../shared.js";
+import type { VoiceCaptureCommand, VoiceInputDevice } from "../bridge/shared.js";
 import type { VoiceWindowSurface } from "./window.js";
 
 type VoiceCaptureWindowFactory = () => VoiceWindowSurface;

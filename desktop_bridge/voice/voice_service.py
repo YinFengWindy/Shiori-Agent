@@ -5,13 +5,13 @@ from __future__ import annotations
 import threading
 
 from agent.voice_config import VoiceConfig
-from desktop_bridge.voice_models import (
+from desktop_bridge.voice.voice_models import (
     VoiceOperationMetrics,
     VoiceServiceError,
     VoiceSynthesisResult,
     VoiceTranscriptionResult,
 )
-from desktop_bridge.voice_providers import (
+from desktop_bridge.voice.voice_providers import (
     MiniMaxTtsClient,
     TencentAsrClient,
     parse_minimax_stream_chunks,

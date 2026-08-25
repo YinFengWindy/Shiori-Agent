@@ -8,13 +8,13 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from desktop_bridge.models import BridgeEvent
-from desktop_bridge.role_tts_settings import RoleTtsSettings
-from desktop_bridge.tts_text import TtsSentenceBuffer
-from desktop_bridge.voice_models import (
+from desktop_bridge.voice.role_tts_settings import RoleTtsSettings
+from desktop_bridge.voice.tts_text import TtsSentenceBuffer
+from desktop_bridge.voice.voice_models import (
     VoiceOperationMetrics,
     VoiceServiceError,
 )
-from desktop_bridge.voice_service import VoiceService
+from desktop_bridge.voice.voice_service import VoiceService
 
 logger = logging.getLogger("desktop.bridge.tts")
 

@@ -1,7 +1,7 @@
 import { CaretRight, Check } from "@phosphor-icons/react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { ModelRegistrationFormData } from "../../../src/shared";
+import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import type { RoleRecord } from "../shared/types";
 import {
   runtimeConfigForSelection,

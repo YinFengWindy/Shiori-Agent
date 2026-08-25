@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { VoiceInputDevice } from "../../../src/shared.js";
+import type { VoiceInputDevice } from "../../../src/bridge/shared.js";
 import { SettingsField as Field } from "./SettingsField";
 import { SettingsSectionCard, SettingsToggleField, settingsInputClass } from "./SettingsFieldPrimitives";
 import type { SettingsSectionEditorProps } from "./settingsPageTypes";

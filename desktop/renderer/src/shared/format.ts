@@ -1,4 +1,4 @@
-import { unavailableLocalAssetUrl } from "../../../src/shared";
+import { unavailableLocalAssetUrl } from "../../../src/bridge/shared";
 
 /** Converts one trusted bridge path into its renderer-safe opaque URL. */
 export type LocalAssetUrlResolver = (path: string) => string;

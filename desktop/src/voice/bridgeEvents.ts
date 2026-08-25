@@ -1,4 +1,4 @@
-import type { BridgeEvent } from "../shared.js";
+import type { BridgeEvent } from "../bridge/shared.js";
 import type { VoiceBridge } from "./controller.js";
 import type { VoicePlaybackCallbacks, VoicePlaybackItem } from "./playback.js";
 

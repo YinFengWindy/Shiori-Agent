@@ -1,7 +1,7 @@
 import type {
   SettingsFormData,
   SettingsSnapshot,
-} from "../../../src/shared.js";
+} from "../../../src/bridge/shared.js";
 
 /** Role data returned by the desktop bridge. */
 export type RelationshipSnapshot = {

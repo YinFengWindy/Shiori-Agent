@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 
-from desktop_bridge.voice_models import VoiceServiceError
+from desktop_bridge.voice.voice_models import VoiceServiceError
 
 JsonRequester = Callable[[str, dict[str, str], bytes], dict[str, Any]]
 StreamRequester = Callable[[str, dict[str, str], bytes], Iterable[bytes]]

@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import { localAssetScheme } from "./localAssetRegistry.js";
+import { localAssetScheme } from "./assets/localAssetRegistry.js";
 
 type NavigationEvent = {
   preventDefault(): void;

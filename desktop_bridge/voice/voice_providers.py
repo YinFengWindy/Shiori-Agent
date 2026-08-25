@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from agent.voice_config import VoiceAsrConfig, VoiceTtsConfig
-from desktop_bridge.voice_http import (
+from desktop_bridge.voice.voice_http import (
     BinaryRequester,
     JsonRequester,
     MultipartRequester,
@@ -27,7 +27,7 @@ from desktop_bridge.voice_http import (
     request_multipart,
     request_stream,
 )
-from desktop_bridge.voice_models import (
+from desktop_bridge.voice.voice_models import (
     VoiceOperationMetrics,
     VoiceServiceError,
     VoiceSynthesisResult,

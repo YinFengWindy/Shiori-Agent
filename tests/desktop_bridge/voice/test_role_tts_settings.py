@@ -1,4 +1,4 @@
-from desktop_bridge.role_tts_settings import resolve_role_tts_settings
+from desktop_bridge.voice.role_tts_settings import resolve_role_tts_settings
 
 
 def test_resolve_role_tts_settings_uses_one_mood_snapshot_and_valid_mapping() -> None:

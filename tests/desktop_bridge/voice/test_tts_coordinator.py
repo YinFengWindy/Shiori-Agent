@@ -5,12 +5,12 @@ import threading
 
 import pytest
 
-from desktop_bridge.role_tts_settings import (
+from desktop_bridge.voice.role_tts_settings import (
     RoleTtsSettings,
     resolve_role_tts_settings,
 )
-from desktop_bridge.tts_coordinator import TtsTurnCoordinator
-from desktop_bridge.voice_service import VoiceOperationMetrics, VoiceSynthesisResult
+from desktop_bridge.voice.tts_coordinator import TtsTurnCoordinator
+from desktop_bridge.voice.voice_service import VoiceOperationMetrics, VoiceSynthesisResult
 
 
 class _VoiceService:

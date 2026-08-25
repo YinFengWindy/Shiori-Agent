@@ -1,4 +1,4 @@
-import type { ModelRegistrationFormData } from "../../../src/shared";
+import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import type { RoleRecord } from "../shared/types";
 
 /** Supported reasoning effort values exposed by model controls. */

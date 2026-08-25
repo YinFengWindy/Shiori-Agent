@@ -7,8 +7,8 @@ import threading
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from desktop_bridge.voice_assets import VoiceAssetLifecycle
-from desktop_bridge.voice_service import VoiceService
+from desktop_bridge.voice.voice_assets import VoiceAssetLifecycle
+from desktop_bridge.voice.voice_service import VoiceService
 
 
 class DesktopVoiceHandler:

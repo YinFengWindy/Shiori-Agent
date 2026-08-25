@@ -14,7 +14,7 @@ from bus.events_lifecycle import (
     TurnCommitted,
 )
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
-from desktop_bridge.voice_service import VoiceOperationMetrics, VoiceSynthesisResult
+from desktop_bridge.voice.voice_service import VoiceOperationMetrics, VoiceSynthesisResult
 
 
 class _VoiceService:

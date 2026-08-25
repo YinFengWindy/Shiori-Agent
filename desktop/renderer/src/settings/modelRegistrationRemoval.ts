@@ -1,4 +1,4 @@
-import type { ModelRegistrationFormData, PendingRoleModelUpdate } from "../../../src/shared";
+import type { ModelRegistrationFormData, PendingRoleModelUpdate } from "../../../src/bridge/shared";
 import type { RoleRecord } from "../shared/types";
 
 /** Confirms a registration removal and migrates role references before deletion. */

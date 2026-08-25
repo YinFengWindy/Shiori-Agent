@@ -1,13 +1,13 @@
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { app, BrowserWindow, Menu, powerMonitor, protocol, screen, session, shell } from "electron";
-import { localAssetSchemePrivileges, registerLocalAssetProtocol } from "./assetProtocol.js";
-import { DesktopBridgeClient } from "./bridgeClient.js";
-import { startBridge, wireBridgeEvents } from "./bridgeLifecycle.js";
+import { localAssetSchemePrivileges, registerLocalAssetProtocol } from "./assets/assetProtocol.js";
+import { DesktopBridgeClient } from "./bridge/bridgeClient.js";
+import { startBridge, wireBridgeEvents } from "./bridge/bridgeLifecycle.js";
 import { logDesktopDiagnostic } from "./diagnostics.js";
-import { registerDesktopIpc } from "./ipc.js";
-import { openGrantedLocalAsset } from "./localAssetOpen.js";
-import { LocalAssetRegistry, localAssetScheme } from "./localAssetRegistry.js";
+import { registerDesktopIpc } from "./bridge/ipc.js";
+import { openGrantedLocalAsset } from "./assets/localAssetOpen.js";
+import { LocalAssetRegistry, localAssetScheme } from "./assets/localAssetRegistry.js";
 import { ensureDesktopRuntimeConfig, resolveDesktopRuntimePaths } from "./runtimePaths.js";
 import { checkForDesktopUpdates } from "./updater.js";
 import { createDesktopTray } from "./tray.js";
@@ -30,7 +30,7 @@ import { VoiceHotkeyController } from "./voice/hotkey.js";
 import { BrowserVoicePlayback } from "./voice/playback.js";
 import { cancelVoiceTurn, createVoicePlaybackCallbacks, handleVoiceBridgeEvent, selectVoiceTurn } from "./voice/bridgeEvents.js";
 import { configureSettingsConfigPath, loadSettingsData } from "./settings.js";
-import type { SettingsFormData, VoiceStatePayload } from "./shared.js";
+import type { SettingsFormData, VoiceStatePayload } from "./bridge/shared.js";
 
 // Voice replies are played from a trusted hidden renderer without a DOM user gesture.
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");

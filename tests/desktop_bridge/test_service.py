@@ -14,7 +14,7 @@ from conversation.push_sync import ExternalImageSyncService
 from core.roles import RoleStore
 from core.roles.services import RoleAggregateService
 from desktop_bridge.service import DesktopBridgeService
-from desktop_bridge.voice_service import (
+from desktop_bridge.voice.voice_service import (
     VoiceOperationMetrics,
     VoiceServiceError,
     VoiceTranscriptionResult,

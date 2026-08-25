@@ -1,5 +1,5 @@
 import { ArrowLeft, Trash } from "@phosphor-icons/react";
-import type { ModelRegistrationFormData } from "../../../src/shared";
+import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import { SettingsField as Field } from "./SettingsField";
 import { SettingsSecretInput, settingsInputClass } from "./SettingsFieldPrimitives";
 
