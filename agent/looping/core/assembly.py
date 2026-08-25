@@ -52,7 +52,7 @@ class _AssemblyMixin:
         self._running = False
         self._processing_state = deps.processing_state
         self._event_bus = deps.event_bus or EventBus()
-        self._role_world_registry = deps.role_world_registry
+        self._role_runtime_registry = deps.role_runtime_registry
 
         # ── 中断控制面（纯内存态） ──
         self._active_tasks: dict[str, asyncio.Task] = {}
@@ -85,7 +85,7 @@ class _AssemblyMixin:
                 provider=RoleAwareProvider(base_llm_services.provider),
                 light_provider=RoleAwareProvider(base_llm_services.light_provider),
             )
-            if self._role_world_registry is not None
+            if self._role_runtime_registry is not None
             else base_llm_services
         )
         self._session_services = deps.session_services or SessionServices(

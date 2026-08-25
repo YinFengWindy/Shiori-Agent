@@ -1002,7 +1002,7 @@ def test_bootstrap_proactive_builders_cover_enabled_and_disabled_paths(
         presence=MagicMock(),
         agent_loop=cast(Any, SimpleNamespace(
             processing_state=SimpleNamespace(is_busy=lambda: False),
-            role_world_registry=MagicMock(),
+            role_runtime_registry=MagicMock(),
         )),
     )
     assert tasks == ["loop-task"]

@@ -19,7 +19,7 @@ async def test_optimizer_uses_the_role_dialogue_model_snapshot() -> None:
     )
     activations: list[tuple[str, str]] = []
 
-    class _WorldRegistry:
+    class _RoleRuntimeRegistry:
         async def get(self, role_id: str):
             self.role_id = role_id
             return self
@@ -49,7 +49,7 @@ async def test_optimizer_uses_the_role_dialogue_model_snapshot() -> None:
         _RelationshipRuntime(),
         provider=fallback_provider,
         model="base-model",
-        world_registry=_WorldRegistry(),
+        role_runtime_registry=_RoleRuntimeRegistry(),
     )
 
     result = await optimizer.optimize(role_id="mira")

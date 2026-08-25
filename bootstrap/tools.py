@@ -61,7 +61,7 @@ from core.roles import (
     RoleRelationshipRuntimeService,
     RoleRepository,
     RoleStore,
-    RoleWorldRegistry,
+    RoleRuntimeRegistry,
 )
 from core.roles.model_runtime import RoleModelRuntime
 from infra.screen_capture import PrimaryScreenCapture
@@ -89,7 +89,7 @@ class CoreRuntime:
     memory_runtime: MemoryRuntime
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
-    role_world_registry: RoleWorldRegistry
+    role_runtime_registry: RoleRuntimeRegistry
     vl_provider: LLMProvider | None = None
     image_sync_service: ExternalImageSyncService | None = None
     agent_provider: LLMProvider | None = None
@@ -255,7 +255,7 @@ def build_registered_tools(
     event_publisher: EventBus | None = None,
     agent_loop_provider: Callable[[], Any] | None = None,
     role_repository: RoleRepository | None = None,
-    role_world_registry: RoleWorldRegistry | None = None,
+    role_runtime_registry: RoleRuntimeRegistry | None = None,
 ) -> tuple[
     ToolRegistry,
     MessagePushTool,
@@ -285,7 +285,7 @@ def build_registered_tools(
             light_provider=light_provider,
             http_resources=http_resources,
             event_publisher=event_publisher,
-            role_world_registry=role_world_registry,
+            role_runtime_registry=role_runtime_registry,
         ),
     )
     memory_runtime = memory_result.extras["memory_runtime"]
@@ -295,7 +295,7 @@ def build_registered_tools(
         provider=provider,
         vl_provider=vl_provider,
         memory=memory_runtime.engine,
-        world_registry=role_world_registry,
+        role_runtime_registry=role_runtime_registry,
     )
     tools.register(
         ObserveScreenTool(
@@ -335,7 +335,7 @@ def build_registered_tools(
                 memory_engine=memory_runtime.engine,
                 scheduler=scheduler,
                 event_publisher=event_publisher,
-                role_world_registry=role_world_registry,
+                role_runtime_registry=role_runtime_registry,
             ),
         )
         maybe_mcp = result.extras.get("mcp_registry")
@@ -373,7 +373,7 @@ def _build_loop_deps(
     event_bus: EventBus,
     memory_runtime: MemoryRuntime,
     relationship_runtime: RoleRelationshipRuntimeService,
-    role_world_registry: RoleWorldRegistry | None = None,
+    role_runtime_registry: RoleRuntimeRegistry | None = None,
 ) -> AgentLoopDeps:
     wiring = getattr(config, "wiring", WiringConfig())
     context = resolve_context_factory(wiring.context)(
@@ -398,7 +398,7 @@ def _build_loop_deps(
         relationship_runtime,
         provider=provider,
         model=config.agent_model or config.model,
-        world_registry=role_world_registry,
+        role_runtime_registry=role_runtime_registry,
     )
     _bind_memory_lifecycle_if_supported(
         markdown=memory_runtime.markdown.maintenance,
@@ -426,7 +426,7 @@ def _build_loop_deps(
         llm_services=llm_services,
         memory_services=memory_services,
         session_services=session_services,
-        role_world_registry=role_world_registry,
+        role_runtime_registry=role_runtime_registry,
     )
 
 
@@ -511,7 +511,7 @@ def build_core_runtime(
         len(migration_summary.migrated_session_keys),
         len(migration_summary.unresolved_session_keys),
     )
-    role_world_registry = RoleWorldRegistry(
+    role_runtime_registry = RoleRuntimeRegistry(
         role_repository,
         model_resolver=role_model_resolver,
     )
@@ -527,7 +527,7 @@ def build_core_runtime(
             vl_provider=vl_provider,
             session_store=session_manager._store,
             event_publisher=event_bus,
-            role_world_registry=role_world_registry,
+            role_runtime_registry=role_runtime_registry,
             agent_loop_provider=lambda: loop_ref.get("loop"),
             role_repository=role_repository,
         )
@@ -565,7 +565,7 @@ def build_core_runtime(
         event_bus=event_bus,
         memory_runtime=memory_runtime,
         relationship_runtime=relationship_runtime,
-        role_world_registry=role_world_registry,
+        role_runtime_registry=role_runtime_registry,
     )
     loop = AgentLoop(
         loop_deps,
@@ -629,7 +629,7 @@ def build_core_runtime(
         memory_runtime=memory_runtime,
         presence=presence,
         relationship_runtime=relationship_runtime,
-        role_world_registry=role_world_registry,
+        role_runtime_registry=role_runtime_registry,
         plugin_manager=plugin_manager,
         screen_observation=screen_observation,
     )

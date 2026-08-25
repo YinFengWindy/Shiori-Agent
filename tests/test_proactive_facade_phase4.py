@@ -57,7 +57,7 @@ def test_build_proactive_runtime_accepts_facade_memory(tmp_path, monkeypatch):
             Any,
             SimpleNamespace(
                 processing_state=None,
-                role_world_registry=MagicMock(),
+                role_runtime_registry=MagicMock(),
             ),
         ),
     )

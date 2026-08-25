@@ -21,7 +21,7 @@ related:
 
 | 准备修改 | 必查影响面 | 推荐图谱查询词 |
 | --- | --- | --- |
-| 角色 schema / CRUD | store、迁移、world、绑定、Session、关系、任务、桌面共享类型 | `RoleRecord RoleAggregateService RoleWorldRegistry` |
+| 角色 schema / CRUD | store、迁移、role_runtime、绑定、Session、关系、任务、桌面共享类型 | `RoleRecord RoleAggregateService RoleRuntimeRegistry` |
 | 关系、心情、寂寞 | relationship runtime、Proactive、提示词、场景、桌面展示 | `RoleRelationshipRuntimeService loneliness snapshot` |
 | 角色素材 | 资源存储、桌面素材页、提示词、NovelAI、自动 CG | `RoleAssetsPage LocalAssetRegistry NovelAI` |
 | 会话键 / 线程 | 渠道标识、Session、Conversation、群聊记忆、桌面缓存 | `session_key SessionManager ConversationService` |

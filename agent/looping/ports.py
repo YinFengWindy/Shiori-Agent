@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from core.memory.runtime import MemoryRuntime
     from proactive_v2.presence import PresenceStore
     from core.roles.relationship_runtime import RoleRelationshipRuntimeService
-    from core.roles.world import RoleWorldRegistry
+    from core.roles.role_runtime import RoleRuntimeRegistry
     from conversation.service import ConversationService
     from session.manager import SessionManager
 
@@ -93,7 +93,7 @@ class AgentLoopDeps:
     tool_discovery: "ToolDiscoveryState | None" = None
     reasoner: "Reasoner | None" = None
     core_runner: "CoreRunner | None" = None
-    role_world_registry: "RoleWorldRegistry | None" = None
+    role_runtime_registry: "RoleRuntimeRegistry | None" = None
 
 @dataclass
 class AgentLoopConfig:

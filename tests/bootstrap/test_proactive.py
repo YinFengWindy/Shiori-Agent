@@ -89,7 +89,7 @@ def test_build_proactive_runtime_isolates_role_policy_and_state(tmp_path, monkey
             Any,
             SimpleNamespace(
                 processing_state=None,
-                role_world_registry=MagicMock(),
+                role_runtime_registry=MagicMock(),
             ),
         ),
         proactive_gates=[proactive_gate],

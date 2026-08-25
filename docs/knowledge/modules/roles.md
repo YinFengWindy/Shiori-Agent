@@ -12,7 +12,7 @@ source_paths:
   - core/roles/pet_state.py
   - core/roles/pet_packages.py
   - core/roles/services.py
-  - core/roles/world.py
+  - core/roles/role_runtime.py
   - core/roles/relationship_runtime/
   - core/roles/scene_followup_runtime.py
   - desktop_bridge/role_difference_service.py
@@ -29,7 +29,7 @@ related:
 
 ## 模块边界
 
-`RoleStore` 是兼容 facade：`RoleManifestRepository` 负责 JSON 清单、迁移和进程内锁，`RoleAssetStore` 负责素材文件、路径安全与分类，`RoleBindingPolicy` 负责渠道联系人和主动目标不变量，`RolePetStateStore` 负责桌宠选择与单启用状态，持久化数据契约集中在 `models.py`。`RoleAggregateService` 和相关 service 提供角色聚合业务入口，`RoleWorldRegistry` 将持久化角色装配为运行时角色世界。桌面端、渠道和主动能力应调用这些服务，不应各自读写角色文件。
+`RoleStore` 是兼容 facade：`RoleManifestRepository` 负责 JSON 清单、迁移和进程内锁，`RoleAssetStore` 负责素材文件、路径安全与分类，`RoleBindingPolicy` 负责渠道联系人和主动目标不变量，`RolePetStateStore` 负责桌宠选择与单启用状态，持久化数据契约集中在 `models.py`。`RoleAggregateService` 和相关 service 提供角色聚合业务入口，`RoleRuntimeRegistry` 将持久化角色装配为角色运行时。桌面端、渠道和主动能力应调用这些服务，不应各自读写角色文件。
 
 角色能力包含基本设定、渠道绑定、工作区、素材、心情相关配置和运行时关系状态。角色素材既被桌面管理页使用，也可能进入提示词、场景和图片生成流程。
 
@@ -39,7 +39,7 @@ related:
 
 ## 修改影响
 
-- 修改角色 schema：同步检查 `models.py` 序列化、manifest 迁移、桌面共享类型、表单适配、渠道绑定和角色世界装配。
+- 修改角色 schema：同步检查 `models.py` 序列化、manifest 迁移、桌面共享类型、表单适配、渠道绑定和角色运行时装配。
 - 修改角色删除：检查会话、对话线程、关系状态、记忆、调度任务、工作区和素材清理。
 - 修改心情或关系：检查主动触发条件、提示词装配、场景判断和桌面展示。
 - 修改素材分类：检查角色素材页、选择器、图片提示词与本地资源传输。

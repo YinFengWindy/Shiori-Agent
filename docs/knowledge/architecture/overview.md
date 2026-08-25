@@ -18,7 +18,7 @@ related:
 
 ## 启动与装配
 
-`main.py` 是进程入口。`bootstrap/app.py` 管理应用生命周期，`bootstrap/wiring.py` 负责把配置、持久化、角色世界、Session、Agent、工具、插件、渠道和主动循环拼装在一起。具体领域服务应由 owning module 提供，bootstrap 只承担依赖拼接。
+`main.py` 是进程入口。`bootstrap/app.py` 管理应用生命周期，`bootstrap/wiring.py` 负责把配置、持久化、角色运行时、Session、Agent、工具、插件、渠道和主动循环拼装在一起。具体领域服务应由 owning module 提供，bootstrap 只承担依赖拼接。
 
 ## 被动消息主链路
 

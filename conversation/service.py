@@ -169,7 +169,7 @@ class ConversationService:
         channel: str,
         chat_id: str,
     ) -> bool:
-        """Checks whether a legacy session still belongs to the same role world."""
+        """Checks whether a legacy session still belongs to the same role runtime."""
         return (
             (not role_id or thread.role_id == role_id)
             and (not channel or thread.channel == channel)

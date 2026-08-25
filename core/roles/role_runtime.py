@@ -93,7 +93,7 @@ class RoleExecutionContext:
         }
 
 
-class RoleWorld:
+class RoleRuntime:
     """Owns one role's mutable execution boundaries inside a process."""
 
     def __init__(
@@ -113,32 +113,32 @@ class RoleWorld:
 
     @property
     def role_id(self) -> str:
-        """Returns the role this world owns."""
+        """Returns the role this runtime owns."""
 
         return self._role.id
 
     @property
     def config_version(self) -> str:
-        """Returns the newest role configuration snapshot observed by this world."""
+        """Returns the newest role configuration snapshot observed by this runtime."""
 
         return _role_config_version(self._role)
 
     def refresh_role(self, role: RoleRecord) -> None:
-        """Applies a role configuration update without replacing the world identity."""
+        """Applies a role configuration update without replacing the runtime identity."""
 
         if role.id != self.role_id:
-            raise ValueError("不能用其他角色配置刷新 RoleWorld")
+            raise ValueError("不能用其他角色配置刷新 RoleRuntime")
         self._role = role
 
     @property
     def active_work(self) -> int:
-        """Returns the number of work items currently executing in this world."""
+        """Returns the number of work items currently executing in this runtime."""
 
         return self._active_work
 
     @property
     def models_enabled(self) -> bool:
-        """Returns whether this world can resolve role-owned model snapshots."""
+        """Returns whether this runtime can resolve role-owned model snapshots."""
 
         return self._model_resolver is not None
 
@@ -147,12 +147,12 @@ class RoleWorld:
         self,
         purpose: ModelPurpose,
     ) -> Generator[RoleModelSnapshot]:
-        """Activates one immutable model snapshot owned by this role world."""
+        """Activates one immutable model snapshot owned by this role runtime."""
 
         if self._closing:
-            raise RuntimeError(f"角色世界已停止: {self.role_id}")
+            raise RuntimeError(f"角色运行时已停止: {self.role_id}")
         if self._model_resolver is None:
-            raise RuntimeError(f"角色世界未配置模型能力: {self.role_id}")
+            raise RuntimeError(f"角色运行时未配置模型能力: {self.role_id}")
         with self._model_resolver.activate(self.role_id, purpose) as snapshot:
             yield snapshot
 
@@ -162,7 +162,7 @@ class RoleWorld:
         self._closing = True
 
     def cancel_active_work(self) -> None:
-        """Cancels all registered work before the world is reloaded or removed."""
+        """Cancels all registered work before the runtime is reloaded or removed."""
 
         for task in tuple(self._tasks):
             task.cancel()
@@ -204,7 +204,7 @@ class RoleWorld:
         return await self.execute_thread(context, operation)
 
     async def send_channel(self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]) -> T:
-        """Runs a role-authorized channel send through its owning world."""
+        """Runs a role-authorized channel send through its owning runtime."""
         return await self.execute_thread(context, operation)
 
     async def execute_role_state(
@@ -230,9 +230,9 @@ class RoleWorld:
 
     def _validate_context(self, context: RoleExecutionContext) -> None:
         if self._closing:
-            raise RuntimeError(f"角色世界已停止: {self.role_id}")
+            raise RuntimeError(f"角色运行时已停止: {self.role_id}")
         if context.role_id != self.role_id:
-            raise ValueError("RoleExecutionContext 角色与 RoleWorld 不匹配")
+            raise ValueError("RoleExecutionContext 角色与 RoleRuntime 不匹配")
 
     @staticmethod
     def _require_work_kind(context: RoleExecutionContext, expected: str) -> None:
@@ -240,8 +240,8 @@ class RoleWorld:
             raise ValueError(f"角色能力不接受工作类型: {context.work_kind}")
 
 
-class RoleWorldRegistry:
-    """Creates and validates the process-local worlds that own role work."""
+class RoleRuntimeRegistry:
+    """Creates and validates the process-local runtimes that own role work."""
 
     def __init__(
         self,
@@ -251,21 +251,21 @@ class RoleWorldRegistry:
     ) -> None:
         self._repository = repository
         self._model_resolver = model_resolver
-        self._worlds: dict[str, RoleWorld] = {}
+        self._runtimes: dict[str, RoleRuntime] = {}
         self._lock = asyncio.Lock()
 
-    async def get(self, role_id: str) -> RoleWorld:
-        """Returns the stable world for a role and refreshes its current configuration."""
+    async def get(self, role_id: str) -> RoleRuntime:
+        """Returns the stable runtime for a role and refreshes its current configuration."""
 
         role = self._repository.get_required(role_id)
         async with self._lock:
-            current = self._worlds.get(role.id)
+            current = self._runtimes.get(role.id)
             if current is not None:
                 current.refresh_role(role)
                 return current
-            world = RoleWorld(role, model_resolver=self._model_resolver)
-            self._worlds[role.id] = world
-            return world
+            runtime = RoleRuntime(role, model_resolver=self._model_resolver)
+            self._runtimes[role.id] = runtime
+            return runtime
 
     def create_context(
         self,
@@ -297,10 +297,10 @@ class RoleWorldRegistry:
         context: RoleExecutionContext,
         operation: Callable[[], Awaitable[T]],
     ) -> T:
-        """Runs a thread turn through the world selected by its explicit context."""
+        """Runs a thread turn through the runtime selected by its explicit context."""
 
-        world = await self.get(context.role_id)
-        return await world.execute_thread(context, operation)
+        runtime = await self.get(context.role_id)
+        return await runtime.execute_thread(context, operation)
 
     async def dispatch_passive_turn(self, context: RoleExecutionContext, operation: Callable[[], Awaitable[T]]) -> T:
         """Dispatches the inbound conversation capability for a role."""
@@ -319,29 +319,29 @@ class RoleWorldRegistry:
         context: RoleExecutionContext,
         operation: Callable[[], Awaitable[T]],
     ) -> T:
-        """Runs a role-wide mutation through the world selected by its context."""
+        """Runs a role-wide mutation through the runtime selected by its context."""
 
-        world = await self.get(context.role_id)
-        return await world.execute_role_state(context, operation)
+        runtime = await self.get(context.role_id)
+        return await runtime.execute_role_state(context, operation)
 
     async def close(self, role_id: str) -> None:
-        """Stops a role world after ensuring no work remains active."""
+        """Stops a role runtime after ensuring no work remains active."""
 
         clean_role_id = _required(role_id, "role_id")
         async with self._lock:
-            world = self._worlds.get(clean_role_id)
-            if world is None:
+            runtime = self._runtimes.get(clean_role_id)
+            if runtime is None:
                 return
-            world.begin_closing()
-            world.cancel_active_work()
-            if world.active_work:
-                raise RuntimeError(f"角色世界仍有运行中的工作: {clean_role_id}")
-            self._worlds.pop(clean_role_id, None)
+            runtime.begin_closing()
+            runtime.cancel_active_work()
+            if runtime.active_work:
+                raise RuntimeError(f"角色运行时仍有运行中的工作: {clean_role_id}")
+            self._runtimes.pop(clean_role_id, None)
 
     async def close_all(self) -> None:
-        """Stops every idle world during process shutdown."""
+        """Stops every idle runtime during process shutdown."""
 
-        for role_id in list(self._worlds):
+        for role_id in list(self._runtimes):
             await self.close(role_id)
 
     def context_from_metadata(

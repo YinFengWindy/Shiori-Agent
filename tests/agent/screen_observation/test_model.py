@@ -134,7 +134,7 @@ async def test_analyze_uses_the_role_visual_model_snapshot() -> None:
     )
     activations: list[tuple[str, str]] = []
 
-    class _WorldRegistry:
+    class _RoleRuntimeRegistry:
         async def get(self, role_id: str):
             self.role_id = role_id
             return self
@@ -152,7 +152,7 @@ async def test_analyze_uses_the_role_visual_model_snapshot() -> None:
         ),
         provider=None,
         model="",
-        world_registry=_WorldRegistry(),
+        role_runtime_registry=_RoleRuntimeRegistry(),
     )
 
     await adapter.analyze(_payload())

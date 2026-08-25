@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from agent.provider import LLMProvider
 
 if TYPE_CHECKING:
-    from core.roles.world import RoleWorldRegistry
+    from core.roles.role_runtime import RoleRuntimeRegistry
     from .service import RoleRelationshipRuntimeService
 
 _RELATIONSHIP_SYSTEM = (
@@ -80,12 +80,12 @@ class RelationshipSnapshotOptimizer:
         provider: LLMProvider,
         model: str,
         max_tokens: int = 2048,
-        world_registry: RoleWorldRegistry | None = None,
+        role_runtime_registry: RoleRuntimeRegistry | None = None,
     ) -> None:
         self._runtime = runtime
         self._provider = provider
         self._model = model
-        self._world_registry = world_registry
+        self._role_runtime_registry = role_runtime_registry
         self._max_tokens = max_tokens
         self._lock = asyncio.Lock()
 
@@ -100,7 +100,7 @@ class RelationshipSnapshotOptimizer:
         async with self._lock:
             now = datetime.now().astimezone()
             try:
-                if self._world_registry is None:
+                if self._role_runtime_registry is None:
                     snapshot = await self._generate(
                         clean_role_id,
                         provider=self._provider,
@@ -108,8 +108,8 @@ class RelationshipSnapshotOptimizer:
                         now=now,
                     )
                 else:
-                    world = await self._world_registry.get(clean_role_id)
-                    with world.activate_model("chat") as model_snapshot:
+                    runtime = await self._role_runtime_registry.get(clean_role_id)
+                    with runtime.activate_model("chat") as model_snapshot:
                         snapshot = await self._generate(
                             clean_role_id,
                             provider=model_snapshot.provider,

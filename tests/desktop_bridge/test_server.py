@@ -105,9 +105,9 @@ async def test_serve_stdio_forces_utf8_for_all_bridge_streams(
     }
 
 
-def test_server_forwards_the_role_world_registry_to_story(tmp_path: Path) -> None:
+def test_server_forwards_the_role_runtime_registry_to_story(tmp_path: Path) -> None:
     session_manager = SessionManager(tmp_path)
-    world_registry = SimpleNamespace()
+    role_runtime_registry = SimpleNamespace()
     runtime = SimpleNamespace(
         session_manager=SimpleNamespace(
             workspace=tmp_path,
@@ -116,12 +116,12 @@ def test_server_forwards_the_role_world_registry_to_story(tmp_path: Path) -> Non
         loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
         event_bus=EventBus(),
         provider=None,
-        role_world_registry=world_registry,
+        role_runtime_registry=role_runtime_registry,
     )
 
     server = DesktopBridgeServer(runtime)
 
-    assert server.service.story_simulation._world_registry is world_registry
+    assert server.service.story_simulation._role_runtime_registry is role_runtime_registry
 
 
 def test_observation_service_prefers_dedicated_vl_provider(tmp_path: Path) -> None:

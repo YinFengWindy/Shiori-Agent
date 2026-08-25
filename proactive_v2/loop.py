@@ -401,7 +401,7 @@ class ProactiveLoop:
                 last_base_score = None
 
     async def _run_tick(self) -> float | None:
-        """Runs one proactive tick through the owning role world when configured."""
+        """Runs one proactive tick through the owning role runtime when configured."""
 
         if self._tick_dispatcher is None:
             return await self._tick()
