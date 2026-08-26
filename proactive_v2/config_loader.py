@@ -98,8 +98,6 @@ def _check_forbidden_keys(p: dict[str, Any]) -> None:
         "features",
         "overrides",
         "feed_poller_interval_seconds",
-        # v2 Agent Tick（独立子系统）
-        "agent_tick",
     }
 
     forbidden = set(p.keys()) - allowed_root_keys
@@ -117,23 +115,6 @@ def _validate_feature_keys(features: dict[str, Any]) -> None:
         raise ProactiveConfigError(
             f"proactive.features 出现非法键: {', '.join(sorted(forbidden))}。"
             "当前已无允许键。"
-        )
-
-
-def _validate_agent_tick_keys(agent_tick: dict[str, Any]) -> None:
-    allowed = {
-        "max_steps",
-        "content_limit",
-        "web_fetch_max_chars",
-        "drift_enabled",
-        "drift_max_steps",
-        "drift_min_interval_hours",
-    }
-    forbidden = set(agent_tick.keys()) - allowed
-    if forbidden:
-        raise ProactiveConfigError(
-            f"proactive.agent_tick 出现非法键: {', '.join(sorted(forbidden))}。"
-            f"允许键: {', '.join(sorted(allowed))}"
         )
 
 
@@ -192,12 +173,6 @@ def _validate_drift_keys(drift: dict[str, Any]) -> None:
             f"proactive.drift 出现非法键: {', '.join(sorted(forbidden))}。"
             f"允许键: {', '.join(sorted(allowed))}"
         )
-
-
-def _pick(primary: dict[str, Any], primary_key: str, legacy: dict[str, Any], legacy_key: str):
-    if primary_key in primary:
-        return primary[primary_key]
-    return legacy.get(legacy_key)
 
 
 def _as_int(value: Any, field_name: str) -> int:
@@ -320,9 +295,7 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
         **final_config,
     )
 
-    # v2 Agent Tick 配置（独立子系统）
-    at = p.get("agent_tick") or {}
-    _validate_agent_tick_keys(at)
+    # Agent Tick 与 Drift 都由角色主动推送配置提供。
     agent = p.get("agent") or {}
     if not isinstance(agent, dict):
         raise ProactiveConfigError("proactive.agent 必须是字典")
@@ -332,39 +305,39 @@ def load_proactive_config(p: dict[str, Any]) -> ProactiveConfig:
         raise ProactiveConfigError("proactive.drift 必须是字典")
     _validate_drift_keys(drift)
 
-    if "max_steps" in agent or "max_steps" in at:
+    if "max_steps" in agent:
         config.agent_tick_max_steps = max(
             1,
-            _as_int(_pick(agent, "max_steps", at, "max_steps"), "agent.max_steps"),
+            _as_int(agent["max_steps"], "agent.max_steps"),
         )
-    if "content_limit" in agent or "content_limit" in at:
+    if "content_limit" in agent:
         config.agent_tick_content_limit = max(
             1,
             _as_int(
-                _pick(agent, "content_limit", at, "content_limit"),
+                agent["content_limit"],
                 "agent.content_limit",
             ),
         )
-    if "web_fetch_max_chars" in agent or "web_fetch_max_chars" in at:
+    if "web_fetch_max_chars" in agent:
         config.agent_tick_web_fetch_max_chars = max(
             1000,
             _as_int(
-                _pick(agent, "web_fetch_max_chars", at, "web_fetch_max_chars"),
+                agent["web_fetch_max_chars"],
                 "agent.web_fetch_max_chars",
             ),
         )
-    if "enabled" in drift or "drift_enabled" in at:
-        config.drift_enabled = bool(drift.get("enabled", at.get("drift_enabled")))
-    if "max_steps" in drift or "drift_max_steps" in at:
+    if "enabled" in drift:
+        config.drift_enabled = bool(drift["enabled"])
+    if "max_steps" in drift:
         config.drift_max_steps = max(
             3,
-            _as_int(_pick(drift, "max_steps", at, "drift_max_steps"), "drift.max_steps"),
+            _as_int(drift["max_steps"], "drift.max_steps"),
         )
-    if "min_interval_hours" in drift or "drift_min_interval_hours" in at:
+    if "min_interval_hours" in drift:
         config.drift_min_interval_hours = max(
             0,
             _as_int(
-                _pick(drift, "min_interval_hours", at, "drift_min_interval_hours"),
+                drift["min_interval_hours"],
                 "drift.min_interval_hours",
             ),
         )

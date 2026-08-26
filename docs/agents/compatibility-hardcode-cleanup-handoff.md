@@ -86,7 +86,7 @@
 | F09 | `memory2/retriever.py:183-231` | embedding 失败跳过向量 lane，继续 keyword lane。 | 降级应返回 metadata，并设置连续失败告警。 |
 | F10 | `proactive_v2/loop.py:328-345,394-419` | feed/tick 异常只记录并继续循环。 | 增加连续失败、backoff、健康状态或熔断。 |
 | F11 | `plugins/meme/runtime.py:177-191,251-252` | 角色素材缺失时回退全局 MemeCatalog。 | 确认是否允许角色隔离边界被全局素材穿透。 |
-| F12 | `proactive_v2/config_loader.py:197-200,335-368` | 新配置块兼容旧 `agent_tick` / `drift_*` 平铺字段。 | 检查旧配置存量，增加 warning 和移除期限。 |
+| F12 | `proactive_v2/config_loader.py` | 已移除历史全局 `agent_tick` 输入兼容；角色级 `agent` / `drift` 是唯一输入。 | 角色设置、持久化和启动装配保持当前契约。 |
 | F13 | `memory2/dedup_decider.py:188-205,218-273` | 兼容旧 LLM decision、空列表、1-based index 和多 merge。 | 区分 legacy repair 与 invalid output，返回结构化原因。 |
 | F14 | `desktop_bridge/story_simulation_handler.py:651-655` | 缺 `creation_id` 时回退 `request_id`。 | 确认所有调用方是否已提供 creation_id，避免幂等退化。 |
 | F15 | `desktop_bridge/story_simulation_handler.py:629-634` | 无 director 时构造 `provider=None` 的 director。 | 确认是否只用于测试；生产路径应明确依赖缺失。 |
