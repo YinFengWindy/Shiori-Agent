@@ -74,6 +74,7 @@ async def start_channels(
                 channel_hub=channel_hub,
             ))
         except Exception as exc:
+            host.record_failure("telegram", phase="construct", error=exc)
             logger.warning("跳过 Telegram 渠道: %s", exc)
 
     if config.channels.qq and config.channels.qq.bot_uin:
@@ -92,6 +93,7 @@ async def start_channels(
                 channel_hub=channel_hub,
             ))
         except Exception as exc:
+            host.record_failure("qq", phase="construct", error=exc)
             logger.warning("跳过 QQ 渠道: %s", exc)
 
     for channel in plugin_channels or []:

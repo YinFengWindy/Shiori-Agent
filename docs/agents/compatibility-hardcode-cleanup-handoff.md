@@ -61,7 +61,7 @@
 | ID | 位置 | 当前行为 | 审查重点 |
 | --- | --- | --- | --- |
 | F01 | `infra/channels/qq_channel/compat.py:18-45` | 对 ncatbot 的 websocket 全局 monkey patch，失败只 warning。 | 确认第三方版本是否仍需补丁；优先改显式 adapter/版本检查。 |
-| F02 | `bootstrap/channels.py:66-99` | 渠道构造异常后跳过，Runtime 继续启动。 | 启用渠道失败是否应 fail-fast，至少需要结构化状态。 |
+| F02 | `bootstrap/channels.py:66-101`、`bootstrap/channel_host.py` | 渠道构造或启动异常时继续让其他渠道运行，并通过 `ChannelHost.failures` 暴露结构化失败状态。 | 已保留独立渠道隔离语义；调用方可据 `channel/phase/error_type/message` 展示健康状态。 |
 | F03 | `agent/turns/outbound.py:65-96` | push 任意异常都转成 `False`。 | 区分参数不可发送与外部调用异常，避免业务层吞错。 |
 | F04 | `memory2/store/connection.py:14-103`、`memory2/store/vector.py:209-220` | sqlite-vec 失败后全表扫描。 | 确认是否产品必需；若允许降级，增加规模阈值、状态和指标。 |
 | F05 | `proactive_v2/event.py:45-55,98-164` | 缺 upstream id 时生成 SHA1 fallback id，坏时间静默忽略。 | 区分 dedupe key 与真实 event id；无 ID 或坏时间应可观测。 |
