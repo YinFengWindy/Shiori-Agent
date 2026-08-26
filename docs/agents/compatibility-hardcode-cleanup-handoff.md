@@ -66,6 +66,8 @@
 - **F04**：保留 sqlite-vec 不可用时的全表扫描；集中暴露 vector backend 状态和降级原因，区分未安装、初始化失败和查询维度不匹配，不改变结果排序和默认阈值。
 - **F05**：分离上游真实事件 ID、dedupe key 与时间解析状态。缺少 upstream ID 时只生成稳定 dedupe key，不伪装成真实事件 ID；坏时间事件保留错误原因并拒绝进入可调度队列。
 - **F06**：主动任务 scope 由现有 `default_role_id` 或 `role:<role_id>` session key 判定，不新增 scope 字段。角色任务只能使用角色 binding resolver 返回的目标，解析失败即 no-target；只有全局任务可回退到 `default_channel/default_chat_id`。
+- **F07**：MCP 通用调用默认不重放。仅代码中明确为读取的 get/context 工具可声明一次 transport retry；超时、响应中断、poll、ack 及其他未声明幂等的工具只清理连接并把结果未知的错误上抛。JSON-RPC 业务错误改为结构化 tool error，不以字符串协议驱动重试。
+- **F08-F10**：本轮跳过，不调整 query rewriter、检索 lane 降级或 proactive loop 健康策略。
 - **F11**：全局 `MemeCatalog` 回退是允许的产品行为。角色素材优先，角色素材缺失时可以使用全局 meme 素材；本项不再改动。
 
 ## 第三批：运行时 fallback 与异常吞错
