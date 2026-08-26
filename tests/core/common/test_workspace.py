@@ -2,7 +2,6 @@ from pathlib import Path
 
 from core.common.workspace import (
     resolve_default_workspace,
-    resolve_legacy_workspace_file,
     resolve_ncatbot_dir,
 )
 
@@ -14,59 +13,5 @@ def test_resolve_default_workspace_uses_shiori_directory(tmp_path: Path) -> None
     assert not workspace.exists()
 
 
-def test_resolve_default_workspace_migrates_legacy_directory(tmp_path: Path) -> None:
-    legacy_workspace = tmp_path / ".akashic" / "workspace"
-    legacy_workspace.mkdir(parents=True)
-    (legacy_workspace / "roles.json").write_text("{}", encoding="utf-8")
-
-    workspace = resolve_default_workspace(tmp_path)
-
-    assert workspace == tmp_path / ".shiori" / "workspace"
-    assert (workspace / "roles.json").read_text(encoding="utf-8") == "{}"
-    assert not legacy_workspace.exists()
-
-
-def test_resolve_default_workspace_preserves_legacy_when_target_exists(
-    tmp_path: Path,
-) -> None:
-    workspace = tmp_path / ".shiori" / "workspace"
-    workspace.mkdir(parents=True)
-    legacy_workspace = tmp_path / ".akashic" / "workspace"
-    legacy_workspace.mkdir(parents=True)
-
-    assert resolve_default_workspace(tmp_path) == workspace
-    assert workspace.exists()
-    assert legacy_workspace.exists()
-
-
-def test_resolve_ncatbot_dir_migrates_legacy_directory(tmp_path: Path) -> None:
-    legacy_dir = tmp_path / ".akashic" / "ncatbot"
-    legacy_dir.mkdir(parents=True)
-    (legacy_dir / "plugins").mkdir()
-
-    ncatbot_dir = resolve_ncatbot_dir(tmp_path)
-
-    assert ncatbot_dir == tmp_path / ".shiori" / "ncatbot"
-    assert (ncatbot_dir / "plugins").is_dir()
-    assert not legacy_dir.exists()
-
-
-def test_resolve_legacy_workspace_file_returns_existing_shiori_file(
-    tmp_path: Path,
-) -> None:
-    workspace = tmp_path / ".shiori" / "workspace"
-    current_file = workspace / "private_runtime" / "image.png"
-    current_file.parent.mkdir(parents=True)
-    current_file.write_bytes(b"png")
-    legacy_file = (
-        tmp_path / ".akashic" / "workspace" / "private_runtime" / "image.png"
-    )
-
-    assert resolve_legacy_workspace_file(workspace, legacy_file) == str(current_file)
-
-
-def test_resolve_legacy_workspace_file_preserves_missing_path(tmp_path: Path) -> None:
-    workspace = tmp_path / ".shiori" / "workspace"
-    legacy_file = tmp_path / ".akashic" / "workspace" / "missing.png"
-
-    assert resolve_legacy_workspace_file(workspace, legacy_file) == str(legacy_file)
+def test_resolve_ncatbot_dir_uses_shiori_directory(tmp_path: Path) -> None:
+    assert resolve_ncatbot_dir(tmp_path) == tmp_path / ".shiori" / "ncatbot"

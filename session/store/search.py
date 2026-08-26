@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sqlite3
 from typing import Any
-from core.common.workspace import resolve_legacy_workspace_file
 
 from .common import _MESSAGE_SELECT_COLUMNS
 
@@ -197,10 +196,7 @@ class _SearchMixin:
         if "media" in row_keys and row["media"]:
             raw_media = json.loads(row["media"] or "[]")
             if isinstance(raw_media, list):
-                message["media"] = [
-                    resolve_legacy_workspace_file(self._workspace, item)
-                    for item in raw_media
-                ]
+                message["media"] = raw_media
         if (
             "external_message_id" in row_keys
             and str(row["external_message_id"] or "").strip()

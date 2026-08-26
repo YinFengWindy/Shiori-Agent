@@ -8,7 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-from core.common.workspace import resolve_legacy_workspace_file
 from core.integrations.novelai.models import (
     GeneratedImageRecord,
     NovelAIGenerationSource,
@@ -78,14 +77,6 @@ class NovelAIStore:
         for payload in self._read_record_payloads():
             if clean_role_id and str(payload.get("role_id") or "").strip() != clean_role_id:
                 continue
-            payload["base_image_path"] = self._resolve_legacy_path(
-                payload.get("base_image_path")
-            )
-            raw_output_paths = payload.get("output_paths")
-            if isinstance(raw_output_paths, list):
-                payload["output_paths"] = [
-                    self._resolve_legacy_path(path) for path in raw_output_paths
-                ]
             items.append(payload)
         items.sort(
             key=lambda item: str(item.get("created_at") or ""),
@@ -107,7 +98,7 @@ class NovelAIStore:
             if not isinstance(raw_output_paths, list):
                 continue
             for raw_output_path in raw_output_paths:
-                resolved_output_path = self._resolve_legacy_path(raw_output_path)
+                resolved_output_path = str(raw_output_path or "").strip()
                 if self._canonical_path(resolved_output_path) != target_path:
                     continue
                 request_path = Path(resolved_output_path).parent / "request.json"
@@ -150,7 +141,7 @@ class NovelAIStore:
             raise ValueError("NovelAI 记录缺少 output_paths")
         raw_role_asset_paths = payload.get("role_asset_paths")
         role_asset_paths = (
-            [self._resolve_legacy_path(path) for path in raw_role_asset_paths]
+            [str(path or "").strip() for path in raw_role_asset_paths]
             if isinstance(raw_role_asset_paths, list)
             else []
         )
@@ -168,10 +159,8 @@ class NovelAIStore:
             seed=(int(payload["seed"]) if payload.get("seed") is not None else None),
             width=int(payload.get("width") or 0),
             height=int(payload.get("height") or 0),
-            base_image_path=self._resolve_legacy_path(payload.get("base_image_path")),
-            output_paths=[
-                self._resolve_legacy_path(path) for path in raw_output_paths
-            ],
+            base_image_path=str(payload.get("base_image_path") or "").strip(),
+            output_paths=[str(path or "").strip() for path in raw_output_paths],
             wrote_back_to_role=bool(payload.get("wrote_back_to_role")),
             role_asset_paths=role_asset_paths,
         )
@@ -184,8 +173,3 @@ class NovelAIStore:
         if not path.is_absolute():
             path = self._workspace / path
         return os.path.normcase(os.path.abspath(os.path.normpath(str(path))))
-
-    def _resolve_legacy_path(self, value: object) -> str:
-        """Resolve an existing legacy .akashic asset under the current workspace."""
-
-        return resolve_legacy_workspace_file(self._workspace, value)
