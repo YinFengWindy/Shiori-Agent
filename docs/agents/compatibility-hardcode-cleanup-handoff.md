@@ -4,7 +4,7 @@
 >
 > 状态：只读审计完成，候选项待逐项确认。本文不是已批准的删除计划。
 
-> 2026-08-26：E01-E04 已按当前产品决策完成。仓库根 `config.toml` 不再作为迁移来源；桌面 settings 只接受 runtime path contract 注入的 workspace 配置路径；开发环境变量已统一为 `SHIORI_*`。E05-E15 仍保持候选状态。
+> 2026-08-26：E01-E04 已按当前产品决策完成。仓库根 `config.toml` 不再作为迁移来源；桌面 settings 只接受 runtime path contract 注入的 workspace 配置路径；开发环境变量已统一为 `SHIORI_*`。E05 保持现状，E06 已完成发布路径 manifest 集中化；E07-E15 仍保持候选状态。
 >
 > 前置变更：PR #103 已将 Electron bridge/assets、桌面桥接 voice/TTS、Story internal helpers 做了低风险归位；根目录应用边界迁移继续由 Issue #102 跟踪。
 
@@ -109,7 +109,7 @@
 | E03 | `desktop/src/settings.ts` | settings 不再拥有仓库根配置默认路径，必须由 main 注入 runtime path contract 的 workspace 配置路径。 | 已完成；未初始化时显式失败。 |
 | E04 | `desktop/src/runtimePaths.ts` | workspace、config 和 bridge 参数由 runtime path contract 的共享 helper 统一推导，开发/打包只保留 executable 与 prefix 差异。 | 已完成；后续路径变更从该 contract 扩展。 |
 | E05 | `desktop/scripts/dev.mjs:14,20,26-40` | 默认端口 `5173`、localhost 绑定、20 次端口尝试。 | 区分开发方便性和 window security 白名单。 |
-| E06 | `desktop/scripts/release-paths.mjs`、`build-runtime.mjs`、`package.json` | release/runtime/installer 目录契约分散。 | 建立单一 release manifest。 |
+| E06 | `desktop/scripts/release-manifest.mjs`、`build-runtime.mjs`、`package-win.mjs`、`verify-packaged.mjs`、`hash-release.mjs` | release build、runtime、installer 和 unpacked 校验目录统一由 manifest 计算；`SHIORI_RELEASE_OUTPUT` 仍可覆盖最终 installer 输出。 | 已完成；后续仓库目录迁移优先调整 manifest，不改变交付语义。 |
 | E07 | `desktop/src/assets/localAssetRegistry.ts:13,96` | 本地资源上限固定为 `32 MiB`。 | 与 bridge/import policy 对齐并验证大文件需求。 |
 | E08 | `desktop/src/settings.ts:211,216,315` | ASR/TTS/NovelAI endpoint 固定在 Electron 默认值。 | 权威来源应是 integration config/schema。 |
 | E09 | `desktop/src/bridge/shared.ts`、assets 模块 | `shiori-asset` 协议字面量多处重复。 | 集中 protocol constants，保持安全测试。 |

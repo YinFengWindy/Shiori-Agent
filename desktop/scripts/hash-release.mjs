@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { resolveReleaseOutputDirectory } from "./release-paths.mjs";
+import { resolveReleaseManifest } from "./release-manifest.mjs";
 
 async function sha256(path) {
   const hash = createHash("sha256");
@@ -30,5 +30,5 @@ export async function writeReleaseChecksums(directory) {
 
 const invokedDirectly = process.argv[1]?.endsWith("hash-release.mjs");
 if (invokedDirectly) {
-  await writeReleaseChecksums(resolveReleaseOutputDirectory());
+  await writeReleaseChecksums(resolveReleaseManifest().installerOutput);
 }

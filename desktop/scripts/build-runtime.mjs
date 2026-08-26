@@ -1,14 +1,13 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
-import { delimiter, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { delimiter, join, resolve } from "node:path";
+import { resolveReleaseManifest } from "./release-manifest.mjs";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const desktopRoot = resolve(here, "..");
-const repositoryRoot = resolve(desktopRoot, "..");
-const runtimeRoot = resolve(repositoryRoot, "release", "runtime");
-const workRoot = resolve(repositoryRoot, "release", "pyinstaller-work");
+const releaseManifest = resolveReleaseManifest();
+const { repositoryRoot } = releaseManifest;
+const runtimeRoot = releaseManifest.runtimeOutput;
+const workRoot = releaseManifest.pyinstallerWork;
 const python = resolve(repositoryRoot, ".venv", "Scripts", "python.exe");
 if (!existsSync(python)) {
   throw new Error(`Repository Python environment not found: ${python}`);
