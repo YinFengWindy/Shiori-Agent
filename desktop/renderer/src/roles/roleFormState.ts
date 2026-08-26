@@ -1,6 +1,7 @@
 import type { RoleFormState, RoleProactiveConfig, RoleRecord } from "../shared/types";
 import { readRoleMoodConfig, roleMoodConfigEqual } from "./roleMoodConfig";
 import { readRoleVoiceConfig, roleVoiceConfigEqual } from "./roleVoiceConfig";
+import { roleProactiveDefaults } from "./roleProactiveDefaults";
 
 /** Builds a proactive update while preserving persisted fields outside the form. */
 export function buildRoleProactiveConfig(
@@ -15,18 +16,18 @@ export function buildRoleProactiveConfig(
     enabled: Boolean(roleForm.proactiveEnabled),
     target_channel: roleForm.proactiveTargetChannel ?? "",
     target_chat_id: roleForm.proactiveTargetChatId ?? "",
-    profile: roleForm.proactiveProfile ?? "daily",
+    profile: roleForm.proactiveProfile ?? roleProactiveDefaults.profile,
     agent: {
       ...persistedAgent,
-      max_steps: roleForm.proactiveAgentMaxSteps ?? 35,
-      content_limit: roleForm.proactiveAgentContentLimit ?? 5,
-      web_fetch_max_chars: roleForm.proactiveAgentWebFetchMaxChars ?? 8000,
+      max_steps: roleForm.proactiveAgentMaxSteps ?? roleProactiveDefaults.agentMaxSteps,
+      content_limit: roleForm.proactiveAgentContentLimit ?? roleProactiveDefaults.agentContentLimit,
+      web_fetch_max_chars: roleForm.proactiveAgentWebFetchMaxChars ?? roleProactiveDefaults.agentWebFetchMaxChars,
     },
     drift: {
       ...(persisted?.drift ?? {}),
       enabled: Boolean(roleForm.proactiveDriftEnabled),
-      max_steps: roleForm.proactiveDriftMaxSteps ?? 20,
-      min_interval_hours: roleForm.proactiveDriftMinIntervalHours ?? 3,
+      max_steps: roleForm.proactiveDriftMaxSteps ?? roleProactiveDefaults.driftMaxSteps,
+      min_interval_hours: roleForm.proactiveDriftMinIntervalHours ?? roleProactiveDefaults.driftMinIntervalHours,
     },
   };
 }
@@ -45,13 +46,13 @@ export function createRoleFormFromRole(role: RoleRecord): RoleFormState {
     proactiveEnabled: role.proactive?.enabled ?? false,
     proactiveTargetChannel: role.proactive?.target_channel ?? "",
     proactiveTargetChatId: role.proactive?.target_chat_id ?? "",
-    proactiveProfile: role.proactive?.profile ?? "daily",
-    proactiveAgentMaxSteps: role.proactive?.agent?.max_steps ?? 35,
-    proactiveAgentContentLimit: role.proactive?.agent?.content_limit ?? 5,
-    proactiveAgentWebFetchMaxChars: role.proactive?.agent?.web_fetch_max_chars ?? 8000,
+    proactiveProfile: role.proactive?.profile ?? roleProactiveDefaults.profile,
+    proactiveAgentMaxSteps: role.proactive?.agent?.max_steps ?? roleProactiveDefaults.agentMaxSteps,
+    proactiveAgentContentLimit: role.proactive?.agent?.content_limit ?? roleProactiveDefaults.agentContentLimit,
+    proactiveAgentWebFetchMaxChars: role.proactive?.agent?.web_fetch_max_chars ?? roleProactiveDefaults.agentWebFetchMaxChars,
     proactiveDriftEnabled: role.proactive?.drift?.enabled ?? false,
-    proactiveDriftMaxSteps: role.proactive?.drift?.max_steps ?? 20,
-    proactiveDriftMinIntervalHours: role.proactive?.drift?.min_interval_hours ?? 3,
+    proactiveDriftMaxSteps: role.proactive?.drift?.max_steps ?? roleProactiveDefaults.driftMaxSteps,
+    proactiveDriftMinIntervalHours: role.proactive?.drift?.min_interval_hours ?? roleProactiveDefaults.driftMinIntervalHours,
     avatarSource: "",
     illustrationSources: [],
     removedIllustrations: [],
@@ -100,13 +101,13 @@ export function isRoleFormDirty(roleForm: RoleFormState, role: RoleRecord | null
         || Boolean(roleForm.proactiveEnabled) !== Boolean(role.proactive?.enabled)
         || (roleForm.proactiveTargetChannel ?? "") !== (role.proactive?.target_channel ?? "")
         || (roleForm.proactiveTargetChatId ?? "") !== (role.proactive?.target_chat_id ?? "")
-        || (roleForm.proactiveProfile ?? "daily") !== (role.proactive?.profile ?? "daily")
-        || (roleForm.proactiveAgentMaxSteps ?? 35) !== (role.proactive?.agent?.max_steps ?? 35)
-        || (roleForm.proactiveAgentContentLimit ?? 5) !== (role.proactive?.agent?.content_limit ?? 5)
-        || (roleForm.proactiveAgentWebFetchMaxChars ?? 8000) !== (role.proactive?.agent?.web_fetch_max_chars ?? 8000)
+        || (roleForm.proactiveProfile ?? roleProactiveDefaults.profile) !== (role.proactive?.profile ?? roleProactiveDefaults.profile)
+        || (roleForm.proactiveAgentMaxSteps ?? roleProactiveDefaults.agentMaxSteps) !== (role.proactive?.agent?.max_steps ?? roleProactiveDefaults.agentMaxSteps)
+        || (roleForm.proactiveAgentContentLimit ?? roleProactiveDefaults.agentContentLimit) !== (role.proactive?.agent?.content_limit ?? roleProactiveDefaults.agentContentLimit)
+        || (roleForm.proactiveAgentWebFetchMaxChars ?? roleProactiveDefaults.agentWebFetchMaxChars) !== (role.proactive?.agent?.web_fetch_max_chars ?? roleProactiveDefaults.agentWebFetchMaxChars)
         || Boolean(roleForm.proactiveDriftEnabled) !== Boolean(role.proactive?.drift?.enabled)
-        || (roleForm.proactiveDriftMaxSteps ?? 20) !== (role.proactive?.drift?.max_steps ?? 20)
-        || (roleForm.proactiveDriftMinIntervalHours ?? 3) !== (role.proactive?.drift?.min_interval_hours ?? 3)
+        || (roleForm.proactiveDriftMaxSteps ?? roleProactiveDefaults.driftMaxSteps) !== (role.proactive?.drift?.max_steps ?? roleProactiveDefaults.driftMaxSteps)
+        || (roleForm.proactiveDriftMinIntervalHours ?? roleProactiveDefaults.driftMinIntervalHours) !== (role.proactive?.drift?.min_interval_hours ?? roleProactiveDefaults.driftMinIntervalHours)
         || !roleMoodConfigEqual(roleForm, persistedMoodConfig)
         || Boolean(roleForm.desktopPetEnabled) !== Boolean(role.desktop_pet_enabled)
         || !roleVoiceConfigEqual(roleForm, persistedVoiceConfig)

@@ -6,6 +6,12 @@ export type StoryBeatPresentationFragment = {
   text: string;
 };
 
+const legacyDialoguePattern = /“[^”]*”|「[^」]*」|『[^』]*』|"[^"]*"/g;
+
+function defaultFragmentKind(kind: StoryBeat["kind"]): StoryBeatPresentationFragment["kind"] {
+  return kind === "dialogue" ? "dialogue" : "narration";
+}
+
 function isColonIntroducedQuote(text: string, start: number) {
   let index = start - 1;
   while (index >= 0 && /\s/u.test(text[index] ?? "")) index -= 1;
@@ -14,9 +20,8 @@ function isColonIntroducedQuote(text: string, start: number) {
 
 /** Splits mixed legacy beat text without changing the committed Story transcript. */
 export function getStoryBeatPresentationFragments(beat: Pick<StoryBeat, "kind" | "text">): StoryBeatPresentationFragment[] {
-  const quotedTextPattern = /“[^”]*”|「[^」]*」|『[^』]*』|"[^"]*"/g;
-  const matches = [...beat.text.matchAll(quotedTextPattern)].filter((match) => isColonIntroducedQuote(beat.text, match.index ?? 0));
-  if (matches.length === 0) return [{ kind: beat.kind === "dialogue" ? "dialogue" : "narration", text: beat.text }];
+  const matches = [...beat.text.matchAll(legacyDialoguePattern)].filter((match) => isColonIntroducedQuote(beat.text, match.index ?? 0));
+  if (matches.length === 0) return [{ kind: defaultFragmentKind(beat.kind), text: beat.text }];
 
   const fragments: StoryBeatPresentationFragment[] = [];
   let cursor = 0;

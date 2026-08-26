@@ -45,6 +45,19 @@ describe("getStoryBeatPresentationFragments", () => {
     ]);
   });
 
+  it("keeps every supported historical quote style and trailing narration", () => {
+    const fragments = getStoryBeatPresentationFragments(createStoryBeat({
+      kind: "narration",
+      text: "她轻声说：「别担心。」随后替你关上窗。",
+    }));
+
+    assert.deepEqual(fragments, [
+      { kind: "narration", text: "她轻声说：" },
+      { kind: "dialogue", text: "「别担心。」" },
+      { kind: "narration", text: "随后替你关上窗。" },
+    ]);
+  });
+
   it("keeps ordinary quoted text together when it is not introduced by a colon", () => {
     const fragments = getStoryBeatPresentationFragments(createStoryBeat({
       kind: "action",

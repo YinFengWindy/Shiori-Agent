@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { configureSettingsConfigPath, loadSettingsData } from "./settings.js";
+import { desktopSettingsDefaults } from "./settingsContract.js";
 
 describe("desktop settings config path", () => {
   it("requires the runtime path contract instead of falling back to the repository root", () => {
@@ -21,6 +22,22 @@ describe("desktop settings config path", () => {
       const snapshot = loadSettingsData();
 
       assert.equal(snapshot.configPath, configPath);
+      assert.deepEqual(snapshot.formData.voice, {
+        enabled: false,
+        hotkey: "Ctrl+Space",
+        microphoneDeviceId: "",
+        asrEnabled: false,
+        asrProvider: desktopSettingsDefaults.asrProvider,
+        asrBaseUrl: desktopSettingsDefaults.asrBaseUrl,
+        asrSecretId: "",
+        asrSecretKey: "",
+        ttsEnabled: false,
+        ttsProvider: desktopSettingsDefaults.ttsProvider,
+        ttsBaseUrl: desktopSettingsDefaults.ttsBaseUrl,
+        ttsModel: desktopSettingsDefaults.ttsModel,
+        ttsApiKey: "",
+        ttsVolume: desktopSettingsDefaults.ttsVolume,
+      });
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

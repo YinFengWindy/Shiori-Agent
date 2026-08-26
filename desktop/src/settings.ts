@@ -7,6 +7,7 @@ import type {
   SettingsSnapshot,
 } from "./bridge/shared.js";
 import { parseHotkey } from "./voice/hotkey.js";
+import { desktopSettingsDefaults } from "./settingsContract.js";
 
 type BridgeRestarter = () => Promise<{
   ok: boolean;
@@ -214,16 +215,16 @@ export function loadSettingsData(): SettingsSnapshot {
         hotkey: String(voice.hotkey ?? "Ctrl+Space"),
         microphoneDeviceId: String(voice.microphone_device_id ?? ""),
         asrEnabled: Boolean(voiceAsr.enabled ?? voice.enabled),
-        asrProvider: String(voiceAsr.provider ?? "tencent"),
-        asrBaseUrl: String(voiceAsr.base_url ?? "https://asr.tencentcloudapi.com/"),
+        asrProvider: String(voiceAsr.provider ?? desktopSettingsDefaults.asrProvider),
+        asrBaseUrl: String(voiceAsr.base_url ?? desktopSettingsDefaults.asrBaseUrl),
         asrSecretId: String(voiceAsr.secret_id ?? ""),
         asrSecretKey: String(voiceAsr.secret_key ?? ""),
         ttsEnabled: Boolean(voiceTts.enabled ?? voice.enabled),
-        ttsProvider: String(voiceTts.provider ?? "minimax"),
-        ttsBaseUrl: String(voiceTts.base_url ?? "https://api.minimaxi.com/v1/t2a_v2"),
-        ttsModel: String(voiceTts.model ?? "speech-2.8-turbo"),
+        ttsProvider: String(voiceTts.provider ?? desktopSettingsDefaults.ttsProvider),
+        ttsBaseUrl: String(voiceTts.base_url ?? desktopSettingsDefaults.ttsBaseUrl),
+        ttsModel: String(voiceTts.model ?? desktopSettingsDefaults.ttsModel),
         ttsApiKey: String(voiceTts.api_key ?? ""),
-        ttsVolume: Number(voiceTts.volume ?? 2.0),
+        ttsVolume: Number(voiceTts.volume ?? desktopSettingsDefaults.ttsVolume),
       },
       advanced: {
         maxTokens: Number(agent.max_tokens ?? 8192),
@@ -319,9 +320,9 @@ function renderSettingsToml(formData: SettingsFormData): string {
     "[integrations.novelai]",
     `enabled = ${formData.integrations.novelaiEnabled ? "true" : "false"}`,
     `token = ${quote(formData.integrations.novelaiToken)}`,
-    'base_url = "https://image.novelai.net"',
-    'default_model = "nai-diffusion-4-5-curated"',
-    'nsfw_model = "nai-diffusion-4-5-full"',
+    `base_url = ${quote(desktopSettingsDefaults.novelaiBaseUrl)}`,
+    `default_model = ${quote(desktopSettingsDefaults.novelaiDefaultModel)}`,
+    `nsfw_model = ${quote(desktopSettingsDefaults.novelaiNsfwModel)}`,
     `nsfw_enabled = ${
       formData.integrations.novelaiNsfwEnabled ? "true" : "false"
     }`,

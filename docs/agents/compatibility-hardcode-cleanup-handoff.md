@@ -4,7 +4,7 @@
 >
 > 状态：只读审计完成，候选项待逐项确认。本文不是已批准的删除计划。
 
-> 2026-08-26：E01-E04 已按当前产品决策完成。仓库根 `config.toml` 不再作为迁移来源；桌面 settings 只接受 runtime path contract 注入的 workspace 配置路径；开发环境变量已统一为 `SHIORI_*`。E05 保持现状，E06 已完成发布路径 manifest 集中化；E07、E09-E12 已完成等价常量集中化，E08、E13-E15 仍保持候选状态。
+> 2026-08-27：E01-E04 已按当前产品决策完成。仓库根 `config.toml` 不再作为迁移来源；桌面 settings 只接受 runtime path contract 注入的 workspace 配置路径；开发环境变量已统一为 `SHIORI_*`。E05 保持现状，E06 已完成发布路径 manifest 集中化；E07-E15 已完成等价契约集中或保留型容错整理。
 >
 > 前置变更：PR #103 已将 Electron bridge/assets、桌面桥接 voice/TTS、Story internal helpers 做了低风险归位；根目录应用边界迁移继续由 Issue #102 跟踪。
 
@@ -111,14 +111,14 @@
 | E05 | `desktop/scripts/dev.mjs:14,20,26-40` | 默认端口 `5173`、localhost 绑定、20 次端口尝试。 | 区分开发方便性和 window security 白名单。 |
 | E06 | `desktop/scripts/release-manifest.mjs`、`build-runtime.mjs`、`package-win.mjs`、`verify-packaged.mjs`、`hash-release.mjs` | release build、runtime、installer 和 unpacked 校验目录统一由 manifest 计算；`SHIORI_RELEASE_OUTPUT` 仍可覆盖最终 installer 输出。 | 已完成；后续仓库目录迁移优先调整 manifest，不改变交付语义。 |
 | E07 | `desktop/src/assets/localAssetRegistry.ts:13,96` | 本地资源上限固定为 `32 MiB`。 | 已完成；由 `localAssetContract.ts` 集中，并与 bridge/import policy 共用，默认值不变。 |
-| E08 | `desktop/src/settings.ts:211,216,315` | ASR/TTS/NovelAI endpoint 固定在 Electron 默认值。 | 权威来源应是 integration config/schema。 |
+| E08 | `desktop/src/settings.ts:211,216,315` | ASR/TTS/NovelAI endpoint 固定在 Electron 默认值。 | 已完成；由 desktop settings contract 集中，保持与现有 `config.example.toml` 和 integration 默认值相同的值。 |
 | E09 | `desktop/src/bridge/shared.ts`、assets 模块 | `shiori-asset` 协议字面量多处重复。 | 已完成；由 local asset contract 集中，安全边界和协议值不变。 |
 | E10 | `desktop/src/bridge/bridgeClient.ts:7-14,103-125,284` | bridge health/start/request/image/observation/stop 超时分散。 | 已完成；由 command timeout policy 集中，按现有 command 分类保持默认值。 |
 | E11 | `desktop_bridge/voice/voice_http.py:81,111,172` | 多处重复网络 `timeout=60`。 | 已完成；由 `VOICE_HTTP_TIMEOUT_SECONDS` 集中，超时值不变。 |
 | E12 | `desktop_bridge/voice/voice_providers.py:40,608` | 音频时长、bitrate 固定。 | 已完成；集中已有 ASR/MiniMax 音频协议常量，不调整 provider 默认值。 |
-| E13 | `desktop/renderer/src/roles/roleFormState.ts:21-29,49-54,104-109` | proactive 默认值在 build/load/dirty 三处重复。 | 抽共享 defaults 或由 bridge 规范化。 |
-| E14 | `desktop/renderer/src/chat/chatModelSelection.ts:7,25-36,51-52` | 非法 model effort 回退 registration effort/`none`。 | 由 bridge normalize，renderer 只展示合法值。 |
-| E15 | `desktop/renderer/src/story/storyBeatPresentation.ts:15-18` | 多种引号正则兼容 mixed legacy beat text。 | 确认历史文本迁移后是否可移出展示层。 |
+| E13 | `desktop/renderer/src/roles/roleFormState.ts:21-29,49-54,104-109` | proactive 默认值在 build/load/dirty 三处重复。 | 已完成；由 role proactive defaults 统一，稀疏历史角色仍按原语义加载和 dirty 比较。 |
+| E14 | `desktop/renderer/src/chat/chatModelSelection.ts:7,25-36,51-52` | 非法 model effort 回退 registration effort/`none`。 | 已完成；由 shared renderer normalizer 只接受合法值，保留原有 registration effort/`none` 回退。 |
+| E15 | `desktop/renderer/src/story/storyBeatPresentation.ts:15-18` | 多种引号正则兼容 mixed legacy beat text。 | 已完成；保留 renderer-only legacy quote 解析，覆盖中文引号和尾随叙述，不改写已提交 Story transcript。 |
 
 ## 第五批：产品硬编码与测试夹具
 
