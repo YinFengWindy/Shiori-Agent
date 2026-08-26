@@ -49,7 +49,7 @@ function toStorySummary(story: StorySummaryPayload): StorySummary {
 export interface StoryBridgeClient {
   listStories(): Promise<StorySummary[]>;
   getStory(storyId: string): Promise<StoryDetails>;
-  createStory(input: StoryCreationInput, creationId?: string): Promise<StoryDetails>;
+  createStory(input: StoryCreationInput, creationId: string): Promise<StoryDetails>;
   submitInput(storyId: string, input: string): Promise<StoryDetails>;
   continueStory(storyId: string): Promise<StoryDetails>;
   listCgGallery(): Promise<StoryCgGallery[]>;
@@ -97,7 +97,7 @@ export function createStoryBridgeClient(invoke: DesktopInvoke = window.miraDeskt
           identity: input.playerProfile.identity,
         },
       };
-      if (creationId) requestPayload.creation_id = creationId;
+      requestPayload.creation_id = creationId;
       const payload = await invokePayload<{ story: StoryPayload }>(invoke, "stories.create", requestPayload);
       return rememberStory(payload.story);
     },

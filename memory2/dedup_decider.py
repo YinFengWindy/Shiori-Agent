@@ -43,6 +43,8 @@ class DedupResult:
     similar_items: list[dict]
     actions: list[ExistingAction] = field(default_factory=list)
     reason: str = ""
+    # Machine-readable parse/provider outcomes; ``reason`` remains user-facing text.
+    reason_codes: tuple[str, ...] = ()
     query_vector: list[float] | None = None
 
 
@@ -93,7 +95,7 @@ class DedupDecider:
                 query_vector=query_vec,
             )
 
-        decision, reason, actions = await self._llm_decide(summary, similar)
+        decision, reason, actions, reason_codes = await self._llm_decide(summary, similar)
 
         return DedupResult(
             decision=decision,
@@ -102,6 +104,7 @@ class DedupDecider:
             similar_items=similar,
             actions=actions,
             reason=reason,
+            reason_codes=reason_codes,
             query_vector=query_vec,
         )
 
@@ -149,7 +152,7 @@ class DedupDecider:
         self,
         candidate_summary: str,
         similar: list[dict],
-    ) -> tuple[DedupDecision, str, list[ExistingAction]]:
+    ) -> tuple[DedupDecision, str, list[ExistingAction], tuple[str, ...]]:
         existing_block = "\n".join(
             f"{i+1}. id={item['id']} score={item.get('_dedup_score', 0):.4f}\n"
             f"   summary={item.get('summary', '')}"
@@ -166,24 +169,41 @@ class DedupDecider:
                 model=self._model,
                 max_tokens=256,
             )
-            text = (resp.content or "").strip()
-            if text.startswith("```"):
-                text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            data = load_json_object_loose(text) or {}
-            if not isinstance(data, dict):
-                return DedupDecision.CREATE, "invalid_llm_payload", []
-            return self._parse_payload(data, similar)
         except Exception as e:
             logger.warning("dedup_decider llm failed: %s", e)
-            return DedupDecision.CREATE, f"llm failed: {e}", []
+            return DedupDecision.CREATE, f"llm failed: {e}", [], ("provider_error",)
+
+        text = (resp.content or "").strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        data = load_json_object_loose(text)
+        if data is None:
+            return DedupDecision.CREATE, "invalid_json", [], ("json_parse_error",)
+        if not isinstance(data, dict):
+            return (
+                DedupDecision.SKIP,
+                "invalid JSON object shape",
+                [],
+                ("invalid_json_shape",),
+            )
+        return self._parse_payload(data, similar)
 
     def _parse_payload(
         self,
         data: dict,
         similar: list[dict],
-    ) -> tuple[DedupDecision, str, list[ExistingAction]]:
-        decision_str = str(data.get("decision", "create")).lower().strip()
+    ) -> tuple[DedupDecision, str, list[ExistingAction], tuple[str, ...]]:
+        if "decision" not in data:
+            return DedupDecision.SKIP, "missing decision", [], ("invalid_missing_decision",)
+
+        raw_decision = data.get("decision")
+        if not isinstance(raw_decision, str):
+            return DedupDecision.SKIP, "invalid decision type", [], (
+                "invalid_decision_type",
+            )
+        decision_str = raw_decision.lower().strip()
         reason = str(data.get("reason", "") or "")
+        reason_codes: list[str] = []
 
         decision_map = {
             "skip":   DedupDecision.SKIP,
@@ -191,47 +211,61 @@ class DedupDecider:
             "none":   DedupDecision.NONE,
             "merge":  DedupDecision.NONE,   # legacy: LLM 直接输出 merge 时降级为 none
         }
-        decision = decision_map.get(decision_str, DedupDecision.CREATE)
+        decision = decision_map.get(decision_str)
+        if decision is None:
+            return (
+                DedupDecision.SKIP,
+                reason or "invalid decision",
+                [],
+                ("invalid_unknown_decision",),
+            )
 
         raw_list = data.get("list", [])
         if not isinstance(raw_list, list):
-            raw_list = []
+            return DedupDecision.SKIP, reason or "invalid action list", [], (
+                "invalid_action_list",
+            )
 
         # legacy 兼容：LLM 输出 decision=merge 但 list 为空时，取 similar[0] 作为 merge 目标
         if decision_str == "merge" and not raw_list and similar:
             raw_list = [{"id": similar[0]["id"], "decide": "merge", "reason": "legacy"}]
             if not reason:
                 reason = "legacy merge mapped to none"
+            reason_codes.append("legacy_decision_merge")
 
         id_to_item = {item["id"]: item for item in similar}
         actions: list[ExistingAction] = []
         seen: dict[str, MemoryAction] = {}
 
+        invalid_codes: list[str] = []
         for entry in raw_list:
             if not isinstance(entry, dict):
+                invalid_codes.append("invalid_action_entry")
                 continue
             action_str = str(entry.get("decide", "")).lower().strip()
             action = {"merge": MemoryAction.MERGE, "delete": MemoryAction.DELETE}.get(action_str)
             if not action:
+                invalid_codes.append("invalid_action")
                 continue
 
             item = id_to_item.get(entry.get("id", ""))
             if item is None:
                 # 兜底：LLM 可能用 1-based index 而非 id
                 idx = entry.get("index")
-                if isinstance(idx, int):
-                    i = (idx - 1) if 1 <= idx <= len(similar) else idx
-                    if 0 <= i < len(similar):
-                        item = similar[i]
+                if isinstance(idx, int) and 1 <= idx <= len(similar):
+                    item = similar[idx - 1]
+                    reason_codes.append("legacy_index_1_based")
             if item is None:
+                if "index" in entry:
+                    invalid_codes.append("invalid_unknown_index")
+                else:
+                    invalid_codes.append("invalid_unknown_id")
                 continue
 
             iid = item["id"]
             if iid in seen and seen[iid] != action:
-                # 同一 id 出现了冲突动作，丢弃
-                actions = [a for a in actions if a.item_id != iid]
-                seen.pop(iid)
-                logger.warning("dedup: conflicting actions for %s, dropping both", iid)
+                # Conflicting actions make the complete model output unsafe to apply.
+                invalid_codes.append("invalid_conflicting_actions")
                 continue
             if iid in seen:
                 continue
@@ -244,16 +278,26 @@ class DedupDecider:
                 reason=str(entry.get("reason", "") or ""),
             ))
 
+        if invalid_codes:
+            return DedupDecision.SKIP, reason or "invalid dedup payload", [], tuple(
+                [*reason_codes, *invalid_codes]
+            )
+
         # SKIP 不应该带任何动作
         if decision == DedupDecision.SKIP:
-            return decision, reason, []
+            if actions:
+                return decision, reason or "skip with actions", [], tuple(
+                    [*reason_codes, "invalid_skip_actions"]
+                )
+            return decision, reason, [], tuple(reason_codes)
 
         has_merge = any(a.action == MemoryAction.MERGE for a in actions)
 
         # create + merge 矛盾：降级为 none
         if decision == DedupDecision.CREATE and has_merge:
-            decision = DedupDecision.NONE
-            reason = (reason + " | normalized:create+merge->none").strip(" |")
+            return DedupDecision.SKIP, reason or "create with merge action", [], tuple(
+                [*reason_codes, "invalid_create_merge_conflict"]
+            )
 
         # create 只能带 delete
         if decision == DedupDecision.CREATE:
@@ -267,9 +311,15 @@ class DedupDecider:
                     "dedup: %d merge targets exceeds MVP limit 1, downgrading to SKIP",
                     len(merge_actions),
                 )
-                return DedupDecision.SKIP, reason + " | multi-merge->skip", []
+                return DedupDecision.SKIP, reason + " | multi-merge->skip", [], tuple(
+                    [*reason_codes, "invalid_multi_merge"]
+                )
+            if not actions:
+                return DedupDecision.SKIP, reason or "missing merge target", [], tuple(
+                    [*reason_codes, "invalid_missing_merge_target"]
+                )
 
-        return decision, reason, actions
+        return decision, reason, actions, tuple(reason_codes)
 
 
 _DEDUP_DECISION_PROMPT = """\

@@ -25,6 +25,18 @@ logger = logging.getLogger(__name__)
 _POLL_TOOL_TIMEOUT = 180.0
 
 
+class ContextSourceFormatError(ValueError):
+    """context MCP 源返回不符合 dict/list[dict] 契约时抛出的格式错误。"""
+
+    def __init__(self, server: str, payload_type: str) -> None:
+        self.server = server
+        self.payload_type = payload_type
+        super().__init__(
+            f"context source {server!r} returned unsupported payload type "
+            f"{payload_type}; expected dict or list[dict]"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Config loaders
 # ---------------------------------------------------------------------------
@@ -241,14 +253,22 @@ def _extract_context_items(data: Any, *, server: str) -> list[dict]:
         return [item]
     if isinstance(data, list):
         result: list[dict] = []
+        invalid_count = 0
         for item in data:
             if not isinstance(item, dict):
+                invalid_count += 1
                 continue
             enriched = dict(item)
             enriched.setdefault("_source", server)
             result.append(enriched)
+        if invalid_count:
+            logger.warning(
+                "[mcp_sources] context 源 %s 返回 list 中有 %d 个非法条目，已跳过",
+                server,
+                invalid_count,
+            )
         return result
-    return []
+    raise ContextSourceFormatError(server, type(data).__name__)
 
 
 async def _fetch_by_channel_async(pool: McpClientPool, *, channel: str) -> list[dict]:

@@ -86,7 +86,7 @@ async def test_fetch_content_events_async_keeps_default_compat_channel_filter(mo
 
 
 @pytest.mark.asyncio
-async def test_fetch_context_data_async_accepts_dict_and_list(monkeypatch):
+async def test_fetch_context_data_async_accepts_dict_and_list(monkeypatch, caplog):
     monkeypatch.setattr(
         mcp_sources,
         "_load_sources",
@@ -108,6 +108,32 @@ async def test_fetch_context_data_async_accepts_dict_and_list(monkeypatch):
         {"available": True, "_source": "ctx1"},
         {"available": False, "_source": "ctx2"},
     ]
+    assert "ctx2" in caplog.text
+    assert "1 个非法条目" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_fetch_context_data_async_isolates_invalid_top_level_source(monkeypatch, caplog):
+    monkeypatch.setattr(
+        mcp_sources,
+        "_load_sources",
+        lambda _w=None: [
+            {"channel": "context", "server": "invalid", "get_tool": "get_context"},
+            {"channel": "context", "server": "valid", "get_tool": "get_context"},
+        ],
+    )
+    pool = _FakePool(
+        {
+            ("invalid", "get_context"): "not-an-object",
+            ("valid", "get_context"): {"available": True},
+        }
+    )
+
+    result = await mcp_sources.fetch_context_data_async(cast(Any, pool))
+
+    assert result == [{"available": True, "_source": "valid"}]
+    assert "invalid" in caplog.text
+    assert "unsupported payload type str" in caplog.text
 
 
 @pytest.mark.asyncio

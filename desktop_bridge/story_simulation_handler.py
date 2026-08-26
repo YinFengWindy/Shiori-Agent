@@ -106,7 +106,7 @@ class StorySimulationHandler:
         if method == "stories.cg.regenerate":
             return await self._regenerate_cg(payload, emit_event=emit_event)
         if method == "stories.create":
-            return await self._create(payload, request_id=request_id, emit_event=emit_event)
+            return await self._create(payload, emit_event=emit_event)
         if method == "stories.input":
             return await self._input(payload, request_id=request_id, emit_event=emit_event)
         if method == "stories.continue":
@@ -114,9 +114,9 @@ class StorySimulationHandler:
         raise ValueError(f"unknown Story method: {method}")
 
     async def _create(
-        self, payload: dict[str, Any], *, request_id: str, emit_event: EventEmitter
+        self, payload: dict[str, Any], *, emit_event: EventEmitter
     ) -> dict[str, Any]:
-        creation_id = self._creation_id(payload, request_id)
+        creation_id = self._required(payload, "creation_id")
         request_payload_hash = payload_hash(payload)
         title = self._required(payload, "title")
         background = self._required(payload, "background")
@@ -630,7 +630,9 @@ class StorySimulationHandler:
             repository=repository,
             director=director
             or self._director
-            or ProviderStoryDirector(provider=None, model=""),
+            or _FailingStoryDirector(
+                StoryProviderUnavailableError("Story Director 尚未配置角色运行时")
+            ),
             image_generator=self._image_generator,
         )
 
@@ -646,13 +648,6 @@ class StorySimulationHandler:
         if not value:
             raise ValueError(f"{key} 不能为空")
         return value
-
-    @staticmethod
-    def _creation_id(payload: dict[str, Any], request_id: str) -> str:
-        """Resolve the stable logical create key or retain transport compatibility."""
-
-        value = str(payload.get("creation_id") or "").strip()
-        return value or request_id
 
     @classmethod
     def _story_id(cls, payload: dict[str, Any]) -> str:
