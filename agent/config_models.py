@@ -95,9 +95,6 @@ class Config:
     agent_base_url: str = ""
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     multimodal: bool = True
-    vl_model: str = ""
-    vl_api_key: str = ""
-    vl_base_url: str = ""
     tool_search_enabled: bool = False
     spawn_enabled: bool = True
     dev_mode: bool = False

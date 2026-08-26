@@ -7,12 +7,12 @@ source_paths:
   - agent/voice_config.py
   - desktop/src/voice/
   - desktop/renderer/src/voice/
-  - desktop_bridge/role_tts_settings.py
-  - desktop_bridge/tts_text.py
-  - desktop_bridge/voice_http.py
-  - desktop_bridge/voice_models.py
-  - desktop_bridge/voice_service.py
-  - desktop_bridge/tts_coordinator.py
+  - desktop_bridge/voice/role_tts_settings.py
+  - desktop_bridge/voice/tts_text.py
+  - desktop_bridge/voice/voice_http.py
+  - desktop_bridge/voice/voice_models.py
+  - desktop_bridge/voice/voice_service.py
+  - desktop_bridge/voice/tts_coordinator.py
   - desktop_bridge/chat_service.py
 related:
   - desktop-and-bridge.md

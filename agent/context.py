@@ -69,20 +69,16 @@ class MessageEnvelopeBuilder:
         policies: dict[str, ChannelPolicy] | None = None,
         *,
         multimodal: bool = True,
-        vl_available: bool = False,
     ):
         self._policies = policies or {}
         self._multimodal = multimodal
-        self._vl_available = vl_available
 
     def set_media_capabilities(
         self,
         *,
         multimodal: bool,
-        vl_available: bool,
     ) -> None:
         self._multimodal = multimodal
-        self._vl_available = vl_available
 
     def build(
         self,
@@ -158,7 +154,6 @@ class MessageEnvelopeBuilder:
 
     def _build_text_with_media_refs(self, text: str, media: list[str]) -> str:
         refs: list[str] = []
-        local_image_paths: list[str] = []
         for item in media:
             value = str(item)
             if value.startswith(("http://", "https://")):
@@ -170,26 +165,12 @@ class MessageEnvelopeBuilder:
             if not p.is_file() or (mime and not mime.startswith("image/")):
                 continue
             refs.append(f"- 图片路径: {value}")
-            local_image_paths.append(value)
 
         lines = [self._append_text_attachment_refs(text, media)]
         if refs:
             lines.extend(["", "[附加媒体]", *refs])
-        if self._vl_available and local_image_paths:
-            lines.append(
-                "当前主模型不能直接接收图片内容；需要识别图片时，调用 read_image_vision 工具。"
-            )
-            for path in local_image_paths:
-                quoted_path = json.dumps(path, ensure_ascii=False)
-                lines.append(
-                    f'- read_image_vision(path={quoted_path}, prompt="描述这张图片的内容")'
-                )
-        elif self._vl_available:
-            lines.append(
-                "当前主模型不能直接接收图片内容；远程图片需先取得本地路径后再读图。"
-            )
-        elif refs:
-            lines.append("当前主模型不能直接接收图片内容，且未配置 VL 视觉模型。")
+        if refs:
+            lines.append("当前模型不支持多模态，无法处理图片内容。")
         if len(lines) == 1:
             return lines[0]
         return "\n".join(lines)
@@ -245,7 +226,6 @@ class ContextBuilder:
         memory: "MemoryProfileApi",
         *,
         multimodal: bool = True,
-        vl_available: bool = False,
     ):
         self.workspace = workspace
         self.skills = SkillsLoader(workspace)
@@ -266,7 +246,6 @@ class ContextBuilder:
         self._envelope_builder = MessageEnvelopeBuilder(
             policies={TelegramChannelPolicy.channel: TelegramChannelPolicy()},
             multimodal=multimodal,
-            vl_available=vl_available,
         )
         self._assembler = PromptAssembler(self)
         self._last_debug_breakdown: list[PromptSectionMeta] = []
@@ -278,11 +257,9 @@ class ContextBuilder:
         self,
         *,
         multimodal: bool,
-        vl_available: bool,
     ) -> None:
         self._envelope_builder.set_media_capabilities(
             multimodal=multimodal,
-            vl_available=vl_available,
         )
 
     @property

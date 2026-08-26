@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from agent.config_models import Config
 from agent.provider import LLMProvider
 from core.memory.engine import MemoryWriteApi
 from core.roles import RoleRepository
@@ -50,25 +49,15 @@ class ScreenObservationService:
 def build_screen_observation_service(
     *,
     roles: RoleRepository,
-    config: Config,
-    provider: LLMProvider,
-    vl_provider: LLMProvider | None,
     memory: MemoryWriteApi,
-    role_runtime_registry: RoleRuntimeRegistry | None = None,
+    role_runtime_registry: RoleRuntimeRegistry,
 ) -> ScreenObservationService:
-    """Builds the default role capability with the configured visual model."""
+    """Builds the default role capability with role-owned visual selection."""
 
-    multimodal = bool(getattr(config, "multimodal", True))
-    selected_provider = vl_provider or (provider if multimodal else None)
-    selected_model = (
-        str(getattr(config, "vl_model", "") or "")
-        if vl_provider is not None
-        else str(getattr(config, "model", "") or "")
-    )
     return ScreenObservationService(
         roles=roles,
-        provider=selected_provider,
-        model=selected_model,
+        provider=None,
+        model="",
         memory=memory,
         role_runtime_registry=role_runtime_registry,
     )

@@ -34,20 +34,6 @@ class CommonMetaToolsetProvider(ToolsetProvider):
             push_tool=deps.push_tool,
         )
 
-        # 主模型不支持多模态时，注册视觉工具供模型调用
-        if deps.vl_provider is not None and deps.vl_model:
-            from agent.tools.vision import ReadImageVisionTool
-
-            registry.register(
-                ReadImageVisionTool(
-                    vl_provider=deps.vl_provider,
-                    vl_model=deps.vl_model,
-                ),
-                always_on=True,
-                risk="read-only",
-                search_hint="看图 识图 图片内容 视觉识别 VL",
-            )
-
         return build_registration_result(
             registry=registry,
             source_name="meta_common",
@@ -99,7 +85,6 @@ def build_readonly_tools(
     http_resources: SharedHttpResources,
     *,
     multimodal: bool = True,
-    vl_available: bool = False,
 ) -> dict[str, Tool]:
     return {
         tool.name: tool
@@ -107,7 +92,6 @@ def build_readonly_tools(
             fetch_requester=http_resources.external_default,
             include_list_dir=True,
             multimodal=multimodal,
-            vl_available=vl_available,
         )
     }
 

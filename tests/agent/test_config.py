@@ -66,7 +66,27 @@ system_prompt = "system"
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="至少需要一个模型注册"):
+    with pytest.raises(ValueError, match=r"配置项已移除: \[llm.vl\]"):
+        config.load_config(config_path)
+
+
+@pytest.mark.parametrize("name", ["vl_model", "vl_api_key", "vl_base_url"])
+def test_load_config_rejects_legacy_root_visual_fields(tmp_path: Path, name: str) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        f'''\
+{name} = "legacy"
+
+[[llm.registrations]]
+id = "00000000-0000-4000-a000-000000000001"
+provider = "openai"
+model = "main"
+effort = "none"
+''',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=rf"配置项已移除: {name}"):
         config.load_config(config_path)
 
 

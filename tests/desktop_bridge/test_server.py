@@ -15,7 +15,7 @@ import pytest
 
 from bus.event_bus import EventBus
 from core.roles import RoleRepository, RoleStore
-from agent.screen_observation.service import build_screen_observation_service
+from agent.screen_observation.service import ScreenObservationService
 from desktop_bridge.models import BridgeResponse
 from desktop_bridge.server import DesktopBridgeServer
 from desktop_bridge.service import DesktopBridgeService
@@ -46,12 +46,11 @@ class _ReconfigurableTextStream:
 
 
 def _build_observation_service(runtime, role_store):
-    return build_screen_observation_service(
+    return ScreenObservationService(
         roles=RoleRepository(role_store),
-        config=runtime.config,
         provider=runtime.provider,
-        vl_provider=runtime.vl_provider,
         memory=runtime.memory_runtime.engine,
+        model=runtime.config.model,
     )
 
 
@@ -124,56 +123,6 @@ def test_server_forwards_the_role_runtime_registry_to_story(tmp_path: Path) -> N
     assert server.service.story_simulation._role_runtime_registry is role_runtime_registry
 
 
-def test_observation_service_prefers_dedicated_vl_provider(tmp_path: Path) -> None:
-    role_store = SimpleNamespace()
-    main_provider = SimpleNamespace(name="main")
-    vl_provider = SimpleNamespace(name="vl")
-    memory = SimpleNamespace()
-    runtime = SimpleNamespace(
-        config=SimpleNamespace(multimodal=False, model="main-model", vl_model="vl-model"),
-        provider=main_provider,
-        vl_provider=vl_provider,
-        memory_runtime=SimpleNamespace(engine=memory),
-    )
-
-    service = _build_observation_service(runtime, role_store)
-
-    assert service is not None
-    assert service._model_adapter._provider is vl_provider
-    assert service._model_adapter._model == "vl-model"
-
-
-@pytest.mark.asyncio
-async def test_observation_service_requires_a_visual_provider(tmp_path: Path) -> None:
-    runtime = SimpleNamespace(
-        config=SimpleNamespace(multimodal=False, model="text-model", vl_model=""),
-        provider=SimpleNamespace(),
-        vl_provider=None,
-        memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
-    )
-
-    service = _build_observation_service(runtime, SimpleNamespace())
-
-    with pytest.raises(RuntimeError, match="视觉模型未配置"):
-        await service.analyze({})
-
-
-def test_observation_service_uses_main_provider_when_it_is_multimodal() -> None:
-    main_provider = SimpleNamespace(name="main")
-    runtime = SimpleNamespace(
-        config=SimpleNamespace(multimodal=True, model="main-model", vl_model=""),
-        provider=main_provider,
-        vl_provider=None,
-        memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
-    )
-
-    service = _build_observation_service(runtime, SimpleNamespace())
-
-    assert service is not None
-    assert service._model_adapter._provider is main_provider
-    assert service._model_adapter._model == "main-model"
-
-
 def test_desktop_server_reuses_core_screen_observation_service(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -188,9 +137,8 @@ def test_desktop_server_reuses_core_screen_observation_service(
         loop=SimpleNamespace(),
         event_bus=EventBus(),
         tools=ToolRegistry(),
-        config=SimpleNamespace(multimodal=True, model="main-model", vl_model=""),
+        config=SimpleNamespace(multimodal=True, model="main-model"),
         provider=SimpleNamespace(),
-        vl_provider=None,
         memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
         screen_observation=observation,
     )
@@ -225,9 +173,8 @@ async def test_observation_service_reads_roles_through_the_production_repository
         )
     )
     runtime = SimpleNamespace(
-        config=SimpleNamespace(multimodal=True, model="main-model", vl_model=""),
+        config=SimpleNamespace(multimodal=True, model="main-model"),
         provider=provider,
-        vl_provider=None,
         memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
     )
     service = _build_observation_service(runtime, role_store)
@@ -271,9 +218,8 @@ async def test_observation_service_validates_memory_roles_through_the_repository
         )
     )
     runtime = SimpleNamespace(
-        config=SimpleNamespace(multimodal=True, model="main-model", vl_model=""),
+        config=SimpleNamespace(multimodal=True, model="main-model"),
         provider=SimpleNamespace(),
-        vl_provider=None,
         memory_runtime=SimpleNamespace(engine=memory),
     )
     service = _build_observation_service(runtime, role_store)
