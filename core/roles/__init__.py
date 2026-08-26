@@ -25,7 +25,6 @@ from .models import (
 )
 from .store import RoleStore
 from .pet_packages import RolePetPackageService
-from .config_migration import RoleConfigMigrationSummary, RoleConfigMigrator
 from .role_runtime import RoleExecutionContext, RoleRuntime, RoleRuntimeRegistry
 
 __all__ = [
@@ -37,8 +36,6 @@ __all__ = [
     "RoleBindingService",
     "RoleChannelBinding",
     "RoleChannelBindingConfig",
-    "RoleConfigMigrationSummary",
-    "RoleConfigMigrator",
     "RoleMemoryService",
     "RolePetPackage",
     "RolePetPackageService",

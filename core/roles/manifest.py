@@ -6,7 +6,7 @@ from typing import Any
 
 from infra.persistence.json_store import atomic_save_json, load_json
 
-from .models import DEFAULT_ASSET_CATEGORY_ID, RoleRecord, default_asset_category
+from .models import RoleRecord
 
 MANIFEST_VERSION = 2
 
@@ -44,44 +44,17 @@ class RoleManifestRepository:
         roles = payload.get("roles")
         if not isinstance(roles, list):
             raise ValueError("角色清单格式无效：roles 必须是数组")
-        migrated = False
-        normalized_roles: list[dict[str, Any]] = []
         for item in roles:
             if not isinstance(item, dict):
                 raise ValueError("角色清单格式无效：角色记录必须是对象")
-            role_payload = dict(item)
-            if "featured_image" in role_payload:
-                if "chat_background" not in role_payload:
-                    role_payload["chat_background"] = role_payload.get("featured_image")
-                del role_payload["featured_image"]
-                migrated = True
-            if not isinstance(role_payload.get("asset_categories"), list):
-                role_payload["asset_categories"] = [default_asset_category().to_dict()]
-                migrated = True
-            if not isinstance(role_payload.get("asset_category_bindings"), dict):
-                raw_categories = role_payload.get("asset_categories")
-                first_category_id = (
-                    str(raw_categories[0].get("id") or "").strip()
-                    if isinstance(raw_categories, list)
-                    and raw_categories
-                    and isinstance(raw_categories[0], dict)
-                    else DEFAULT_ASSET_CATEGORY_ID
-                )
-                role_payload["asset_category_bindings"] = {
-                    str(path): first_category_id
-                    for path in role_payload.get("illustrations", [])
-                    if str(path).strip()
-                }
-                migrated = True
-            normalized_roles.append(role_payload)
-        if migrated:
-            self.save_payload(normalized_roles)
+        version = int(payload.get("version") or 0)
+        if version != MANIFEST_VERSION:
+            raise ValueError(
+                f"角色清单版本不支持：需要版本 {MANIFEST_VERSION}，实际为 {version}"
+            )
         return {
-            "version": max(
-                int(payload.get("version") or MANIFEST_VERSION),
-                MANIFEST_VERSION,
-            ),
-            "roles": normalized_roles,
+            "version": version,
+            "roles": roles,
         }
 
     def save_roles(self, roles: list[RoleRecord]) -> None:

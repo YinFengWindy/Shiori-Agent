@@ -49,6 +49,13 @@
 | M12 | `plugins/observe/db.py:122-143` | 每次打开 DB 自动补列并删除旧 proactive observe 数据。 | 这是 destructive migration，必须有 schema version、备份和恢复验证。 |
 | M13 | `core/memory/markdown_schema.py:57-131,216-223` | 打开角色记忆时重写旧 headings 和内容。 | 检查历史文件覆盖风险，改为一次性迁移并保存 diff/备份。 |
 
+### 2026-08-26 存量审计与已处理项
+
+- 已移除 M02、M03、M09-M13 的运行时兼容处理：当前 `roles.json` 已是 v2，当前 Story DB 与已有备份均没有旧时间/资源列，Observe DB 没有旧 RAG 表或 proactive 数据，角色记忆没有旧 headings。角色清单现只接受 v2；初始化角色记忆不再改写已存在文件；Observe 打开数据库不再删除记录或表。
+- M02 的 `roles/channel_bindings.json` 仍存在 4 条记录，但 `config_migration_state.json` 已标记完成；本轮未删除任何 workspace 文件。
+- M01 不能直接删除：`sessions.db.messages.media` 仍有 71 处 `.akashic` 路径引用，且 NovelAI 元数据仍含旧路径。必须先备份并做路径值迁移和回滚验证。
+- M04-M08 不能直接删除：`sessions.db` 仍有 46 个 session、7,798 条消息、48 个带 `legacy_session_key` 的 thread、14 条未归属消息、6 个未映射 session 和 2 个 unresolved thread。必须先完成可审计的数据归属迁移。
+
 ## 第三批：运行时 fallback 与异常吞错
 
 | ID | 位置 | 当前行为 | 审查重点 |

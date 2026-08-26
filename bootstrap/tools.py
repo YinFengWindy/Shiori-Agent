@@ -57,7 +57,6 @@ from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
 from core.roles import (
     RelationshipSnapshotOptimizer,
-    RoleConfigMigrator,
     RoleRelationshipRuntimeService,
     RoleRepository,
     RoleStore,
@@ -480,21 +479,6 @@ def build_core_runtime(
         dev_mode=config.dev_mode,
     )
     role_repository = RoleRepository(role_store)
-    role_migration = RoleConfigMigrator(
-        workspace,
-        role_repository,
-    ).migrate(config.proactive)
-    if (
-        role_migration.bindings_migrated
-        or role_migration.proactive_migrated
-        or role_migration.unresolved_bindings
-    ):
-        logger.info(
-            "角色配置迁移完成: bindings=%d proactive=%d unresolved=%d",
-            role_migration.bindings_migrated,
-            role_migration.proactive_migrated,
-            role_migration.unresolved_bindings,
-        )
     migration_summary = migrate_workspace_conversations(workspace, session_manager)
     logger.info(
         "conversation migration complete: migrated=%d unresolved=%d",
