@@ -29,7 +29,7 @@
 | C06 | `memory2/hyde_enhancer.py:33-46` | `HyDEAugmentResult.__iter__` 支持旧式二元解包。 | 旧调用清零后可删除；否则记录移除版本。 |
 | C07 | `agent/prompting/assembler.py:58-67` | 接受旧 `[SYSTEM_CONTEXT_FRAME]` marker。 | 确认历史消息是否仍可读取；若保留，应限制为只读解析。 |
 | C08 | `infra/channels/qq_channel/__init__.py:14-20`、`plugins/qqbot/channel.py:116-128` | 暴露旧 channel/stream helper facade。 | 迁移测试和内部调用到权威 formatting 模块。 |
-| C09 | `conversation/__init__.py:3-12` | 继续 re-export `ConversationMigrator` 和 `LegacySessionDescriptor`。 | `LegacySessionDescriptor` 仍被生产路径使用，不可直接删除。 |
+| C09 | `conversation/__init__.py` | 已移除 `ConversationMigrator` re-export；`LegacySessionDescriptor` 由运行时调用方直接从 `conversation.service` 导入。 | 不再保留 package-level 兼容导出。 |
 
 ## 第二批：必须先确认数据存量的迁移链
 
@@ -38,11 +38,11 @@
 | M01 | `core/common/workspace.py:9-57` | `.akashic` workspace、ncatbot 目录和媒体路径迁移到 `.shiori`。 | 确认旧安装存量；必要时改成显式迁移命令。 |
 | M02 | `core/roles/config_migration.py:26-182` | 导入旧角色绑定和旧全局 proactive 配置。 | 统计旧 JSON 存量，确认迁移状态文件和默认值。 |
 | M03 | `core/roles/manifest.py:36-85` | `featured_image -> chat_background`，补 asset categories 并写回角色清单。 | 确认旧版本角色文件已升级，增加 schema version 检查。 |
-| M04 | `conversation/store.py` legacy API | 初始化 `sessions/messages`，保留 `legacy_session_key` 和旧消息归属 API。 | `SessionManager` 仍在持续使用旧表；只能先拆字段/API，不能删整表。 |
-| M05 | `conversation/migrator.py:22-128`、`bootstrap/conversation.py:17` | 启动时将旧 session 转成 thread/contact 并合并消息。 | 确认是否仍需启动扫描，改为一次性或增量迁移。 |
-| M06 | `conversation/service.py:13-18,59-145,336-368` | legacy session fallback、unresolved thread 和迁移元数据。 | `core/channels/hub.py`、`agent/turns/orchestrator.py`、`conversation/push_sync.py` 仍构造 descriptor。 |
-| M07 | `session/manager/role_sessions.py:111-180` | 合并 legacy transport history 并写 provenance。 | 迁移完成后整体审查 provenance 字段和 merge API。 |
-| M08 | `session/manager/__init__.py:38-82` | 用 facade 和 monkeypatch 兼容旧 import/test patch。 | 清零旧 import/patch 后再删除，需补模块边界测试。 |
+| M04 | `conversation/store.py` session/thread API | `sessions/messages` 与 thread/contact 共享同一 DB，`legacy_session_key` 仍是实时渠道 session 到 thread 的映射键。 | `SessionManager` 和当前渠道运行时仍在使用，不能删表或映射字段。 |
+| M05 | `conversation/migrator.py`、`bootstrap/conversation.py` | 已移除启动扫描和旧渠道 session 到 thread/contact 的数据回灌。 | 旧渠道 session/消息已主动清空，不保留迁移入口。 |
+| M06 | `conversation/service.py:13-18,59-145,336-368` | `LegacySessionDescriptor` 将当前渠道 session 映射为正式 thread，仍会处理未绑定渠道。 | `core/channels/hub.py`、`agent/turns/orchestrator.py`、`conversation/push_sync.py` 仍构造 descriptor，不能按 M05 删除。 |
+| M07 | `session/manager/role_sessions.py` | 已移除旧 transport history 合并、provenance 和防回灌元数据。 | 角色会话仅保存自身的运行时历史。 |
+| M08 | `session/manager/__init__.py` | 已移除 facade module 与跨模块 monkeypatch 转发。 | 生产模块直接依赖 owning module，现有测试没有 facade patch 调用方。 |
 | M09 | `story_simulation/schema_migrations.py:17-98,106-216` | 迁移旧 Story 时间、资源字段，并 DROP 旧列。 | 先备份/验证历史 DB；审查 `1970-01-01`、`上午` 和失败资源语义。 |
 | M10 | `story_simulation/story_time.py:60-89` | 仅用于旧 Story timestamp 的解析。 | Story DB 迁移完成后再删除。 |
 | M11 | `plugins/observe/migrate_legacy_rag.py:13-127` | 旧 RAG 表转为新表并 DROP 老表。 | 当前主要是 CLI/测试；应移出常规启动路径并保留回滚说明。 |
@@ -54,7 +54,7 @@
 - 已移除 M02、M03、M09-M13 的运行时兼容处理：当前 `roles.json` 已是 v2，当前 Story DB 与已有备份均没有旧时间/资源列，Observe DB 没有旧 RAG 表或 proactive 数据，角色记忆没有旧 headings。角色清单现只接受 v2；初始化角色记忆不再改写已存在文件；Observe 打开数据库不再删除记录或表。
 - M02 的 `roles/channel_bindings.json` 仍存在 4 条记录，但 `config_migration_state.json` 已标记完成；本轮未删除任何 workspace 文件。
 - M01 已完成：创建 `workspace/.migration-backups/m01-20260826-202047/`，其中包含 SQLite 一致性备份、77 个 JSON 原件和 manifest；恢复探针确认备份仍有迁移前的 71 个媒体引用与 88 个 JSON 路径值。已改写 65 个消息媒体路径和 83 个 JSON 路径，清空 6 个失效消息附件与 3 个失效 `base_image_path`，删除 2 个无运行时读取的历史报告。live workspace（排除备份）已无 `.akashic` 引用。
-- M04-M08 不能直接删除：`sessions.db` 仍有 46 个 session、7,798 条消息、48 个带 `legacy_session_key` 的 thread、14 条未归属消息、6 个未映射 session 和 2 个 unresolved thread。必须先完成可审计的数据归属迁移。
+- 用户已确认旧渠道 session/消息已主动删除。因此 M05 启动迁移与 M07 历史回灌已退役；M04、M06 与 M08 中仍承载当前运行时会话、渠道 thread 映射或模块边界兼容的部分，必须按实际调用方逐项处理。
 
 ## 第三批：运行时 fallback 与异常吞错
 

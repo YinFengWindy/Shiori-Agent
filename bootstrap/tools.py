@@ -47,7 +47,6 @@ from bootstrap.wiring import (
 )
 from agent.lifecycle.facade import TurnLifecycle
 from bootstrap.providers import build_providers
-from bootstrap.conversation import migrate_workspace_conversations
 from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from bus.queue import MessageBus
@@ -479,12 +478,6 @@ def build_core_runtime(
         dev_mode=config.dev_mode,
     )
     role_repository = RoleRepository(role_store)
-    migration_summary = migrate_workspace_conversations(workspace, session_manager)
-    logger.info(
-        "conversation migration complete: migrated=%d unresolved=%d",
-        len(migration_summary.migrated_session_keys),
-        len(migration_summary.unresolved_session_keys),
-    )
     role_runtime_registry = RoleRuntimeRegistry(
         role_repository,
         model_resolver=role_model_resolver,

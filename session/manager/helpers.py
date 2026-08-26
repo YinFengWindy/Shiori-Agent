@@ -6,7 +6,6 @@ import base64
 import logging
 import mimetypes
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,15 +21,6 @@ _TOOL_RESULT_CHAR_BUDGET = 10000
 _PROACTIVE_HISTORY_CHAR_BUDGET = 360
 _PROACTIVE_META_HISTORY_CHAR_BUDGET = 1200
 _ROLE_SESSION_PREFIX = "role:"
-
-
-def _timestamp_at_or_before(value: str, cutoff: str) -> bool:
-    """Compares migration timestamps while tolerating legacy malformed values."""
-
-    try:
-        return datetime.fromisoformat(value) <= datetime.fromisoformat(cutoff)
-    except (TypeError, ValueError):
-        return bool(value and value <= cutoff)
 
 
 def _truncate_tool_result(content: object) -> str:

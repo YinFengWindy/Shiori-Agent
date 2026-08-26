@@ -177,25 +177,6 @@ class ConversationStore:
             ensure_conversation_schema(self._conn)
             self._conn.commit()
 
-    def list_legacy_sessions(self) -> list[dict[str, Any]]:
-        with self._lock:
-            rows = self._conn.execute(
-                """
-                SELECT key, created_at, updated_at, metadata
-                FROM sessions
-                ORDER BY updated_at ASC, key ASC
-                """
-            ).fetchall()
-        return [
-            {
-                "key": str(row["key"]),
-                "created_at": str(row["created_at"]),
-                "updated_at": str(row["updated_at"]),
-                "metadata": json.loads(row["metadata"] or "{}"),
-            }
-            for row in rows
-        ]
-
     def list_contacts(self) -> list[ContactRecord]:
         with self._lock:
             rows = self._conn.execute(

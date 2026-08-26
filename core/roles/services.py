@@ -197,7 +197,6 @@ class RoleSessionService:
     def clear(self, role_id: str) -> Session:
         session = self._session_manager.get_or_create(self.derive_session_key(role_id))
         session.clear()
-        session.metadata["cleared_at"] = datetime.now().astimezone().isoformat()
         self._session_manager.save(session)
         return session
 
@@ -219,7 +218,6 @@ class RoleSessionService:
 
     def delete(self, role_id: str) -> bool:
         clean_role_id = _clean_role_id(role_id)
-        self._session_manager.record_role_deleted(clean_role_id)
         return self._session_manager.delete_role_session(clean_role_id)
 
 
