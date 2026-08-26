@@ -65,6 +65,7 @@
 - **F03**：保留 outbound 的 `bool` 成功契约。空消息、缺目标和业务层明确拒绝返回 `False`；未注册渠道、网络或其他未知外部异常不再统一吞掉，必要时包装为 `OutboundDispatchError`。
 - **F04**：保留 sqlite-vec 不可用时的全表扫描；集中暴露 vector backend 状态和降级原因，区分未安装、初始化失败和查询维度不匹配，不改变结果排序和默认阈值。
 - **F05**：分离上游真实事件 ID、dedupe key 与时间解析状态。缺少 upstream ID 时只生成稳定 dedupe key，不伪装成真实事件 ID；坏时间事件保留错误原因并拒绝进入可调度队列。
+- **F06**：主动任务 scope 由现有 `default_role_id` 或 `role:<role_id>` session key 判定，不新增 scope 字段。角色任务只能使用角色 binding resolver 返回的目标，解析失败即 no-target；只有全局任务可回退到 `default_channel/default_chat_id`。
 - **F11**：全局 `MemeCatalog` 回退是允许的产品行为。角色素材优先，角色素材缺失时可以使用全局 meme 素材；本项不再改动。
 
 ## 第三批：运行时 fallback 与异常吞错
