@@ -1,5 +1,4 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
 
 import type {
   ModelRegistrationFormData,
@@ -20,11 +19,18 @@ type BridgeHealthChecker = () => Promise<{
   message: string;
 }>;
 
-let configPath = resolve(import.meta.dirname, "..", "..", "config.toml");
+let configPath: string | null = null;
 
 /** Sets the user-writable configuration path before settings or the bridge are initialized. */
 export function configureSettingsConfigPath(path: string): void {
-  configPath = resolve(path);
+  configPath = path;
+}
+
+function requireConfigPath(): string {
+  if (!configPath) {
+    throw new Error("桌面配置路径尚未初始化");
+  }
+  return configPath;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -148,7 +154,8 @@ function loadModelRegistrations(llm: Record<string, unknown>): ModelRegistration
 }
 
 export function loadSettingsData(): SettingsSnapshot {
-  const content = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
+  const configuredPath = requireConfigPath();
+  const content = existsSync(configuredPath) ? readFileSync(configuredPath, "utf-8") : "";
   const parsed = parseToml(content);
   const llm = asRecord(parsed.llm);
   const channels = asRecord(parsed.channels);
@@ -168,7 +175,7 @@ export function loadSettingsData(): SettingsSnapshot {
   const plugins = asRecord(parsed.plugins);
   const qqbot = asRecord(plugins.qqbot);
   return {
-    configPath,
+    configPath: configuredPath,
     formData: {
       models: {
         registrations: loadModelRegistrations(llm),
@@ -418,7 +425,7 @@ export async function saveSettings(
   checkHealth: BridgeHealthChecker,
 ): Promise<SaveSettingsResult> {
   validateSettings(formData);
-  writeFileSync(configPath, renderSettingsToml(formData), { encoding: "utf-8" });
+  writeFileSync(requireConfigPath(), renderSettingsToml(formData), { encoding: "utf-8" });
   const restart = await restartBridge();
   const health = restart.ok
     ? await checkHealth()

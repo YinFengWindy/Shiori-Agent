@@ -17,7 +17,6 @@ export type DesktopRuntimePaths = {
   bridge: DesktopBridgeCommand;
   configPath: string;
   configTemplatePath: string;
-  legacyConfigPath?: string;
   workspacePath: string;
 };
 
@@ -35,18 +34,17 @@ export function resolveDesktopRuntimePaths({
   homePath,
   repositoryRoot = developmentRepositoryRoot,
 }: ResolveDesktopRuntimePathsOptions): DesktopRuntimePaths {
-  const workspacePath = resolve(homePath, ".shiori", "workspace");
-  const configPath = resolve(workspacePath, "config.toml");
+  const workspacePath = resolveDesktopWorkspacePath(homePath);
+  const configPath = resolveDesktopConfigPath(workspacePath);
   if (!packaged) {
     return {
       bridge: {
         executable: resolve(repositoryRoot, ".venv", "Scripts", "python.exe"),
-        args: ["main.py", "bridge", "--workspace", workspacePath, "--config", configPath],
+        args: buildBridgeArgs(["main.py"], workspacePath, configPath),
         cwd: repositoryRoot,
       },
       configPath,
       configTemplatePath: resolve(repositoryRoot, "config.example.toml"),
-      legacyConfigPath: resolve(repositoryRoot, "config.toml"),
       workspacePath,
     };
   }
@@ -56,13 +54,27 @@ export function resolveDesktopRuntimePaths({
   return {
     bridge: {
       executable: resolve(runtimeDirectory, "shiori-runtime.exe"),
-      args: ["bridge", "--workspace", workspacePath, "--config", configPath],
+      args: buildBridgeArgs([], workspacePath, configPath),
       cwd: runtimeDirectory,
     },
     configPath,
     configTemplatePath: resolve(resourcesPath, "config.example.toml"),
     workspacePath,
   };
+}
+
+/** Resolves the single writable workspace owned by the desktop runtime. */
+export function resolveDesktopWorkspacePath(homePath: string): string {
+  return resolve(homePath, ".shiori", "workspace");
+}
+
+/** Resolves the only configuration file consumed by the desktop runtime. */
+export function resolveDesktopConfigPath(workspacePath: string): string {
+  return resolve(workspacePath, "config.toml");
+}
+
+function buildBridgeArgs(prefix: string[], workspacePath: string, configPath: string): string[] {
+  return [...prefix, "bridge", "--workspace", workspacePath, "--config", configPath];
 }
 
 /** Creates the user-owned config file once, preserving it across upgrades and uninstalls. */
@@ -72,9 +84,7 @@ export function ensureDesktopRuntimeConfig(paths: DesktopRuntimePaths): void {
   }
   mkdirSync(dirname(paths.configPath), { recursive: true });
   copyFileSync(
-    paths.legacyConfigPath && existsSync(paths.legacyConfigPath)
-      ? paths.legacyConfigPath
-      : paths.configTemplatePath,
+    paths.configTemplatePath,
     paths.configPath,
   );
 }

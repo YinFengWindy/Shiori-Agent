@@ -3,6 +3,8 @@
 > 关联 Issue：[ #104 refactor: 清理兼容性代码与硬编码 ](https://github.com/YinFengWindy/Shiori-Agent/issues/104)
 >
 > 状态：只读审计完成，候选项待逐项确认。本文不是已批准的删除计划。
+
+> 2026-08-26：E01-E04 已按当前产品决策完成。仓库根 `config.toml` 不再作为迁移来源；桌面 settings 只接受 runtime path contract 注入的 workspace 配置路径；开发环境变量已统一为 `SHIORI_*`。E05-E15 仍保持候选状态。
 >
 > 前置变更：PR #103 已将 Electron bridge/assets、桌面桥接 voice/TTS、Story internal helpers 做了低风险归位；根目录应用边界迁移继续由 Issue #102 跟踪。
 
@@ -97,10 +99,10 @@
 
 | ID | 位置 | 当前行为 | 审查重点 |
 | --- | --- | --- | --- |
-| E01 | `desktop/src/runtimePaths.ts:20,49,75-77` | 继续读取根 `config.toml` 作为 legacy config。 | 确认迁移窗口是否结束。 |
-| E02 | `desktop/src/paths.ts:33`、`desktop/src/main.ts`、`desktop/scripts/dev.mjs` | 使用 `MIRA_RENDERER_DEV_SERVER_URL`、`MIRA_DESKTOP_USER_DATA_DIR`。 | 统一改为 `SHIORI_*`，是否保留一次兼容读取。 |
-| E03 | `desktop/src/settings.ts:23` | 与 runtimePaths 并存的根 `config.toml` 默认路径。 | 统一由 runtimePaths/config service 提供。 |
-| E04 | `desktop/src/runtimePaths.ts:38-64` | `.shiori/workspace`、打包 runtime 和 bridge args 分散硬编码。 | 集中为唯一 runtime path contract。 |
+| E01 | `desktop/src/runtimePaths.ts` | 已移除仓库根 `config.toml` 的 legacy 读取和迁移入口；首次启动只从 `config.example.toml` 创建 workspace 配置。 | 已完成；不再保留迁移窗口。 |
+| E02 | `desktop/src/paths.ts`、`desktop/src/main.ts`、`desktop/scripts/dev.mjs` | 开发服务器 URL、端口和临时 user-data 目录统一使用 `SHIORI_*` 环境变量。 | 已完成；旧 `MIRA_*` 名称不再兼容读取。 |
+| E03 | `desktop/src/settings.ts` | settings 不再拥有仓库根配置默认路径，必须由 main 注入 runtime path contract 的 workspace 配置路径。 | 已完成；未初始化时显式失败。 |
+| E04 | `desktop/src/runtimePaths.ts` | workspace、config 和 bridge 参数由 runtime path contract 的共享 helper 统一推导，开发/打包只保留 executable 与 prefix 差异。 | 已完成；后续路径变更从该 contract 扩展。 |
 | E05 | `desktop/scripts/dev.mjs:14,20,26-40` | 默认端口 `5173`、localhost 绑定、20 次端口尝试。 | 区分开发方便性和 window security 白名单。 |
 | E06 | `desktop/scripts/release-paths.mjs`、`build-runtime.mjs`、`package.json` | release/runtime/installer 目录契约分散。 | 建立单一 release manifest。 |
 | E07 | `desktop/src/assets/localAssetRegistry.ts:13,96` | 本地资源上限固定为 `32 MiB`。 | 与 bridge/import policy 对齐并验证大文件需求。 |

@@ -30,7 +30,7 @@ export const rendererPetDist = resolve(desktopRoot, "renderer-dist", "pet.html")
 export const rendererVoiceDist = resolve(desktopRoot, "renderer-dist", "voice.html");
 
 /** Vite dev server URL used by the desktop shell during renderer development. */
-export const rendererDevServerUrl = process.env.MIRA_RENDERER_DEV_SERVER_URL;
+export const rendererDevServerUrl = process.env.SHIORI_RENDERER_DEV_SERVER_URL;
 
 /** Absolute path to the compiled preload script loaded by Electron. */
 export const preloadScript = resolve(here, "preload.js");
