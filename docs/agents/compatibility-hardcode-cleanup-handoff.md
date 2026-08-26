@@ -72,6 +72,11 @@
 - **F08-F10**：本轮跳过，不调整 query rewriter、检索 lane 降级或 proactive loop 健康策略。
 - **F11**：全局 `MemeCatalog` 回退是允许的产品行为。角色素材优先，角色素材缺失时可以使用全局 meme 素材；本项不再改动。
 - **F12**：移除历史全局 `proactive.agent_tick` 输入的兼容读取、校验和字段映射。当前权威入口是角色详情页的 `proactive.agent`、`proactive.drift`；角色持久化、桌面编辑和运行时装配不作调整，也不新增迁移提示或专门拒绝逻辑。
+- **F13**：保留去重解析器中明确且可证明安全的旧输出修复（`merge` 别名、1-based index），但把修复和非法输出区分为结构化原因。未知 id/index、冲突动作、多 merge 或缺少明确 merge 目标时走保守 `skip`，不再把格式问题静默当作 `create`；provider/JSON 调用失败仍与解析错误分开处理。
+- **F14**：`stories.create` 的 `creation_id` 是必填业务幂等键，不回退到 transport `request_id`。`story_id` 继续由后端创建后生成，保持实体主键与创建请求键分离；renderer 当前传递链保持不变，补齐 bridge 缺字段测试。
+- **F15**：移除 Story service 对 `ProviderStoryDirector(provider=None, model="")` 的占位 fallback，改为显式失败 director。正常角色运行时解析和 provider 路径不变，缺依赖时返回 `StoryProviderUnavailableError`。
+- **F16**：跳过。LF/CRLF、BOM 和混合换行处理是文件编辑工具的跨平台契约，已有聚焦测试，不按旧兼容代码删除。
+- **F17**：保留 context MCP 的公开 `dict` / `list[dict]` 双形态契约。顶层非法返回改为显式源错误，由现有单源隔离边界记录并继续其他源；list 内非法项可继续跳过并保留有效项。
 
 ## 第三批：运行时 fallback 与异常吞错
 
@@ -89,11 +94,11 @@
 | F10 | `proactive_v2/loop.py:328-345,394-419` | feed/tick 异常只记录并继续循环。 | 增加连续失败、backoff、健康状态或熔断。 |
 | F11 | `plugins/meme/runtime.py:177-191,251-252` | 角色素材缺失时回退全局 MemeCatalog。 | 确认是否允许角色隔离边界被全局素材穿透。 |
 | F12 | `proactive_v2/config_loader.py` | 已移除历史全局 `agent_tick` 输入兼容；角色级 `agent` / `drift` 是唯一输入。 | 角色设置、持久化和启动装配保持当前契约。 |
-| F13 | `memory2/dedup_decider.py:188-205,218-273` | 兼容旧 LLM decision、空列表、1-based index 和多 merge。 | 区分 legacy repair 与 invalid output，返回结构化原因。 |
-| F14 | `desktop_bridge/story_simulation_handler.py:651-655` | 缺 `creation_id` 时回退 `request_id`。 | 确认所有调用方是否已提供 creation_id，避免幂等退化。 |
-| F15 | `desktop_bridge/story_simulation_handler.py:629-634` | 无 director 时构造 `provider=None` 的 director。 | 确认是否只用于测试；生产路径应明确依赖缺失。 |
-| F16 | `agent/tools/filesystem.py:58,513-516` | old_text 匹配失败后自动 LF/CRLF 转换再匹配。 | 保留跨平台容错或改为显式 newline normalization。 |
-| F17 | `proactive_v2/mcp_sources.py:235-257` | MCP context 同时接受 dict/list，非法形态静默返回空。 | 固定 contract 后删除旧包装或改为明确错误。 |
+| F13 | `memory2/dedup_decider.py:188-273` | 已保留明确旧输出修复，并区分 legacy repair 与 invalid output；不确定结果保守 skip。 | 解析原因结构化，避免格式错误继续 create。 |
+| F14 | `desktop_bridge/story_simulation_handler.py:119-155,651-655` | `creation_id` 收口为必填业务幂等键，不再回退 transport `request_id`。 | `story_id` 继续由后端生成；补齐缺字段测试。 |
+| F15 | `desktop_bridge/story_simulation_handler.py:629-634` | 无 director 时不再构造 `provider=None` 占位 director，改为显式失败 director。 | 正常角色运行时 provider 路径保持不变。 |
+| F16 | `agent/tools/filesystem.py:58,503-524` | 本轮跳过；LF/CRLF、BOM 与混合换行是保留的跨平台契约。 | 继续使用现有测试覆盖。 |
+| F17 | `proactive_v2/mcp_sources.py:234-257` | 保留 context 的 dict/list 双形态；顶层非法返回显式源错误，单源隔离继续生效。 | list 内非法项保留有效项并可记录计数。 |
 
 ## 第四批：Electron、Bridge 与环境硬编码
 
