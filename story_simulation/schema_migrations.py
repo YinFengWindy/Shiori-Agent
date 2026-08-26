@@ -97,12 +97,6 @@ def migrate_story_timeline(connection: sqlite3.Connection) -> None:
         connection.execute("PRAGMA foreign_keys = ON")
 
 
-def migrate_legacy_story_time(connection: sqlite3.Connection) -> None:
-    """Compatibility entry point for callers of the former timestamp migration."""
-
-    migrate_story_timeline(connection)
-
-
 def migrate_story_resources(connection: sqlite3.Connection) -> None:
     """Add visual type metadata and give legacy Stories a background fallback."""
 

@@ -194,7 +194,7 @@ async def test_plugin_generates_required_scene_cg_from_observation(
             size_preset="portrait",
         )
     )
-    await asyncio.gather(*plugin._auto_cg_tasks.values())
+    await asyncio.gather(*plugin._auto_cg_controller.tasks.values())
 
     generated_arguments = generate.await_args.kwargs
     assert generated_arguments["scene_key"] == "rain-confession"
@@ -252,7 +252,7 @@ async def test_required_scene_change_bypasses_cooldown(
             prompt="1girl, sitting by window",
         )
     )
-    await asyncio.gather(*plugin._auto_cg_tasks.values())
+    await asyncio.gather(*plugin._auto_cg_controller.tasks.values())
 
     generate.assert_awaited_once()
     await plugin.terminate()
@@ -301,7 +301,7 @@ async def test_same_scene_respects_manual_generation_and_cooldown(
     plugin._auto_cg.record_success("role:mira", "old-scene")
     await plugin.context.event_bus.fanout(SceneObservationCommitted(**base))
 
-    assert plugin._auto_cg_tasks == {}
+    assert plugin._auto_cg_controller.tasks == {}
     generate.assert_not_awaited()
     await plugin.terminate()
 

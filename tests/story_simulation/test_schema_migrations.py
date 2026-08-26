@@ -1,8 +1,8 @@
 import json
 import sqlite3
 
-from story_simulation.schema_migrations import migrate_legacy_story_time
 from story_simulation.schema_migrations import migrate_story_resources
+from story_simulation.schema_migrations import migrate_story_timeline
 
 
 def test_migrate_legacy_story_timestamps_to_periods() -> None:
@@ -51,7 +51,7 @@ def test_migrate_legacy_story_timestamps_to_periods() -> None:
         """
     )
 
-    migrate_legacy_story_time(connection)
+    migrate_story_timeline(connection)
 
     assert {row[1] for row in connection.execute("PRAGMA table_info(segments)")} == {
         "id",

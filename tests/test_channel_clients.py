@@ -21,6 +21,7 @@ from bus.events_lifecycle import (
 )
 from core.roles import RoleStore
 from conversation.service import LegacySessionDescriptor
+from infra.channels.base import AttachmentStore
 
 
 class _Bus:
@@ -374,7 +375,9 @@ def test_qq_channel_ws_timeout_patch_is_best_effort(
     mod = _import_qq_channel(monkeypatch)
     monkeypatch.delitem(sys.modules, "ncatbot.core.adapter.adapter", raising=False)
 
-    mod._patch_ncatbot_ws_open_timeout(7.5)
+    from infra.channels.qq_channel.compat import patch_ncatbot_ws_open_timeout
+
+    patch_ncatbot_ws_open_timeout(7.5)
 
 
 @pytest.mark.asyncio
@@ -797,7 +800,8 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
 async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     mod = _import_qq_channel(monkeypatch)
     ncatbot_dir = tmp_path / ".shiori" / "ncatbot"
-    monkeypatch.setattr(mod, "resolve_ncatbot_dir", lambda: ncatbot_dir)
+    lifecycle = importlib.import_module("infra.channels.qq_channel.lifecycle")
+    monkeypatch.setattr(lifecycle, "resolve_ncatbot_dir", lambda: ncatbot_dir)
     bus = _Bus()
     session_manager = _SessionManager(tmp_path)
     role_store = RoleStore(tmp_path)
@@ -854,7 +858,14 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     )
     assert channel._is_allowed("1") is True
     assert channel._is_allowed("2") is False
-    assert mod._extract_cq_images("hello [CQ:image,url=http://x/a.jpg]") == ("hello", ["http://x/a.jpg"])
+    from infra.channels.qq_channel.compat import (
+        download_to_temp,
+        extract_cq_images,
+        is_local,
+        local_to_base64,
+    )
+
+    assert extract_cq_images("hello [CQ:image,url=http://x/a.jpg]") == ("hello", ["http://x/a.jpg"])
 
     scheduled = []
     real_create_task = asyncio.create_task
@@ -863,7 +874,11 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         scheduled.append(real_create_task(coro))
         return SimpleNamespace(result=lambda timeout=None: True)
 
-    monkeypatch.setattr(mod.asyncio, "run_coroutine_threadsafe", _run_coroutine_threadsafe)
+    monkeypatch.setattr(
+        lifecycle.asyncio,
+        "run_coroutine_threadsafe",
+        _run_coroutine_threadsafe,
+    )
     await channel.start()
     assert bus.outbound[0][0] == "qq"
     channel._channel_hub._conversation.ensure_thread_for_session(
@@ -921,12 +936,12 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         )
     )
     assert channel._api.calls
-    assert mod._is_local(str(sample)) is True
-    assert mod._is_local("https://example.com/x.jpg") is False
-    assert mod._local_to_base64(str(sample)).startswith("base64://")
+    assert is_local(str(sample)) is True
+    assert is_local("https://example.com/x.jpg") is False
+    assert local_to_base64(str(sample)).startswith("base64://")
 
-    test_attachments = mod.AttachmentStore(tmp_path / "uploads")
-    paths = await mod._download_to_temp(
+    test_attachments = AttachmentStore(tmp_path / "uploads")
+    paths = await download_to_temp(
         ["http://x/a.png", "http://x/b.png"],
         requester,
         test_attachments,

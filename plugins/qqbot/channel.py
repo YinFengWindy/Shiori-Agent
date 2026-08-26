@@ -111,31 +111,3 @@ class QQBotChannel(
         if self._bus is None:
             raise RuntimeError("QQBotChannel 尚未启动")
         return self._bus
-
-
-# Compatibility exports for tests and callers that imported old module helpers.
-_CHANNEL = CHANNEL
-
-
-def _iter_stream_chunks(text: str, limit: int = 160) -> list[str]:
-    from .formatting import iter_stream_chunks
-
-    return iter_stream_chunks(text, limit)
-
-
-def _format_turn_live(reply: str) -> str:
-    from .formatting import format_turn_live
-
-    return format_turn_live(reply)
-
-
-def _tail_text(text: str, limit: int) -> str:
-    from .formatting import tail_text
-
-    return tail_text(text, limit)
-
-
-def _as_dict(value: object) -> dict[str, Any]:
-    from .formatting import as_dict
-
-    return as_dict(value)

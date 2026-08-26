@@ -67,7 +67,7 @@ def test_hypothesis_timeout_falls_back_to_raw():
     async def fake_retrieve(query, **kwargs):
         return raw_items
 
-    results, used_hyde = asyncio.run(
+    result = asyncio.run(
         enhancer.augment(
             raw_query="测试问题",
             context="",
@@ -76,8 +76,8 @@ def test_hypothesis_timeout_falls_back_to_raw():
         )
     )
 
-    assert results == raw_items
-    assert used_hyde is False
+    assert result.items == raw_items
+    assert result.used_hyde is False
 
 
 # ── 4. raw 结果完整保留（id 不丢，score 不变）────────────────────────────────
@@ -132,7 +132,7 @@ def test_used_hyde_true_when_hyde_appended_new_item():
         timeout_s=2.0,
     )
 
-    results, used_hyde = asyncio.run(
+    result = asyncio.run(
         enhancer.augment(
             raw_query="原始问题",
             context="",
@@ -141,8 +141,8 @@ def test_used_hyde_true_when_hyde_appended_new_item():
         )
     )
 
-    assert used_hyde is True
-    assert len(cast(Any, results)) == 2
+    assert result.used_hyde is True
+    assert len(result.items) == 2
 
 
 def test_used_hyde_false_when_hyde_adds_nothing_new():
@@ -164,7 +164,7 @@ def test_used_hyde_false_when_hyde_adds_nothing_new():
         timeout_s=2.0,
     )
 
-    results, used_hyde = asyncio.run(
+    result = asyncio.run(
         enhancer.augment(
             raw_query="原始问题",
             context="",
@@ -173,8 +173,8 @@ def test_used_hyde_false_when_hyde_adds_nothing_new():
         )
     )
 
-    assert used_hyde is False
-    assert len(cast(Any, results)) == 1
+    assert result.used_hyde is False
+    assert len(result.items) == 1
 
 
 # ── 6. retrieve_history_items scope_mode 标记 ─────────────────────────────────
