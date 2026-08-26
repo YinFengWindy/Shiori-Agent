@@ -8,6 +8,7 @@ import { desktopDragFileIcon } from "../paths.js";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
 import { importLocalAssets } from "../assets/localAssetImport.js";
 import type { LocalAssetRegistry } from "../assets/localAssetRegistry.js";
+import { maxLocalAssetBytes } from "../assets/localAssetContract.js";
 import { loadSettingsData, saveSettings } from "../settings.js";
 import type { DesktopPetController } from "../pet/controller.js";
 import type { DesktopObservationController } from "../observation/controller.js";
@@ -67,7 +68,7 @@ async function importPetPackageSelection(paths: string[], importsRoot: string): 
   for (const source of paths) {
     if (extname(source).toLowerCase() !== ".zip") throw new Error("桌宠包必须是 ZIP 文件");
     const sourceStats = await stat(source);
-    if (!sourceStats.isFile() || sourceStats.size > 32 * 1024 * 1024) throw new Error("桌宠包无效或超过 32MB");
+    if (!sourceStats.isFile() || sourceStats.size > maxLocalAssetBytes) throw new Error("桌宠包无效或超过 32MB");
     const destinationDirectory = join(importsRoot, "pets");
     await mkdir(destinationDirectory, { recursive: true });
     const destination = join(destinationDirectory, `${randomUUID()}-${basename(source)}`);

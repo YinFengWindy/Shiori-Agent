@@ -1,9 +1,8 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import {
   LocalAssetRegistry,
-  localAssetScheme,
-  maxLocalAssetBytes,
 } from "./localAssetRegistry.js";
+import { localAssetScheme, maxLocalAssetBytes } from "./localAssetContract.js";
 
 export const localAssetSchemePrivileges = Object.freeze({
   standard: true,

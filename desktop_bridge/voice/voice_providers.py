@@ -36,8 +36,16 @@ from desktop_bridge.voice.voice_models import (
 
 logger = logging.getLogger("desktop.bridge.voice.providers")
 
+MAX_ASR_AUDIO_SECONDS = 60
+MINIMAX_AUDIO_SAMPLE_RATE = 32000
+MINIMAX_AUDIO_BITRATE = 128000
+MINIMAX_AUDIO_FORMAT = "mp3"
+MINIMAX_AUDIO_CHANNELS = 1
 
-def validate_wav_audio(audio: bytes, *, max_seconds: int = 60) -> None:
+
+def validate_wav_audio(
+    audio: bytes, *, max_seconds: int = MAX_ASR_AUDIO_SECONDS
+) -> None:
     """Validates the fixed 16 kHz mono PCM contract used by cloud ASR."""
 
     try:
@@ -604,10 +612,10 @@ class MiniMaxTtsClient:
                 "pitch": 0,
             },
             "audio_setting": {
-                "sample_rate": 32000,
-                "bitrate": 128000,
-                "format": "mp3",
-                "channel": 1,
+                "sample_rate": MINIMAX_AUDIO_SAMPLE_RATE,
+                "bitrate": MINIMAX_AUDIO_BITRATE,
+                "format": MINIMAX_AUDIO_FORMAT,
+                "channel": MINIMAX_AUDIO_CHANNELS,
             },
         }
         if stream:

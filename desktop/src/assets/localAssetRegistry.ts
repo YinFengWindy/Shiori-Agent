@@ -9,9 +9,13 @@ import {
   type LocalAssetKind,
 } from "./localAssetPolicy.js";
 import type { LocalAssetReference } from "../bridge/shared.js";
+import {
+  localAssetAuthority,
+  localAssetScheme,
+  maxLocalAssetBytes,
+} from "./localAssetContract.js";
 
-export const localAssetScheme = "shiori-asset";
-export const maxLocalAssetBytes = 32 * 1024 * 1024;
+export { localAssetScheme, maxLocalAssetBytes } from "./localAssetContract.js";
 
 /** Canonical local file authorization owned by the Electron main process. */
 export type ResolvedLocalAsset = {
@@ -93,7 +97,7 @@ export class LocalAssetRegistry {
     } catch {
       return null;
     }
-    if (requestedUrl.protocol !== `${localAssetScheme}:` || requestedUrl.hostname !== "local") {
+    if (requestedUrl.protocol !== `${localAssetScheme}:` || requestedUrl.hostname !== localAssetAuthority) {
       return null;
     }
     if (requestedUrl.search || requestedUrl.hash) {
@@ -113,7 +117,7 @@ export class LocalAssetRegistry {
   private toReference(grant: ResolvedLocalAsset): LocalAssetReference {
     return {
       path: grant.requestedPath,
-      url: `${localAssetScheme}://local/${grant.token}`,
+      url: `${localAssetScheme}://${localAssetAuthority}/${grant.token}`,
       kind: grant.kind,
     };
   }
