@@ -56,6 +56,17 @@
 - M01 已完成：创建 `workspace/.migration-backups/m01-20260826-202047/`，其中包含 SQLite 一致性备份、77 个 JSON 原件和 manifest；恢复探针确认备份仍有迁移前的 71 个媒体引用与 88 个 JSON 路径值。已改写 65 个消息媒体路径和 83 个 JSON 路径，清空 6 个失效消息附件与 3 个失效 `base_image_path`，删除 2 个无运行时读取的历史报告。live workspace（排除备份）已无 `.akashic` 引用。
 - 用户已确认旧渠道 session/消息已主动删除。因此 M05 启动迁移与 M07 历史回灌已退役；M04、M06 与 M08 中仍承载当前运行时会话、渠道 thread 映射或模块边界兼容的部分，必须按实际调用方逐项处理。
 
+### F 阶段已确认方案
+
+以下内容是逐项讨论后确认的设计，尚未全部实施：
+
+- **F01**：保留 ncatbot WebSocket timeout patch。当前依赖版本仍在 adapter 内硬编码 `open_timeout=1`；后续只收紧适配边界和错误报告，不复制第三方 Adapter。
+- **F02**：保留单渠道失败不阻塞其他渠道的行为；构造/启动失败通过 `ChannelHost.failures` 暴露 `channel`、`phase`、`error_type` 和 `message`。实现已提交，待 F 阶段方案整体确认后继续。
+- **F03**：保留 outbound 的 `bool` 成功契约。空消息、缺目标和业务层明确拒绝返回 `False`；未注册渠道、网络或其他未知外部异常不再统一吞掉，必要时包装为 `OutboundDispatchError`。
+- **F04**：保留 sqlite-vec 不可用时的全表扫描；集中暴露 vector backend 状态和降级原因，区分未安装、初始化失败和查询维度不匹配，不改变结果排序和默认阈值。
+- **F05**：分离上游真实事件 ID、dedupe key 与时间解析状态。缺少 upstream ID 时只生成稳定 dedupe key，不伪装成真实事件 ID；坏时间事件保留错误原因并拒绝进入可调度队列。
+- **F11**：全局 `MemeCatalog` 回退是允许的产品行为。角色素材优先，角色素材缺失时可以使用全局 meme 素材；本项不再改动。
+
 ## 第三批：运行时 fallback 与异常吞错
 
 | ID | 位置 | 当前行为 | 审查重点 |
