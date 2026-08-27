@@ -76,7 +76,6 @@ class TurnOrchestrator:
             content=content,
             media=media,
             metadata=source_metadata,
-            operation="proactive",
         )
 
         # 4. 根据是否真正发送成功，分别执行 success / failure side_effects。
@@ -131,7 +130,6 @@ class TurnOrchestrator:
                 "source": "proactive_retry",
                 "session_key_override": session_key,
             },
-            operation="proactive retry",
         )
 
     async def _run_side_effects(self, result: TurnResult) -> None:
@@ -154,21 +152,16 @@ class TurnOrchestrator:
         content: str,
         media: list[str],
         metadata: dict[str, Any],
-        operation: str,
     ) -> bool:
-        try:
-            return await self._outbound.dispatch(
-                OutboundDispatch(
-                    channel=channel,
-                    chat_id=chat_id,
-                    content=content,
-                    metadata=metadata,
-                    media=media,
-                )
+        return await self._outbound.dispatch(
+            OutboundDispatch(
+                channel=channel,
+                chat_id=chat_id,
+                content=content,
+                metadata=metadata,
+                media=media,
             )
-        except Exception as e:
-            logger.warning("%s outbound dispatch failed: %s", operation, e)
-            return False
+        )
 
     def _persist_proactive_session(
         self,

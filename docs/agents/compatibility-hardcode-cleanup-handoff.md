@@ -2,7 +2,7 @@
 
 > 关联 Issue：[ #104 refactor: 清理兼容性代码与硬编码 ](https://github.com/YinFengWindy/Shiori-Agent/issues/104)
 >
-> 状态：只读审计完成，候选项待逐项确认。本文不是已批准的删除计划。
+> 状态：C01-C06、C08-C09 已逐项确认并完成删除，C07 保留为只读解析；其他候选项仍以各批次结论为准。本文同时记录已批准项和待确认项。
 
 > 2026-08-27：E01-E04 已按当前产品决策完成。仓库根 `config.toml` 不再作为迁移来源；桌面 settings 只接受 runtime path contract 注入的 workspace 配置路径；开发环境变量已统一为 `SHIORI_*`。E05 保持现状，E06 已完成发布路径 manifest 集中化；E07-E15 已完成等价契约集中或保留型容错整理。
 >
@@ -18,6 +18,22 @@
 4. 删除或重构后，需要哪些聚焦测试、类型检查、构建或运行时验证？
 
 候选项没有经过批准前，不要删除兼容入口，也不要把 fallback 直接改成抛错。
+
+## 第一批处理结论
+
+2026-08-27，维护者确认本 PR 的第一批兼容入口清理范围。以下项目均已完成仓库内生产代码、测试和维护脚本的调用方核对；删除的是内部历史入口，权威实现路径已在对应模块中保留。仓库不将这些旧路径作为受支持的公共 API 发布。
+
+| ID | 结论 | 核对结果 |
+| --- | --- | --- |
+| C01 | 删除旧 voice/TTS re-export | 旧 `desktop_bridge` 根路径调用已迁移到 `desktop_bridge/voice/`；保留模块不变。 |
+| C02 | 删除 Story internal 旧 re-export | 生产代码和测试已使用 `story_simulation.internal` 的权威实现。 |
+| C03 | 删除旧 Story migration wrapper | 迁移调用已统一到 `migrate_story_timeline()`，没有旧入口调用方。 |
+| C04 | 删除 `build_vl_provider()` 假兼容 API | 没有生产或维护脚本调用；当前 provider disabled 语义由现有配置路径表达。 |
+| C05 | 删除 NovelAI 私有 `_auto_cg_tasks` 转发 | 调用方直接使用 controller 状态 API，未保留旧私有别名。 |
+| C06 | 删除 `HyDEAugmentResult.__iter__` 旧解包兼容 | 调用方使用结构化结果字段，未发现二元解包调用。 |
+| C07 | 保留只读兼容解析 | 历史 context marker 仍可能出现在已保存消息中，不做 destructive rewrite。 |
+| C08 | 删除 QQ channel/stream 旧 facade | 内部调用和测试已迁移到 owning formatting 模块。 |
+| C09 | 删除 conversation package-level 旧导出 | `LegacySessionDescriptor` 等当前调用方直接从 owning module 导入。 |
 
 ## 第一批：高概率可清理的兼容 Shim
 

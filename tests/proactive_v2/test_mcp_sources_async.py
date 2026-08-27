@@ -19,6 +19,7 @@ class _FakePool:
         self._failures = failures or set()
         self.calls: list[tuple[str, str, dict]] = []
         self.timeouts: list[float | None] = []
+        self.retry_flags: list[bool] = []
 
     async def call(
         self,
@@ -27,9 +28,11 @@ class _FakePool:
         args: dict[str, Any],
         *,
         timeout: float | None = None,
+        retry_on_transport: bool = False,
     ):
         self.calls.append((server, tool_name, dict(args)))
         self.timeouts.append(timeout)
+        self.retry_flags.append(retry_on_transport)
         if (server, tool_name) in self._failures:
             raise RuntimeError(f"failed: {server}.{tool_name}")
         return self._responses[(server, tool_name)]
@@ -58,6 +61,7 @@ async def test_fetch_alert_events_async_filters_kind_and_sets_ack_server(monkeyp
     result = await mcp_sources.fetch_alert_events_async(cast(Any, pool))
 
     assert result == [{"kind": "alert", "event_id": "a1", "ack_server": "s1"}]
+    assert pool.retry_flags == [True]
 
 
 @pytest.mark.asyncio
@@ -110,6 +114,7 @@ async def test_fetch_context_data_async_accepts_dict_and_list(monkeypatch, caplo
     ]
     assert "ctx2" in caplog.text
     assert "1 个非法条目" in caplog.text
+    assert pool.retry_flags == [True, True]
 
 
 @pytest.mark.asyncio
@@ -134,6 +139,7 @@ async def test_fetch_context_data_async_isolates_invalid_top_level_source(monkey
     assert result == [{"available": True, "_source": "valid"}]
     assert "invalid" in caplog.text
     assert "unsupported payload type str" in caplog.text
+    assert pool.retry_flags == [True, True]
 
 
 @pytest.mark.asyncio
@@ -162,6 +168,7 @@ async def test_poll_content_feeds_async_raises_when_any_source_failed(monkeypatc
     assert "s2" in str(exc.value)
     assert ("a1", "poll", {}) not in pool.calls
     assert pool.timeouts == [mcp_sources._POLL_TOOL_TIMEOUT, mcp_sources._POLL_TOOL_TIMEOUT]
+    assert pool.retry_flags == [False, False]
 
 
 @pytest.mark.asyncio
@@ -198,6 +205,144 @@ async def test_mcp_pool_disconnects_timeout_client_without_retry():
 
 
 @pytest.mark.asyncio
+async def test_mcp_pool_does_not_retry_transport_failure_by_default():
+    class _BrokenClient:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.disconnected = False
+
+        async def call(
+            self,
+            tool_name: str,
+            args: dict[str, Any],
+            *,
+            timeout: float | None = None,
+        ) -> str:
+            self.calls += 1
+            raise ConnectionError("pipe closed")
+
+        async def disconnect(self) -> None:
+            self.disconnected = True
+
+    pool = mcp_sources.McpClientPool(Path("unused-workspace"))
+    client = _BrokenClient()
+    pool._configs["feed"] = (["cmd"], {})
+    pool._clients["feed"] = client
+
+    with pytest.raises(ConnectionError, match="pipe closed"):
+        await pool.call("feed", "get_proactive_events", {})
+
+    assert client.calls == 1
+    assert client.disconnected is True
+    assert "feed" not in pool._clients
+
+
+@pytest.mark.asyncio
+async def test_mcp_pool_retries_explicit_read_transport_failure_once():
+    class _BrokenClient:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.disconnected = False
+
+        async def call(
+            self,
+            tool_name: str,
+            args: dict[str, Any],
+            *,
+            timeout: float | None = None,
+        ) -> str:
+            self.calls += 1
+            raise ConnectionError("pipe closed")
+
+        async def disconnect(self) -> None:
+            self.disconnected = True
+
+    class _ReadClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def call(
+            self,
+            tool_name: str,
+            args: dict[str, Any],
+            *,
+            timeout: float | None = None,
+        ) -> str:
+            self.calls += 1
+            return '{"available": true}'
+
+        async def disconnect(self) -> None:
+            return None
+
+    pool = mcp_sources.McpClientPool(Path("unused-workspace"))
+    first = _BrokenClient()
+    second = _ReadClient()
+    pool._configs["ctx"] = (["cmd"], {})
+    pool._clients["ctx"] = first
+
+    async def reconnect(server: str) -> bool:
+        pool._clients[server] = second
+        return True
+
+    pool._connect = reconnect  # type: ignore[method-assign]
+
+    result = await pool.call(
+        "ctx",
+        "get_context",
+        {},
+        retry_on_transport=True,
+    )
+
+    assert result == {"available": True}
+    assert first.calls == 1
+    assert first.disconnected is True
+    assert second.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_mcp_pool_does_not_retry_json_rpc_tool_error():
+    from agent.mcp.client import McpToolError
+
+    class _ErrorClient:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.disconnected = False
+
+        async def call(
+            self,
+            tool_name: str,
+            args: dict[str, Any],
+            *,
+            timeout: float | None = None,
+        ) -> str:
+            self.calls += 1
+            raise McpToolError(
+                server="ctx",
+                tool_name=tool_name,
+                message="invalid arguments",
+                code=-32602,
+                data={"field": "query"},
+            )
+
+        async def disconnect(self) -> None:
+            self.disconnected = True
+
+    pool = mcp_sources.McpClientPool(Path("unused-workspace"))
+    client = _ErrorClient()
+    pool._configs["ctx"] = (["cmd"], {})
+    pool._clients["ctx"] = client
+
+    with pytest.raises(McpToolError) as exc_info:
+        await pool.call("ctx", "get_context", {}, retry_on_transport=True)
+
+    assert exc_info.value.code == -32602
+    assert exc_info.value.data == {"field": "query"}
+    assert client.calls == 1
+    assert client.disconnected is True
+    assert "ctx" not in pool._clients
+
+
+@pytest.mark.asyncio
 async def test_acknowledge_events_async_groups_by_ack_server(monkeypatch):
     monkeypatch.setattr(
         mcp_sources,
@@ -230,6 +375,7 @@ async def test_acknowledge_events_async_groups_by_ack_server(monkeypatch):
 
     assert ("fitbit", "ack_events", {"event_ids": ["a1", "a2"]}) in pool.calls
     assert ("feed", "ack_events", {"event_ids": ["a3"]}) in pool.calls
+    assert pool.retry_flags == [False, False]
 
 
 @pytest.mark.asyncio
@@ -253,3 +399,4 @@ async def test_acknowledge_content_entries_async_passes_ttl_hours(monkeypatch):
         "ack_content",
         {"event_ids": ["evt-1", "evt-2"], "ttl_hours": 24},
     ) in pool.calls
+    assert pool.retry_flags == [False]

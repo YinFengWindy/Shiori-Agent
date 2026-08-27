@@ -4,9 +4,9 @@ import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:chil
 import { EventEmitter } from "node:events";
 import type { BridgeEvent, BridgeRequest, BridgeResponse } from "./shared.js";
 import type { DesktopBridgeCommand } from "../runtimePaths.js";
-const BRIDGE_START_TIMEOUT_MS = 60_000;
-const BRIDGE_START_RETRY_DELAY_MS = 250;
 import { bridgeRequestTimeoutMs, bridgeTimeoutPolicy } from "./bridgeTimeoutPolicy.js";
+
+const BRIDGE_START_RETRY_DELAY_MS = 250;
 
 type PendingRequest = {
   id: string;
@@ -221,7 +221,7 @@ export class DesktopBridgeClient extends EventEmitter {
   }
 
   private async waitUntilReady(session: BridgeProcessSession): Promise<void> {
-    const deadline = Date.now() + BRIDGE_START_TIMEOUT_MS;
+    const deadline = Date.now() + bridgeTimeoutPolicy.startup;
     let lastError = "bridge health check failed";
     while (Date.now() < deadline) {
       if (this.session !== session || session.exited) {

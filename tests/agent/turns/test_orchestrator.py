@@ -8,7 +8,7 @@ import pytest
 
 from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
-from agent.turns.outbound import OutboundDispatch
+from agent.turns.outbound import OutboundDispatch, OutboundDispatchError
 from agent.turns.result import TurnOutbound, TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
@@ -152,3 +152,50 @@ async def test_proactive_retry_dispatches_without_recommitting_shared_session() 
     assert dispatched[0].media == ["D:\\media\\scene.png"]
     session_manager.append_messages.assert_not_awaited()
     assert committed == []
+
+
+@pytest.mark.asyncio
+async def test_proactive_dispatch_error_is_not_converted_to_false() -> None:
+    session = SimpleNamespace(
+        key="role:mira",
+        metadata={"role_id": "mira"},
+        messages=[],
+    )
+
+    def add_message(role: str, content: str, media=None, **kwargs) -> None:
+        session.messages.append({"role": role, "content": content, **kwargs})
+
+    session.add_message = add_message
+    session_manager = SimpleNamespace(
+        get_or_create=lambda _key: session,
+        append_messages=AsyncMock(return_value=None),
+    )
+
+    class _Outbound:
+        async def dispatch(self, outbound: OutboundDispatch) -> bool:
+            raise OutboundDispatchError(
+                channel=outbound.channel,
+                chat_id=outbound.chat_id,
+                detail="network unavailable",
+            )
+
+    orchestrator = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            session=SessionServices(
+                session_manager=cast(Any, session_manager),
+                presence=None,
+            ),
+            outbound=_Outbound(),
+        )
+    )
+
+    with pytest.raises(OutboundDispatchError, match="network unavailable"):
+        await orchestrator.handle_proactive_turn(
+            result=TurnResult(
+                decision="reply",
+                outbound=TurnOutbound(session_key="role:mira", content="hello"),
+            ),
+            session_key="role:mira",
+            channel="telegram",
+            chat_id="123",
+        )

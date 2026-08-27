@@ -50,7 +50,7 @@ def build_screen_observation_service(
     *,
     roles: RoleRepository,
     memory: MemoryWriteApi,
-    role_runtime_registry: RoleRuntimeRegistry,
+    role_runtime_registry: RoleRuntimeRegistry | None,
 ) -> ScreenObservationService:
     """Builds the default role capability with role-owned visual selection."""
 

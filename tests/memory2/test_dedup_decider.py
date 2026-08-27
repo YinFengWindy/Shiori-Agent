@@ -137,5 +137,5 @@ def test_provider_and_json_failures_keep_distinct_reason_codes() -> None:
     provider_result, json_result = asyncio.run(run())
     assert provider_result[0] is DedupDecision.CREATE
     assert provider_result[3] == ("provider_error",)
-    assert json_result[0] is DedupDecision.CREATE
+    assert json_result[0] is DedupDecision.SKIP
     assert json_result[3] == ("json_parse_error",)

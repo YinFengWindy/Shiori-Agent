@@ -450,6 +450,7 @@ async def test_yinfeng_relationship_fallback_includes_direct_longing_style_hint(
     llm = FakeLLM([("finish_turn", {"decision": "skip", "reason": "no_content"})])
     tick = make_proactive_pipeline(
         session_key="role:role-0424dd696dd6",
+        target_transport_fn=lambda: ("desktop", "role:role-0424dd696dd6"),
         llm_fn=llm,
         rng=FakeRng(value=1.0),
         proactive_gates=relationship_gate_chain(),

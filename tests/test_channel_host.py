@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from bootstrap.channel_host import ChannelHost
+from bootstrap.channel_host import ChannelFailure, ChannelHost
 
 
 class _Channel:
@@ -44,6 +44,14 @@ async def test_channel_host_start_failure_does_not_block_others():
         "start:a:ctx:a",
         "start:b:ctx:b",
         "start:c:ctx:c",
+    ]
+    assert host.failures == [
+        ChannelFailure(
+            channel="b",
+            phase="start",
+            error_type="RuntimeError",
+            message="start failed",
+        )
     ]
 
 

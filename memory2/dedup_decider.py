@@ -178,7 +178,7 @@ class DedupDecider:
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         data = load_json_object_loose(text)
         if data is None:
-            return DedupDecision.CREATE, "invalid_json", [], ("json_parse_error",)
+            return DedupDecision.SKIP, "invalid_json", [], ("json_parse_error",)
         if not isinstance(data, dict):
             return (
                 DedupDecision.SKIP,

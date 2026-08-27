@@ -93,6 +93,17 @@ def replace_memory_section(path: Path, heading: str, body: str) -> None:
         raise ValueError(f"unsupported memory section: {filename} {heading}")
     current = path.read_text(encoding="utf-8") if path.exists() else ""
     lines = normalize_memory_document(filename, current).rstrip().splitlines()
+    if heading not in lines:
+        clean_body = str(body or "").strip()
+        appended = [heading]
+        if clean_body:
+            appended.extend(["", *clean_body.splitlines()])
+        path.write_text(
+            "\n".join([*lines, "", *appended]).strip() + "\n",
+            encoding="utf-8",
+        )
+        return
+
     start = lines.index(heading)
     end = len(lines)
     for index in range(start + 1, len(lines)):

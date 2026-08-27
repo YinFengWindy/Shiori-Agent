@@ -1,8 +1,9 @@
 /** Time limits shared by the Electron bridge command boundary. */
 export const bridgeTimeoutPolicy = Object.freeze({
   health: 5_000,
+  startup: 60_000,
   defaultRequest: 30_000,
-  voiceRequest: 60_000,
+  voiceRequest: 30_000,
   imageGeneration: 5 * 60_000,
   observation: 2 * 60_000,
   gracefulStop: 5_000,

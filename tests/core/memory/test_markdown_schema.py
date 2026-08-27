@@ -5,6 +5,7 @@ from core.memory.markdown_schema import (
     ensure_memory_documents,
     normalize_memory_document,
     pending_body,
+    replace_memory_section,
 )
 
 
@@ -34,3 +35,18 @@ def test_memory_document_write_normalizes_line_endings_only() -> None:
 def test_pending_body_removes_only_the_document_title() -> None:
     pending = "# 待整理的记忆\n- [preference] 保持简洁\n"
     assert pending_body(pending) == "- [preference] 保持简洁"
+
+
+def test_replace_memory_section_appends_missing_section_without_rewriting_custom_text(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "SELF.md"
+    original = "# 自定义标题\n\n保留用户编辑。\n"
+    path.write_text(original, encoding="utf-8")
+
+    replace_memory_section(path, "## 我的性格与形象", "- 新增内容")
+
+    assert path.read_text(encoding="utf-8") == (
+        "# 自定义标题\n\n保留用户编辑。\n\n"
+        "## 我的性格与形象\n\n- 新增内容\n"
+    )

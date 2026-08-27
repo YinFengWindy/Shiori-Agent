@@ -26,6 +26,18 @@ class OutboundDispatch:
     media: list[str] = field(default_factory=list)
 
 
+class OutboundDispatchError(RuntimeError):
+    """Indicates an unexpected transport or channel configuration failure."""
+
+    def __init__(self, *, channel: str, chat_id: str, detail: object) -> None:
+        self.channel = channel
+        self.chat_id = chat_id
+        self.detail = str(detail)
+        super().__init__(
+            f"outbound dispatch failed for {channel}:{chat_id}: {self.detail}"
+        )
+
+
 class OutboundPort(Protocol):
     async def dispatch(self, outbound: OutboundDispatch) -> bool: ...
 
@@ -68,15 +80,15 @@ class PushToolOutboundPort:
         media = [str(item).strip() for item in outbound.media if str(item).strip()]
         if (not message and not media) or not channel or not chat_id:
             return False
+        result = ""
+        execution_context = {
+            **self._execution_context,
+            "session_key": str(
+                outbound.metadata.get("session_key_override") or ""
+            ).strip(),
+            "push_message_already_persisted": "true",
+        }
         try:
-            result = ""
-            execution_context = {
-                **self._execution_context,
-                "session_key": str(
-                    outbound.metadata.get("session_key_override") or ""
-                ).strip(),
-                "push_message_already_persisted": "true",
-            }
             if message or media:
                 result = await self._push.execute(
                     channel=channel,
@@ -92,6 +104,28 @@ class PushToolOutboundPort:
                     image=image,
                     **execution_context,
                 )
-        except Exception:
+        except PermissionError:
             return False
-        return "已发送" in str(result)
+        except OutboundDispatchError:
+            raise
+        except Exception as exc:
+            raise OutboundDispatchError(
+                channel=channel,
+                chat_id=chat_id,
+                detail=exc,
+            ) from exc
+
+        result_text = str(result)
+        if "未注册" in result_text or result_text.startswith("发送失败："):
+            raise OutboundDispatchError(
+                channel=channel,
+                chat_id=chat_id,
+                detail=result_text,
+            )
+        if "没有可用的 sender" in result_text:
+            raise OutboundDispatchError(
+                channel=channel,
+                chat_id=chat_id,
+                detail=result_text,
+            )
+        return "已发送" in result_text

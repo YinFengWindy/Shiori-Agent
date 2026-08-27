@@ -12,7 +12,6 @@ import type { LocalAssetReference } from "../bridge/shared.js";
 import {
   localAssetAuthority,
   localAssetScheme,
-  maxLocalAssetBytes,
 } from "./localAssetContract.js";
 
 export { localAssetScheme, maxLocalAssetBytes } from "./localAssetContract.js";

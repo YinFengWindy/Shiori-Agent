@@ -4,7 +4,9 @@ import { bridgeRequestTimeoutMs, bridgeTimeoutPolicy } from "./bridgeTimeoutPoli
 
 test("bridge timeout policy keeps command classes explicit", () => {
   assert.equal(bridgeRequestTimeoutMs("health"), bridgeTimeoutPolicy.health);
+  assert.equal(bridgeTimeoutPolicy.startup, 60_000);
   assert.equal(bridgeRequestTimeoutMs("roles.list"), bridgeTimeoutPolicy.defaultRequest);
+  assert.equal(bridgeTimeoutPolicy.voiceRequest, 30_000);
   assert.equal(bridgeRequestTimeoutMs("voice.clone"), bridgeTimeoutPolicy.voiceRequest);
   assert.equal(bridgeRequestTimeoutMs("novelai.generate"), bridgeTimeoutPolicy.imageGeneration);
   assert.equal(bridgeRequestTimeoutMs("observation.analyze"), bridgeTimeoutPolicy.observation);
