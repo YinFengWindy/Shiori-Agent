@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +70,7 @@ class RoleAssetStore:
 
     @staticmethod
     def normalize_categories(
-        categories: list[RoleAssetCategory | dict[str, Any]],
+        categories: Sequence[RoleAssetCategory | dict[str, Any]],
     ) -> list[RoleAssetCategory]:
         normalized = [
             (
