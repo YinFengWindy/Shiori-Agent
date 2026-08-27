@@ -793,7 +793,7 @@ class TestToolSearchTool:
 
 # ── Baseline 回归测试 ─────────────────────────────────────────────────────────
 
-_BASELINE_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "tool_search_baseline.json"
+_BASELINE_PATH = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "tool_search_baseline.json"
 
 
 class TestBaseline:

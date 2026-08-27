@@ -19,7 +19,7 @@ from agent.plugins.registry import plugin_registry
 from bus.event_bus import EventBus
 from core.roles import RoleStore
 
-BACKEND_ROOT = Path(__file__).resolve().parents[2] / "apps" / "backend"
+BACKEND_ROOT = Path(__file__).resolve().parents[4] / "apps" / "backend"
 
 
 def _load_meme_plugin_module() -> Any:

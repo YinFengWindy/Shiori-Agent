@@ -13,7 +13,7 @@ from agent.plugins.registry import plugin_registry
 from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
 from bus.event_bus import EventBus
 
-PLUGIN_DIR = Path(__file__).resolve().parents[2] / "apps" / "backend" / "plugins" / "shell_safety"
+PLUGIN_DIR = Path(__file__).resolve().parents[4] / "apps" / "backend" / "plugins" / "shell_safety"
 
 
 @pytest.fixture(autouse=True)

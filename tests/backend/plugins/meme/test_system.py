@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-BACKEND_ROOT = Path(__file__).resolve().parents[2] / "apps" / "backend"
+BACKEND_ROOT = Path(__file__).resolve().parents[4] / "apps" / "backend"
 
 
 def _load_meme_runtime() -> Any:

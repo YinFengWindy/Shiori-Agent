@@ -23,7 +23,7 @@ from core.net.http import (
 )
 from tests.backend.memory_fakes import FakeMemoryEngine
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[2] / "apps" / "backend"
+_BACKEND_ROOT = Path(__file__).resolve().parents[4] / "apps" / "backend"
 
 
 class _DummyTool(Tool):

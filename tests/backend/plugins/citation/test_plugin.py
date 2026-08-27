@@ -13,7 +13,7 @@ import pytest
 from agent.core.response_parser import ResponseMetadata
 from agent.lifecycle.types import AfterReasoningCtx, PromptRenderCtx
 
-BACKEND_ROOT = Path(__file__).resolve().parents[2] / "apps" / "backend"
+BACKEND_ROOT = Path(__file__).resolve().parents[4] / "apps" / "backend"
 
 
 def _load_citation_plugin_module() -> Any:

@@ -15,7 +15,7 @@ from agent.plugins.manager import PluginManager
 from agent.plugins.registry import plugin_registry
 
 
-FIXTURES_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "plugins"
+FIXTURES_DIR = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "plugins"
 
 
 @pytest.fixture(autouse=True)

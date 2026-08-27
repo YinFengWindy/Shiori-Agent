@@ -31,7 +31,7 @@ open_db = cast(Callable[[Path], sqlite3.Connection], getattr(_observe_db, "open_
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 BACKEND_ROOT = REPOSITORY_ROOT / "apps" / "backend"
 FIXTURES_DIR = REPOSITORY_ROOT / "tests" / "fixtures" / "plugins"
 

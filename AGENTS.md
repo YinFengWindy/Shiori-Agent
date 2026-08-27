@@ -6,7 +6,7 @@
 
 ## 项目概览
 
-- Shiori 是一个以角色为基底进行角色扮演的 Agent 助手，以 Akashic 为 Agent 基座。
+- Shiori 是一个以角色为基底进行角色扮演的 Agent 助手
 
 ## 工作原则
 
@@ -64,7 +64,7 @@
 - 通过脚本或命令写文件时显式指定编码，避免默认 ANSI 或 GBK 造成乱码。
 - 发现乱码先检查文件编码与终端解码设置，必要时重存为 UTF-8。
 - Python 命令、测试和质量工具必须使用仓库 `.venv`，禁止依赖 PATH 中的系统 Python：Windows 使用 `.venv\\Scripts\\python.exe`、`.venv\\Scripts\\pytest.exe`、`.venv\\Scripts\\ruff.exe` 等；跨平台文档和脚本统一使用 `uv run ...`。
-- 不要直接运行裸 `python`、`pytest`、`ruff` 或 `pyright` 来验证 Shiori；先确认 `python -c \"import sys; print(sys.executable)\"` 指向仓库 `.venv`，否则使用 `.venv` 的绝对/相对路径。
+- 不要直接运行裸 `python`、`pytest`、`ruff` 或 `pyright` 来验证 Shiori；使用.venv来进行测试。
 - `pnpm dev` 的 Python bridge 必须继续由 `apps/desktop/src/bridge/bridgeClient.ts` 启动项目 `.venv` 中的解释器，不得改成依赖系统 PATH 的 `python`。
 
 ## 仓库特定约束
@@ -91,16 +91,3 @@
 ### Domain docs
 
 本仓库采用单上下文领域文档布局。详见 `docs/agents/domain.md`。
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
