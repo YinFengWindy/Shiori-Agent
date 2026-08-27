@@ -47,7 +47,12 @@ def test_optimize_rewrites_memory_from_first_llm_call(tmp_path):
     role_memory = MarkdownMemoryStore(tmp_path / "roles" / "mira")
     role_memory.write_long_term("old profile")
 
-    provider = _provider_with_responses("## 用户画像\n- 新版本\n")
+    provider = _provider_with_responses(
+        "# 我的长期记忆\n\n"
+        "## 关于你\n- 新版本\n\n"
+        "## 你的偏好\n\n"
+        "## 你希望我记住的事\n"
+    )
     optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
     asyncio.run(optimizer.optimize(role_id="mira"))
@@ -120,8 +125,14 @@ def test_optimize_updates_self_using_pending_only(tmp_path):
     role_memory.append_history("[2026-03-03 10:00] USER: 这段历史不该进入 SELF")
 
     provider = _provider_with_responses(
-        "## 新记忆",
-        "# 角色自我认知\n\n## 人格与形象\n\n- 新版人格\n\n## 我对当前用户的理解\n\n- 新版理解\n\n## 我们关系的定义\n\n- 新版关系\n",
+        "# 我的长期记忆\n\n"
+        "## 关于你\n- 新记忆\n\n"
+        "## 你的偏好\n\n"
+        "## 你希望我记住的事\n",
+        "# 我是谁\n\n"
+        "## 我的性格与形象\n\n- 新版人格\n\n"
+        "## 我对你的理解\n\n- 新版理解\n\n"
+        "## 我们的关系\n\n- 新版关系\n",
     )
     optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
@@ -160,7 +171,7 @@ def test_update_self_does_not_copy_user_preference_facts_verbatim(tmp_path):
     role_memory.write_self("# 角色自我认知\n\n## 人格与形象\n- 旧人格\n\n## 我对当前用户的理解\n- 旧理解\n\n## 我们关系的定义\n- 旧关系\n")
 
     provider = _provider_with_responses(
-        "# 角色自我认知\n\n## 人格与形象\n- 角色依旧保持自己的审美与语气\n\n## 我对当前用户的理解\n- 我知道用户对视觉表达有稳定要求，但不会把具体偏好清单写进自我认知\n\n## 我们关系的定义\n- 我会根据这些长期信号调整相处方式\n",
+        "# 我是谁\n\n## 我的性格与形象\n- 角色依旧保持自己的审美与语气\n\n## 我对你的理解\n- 我知道你对视觉表达有稳定要求，但不会把具体偏好清单写进自我认知\n\n## 我们的关系\n- 我会根据这些长期信号调整相处方式\n",
     )
     optimizer = MemoryOptimizer(memory, cast(Any, provider), "test-model", tmp_path)
     optimizer._STEP_DELAY_SECONDS = 0
@@ -247,8 +258,14 @@ def test_optimize_with_role_id_updates_role_markdown_memory(tmp_path):
     global_memory.write_long_term("全局旧记忆")
 
     provider = _provider_with_responses(
-        "## 用户画像\n- 角色新版本\n",
-        "# 角色自我认知\n\n## 人格与形象\n\n- 角色人格\n\n## 我对当前用户的理解\n\n- 角色理解\n\n## 我们关系的定义\n\n- 角色关系\n",
+        "# 我的长期记忆\n\n"
+        "## 关于你\n- 角色新版本\n\n"
+        "## 你的偏好\n\n"
+        "## 你希望我记住的事\n",
+        "# 我是谁\n\n"
+        "## 我的性格与形象\n\n- 角色人格\n\n"
+        "## 我对你的理解\n\n- 角色理解\n\n"
+        "## 我们的关系\n\n- 角色关系\n",
     )
     optimizer = MemoryOptimizer(
         global_memory,
