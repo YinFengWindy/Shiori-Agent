@@ -38,6 +38,8 @@ const args = [
   `${join(backendRoot, "plugins")}${dataSeparator}plugins`,
   "--add-data",
   `${join(backendRoot, "skills")}${dataSeparator}skills`,
+  "--add-data",
+  `${join(repositoryRoot, "apps", "desktop", "renderer", "src", "chat", "common_emojis.json")}${dataSeparator}common_emojis.json`,
   "--collect-submodules",
   "plugins",
   "--collect-submodules",

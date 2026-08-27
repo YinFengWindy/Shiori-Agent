@@ -11,6 +11,7 @@ test("verifyPackagedDesktop accepts the required Windows release layout", async 
     const files = [
       "resources/app.asar",
       "resources/runtime/shiori-runtime.exe",
+      "resources/runtime/_internal/common_emojis.json",
       "resources/config.example.toml",
       "resources/assets/shiori-app-icon.ico",
       "resources/app.asar.unpacked/node_modules/uiohook-napi/prebuilds/win32-x64/uiohook-napi.node",

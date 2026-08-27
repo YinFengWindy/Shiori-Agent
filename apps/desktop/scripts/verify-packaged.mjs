@@ -26,6 +26,7 @@ export async function verifyPackagedDesktop(appOutDir) {
   await Promise.all([
     requireFile(join(resources, "app.asar")),
     requireFile(join(resources, "runtime", "shiori-runtime.exe")),
+    requireFile(join(resources, "runtime", "_internal", "common_emojis.json")),
     requireFile(join(resources, "config.example.toml")),
     requireFile(join(resources, "assets", "shiori-app-icon.ico")),
     requireDirectory(join(resources, "app.asar.unpacked", "node_modules", "uiohook-napi")),

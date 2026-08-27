@@ -25,6 +25,7 @@ def _load_meme_runtime() -> Any:
 _meme_runtime = _load_meme_runtime()
 MemeCatalog = _meme_runtime.MemeCatalog
 MemeDecorator = _meme_runtime.MemeDecorator
+load_common_emojis = _meme_runtime.load_common_emojis
 
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
@@ -49,6 +50,24 @@ def add_image(memes_dir: Path, category: str, name: str = "001.png") -> Path:
     img = cat_dir / name
     img.write_bytes(b"\x89PNG\r\n")  # fake PNG header
     return img
+
+
+def test_load_common_emojis_prefers_packaged_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    packaged_root = tmp_path / "packaged"
+    packaged_root.mkdir()
+    (packaged_root / "common_emojis.json").write_text(
+        json.dumps([{"name": "heart", "value": "<packaged-heart>"}]),
+        encoding="utf-8",
+    )
+    workspace = tmp_path / "workspace"
+    (workspace / "apps" / "desktop" / "renderer" / "src" / "chat").mkdir(parents=True)
+    (workspace / "apps" / "desktop" / "renderer" / "src" / "chat" / "common_emojis.json").write_text(
+        json.dumps([{"name": "heart", "value": "<workspace-heart>"}]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys, "_MEIPASS", str(packaged_root), raising=False)
+
+    assert load_common_emojis(workspace) == {"heart": "<packaged-heart>"}
 
 
 # ── MemeCatalog: basic loading ─────────────────────────────────────────────────
