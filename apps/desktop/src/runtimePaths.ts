@@ -45,7 +45,7 @@ export function resolveDesktopRuntimePaths({
         cwd: backendRoot,
       },
       configPath,
-      configTemplatePath: resolve(backendRoot, "config.example.toml"),
+      configTemplatePath: resolve(repositoryRoot, "config", "examples", "config.example.toml"),
       workspacePath,
     };
   }

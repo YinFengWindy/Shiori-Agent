@@ -154,7 +154,7 @@ uv run python apps/backend/main.py init
 | `channels.telegram` / `channels.qq` | 外部消息渠道 | 可选 |
 | `integrations.novelai` | 图片生成与自动 CG | 可选 |
 
-`apps/backend/config.example.toml` 提供了完整配置结构。Shiori 使用 OpenAI 兼容接口，可为不同能力分别设置模型、API Key 和 Base URL。
+`config/examples/config.example.toml` 提供了完整配置结构。`config/examples/mcp_servers.example.json` 提供了 MCP 服务定义的公开起点。Shiori 使用 OpenAI 兼容接口，可为不同能力分别设置模型、API Key 和 Base URL。
 
 ### 3. 启动桌面端
 
@@ -208,7 +208,7 @@ pnpm run desktop:smoke                  # 桌面主链 smoke
 | `apps/desktop/renderer/src/` | React 渲染端，按 `chat/`、`roles/`、`story/`、`settings/`、`image/`、`pet/`、`voice/` 等功能域组织 |
 | `tests/backend/` | Python Runtime 测试，按 `apps/backend/` 的包结构组织 |
 | `benchmarks/` | LongMemEval 与 PersonaMem 评测脚本、数据和运行说明 |
-| `apps/backend/config.example.toml` | 可提交的初始化模板；实际配置由用户工作区持有 |
+| `config/examples/` | 可提交的配置和 MCP 示例；实际配置与 MCP 服务定义由用户工作区持有 |
 
 ### 本地数据
 

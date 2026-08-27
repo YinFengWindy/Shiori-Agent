@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not Path(config_path).exists():
         logger.error(
-            f"找不到配置文件 {config_path!r}，请先复制 apps/backend/config.example.toml 为 config.toml。"
+            f"找不到配置文件 {config_path!r}，请先复制 config/examples/config.example.toml 为 config.toml。"
         )
         return 1
 

@@ -8,9 +8,12 @@ from agent.config import Config
 from agent.memory import MemoryStore
 from bootstrap.memory import ensure_memory_plugin_storage
 from infra.persistence.json_store import save_json
-from project_paths import CONFIG_TEMPLATE_PATH
 from proactive_v2.anyaction import QuotaStore
 from session.store import SessionStore
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+# Canonical template copied into the user-owned workspace during setup.
+CONFIG_TEMPLATE_PATH = _REPOSITORY_ROOT / "config" / "examples" / "config.example.toml"
 
 _TEXT_FILES: dict[str, str] = {}
 

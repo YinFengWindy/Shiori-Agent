@@ -17,7 +17,7 @@ describe("resolveDesktopRuntimePaths", () => {
     assert.equal(paths.configPath, resolve("C:/Users/shiori/.shiori/workspace/config.toml"));
     assert.equal(
       paths.configTemplatePath,
-      resolve("D:/Coding/Shiori/apps/backend/config.example.toml"),
+      resolve("D:/Coding/Shiori/config/examples/config.example.toml"),
     );
     assert.equal(paths.workspacePath, resolve("C:/Users/shiori/.shiori/workspace"));
     assert.equal(paths.bridge.cwd, resolve("D:/Coding/Shiori/apps/backend"));
