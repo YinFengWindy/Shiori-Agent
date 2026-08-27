@@ -6,7 +6,7 @@ akashic 的记忆分为两层：**Markdown 文件层**（人类可读，LLM 直�
 
 ## 五个 Markdown 文件
 
-都在 `~/.akashic/workspace/memory/` 下：
+都在 `~/.shiori/workspace/memory/` 下：
 
 | 文件 | 写者 | 读方 | 用途 |
 |------|------|------|------|
@@ -190,7 +190,7 @@ Optimizer 定时任务
 
 ## 向量记忆 API——谁在调它
 
-`core/memory/engine.py` 定义了一套抽象协议（`MemoryEngine`），由四个子协议组成。引擎本身是一个 **plugin**——`[memory].engine` 配置项指定用哪个实现，留空 = `default_memory` 插件。协议与实现解耦。
+`apps/backend/core/memory/engine.py` 定义了一套抽象协议（`MemoryEngine`），由四个子协议组成。引擎本身是一个 **plugin**——`[memory].engine` 配置项指定用哪个实现，留空 = `default_memory` 插件。协议与实现解耦。
 
 ### API 协议一览
 
@@ -232,17 +232,17 @@ Optimizer 定时任务
 
 ### 调用点汇总
 
-所有不在 `plugins/default_memory/` 下的真实调用点：
+所有不在 `apps/backend/plugins/default_memory/` 下的真实调用点：
 
 | 位置 | 行 | 方法 | 说明 |
 |------|-----|------|------|
-| `agent/retrieval/default_pipeline.py` | 31 | `retrieve()` | 被动 turn 每轮的语义检索入口。`DefaultContextStore.prepare()` → `retrieval_pipeline.retrieve()` → `engine.retrieve(MemoryEngineRetrieveRequest)` |
-| `agent/tools/recall_memory.py` | 138 | `retrieve_explicit()` | `recall_memory` 工具。LLM 传入 query/memory_type/time_filter/limit，工具调 `facade.retrieve_explicit(ExplicitRetrievalRequest)` |
+| `apps/backend/agent/retrieval/default_pipeline.py` | 31 | `retrieve()` | 被动 turn 每轮的语义检索入口。`DefaultContextStore.prepare()` → `retrieval_pipeline.retrieve()` → `engine.retrieve(MemoryEngineRetrieveRequest)` |
+| `apps/backend/agent/tools/recall_memory.py` | 138 | `retrieve_explicit()` | `recall_memory` 工具。LLM 传入 query/memory_type/time_filter/limit，工具调 `facade.retrieve_explicit(ExplicitRetrievalRequest)` |
 | `proactive_v2/tools.py` | 220 | `retrieve_interest_block()` | proactive tick 中评估内容候选时调用，查询用户对某条内容是否可能感兴趣 |
-| `agent/tools/memorize.py` | 71 | `remember()` | `memorize` 工具。用户要求"记住..."时调 `engine.remember(RememberRequest)` |
-| `agent/tools/forget_memory.py` | 55 | `forget()` | `forget_memory` 工具。用户纠正错误记忆时调 `memory.forget(ForgetRequest)` |
-| `core/memory/runtime.py` | 51/57/63 | `retrieve()` / `retrieve_explicit()` / `retrieve_interest_block()` | `MemoryRuntime` 薄封装层，统一入口 |
-| `core/memory/plugin.py` | 80-126 | 全部方法 | `DisabledMemoryEngine` — 记忆关闭时的空实现，所有方法都返回空/报错 |
+| `apps/backend/agent/tools/memorize.py` | 71 | `remember()` | `memorize` 工具。用户要求"记住..."时调 `engine.remember(RememberRequest)` |
+| `apps/backend/agent/tools/forget_memory.py` | 55 | `forget()` | `forget_memory` 工具。用户纠正错误记忆时调 `memory.forget(ForgetRequest)` |
+| `apps/backend/core/memory/runtime.py` | 51/57/63 | `retrieve()` / `retrieve_explicit()` / `retrieve_interest_block()` | `MemoryRuntime` 薄封装层，统一入口 |
+| `apps/backend/core/memory/plugin.py` | 80-126 | 全部方法 | `DisabledMemoryEngine` — 记忆关闭时的空实现，所有方法都返回空/报错 |
 
 ### 引擎如何注入
 
