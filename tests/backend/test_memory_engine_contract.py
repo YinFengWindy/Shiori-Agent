@@ -551,7 +551,9 @@ async def test_markdown_maintenance_background_request_does_not_wait(tmp_path: P
     await _drain_maintenance(maintenance)
 
 
-async def test_default_memory_engine_refreshes_recent_context_from_lifecycle_role_only():
+async def test_default_memory_engine_refreshes_recent_context_from_lifecycle_role_only(
+    tmp_path: Path,
+):
     event_bus = EventBus()
     session = SimpleNamespace(
         key="role:mira",
@@ -560,7 +562,7 @@ async def test_default_memory_engine_refreshes_recent_context_from_lifecycle_rol
         last_consolidated=0,
     )
     maintenance = MarkdownMemoryMaintenance(
-        store=MarkdownMemoryStore(Path(".")),
+        store=MarkdownMemoryStore(tmp_path),
         provider=cast(Any, SimpleNamespace()),
         model="lm",
         keep_count=20,
@@ -652,7 +654,9 @@ async def test_default_memory_engine_refreshes_role_recent_context_in_role_memor
     await event_bus.aclose()
 
 
-async def test_default_memory_engine_consolidates_ready_session_from_lifecycle():
+async def test_default_memory_engine_consolidates_ready_session_from_lifecycle(
+    tmp_path: Path,
+):
     event_bus = EventBus()
     session = SimpleNamespace(
         key="role:mira",
@@ -661,7 +665,7 @@ async def test_default_memory_engine_consolidates_ready_session_from_lifecycle()
         last_consolidated=0,
     )
     maintenance = MarkdownMemoryMaintenance(
-        store=MarkdownMemoryStore(Path(".")),
+        store=MarkdownMemoryStore(tmp_path),
         provider=cast(Any, SimpleNamespace()),
         model="lm",
         keep_count=20,
@@ -872,7 +876,9 @@ async def test_markdown_consolidation_ignores_post_consolidation_hook_failure(
     assert session.last_consolidated == 6
 
 
-async def test_default_memory_engine_serializes_lifecycle_maintenance():
+async def test_default_memory_engine_serializes_lifecycle_maintenance(
+    tmp_path: Path,
+):
     event_bus = EventBus()
     session = SimpleNamespace(
         key="role:mira",
@@ -881,7 +887,7 @@ async def test_default_memory_engine_serializes_lifecycle_maintenance():
         last_consolidated=0,
     )
     maintenance = MarkdownMemoryMaintenance(
-        store=MarkdownMemoryStore(Path(".")),
+        store=MarkdownMemoryStore(tmp_path),
         provider=cast(Any, SimpleNamespace()),
         model="lm",
         keep_count=20,
@@ -1323,6 +1329,7 @@ async def test_default_memory_engine_timeline_query_rejects_unauthorized_shared_
 ):
     store = MemoryStore2(tmp_path / "memory2.db")
     engine = _make_default_engine(retriever=cast(Any, SimpleNamespace()))
+    engine._workspace = tmp_path
     engine._v2_store = store
     try:
         result = await engine.query(
