@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Protocol, cast
+from typing import Any, Protocol, cast
 
 from core.memory.markdown_schema import (
     ensure_memory_documents,
@@ -129,7 +130,7 @@ class RoleRepository:
         background: str = "",
         runtime_config: dict[str, Any] | None = None,
         avatar_source: str | Path | None = None,
-        illustration_sources: list[str | Path] | None = None,
+        illustration_sources: Sequence[str | Path] | None = None,
     ) -> RoleRecord:
         return self._store.create_role(
             name=name,
@@ -624,7 +625,7 @@ class RoleAggregateService:
         background: str = "",
         runtime_config: dict[str, Any] | None = None,
         avatar_source: str | Path | None = None,
-        illustration_sources: list[str | Path] | None = None,
+        illustration_sources: Sequence[str | Path] | None = None,
     ) -> RoleAggregate:
         role = self.repository.create_role(
             name=name,
@@ -654,7 +655,7 @@ class RoleAggregateService:
         background: str = "",
         runtime_config: dict[str, Any] | None = None,
         avatar_source: str | Path | None = None,
-        illustration_sources: list[str | Path] | None = None,
+        illustration_sources: Sequence[str | Path] | None = None,
     ) -> RoleAggregate:
         """异步创建角色，供运行中事件循环内的入口调用。"""
         role = self.repository.create_role(

@@ -456,8 +456,10 @@ class AkashaMemoryEngine:
         *,
         q: str = "",
         memory_type: str = "",
+        memory_domain: str = "",
         status: str = "",
         source_ref: str = "",
+        role_id: str = "",
         scope_channel: str = "",
         scope_chat_id: str = "",
         has_embedding: bool | None = None,
@@ -467,7 +469,16 @@ class AkashaMemoryEngine:
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         # 1. 过滤项先保持 MVP，只支持 q 和分页排序。
-        _ = (memory_type, status, source_ref, scope_channel, scope_chat_id, has_embedding)
+        _ = (
+            memory_type,
+            memory_domain,
+            status,
+            source_ref,
+            role_id,
+            scope_channel,
+            scope_chat_id,
+            has_embedding,
+        )
         return self._store.list_items_for_admin(
             q=q,
             page=page,
@@ -517,6 +528,11 @@ class AkashaMemoryEngine:
         if deleted:
             self._remove_cached_nodes(ids)
         return deleted
+
+    def invalidate_role_memories(self, role_id: str) -> int:
+        """Purge sidecar state owned by a deleted role."""
+
+        return self.purge_role(role_id)
 
     # 查找相似 Akasha 节点。
     def find_similar_items_for_admin(
@@ -672,9 +688,9 @@ class AkashaMemoryEngine:
             self._commit_pending_activation(current_key, pending, reinforced=reinforced)
 
     async def _on_role_deleted(self, event: RoleDeleted) -> None:
-        self.purge_role(event.role_id)
+        _ = self.purge_role(event.role_id)
 
-    def purge_role(self, role_id: str) -> None:
+    def purge_role(self, role_id: str) -> int:
         """Purges one deleted role from the Akasha sidecar and in-memory graph."""
 
         removed_node_keys = self._store.delete_role_data(role_id)
@@ -689,6 +705,7 @@ class AkashaMemoryEngine:
         self._remove_cached_messages(stale_message_ids)
         session_key = f"role:{clean_role_id}"
         _ = self._pending_by_session.pop(session_key, None)
+        return len(removed_node_keys)
 
     # 把 pending activation 转成边和事件。
     def _commit_pending_activation(

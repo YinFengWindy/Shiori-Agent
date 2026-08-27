@@ -202,7 +202,7 @@ class RoleDifferenceGenerationService:
         category_name = _next_category_name(
             [category.name for category in role.asset_categories]
         )
-        categories = [
+        categories: list[dict[str, Any]] = [
             {
                 "id": category.id,
                 "name": category.name,

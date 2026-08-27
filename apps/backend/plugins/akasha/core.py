@@ -14,7 +14,7 @@ import sqlite3
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 
@@ -483,7 +483,9 @@ def advance_salience_state(
 def _best_device() -> str:
     """选择最佳推理设备。"""
     try:
-        import torch
+        import importlib
+
+        torch = cast(Any, importlib.import_module("torch"))
         if torch.cuda.is_available():
             return "cuda"
         if torch.backends.mps.is_available():

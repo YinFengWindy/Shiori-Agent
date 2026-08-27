@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 from uuid import uuid4
@@ -28,6 +29,8 @@ class StoryImageGenerator(Protocol):
         self, *, story: dict[str, Any], resource: dict[str, Any]
     ) -> str:
         """Return the absolute path of the first generated image."""
+
+        ...
 
 
 class StorySimulationService:
@@ -392,5 +395,5 @@ class StorySimulationService:
                 "payload": payload,
             }
         )
-        if hasattr(result, "__await__"):
+        if inspect.isawaitable(result):
             await result

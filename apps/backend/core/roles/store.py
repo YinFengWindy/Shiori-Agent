@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 import uuid
 from pathlib import Path
 from typing import Any
@@ -89,7 +90,7 @@ class RoleStore:
         runtime_config: dict[str, Any] | None = None,
         role_id: str | None = None,
         avatar_source: str | Path | None = None,
-        illustration_sources: list[str | Path] | None = None,
+        illustration_sources: Sequence[str | Path] | None = None,
     ) -> RoleRecord:
         clean_name = str(name).strip()
         clean_prompt = str(system_prompt).strip()
@@ -172,11 +173,11 @@ class RoleStore:
         chat_background: str | None = None,
         clear_chat_background: bool = False,
         clear_avatar: bool = False,
-        illustration_sources: list[str | Path] | None = None,
+        illustration_sources: Sequence[str | Path] | None = None,
         illustration_category_id: str | None = None,
         removed_illustrations: list[str] | None = None,
         clear_illustrations: bool = False,
-        asset_categories: list[RoleAssetCategory | dict[str, Any]] | None = None,
+        asset_categories: Sequence[RoleAssetCategory | dict[str, Any]] | None = None,
         asset_category_bindings: dict[str, str] | None = None,
         desktop_pet_enabled: bool | None = None,
     ) -> RoleRecord:
@@ -303,7 +304,7 @@ class RoleStore:
         self,
         role: RoleRecord,
         *,
-        asset_categories: list[RoleAssetCategory | dict[str, Any]] | None,
+        asset_categories: Sequence[RoleAssetCategory | dict[str, Any]] | None,
         asset_category_bindings: dict[str, str] | None,
     ) -> None:
         next_categories = (
@@ -344,7 +345,7 @@ class RoleStore:
         chat_background: str | None,
         clear_chat_background: bool,
         clear_avatar: bool,
-        illustration_sources: list[str | Path] | None,
+        illustration_sources: Sequence[str | Path] | None,
         illustration_category_id: str | None,
         removed_illustrations: list[str] | None,
         clear_illustrations: bool,

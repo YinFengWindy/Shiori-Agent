@@ -17,6 +17,8 @@ class StoryDirector(Protocol):
     ) -> DirectorDraft:
         """Return no more than the configured Story beat budget."""
 
+        ...
+
 
 class ProviderStoryDirector:
     """Use the existing LLM provider without coupling Story to AgentLoop sessions."""
