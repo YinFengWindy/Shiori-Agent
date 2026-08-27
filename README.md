@@ -1,4 +1,5 @@
 <img width="1983" height="1294" alt="Image" src="https://github.com/user-attachments/assets/5bd97021-16d0-4b8c-a5a1-7803c9cdeec0" />
+
 # Shiori
 
 Shiori 是一个以角色为核心的本地 Agent 应用，当前以 **Windows 桌面端 + Python Agent Runtime** 为主要形态。
