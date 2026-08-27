@@ -3,14 +3,17 @@
   "pythonVersion": "3.12",
   "venvPath": ".",
   "venv": ".venv",
+  "extraPaths": [
+    "apps/backend"
+  ],
   "include": [
-    "tests"
+    "tests/backend"
   ],
   "exclude": [
     ".venv",
     ".venv-test",
     "mcp_servers",
-    "eval",
+    "benchmarks",
     "private_runtime/scripts"
   ],
   "reportMissingTypeArgument": "warning",

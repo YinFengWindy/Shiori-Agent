@@ -12,8 +12,8 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
-    # pnpm --filter shiori-desktop runs scripts with desktop/ as cwd, so this path
-    # resolves to desktop/release/installer in the repository root.
+    # pnpm --filter shiori-desktop runs scripts with apps/desktop as cwd, so this
+    # path resolves to apps/desktop/release/installer.
     env:
       SHIORI_RELEASE_OUTPUT: release/installer
     steps:
@@ -58,7 +58,7 @@ jobs:
 
       - name: Run focused release checks
         run: |
-          .venv\Scripts\pytest.exe -q tests/test_main.py
+          .venv\Scripts\pytest.exe -q tests/backend/test_main.py
           pnpm --filter shiori-desktop run typecheck
           pnpm test
           pnpm --filter shiori-desktop run test:package
@@ -75,7 +75,7 @@ jobs:
       - name: Verify release checksums
         shell: pwsh
         run: |
-          $checksumPath = "desktop/release/installer/SHA256SUMS.txt"
+          $checksumPath = "apps/desktop/release/installer/SHA256SUMS.txt"
           foreach ($line in Get-Content $checksumPath) {
             if ($line -notmatch '^([0-9a-fA-F]{64})  (.+)$') {
               throw "Invalid checksum line: $line"
@@ -92,7 +92,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Shiori-Windows-x64
-          path: desktop/release/installer/*
+          path: apps/desktop/release/installer/*
           if-no-files-found: error
 
       - name: Create draft GitHub Release
@@ -101,4 +101,4 @@ jobs:
         with:
           draft: true
           generate_release_notes: true
-          files: desktop/release/installer/*
+          files: apps/desktop/release/installer/*

@@ -8,13 +8,11 @@ import math
 import sqlite3
 import sys
 from collections import defaultdict
-from pathlib import Path
-
 import jieba
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+from scripts.project_paths import add_backend_to_sys_path
+
+add_backend_to_sys_path()
 
 from core.common.workspace import resolve_default_workspace
 

@@ -134,13 +134,13 @@ pip install uv
 推荐使用交互式向导创建配置与本地工作区：
 
 ```bash
-uv run python main.py setup
+uv run python apps/backend/main.py setup
 ```
 
 也可以只生成默认文件，再手动编辑 `config.toml`：
 
 ```bash
-uv run python main.py init
+uv run python apps/backend/main.py init
 ```
 
 至少需要配置一个可用的主模型。其他能力可以按需启用：
@@ -154,7 +154,7 @@ uv run python main.py init
 | `channels.telegram` / `channels.qq` | 外部消息渠道 | 可选 |
 | `integrations.novelai` | 图片生成与自动 CG | 可选 |
 
-`config.example.toml` 提供了完整配置结构。Shiori 使用 OpenAI 兼容接口，可为不同能力分别设置模型、API Key 和 Base URL。
+`config/examples/config.example.toml` 提供了完整配置结构。Shiori 使用 OpenAI 兼容接口，可为不同能力分别设置模型、API Key 和 Base URL。
 
 ### 3. 启动桌面端
 
@@ -178,12 +178,12 @@ pnpm start
 ### 常用命令
 
 ```bash
-uv run python main.py                    # 启动完整 Runtime
-uv run python main.py bridge             # 只启动桌面桥接层
-uv run python main.py --inspect-modules  # 检查模块装配
-uv run python main.py --help             # 查看命令行帮助
+uv run python apps/backend/main.py                    # 启动完整 Runtime
+uv run python apps/backend/main.py bridge             # 只启动桌面桥接层
+uv run python apps/backend/main.py --inspect-modules  # 检查模块装配
+uv run python apps/backend/main.py --help             # 查看命令行帮助
 
-uv run pytest tests/                     # Python 测试（使用项目 .venv）
+uv run pytest tests/backend/             # Python 测试（使用项目 .venv）
 pnpm test                               # 桌面端单元测试
 pnpm lint                               # ESLint
 pnpm typecheck                          # TypeScript 类型检查
@@ -194,7 +194,7 @@ pnpm run desktop:smoke                  # 桌面主链 smoke
 
 ### Node 依赖管理
 
-仓库使用根目录的 pnpm workspace 管理根包与 `desktop/`，固定版本由 `package.json` 的 `packageManager` 字段约束。`pnpm-lock.yaml` 是唯一需要提交的 Node 依赖快照；修改依赖时，使用 `pnpm add` 或 `pnpm --filter shiori-desktop add`，并与对应的 `package.json` 一起提交更新后的 lockfile。CI 始终使用 `pnpm install --frozen-lockfile`，不能在 CI 中重算依赖。
+仓库使用根目录的 pnpm workspace 管理根包与 `apps/desktop/`，固定版本由 `package.json` 的 `packageManager` 字段约束。`pnpm-lock.yaml` 是唯一需要提交的 Node 依赖快照；修改依赖时，使用 `pnpm add` 或 `pnpm --filter shiori-desktop add`，并与对应的 `package.json` 一起提交更新后的 lockfile。CI 始终使用 `pnpm install --frozen-lockfile`，不能在 CI 中重算依赖。
 
 迁移后不要重新提交 `package-lock.json`。若 pnpm 迁移本身需要回滚，应整体 revert 该迁移提交，使 `package.json`、workspace 清单和 lockfile 同步回到 npm 版本，再按恢复后的锁文件重新安装依赖。
 
@@ -202,17 +202,12 @@ pnpm run desktop:smoke                  # 桌面主链 smoke
 
 | 目录 | 职责 |
 | --- | --- |
-| `desktop/src/` | Electron 主进程、preload 与本地桌面能力；`src/bridge/` 是桥接协议与 IPC，`src/assets/` 是本地资源授权与协议 |
-| `desktop/renderer/src/` | React 渲染端，按 `chat/`、`roles/`、`story/`、`settings/`、`image/`、`pet/`、`voice/` 等功能域组织 |
-| `desktop_bridge/` | 桌面端与 Python Runtime 的 RPC 边界；`desktop_bridge/voice/` 集中语音、TTS 与音频资源服务 |
-| `agent/` | 回合编排、推理循环、工具执行、插件生命周期与 MCP 接入 |
-| `core/` | 角色、记忆、渠道、集成和其他核心领域服务；角色实现位于 `core/roles/` |
-| `session/` | 会话、消息、在线状态与搜索持久化 |
-| `memory2/`、`core/memory/` | 语义记忆实现与 Core 记忆契约 |
-| `proactive_v2/` | 主动任务调度、裁定、Agent tick 与 Drift 状态 |
-| `story_simulation/` | 单角色剧情领域；`story_simulation/internal/` 仅存放内部 JSON/SQLite schema helper |
-| `plugins/` | NovelAI、渠道、记忆和其他可扩展能力 |
-| `bootstrap/` | Runtime 依赖装配与启动配置 |
+| `apps/backend/` | Python Runtime；包含启动入口、桌面桥接、Agent、领域服务与插件 |
+| `apps/desktop/src/` | Electron 主进程、preload 与本地桌面能力；`src/bridge/` 是桥接协议与 IPC，`src/assets/` 是本地资源授权与协议 |
+| `apps/desktop/renderer/src/` | React 渲染端，按 `chat/`、`roles/`、`story/`、`settings/`、`image/`、`pet/`、`voice/` 等功能域组织 |
+| `tests/backend/` | Python Runtime 测试，按 `apps/backend/` 的包结构组织 |
+| `benchmarks/` | LongMemEval 与 PersonaMem 评测脚本、数据和运行说明 |
+| `config/examples/` | 可提交的配置模板；实际配置由用户工作区持有 |
 
 ### 本地数据
 

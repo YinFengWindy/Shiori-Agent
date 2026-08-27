@@ -4,16 +4,16 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: 277053d5
 source_paths:
-  - agent/voice_config.py
-  - desktop/src/voice/
-  - desktop/renderer/src/voice/
-  - desktop_bridge/voice/role_tts_settings.py
-  - desktop_bridge/voice/tts_text.py
-  - desktop_bridge/voice/voice_http.py
-  - desktop_bridge/voice/voice_models.py
-  - desktop_bridge/voice/voice_service.py
-  - desktop_bridge/voice/tts_coordinator.py
-  - desktop_bridge/chat_service.py
+  - apps/backend/agent/voice_config.py
+  - apps/desktop/src/voice/
+  - apps/desktop/renderer/src/voice/
+  - apps/backend/desktop_bridge/voice/role_tts_settings.py
+  - apps/backend/desktop_bridge/voice/tts_text.py
+  - apps/backend/desktop_bridge/voice/voice_http.py
+  - apps/backend/desktop_bridge/voice/voice_models.py
+  - apps/backend/desktop_bridge/voice/voice_service.py
+  - apps/backend/desktop_bridge/voice/tts_coordinator.py
+  - apps/backend/desktop_bridge/chat_service.py
 related:
   - desktop-and-bridge.md
   - roles.md

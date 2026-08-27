@@ -4,12 +4,12 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: 3955470b
 source_paths:
-  - agent/scheduler.py
-  - agent/scheduler_cron.py
-  - agent/tools/schedule.py
-  - bootstrap/toolsets/schedule.py
-  - desktop_bridge/schedule_role_task_service.py
-  - desktop_bridge/role_task_service.py
+  - apps/backend/agent/scheduler.py
+  - apps/backend/agent/scheduler_cron.py
+  - apps/backend/agent/tools/schedule.py
+  - apps/backend/bootstrap/toolsets/schedule.py
+  - apps/backend/desktop_bridge/schedule_role_task_service.py
+  - apps/backend/desktop_bridge/role_task_service.py
 related:
   - proactive-and-drift.md
   - desktop-and-bridge.md
@@ -17,7 +17,7 @@ related:
 
 # 调度与角色任务
 
-`agent/scheduler.py` 负责计算触发时间和调度执行，`agent/tools/schedule.py` 将创建、查询、更新和取消能力暴露给 Agent，bootstrap 将工具注册进 ToolRegistry。桌面桥接分别提供通用调度角色任务与角色任务服务，并由 presenter 形成 UI 数据。
+`apps/backend/agent/scheduler.py` 负责计算触发时间和调度执行，`apps/backend/agent/tools/schedule.py` 将创建、查询、更新和取消能力暴露给 Agent，bootstrap 将工具注册进 ToolRegistry。桌面桥接分别提供通用调度角色任务与角色任务服务，并由 presenter 形成 UI 数据。
 
 任务触发后应进入统一的角色、会话和主动投递路径，而不是直接绕过 Agent/Conversation 写一条平台消息。一次性任务完成后应终止；周期任务应根据上次计划时间稳定计算下一次触发，避免进程延迟造成连续补发。
 

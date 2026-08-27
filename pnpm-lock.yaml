@@ -33,7 +33,7 @@ importers:
         specifier: ^8.59.1
         version: 8.62.0(eslint@10.5.0(jiti@2.7.0))(typescript@5.9.3)
 
-  desktop:
+  apps/desktop:
     dependencies:
       electron-updater:
         specifier: ^6.8.9

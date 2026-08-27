@@ -4,10 +4,10 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: 0a94bd42
 source_paths:
-  - core/integrations/novelai/
-  - plugins/scene_awareness/
-  - plugins/novelai/
-  - bus/events_lifecycle.py
+  - apps/backend/core/integrations/novelai/
+  - apps/backend/plugins/scene_awareness/
+  - apps/backend/plugins/novelai/
+  - apps/backend/bus/events_lifecycle.py
 related:
   - roles.md
   - conversations-and-sessions.md
@@ -18,12 +18,12 @@ related:
 
 ## NovelAI 基础能力
 
-`core/integrations/novelai/` 拥有设置、请求模型、提示词标签、持久化和 `NovelAIService.generate()`。手动 `generate_image` 工具和自动 CG 都应复用该服务，避免各自实现请求与错误处理。
+`apps/backend/core/integrations/novelai/` 拥有设置、请求模型、提示词标签、持久化和 `NovelAIService.generate()`。手动 `generate_image` 工具和自动 CG 都应复用该服务，避免各自实现请求与错误处理。
 
 ## 自动 CG 生命周期
 
 1. Scene Awareness 插件在 `BeforeTurn` 捕获被动回合上下文，并在 `AfterTurn` 对非空回复调度场景判断；主动消息则从 `ProactiveMessageCommitted` 接入同一判断链。
-2. `plugins/scene_awareness/decision.py` 使用独立观察器 system prompt，并强制模型调用内部函数 `submit_scene_observation`，将结果归为 `started`、`same`、`changed`、`closed` 或 `none`。观察结果同时携带持续场景 `scene_key` 与可见定格 `visual_key`。
+2. `apps/backend/plugins/scene_awareness/decision.py` 使用独立观察器 system prompt，并强制模型调用内部函数 `submit_scene_observation`，将结果归为 `started`、`same`、`changed`、`closed` 或 `none`。观察结果同时携带持续场景 `scene_key` 与可见定格 `visual_key`。
 3. Scene Awareness 对函数参数执行协议和语义校验；有效结果才会持久化这两个键并发布 `SceneObservationCommitted`。`scene_key` 供场景追问保持连续性，`visual_key` 供图片生成判断重复。
 4. NovelAI 插件订阅场景观察事件，`AutoCgController` 根据视觉定格、冷却和手动生成抑制规则决定是否生成。
 5. 成功图片通过消息推送发送，并同步回权威角色会话。
