@@ -50,8 +50,8 @@ def test_default_memory_db_path_resolves_under_workspace(tmp_path: Path) -> None
     )
 
 
-def test_root_config_example_does_not_expose_default_memory_private_config() -> None:
-    text = Path("config/examples/config.example.toml").read_text(encoding="utf-8")
+def test_backend_config_example_does_not_expose_default_memory_private_config() -> None:
+    text = Path("apps/backend/config.example.toml").read_text(encoding="utf-8")
 
     assert "[memory.embedding]" in text
     assert "[memory.retrieval]" not in text

@@ -8,7 +8,7 @@ from agent.config import Config
 from agent.memory import MemoryStore
 from bootstrap.memory import ensure_memory_plugin_storage
 from infra.persistence.json_store import save_json
-from project_paths import REPOSITORY_ROOT
+from project_paths import CONFIG_TEMPLATE_PATH
 from proactive_v2.anyaction import QuotaStore
 from session.store import SessionStore
 
@@ -65,7 +65,7 @@ def _write_json_file(path: Path, payload: object, *, force: bool, summary: InitS
 
 
 def _ensure_config(config_path: Path, *, force: bool, summary: InitSummary) -> None:
-    template = REPOSITORY_ROOT / "config" / "examples" / "config.example.toml"
+    template = CONFIG_TEMPLATE_PATH
     existed = config_path.exists()
     if existed and not force:
         summary.skipped.append(config_path)
