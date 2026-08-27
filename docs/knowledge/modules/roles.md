@@ -4,21 +4,21 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: 5ed016f2
 source_paths:
-  - core/roles/store.py
-  - core/roles/models.py
-  - core/roles/manifest.py
-  - core/roles/assets.py
-  - core/roles/binding_policy.py
-  - core/roles/pet_state.py
-  - core/roles/pet_packages.py
-  - core/roles/services.py
-  - core/roles/role_runtime.py
-  - core/roles/relationship_runtime/
-  - core/roles/scene_followup_runtime.py
-  - desktop_bridge/role_difference_service.py
-  - desktop/src/bridgeClient.ts
-  - desktop/renderer/src/roles/useRoleDifferenceGeneration.ts
-  - desktop/renderer/src/roles/RoleAssetCategoryGroups.tsx
+  - apps/backend/core/roles/store.py
+  - apps/backend/core/roles/models.py
+  - apps/backend/core/roles/manifest.py
+  - apps/backend/core/roles/assets.py
+  - apps/backend/core/roles/binding_policy.py
+  - apps/backend/core/roles/pet_state.py
+  - apps/backend/core/roles/pet_packages.py
+  - apps/backend/core/roles/services.py
+  - apps/backend/core/roles/role_runtime.py
+  - apps/backend/core/roles/relationship_runtime/
+  - apps/backend/core/roles/scene_followup_runtime.py
+  - apps/backend/desktop_bridge/role_difference_service.py
+  - apps/desktop/src/bridge/bridgeClient.ts
+  - apps/desktop/renderer/src/roles/useRoleDifferenceGeneration.ts
+  - apps/desktop/renderer/src/roles/RoleAssetCategoryGroups.tsx
 related:
   - conversations-and-sessions.md
   - proactive-and-drift.md
@@ -35,7 +35,7 @@ related:
 
 ## 关系与场景
 
-`core/roles/relationship_runtime/` 负责关系快照、持久化、寂寞计算和维护循环。`SceneFollowupRuntime` 负责场景追问状态。它们为 Proactive、Drift 和自动 CG 提供上下文，但不直接拥有 Agent 回合。
+`apps/backend/core/roles/relationship_runtime/` 负责关系快照、持久化、寂寞计算和维护循环。`SceneFollowupRuntime` 负责场景追问状态。它们为 Proactive、Drift 和自动 CG 提供上下文，但不直接拥有 Agent 回合。
 
 ## 修改影响
 

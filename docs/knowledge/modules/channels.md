@@ -4,10 +4,10 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: 27af068a
 source_paths:
-  - infra/channels/
-  - core/channels/hub.py
-  - plugins/qqbot/
-  - bootstrap/channels.py
+  - apps/backend/infra/channels/
+  - apps/backend/core/channels/hub.py
+  - apps/backend/plugins/qqbot/
+  - apps/backend/bootstrap/channels.py
 related:
   - conversations-and-sessions.md
   - desktop-and-bridge.md
@@ -17,9 +17,9 @@ related:
 
 ## 统一边界
 
-`infra/channels/contract.py` 定义 Channel 合约与上下文，`core/channels/hub.py` 汇总渠道，bootstrap 负责按配置启动。渠道适配器把外部消息转换为统一入站事件，并把统一出站消息渲染为平台格式。
+`apps/backend/infra/channels/contract.py` 定义 Channel 合约与上下文，`apps/backend/core/channels/hub.py` 汇总渠道，bootstrap 负责按配置启动。渠道适配器把外部消息转换为统一入站事件，并把统一出站消息渲染为平台格式。
 
-Telegram 实现在 `infra/channels/telegram_channel/`，拆分 lifecycle、inbound、outbound、media、streaming、commands 等职责。NcatBot QQ 位于 `infra/channels/qq_channel/`：lifecycle 只装配 SDK 与订阅，inbound、outbound、trace、loop bridge 和兼容 helper 各自拥有单一边界。官方 QQBot 位于 `plugins/qqbot/`：`channel.py` 只保留组合与启停，Gateway、C2C 入站、HTTP/媒体出站和 live stream 分别由对应 mixin 负责。两套适配器共享 Channel 合约，但不隐藏协议差异。
+Telegram 实现在 `apps/backend/infra/channels/telegram_channel/`，拆分 lifecycle、inbound、outbound、media、streaming、commands 等职责。NcatBot QQ 位于 `apps/backend/infra/channels/qq_channel/`：lifecycle 只装配 SDK 与订阅，inbound、outbound、trace、loop bridge 和兼容 helper 各自拥有单一边界。官方 QQBot 位于 `apps/backend/plugins/qqbot/`：`channel.py` 只保留组合与启停，Gateway、C2C 入站、HTTP/媒体出站和 live stream 分别由对应 mixin 负责。两套适配器共享 Channel 合约，但不隐藏协议差异。
 
 ## 标识与投递
 

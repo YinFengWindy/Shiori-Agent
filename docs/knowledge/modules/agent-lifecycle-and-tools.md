@@ -4,13 +4,13 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: dd424e65
 source_paths:
-  - agent/core/
-  - agent/turns/
-  - agent/lifecycle/
-  - agent/tools/
-  - agent/screen_observation/
-  - agent/plugins/
-  - agent/mcp/
+  - apps/backend/agent/core/
+  - apps/backend/agent/turns/
+  - apps/backend/agent/lifecycle/
+  - apps/backend/agent/tools/
+  - apps/backend/agent/screen_observation/
+  - apps/backend/agent/plugins/
+  - apps/backend/agent/mcp/
 related:
   - memory.md
   - proactive-and-drift.md
@@ -21,7 +21,7 @@ related:
 
 ## 回合生命周期
 
-被动回合由 `agent/core/passive_turn/` 组织，`agent/turns/` 负责回合协调和输出。生命周期模块提供 `BeforeTurn`、`BeforeReasoning`、`AfterReasoning`、`AfterTurn`、prompt render 等 phase，使记忆、插件、自动 CG 和观测逻辑在明确边界接入。
+被动回合由 `apps/backend/agent/core/passive_turn/` 组织，`apps/backend/agent/turns/` 负责回合协调和输出。生命周期模块提供 `BeforeTurn`、`BeforeReasoning`、`AfterReasoning`、`AfterTurn`、prompt render 等 phase，使记忆、插件、自动 CG 和观测逻辑在明确边界接入。
 
 ## 工具体系
 
@@ -33,7 +33,7 @@ related:
 
 ## 插件与 MCP
 
-`agent/plugins/` 管理插件注册、配置、生命周期和装饰器。`agent/mcp/registry.py` 与 `client.py` 管理 MCP server 配置和连接池，并把远端工具同步到 ToolRegistry。插件工具 hook 会适配到统一 ToolExecutor 接口。
+`apps/backend/agent/plugins/` 管理插件注册、配置、生命周期和装饰器。`apps/backend/agent/mcp/registry.py` 与 `client.py` 管理 MCP server 配置和连接池，并把远端工具同步到 ToolRegistry。插件工具 hook 会适配到统一 ToolExecutor 接口。
 
 ## 修改影响
 

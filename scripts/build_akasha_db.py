@@ -7,7 +7,6 @@ import importlib
 import json
 import shutil
 import sqlite3
-import sys
 from collections.abc import Callable
 from contextlib import closing
 from dataclasses import dataclass, replace
@@ -17,9 +16,14 @@ from typing import Iterator, cast
 
 import numpy as np
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+if __package__:
+    from scripts.project_paths import add_backend_to_sys_path
+else:
+    # When this file is executed directly, Python puts only ``scripts/`` on
+    # sys.path, so the package-qualified import is not available yet.
+    from project_paths import add_backend_to_sys_path
+
+add_backend_to_sys_path()
 
 from agent.config_models import Config
 from core.common.workspace import resolve_default_workspace
@@ -82,7 +86,7 @@ def _load_script_config(
     *,
     db_path: str,
 ) -> AkashaConfig:
-    # 1. 插件配置仍从 plugins/akasha/config.local.toml 读取。
+    # 1. 插件配置仍从 apps/backend/plugins/akasha/config.local.toml 读取。
     config = load_akasha_config()
     if db_path.strip():
         return replace(config, db_path=db_path)

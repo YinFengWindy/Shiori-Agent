@@ -4,12 +4,12 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: 9aea4b75
 source_paths:
-  - desktop/src/
-  - desktop/scripts/
+  - apps/desktop/src/
+  - apps/desktop/scripts/
   - .github/workflows/windows-release.yml
-  - desktop/renderer/src/
-  - desktop_bridge/
-  - story_simulation/
+  - apps/desktop/renderer/src/
+  - apps/backend/desktop_bridge/
+  - apps/backend/story_simulation/
 related:
   - roles.md
   - conversations-and-sessions.md
@@ -22,15 +22,15 @@ related:
 
 ## 三层结构
 
-- `desktop/src/`：Electron 主进程、窗口、本地资源传输和 Python bridge client。
-- `desktop/renderer/src/`：React 界面，包含应用状态装配、聊天、角色、设置、图片和任务页面。
-- `desktop_bridge/`：Python 业务边界。`request_dispatcher.py` 负责并发与写入顺序，`request_router.py` 只分发 RPC；role、session/task、chat、image 请求分别进入对应 request handler，再调用 owning service 与 presenter。`DesktopBridgeService` 仅装配依赖、管理生命周期、广播事件并统一映射响应与错误。
+- `apps/desktop/src/`：Electron 主进程、窗口、本地资源传输和 Python bridge client。
+- `apps/desktop/renderer/src/`：React 界面，包含应用状态装配、聊天、角色、设置、图片和任务页面。
+- `apps/backend/desktop_bridge/`：Python 业务边界。`request_dispatcher.py` 负责并发与写入顺序，`request_router.py` 只分发 RPC；role、session/task、chat、image 请求分别进入对应 request handler，再调用 owning service 与 presenter。`DesktopBridgeService` 仅装配依赖、管理生命周期、广播事件并统一映射响应与错误。
 
 `DesktopAppFrame.tsx` 只应装配状态、依赖与视图。bridge lifecycle、会话切换、角色管理、聊天交互、图片状态、UI effect 和导航历史已经按 hook 边界分离，新增行为应进入对应 hook/service，而不是重新堆回入口组件。
 
 Windows packaged desktop uses an Electron-builder NSIS bundle with a PyInstaller onedir runtime under `resources/runtime`. The main process resolves packaged resources from `process.resourcesPath`, keeps the workspace and `config.toml` under `%USERPROFILE%\.shiori\workspace`, and starts the sidecar with explicit `bridge`, `--workspace`, and `--config` arguments. Release tags provide the application version and CI emits `SHA256SUMS.txt` alongside the installer; clean Windows installation, upgrade, uninstall, and feature smoke remain release-owner acceptance work.
 
-桌宠语音的 Electron 主进程控制、隐藏 renderer 采集/播放与 Python provider 协调边界见 [桌宠语音交互](voice.md)。通用 `ipc.ts` 不拥有语音业务，语音 IPC 统一注册在 `desktop/src/voice/ipc.ts`。
+桌宠语音的 Electron 主进程控制、隐藏 renderer 采集/播放与 Python provider 协调边界见 [桌宠语音交互](voice.md)。通用 `ipc.ts` 不拥有语音业务，语音 IPC 统一注册在 `apps/desktop/src/voice/ipc.ts`。
 
 ## 数据流
 
@@ -42,14 +42,14 @@ Story 进入独立路由时才挂载 `StoryRoute`、`useStoryController` 和 `us
 
 角色通过 `pet_action` 操控桌宠时，工具 schema 会按当前回合的角色和渠道动态投影桌宠状态：桌面端角色可看到桌宠开关、当前绑定桌宠包和包声明的动作名及其精灵状态；外部渠道会明确标记为不可用。动作名来自角色素材包的 `actions` 映射，工具执行层仍会再次校验角色绑定、开关、渠道和动作支持情况。
 
-屏幕识别是每个角色默认拥有的 Agent 工具，由核心 runtime 注册，桌面端和 Telegram/QQ 等渠道共用同一能力。`desktop_bridge` 只负责桌面 IPC 的观察分析/记忆接口和环境状态；主屏捕获由 `infra/screen_capture.py` 提供，不读取桌宠绑定配置。Electron 的 `DesktopObservationController` 仍负责桌面端的定时观察、持久化开关和桌宠提示，但不决定 Agent 是否拥有 `observe_screen`。
+屏幕识别是每个角色默认拥有的 Agent 工具，由核心 runtime 注册，桌面端和 Telegram/QQ 等渠道共用同一能力。`apps/backend/desktop_bridge` 只负责桌面 IPC 的观察分析/记忆接口和环境状态；主屏捕获由 `apps/backend/infra/screen_capture.py` 提供，不读取桌宠绑定配置。Electron 的 `DesktopObservationController` 仍负责桌面端的定时观察、持久化开关和桌宠提示，但不决定 Agent 是否拥有 `observe_screen`。
 
 ## 修改影响
 
-- 修改 Windows 发版链路：同步检查 `desktop/scripts/`、`.github/workflows/windows-release.yml`、Electron runtime paths、sidecar 启动参数、版本元数据和 checksum 产物；不要把真实 Windows 安装/升级/卸载验收误认为布局校验。
+- 修改 Windows 发版链路：同步检查 `apps/desktop/scripts/`、`.github/workflows/windows-release.yml`、Electron runtime paths、sidecar 启动参数、版本元数据和 checksum 产物；不要把真实 Windows 安装/升级/卸载验收误认为布局校验。
 
 - 修改 bridge 请求：同步检查 dispatcher、request router、所属 request handler/service、presenter、Electron client 和 renderer 调用方；不要把领域分支重新加入 `DesktopBridgeService.handle()`。
-- 修改共享类型：检查 Python models/presenter、`desktop/src/shared.ts`、renderer `shared/types.ts`。
+- 修改共享类型：检查 Python models/presenter、`apps/desktop/src/bridge/shared.ts`、renderer `shared/types.ts`。
 - 修改会话切换：检查 bridge 事件优先级、Session cache、聊天消息连续性和导航历史。
 - 修改角色 CRUD：复用统一刷新/派生状态流程，避免各页面重复“调用、刷新、同步、导航”。
 - 修改桌宠拖拽：同步检查 renderer 原生拖拽区域、窗口原生交互注册与 `DesktopPetController`，并验证窗口位置会保存。

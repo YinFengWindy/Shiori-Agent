@@ -4,17 +4,22 @@
 
 from __future__ import annotations
 
+import argparse
 import math
 import sqlite3
 import sys
 from collections import defaultdict
 from pathlib import Path
-
 import jieba
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+if __package__:
+    from scripts.project_paths import add_backend_to_sys_path
+else:
+    # When this file is executed directly, Python puts only ``scripts/`` on
+    # sys.path, so the package-qualified import is not available yet.
+    from project_paths import add_backend_to_sys_path
+
+add_backend_to_sys_path()
 
 from core.common.workspace import resolve_default_workspace
 
@@ -31,8 +36,22 @@ def tokenize(text: str) -> set[str]:
     return out
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Build the Akasha FTS token IDF table from sessions.db."
+    )
+    parser.add_argument(
+        "--workspace",
+        type=Path,
+        default=None,
+        help="Shiori workspace path (defaults to the configured workspace).",
+    )
+    return parser
+
+
 def main() -> None:
-    workspace = resolve_default_workspace()
+    args = _build_parser().parse_args()
+    workspace = args.workspace or resolve_default_workspace()
     akasha_db = workspace / "memory" / "akasha.db"
     sessions_db = workspace / "sessions.db"
     if not akasha_db.exists():

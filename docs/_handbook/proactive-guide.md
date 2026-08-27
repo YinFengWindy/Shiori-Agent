@@ -105,7 +105,7 @@ max_steps = 30
 min_interval_hours = 1
 ```
 
-### 2. 注册 MCP server（`~/.akashic/workspace/mcp_servers.json`）
+### 2. 注册 MCP server（`~/.shiori/workspace/mcp_servers.json`）
 
 ```json
 {
@@ -126,7 +126,7 @@ min_interval_hours = 1
 
 MCP server 通过 stdio 与 agent 通信，启动时 `McpClientPool.connect_all()` 建立常驻连接。也可以用内置工具 `mcp_add` 让 agent 帮你加。
 
-### 3. 声明信息源（`~/.akashic/workspace/proactive_sources.json`）
+### 3. 声明信息源（`~/.shiori/workspace/proactive_sources.json`）
 
 把 MCP server 的工具映射到 proactive 通道：
 
@@ -172,7 +172,7 @@ MCP server 通过 stdio 与 agent 通信，启动时 `McpClientPool.connect_all(
 | `ack_tool` | 确认工具。alert/content 需要，context 不需要（不走 ACK） |
 | `poll_tool` | content 专用：周期拉新的 tool（如 `poll_feeds`） |
 
-### 4. 写推送规则（`~/.akashic/workspace/PROACTIVE_CONTEXT.md`）
+### 4. 写推送规则（`~/.shiori/workspace/PROACTIVE_CONTEXT.md`）
 
 这是主被动 loop 共享的规则面板。你通过**被动对话**让主 agent 帮你写和维护。proactive agent 每轮只读。
 
@@ -325,7 +325,7 @@ ProactiveLoop.run()
 
 **ACK tool**：`acknowledge_events(event_ids: list[str])` — alert 走独立 ACK 通道，无 TTL（一次性消费）。
 
-**真实实现**：`~/.akashic/workspace/mcp/fitbit-mcp/src/mcp_bridge.py`：
+**真实实现**：`~/.shiori/workspace/mcp/fitbit-mcp/src/mcp_bridge.py`：
 
 ```python
 @mcp.tool()
@@ -377,7 +377,7 @@ def get_proactive_events() -> str:
 
 **Poll tool**（content 专用）：`poll_feeds()` — 后台周期性调用，让 MCP server 去真正抓取 RSS/API。
 
-**真实实现**：`~/.akashic/workspace/mcp/feed-mcp/src/feed_backend.py:1284`：
+**真实实现**：`~/.shiori/workspace/mcp/feed-mcp/src/feed_backend.py:1284`：
 
 ```python
 def get_proactive_events() -> list[dict[str, Any]]:
@@ -432,8 +432,8 @@ def get_proactive_events() -> list[dict[str, Any]]:
 | `summary` / `hint` | 人类可读说明和判断指引 |
 
 **真实实现**：
-- fitbit sleep：`~/.akashic/workspace/mcp/fitbit-mcp/src/mcp_bridge.py:136`
-- steam game：`~/.akashic/workspace/mcp/steam-mcp/steam_proactive.py`
+- fitbit sleep：`~/.shiori/workspace/mcp/fitbit-mcp/src/mcp_bridge.py:136`
+- steam game：`~/.shiori/workspace/mcp/steam-mcp/steam_proactive.py`
 
 ---
 

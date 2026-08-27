@@ -4,12 +4,12 @@ kind: 影响分析
 status: 当前有效
 last_verified_commit: 27af068a
 source_paths:
-  - core/
-  - agent/
-  - proactive_v2/
-  - infra/
-  - desktop_bridge/
-  - desktop/renderer/src/
+  - apps/backend/core/
+  - apps/backend/agent/
+  - apps/backend/proactive_v2/
+  - apps/backend/infra/
+  - apps/backend/desktop_bridge/
+  - apps/desktop/renderer/src/
 related:
   - ../map.md
   - ../quality/graph-health.md

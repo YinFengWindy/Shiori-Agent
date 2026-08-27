@@ -4,11 +4,11 @@ agent 每次收到一条用户消息，经过 6 个生命周期阶段产出一�
 
 ## 先理解它怎么运转的
 
-插件放到 `plugins/` 目录下，启动时自动发现、加载、注册。过程：
+插件放到 `apps/backend/plugins/` 目录下，启动时自动发现、加载、注册。过程：
 
 ```
 PluginManager.discover()
-  → 扫描 plugins/ 下每个有 plugin.py 的子目录
+  → 扫描 apps/backend/plugins/ 下每个有 plugin.py 的子目录
   → 动态 import plugin.py，Plugin.__init_subclass__() 自动注册
   → 调用 initialize()，失败则回滚该插件的所有注册
 ```
@@ -86,7 +86,7 @@ class MyPlugin(Plugin):
 | AfterReasoning | `after_reasoning_modules()` | `after_reasoning.build_ctx`（emit 前改 reply）<br>`after_reasoning.emit`（emit 后清理）<br>`after_reasoning.persist_user`（持久化前写 slot） | 回复后处理 |
 | AfterTurn | `after_turn_modules()` | `after_turn.build_work`（commit 前写 extra）<br>`after_turn.fanout_committed`（fanout 前写 telemetry） | 收尾 |
 
-**完整的内置模块 slot 列表**可通过 `uv run python main.py --inspect-modules` 打印 ASCII 依赖树查看。
+**完整的内置模块 slot 列表**可通过 `uv run python apps/backend/main.py --inspect-modules` 打印 ASCII 依赖树查看。
 
 ---
 

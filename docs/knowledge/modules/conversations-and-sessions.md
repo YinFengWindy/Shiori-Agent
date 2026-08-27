@@ -4,11 +4,11 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: 5ed016f2
 source_paths:
-  - session/
-  - conversation/store.py
-  - conversation/service.py
-  - conversation/projector.py
-  - conversation/push_sync.py
+  - apps/backend/session/
+  - apps/backend/conversation/store.py
+  - apps/backend/conversation/service.py
+  - apps/backend/conversation/projector.py
+  - apps/backend/conversation/push_sync.py
 related:
   - roles.md
   - memory.md
@@ -19,7 +19,7 @@ related:
 
 ## 两层职责
 
-`session/` 管理 Agent 运行所需的会话状态，包括消息、presence、搜索、角色会话和连接。`conversation/` 管理可持久化的线程模型、存储、投影和推送同步。
+`apps/backend/session/` 管理 Agent 运行所需的会话状态，包括消息、presence、搜索、角色会话和连接。`apps/backend/conversation/` 管理可持久化的线程模型、存储、投影和推送同步。
 
 可以把 Session 理解为“当前如何运行”，把 Conversation 理解为“对话如何长期存在和被不同入口一致地看见”。两者相关但不能混为一个数据结构。
 
@@ -30,7 +30,7 @@ related:
 ## 修改影响
 
 - 修改消息模型：检查 bus 事件、Session store、Conversation projector、桌面 presenter、渠道格式化与记忆采样。
-- 修改会话键规则：检查 `infra/channels/session_key.py`、角色绑定、群聊成员隔离和历史迁移。
+- 修改会话键规则：检查 `apps/backend/infra/channels/session_key.py`、角色绑定、群聊成员隔离和历史迁移。
 - 修改线程删除或归档：检查 Session 缓存、搜索索引、桌面导航和后台任务引用。
 - 修改主动消息写入：确保消息同时完成投递与 Conversation/Session 同步。
 

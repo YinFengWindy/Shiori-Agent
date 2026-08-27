@@ -15,7 +15,7 @@ select = ["E4", "E7", "E9", "F"]
 "__init__.py" = ["F401"]
 "scripts/build_akasha_db.py" = ["E402"]
 "scripts/build_fts_idf.py" = ["E402"]
-"tests/conftest.py" = ["E402"]
+"tests/backend/conftest.py" = ["E402"]
 
 [dependency-groups]
 dev = [

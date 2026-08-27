@@ -8,6 +8,8 @@
 >
 > 前置变更：PR #103 已将 Electron bridge/assets、桌面桥接 voice/TTS、Story internal helpers 做了低风险归位；根目录应用边界迁移继续由 Issue #102 跟踪。
 
+> 路径说明：C/M/F 候选表保留了当时审计记录中的相对路径，便于与 Issue #104 的历史讨论对照。当前源码路径统一在 `apps/backend/` 或 `apps/desktop/` 下；E 批次及后续新记录应使用迁移后的完整路径。
+
 ## 使用方式
 
 按 ID 逐项审查。每项需要先回答：
@@ -39,33 +41,33 @@
 
 | ID | 位置 | 当前行为 | 审查重点 |
 | --- | --- | --- | --- |
-| C01 | `desktop_bridge/voice_service.py`、`voice_providers.py`、`voice_models.py`、`voice_http.py`、`voice_handler.py`、`voice_assets.py`、`tts_text.py`、`tts_coordinator.py`、`role_tts_settings.py` | 旧模块路径 re-export 到 `desktop_bridge/voice/`。 | 全仓没有旧路径 import；确认外部消费者或历史脚本后，可成组删除。 |
-| C02 | `story_simulation/_json.py`、`story_simulation/_schema.py` | 移动到 `story_simulation/internal/` 后保留旧导出。 | 生产代码已改用新路径；当前旧路径只被兼容测试引用。 |
-| C03 | `story_simulation/schema_migrations.py:100-103` | `migrate_legacy_story_time()` 转发到 `migrate_story_timeline()`。 | 当前生产调用方使用新入口；测试引用清理后可删除。 |
-| C04 | `bootstrap/providers.py:33-35` | `build_vl_provider()` 保留兼容签名但固定返回 `None`。 | 搜索旧调用方；若为空，删除假 API 或改成显式 disabled。 |
-| C05 | `plugins/novelai/plugin.py:85-88` | `_auto_cg_tasks` 仅转发 controller 状态。 | 确认外部调用；否则改用公开 controller 状态 API。 |
-| C06 | `memory2/hyde_enhancer.py:33-46` | `HyDEAugmentResult.__iter__` 支持旧式二元解包。 | 旧调用清零后可删除；否则记录移除版本。 |
-| C07 | `agent/prompting/assembler.py:58-67` | 接受旧 `[SYSTEM_CONTEXT_FRAME]` marker。 | 确认历史消息是否仍可读取；若保留，应限制为只读解析。 |
-| C08 | `infra/channels/qq_channel/__init__.py:14-20`、`plugins/qqbot/channel.py:116-128` | 暴露旧 channel/stream helper facade。 | 迁移测试和内部调用到权威 formatting 模块。 |
-| C09 | `conversation/__init__.py` | 已移除 `ConversationMigrator` re-export；`LegacySessionDescriptor` 由运行时调用方直接从 `conversation.service` 导入。 | 不再保留 package-level 兼容导出。 |
+| C01 | `apps/backend/desktop_bridge/voice_service.py`、`apps/backend/desktop_bridge/voice/voice_providers.py`、`apps/backend/desktop_bridge/voice/voice_models.py`、`apps/backend/desktop_bridge/voice/voice_http.py`、`apps/backend/desktop_bridge/voice/voice_handler.py`、`apps/backend/desktop_bridge/voice/voice_assets.py`、`apps/backend/desktop_bridge/voice/tts_text.py`、`apps/backend/desktop_bridge/voice/tts_coordinator.py`、`apps/backend/desktop_bridge/voice/role_tts_settings.py` | 旧模块路径 re-export 到 `apps/backend/desktop_bridge/voice/`。 | 全仓没有旧路径 import；确认外部消费者或历史脚本后，可成组删除。 |
+| C02 | `apps/backend/story_simulation/_json.py`、`apps/backend/story_simulation/_schema.py` | 移动到 `apps/backend/story_simulation/internal/` 后保留旧导出。 | 生产代码已改用新路径；当前旧路径只被兼容测试引用。 |
+| C03 | `apps/backend/story_simulation/schema_migrations.py:100-103` | `migrate_legacy_story_time()` 转发到 `migrate_story_timeline()`。 | 当前生产调用方使用新入口；测试引用清理后可删除。 |
+| C04 | `apps/backend/bootstrap/providers.py:33-35` | `build_vl_provider()` 保留兼容签名但固定返回 `None`。 | 搜索旧调用方；若为空，删除假 API 或改成显式 disabled。 |
+| C05 | `apps/backend/plugins/novelai/plugin.py:85-88` | `_auto_cg_tasks` 仅转发 controller 状态。 | 确认外部调用；否则改用公开 controller 状态 API。 |
+| C06 | `apps/backend/memory2/hyde_enhancer.py:33-46` | `HyDEAugmentResult.__iter__` 支持旧式二元解包。 | 旧调用清零后可删除；否则记录移除版本。 |
+| C07 | `apps/backend/agent/prompting/assembler.py:58-67` | 接受旧 `[SYSTEM_CONTEXT_FRAME]` marker。 | 确认历史消息是否仍可读取；若保留，应限制为只读解析。 |
+| C08 | `apps/backend/infra/channels/qq_channel/__init__.py:14-20`、`apps/backend/plugins/qqbot/channel.py:116-128` | 暴露旧 channel/stream helper facade。 | 迁移测试和内部调用到权威 formatting 模块。 |
+| C09 | `apps/backend/conversation/__init__.py` | 已移除 `ConversationMigrator` re-export；`LegacySessionDescriptor` 由运行时调用方直接从 `apps/backend/conversation/service.py` 导入。 | 不再保留 package-level 兼容导出。 |
 
 ## 第二批：必须先确认数据存量的迁移链
 
 | ID | 位置 | 当前行为 | 删除前置条件 |
 | --- | --- | --- | --- |
-| M01 | `core/common/workspace.py:9-57` | `.akashic` workspace、ncatbot 目录和媒体路径迁移到 `.shiori`。 | 确认旧安装存量；必要时改成显式迁移命令。 |
-| M02 | `core/roles/config_migration.py:26-182` | 导入旧角色绑定和旧全局 proactive 配置。 | 统计旧 JSON 存量，确认迁移状态文件和默认值。 |
-| M03 | `core/roles/manifest.py:36-85` | `featured_image -> chat_background`，补 asset categories 并写回角色清单。 | 确认旧版本角色文件已升级，增加 schema version 检查。 |
-| M04 | `conversation/store.py` session/thread API | `sessions/messages` 与 thread/contact 共享同一 DB，`legacy_session_key` 仍是实时渠道 session 到 thread 的映射键。 | `SessionManager` 和当前渠道运行时仍在使用，不能删表或映射字段。 |
-| M05 | `conversation/migrator.py`、`bootstrap/conversation.py` | 已移除启动扫描和旧渠道 session 到 thread/contact 的数据回灌。 | 旧渠道 session/消息已主动清空，不保留迁移入口。 |
-| M06 | `conversation/service.py:13-18,59-145,336-368` | `LegacySessionDescriptor` 将当前渠道 session 映射为正式 thread，仍会处理未绑定渠道。 | `core/channels/hub.py`、`agent/turns/orchestrator.py`、`conversation/push_sync.py` 仍构造 descriptor，不能按 M05 删除。 |
-| M07 | `session/manager/role_sessions.py` | 已移除旧 transport history 合并、provenance 和防回灌元数据。 | 角色会话仅保存自身的运行时历史。 |
-| M08 | `session/manager/__init__.py` | 已移除 facade module 与跨模块 monkeypatch 转发。 | 生产模块直接依赖 owning module，现有测试没有 facade patch 调用方。 |
-| M09 | `story_simulation/schema_migrations.py:17-98,106-216` | 迁移旧 Story 时间、资源字段，并 DROP 旧列。 | 先备份/验证历史 DB；审查 `1970-01-01`、`上午` 和失败资源语义。 |
-| M10 | `story_simulation/story_time.py:60-89` | 仅用于旧 Story timestamp 的解析。 | Story DB 迁移完成后再删除。 |
-| M11 | `plugins/observe/migrate_legacy_rag.py:13-127` | 旧 RAG 表转为新表并 DROP 老表。 | 当前主要是 CLI/测试；应移出常规启动路径并保留回滚说明。 |
-| M12 | `plugins/observe/db.py:122-143` | 每次打开 DB 自动补列并删除旧 proactive observe 数据。 | 这是 destructive migration，必须有 schema version、备份和恢复验证。 |
-| M13 | `core/memory/markdown_schema.py:57-131,216-223` | 打开角色记忆时重写旧 headings 和内容。 | 检查历史文件覆盖风险，改为一次性迁移并保存 diff/备份。 |
+| M01 | `apps/backend/core/common/workspace.py:9-57` | `.akashic` workspace、ncatbot 目录和媒体路径迁移到 `.shiori`。 | 确认旧安装存量；必要时改成显式迁移命令。 |
+| M02 | `apps/backend/core/roles/config_migration.py:26-182` | 导入旧角色绑定和旧全局 proactive 配置。 | 统计旧 JSON 存量，确认迁移状态文件和默认值。 |
+| M03 | `apps/backend/core/roles/manifest.py:36-85` | `featured_image -> chat_background`，补 asset categories 并写回角色清单。 | 确认旧版本角色文件已升级，增加 schema version 检查。 |
+| M04 | `apps/backend/conversation/store.py` session/thread API | `sessions/messages` 与 thread/contact 共享同一 DB，`legacy_session_key` 仍是实时渠道 session 到 thread 的映射键。 | `SessionManager` 和当前渠道运行时仍在使用，不能删表或映射字段。 |
+| M05 | `apps/backend/conversation/migrator.py`、`apps/backend/bootstrap/conversation.py` | 已移除启动扫描和旧渠道 session 到 thread/contact 的数据回灌。 | 旧渠道 session/消息已主动清空，不保留迁移入口。 |
+| M06 | `apps/backend/conversation/service.py:13-18,59-145,336-368` | `LegacySessionDescriptor` 将当前渠道 session 映射为正式 thread，仍会处理未绑定渠道。 | `apps/backend/core/channels/hub.py`、`apps/backend/agent/turns/orchestrator.py`、`apps/backend/conversation/push_sync.py` 仍构造 descriptor，不能按 M05 删除。 |
+| M07 | `apps/backend/session/manager/role_sessions.py` | 已移除旧 transport history 合并、provenance 和防回灌元数据。 | 角色会话仅保存自身的运行时历史。 |
+| M08 | `apps/backend/session/manager/__init__.py` | 已移除 facade module 与跨模块 monkeypatch 转发。 | 生产模块直接依赖 owning module，现有测试没有 facade patch 调用方。 |
+| M09 | `apps/backend/story_simulation/schema_migrations.py:17-98,106-216` | 迁移旧 Story 时间、资源字段，并 DROP 旧列。 | 先备份/验证历史 DB；审查 `1970-01-01`、`上午` 和失败资源语义。 |
+| M10 | `apps/backend/story_simulation/story_time.py:60-89` | 仅用于旧 Story timestamp 的解析。 | Story DB 迁移完成后再删除。 |
+| M11 | `apps/backend/plugins/observe/migrate_legacy_rag.py:13-127` | 旧 RAG 表转为新表并 DROP 老表。 | 当前主要是 CLI/测试；应移出常规启动路径并保留回滚说明。 |
+| M12 | `apps/backend/plugins/observe/db.py:122-143` | 每次打开 DB 自动补列并删除旧 proactive observe 数据。 | 这是 destructive migration，必须有 schema version、备份和恢复验证。 |
+| M13 | `apps/backend/core/memory/markdown_schema.py:57-131,216-223` | 打开角色记忆时重写旧 headings 和内容。 | 检查历史文件覆盖风险，改为一次性迁移并保存 diff/备份。 |
 
 ### 2026-08-26 存量审计与已处理项
 
@@ -98,61 +100,61 @@
 
 | ID | 位置 | 当前行为 | 审查重点 |
 | --- | --- | --- | --- |
-| F01 | `infra/channels/qq_channel/compat.py:18-45` | 对 ncatbot 的 websocket 全局 monkey patch，失败只 warning。 | 确认第三方版本是否仍需补丁；优先改显式 adapter/版本检查。 |
-| F02 | `bootstrap/channels.py:66-101`、`bootstrap/channel_host.py` | 渠道构造或启动异常时继续让其他渠道运行，并通过 `ChannelHost.failures` 暴露结构化失败状态。 | 已保留独立渠道隔离语义；调用方可据 `channel/phase/error_type/message` 展示健康状态。 |
-| F03 | `agent/turns/outbound.py:65-96` | push 任意异常都转成 `False`。 | 区分参数不可发送与外部调用异常，避免业务层吞错。 |
-| F04 | `memory2/store/connection.py:14-103`、`memory2/store/vector.py:209-220` | sqlite-vec 失败后全表扫描。 | 确认是否产品必需；若允许降级，增加规模阈值、状态和指标。 |
-| F05 | `proactive_v2/event.py:45-55,98-164` | 缺 upstream id 时生成 SHA1 fallback id，坏时间静默忽略。 | 区分 dedupe key 与真实 event id；无 ID 或坏时间应可观测。 |
-| F06 | `agent/core/proactive_turn/delivery.py:243-257` | target resolver 失败回退全局默认 channel/chat。 | 确认 role-scoped target 是否已经是唯一权威来源。 |
-| F07 | `proactive_v2/mcp_sources.py:145-199` | 任意异常断开、重连并重试一次。 | 仅对 transport 错误重试；确认工具幂等性。 |
-| F08 | `memory2/query_rewriter.py:35-72,110,133-137` | LLM 判断失败时默认开启 episodic retrieval，procedure 返回空。 | 保留产品容错时增加 decision source/metrics。 |
-| F09 | `memory2/retriever.py:183-231` | embedding 失败跳过向量 lane，继续 keyword lane。 | 降级应返回 metadata，并设置连续失败告警。 |
-| F10 | `proactive_v2/loop.py:328-345,394-419` | feed/tick 异常只记录并继续循环。 | 增加连续失败、backoff、健康状态或熔断。 |
-| F11 | `plugins/meme/runtime.py:177-191,251-252` | 角色素材缺失时回退全局 MemeCatalog。 | 确认是否允许角色隔离边界被全局素材穿透。 |
-| F12 | `proactive_v2/config_loader.py` | 已移除历史全局 `agent_tick` 输入兼容；角色级 `agent` / `drift` 是唯一输入。 | 角色设置、持久化和启动装配保持当前契约。 |
-| F13 | `memory2/dedup_decider.py:188-273` | 已保留明确旧输出修复，并区分 legacy repair 与 invalid output；不确定结果保守 skip。 | 解析原因结构化，避免格式错误继续 create。 |
-| F14 | `desktop_bridge/story_simulation_handler.py:119-155,651-655` | `creation_id` 收口为必填业务幂等键，不再回退 transport `request_id`。 | `story_id` 继续由后端生成；补齐缺字段测试。 |
+| F01 | `apps/backend/infra/channels/qq_channel/compat.py:18-45` | 对 ncatbot 的 websocket 全局 monkey patch，失败只 warning。 | 确认第三方版本是否仍需补丁；优先改显式 adapter/版本检查。 |
+| F02 | `apps/backend/bootstrap/channels.py:66-101`、`apps/backend/bootstrap/channel_host.py` | 渠道构造或启动异常时继续让其他渠道运行，并通过 `ChannelHost.failures` 暴露结构化失败状态。 | 已保留独立渠道隔离语义；调用方可据 `channel/phase/error_type/message` 展示健康状态。 |
+| F03 | `apps/backend/agent/turns/outbound.py:65-96` | push 任意异常都转成 `False`。 | 区分参数不可发送与外部调用异常，避免业务层吞错。 |
+| F04 | `apps/backend/memory2/store/connection.py:14-103`、`apps/backend/memory2/store/vector.py:209-220` | sqlite-vec 失败后全表扫描。 | 确认是否产品必需；若允许降级，增加规模阈值、状态和指标。 |
+| F05 | `apps/backend/proactive_v2/event.py:45-55,98-164` | 缺 upstream id 时生成 SHA1 fallback id，坏时间静默忽略。 | 区分 dedupe key 与真实 event id；无 ID 或坏时间应可观测。 |
+| F06 | `apps/backend/agent/core/proactive_turn/delivery.py:243-257` | target resolver 失败回退全局默认 channel/chat。 | 确认 role-scoped target 是否已经是唯一权威来源。 |
+| F07 | `apps/backend/proactive_v2/mcp_sources.py:145-199` | 任意异常断开、重连并重试一次。 | 仅对 transport 错误重试；确认工具幂等性。 |
+| F08 | `apps/backend/memory2/query_rewriter.py:35-72,110,133-137` | LLM 判断失败时默认开启 episodic retrieval，procedure 返回空。 | 保留产品容错时增加 decision source/metrics。 |
+| F09 | `apps/backend/memory2/retriever.py:183-231` | embedding 失败跳过向量 lane，继续 keyword lane。 | 降级应返回 metadata，并设置连续失败告警。 |
+| F10 | `apps/backend/proactive_v2/loop.py:328-345,394-419` | feed/tick 异常只记录并继续循环。 | 增加连续失败、backoff、健康状态或熔断。 |
+| F11 | `apps/backend/plugins/meme/runtime.py:177-191,251-252` | 角色素材缺失时回退全局 MemeCatalog。 | 确认是否允许角色隔离边界被全局素材穿透。 |
+| F12 | `apps/backend/proactive_v2/config_loader.py` | 已移除历史全局 `agent_tick` 输入兼容；角色级 `agent` / `drift` 是唯一输入。 | 角色设置、持久化和启动装配保持当前契约。 |
+| F13 | `apps/backend/memory2/dedup_decider.py:188-273` | 已保留明确旧输出修复，并区分 legacy repair 与 invalid output；不确定结果保守 skip。 | 解析原因结构化，避免格式错误继续 create。 |
+| F14 | `apps/backend/desktop_bridge/story_simulation_handler.py:119-155,651-655` | `creation_id` 收口为必填业务幂等键，不再回退 transport `request_id`。 | `story_id` 继续由后端生成；补齐缺字段测试。 |
 | F15 | `desktop_bridge/story_simulation_handler.py:629-634` | 无 director 时不再构造 `provider=None` 占位 director，改为显式失败 director。 | 正常角色运行时 provider 路径保持不变。 |
-| F16 | `agent/tools/filesystem.py:58,503-524` | 本轮跳过；LF/CRLF、BOM 与混合换行是保留的跨平台契约。 | 继续使用现有测试覆盖。 |
-| F17 | `proactive_v2/mcp_sources.py:234-257` | 保留 context 的 dict/list 双形态；顶层非法返回显式源错误，单源隔离继续生效。 | list 内非法项保留有效项并可记录计数。 |
+| F16 | `apps/backend/agent/tools/filesystem.py:58,503-524` | 本轮跳过；LF/CRLF、BOM 与混合换行是保留的跨平台契约。 | 继续使用现有测试覆盖。 |
+| F17 | `apps/backend/proactive_v2/mcp_sources.py:234-257` | 保留 context 的 dict/list 双形态；顶层非法返回显式源错误，单源隔离继续生效。 | list 内非法项保留有效项并可记录计数。 |
 
 ## 第四批：Electron、Bridge 与环境硬编码
 
 | ID | 位置 | 当前行为 | 审查重点 |
 | --- | --- | --- | --- |
-| E01 | `desktop/src/runtimePaths.ts` | 已移除仓库根 `config.toml` 的 legacy 读取和迁移入口；首次启动只从 `config.example.toml` 创建 workspace 配置。 | 已完成；不再保留迁移窗口。 |
-| E02 | `desktop/src/paths.ts`、`desktop/src/main.ts`、`desktop/scripts/dev.mjs` | 开发服务器 URL、端口和临时 user-data 目录统一使用 `SHIORI_*` 环境变量。 | 已完成；旧 `MIRA_*` 名称不再兼容读取。 |
-| E03 | `desktop/src/settings.ts` | settings 不再拥有仓库根配置默认路径，必须由 main 注入 runtime path contract 的 workspace 配置路径。 | 已完成；未初始化时显式失败。 |
-| E04 | `desktop/src/runtimePaths.ts` | workspace、config 和 bridge 参数由 runtime path contract 的共享 helper 统一推导，开发/打包只保留 executable 与 prefix 差异。 | 已完成；后续路径变更从该 contract 扩展。 |
-| E05 | `desktop/scripts/dev.mjs:14,20,26-40` | 默认端口 `5173`、localhost 绑定、20 次端口尝试。 | 区分开发方便性和 window security 白名单。 |
-| E06 | `desktop/scripts/release-manifest.mjs`、`build-runtime.mjs`、`package-win.mjs`、`verify-packaged.mjs`、`hash-release.mjs` | release build、runtime、installer 和 unpacked 校验目录统一由 manifest 计算；`SHIORI_RELEASE_OUTPUT` 仍可覆盖最终 installer 输出。 | 已完成；后续仓库目录迁移优先调整 manifest，不改变交付语义。 |
-| E07 | `desktop/src/assets/localAssetRegistry.ts:13,96` | 本地资源上限固定为 `32 MiB`。 | 已完成；由 `localAssetContract.ts` 集中，并与 bridge/import policy 共用，默认值不变。 |
-| E08 | `desktop/src/settings.ts:211,216,315` | ASR/TTS/NovelAI endpoint 固定在 Electron 默认值。 | 已完成；由 desktop settings contract 集中，保持与现有 `config.example.toml` 和 integration 默认值相同的值。 |
-| E09 | `desktop/src/bridge/shared.ts`、assets 模块 | `shiori-asset` 协议字面量多处重复。 | 已完成；由 local asset contract 集中，安全边界和协议值不变。 |
-| E10 | `desktop/src/bridge/bridgeClient.ts:7-14,103-125,284` | bridge health/start/request/image/observation/stop 超时分散。 | 已完成；由 command timeout policy 集中，按现有 command 分类保持默认值。 |
-| E11 | `desktop_bridge/voice/voice_http.py:81,111,172` | 多处重复网络 `timeout=60`。 | 已完成；由 `VOICE_HTTP_TIMEOUT_SECONDS` 集中，超时值不变。 |
-| E12 | `desktop_bridge/voice/voice_providers.py:40,608` | 音频时长、bitrate 固定。 | 已完成；集中已有 ASR/MiniMax 音频协议常量，不调整 provider 默认值。 |
-| E13 | `desktop/renderer/src/roles/roleFormState.ts:21-29,49-54,104-109` | proactive 默认值在 build/load/dirty 三处重复。 | 已完成；由 role proactive defaults 统一，稀疏历史角色仍按原语义加载和 dirty 比较。 |
-| E14 | `desktop/renderer/src/chat/chatModelSelection.ts:7,25-36,51-52` | 非法 model effort 回退 registration effort/`none`。 | 已完成；由 shared renderer normalizer 只接受合法值，保留原有 registration effort/`none` 回退。 |
-| E15 | `desktop/renderer/src/story/storyBeatPresentation.ts:15-18` | 多种引号正则兼容 mixed legacy beat text。 | 已完成；保留 renderer-only legacy quote 解析，覆盖中文引号和尾随叙述，不改写已提交 Story transcript。 |
+| E01 | `apps/desktop/src/runtimePaths.ts` | 已移除仓库根 `config.toml` 的 legacy 读取和迁移入口；首次启动只从 `config.example.toml` 创建 workspace 配置。 | 已完成；不再保留迁移窗口。 |
+| E02 | `apps/desktop/src/paths.ts`、`apps/desktop/src/main.ts`、`apps/desktop/scripts/dev.mjs` | 开发服务器 URL、端口和临时 user-data 目录统一使用 `SHIORI_*` 环境变量。 | 已完成；旧 `MIRA_*` 名称不再兼容读取。 |
+| E03 | `apps/desktop/src/settings.ts` | settings 不再拥有仓库根配置默认路径，必须由 main 注入 runtime path contract 的 workspace 配置路径。 | 已完成；未初始化时显式失败。 |
+| E04 | `apps/desktop/src/runtimePaths.ts` | workspace、config 和 bridge 参数由 runtime path contract 的共享 helper 统一推导，开发/打包只保留 executable 与 prefix 差异。 | 已完成；后续路径变更从该 contract 扩展。 |
+| E05 | `apps/desktop/scripts/dev.mjs:14,20,26-40` | 默认端口 `5173`、localhost 绑定、20 次端口尝试。 | 区分开发方便性和 window security 白名单。 |
+| E06 | `apps/desktop/scripts/release-manifest.mjs`、`build-runtime.mjs`、`package-win.mjs`、`verify-packaged.mjs`、`hash-release.mjs` | release build、runtime、installer 和 unpacked 校验目录统一由 manifest 计算；`SHIORI_RELEASE_OUTPUT` 仍可覆盖最终 installer 输出。 | 已完成；后续仓库目录迁移优先调整 manifest，不改变交付语义。 |
+| E07 | `apps/desktop/src/assets/localAssetRegistry.ts:13,96` | 本地资源上限固定为 `32 MiB`。 | 已完成；由 `localAssetContract.ts` 集中，并与 bridge/import policy 共用，默认值不变。 |
+| E08 | `apps/desktop/src/settings.ts:211,216,315` | ASR/TTS/NovelAI endpoint 固定在 Electron 默认值。 | 已完成；由 desktop settings contract 集中，保持与现有 `config.example.toml` 和 integration 默认值相同的值。 |
+| E09 | `apps/desktop/src/bridge/shared.ts`、assets 模块 | `shiori-asset` 协议字面量多处重复。 | 已完成；由 local asset contract 集中，安全边界和协议值不变。 |
+| E10 | `apps/desktop/src/bridge/bridgeClient.ts:7-14,103-125,284` | bridge health/start/request/image/observation/stop 超时分散。 | 已完成；由 command timeout policy 集中，按现有 command 分类保持默认值。 |
+| E11 | `apps/backend/desktop_bridge/voice/voice_http.py:81,111,172` | 多处重复网络 `timeout=60`。 | 已完成；由 `VOICE_HTTP_TIMEOUT_SECONDS` 集中，超时值不变。 |
+| E12 | `apps/backend/desktop_bridge/voice/voice_providers.py:40,608` | 音频时长、bitrate 固定。 | 已完成；集中已有 ASR/MiniMax 音频协议常量，不调整 provider 默认值。 |
+| E13 | `apps/desktop/renderer/src/roles/roleFormState.ts:21-29,49-54,104-109` | proactive 默认值在 build/load/dirty 三处重复。 | 已完成；由 role proactive defaults 统一，稀疏历史角色仍按原语义加载和 dirty 比较。 |
+| E14 | `apps/desktop/renderer/src/chat/chatModelSelection.ts:7,25-36,51-52` | 非法 model effort 回退 registration effort/`none`。 | 已完成；由 shared renderer normalizer 只接受合法值，保留原有 registration effort/`none` 回退。 |
+| E15 | `apps/desktop/renderer/src/story/storyBeatPresentation.ts:15-18` | 多种引号正则兼容 mixed legacy beat text。 | 已完成；保留 renderer-only legacy quote 解析，覆盖中文引号和尾随叙述，不改写已提交 Story transcript。 |
 
 ## 第五批：产品硬编码与测试夹具
 
 这些项目通常不是直接删除，而是确认权威来源、集中管理并保留测试证据。
 
-- H01 `proactive_v2/config.py`：channel、poll/tick interval、score threshold、interrupt floor、agent/drift limits。
-- H02 `memory2/retriever.py`：keyword floor、embedding timeout、score threshold、注入字符数和强制记忆数。
-- H03 `agent/provider.py:204-230,440-474`：request timeout、重试次数和 retryable error 集合。
-- H04 `bootstrap/providers.py:6-7`：provider timeout `45s`，以及 light provider 返回 `None` 的旧契约。
-- H05 `infra/channels/telegram_utils/live_edit.py:21-25`：Telegram 长度上限、更新间隔、flood/backoff。
-- H06 `desktop/src/pet/momentum.ts`、`pet/controller.ts`、renderer pet interaction：拖拽、衰减、速度和 duration 常量。
-- H07 `desktop/src/voice/interactionState.ts:5`、`observation/bubble.ts:3`：长按和 bubble duration。
-- H08 `desktop/renderer/src/chat/chatMessageWindow.ts`、`chatMessageImageLayout.ts`、`ChatSurface.tsx`：消息窗口、图片和拖拽 UI 阈值。
-- H09 `desktop/renderer/src/story/storyPreferences.ts`、`storyMenuTheme.ts`：音量、文字速度、图像采样和色彩量化参数。
-- H10 `desktop/renderer/src/image/useImageStudioState.ts:30`、`ImageFormPanel.tsx:49,281`：NovelAI 默认模型、最大尺寸和 preset fallback。
-- H11 `desktop_bridge/role_difference_service.py:127`、`stream_writer.py:20`、`voice/tts_text.py:7,40`：steps、queue size、TTS sentence max length。
-- H12 `desktop/src/windowSecurity.ts:41-85`：localhost、CSP、`shiori-asset` 安全边界；通常应保留，只集中协议常量。
-- H13 `desktop/src/voice/hotkey.ts`：uiohook 扫描码映射，是第三方库契约，不是普通业务配置。
+- H01 `apps/backend/proactive_v2/config.py`：channel、poll/tick interval、score threshold、interrupt floor、agent/drift limits。
+- H02 `apps/backend/memory2/retriever.py`：keyword floor、embedding timeout、score threshold、注入字符数和强制记忆数。
+- H03 `apps/backend/agent/provider.py:204-230,440-474`：request timeout、重试次数和 retryable error 集合。
+- H04 `apps/backend/bootstrap/providers.py:6-7`：provider timeout `45s`，以及 light provider 返回 `None` 的旧契约。
+- H05 `apps/backend/infra/channels/telegram_utils/live_edit.py:21-25`：Telegram 长度上限、更新间隔、flood/backoff。
+- H06 `apps/desktop/src/pet/momentum.ts`、`apps/desktop/src/pet/controller.ts`、renderer pet interaction：拖拽、衰减、速度和 duration 常量。
+- H07 `apps/desktop/src/voice/interactionState.ts:5`、`apps/desktop/src/observation/bubble.ts:3`：长按和 bubble duration。
+- H08 `apps/desktop/renderer/src/chat/chatMessageWindow.ts`、`apps/desktop/renderer/src/chat/chatMessageImageLayout.ts`、`apps/desktop/renderer/src/chat/ChatSurface.tsx`：消息窗口、图片和拖拽 UI 阈值。
+- H09 `apps/desktop/renderer/src/story/storyPreferences.ts`、`apps/desktop/renderer/src/story/storyMenuTheme.ts`：音量、文字速度、图像采样和色彩量化参数。
+- H10 `apps/desktop/renderer/src/image/useImageStudioState.ts:30`、`apps/desktop/renderer/src/image/ImageFormPanel.tsx:49,281`：NovelAI 默认模型、最大尺寸和 preset fallback。
+- H11 `apps/backend/desktop_bridge/role_difference_service.py:127`、`apps/backend/desktop_bridge/stream_writer.py:20`、`apps/backend/desktop_bridge/voice/tts_text.py:7,40`：steps、queue size、TTS sentence max length。
+- H12 `apps/desktop/src/windowSecurity.ts:41-85`：localhost、CSP、`shiori-asset` 安全边界；通常应保留，只集中协议常量。
+- H13 `apps/desktop/src/voice/hotkey.ts`：uiohook 扫描码映射，是第三方库契约，不是普通业务配置。
 - F01 测试中的 `C:\...`、`D:\...`、`mira.png`、`legacy-asset://`：单独判断 portability 或旧协议拒绝测试，不与生产硬编码混删。
 
 ## 实施与验证约束

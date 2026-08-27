@@ -4,12 +4,12 @@ kind: 知识库入口
 status: 当前有效
 last_verified_commit: 27af068a
 source_paths:
-  - main.py
-  - bootstrap/
-  - core/
-  - agent/
-  - proactive_v2/
-  - desktop_bridge/
+  - apps/backend/main.py
+  - apps/backend/bootstrap/
+  - apps/backend/core/
+  - apps/backend/agent/
+  - apps/backend/proactive_v2/
+  - apps/backend/desktop_bridge/
 related:
   - map.md
   - architecture/overview.md

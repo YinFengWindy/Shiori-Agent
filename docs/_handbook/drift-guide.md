@@ -46,7 +46,7 @@ tick
 
 ## Drift Skill 格式
 
-每个 skill 是一个目录，放在 `~/.akashic/workspace/drift/skills/<skill-name>/` 下，核心文件是 `SKILL.md`。
+每个 skill 是一个目录，放在 `~/.shiori/workspace/drift/skills/<skill-name>/` 下，核心文件是 `SKILL.md`。
 
 ### 哪些文件你写、哪些 agent 写
 
@@ -59,7 +59,7 @@ tick
 | `drift/drift.json` | **agent 写** | DriftTurnPipeline 自动写运行记录（recent_runs），不用管 |
 | `drift/drift_note.md` | **agent 写** | 跨轮次的自由笔记，agent 可读可写 |
 
-内置了一个 skill 放仓库里（`agent/skills/`），用来创建新的 drift skill。
+内置了一个 skill 放仓库里（`apps/backend/skills/`），用来创建新的 drift skill。
 
 ### SKILL.md 结构
 

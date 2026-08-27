@@ -4,15 +4,15 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: 7f427a71
 source_paths:
-  - proactive_v2/loop.py
-  - proactive_v2/agent_tick_factory.py
-  - proactive_v2/state.py
-  - agent/core/proactive_turn/gates.py
-  - agent/core/proactive_turn/phases.py
-  - agent/core/proactive_turn/tick_logging.py
-  - plugins/relationship_proactive/plugin.py
-  - proactive_v2/drift_state.py
-  - agent/core/drift_turn.py
+  - apps/backend/proactive_v2/loop.py
+  - apps/backend/proactive_v2/agent_tick_factory.py
+  - apps/backend/proactive_v2/state.py
+  - apps/backend/agent/core/proactive_turn/gates.py
+  - apps/backend/agent/core/proactive_turn/phases.py
+  - apps/backend/agent/core/proactive_turn/tick_logging.py
+  - apps/backend/plugins/relationship_proactive/plugin.py
+  - apps/backend/proactive_v2/drift_state.py
+  - apps/backend/agent/core/drift_turn.py
 related:
   - roles.md
   - conversations-and-sessions.md
@@ -31,7 +31,7 @@ related:
 
 ## Drift
 
-Drift 是独立于普通被动消息的特殊回合模式。`DriftStateStore` 保存状态，`DriftTurnPipeline` 负责执行，`proactive_v2/drift_tools.py` 提供相关工具接入。它与 Proactive 共享触发和投递基础设施，但拥有自己的回合语义与状态迁移。Drift 必须显式取得当前角色 prompt，并完整读取该角色的 `SELF.md`、长期记忆与最近上下文；任一读取失败都终止本轮，不能退化为无记忆的通用回复。
+Drift 是独立于普通被动消息的特殊回合模式。`DriftStateStore` 保存状态，`DriftTurnPipeline` 负责执行，`apps/backend/proactive_v2/drift_tools.py` 提供相关工具接入。它与 Proactive 共享触发和投递基础设施，但拥有自己的回合语义与状态迁移。Drift 必须显式取得当前角色 prompt，并完整读取该角色的 `SELF.md`、长期记忆与最近上下文；任一读取失败都终止本轮，不能退化为无记忆的通用回复。
 
 ## 修改影响
 

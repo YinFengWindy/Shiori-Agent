@@ -3,26 +3,32 @@
   "pythonVersion": "3.12",
   "venvPath": ".",
   "venv": ".venv",
+  "extraPaths": [
+    "apps/backend"
+  ],
   "include": [
-    "main.py",
-    "agent",
-    "bootstrap",
-    "bus",
-    "core",
-    "infra",
-    "memory2",
-    "proactive_v2",
-    "prompts",
-    "session"
+    "apps/backend/main.py",
+    "apps/backend/agent",
+    "apps/backend/bootstrap",
+    "apps/backend/bus",
+    "apps/backend/conversation",
+    "apps/backend/core",
+    "apps/backend/desktop_bridge",
+    "apps/backend/infra",
+    "apps/backend/memory2",
+    "apps/backend/plugins",
+    "apps/backend/proactive_v2",
+    "apps/backend/prompts",
+    "apps/backend/session",
+    "apps/backend/story_simulation",
+    "apps/backend/utils"
   ],
   "exclude": [
     ".venv",
     ".venv-test",
     "tests",
     "private_tests",
-    "private_runtime/scripts",
-    "mcp_servers",
-    "eval"
+    "benchmarks"
   ],
   "reportMissingTypeArgument": "warning",
   "reportPrivateUsage": "warning",

@@ -1,33 +1,33 @@
 ---
-title: 当前后端架构基线
+title: 当前后端架构
 kind: 架构说明
-status: 迁移前基线
+status: 当前有效
 last_verified_commit: 3050d593
 source_paths:
-  - main.py
-  - bootstrap/app.py
-  - bootstrap/tools.py
-  - desktop_bridge/
-  - core/roles/role_runtime.py
-  - session/
-  - agent/core/passive_turn/
-  - agent/provider.py
-  - agent/tools/
-  - core/memory/
-  - agent/plugins/manager.py
+  - apps/backend/main.py
+  - apps/backend/bootstrap/app.py
+  - apps/backend/bootstrap/tools.py
+  - apps/backend/desktop_bridge/
+  - apps/backend/core/roles/role_runtime.py
+  - apps/backend/session/
+  - apps/backend/agent/core/passive_turn/
+  - apps/backend/agent/provider.py
+  - apps/backend/agent/tools/
+  - apps/backend/core/memory/
+  - apps/backend/agent/plugins/manager.py
 ---
 
 # 当前后端架构基线
 
-本文记录 Python backend 在迁移前的实际运行边界。`EXTRACTED` 表示源码或测试直接证明，`INFERRED` 表示由多个调用点推断，`AMBIGUOUS` 表示仍需运行 trace 验证。
+本文记录 Python backend 的实际运行边界。`EXTRACTED` 表示源码或测试直接证明，`INFERRED` 表示由多个调用点推断，`AMBIGUOUS` 表示仍需运行 trace 验证。
 
 ## 进程与装配
 
-`main.py` 解析配置和 workspace，`bootstrap/app.py` 的 `AppRuntime.start()` 调用 `bootstrap/tools.py:build_core_runtime()` 装配 CoreRuntime。CoreRuntime 持有 AgentLoop、MessageBus、EventBus、ToolRegistry、SessionManager、Scheduler、LLMProvider、MemoryRuntime、RoleRuntimeRegistry、MCP 和 PluginManager。
+`apps/backend/main.py` 解析配置和 workspace，`apps/backend/bootstrap/app.py` 的 `AppRuntime.start()` 调用 `apps/backend/bootstrap/tools.py:build_core_runtime()` 装配 CoreRuntime。CoreRuntime 持有 AgentLoop、MessageBus、EventBus、ToolRegistry、SessionManager、Scheduler、LLMProvider、MemoryRuntime、RoleRuntimeRegistry、MCP 和 PluginManager。
 
 ```mermaid
 flowchart TD
-  A[main.py] --> B[AppRuntime.start]
+  A[apps/backend/main.py] --> B[AppRuntime.start]
   B --> C[build_core_runtime]
   C --> D[Providers / RoleStore / SessionManager]
   C --> E[RoleRuntimeRegistry]
@@ -40,11 +40,11 @@ flowchart TD
   K --> L[DesktopBridgeService]
 ```
 
-事实依据：`main.py:93-112`、`bootstrap/app.py:74-255`、`bootstrap/tools.py:467-635`。
+事实依据：`apps/backend/main.py:93-112`、`apps/backend/bootstrap/app.py:74-255`、`apps/backend/bootstrap/tools.py:467-635`。
 
 ## Bridge 与消息入口
 
-Electron main 通过 `desktop/src/bridgeClient.ts` 启动 Python bridge，使用 stdin/stdout JSONL。`desktop_bridge/server.py` 负责解析请求、并发分发、串行写回 response/event，并在退出时关闭 dispatcher、service 和 writer。
+Electron main 通过 `apps/desktop/src/bridge/bridgeClient.ts` 启动 Python bridge，使用 stdin/stdout JSONL。`apps/backend/desktop_bridge/server.py` 负责解析请求、并发分发、串行写回 response/event，并在退出时关闭 dispatcher、service 和 writer。
 
 桌面聊天的实际路径是 `DesktopBridgeService -> DesktopChatService -> AgentLoop.process_direct`，不保证先经过 `MessageBus`。因此旧版总体架构中“所有输入先进入 bus”的表述需要细化为：渠道输入通常经过 bus，DesktopBridge chat 可以直接进入 AgentLoop 的 role-scoped processing。
 
@@ -54,7 +54,7 @@ Electron main 通过 `desktop/src/bridgeClient.ts` 启动 Python bridge，使用
 
 角色会话 key 为 `role:{role_id}`。角色与唯一活跃会话是同一生命周期边界，不存在独立的 Session Plugin 产品概念。角色删除先记录删除事件，再删除 role session，并级联清理角色记忆和其他 role-owned 状态。
 
-事实依据：`core/roles/role_runtime.py:35-349`、`session/manager/role_sessions.py:15-201`、`core/roles/services.py:220-247`。
+事实依据：`apps/backend/core/roles/role_runtime.py:35-349`、`apps/backend/session/manager/role_sessions.py:15-201`、`apps/backend/core/roles/services.py:220-247`。
 
 ## 被动回合
 
@@ -75,24 +75,24 @@ flowchart TD
   L --> M[Session and bridge events]
 ```
 
-`agent/core/passive_turn/pipeline.py:137-148` 定义 phase 顺序。Provider 或 reasoner 错误进入用户可见 fallback；AfterReasoning 和 AfterTurn 的权威持久化错误继续向边界冒泡。桌面流事件由 `desktop_bridge/chat_service.py` 发出，包括 `chat.delta`、`chat.tool.started`、`chat.tool.completed`、`chat.done` 和 `chat.error`。
+`apps/backend/agent/core/passive_turn/pipeline.py:137-148` 定义 phase 顺序。Provider 或 reasoner 错误进入用户可见 fallback；AfterReasoning 和 AfterTurn 的权威持久化错误继续向边界冒泡。桌面流事件由 `apps/backend/desktop_bridge/chat_service.py` 发出，包括 `chat.delta`、`chat.tool.started`、`chat.tool.completed`、`chat.done` 和 `chat.error`。
 
 ## 主动回合与后台任务
 
-`proactive_v2` 根据时间、presence、关系和观察结果生成 tick。`bootstrap/proactive.py` 为角色创建主动循环，tick dispatcher 通过 `RoleRuntimeRegistry.dispatch_proactive_tick()` 进入同一角色 runtime。后台任务和 drift 使用同一套 role/session/tool 基础设施，但具体 scheduler 路径仍需运行 trace 验证。
+`apps/backend/proactive_v2` 根据时间、presence、关系和观察结果生成 tick。`apps/backend/bootstrap/proactive.py` 为角色创建主动循环，tick dispatcher 通过 `RoleRuntimeRegistry.dispatch_proactive_tick()` 进入同一角色 runtime。后台任务和 drift 使用同一套 role/session/tool 基础设施，但具体 scheduler 路径仍需运行 trace 验证。
 
 ## 工具、Memory 与插件
 
 - `ToolRegistry` 保存工具、schema、风险、always-on、搜索索引和 source metadata；MCP 工具也同步到该 registry。
-- `core/memory/` 定义 MemoryEngine、MemoryQuery、MemoryResult、MemoryMutation 和 runtime protocol；具体策略位于 `plugins/default_memory/`、Akasha 和 `memory2/`。
+- `apps/backend/core/memory/` 定义 MemoryEngine、MemoryQuery、MemoryResult、MemoryMutation 和 runtime protocol；具体策略位于 `apps/backend/plugins/default_memory/`、Akasha 和 `apps/backend/memory2/`。
 - `PluginManager` 同时负责 discover/import/config/context 注入、EventBus handler、tool、tool hook、phase module、proactive gate、channel、initialize rollback 和 terminate。
 - 当前 PluginManager 的 EventBus handler 卸载不完整，目标迁移必须把每个订阅变成可销毁资源。
 
 ## 持久化边界
 
-- 角色配置、绑定和素材：`core/roles/` 与 RoleStore facade。
-- Session metadata/messages：`session/` 的 SQLite store；消息可能含 `tool_chain`、reasoning 和 proactive metadata。
-- Conversation：`conversation/` 负责 legacy session key 到正式 thread 的映射。
+- 角色配置、绑定和素材：`apps/backend/core/roles/` 与 RoleStore facade。
+- Session metadata/messages：`apps/backend/session/` 的 SQLite store；消息可能含 `tool_chain`、reasoning 和 proactive metadata。
+- Conversation：`apps/backend/conversation/` 负责 legacy session key 到正式 thread 的映射。
 - 角色记忆：`workspace/roles/{role_id}/memory` 及具体 MemoryStore/索引。
 - 插件配置和 KV：插件目录中的配置文件与 `.kv.json`。
 

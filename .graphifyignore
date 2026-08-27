@@ -1,6 +1,6 @@
 # 测试与评测不进入主业务图谱
 tests/
-eval/
+benchmarks/
 **/*.test.ts
 **/*.test.tsx
 **/*.test.js
@@ -15,7 +15,6 @@ dist/
 renderer-dist/
 **/renderer-dist/
 static/
-docker/
 assets/
 logs/
 data/

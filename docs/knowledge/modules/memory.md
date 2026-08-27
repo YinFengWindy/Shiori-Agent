@@ -4,10 +4,10 @@ kind: 领域说明
 status: 当前有效
 last_verified_commit: 27af068a
 source_paths:
-  - core/memory/
-  - plugins/default_memory/
-  - memory2/
-  - agent/retrieval/
+  - apps/backend/core/memory/
+  - apps/backend/plugins/default_memory/
+  - apps/backend/memory2/
+  - apps/backend/agent/retrieval/
 related:
   - conversations-and-sessions.md
   - agent-lifecycle-and-tools.md
@@ -17,10 +17,10 @@ related:
 
 ## 分层
 
-- `core/memory/` 定义 `MemoryEngine`、查询、变更和运行时契约，并提供生命周期接入点。
-- `plugins/default_memory/` 是默认记忆插件与 engine 策略实现，负责查询、变更、管理和提示词。
-- `memory2/` 提供增强处理链，包括查询构造/改写、HyDE、召回、充分性判断、去重、注入规划、画像与响应后记忆化。
-- `agent/retrieval/` 将具体记忆召回适配到 Agent 上下文准备阶段。
+- `apps/backend/core/memory/` 定义 `MemoryEngine`、查询、变更和运行时契约，并提供生命周期接入点。
+- `apps/backend/plugins/default_memory/` 是默认记忆插件与 engine 策略实现，负责查询、变更、管理和提示词。
+- `apps/backend/memory2/` 提供增强处理链，包括查询构造/改写、HyDE、召回、充分性判断、去重、注入规划、画像与响应后记忆化。
+- `apps/backend/agent/retrieval/` 将具体记忆召回适配到 Agent 上下文准备阶段。
 
 ## 典型数据流
 
