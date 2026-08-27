@@ -188,14 +188,18 @@ async def test_proactive_dispatch_error_is_not_converted_to_false() -> None:
             outbound=_Outbound(),
         )
     )
+    failure_effect = SimpleNamespace(run=AsyncMock())
 
     with pytest.raises(OutboundDispatchError, match="network unavailable"):
         await orchestrator.handle_proactive_turn(
             result=TurnResult(
                 decision="reply",
                 outbound=TurnOutbound(session_key="role:mira", content="hello"),
+                failure_side_effects=[failure_effect],
             ),
             session_key="role:mira",
             channel="telegram",
             chat_id="123",
         )
+
+    failure_effect.run.assert_awaited_once_with()

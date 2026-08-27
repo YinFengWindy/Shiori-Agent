@@ -506,37 +506,6 @@ class ConversationStore:
         """Returns the current derived state for a formal role."""
         return self._get_state("role_state", "role_id", role_id)
 
-    def count_unassigned_messages(self, session_key: str) -> int:
-        with self._lock:
-            row = self._conn.execute(
-                """
-                SELECT COUNT(1) AS c
-                FROM messages
-                WHERE session_key = ? AND COALESCE(thread_id, '') = ''
-                """,
-                (session_key,),
-            ).fetchone()
-        return int((row["c"] if row else 0) or 0)
-
-    def assign_legacy_messages_to_thread(self, session_key: str, thread_id: str) -> int:
-        now = datetime.now().astimezone().isoformat()
-        with self._lock:
-            cur = self._conn.execute(
-                """
-                UPDATE messages
-                SET thread_id = ?,
-                    sender_role = COALESCE(NULLIF(sender_role, ''), role)
-                WHERE session_key = ? AND COALESCE(thread_id, '') = ''
-                """,
-                (thread_id, session_key),
-            )
-            self._conn.execute(
-                "UPDATE threads SET updated_at = ? WHERE id = ?",
-                (now, thread_id),
-            )
-            self._conn.commit()
-        return int(cur.rowcount or 0)
-
     def list_message_thread_ids(self, session_key: str) -> list[str | None]:
         with self._lock:
             rows = self._conn.execute(
