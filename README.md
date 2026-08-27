@@ -1,6 +1,6 @@
 # Shiori
 
-![](apps\desktop\assets\readme\gal_background.jpg)
+![](.\assets\readme\gal_background.jpg)
 
 Shiori 是一个以角色为核心的本地 Agent 应用，当前以 **Windows 桌面端 + Python Agent Runtime** 为主要形态。
 
