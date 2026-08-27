@@ -1,5 +1,7 @@
 # Shiori
 
+![](D:\Coding\Shiori\apps\desktop\assets\readme\gal_background.jpg)
+
 Shiori 是一个以角色为核心的本地 Agent 应用，当前以 **Windows 桌面端 + Python Agent Runtime** 为主要形态。
 
 它关注角色如何在长期相处中保持一致：每个角色有自己的设定、素材、会话、记忆和渠道绑定，也可以在合适的时候主动联系你、延续同一个场景，或把对话转化成图片。
