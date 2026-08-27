@@ -12,7 +12,7 @@ Shiori 是一个以角色为核心的本地 Agent 应用，当前以 **Windows �
 
 你可以创建多个角色，并分别维护名称、简介、系统提示词、头像和立绘。每个角色拥有独立的记忆空间与会话，不会因为切换角色而混淆身份和经历。
 
-角色还可以绑定不同的聊天渠道和允许对象。同一个 Shiori 实例可以让不同角色面向不同联系人，也可以让同一个角色从桌面延伸到 Telegram 或 QQ。
+角色还可以绑定不同的聊天渠道和允许对象：可以让不同角色面向不同联系人，也可以让同一个角色从桌面延伸到 Telegram 或 QQ。
 
 ### 对话会留下记忆
 
@@ -103,116 +103,8 @@ Telegram / QQ ──┼── Agent Runtime
 
 Electron 桌面端负责交互与本地资源访问，Python Runtime 负责角色推理、记忆、工具、主动任务和渠道连接。桌面桥接层连接两者，并在 Runtime 重启后恢复角色与会话状态。
 
-## 安装与启动
 
-### 环境要求
-
-- Windows
-- Python `3.12+`
-- Node.js `20+`
-- pnpm `10.33.0`（通过 Corepack 管理）
-- [uv](https://docs.astral.sh/uv/)
-
-### 1. 安装依赖
-
-```bash
-git clone https://github.com/YinFengWindy/Shiori-Agent.git
-cd Shiori-Agent
-uv venv
-uv pip install -r apps/backend/requirements/production.txt
-corepack enable
-corepack install
-pnpm install
-```
-
-如果尚未安装 `uv`：
-
-```bash
-pip install uv
-```
-
-### 2. 初始化配置
-
-推荐使用交互式向导创建配置与本地工作区：
-
-```bash
-uv run python apps/backend/main.py setup
-```
-
-也可以只生成默认文件，再手动编辑 `config.toml`：
-
-```bash
-uv run python apps/backend/main.py init
-```
-
-至少需要配置一个可用的主模型。其他能力可以按需启用：
-
-| 配置 | 用途 | 是否必需 |
-| --- | --- | --- |
-| `llm.main` | 角色主要推理与回复 | 是 |
-| `llm.fast` | 改写、门控和轻量判断 | 推荐 |
-| `llm.vl` | 图片理解 | 可选 |
-| `memory.embedding` | 语义记忆检索 | 推荐 |
-| `channels.telegram` / `channels.qq` | 外部消息渠道 | 可选 |
-| `integrations.novelai` | 图片生成与自动 CG | 可选 |
-
-`config/examples/config.example.toml` 提供了完整配置结构。`config/examples/mcp_servers.example.json` 提供了 MCP 服务定义的公开起点。Shiori 使用 OpenAI 兼容接口，可为不同能力分别设置模型、API Key 和 Base URL。
-
-### 3. 启动桌面端
-
-开发模式：
-
-```bash
-pnpm dev
-```
-
-生产构建：
-
-```bash
-pnpm build
-pnpm start
-```
-
-桌面端会自动启动 Python bridge。开发模式下 bridge 固定使用项目 `.venv` 中的 Python，不依赖系统 PATH 里的 Python。关闭主窗口后，应用会进入系统托盘；如果已配置外部渠道，角色仍可继续收发消息。
-
-## 开发者入口
-
-### 常用命令
-
-```bash
-uv run python apps/backend/main.py                    # 启动完整 Runtime
-uv run python apps/backend/main.py bridge             # 只启动桌面桥接层
-uv run python apps/backend/main.py --inspect-modules  # 检查模块装配
-uv run python apps/backend/main.py --help             # 查看命令行帮助
-
-uv run pytest tests/backend/             # Python 测试（使用项目 .venv）
-pnpm test                               # 桌面端单元测试
-pnpm lint                               # ESLint
-pnpm typecheck                          # TypeScript 类型检查
-pnpm run desktop:smoke                  # 桌面主链 smoke
-```
-
-默认只需运行与当前改动范围直接相关的测试；改动影响多个边界时，再补充更大范围回归。
-
-### Node 依赖管理
-
-仓库使用根目录的 pnpm workspace 管理根包与 `apps/desktop/`，固定版本由 `package.json` 的 `packageManager` 字段约束。`pnpm-lock.yaml` 是唯一需要提交的 Node 依赖快照；修改依赖时，使用 `pnpm add` 或 `pnpm --filter shiori-desktop add`，并与对应的 `package.json` 一起提交更新后的 lockfile。CI 始终使用 `pnpm install --frozen-lockfile`，不能在 CI 中重算依赖。
-
-迁移后不要重新提交 `package-lock.json`。若 pnpm 迁移本身需要回滚，应整体 revert 该迁移提交，使 `package.json`、workspace 清单和 lockfile 同步回到 npm 版本，再按恢复后的锁文件重新安装依赖。
-
-### 主要目录
-
-| 目录 | 职责 |
-| --- | --- |
-| `apps/backend/` | Python Runtime；包含启动入口、桌面桥接、Agent、领域服务与插件 |
-| `apps/desktop/src/` | Electron 主进程、preload 与本地桌面能力；`src/bridge/` 是桥接协议与 IPC，`src/assets/` 是本地资源授权与协议 |
-| `apps/desktop/assets/` | Electron 窗口图标、原生拖拽图标等桌面壳打包资源 |
-| `apps/desktop/renderer/src/` | React 渲染端，按 `chat/`、`roles/`、`story/`、`settings/`、`image/`、`pet/`、`voice/` 等功能域组织 |
-| `tests/backend/` | Python Runtime 测试，按 `apps/backend/` 的包结构组织 |
-| `benchmarks/` | LongMemEval 与 PersonaMem 评测脚本、数据和运行说明 |
-| `config/examples/` | 可提交的配置和 MCP 示例；实际配置与 MCP 服务定义由用户工作区持有 |
-
-### 本地数据
+## 本地数据
 
 默认工作区位于：
 
