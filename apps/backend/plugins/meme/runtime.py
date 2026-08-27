@@ -8,11 +8,11 @@ from pathlib import Path
 from typing import cast
 
 from core.roles import RoleStore
-from project_paths import REPOSITORY_ROOT
 
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 _COMMON_EMOJIS_PATH = Path("apps/desktop/renderer/src/chat/common_emojis.json")
 _PACKAGED_COMMON_EMOJIS_PATH = Path("common_emojis.json")
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
 
 def _common_emojis_candidates(workspace: Path) -> list[Path]:
@@ -24,7 +24,7 @@ def _common_emojis_candidates(workspace: Path) -> list[Path]:
     candidates.extend(
         (
             workspace / _COMMON_EMOJIS_PATH,
-            REPOSITORY_ROOT / _COMMON_EMOJIS_PATH,
+            _REPOSITORY_ROOT / _COMMON_EMOJIS_PATH,
         )
     )
     return candidates
