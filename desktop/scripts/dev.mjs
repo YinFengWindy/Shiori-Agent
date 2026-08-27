@@ -11,7 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, "..");
 const rendererConfig = resolve(desktopRoot, "renderer", "vite.config.ts");
 const userDataDir = resolve(desktopRoot, ".dev-user-data");
-const preferredPort = Number(process.env.MIRA_RENDERER_DEV_SERVER_PORT || "5173");
+const preferredPort = Number(process.env.SHIORI_RENDERER_DEV_SERVER_PORT || "5173");
 
 async function canListen(port) {
   return await new Promise((resolve) => {
@@ -78,8 +78,8 @@ electronProc = spawn(electronExe, ["."], {
   stdio: "inherit",
   env: {
     ...process.env,
-    MIRA_RENDERER_DEV_SERVER_URL: devServerUrl,
-    MIRA_DESKTOP_USER_DATA_DIR: userDataDir,
+    SHIORI_RENDERER_DEV_SERVER_URL: devServerUrl,
+    SHIORI_DESKTOP_USER_DATA_DIR: userDataDir,
   },
 });
 

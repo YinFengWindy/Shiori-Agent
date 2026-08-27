@@ -25,6 +25,18 @@ logger = logging.getLogger(__name__)
 _POLL_TOOL_TIMEOUT = 180.0
 
 
+class ContextSourceFormatError(ValueError):
+    """context MCP 源返回不符合 dict/list[dict] 契约时抛出的格式错误。"""
+
+    def __init__(self, server: str, payload_type: str) -> None:
+        self.server = server
+        self.payload_type = payload_type
+        super().__init__(
+            f"context source {server!r} returned unsupported payload type "
+            f"{payload_type}; expected dict or list[dict]"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Config loaders
 # ---------------------------------------------------------------------------
@@ -143,10 +155,12 @@ class McpClientPool:
         args: dict[str, Any],
         *,
         timeout: float | None = None,
+        retry_on_transport: bool = False,
     ) -> Any:
-        """调用 tool，连接断开时自动重连一次。
+        """调用 tool，默认只清理断开的连接并把失败交给调用方。
 
-        MCP stdio 传输不支持并发调用，per-server lock 保证串行。
+        只有调用方明确声明操作可安全重放时，才会对 transport failure
+        重连并重试一次。MCP stdio 传输不支持并发调用，per-server lock 保证串行。
         """
         if server not in self._locks:
             self._locks[server] = asyncio.Lock()
@@ -159,36 +173,40 @@ class McpClientPool:
             client = self._clients[server]
             try:
                 raw = await client.call(tool_name, args, timeout=timeout)
-                return json.loads(raw) if raw and raw.strip().startswith(("[", "{")) else raw
-            except TimeoutError:
-                self._clients.pop(server, None)
-                try:
-                    await client.disconnect()
-                except Exception:
-                    pass
-                raise
-            except Exception as e:
+                return _decode_result(raw)
+            except Exception as exc:
+                await self._discard_client(server, client)
+                if not retry_on_transport or not _is_transport_failure(exc):
+                    raise
                 logger.warning(
-                    "[mcp_pool] call failed %s.%s, reconnecting: %s", server, tool_name, e
+                    "[mcp_pool] transport failed %s.%s, reconnecting once: %s",
+                    server,
+                    tool_name,
+                    exc,
                 )
-                self._clients.pop(server, None)
+                if not await self._connect(server):
+                    raise
+                retry_client = self._clients[server]
                 try:
-                    await client.disconnect()
+                    raw = await retry_client.call(tool_name, args, timeout=timeout)
+                    return _decode_result(raw)
                 except Exception:
-                    pass
-                if await self._connect(server):
-                    retry_client = self._clients[server]
-                    try:
-                        raw = await retry_client.call(tool_name, args, timeout=timeout)
-                        return json.loads(raw) if raw and raw.strip().startswith(("[", "{")) else raw
-                    except Exception:
-                        self._clients.pop(server, None)
-                        try:
-                            await retry_client.disconnect()
-                        except Exception:
-                            pass
-                        raise
-                raise
+                    await self._discard_client(server, retry_client)
+                    raise
+
+    async def _discard_client(self, server: str, client: Any) -> None:
+        """Removes and closes one failed client without masking the root error."""
+
+        if self._clients.get(server) is client:
+            self._clients.pop(server, None)
+        try:
+            await client.disconnect()
+        except Exception:
+            logger.debug(
+                "[mcp_pool] disconnect failed after %s failure",
+                server,
+                exc_info=True,
+            )
 
     async def disconnect_all(self) -> None:
         """断开所有连接。agent 关闭时在 finally 块调用。"""
@@ -199,6 +217,19 @@ class McpClientPool:
             except Exception as e:
                 logger.warning("[mcp_pool] disconnect error %s: %s", server, e)
         self._clients.clear()
+
+
+def _decode_result(raw: str) -> Any:
+    if raw and raw.strip().startswith(("[", "{")):
+        return json.loads(raw)
+    return raw
+
+
+def _is_transport_failure(error: BaseException) -> bool:
+    return isinstance(
+        error,
+        (ConnectionError, BrokenPipeError, EOFError, OSError),
+    ) and not isinstance(error, TimeoutError)
 
 
 # ── Async pool-based variants ─────────────────────────────────────────────────
@@ -241,14 +272,22 @@ def _extract_context_items(data: Any, *, server: str) -> list[dict]:
         return [item]
     if isinstance(data, list):
         result: list[dict] = []
+        invalid_count = 0
         for item in data:
             if not isinstance(item, dict):
+                invalid_count += 1
                 continue
             enriched = dict(item)
             enriched.setdefault("_source", server)
             result.append(enriched)
+        if invalid_count:
+            logger.warning(
+                "[mcp_sources] context 源 %s 返回 list 中有 %d 个非法条目，已跳过",
+                server,
+                invalid_count,
+            )
         return result
-    return []
+    raise ContextSourceFormatError(server, type(data).__name__)
 
 
 async def _fetch_by_channel_async(pool: McpClientPool, *, channel: str) -> list[dict]:
@@ -267,7 +306,12 @@ async def _fetch_by_channel_async(pool: McpClientPool, *, channel: str) -> list[
         try:
             # 3. 通过常驻 McpClientPool 调远端 MCP 工具。
             #    pool.call() 内部会负责串行、断线重连、JSON 反序列化。
-            data = await pool.call(server, get_tool, {})
+            data = await pool.call(
+                server,
+                get_tool,
+                {},
+                retry_on_transport=True,
+            )
             if channel == "context":
                 # 4a. context 通道不看 kind，直接把返回值规范成 list[dict]。
                 items = _extract_context_items(data, server=server)

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { describe, it } from "node:test";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { ensureDesktopRuntimeConfig, resolveDesktopRuntimePaths } from "./runtimePaths.js";
+import { ensureDesktopRuntimeConfig, resolveDesktopConfigPath, resolveDesktopRuntimePaths, resolveDesktopWorkspacePath } from "./runtimePaths.js";
 
 describe("resolveDesktopRuntimePaths", () => {
   it("keeps development runtime execution inside the repository while using the stable workspace", () => {
@@ -15,7 +15,6 @@ describe("resolveDesktopRuntimePaths", () => {
     });
 
     assert.equal(paths.configPath, resolve("C:/Users/shiori/.shiori/workspace/config.toml"));
-    assert.equal(paths.legacyConfigPath, resolve("D:/Coding/Shiori/config.toml"));
     assert.equal(paths.workspacePath, resolve("C:/Users/shiori/.shiori/workspace"));
     assert.deepEqual(paths.bridge.args, [
       "main.py",
@@ -66,28 +65,9 @@ describe("resolveDesktopRuntimePaths", () => {
     }
   });
 
-  it("migrates the development config into the stable workspace only once", () => {
-    const directory = mkdtempSync(join(tmpdir(), "shiori-runtime-paths-"));
-    try {
-      const legacyConfigPath = join(directory, "repository", "config.toml");
-      const templatePath = join(directory, "resources", "config.example.toml");
-      const configPath = join(directory, "home", ".shiori", "workspace", "config.toml");
-      mkdirSync(dirname(legacyConfigPath), { recursive: true });
-      mkdirSync(dirname(templatePath), { recursive: true });
-      writeFileSync(legacyConfigPath, "[llm]\napi_key = \"existing\"\n", { encoding: "utf-8" });
-      writeFileSync(templatePath, "[llm]\n", { encoding: "utf-8" });
-
-      ensureDesktopRuntimeConfig({
-        bridge: { executable: "python.exe", args: ["bridge"], cwd: directory },
-        configPath,
-        configTemplatePath: templatePath,
-        legacyConfigPath,
-        workspacePath: dirname(configPath),
-      });
-
-      assert.equal(readFileSync(configPath, "utf-8"), "[llm]\napi_key = \"existing\"\n");
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
+  it("keeps workspace and config derivation in the runtime path contract", () => {
+    const workspacePath = resolveDesktopWorkspacePath("C:/Users/shiori");
+    assert.equal(workspacePath, resolve("C:/Users/shiori/.shiori/workspace"));
+    assert.equal(resolveDesktopConfigPath(workspacePath), resolve("C:/Users/shiori/.shiori/workspace/config.toml"));
   });
 });

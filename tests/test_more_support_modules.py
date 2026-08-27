@@ -27,7 +27,7 @@ from proactive_v2.anyaction import AnyActionGate, QuotaStore
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.memory_sampler import sample_memory_chunks, split_memory_chunks
 from bootstrap.app import AppRuntime, DESKTOP_RUNTIME_FEATURES
-from bootstrap.providers import build_providers, build_vl_provider
+from bootstrap.providers import build_providers
 from bus.event_bus import EventBus
 
 
@@ -447,13 +447,9 @@ def test_bootstrap_providers_set_a_shared_request_budget(
         agent_api_key="agent-key",
         agent_base_url="https://agent.example.com/v1",
         multimodal=False,
-        vl_model="vl",
-        vl_api_key="vl-key",
-        vl_base_url="https://vl.example.com/v1",
     )
 
     build_providers(cast(Any, cfg))
-    build_vl_provider(cast(Any, cfg))
 
     assert [item["request_timeout_s"] for item in created] == [45.0]
     assert [item["stream_idle_timeout_s"] for item in created] == [45.0]

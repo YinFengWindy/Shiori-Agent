@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 import agent.mcp.client as mcp_client_module
 
-from agent.mcp.client import McpClient, _infer_cwd
+from agent.mcp.client import McpClient, McpToolError, _infer_cwd
 from agent.tool_runtime import append_tool_result
 from agent.tools.base import ToolResult
 from agent.tools.filesystem import (
@@ -22,7 +21,6 @@ from agent.tools.filesystem import (
     _resolve_path,
     _run_with_file_mutation_lock,
 )
-from agent.tools.vision import _encode_image_data_uri
 
 
 class _Pipe:
@@ -259,50 +257,6 @@ async def test_filesystem_tools_cover_core_paths(
     assert "不是目录" in await lister.execute("a.txt")
 
 
-def test_vision_rejects_extension_only_image(tmp_path: Path):
-    fake_image = tmp_path / "secret.png"
-    fake_image.write_text("secret text", encoding="utf-8")
-
-    with pytest.raises(ValueError, match="不支持的图片格式"):
-        _encode_image_data_uri(fake_image)
-
-
-def test_vision_rejects_forged_magic_bytes_image(tmp_path: Path):
-    fake_image = tmp_path / "secret.png"
-    fake_image.write_bytes(b"\x89PNG\r\n\x1a\nsecret text")
-
-    with pytest.raises(ValueError, match="图片文件无法解码"):
-        _encode_image_data_uri(fake_image)
-
-
-def test_vision_reencodes_image_before_sending(tmp_path: Path):
-    from PIL import Image
-
-    image = tmp_path / "with_tail.png"
-    Image.new("RGB", (2, 2), (255, 0, 0)).save(image)
-    image.write_bytes(image.read_bytes() + b"secret text")
-
-    data_uri = _encode_image_data_uri(image)
-    payload = data_uri.split(",", 1)[1]
-
-    assert b"secret text" not in base64.b64decode(payload)
-
-
-def test_vision_rejects_image_when_compression_still_exceeds_limit(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-):
-    from PIL import Image
-    from agent.tools import vision
-
-    image = tmp_path / "large.png"
-    Image.new("RGB", (32, 32), (255, 0, 0)).save(image)
-    monkeypatch.setattr(vision, "_VL_MAX_DATA_URI_BYTES", 10)
-
-    with pytest.raises(ValueError, match="压缩后仍然过大"):
-        _encode_image_data_uri(image)
-
-
 def test_append_tool_result_supports_multimodal_blocks() -> None:
     messages: list[dict] = []
     append_tool_result(
@@ -382,6 +336,20 @@ async def test_mcp_client_and_loop_factory_cover_core_paths(
     assert await client.call("tool1", {"q": "x"}) == "ok"
     await client.disconnect()
     assert proc.terminated is True
+
+    error_proc = _Proc(
+        [
+            b'{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"bad args","data":{"field":"q"}}}\n'
+        ]
+    )
+    error_client = McpClient("docs", ["python", str(script)])
+    error_client._process = error_proc
+    with pytest.raises(McpToolError) as exc_info:
+        await error_client.call("tool1", {"q": "x"})
+    assert exc_info.value.code == -32602
+    assert exc_info.value.data == {"field": "q"}
+    assert exc_info.value.server == "docs"
+    assert exc_info.value.tool_name == "tool1"
 
     proc = _Proc([b""])
     monkeypatch.setattr(

@@ -1,10 +1,9 @@
 import type { ModelRegistrationFormData } from "../../../src/bridge/shared";
 import type { RoleRecord } from "../shared/types";
+import { normalizeModelEffort } from "./modelEffort";
 
 /** Supported reasoning effort values exposed by model controls. */
 export type ModelEffort = ModelRegistrationFormData["effort"];
-
-const MODEL_EFFORTS = new Set<ModelEffort>(["none", "low", "high", "max"]);
 
 /** Effective role-owned model and effort selections shown in the chat menu. */
 export type RoleModelSelection = {
@@ -26,8 +25,7 @@ export function selectionFromRole(
   const visualId = String(role.runtime_config.visual_model_registration_id ?? "");
   const visual = registrations.find((registration) => registration.id === visualId) ?? dialogue;
   const effortFromRole = (key: string, fallback: ModelEffort) => {
-    const raw = String(role.runtime_config[key] ?? fallback);
-    return MODEL_EFFORTS.has(raw as ModelEffort) ? raw as ModelEffort : fallback;
+    return normalizeModelEffort(role.runtime_config[key], fallback);
   };
   return {
     dialogueId,

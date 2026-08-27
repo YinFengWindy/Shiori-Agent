@@ -35,7 +35,6 @@ class LLMConfig:
     max_tokens: int = 8192
     tool_search_enabled: bool = False
     multimodal: bool = True
-    vl_available: bool = False
 
 
 @dataclass

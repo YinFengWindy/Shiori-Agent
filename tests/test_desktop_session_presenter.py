@@ -5,26 +5,6 @@ from desktop_bridge.session_presenter import DesktopSessionPresenter
 from session.manager import SessionManager
 
 
-def test_session_presenter_serializes_formal_thread(tmp_path) -> None:
-    manager = SessionManager(tmp_path)
-    session = manager.get_or_create("role:mira")
-    session.add_message("user", "hello")
-    manager.save(session)
-    conversation = ConversationService(manager)
-    thread = conversation.sync_session_messages_to_thread(
-        session.key,
-        role_id="mira",
-        channel="desktop",
-        chat_id="self",
-    )
-
-    payload = DesktopSessionPresenter(conversation).serialize(session)
-
-    assert "thread" not in payload
-    assert thread.id == "thread:mira:desktop"
-    assert payload["messages"][0]["content"] == "hello"
-
-
 def test_session_presenter_keeps_sanitized_turn_metrics(tmp_path) -> None:
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("role:mira")

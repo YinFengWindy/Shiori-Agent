@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Literal, cast
 from zoneinfo import ZoneInfo
 
@@ -55,36 +55,3 @@ def next_story_clock(
     if next_band != current and STORY_TIME_BANDS.index(next_band) < STORY_TIME_BANDS.index(current):
         story_date += timedelta(days=1)
     return story_date.isoformat(), next_band
-
-
-def legacy_story_time_band(value: str) -> StoryTimeBand:
-    """Convert a pre-band Story timestamp while migrating an existing database."""
-
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise ValueError("旧 Story 时间无效") from exc
-    if parsed.tzinfo is None:
-        raise ValueError("旧 Story 时间必须带时区")
-    hour = parsed.astimezone(STORY_TIMEZONE).hour
-    if 5 <= hour < 9:
-        return "清晨"
-    if 9 <= hour < 12:
-        return "上午"
-    if 12 <= hour < 18:
-        return "下午"
-    if 18 <= hour < 23:
-        return "夜晚"
-    return "深夜"
-
-
-def legacy_story_date(value: str) -> str:
-    """Extract a legacy Story date once when migrating recorded timestamps."""
-
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise ValueError("旧 Story 日期无效") from exc
-    if parsed.tzinfo is None:
-        raise ValueError("旧 Story 时间必须带时区")
-    return parsed.astimezone(STORY_TIMEZONE).date().isoformat()

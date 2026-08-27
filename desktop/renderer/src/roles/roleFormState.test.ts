@@ -9,6 +9,7 @@ import {
   isRoleFormDirty,
   syncRoleFormMoodConfig,
 } from "./roleFormState";
+import { roleProactiveDefaults } from "./roleProactiveDefaults";
 
 function createRole(runtime_config: Record<string, unknown> = {}): RoleRecord {
   return {
@@ -101,6 +102,19 @@ describe("roleFormState", () => {
       buildRoleProactiveConfig(role, { ...form, proactiveEnabled: true }).overrides,
       { loneliness: { threshold: 0.7 } },
     );
+  });
+
+  it("uses one default contract for sparse historical proactive state", () => {
+    const role = { ...createRole(), proactive: undefined };
+    const form = createRoleFormFromRole(role);
+
+    assert.equal(form.proactiveProfile, roleProactiveDefaults.profile);
+    assert.equal(form.proactiveAgentMaxSteps, roleProactiveDefaults.agentMaxSteps);
+    assert.equal(form.proactiveAgentContentLimit, roleProactiveDefaults.agentContentLimit);
+    assert.equal(form.proactiveAgentWebFetchMaxChars, roleProactiveDefaults.agentWebFetchMaxChars);
+    assert.equal(form.proactiveDriftMaxSteps, roleProactiveDefaults.driftMaxSteps);
+    assert.equal(form.proactiveDriftMinIntervalHours, roleProactiveDefaults.driftMinIntervalHours);
+    assert.equal(isRoleFormDirty(form, role), false);
   });
 
   it("syncs generated mood bindings without discarding unrelated form edits", () => {

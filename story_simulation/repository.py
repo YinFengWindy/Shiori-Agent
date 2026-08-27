@@ -30,7 +30,6 @@ from .models import (
     has_chinese_text,
     utc_now,
 )
-from .schema_migrations import migrate_story_resources, migrate_story_timeline
 from .story_time import next_story_clock, normalize_story_date, normalize_story_time_band
 
 
@@ -47,8 +46,6 @@ class StoryRepository:
         self._lock = threading.RLock()
         with self._lock:
             self._connection.executescript(SCHEMA)
-            migrate_story_timeline(self._connection)
-            migrate_story_resources(self._connection)
 
     def close(self) -> None:
         """Close this Story database connection."""

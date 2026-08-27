@@ -80,12 +80,6 @@ class NovelAIPlugin(Plugin):
             source_name=self.name,
         )
 
-    @property
-    def _auto_cg_tasks(self) -> dict[str, Any]:
-        """Backward-compatible view of controller tasks for integrations/tests."""
-
-        return self._auto_cg_controller.tasks
-
     def _handle_scene_observation(self, event: SceneObservationCommitted) -> None:
         self._auto_cg_controller.schedule(event)
 

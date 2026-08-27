@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from agent.turns.outbound import OutboundDispatch, OutboundPort
+from agent.turns.outbound import OutboundDispatch, OutboundDispatchError, OutboundPort
 from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
@@ -70,14 +70,17 @@ class TurnOrchestrator:
 
         # 3. 先执行发送前 side_effects，再真正 dispatch 到 outbound。
         await self._run_effects(result.side_effects)
-        sent = await self._dispatch_outbound(
-            channel=channel,
-            chat_id=chat_id,
-            content=content,
-            media=media,
-            metadata=source_metadata,
-            operation="proactive",
-        )
+        try:
+            sent = await self._dispatch_outbound(
+                channel=channel,
+                chat_id=chat_id,
+                content=content,
+                media=media,
+                metadata=source_metadata,
+            )
+        except OutboundDispatchError:
+            await self._run_effects(result.failure_side_effects)
+            raise
 
         # 4. 根据是否真正发送成功，分别执行 success / failure side_effects。
         if sent:
@@ -131,7 +134,6 @@ class TurnOrchestrator:
                 "source": "proactive_retry",
                 "session_key_override": session_key,
             },
-            operation="proactive retry",
         )
 
     async def _run_side_effects(self, result: TurnResult) -> None:
@@ -154,21 +156,16 @@ class TurnOrchestrator:
         content: str,
         media: list[str],
         metadata: dict[str, Any],
-        operation: str,
     ) -> bool:
-        try:
-            return await self._outbound.dispatch(
-                OutboundDispatch(
-                    channel=channel,
-                    chat_id=chat_id,
-                    content=content,
-                    metadata=metadata,
-                    media=media,
-                )
+        return await self._outbound.dispatch(
+            OutboundDispatch(
+                channel=channel,
+                chat_id=chat_id,
+                content=content,
+                metadata=metadata,
+                media=media,
             )
-        except Exception as e:
-            logger.warning("%s outbound dispatch failed: %s", operation, e)
-            return False
+        )
 
     def _persist_proactive_session(
         self,

@@ -1,18 +1,17 @@
 import { spawn } from "node:child_process";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { resolveReleaseOutputDirectory } from "./release-paths.mjs";
+import { resolve } from "node:path";
+import { resolveReleaseManifest } from "./release-manifest.mjs";
 import { resolveReleaseVersion } from "./release-version.mjs";
 
-const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const builderCli = resolve(desktopRoot, "node_modules", "electron-builder", "cli.js");
-const outputDirectory = resolveReleaseOutputDirectory();
+const releaseManifest = resolveReleaseManifest();
+const builderCli = resolve(releaseManifest.desktopRoot, "node_modules", "electron-builder", "cli.js");
+const outputDirectory = releaseManifest.installerOutput;
 const releaseVersion = resolveReleaseVersion();
 const versionArgs = releaseVersion ? [`--config.extraMetadata.version=${releaseVersion}`] : [];
 const child = spawn(process.execPath, [
   builderCli,
   "--projectDir",
-  desktopRoot,
+  releaseManifest.desktopRoot,
   `--config.directories.output=${outputDirectory}`,
   ...versionArgs,
   "--win",
@@ -20,7 +19,7 @@ const child = spawn(process.execPath, [
   "--publish",
   "never",
 ], {
-  cwd: desktopRoot,
+  cwd: releaseManifest.desktopRoot,
   stdio: "inherit",
 });
 

@@ -11,6 +11,7 @@ from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted, TurnStarted
 from bus.queue import MessageBus
 from core.channels import ChannelHub
 from core.common.channel_identifiers import normalize_qq_group_chat_id
+from core.common.workspace import resolve_ncatbot_dir
 from core.net.http import HttpRequester, get_default_http_requester
 from infra.channels.base import AttachmentStore, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
@@ -97,9 +98,6 @@ class QQChannel(_InboundMixin, _TraceMixin, _OutboundMixin, _LoopBridgeMixin):
         ncatbot_config.napcat.remote_mode = True
         ncatbot_config.napcat.enable_webui = False
         ncatbot_config.enable_webui_interaction = False
-        # Resolve through the package entry point so existing monkeypatch callers work.
-        from . import resolve_ncatbot_dir
-
         ncatbot_dir = resolve_ncatbot_dir()
         ncatbot_dir.mkdir(parents=True, exist_ok=True)
         (ncatbot_dir / "plugins").mkdir(exist_ok=True)

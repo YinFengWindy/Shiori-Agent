@@ -55,7 +55,6 @@ def load_config(path: str | Path = "config.toml") -> Config:
     llm_main = _as_dict(llm.get("main"))
     llm_fast = _as_dict(llm.get("fast"))
     llm_agent = _as_dict(llm.get("agent"))
-    llm_vl = _as_dict(llm.get("vl"))
     agent_cfg = _as_dict(data.get("agent"))
     desktop_cfg = _as_dict(data.get("desktop"))
     desktop_chat_cfg = _as_dict(desktop_cfg.get("chat"))
@@ -133,9 +132,6 @@ def load_config(path: str | Path = "config.toml") -> Config:
             desktop_chat_cfg.get("streaming_enabled", False)
         ),
         multimodal=bool(llm_main.get("multimodal", True)),
-        vl_model=str(llm_vl.get("model") or data.get("vl_model", "")),
-        vl_api_key=_resolve(str(llm_vl.get("api_key") or data.get("vl_api_key", ""))),
-        vl_base_url=str(llm_vl.get("base_url") or data.get("vl_base_url", "")),
         novelai=novelai,
         voice=voice,
         wiring=wiring,
@@ -349,6 +345,12 @@ def _reject_removed_runtime_config(data: dict) -> None:
                 raise ValueError(f"配置项已移除: [{section}.{name}]")
     if "peer_agents" in data:
         raise ValueError("配置项已移除: peer_agents")
+    llm = _as_dict(data.get("llm"))
+    if "vl" in llm:
+        raise ValueError("配置项已移除: [llm.vl]，请改用模型注册和角色视觉模型选择")
+    for name in ("vl_model", "vl_api_key", "vl_base_url"):
+        if name in data:
+            raise ValueError(f"配置项已移除: {name}，请改用模型注册和角色视觉模型选择")
 
 
 def _load_extra_body(data: dict) -> dict:

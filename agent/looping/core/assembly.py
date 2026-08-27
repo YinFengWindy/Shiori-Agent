@@ -74,7 +74,6 @@ class _AssemblyMixin:
             deps.workspace,
             memory=memory_profile,
             multimodal=config.llm.multimodal,
-            vl_available=config.llm.vl_available,
         )
         base_llm_services = deps.llm_services or LLMServices(
             provider=deps.provider,

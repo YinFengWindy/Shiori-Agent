@@ -10,9 +10,7 @@ import pytest
 from bus.events import InboundMessage
 from core.roles import (
     RoleAggregateService,
-    RoleConfigMigrator,
     RolePetPackage,
-    RoleRepository,
     RoleStore,
 )
 from core.roles.inbound import route_inbound_by_role
@@ -49,79 +47,6 @@ def test_role_store_creates_role_and_copies_assets(tmp_path: Path):
     ill_path = tmp_path / "roles" / role.illustrations[0]
     assert avatar_path.read_bytes() == b"avatar"
     assert ill_path.read_bytes() == b"ill"
-
-
-def test_role_store_migrates_featured_image_to_chat_background(tmp_path: Path):
-    roles_dir = tmp_path / "roles"
-    assets_dir = roles_dir / "assets" / "mira"
-    assets_dir.mkdir(parents=True, exist_ok=True)
-    asset_rel = "assets/mira/illustration-1.png"
-    (roles_dir / asset_rel).write_bytes(b"ill")
-    manifest = {
-        "version": 1,
-        "roles": [
-            {
-                "id": "mira",
-                "name": "Mira",
-                "description": "assistant role",
-                "system_prompt": "you are mira",
-                "background": "",
-                "avatar": None,
-                "featured_image": asset_rel,
-                "illustrations": [asset_rel],
-                "runtime_config": {},
-                "memory_init_state": {},
-                "created_at": "2026-01-01T00:00:00+00:00",
-                "updated_at": "2026-01-01T00:00:00+00:00",
-            }
-        ],
-    }
-    (roles_dir / "roles.json").write_text(
-        json.dumps(manifest, ensure_ascii=False),
-        encoding="utf-8",
-    )
-
-    store = RoleStore(tmp_path)
-    role = store.get_role("mira")
-
-    assert role is not None
-    assert role.chat_background == asset_rel
-    payload = json.loads((roles_dir / "roles.json").read_text(encoding="utf-8"))
-    assert payload["roles"][0]["chat_background"] == asset_rel
-    assert "featured_image" not in payload["roles"][0]
-
-
-def test_role_store_migrates_existing_assets_into_default_category(tmp_path: Path):
-    roles_dir = tmp_path / "roles"
-    asset_dir = roles_dir / "assets" / "mira"
-    asset_dir.mkdir(parents=True)
-    asset_rel = "assets/mira/illustration-1.png"
-    (roles_dir / asset_rel).write_bytes(b"ill")
-    (roles_dir / "roles.json").write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "roles": [
-                    {
-                        "id": "mira",
-                        "name": "Mira",
-                        "system_prompt": "you are mira",
-                        "illustrations": [asset_rel],
-                    }
-                ],
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-
-    role = RoleStore(tmp_path).get_role("mira")
-
-    assert role is not None
-    assert role.asset_categories[0].id == "default"
-    assert role.asset_category_bindings == {asset_rel: "default"}
-    payload = json.loads((roles_dir / "roles.json").read_text(encoding="utf-8"))
-    assert payload["version"] == 2
 
 
 def test_role_store_assigns_uploaded_assets_and_moves_between_categories(
@@ -417,84 +342,6 @@ def test_role_store_rejects_allow_list_for_desktop_binding(tmp_path: Path):
         assert "不支持允许对象" in str(exc)
     else:
         raise AssertionError("桌面端没有外部 sender，不能配置允许对象")
-
-
-def test_role_config_migration_leaves_legacy_external_bindings_for_manual_contact_configuration(
-    tmp_path: Path,
-):
-    store = RoleStore(tmp_path)
-    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-    (tmp_path / "roles" / "channel_bindings.json").write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "bindings": {
-                    "telegram:42": {
-                        "channel": "telegram",
-                        "chat_id": "42",
-                        "role_id": "mira",
-                    }
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    proactive = type(
-        "LegacyProactive",
-        (),
-        {
-            "enabled": True,
-            "default_role_id": "mira",
-            "default_channel": "telegram",
-            "default_chat_id": "42",
-        },
-    )()
-
-    migrator = RoleConfigMigrator(tmp_path, RoleRepository(store))
-    first = migrator.migrate(proactive)
-    second = migrator.migrate(proactive)
-
-    role = store.get_role("mira")
-    assert first.bindings_migrated == 0
-    assert first.proactive_migrated == 1
-    assert first.unresolved_bindings == 1
-    assert second.bindings_migrated == 0
-    assert second.proactive_migrated == 0
-    assert role is not None
-    assert role.channel_bindings == []
-    assert role.proactive.enabled is False
-
-
-def test_role_config_migration_does_not_restore_a_removed_legacy_binding(
-    tmp_path: Path,
-):
-    store = RoleStore(tmp_path)
-    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-    (tmp_path / "roles" / "channel_bindings.json").write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "bindings": {
-                    "telegram:42": {
-                        "channel": "telegram",
-                        "chat_id": "42",
-                        "role_id": "mira",
-                    }
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    migrator = RoleConfigMigrator(tmp_path, RoleRepository(store))
-
-    _ = migrator.migrate()
-    _ = store.update_role("mira", channel_bindings=[])
-    second = migrator.migrate()
-    role = store.get_role("mira")
-
-    assert second.bindings_migrated == 0
-    assert role is not None
-    assert role.channel_bindings == []
 
 
 @pytest.mark.parametrize(

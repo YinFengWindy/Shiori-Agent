@@ -23,6 +23,26 @@ class McpToolInfo:
     input_schema: dict[str, Any]
 
 
+class McpToolError(RuntimeError):
+    """Represents a structured JSON-RPC error returned by an MCP tool."""
+
+    def __init__(
+        self,
+        *,
+        server: str,
+        tool_name: str,
+        message: str,
+        code: int | None = None,
+        data: Any = None,
+    ) -> None:
+        self.server = server
+        self.tool_name = tool_name
+        self.message = message
+        self.code = code
+        self.data = data
+        super().__init__(f"MCP tool error ({server}/{tool_name}): {message}")
+
+
 def _infer_cwd(command: list[str]) -> str | None:
     """从 command 中找第一个绝对路径文件，返回其父目录作为 cwd。"""
     for arg in command:
@@ -147,7 +167,22 @@ class McpClient:
 
         if "error" in resp:
             err = resp["error"]
-            return f"MCP error ({self.name}/{tool_name}): {err.get('message', err)}"
+            if isinstance(err, dict):
+                raw_code = err.get("code")
+                code = raw_code if isinstance(raw_code, int) else None
+                message = str(err.get("message", err))
+                data = err.get("data")
+            else:
+                code = None
+                message = str(err)
+                data = None
+            raise McpToolError(
+                server=self.name,
+                tool_name=tool_name,
+                message=message,
+                code=code,
+                data=data,
+            )
 
         content = resp.get("result", {}).get("content", [])
         if isinstance(content, list):

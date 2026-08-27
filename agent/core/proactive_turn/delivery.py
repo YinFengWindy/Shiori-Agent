@@ -217,7 +217,7 @@ def has_user_replied_since(
 def resolve_target_transports(
     pipeline: ProactiveDeliveryHost,
 ) -> list[tuple[str, str]]:
-    """解析全部可用目标渠道，并回退到单渠道配置。"""
+    """解析全部目标渠道；角色任务不回退到全局目标。"""
 
     if pipeline._target_transports_fn is not None:
         try:
@@ -232,6 +232,8 @@ def resolve_target_transports(
             ]
             if transports:
                 return transports
+        if _is_role_scoped(pipeline):
+            return []
     transport = pipeline._resolve_target_transport()
     return [transport] if transport is not None else []
 
@@ -239,7 +241,7 @@ def resolve_target_transports(
 def resolve_target_transport(
     pipeline: ProactiveDeliveryHost,
 ) -> tuple[str, str] | None:
-    """解析单个目标渠道，并回退到默认渠道配置。"""
+    """解析单个目标渠道；角色任务不回退到全局目标。"""
 
     if pipeline._target_transport_fn is not None:
         try:
@@ -251,8 +253,16 @@ def resolve_target_transport(
             resolved_chat_id = str(chat_id or "").strip()
             if resolved_channel and resolved_chat_id:
                 return resolved_channel, resolved_chat_id
+    if _is_role_scoped(pipeline):
+        return None
     fallback_channel = str(pipeline._cfg.default_channel or "").strip()
     fallback_chat_id = str(pipeline._cfg.default_chat_id or "").strip()
     if fallback_channel and fallback_chat_id:
         return fallback_channel, fallback_chat_id
     return None
+
+
+def _is_role_scoped(pipeline: ProactiveDeliveryHost) -> bool:
+    session_key = str(pipeline._session_key or "").strip()
+    role_id = str(getattr(pipeline._cfg, "default_role_id", "") or "").strip()
+    return bool(role_id or (session_key.startswith("role:") and session_key[5:].strip()))

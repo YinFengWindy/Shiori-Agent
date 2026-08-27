@@ -1,8 +1,9 @@
-import { unavailableLocalAssetUrl, type LocalAssetTransport } from "../bridge/shared.js";
+import { localAssetAuthority, localAssetScheme, unavailableLocalAssetUrl } from "./localAssetContract.js";
+import type { LocalAssetTransport } from "../bridge/shared.js";
 
-export { unavailableLocalAssetUrl } from "../bridge/shared.js";
+export { unavailableLocalAssetUrl } from "./localAssetContract.js";
 
-const opaqueLocalAssetUrlPattern = /^shiori-asset:\/\/local\/[^/?#]+$/;
+const opaqueLocalAssetUrlPattern = new RegExp(`^${localAssetScheme}://${localAssetAuthority}/[^/?#]+$`);
 
 /** Stores opaque local asset URLs received from trusted main-process transports. */
 export class PreloadLocalAssetCache {

@@ -145,4 +145,4 @@ async def test_spawn_read_file_respects_non_multimodal_config(
     result = await read_tool.execute(path="a.png")
 
     assert isinstance(result, str)
-    assert "当前主模型不支持多模态" in result
+    assert "当前模型不支持多模态，无法处理图片。" in result

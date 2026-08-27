@@ -48,46 +48,6 @@ def test_conversation_store_ensures_schema_and_message_columns(tmp_path: Path) -
     }.issubset(message_columns)
 
 
-def test_conversation_store_assigns_legacy_messages_to_thread(tmp_path: Path) -> None:
-    db_path = tmp_path / "sessions.db"
-    legacy = SessionStore(db_path)
-    legacy.create_session(key="role:mira", metadata={})
-    legacy.insert_message(
-        "role:mira",
-        role="user",
-        content="hello",
-        ts="2026-07-10T12:00:00+08:00",
-        seq=0,
-    )
-
-    store = ConversationStore(db_path)
-    contact = store.upsert_contact(
-        contact_id="contact:mira:desktop:self",
-        role_id="mira",
-        kind="self_user",
-        channel="desktop",
-        external_id="self",
-        display_name="你",
-        metadata={},
-    )
-    thread = store.upsert_thread(
-        thread_id="thread:mira:desktop",
-        role_id="mira",
-        contact_id=contact.id,
-        channel="desktop",
-        thread_kind="desktop",
-        external_thread_id="desktop",
-        legacy_session_key="role:mira",
-        metadata={},
-    )
-
-    updated = store.assign_legacy_messages_to_thread("role:mira", thread.id)
-
-    assert updated == 1
-    assert store.list_message_thread_ids("role:mira") == [thread.id]
-    store.close()
-
-
 def test_session_store_message_roundtrip_preserves_conversation_fields(
     tmp_path: Path,
 ) -> None:
@@ -114,40 +74,6 @@ def test_session_store_message_roundtrip_preserves_conversation_fields(
     assert messages[0]["media"] == ["D:\\files\\scene.png"]
     assert messages[0]["external_message_id"] == "telegram-msg-1"
     assert messages[0]["delivery_status"] == "received"
-
-
-def test_conversation_store_resolves_legacy_thread_media_path(tmp_path: Path) -> None:
-    workspace = tmp_path / ".shiori" / "workspace"
-    db_path = workspace / "sessions.db"
-    current_image = workspace / "private_runtime" / "novelai" / "output.png"
-    current_image.parent.mkdir(parents=True)
-    current_image.write_bytes(b"png")
-    legacy_image = (
-        tmp_path
-        / ".akashic"
-        / "workspace"
-        / "private_runtime"
-        / "novelai"
-        / "output.png"
-    )
-    legacy = SessionStore(db_path)
-    legacy.create_session(key="role:mira", metadata={})
-    legacy.insert_message(
-        "role:mira",
-        role="assistant",
-        content="image",
-        ts="2026-07-13T12:00:00+08:00",
-        seq=0,
-        thread_id="thread:mira:desktop",
-        media=[str(legacy_image)],
-    )
-    legacy.close()
-
-    store = ConversationStore(db_path)
-    messages = store.list_thread_messages("thread:mira:desktop")
-
-    assert messages[0]["media"] == [str(current_image)]
-    store.close()
 
 
 def test_session_store_updates_latest_assistant_delivery_by_thread(
@@ -184,30 +110,6 @@ def test_session_store_updates_latest_assistant_delivery_by_thread(
     assert updated["content"] == "first"
     assert updated["delivery_status"] == "sent"
     assert updated["external_message_id"] == "tg-1"
-
-
-def test_conversation_service_projects_thread_contact_and_role_state(
-    tmp_path: Path,
-) -> None:
-    manager = SessionManager(tmp_path)
-    session = manager.get_or_create("role:mira")
-    session.add_message("user", "hello")
-    manager.save(session)
-
-    service = ConversationService(manager)
-    thread = service.sync_session_messages_to_thread(
-        session.key,
-        role_id="mira",
-        channel="desktop",
-        chat_id="self",
-    )
-
-    projected = manager.conversation_store.get_thread_state(thread.id)
-    assert projected is not None
-    assert projected.metadata["message_count"] == 1
-    stored_thread = manager.conversation_store.get_thread(thread.id)
-    assert stored_thread is not None
-    assert stored_thread.id == thread.id
 
 
 def test_conversation_service_resolves_thread_runtime_key(tmp_path: Path) -> None:

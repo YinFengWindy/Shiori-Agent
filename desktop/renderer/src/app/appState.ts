@@ -6,6 +6,7 @@ import type {
   RoleRecord,
   SessionPayload,
 } from "../shared/types";
+import { createDefaultRoleProactiveForm } from "../roles/roleProactiveDefaults";
 
 export const sidebarMinWidth = 220;
 export const sidebarMaxWidth = 400;
@@ -88,16 +89,7 @@ export function createEmptyRoleForm(): RoleFormState {
     autoSceneCgEnabled: false,
     desktopPetEnabled: false,
     channelBindings: [],
-    proactiveEnabled: false,
-    proactiveTargetChannel: "",
-    proactiveTargetChatId: "",
-    proactiveProfile: "daily",
-    proactiveAgentMaxSteps: 35,
-    proactiveAgentContentLimit: 5,
-    proactiveAgentWebFetchMaxChars: 8000,
-    proactiveDriftEnabled: false,
-    proactiveDriftMaxSteps: 20,
-    proactiveDriftMinIntervalHours: 3,
+    ...createDefaultRoleProactiveForm(),
     avatarSource: "",
     illustrationSources: [],
     removedIllustrations: [],

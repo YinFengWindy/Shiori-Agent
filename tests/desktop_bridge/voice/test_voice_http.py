@@ -4,7 +4,11 @@ import urllib.request
 
 import pytest
 
-from desktop_bridge.voice.voice_http import _PreviewRedirectHandler, request_binary
+from desktop_bridge.voice.voice_http import (
+    VOICE_HTTP_TIMEOUT_SECONDS,
+    _PreviewRedirectHandler,
+    request_binary,
+)
 from desktop_bridge.voice.voice_models import VoiceServiceError
 
 
@@ -22,7 +26,7 @@ class _Response:
 class _Opener:
     def open(self, request, *, timeout: int):
         assert request.full_url == "https://api.minimaxi.com/demo.mp3"
-        assert timeout == 60
+        assert timeout == VOICE_HTTP_TIMEOUT_SECONDS
         return _Response()
 
 

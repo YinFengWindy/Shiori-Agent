@@ -176,44 +176,6 @@ class ConversationService:
             and (not chat_id or thread.external_thread_id == chat_id)
         )
 
-    def sync_session_messages_to_thread(
-        self,
-        session_key: str,
-        *,
-        role_id: str = "",
-        channel: str = "",
-        chat_id: str = "",
-        created_at: str = "",
-        updated_at: str = "",
-        metadata: dict[str, Any] | None = None,
-    ) -> ThreadRecord:
-        thread = self.ensure_thread_for_session(
-            LegacySessionDescriptor(
-                session_key=session_key,
-                role_id=role_id,
-                channel=channel,
-                chat_id=chat_id,
-                created_at=created_at,
-                updated_at=updated_at,
-                metadata=metadata,
-            )
-        )
-        existing_thread_ids = {
-            item
-            for item in self._store.list_message_thread_ids(session_key)
-            if item
-        }
-        if existing_thread_ids and existing_thread_ids != {thread.id}:
-            if self._store.count_unassigned_messages(session_key):
-                raise ValueError(
-                    "不能把混合来源 Session 中未分配消息批量归属到当前 thread"
-                )
-            self._projector.project_thread(thread)
-            return thread
-        self._store.assign_legacy_messages_to_thread(session_key, thread.id)
-        self._projector.project_thread(thread)
-        return thread
-
     def project_thread(self, thread: ThreadRecord) -> None:
         """Refreshes derived state without reassigning mixed-session messages."""
 

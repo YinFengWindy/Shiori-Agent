@@ -226,6 +226,7 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
         "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
+        "creation_id": "creation-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }
     events: list[dict] = []
@@ -248,6 +249,25 @@ async def test_create_story_generates_opening_and_replays_request(tmp_path) -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("creation_id", [None, "", "   "])
+async def test_create_story_requires_a_non_blank_creation_id(tmp_path, creation_id) -> None:
+    handler = StorySimulationHandler(
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: None),
+        director=OpeningDirector(),
+    )
+
+    with pytest.raises(ValueError, match="creation_id"):
+        await handler.handle(
+            "stories.create",
+            {"creation_id": creation_id},
+            request_id="transport-request",
+            emit_event=lambda _event: None,
+        )
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
 async def test_story_turns_capture_the_role_dialogue_model_inside_each_task(tmp_path) -> None:
     role = SimpleNamespace(
         id="role-1",
@@ -265,6 +285,7 @@ async def test_story_turns_capture_the_role_dialogue_model_inside_each_task(tmp_
         "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
+        "creation_id": "creation-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }
 
@@ -343,6 +364,7 @@ async def test_story_turn_fails_when_the_role_model_registration_is_missing(tmp_
             "story_date": "2026-08-01",
             "time_band": "上午",
             "role_id": "role-1",
+            "creation_id": "creation-1",
             "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
         },
         request_id="create-1",
@@ -381,6 +403,7 @@ async def test_opening_background_is_saved_to_its_story_visual_gallery(tmp_path)
         "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
+        "creation_id": "creation-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }
     events: list[dict] = []
@@ -418,6 +441,7 @@ async def test_progression_visual_prompt_creates_async_cg_instead_of_opening_bac
         "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
+        "creation_id": "creation-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }
 
@@ -465,6 +489,7 @@ async def test_failed_progression_cg_can_retry_without_creating_a_new_turn(tmp_p
         "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
+        "creation_id": "creation-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }
 
@@ -538,6 +563,7 @@ async def test_ready_cg_regeneration_replaces_the_existing_gallery_resource(tmp_
         "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
+        "creation_id": "creation-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }
 
@@ -607,6 +633,7 @@ async def test_repeated_character_visual_does_not_create_another_cg_for_the_same
         "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
+        "creation_id": "creation-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }
 
@@ -673,6 +700,7 @@ async def test_failed_opening_keeps_story_without_a_visual_resource(tmp_path) ->
         "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
+        "creation_id": "creation-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }
 
@@ -836,6 +864,7 @@ async def test_create_story_rejects_exact_time_as_a_story_period(tmp_path) -> No
                 "story_date": "2026-08-01",
                 "time_band": "2026-08-01T09:00:00+08:00",
                 "role_id": "role-1",
+                "creation_id": "creation-1",
                 "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
             },
             request_id="create-1",
@@ -866,6 +895,7 @@ async def test_create_story_recovers_from_an_interrupted_initialization(tmp_path
         "story_date": "2026-08-01",
         "time_band": "上午",
         "role_id": "role-1",
+        "creation_id": "creation-1",
         "player_profile": {"display_name": "悠", "appearance": "短发", "identity": "转学生"},
     }
 

@@ -172,7 +172,7 @@ export type LocalAssetReference = {
 };
 
 /** Fixed non-sensitive URL used when no local asset capability is available. */
-export const unavailableLocalAssetUrl = "shiori-asset://local/unavailable";
+export { unavailableLocalAssetUrl } from "../assets/localAssetContract.js";
 
 /** Carries renderer-facing data alongside authorized local asset references. */
 export type LocalAssetTransport<T> = {

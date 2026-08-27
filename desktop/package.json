@@ -19,7 +19,7 @@
     "build:runtime": "node scripts/build-runtime.mjs",
     "package:win": "pnpm run build && pnpm run build:runtime && node scripts/package-win.mjs",
     "verify:package": "node scripts/verify-packaged.mjs",
-    "test:package": "node --test scripts/verify-packaged.test.mjs scripts/hash-release.test.mjs scripts/release-version.test.mjs",
+    "test:package": "node --test scripts/release-manifest.test.mjs scripts/verify-packaged.test.mjs scripts/hash-release.test.mjs scripts/release-version.test.mjs",
     "hash:release": "node scripts/hash-release.mjs"
   },
   "dependencies": {

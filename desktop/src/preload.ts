@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { PreloadLocalAssetCache } from "./assets/preloadLocalAssetCache.js";
+import { localAssetScheme } from "./assets/localAssetContract.js";
 import type {
   BridgeEvent,
   BridgeResponse,
@@ -20,7 +21,7 @@ window.addEventListener("click", (event) => {
     return;
   }
   const anchor = target.closest("a");
-  if (!anchor?.href.startsWith("shiori-asset:")) {
+  if (!anchor?.href.startsWith(`${localAssetScheme}:`)) {
     return;
   }
   event.preventDefault();

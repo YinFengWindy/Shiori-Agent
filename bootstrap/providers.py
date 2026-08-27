@@ -30,11 +30,6 @@ def build_providers(
     return provider, None, None
 
 
-def build_vl_provider(config: Config) -> LLMProvider | None:
-    """Compatibility entrypoint; role model runtime owns visual selection."""
-    return None
-
-
 def _sanitize_extra_body(base_url: str | None, extra_body: dict | None) -> dict:
     cleaned = dict(extra_body or {})
     url = (base_url or "").lower()

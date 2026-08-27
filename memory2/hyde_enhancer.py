@@ -39,11 +39,6 @@ class HyDEAugmentResult:
     hypothesis: str | None          # LLM 生成的假设文本
     raw_hits: list[dict] = field(default_factory=list)  # raw query 检索到的条目
 
-    def __iter__(self):
-        """兼容旧调用方的二元解包：results, used_hyde = augment(...)。"""
-        yield self.items
-        yield self.used_hyde
-
 
 class HyDEEnhancer:
     HYPOTHESIS_MAX_TOKENS = 80

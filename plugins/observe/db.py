@@ -98,47 +98,10 @@ CREATE INDEX IF NOT EXISTS ix_gerr_type ON global_errors (error_type, last_ts);
 
 """
 
-
-_TURNS_COLUMNS: dict[str, str] = {
-    "tool_chain_json": "TEXT",
-    "raw_llm_output": "TEXT",
-    "meme_tag": "TEXT",
-    "meme_media_count": "INTEGER",
-    "history_window": "INTEGER",
-    "history_messages": "INTEGER",
-    "history_chars": "INTEGER",
-    "history_tokens": "INTEGER",
-    "prompt_tokens": "INTEGER",
-    "next_turn_baseline_tokens": "INTEGER",
-    "react_iteration_count": "INTEGER",
-    "react_input_sum_tokens": "INTEGER",
-    "react_input_peak_tokens": "INTEGER",
-    "react_final_input_tokens": "INTEGER",
-    "react_cache_prompt_tokens": "INTEGER",
-    "react_cache_hit_tokens": "INTEGER",
-}
-
-
-def _ensure_turns_columns(conn: sqlite3.Connection) -> None:
-    cols = {
-        row[1] for row in conn.execute("PRAGMA table_info(turns)").fetchall()
-    }
-    for col, ddl in _TURNS_COLUMNS.items():
-        if col in cols:
-            continue
-        _ = conn.execute(f"ALTER TABLE turns ADD COLUMN {col} {ddl}")
-
-def _migrate_removed_proactive_observe(conn: sqlite3.Connection) -> None:
-    _ = conn.execute("DELETE FROM turns WHERE source = 'proactive'")
-    _ = conn.execute("DROP TABLE IF EXISTS proactive_decisions")
-
-
 def open_db(db_path: Path) -> sqlite3.Connection:
     """打开（或新建）observe.db，初始化 schema，返回连接。"""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     _ = conn.executescript(_SCHEMA_SQL)
-    _ensure_turns_columns(conn)
-    _migrate_removed_proactive_observe(conn)
     conn.commit()
     return conn

@@ -46,8 +46,7 @@ from bootstrap.wiring import (
     resolve_toolset_provider,
 )
 from agent.lifecycle.facade import TurnLifecycle
-from bootstrap.providers import build_providers, build_vl_provider
-from bootstrap.conversation import migrate_workspace_conversations
+from bootstrap.providers import build_providers
 from bus.event_bus import EventBus
 from bus.processing import ProcessingState
 from bus.queue import MessageBus
@@ -57,7 +56,6 @@ from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
 from core.roles import (
     RelationshipSnapshotOptimizer,
-    RoleConfigMigrator,
     RoleRelationshipRuntimeService,
     RoleRepository,
     RoleStore,
@@ -90,7 +88,6 @@ class CoreRuntime:
     presence: PresenceStore
     relationship_runtime: RoleRelationshipRuntimeService
     role_runtime_registry: RoleRuntimeRegistry
-    vl_provider: LLMProvider | None = None
     image_sync_service: ExternalImageSyncService | None = None
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginManager | None" = None
@@ -249,7 +246,6 @@ def build_registered_tools(
     bus: MessageBus,
     provider,
     light_provider,
-    vl_provider=None,
     session_store=None,
     tools: ToolRegistry | None = None,
     event_publisher: EventBus | None = None,
@@ -270,9 +266,8 @@ def build_registered_tools(
     wiring = getattr(config, "wiring", WiringConfig())
     tools = tools or ToolRegistry()
     multimodal = getattr(config, "multimodal", True)
-    vl_available = (not multimodal) and bool(getattr(config, "vl_model", ""))
     readonly_tools = build_readonly_tools(
-        http_resources, multimodal=multimodal, vl_available=vl_available
+        http_resources, multimodal=multimodal
     )
     store = session_store or SessionStore(workspace / "sessions.db")
     push_tool = MessagePushTool(event_bus=event_publisher)
@@ -291,9 +286,6 @@ def build_registered_tools(
     memory_runtime = memory_result.extras["memory_runtime"]
     screen_observation = build_screen_observation_service(
         roles=role_repository or RoleRepository(RoleStore(workspace)),
-        config=config,
-        provider=provider,
-        vl_provider=vl_provider,
         memory=memory_runtime.engine,
         role_runtime_registry=role_runtime_registry,
     )
@@ -329,8 +321,6 @@ def build_registered_tools(
                 http_resources=http_resources,
                 provider=provider,
                 light_provider=light_provider,
-                vl_provider=vl_provider,
-                vl_model=getattr(config, "vl_model", ""),
                 bus=bus,
                 memory_engine=memory_runtime.engine,
                 scheduler=scheduler,
@@ -382,8 +372,7 @@ def _build_loop_deps(
     )
     if isinstance(context, ContextBuilder):
         context.set_media_capabilities(
-            multimodal=True,
-            vl_available=False,
+            multimodal=config.multimodal,
         )
     memory_engine = memory_runtime.engine
     light = light_provider or provider
@@ -472,7 +461,6 @@ def build_core_runtime(
     bus = MessageBus()
     event_bus = EventBus()
     provider, light_provider, agent_provider = build_providers(config)
-    vl_provider = build_vl_provider(config)
     loop_provider = provider
     loop_model = config.model
     session_manager = SessionManager(workspace)
@@ -490,27 +478,6 @@ def build_core_runtime(
         dev_mode=config.dev_mode,
     )
     role_repository = RoleRepository(role_store)
-    role_migration = RoleConfigMigrator(
-        workspace,
-        role_repository,
-    ).migrate(config.proactive)
-    if (
-        role_migration.bindings_migrated
-        or role_migration.proactive_migrated
-        or role_migration.unresolved_bindings
-    ):
-        logger.info(
-            "角色配置迁移完成: bindings=%d proactive=%d unresolved=%d",
-            role_migration.bindings_migrated,
-            role_migration.proactive_migrated,
-            role_migration.unresolved_bindings,
-        )
-    migration_summary = migrate_workspace_conversations(workspace, session_manager)
-    logger.info(
-        "conversation migration complete: migrated=%d unresolved=%d",
-        len(migration_summary.migrated_session_keys),
-        len(migration_summary.unresolved_session_keys),
-    )
     role_runtime_registry = RoleRuntimeRegistry(
         role_repository,
         model_resolver=role_model_resolver,
@@ -524,7 +491,6 @@ def build_core_runtime(
             bus=bus,
             provider=provider,
             light_provider=light_provider,
-            vl_provider=vl_provider,
             session_store=session_manager._store,
             event_publisher=event_bus,
             role_runtime_registry=role_runtime_registry,
@@ -576,8 +542,7 @@ def build_core_runtime(
                 max_iterations=config.max_iterations,
                 max_tokens=config.max_tokens,
                 tool_search_enabled=config.tool_search_enabled,
-                multimodal=True,
-                vl_available=False,
+                multimodal=config.multimodal,
             ),
             memory=MemoryConfig(
                 window=config.memory_window,
@@ -623,7 +588,6 @@ def build_core_runtime(
         scheduler=scheduler,
         provider=provider,
         light_provider=light_provider,
-        vl_provider=vl_provider,
         agent_provider=agent_provider,
         mcp_registry=mcp_registry,
         memory_runtime=memory_runtime,

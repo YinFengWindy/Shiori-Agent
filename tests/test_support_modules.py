@@ -622,7 +622,6 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
         tmp_path,
         _Memory(),  # type: ignore[arg-type]
         multimodal=False,
-        vl_available=True,
     )
     text_media_messages = text_media_builder.render(
         ContextRequest(
@@ -637,7 +636,7 @@ def test_context_builder_builds_prompt_messages_and_assistant_blocks(
     text_media_content = text_media_messages[-1]["content"]
     assert isinstance(text_media_content, str)
     assert str(image) in text_media_content
-    assert "read_image_vision" in text_media_content
+    assert "当前模型不支持多模态，无法处理图片内容。" in text_media_content
     assert "image_url" not in text_media_content
 
     note_path = tmp_path / "chat-note.md"

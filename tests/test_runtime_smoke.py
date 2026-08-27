@@ -182,6 +182,9 @@ def test_init_workspace_creates_expected_assets(tmp_path):
     assert (workspace / "skills").is_dir()
     assert not (workspace / "drift" / "skills").exists()
     assert (workspace / "roles" / "roles.json").exists()
+    assert json.loads(
+        (workspace / "roles" / "roles.json").read_text(encoding="utf-8")
+    ) == {"version": 2, "roles": []}
     assert (workspace / "roles" / "assets").is_dir()
     assert any(path == config_path for path in summary.created)
 

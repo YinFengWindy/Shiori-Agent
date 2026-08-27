@@ -29,9 +29,9 @@ class WizardAnswers:
     base_url: str = ""
     enable_thinking: bool = False
     multimodal: bool = False
-    vl_model: str = ""
-    vl_api_key: str = ""
-    vl_base_url: str = ""
+    visual_model: str = ""
+    visual_api_key: str = ""
+    visual_base_url: str = ""
     fast_model: str = ""
     fast_api_key: str = ""
     fast_base_url: str = ""
@@ -239,13 +239,13 @@ def _phase_main_llm(a: WizardAnswers) -> None:
     a.provider = "openai"
     a.enable_thinking = click.confirm("开启 thinking 模式？", default=False)
     if click.confirm("配置独立视觉模型注册？", default=False):
-        a.vl_model = click.prompt("视觉模型名")
-        a.vl_base_url = click.prompt(
+        a.visual_model = click.prompt("视觉模型名")
+        a.visual_base_url = click.prompt(
             "base_url（回车 = 复用主模型 base_url）",
             default="",
             show_default=False,
         ) or a.base_url
-        a.vl_api_key = _secret_prompt(
+        a.visual_api_key = _secret_prompt(
             "API key（回车 = 复用主模型 key）",
             default="",
             show_default=False,
@@ -442,14 +442,14 @@ def _render_llm(a: WizardAnswers) -> str:
             )
         )
 
-    if a.vl_model:
+    if a.visual_model:
         lines.extend(
             _render_model_registration(
                 kind="visual",
                 provider=a.provider,
-                model=a.vl_model,
-                api_key=a.vl_api_key,
-                base_url=a.vl_base_url,
+                model=a.visual_model,
+                api_key=a.visual_api_key,
+                base_url=a.visual_base_url,
                 effort="none",
             )
         )

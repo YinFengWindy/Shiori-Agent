@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from conversation.models import ContactRecord, StateRecord, ThreadRecord
-from core.common.workspace import resolve_legacy_workspace_file
 
 
 def ensure_conversation_schema(connection: sqlite3.Connection) -> None:
@@ -157,7 +156,6 @@ class ConversationStore:
         lock: threading.Lock | None = None,
     ) -> None:
         self.db_path = str(db_path)
-        self._workspace = Path(db_path).expanduser().resolve().parent
         self._conn = connection or sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = lock or threading.Lock()
@@ -178,25 +176,6 @@ class ConversationStore:
         with self._lock:
             ensure_conversation_schema(self._conn)
             self._conn.commit()
-
-    def list_legacy_sessions(self) -> list[dict[str, Any]]:
-        with self._lock:
-            rows = self._conn.execute(
-                """
-                SELECT key, created_at, updated_at, metadata
-                FROM sessions
-                ORDER BY updated_at ASC, key ASC
-                """
-            ).fetchall()
-        return [
-            {
-                "key": str(row["key"]),
-                "created_at": str(row["created_at"]),
-                "updated_at": str(row["updated_at"]),
-                "metadata": json.loads(row["metadata"] or "{}"),
-            }
-            for row in rows
-        ]
 
     def list_contacts(self) -> list[ContactRecord]:
         with self._lock:
@@ -527,37 +506,6 @@ class ConversationStore:
         """Returns the current derived state for a formal role."""
         return self._get_state("role_state", "role_id", role_id)
 
-    def count_unassigned_messages(self, session_key: str) -> int:
-        with self._lock:
-            row = self._conn.execute(
-                """
-                SELECT COUNT(1) AS c
-                FROM messages
-                WHERE session_key = ? AND COALESCE(thread_id, '') = ''
-                """,
-                (session_key,),
-            ).fetchone()
-        return int((row["c"] if row else 0) or 0)
-
-    def assign_legacy_messages_to_thread(self, session_key: str, thread_id: str) -> int:
-        now = datetime.now().astimezone().isoformat()
-        with self._lock:
-            cur = self._conn.execute(
-                """
-                UPDATE messages
-                SET thread_id = ?,
-                    sender_role = COALESCE(NULLIF(sender_role, ''), role)
-                WHERE session_key = ? AND COALESCE(thread_id, '') = ''
-                """,
-                (thread_id, session_key),
-            )
-            self._conn.execute(
-                "UPDATE threads SET updated_at = ? WHERE id = ?",
-                (now, thread_id),
-            )
-            self._conn.commit()
-        return int(cur.rowcount or 0)
-
     def list_message_thread_ids(self, session_key: str) -> list[str | None]:
         with self._lock:
             rows = self._conn.execute(
@@ -588,10 +536,7 @@ class ConversationStore:
                 "id": str(row["id"]),
                 "sender_role": str(row["sender_role"] or ""),
                 "content": str(row["content"] or ""),
-                "media": [
-                    resolve_legacy_workspace_file(self._workspace, item)
-                    for item in json.loads(row["media"] or "[]")
-                ],
+                "media": json.loads(row["media"] or "[]"),
                 "external_message_id": str(row["external_message_id"] or ""),
                 "delivery_status": str(row["delivery_status"] or ""),
                 "ts": str(row["ts"]),

@@ -69,7 +69,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 function configureUserDataPath(): void {
-  const requestedUserDataDir = process.env.MIRA_DESKTOP_USER_DATA_DIR;
+  const requestedUserDataDir = process.env.SHIORI_DESKTOP_USER_DATA_DIR;
   if (!requestedUserDataDir) {
     return;
   }
@@ -263,7 +263,7 @@ void app.whenReady().then(() => {
   ensureDesktopRuntimeConfig(runtimePaths);
   configureSettingsConfigPath(runtimePaths.configPath);
   reloadVoiceSettings();
-  process.env.MIRA_DESKTOP_USER_DATA_DIR = app.getPath("userData");
+  process.env.SHIORI_DESKTOP_USER_DATA_DIR = app.getPath("userData");
   desktopPetSettings = loadDesktopPetSettings(desktopPetSettingsPath());
   const activeVoiceRecorder = new BrowserVoiceRecorder(createVoiceCaptureWindow);
   voiceRecorder = activeVoiceRecorder;
@@ -272,7 +272,7 @@ void app.whenReady().then(() => {
   localAssets.addTrustedRoot(privateWorkspaceRoot);
   registerDesktopContentSecurityPolicy(
     session.defaultSession.webRequest,
-    process.env.MIRA_RENDERER_DEV_SERVER_URL,
+    process.env.SHIORI_RENDERER_DEV_SERVER_URL,
   );
   registerLocalAssetProtocol(protocol, localAssets);
   void startBridge(bridge);

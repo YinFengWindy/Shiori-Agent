@@ -2,7 +2,7 @@
 title: 会话与对话
 kind: 领域说明
 status: 当前有效
-last_verified_commit: 27af068a
+last_verified_commit: 5ed016f2
 source_paths:
   - session/
   - conversation/store.py
@@ -19,7 +19,7 @@ related:
 
 ## 两层职责
 
-`session/` 管理 Agent 运行所需的会话状态，包括消息、presence、搜索、角色会话和连接。`conversation/` 管理可持久化的线程模型、存储、投影、推送同步与旧数据迁移。
+`session/` 管理 Agent 运行所需的会话状态，包括消息、presence、搜索、角色会话和连接。`conversation/` 管理可持久化的线程模型、存储、投影和推送同步。
 
 可以把 Session 理解为“当前如何运行”，把 Conversation 理解为“对话如何长期存在和被不同入口一致地看见”。两者相关但不能混为一个数据结构。
 

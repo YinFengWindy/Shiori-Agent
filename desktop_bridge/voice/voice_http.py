@@ -21,6 +21,7 @@ MultipartRequester = Callable[
 BinaryRequester = Callable[[str], bytes]
 
 _ALLOWED_PREVIEW_HOST_SUFFIXES = ("minimaxi.com", "minimax.chat")
+VOICE_HTTP_TIMEOUT_SECONDS = 60
 
 
 def _validate_preview_url(url: str) -> str:
@@ -78,7 +79,7 @@ class _PreviewRedirectHandler(urllib.request.HTTPRedirectHandler):
 def request_json(url: str, headers: dict[str, str], body: bytes) -> dict[str, Any]:
     request = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=VOICE_HTTP_TIMEOUT_SECONDS) as response:
             raw = response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
@@ -108,7 +109,7 @@ def request_stream(url: str, headers: dict[str, str], body: bytes) -> Iterator[b
 
     request = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=VOICE_HTTP_TIMEOUT_SECONDS) as response:
             for chunk in response:
                 if chunk:
                     yield bytes(chunk)
@@ -169,7 +170,7 @@ def request_binary(url: str) -> bytes:
     request = urllib.request.Request(_validate_preview_url(url), method="GET")
     opener = urllib.request.build_opener(_PreviewRedirectHandler())
     try:
-        with opener.open(request, timeout=60) as response:
+        with opener.open(request, timeout=VOICE_HTTP_TIMEOUT_SECONDS) as response:
             return response.read()
     except urllib.error.HTTPError as exc:
         raise VoiceServiceError(
