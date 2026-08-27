@@ -28,8 +28,6 @@
     ".venv-test",
     "tests",
     "private_tests",
-    "private_runtime/scripts",
-    "mcp_servers",
     "benchmarks"
   ],
   "reportMissingTypeArgument": "warning",

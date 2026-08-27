@@ -12,9 +12,7 @@
   "exclude": [
     ".venv",
     ".venv-test",
-    "mcp_servers",
-    "benchmarks",
-    "private_runtime/scripts"
+    "benchmarks"
   ],
   "reportMissingTypeArgument": "warning",
   "reportPrivateUsage": "warning",
