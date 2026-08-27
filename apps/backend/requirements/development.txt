@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 # 开发与测试依赖
--r requirements.txt
+-r production.txt
 
 black>=26.0.0
 pyright>=1.1.403

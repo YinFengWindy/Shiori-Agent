@@ -20,18 +20,12 @@
     "desktop:test": "node apps/desktop/scripts/test-unit.mjs",
     "desktop:typecheck": "pnpm --filter shiori-desktop run typecheck",
     "dev": "pnpm run desktop:dev",
-    "lint": "eslint apps/desktop/src apps/desktop/renderer/src",
+    "lint": "pnpm --filter shiori-desktop run lint",
     "test": "pnpm run desktop:test",
     "typecheck": "pnpm --filter shiori-desktop run typecheck"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.2.1",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "globals": "^17.5.0",
     "tsx": "^4.23.1",
-    "typescript": "^5.8.0",
-    "typescript-eslint": "^8.59.1"
+    "typescript": "^5.8.0"
   }
 }

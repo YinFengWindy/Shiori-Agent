@@ -117,7 +117,7 @@ Electron 桌面端负责交互与本地资源访问，Python Runtime 负责角�
 git clone https://github.com/YinFengWindy/Shiori-Agent.git
 cd Shiori-Agent
 uv venv
-uv pip install -r requirements.txt
+uv pip install -r apps/backend/requirements/production.txt
 corepack enable
 corepack install
 pnpm install

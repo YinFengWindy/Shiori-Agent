@@ -9,10 +9,10 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: [
-      "apps/desktop/src/**/*.ts",
-      "apps/desktop/src/**/*.tsx",
-      "apps/desktop/renderer/src/**/*.ts",
-      "apps/desktop/renderer/src/**/*.tsx",
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "renderer/src/**/*.ts",
+      "renderer/src/**/*.tsx",
     ],
     languageOptions: {
       ecmaVersion: 2021,

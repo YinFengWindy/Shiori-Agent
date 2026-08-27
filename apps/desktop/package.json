@@ -13,6 +13,7 @@
     "build:renderer": "vite build --config renderer/vite.config.ts",
     "dev": "pnpm run build:main && pnpm run build:preload && node scripts/dev.mjs",
     "dev:renderer": "vite --config renderer/vite.config.ts",
+    "lint": "eslint --config eslint.config.js src renderer/src",
     "start": "pnpm run build && electron .",
     "start:built": "electron .",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p renderer/tsconfig.json --noEmit",
@@ -27,6 +28,7 @@
     "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@phosphor-icons/react": "^2.1.10",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.14",
@@ -35,13 +37,18 @@
     "autoprefixer": "^10.5.1",
     "electron": "^43.1.1",
     "electron-builder": "^26.15.3",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.5.0",
     "motion": "^12.42.2",
     "postcss": "^8.5.15",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.8.0",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "typescript-eslint": "^8.59.1"
   },
   "build": {
     "appId": "com.yinfengwindy.shiori",
