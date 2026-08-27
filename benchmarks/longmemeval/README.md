@@ -16,7 +16,7 @@
 
 对应数据文件：
 
-- `benchmarks/longmembenchmarks/data/longmemeval_akashic.json`
+- `benchmarks/longmemeval/data/longmemeval_akashic.json`
 
 ## 它在测什么
 
@@ -75,8 +75,8 @@
 
 ```bash
 python -m benchmarks.longmemeval.run \
-  --config benchmarks/longmembenchmarks/config.toml \
-  --data benchmarks/longmembenchmarks/data/longmemeval_akashic.json \
+  --config benchmarks/longmemeval/config.toml \
+  --data benchmarks/longmemeval/data/longmemeval_akashic.json \
   --workspace /tmp/lme_bench \
   --workers 4 \
   --resume-auto
@@ -86,8 +86,8 @@ python -m benchmarks.longmemeval.run \
 
 ```bash
 python -m benchmarks.longmemeval.run \
-  --config benchmarks/longmembenchmarks/config.toml \
-  --data benchmarks/longmembenchmarks/data/longmemeval_akashic.json \
+  --config benchmarks/longmemeval/config.toml \
+  --data benchmarks/longmemeval/data/longmemeval_akashic.json \
   --workspace /tmp/lme_bench_user \
   --type single-session-user \
   --workers 4 \
@@ -98,8 +98,8 @@ python -m benchmarks.longmemeval.run \
 
 ```bash
 python -m benchmarks.longmemeval.run \
-  --config benchmarks/longmembenchmarks/config.toml \
-  --data benchmarks/longmembenchmarks/data/longmemeval_akashic.json \
+  --config benchmarks/longmemeval/config.toml \
+  --data benchmarks/longmemeval/data/longmemeval_akashic.json \
   --workspace /tmp/lme_bench_smoke \
   --limit 3 \
   --workers 1 \
@@ -110,8 +110,8 @@ python -m benchmarks.longmemeval.run \
 
 ```bash
 python -m benchmarks.longmemeval.run_one_qa \
-  --config benchmarks/longmembenchmarks/config.toml \
-  --data benchmarks/longmembenchmarks/data/longmemeval_akashic.json \
+  --config benchmarks/longmemeval/config.toml \
+  --data benchmarks/longmemeval/data/longmemeval_akashic.json \
   --workspace /tmp/lme_one_case \
   --question-id 94f70d80
 ```

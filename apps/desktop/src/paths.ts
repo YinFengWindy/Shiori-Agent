@@ -9,7 +9,7 @@ export const desktopRoot = resolve(here, "..");
 
 const packagedAssetsRoot = app.isPackaged && process.resourcesPath
   ? resolve(process.resourcesPath, "assets")
-  : resolve(desktopRoot, "..", "..", "assets");
+  : resolve(desktopRoot, "assets");
 
 /** Absolute path to the desktop shell icon asset used by Electron windows. */
 export const desktopWindowIcon = resolve(

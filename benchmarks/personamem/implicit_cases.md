@@ -17,7 +17,7 @@
 
 ```bash
 python -m benchmarks.personamem.run_one_case \
-  --config /mnt/data/coding/akasic-agent/benchmarks/longmembenchmarks/config.toml \
+  --config /mnt/data/coding/akasic-agent/benchmarks/longmemeval/config.toml \
   --questions /mnt/data/coding/akasic-agent/benchmarks/personamem/data/questions_32k.csv \
   --contexts /mnt/data/coding/akasic-agent/benchmarks/personamem/data/shared_contexts_32k.jsonl \
   --workspace /tmp/personamem_cases/f546a74f-54de-40d0-9d88-8b0e30467d7b \
@@ -32,7 +32,7 @@ python -m benchmarks.personamem.run_one_case \
 
 ```bash
 python -m benchmarks.personamem.run_one_case \
-  --config /mnt/data/coding/akasic-agent/benchmarks/longmembenchmarks/config.toml \
+  --config /mnt/data/coding/akasic-agent/benchmarks/longmemeval/config.toml \
   --questions /mnt/data/coding/akasic-agent/benchmarks/personamem/data/questions_32k.csv \
   --contexts /mnt/data/coding/akasic-agent/benchmarks/personamem/data/shared_contexts_32k.jsonl \
   --workspace /tmp/personamem_cases/b3588797-acdf-40d3-bcc5-951f81896f95 \
@@ -47,7 +47,7 @@ python -m benchmarks.personamem.run_one_case \
 
 ```bash
 python -m benchmarks.personamem.run_one_case \
-  --config /mnt/data/coding/akasic-agent/benchmarks/longmembenchmarks/config.toml \
+  --config /mnt/data/coding/akasic-agent/benchmarks/longmemeval/config.toml \
   --questions /mnt/data/coding/akasic-agent/benchmarks/personamem/data/questions_32k.csv \
   --contexts /mnt/data/coding/akasic-agent/benchmarks/personamem/data/shared_contexts_32k.jsonl \
   --workspace /tmp/personamem_cases/d06f511a-0fd8-4ee0-8c35-fd3a87fd35ec \

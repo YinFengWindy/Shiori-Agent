@@ -204,6 +204,7 @@ pnpm run desktop:smoke                  # 桌面主链 smoke
 | --- | --- |
 | `apps/backend/` | Python Runtime；包含启动入口、桌面桥接、Agent、领域服务与插件 |
 | `apps/desktop/src/` | Electron 主进程、preload 与本地桌面能力；`src/bridge/` 是桥接协议与 IPC，`src/assets/` 是本地资源授权与协议 |
+| `apps/desktop/assets/` | Electron 窗口图标、原生拖拽图标等桌面壳打包资源 |
 | `apps/desktop/renderer/src/` | React 渲染端，按 `chat/`、`roles/`、`story/`、`settings/`、`image/`、`pet/`、`voice/` 等功能域组织 |
 | `tests/backend/` | Python Runtime 测试，按 `apps/backend/` 的包结构组织 |
 | `benchmarks/` | LongMemEval 与 PersonaMem 评测脚本、数据和运行说明 |

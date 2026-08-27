@@ -1,12 +1,12 @@
 # ============================================================
 # LongMemEval Benchmark Config
 # ============================================================
-# Copy this file to benchmarks/longmembenchmarks/config.toml and fill in
+# Copy this file to benchmarks/longmemeval/config.toml and fill in
 # your API keys, then run:
 #
 #   python -m benchmarks.longmemeval.run \
-#     --config benchmarks/longmembenchmarks/config.toml \
-#     --data benchmarks/longmembenchmarks/data/longmemeval_akashic.json \
+#     --config benchmarks/longmemeval/config.toml \
+#     --data benchmarks/longmemeval/data/longmemeval_akashic.json \
 #     --workspace /tmp/lme_bench \
 #     --limit 1
 #

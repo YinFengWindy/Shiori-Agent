@@ -28,7 +28,7 @@
 
 ```bash
 python -m benchmarks.personamem.run \
-  --config benchmarks/longmembenchmarks/config.toml \
+  --config benchmarks/longmemeval/config.toml \
   --questions /path/to/questions_32k.csv \
   --contexts /path/to/shared_contexts_32k.jsonl \
   --workspace /tmp/personamem_bench \
@@ -40,7 +40,7 @@ python -m benchmarks.personamem.run \
 
 ```bash
 python -m benchmarks.personamem.run \
-  --config benchmarks/longmembenchmarks/config.toml \
+  --config benchmarks/longmemeval/config.toml \
   --questions /path/to/questions_32k.csv \
   --contexts /path/to/shared_contexts_32k.jsonl \
   --workspace /tmp/personamem_recall \

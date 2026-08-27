@@ -3,8 +3,8 @@
 Usage:
   # Full run:
   python -m benchmarks.longmemeval.run \\
-      --config benchmarks/longmembenchmarks/config.toml \\
-      --data benchmarks/longmembenchmarks/data/longmemeval_akashic.json \\
+      --config benchmarks/longmemeval/config.toml \\
+      --data benchmarks/longmemeval/data/longmemeval_akashic.json \\
       --workspace /tmp/lme_bench
 
   # 2 concurrent workers:
@@ -20,7 +20,7 @@ Usage:
   # Smoke-test with first N instances:
   python -m benchmarks.longmemeval.run ... --limit 5
 
-Results are written to --output (default: benchmarks/longmembenchmarks/results/<timestamp>.json).
+Results are written to --output (default: benchmarks/longmemeval/results/<timestamp>.json).
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--workspace", type=Path, default=Path("/tmp/lme_bench"),
                    help="Workspace directory (created on first run)")
     p.add_argument("--output", type=Path, default=None,
-                   help="Output JSON (default: benchmarks/longmembenchmarks/results/<ts>.json)")
+                   help="Output JSON (default: benchmarks/longmemeval/results/<ts>.json)")
     p.add_argument("--limit", type=int, default=0,
                    help="Only process the first N instances (0 = all)")
     p.add_argument("--workers", type=int, default=1,
