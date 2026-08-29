@@ -13,9 +13,12 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.common.workspace import resolve_default_workspace
+
+if TYPE_CHECKING:
+    from proactive_v2.event import AlertEvent
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,41 @@ class ContextSourceFormatError(ValueError):
             f"context source {server!r} returned unsupported payload type "
             f"{payload_type}; expected dict or list[dict]"
         )
+
+
+# ---------------------------------------------------------------------------
+# Compatibility tombstones
+# ---------------------------------------------------------------------------
+
+def poll_content_feeds() -> None:
+    raise RuntimeError("mcp_sources.sync API 已移除，请使用 poll_content_feeds_async + McpClientPool")
+
+
+def fetch_alert_events() -> list[dict]:
+    raise RuntimeError("mcp_sources.sync API 已移除，请使用 fetch_alert_events_async + McpClientPool")
+
+
+def fetch_content_events() -> list[dict]:
+    raise RuntimeError("mcp_sources.sync API 已移除，请使用 fetch_content_events_async + McpClientPool")
+
+
+def fetch_context_data() -> list[dict]:
+    raise RuntimeError("mcp_sources.sync API 已移除，请使用 fetch_context_data_async + McpClientPool")
+
+
+def acknowledge_events(events: list[AlertEvent]) -> None:
+    _ = events
+    raise RuntimeError("mcp_sources.sync API 已移除，请使用 acknowledge_events_async + McpClientPool")
+
+
+def acknowledge_content_entries(
+    entries: list[tuple[str, str]],
+    ttl_hours: int | None = None,
+) -> None:
+    _ = (entries, ttl_hours)
+    raise RuntimeError(
+        "mcp_sources.sync API 已移除，请使用 acknowledge_content_entries_async + McpClientPool"
+    )
 
 
 # ---------------------------------------------------------------------------

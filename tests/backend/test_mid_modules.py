@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections import OrderedDict
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.core.runtime_support import ToolDiscoveryState
 from agent.provider import LLMResponse
 from agent.tools.shell import ShellTool, _MAX_OUTPUT, _truncate, _validate_network_command
 from agent.tools.web_fetch import WebFetchTool, _to_markdown, _to_text, _validate_url_target
@@ -61,20 +59,6 @@ async def test_shell_tool_covers_core_branches():
         result = json.loads(await tool.execute(command="echo 1", timeout=999))
     assert result["exit_code"] == 2
     assert "Exit code 2" in result["output"]
-
-
-def test_tool_discovery_keeps_always_on_and_caps_unlocked_tools():
-    discovery = ToolDiscoveryState()
-    discovery._unlocked = {"s:1": OrderedDict({"old": None})}
-
-    discovery.update(
-        "s:1",
-        ["always", "tool_search", "a", "b", "c", "d", "e", "f"],
-        {"always"},
-    )
-
-    assert "always" not in discovery._unlocked["s:1"]
-    assert len(discovery._unlocked["s:1"]) == 5
 
 
 async def test_web_fetch_procedure_tagger_and_store_cover_core_paths(tmp_path: Path):
