@@ -12,14 +12,13 @@ source_paths:
   - apps/desktop/renderer/src/
 related:
   - ../map.md
-  - ../quality/graph-health.md
 ---
 
 # 改动影响索引
 
-在修改前先用本表确定第一圈影响，再用 Graphify 查调用路径和相关社区，最后打开源码核验。
+在修改前先用本表确定第一圈影响，再用仓库搜索查调用路径和相关模块，最后打开源码核验。
 
-| 准备修改 | 必查影响面 | 推荐图谱查询词 |
+| 准备修改 | 必查影响面 | 推荐搜索词 |
 | --- | --- | --- |
 | 角色 schema / CRUD | store、迁移、role_runtime、绑定、Session、关系、任务、桌面共享类型 | `RoleRecord RoleAggregateService RoleRuntimeRegistry` |
 | 关系、心情、寂寞 | relationship runtime、Proactive、提示词、场景、桌面展示 | `RoleRelationshipRuntimeService loneliness snapshot` |

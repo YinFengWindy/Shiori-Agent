@@ -25,7 +25,6 @@ related:
 - [能力地图](map.md)：按业务能力找到 owning module。
 - [总体架构](architecture/overview.md)：理解启动、消息、Agent 和持久化主链路。
 - [改动影响索引](impact/change-impact-index.md)：从准备修改的对象反查联动模块。
-- [图谱健康](quality/graph-health.md)：了解 Graphify 的覆盖范围和已知限制。
 
 ## 完整验收问题矩阵
 
@@ -47,4 +46,4 @@ related:
 
 ## 使用原则
 
-知识页是源码核验后的摘要，不是冻结的规范。遇到细节问题，先运行 `graphify query` 缩小范围，再读取 `source_paths` 中的源码。若文档与源码冲突，以源码和实际测试为准，并立即修正文档。
+知识页是源码核验后的摘要，不是冻结的规范。遇到细节问题，先用仓库搜索缩小范围，再读取 `source_paths` 中的源码。若文档与源码冲突，以源码和实际测试为准，并立即修正文档。
