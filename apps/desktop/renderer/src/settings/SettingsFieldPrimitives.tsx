@@ -8,9 +8,6 @@ import { cx } from "../shared/styles";
 /** Shared compact field styling for editable settings values. */
 export const settingsInputClass = "w-full border-0 border-b border-[#DDE5EC] bg-[#F7F9FB] px-3 py-2.5 text-sm text-[#182230] transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-[#98A2B3]";
 
-/** Shared multiline field styling for editable settings values. */
-export const settingsTextareaClass = cx(settingsInputClass, "min-h-28 resize-y");
-
 /** Renders a settings row containing the shared toggle control. */
 export function SettingsToggleField({
   label,

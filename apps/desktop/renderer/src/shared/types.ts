@@ -197,12 +197,6 @@ export type SessionPayload = {
   messages: SessionMessage[];
 };
 
-/** Bridge event row displayed in diagnostics. */
-export type EventLog = {
-  method: string;
-  payload: Record<string, unknown>;
-};
-
 /** Editable role form state used by the role editor. */
 export type ManagedVoiceAssetReference = {
   provider: string;

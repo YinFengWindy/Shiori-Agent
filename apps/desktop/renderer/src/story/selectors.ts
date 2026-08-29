@@ -1,10 +1,5 @@
 import type { StoryBeat, StoryCgGallery, StoryDetails, StoryOperation, StorySummary } from "./types";
 
-/** Returns a launcher Story by id without creating a synthetic fallback. */
-export function selectStory(stories: StorySummary[], storyId: string) {
-  return stories.find((story) => story.storyId === storyId) ?? null;
-}
-
 /** Applies the latest Story status to an existing launcher entry. */
 export function replaceStorySummary(stories: StorySummary[], story: StoryDetails) {
   const index = stories.findIndex((candidate) => candidate.storyId === story.id);

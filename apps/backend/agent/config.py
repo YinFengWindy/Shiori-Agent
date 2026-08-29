@@ -353,22 +353,6 @@ def _reject_removed_runtime_config(data: dict) -> None:
             raise ValueError(f"配置项已移除: {name}，请改用模型注册和角色视觉模型选择")
 
 
-def _load_extra_body(data: dict) -> dict:
-    llm = _as_dict(data.get("llm"))
-    llm_main = _as_dict(llm.get("main"))
-    extra_body = dict(data.get("extra_body", {}))
-    thinking = llm_main.get("thinking")
-    if isinstance(thinking, dict):
-        extra_body["thinking"] = thinking
-    if "enable_thinking" in llm_main:
-        extra_body["enable_thinking"] = bool(llm_main.get("enable_thinking"))
-    if "reasoning_effort" in llm_main:
-        effort = str(llm_main.get("reasoning_effort") or "").strip()
-        if effort:
-            extra_body["reasoning_effort"] = effort
-    return extra_body
-
-
 def _as_dict(value: object) -> dict:
     return value if isinstance(value, dict) else {}
 

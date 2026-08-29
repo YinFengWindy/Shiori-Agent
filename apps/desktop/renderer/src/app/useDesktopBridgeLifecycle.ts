@@ -9,7 +9,7 @@ import { useLatestRef } from "../shared/useLatestRef";
 import { parseChatTurnMetrics } from "../chat/chatTurnMetrics";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
-import type { EventLog, RoleRecord, SessionPayload, AppMainView } from "../shared/types";
+import type { RoleRecord, SessionPayload, AppMainView } from "../shared/types";
 
 type UseDesktopBridgeLifecycleArgs = {
   activeRoleId: string;
@@ -19,7 +19,6 @@ type UseDesktopBridgeLifecycleArgs = {
   setHealth: React.Dispatch<React.SetStateAction<string>>;
   setError: React.Dispatch<React.SetStateAction<string>>;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
-  setEvents: React.Dispatch<React.SetStateAction<EventLog[]>>;
   setWindowMaximized: React.Dispatch<React.SetStateAction<boolean>>;
   setWindowVisible: React.Dispatch<React.SetStateAction<boolean>>;
   setUnreadCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>;
@@ -49,7 +48,6 @@ export function useDesktopBridgeLifecycle({
   setHealth,
   setError,
   setNotice,
-  setEvents,
   setWindowMaximized,
   setWindowVisible,
   setUnreadCounts,
@@ -161,12 +159,6 @@ export function useDesktopBridgeLifecycle({
   useEffect(() => {
     const off = window.miraDesktop.onEvent((event) => {
       const callbacks = callbacksRef.current;
-      if (event.method !== "chat.delta") {
-        startTransition(() => {
-          setEvents((items) => [...items, { method: event.method, payload: event.payload }].slice(-12));
-        });
-      }
-
       const processEvent = () => {
         if (event.method === "window.state") {
           setWindowMaximized(Boolean(event.payload.isMaximized));
@@ -297,7 +289,6 @@ export function useDesktopBridgeLifecycle({
     rolesRef,
     setActiveIllustration,
     setError,
-    setEvents,
     setHealth,
     setNotice,
     setUnreadCounts,

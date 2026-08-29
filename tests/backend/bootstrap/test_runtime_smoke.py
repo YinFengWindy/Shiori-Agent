@@ -334,7 +334,7 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
         controller = object()
         plugin_channel = _QQBotChannel(event_bus=event_bus)
         session_manager = types.SimpleNamespace(workspace=tmp_path)
-        ipc, host = await start_channels(
+        host = await start_channels(
             config,
             bus=cast(Any, object()),
             session_manager=cast(Any, session_manager),
@@ -348,7 +348,6 @@ async def test_start_channels_wires_telegram_and_qq(monkeypatch, tmp_path):
     finally:
         await resources.aclose()
 
-    assert ipc is None
     tg, qq, qqbot = host.channels
     assert starts == ["telegram", "qq", "qqbot"]
     assert registrations == [
@@ -400,7 +399,7 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
     )
     resources = SharedHttpResources()
     try:
-        ipc, host = await start_channels(
+        host = await start_channels(
             config,
             bus=cast(Any, object()),
             session_manager=cast(Any, object()),
@@ -411,7 +410,6 @@ async def test_start_channels_skips_unfilled_optional_channels(monkeypatch, tmp_
     finally:
         await resources.aclose()
 
-    assert ipc is None
     assert host.channels == []
     assert starts == []
 
@@ -447,7 +445,7 @@ async def test_start_channels_skips_channel_constructor_failures(monkeypatch):
     )
     resources = SharedHttpResources()
     try:
-        _, host = await start_channels(
+        host = await start_channels(
             config,
             bus=cast(Any, object()),
             session_manager=cast(Any, object()),
@@ -462,7 +460,7 @@ async def test_start_channels_skips_channel_constructor_failures(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
+async def test_start_channels_desktop_mode_skips_message_channels(
     monkeypatch,
     tmp_path,
 ):
@@ -495,7 +493,7 @@ async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
     )
     resources = SharedHttpResources()
     try:
-        ipc, host = await start_channels(
+        host = await start_channels(
             config,
             bus=cast(Any, object()),
             session_manager=cast(Any, object()),
@@ -507,6 +505,5 @@ async def test_start_channels_desktop_mode_skips_ipc_and_message_channels(
     finally:
         await resources.aclose()
 
-    assert ipc is None
     assert host.channels == []
     assert starts == []

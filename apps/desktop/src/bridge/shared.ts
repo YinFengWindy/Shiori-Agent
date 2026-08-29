@@ -212,7 +212,6 @@ export type DesktopApi = {
   /** Resolves a previously transported local path to its opaque asset URL. */
   localAssetUrl(path: string): string;
   startAttachmentDrag(request: StartAttachmentDragRequest): void;
-  openAttachment(request: LocalAssetOpenRequest): Promise<LocalAssetOpenResult>;
   reportRendererDiagnostic(payload: RendererDiagnosticPayload): void;
   bridgeStatus(): Promise<{ running: boolean; lastError: string | null }>;
   restartBridge(): Promise<{

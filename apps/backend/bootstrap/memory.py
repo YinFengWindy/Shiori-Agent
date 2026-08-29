@@ -131,46 +131,6 @@ def build_memory_runtime(
     )
 
 
-def build_memory_admin_runtime(
-    config: Config,
-    workspace: Path,
-    provider: LLMProvider,
-    light_provider: LLMProvider | None,
-    http_resources: SharedHttpResources,
-    event_publisher: "EventBus | None" = None,
-) -> MemoryRuntime:
-    # 管理工具不注册工具，只需要同一套 engine admin 能力和关闭生命周期。
-    markdown = build_markdown_memory_runtime(
-        workspace=workspace,
-        provider=provider,
-        model=config.model,
-        keep_count=_memory_keep_count(config.memory_window),
-        event_bus=event_publisher,
-        recent_context_provider=light_provider or provider,
-        recent_context_model=config.light_model or config.model,
-    )
-    closeables: list[object] = [http_resources]
-    if _memory_plugin_enabled(config):
-        plugin_runtime = _build_memory_plugin_runtime(
-            config=config,
-            workspace=workspace,
-            provider=provider,
-            light_provider=light_provider,
-            http_resources=http_resources,
-            markdown=markdown,
-            event_publisher=event_publisher,
-        )
-        engine = plugin_runtime.engine
-        closeables[:0] = plugin_runtime.closeables
-    else:
-        engine = DisabledMemoryEngine()
-    return MemoryRuntime(
-        markdown=markdown,
-        engine=engine,
-        closeables=closeables,
-    )
-
-
 def _memory_keep_count(window: int) -> int:
     aligned_window = max(4, ((max(1, window) + 3) // 4) * 4)
     return aligned_window // 2

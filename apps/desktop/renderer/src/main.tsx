@@ -50,7 +50,6 @@ import { useStoryController } from "./story/useStoryController";
 import { StoryAppSurface } from "./story/StoryAppSurface";
 import type {
   AppMainView,
-  EventLog,
   PendingRoleCardAction,
   RoleRecord,
   SessionPayload,
@@ -82,7 +81,6 @@ function App(): React.ReactElement {
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [activeRoleId, setActiveRoleId] = useState("");
   const [activeSession, setActiveSession] = useState<SessionPayload | null>(null);
-  const [, setEvents] = useState<EventLog[]>([]);
   const [, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
@@ -274,7 +272,6 @@ function App(): React.ReactElement {
     setHealth,
     setError,
     setNotice,
-    setEvents,
     setWindowMaximized,
     setWindowVisible,
     setUnreadCounts,

@@ -58,9 +58,6 @@ const api: DesktopApi = {
   startAttachmentDrag(request) {
     ipcRenderer.send("desktop:start-attachment-drag", request);
   },
-  openAttachment(request) {
-    return ipcRenderer.invoke("desktop:open-attachment", request) as Promise<import("./bridge/shared.js").LocalAssetOpenResult>;
-  },
   reportRendererDiagnostic(payload: RendererDiagnosticPayload) {
     ipcRenderer.send("desktop:renderer-diagnostic", payload);
   },
