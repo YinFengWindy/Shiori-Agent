@@ -38,33 +38,7 @@ class ContextSourceFormatError(ValueError):
 
 
 # ---------------------------------------------------------------------------
-# Config loaders
-# ---------------------------------------------------------------------------
-
-def _load_sources(workspace: Path) -> list[dict]:
-    path = workspace / "proactive_sources.json"
-    try:
-        data = json.loads(path.read_text())
-        return [s for s in data.get("sources", []) if s.get("enabled", True)]
-    except FileNotFoundError:
-        return []
-    except Exception as e:
-        logger.warning("[mcp_sources] proactive_sources.json 读取失败: %s", e)
-        return []
-
-
-def _get_server_cfg(server_name: str, workspace: Path) -> dict | None:
-    path = workspace / "mcp_servers.json"
-    try:
-        data = json.loads(path.read_text())
-        return data.get("servers", {}).get(server_name)
-    except Exception as e:
-        logger.warning("[mcp_sources] mcp_servers.json 读取失败: %s", e)
-        return None
-
-
-# ---------------------------------------------------------------------------
-# Public API
+# Compatibility tombstones
 # ---------------------------------------------------------------------------
 
 def poll_content_feeds() -> None:
@@ -88,11 +62,40 @@ def acknowledge_events(events: list[AlertEvent]) -> None:
     raise RuntimeError("mcp_sources.sync API 已移除，请使用 acknowledge_events_async + McpClientPool")
 
 
-def acknowledge_content_entries(entries: list[tuple[str, str]], ttl_hours: int | None = None) -> None:
+def acknowledge_content_entries(
+    entries: list[tuple[str, str]],
+    ttl_hours: int | None = None,
+) -> None:
     _ = (entries, ttl_hours)
     raise RuntimeError(
         "mcp_sources.sync API 已移除，请使用 acknowledge_content_entries_async + McpClientPool"
     )
+
+
+# ---------------------------------------------------------------------------
+# Config loaders
+# ---------------------------------------------------------------------------
+
+def _load_sources(workspace: Path) -> list[dict]:
+    path = workspace / "proactive_sources.json"
+    try:
+        data = json.loads(path.read_text())
+        return [s for s in data.get("sources", []) if s.get("enabled", True)]
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        logger.warning("[mcp_sources] proactive_sources.json 读取失败: %s", e)
+        return []
+
+
+def _get_server_cfg(server_name: str, workspace: Path) -> dict | None:
+    path = workspace / "mcp_servers.json"
+    try:
+        data = json.loads(path.read_text())
+        return data.get("servers", {}).get(server_name)
+    except Exception as e:
+        logger.warning("[mcp_sources] mcp_servers.json 读取失败: %s", e)
+        return None
 
 
 # ── Persistent connection pool ────────────────────────────────────────────────

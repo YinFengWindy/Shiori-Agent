@@ -756,10 +756,7 @@ async def test_app_runtime_start_passes_markdown_store_to_memory_optimizer(
     monkeypatch.setattr(
         "bootstrap.app.start_channels",
         AsyncMock(
-            return_value=(
-                MagicMock(),
-                SimpleNamespace(start_all=AsyncMock(), stop_all=AsyncMock()),
-            )
+            return_value=SimpleNamespace(start_all=AsyncMock(), stop_all=AsyncMock())
         ),
     )
     build_proactive_runtime = MagicMock(return_value=([], {}))
@@ -828,10 +825,7 @@ async def test_app_runtime_desktop_mode_enables_message_channels(
 
     async def _fake_start_channels(*args, **kwargs):
         observed["enable_message_channels"] = kwargs["enable_message_channels"]
-        return (
-            None,
-            SimpleNamespace(start_all=AsyncMock(), stop_all=AsyncMock()),
-        )
+        return SimpleNamespace(start_all=AsyncMock(), stop_all=AsyncMock())
 
     monkeypatch.setattr("bootstrap.app.start_channels", _fake_start_channels)
     monkeypatch.setattr(

@@ -373,10 +373,19 @@ def test_qq_channel_ws_timeout_patch_is_best_effort(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _import_qq_channel(monkeypatch)
-    monkeypatch.delitem(sys.modules, "ncatbot.core.adapter.adapter", raising=False)
+    adapter_mod = sys.modules["ncatbot.core.adapter.adapter"]
+    original_connect = adapter_mod.websockets.connect
 
     from infra.channels.qq_channel.compat import patch_ncatbot_ws_open_timeout
 
+    patch_ncatbot_ws_open_timeout(7.5)
+
+    assert adapter_mod.websockets.connect is not original_connect
+    adapter_mod.websockets.connect("ws://example.invalid", open_timeout=1)
+    assert adapter_mod._captured_connect_calls[-1]["open_timeout"] == 7.5
+
+    monkeypatch.delitem(sys.modules, "ncatbot.core.adapter.adapter", raising=False)
+    # The optional SDK adapter may be absent in a clean installation.
     patch_ncatbot_ws_open_timeout(7.5)
 
 

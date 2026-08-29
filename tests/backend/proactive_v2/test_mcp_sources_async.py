@@ -38,6 +38,21 @@ class _FakePool:
         return self._responses[(server, tool_name)]
 
 
+def test_sync_api_tombstones_raise_migration_error():
+    tombstones = [
+        (mcp_sources.poll_content_feeds, ()),
+        (mcp_sources.fetch_alert_events, ()),
+        (mcp_sources.fetch_content_events, ()),
+        (mcp_sources.fetch_context_data, ()),
+        (mcp_sources.acknowledge_events, ([],)),
+        (mcp_sources.acknowledge_content_entries, ([],)),
+    ]
+
+    for function, args in tombstones:
+        with pytest.raises(RuntimeError, match="mcp_sources.sync API 已移除"):
+            function(*args)
+
+
 @pytest.mark.asyncio
 async def test_fetch_alert_events_async_filters_kind_and_sets_ack_server(monkeypatch):
     monkeypatch.setattr(

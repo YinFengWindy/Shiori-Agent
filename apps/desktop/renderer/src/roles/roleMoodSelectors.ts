@@ -53,25 +53,6 @@ export function resolveMoodIllustration({
   return resolveIllustrationAssetPath(selectedBinding, detailRole) || selectedBinding;
 }
 
-/** Returns whether the current mood maps to an explicit mood illustration binding. */
-export function hasMoodIllustrationBinding({
-  activeSession,
-  detailRole,
-  roleForm,
-}: Pick<ResolveMoodIllustrationArgs, "activeSession" | "detailRole" | "roleForm">): boolean {
-  const runtimeConfig = detailRole?.runtime_config ?? {};
-  const currentMood = resolveCurrentMood({
-    activeSession,
-    detailRole,
-    roleForm,
-  });
-  const bindings = normalizeMoodBindings({
-    ...(runtimeConfig.mood_illustration_bindings as Record<string, unknown> | undefined),
-    ...roleForm.moodIllustrationBindings,
-  });
-  return Boolean(currentMood && bindings[currentMood]);
-}
-
 function normalizeMoodBindings(bindings: Record<string, unknown> | undefined): Record<string, string> {
   if (!bindings) {
     return {};

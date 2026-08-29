@@ -83,7 +83,6 @@ class AppRuntime:
         self.workspace = workspace
         self.features = features
         self.http_resources = SharedHttpResources()
-        self.ipc = None
         self.channel_host: ChannelHost | None = None
         self.core: CoreRuntime | None = None
         self.agent_loop = None
@@ -132,7 +131,7 @@ class AppRuntime:
             await self.core.start()
 
             plugin_manager = getattr(self.core, "plugin_manager", None)
-            self.ipc, self.channel_host = await start_channels(
+            self.channel_host = await start_channels(
                 self.config,
                 bus=self.bus,
                 session_manager=self.session_manager,
@@ -239,7 +238,6 @@ class AppRuntime:
             self._background_tasks = []
             await _run_cleanup_steps(
                 ("core.stop", self.core.stop if self.core else _noop_async),
-                ("ipc.stop", self.ipc.stop if self.ipc else _noop_async),
                 (
                     "channels.stop",
                     self.channel_host.stop_all if self.channel_host else _noop_async,

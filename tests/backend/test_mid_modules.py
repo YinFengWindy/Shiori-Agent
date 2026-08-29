@@ -2,15 +2,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections import OrderedDict
-from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.core.runtime_support import ToolDiscoveryState, TurnRunResult
 from agent.provider import LLMResponse
 from agent.tools.shell import ShellTool, _MAX_OUTPUT, _truncate, _validate_network_command
 from agent.tools.web_fetch import WebFetchTool, _to_markdown, _to_text, _validate_url_target
@@ -18,73 +14,8 @@ from memory2.procedure_tagger import ProcedureTagger, _validate
 from memory2.store import MemoryStore2
 
 
-class _ReasonerHarness:
-    def __init__(self, outcomes):
-        self.tools = SimpleNamespace(get_always_on_names=lambda: {"always"})
-        self._outcomes = list(outcomes)
-        self.discovery = ToolDiscoveryState()
-        self.discovery._unlocked = {"s:1": OrderedDict({"old": None})}
-        self.reasoner = SimpleNamespace(
-            run_turn=AsyncMock(side_effect=self._run_reasoner)
-        )
-
-    async def _run_reasoner(self, **kwargs):
-        outcome = self._outcomes.pop(0)
-        if isinstance(outcome, Exception):
-            raise outcome
-        return TurnRunResult(
-            reply=outcome[0],
-            tools_used=outcome[1],
-            tool_chain=outcome[2],
-            thinking=outcome[4],
-        )
-
-
 @pytest.mark.asyncio
-async def test_reasoner_wrapper_and_shell_cover_branches(tmp_path: Path):
-    msg = SimpleNamespace(
-        content="hello",
-        media=[],
-        channel="telegram",
-        chat_id="1",
-        timestamp=datetime.now(timezone.utc),
-    )
-    session = SimpleNamespace(
-        key="s:1",
-        messages=[{"role": "u", "content": str(i)} for i in range(6)],
-        get_history=lambda max_messages: [{"role": "u", "content": str(i)} for i in range(6)],
-        last_consolidated=3,
-    )
-    harness = _ReasonerHarness(
-        [
-            ("ok", ["tool_search", "x", "y"], [{"calls": []}], None, None),
-        ]
-    )
-    result = await harness.reasoner.run_turn(msg=msg, session=session)
-    assert result.reply == "ok"
-    assert result.tools_used == ["tool_search", "x", "y"]
-
-    harness = _ReasonerHarness(
-        [("上下文过长无法处理，请尝试新建对话。", [], [], None, None)]
-    )
-    result = await harness.reasoner.run_turn(msg=msg, session=session)
-    assert "上下文过长" in str(result.reply)
-    assert result.tools_used == []
-    assert result.tool_chain == []
-
-    harness.reasoner = SimpleNamespace(
-        run_turn=AsyncMock(return_value=TurnRunResult(reply="ok"))
-    )
-    result = await harness.reasoner.run_turn(msg=msg, session=session)
-    assert result.reply == "ok"
-    assert result.tools_used == []
-    assert result.tool_chain == []
-
-    harness = _ReasonerHarness([("ok", ["always", "tool_search", "a", "b", "c", "d", "e", "f"], [], None, None)])
-    harness.discovery.update("s:1", ["always", "tool_search", "a", "b", "c", "d", "e", "f"], harness.tools.get_always_on_names())
-    assert "always" not in harness.discovery._unlocked["s:1"]
-    assert len(harness.discovery._unlocked["s:1"]) == 5
-
+async def test_shell_tool_covers_core_branches():
     tool = ShellTool()
     assert "命令不能为空" in await tool.execute(command="")
     assert "不被允许" in await tool.execute(command="nc localhost 1")
@@ -128,6 +59,7 @@ async def test_reasoner_wrapper_and_shell_cover_branches(tmp_path: Path):
         result = json.loads(await tool.execute(command="echo 1", timeout=999))
     assert result["exit_code"] == 2
     assert "Exit code 2" in result["output"]
+
 
 async def test_web_fetch_procedure_tagger_and_store_cover_core_paths(tmp_path: Path):
     class _Resp:

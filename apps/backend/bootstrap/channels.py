@@ -29,7 +29,7 @@ async def start_channels(
     interrupt_controller: InterruptController | None = None,
     plugin_channels: list[Channel] | None = None,
     enable_message_channels: bool = True,
-) -> tuple[object | None, ChannelHost]:
+) -> ChannelHost:
     attachment_store = AttachmentStore()
     channel_hub: ChannelHub | None = None
 
@@ -49,7 +49,7 @@ async def start_channels(
 
     host = ChannelHost(_ctx_factory)
     if not enable_message_channels:
-        return None, host
+        return host
     channel_hub = (
         ChannelHub.from_workspace(
             session_manager.workspace,
@@ -99,4 +99,4 @@ async def start_channels(
     for channel in plugin_channels or []:
         host.add(channel)
 
-    return None, host
+    return host
