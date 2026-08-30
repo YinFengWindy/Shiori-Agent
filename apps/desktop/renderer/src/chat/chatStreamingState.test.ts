@@ -8,6 +8,7 @@ import {
   applyChatToolCompleted,
   applyChatToolStarted,
   finishChatStream,
+  interruptChatStream,
 } from "./chatStreamingState";
 
 function session(): SessionPayload {
@@ -51,6 +52,28 @@ describe("chat streaming state", () => {
       thinking_duration_ms: 6200,
     });
     assert.equal(finished.messages.at(-1)?.render_id, streaming.messages.at(-1)?.render_id);
+  });
+
+  it("marks a cancelled transient assistant reply for local trace preservation", () => {
+    const streaming = applyChatStreamDelta(session(), "partial answer", "partial thinking");
+    const interrupted = interruptChatStream(streaming);
+
+    assert.equal(interrupted.messages.at(-1)?.streaming, false);
+    assert.deepEqual(interrupted.messages.at(-1)?.metadata, {
+      streamed_reply: true,
+      interrupted_reply: true,
+    });
+    assert.equal(interrupted.messages.at(-1)?.reasoning_content, "partial thinking");
+    assert.equal(interrupted.messages.at(-1)?.render_id, streaming.messages.at(-1)?.render_id);
+  });
+
+  it("does not alter an already finished or non-assistant session", () => {
+    const original = session();
+    assert.equal(interruptChatStream(original), original);
+    const finished = finishChatStream(
+      applyChatStreamDelta(original, "complete", "thinking"),
+    );
+    assert.equal(interruptChatStream(finished), finished);
   });
 
   it("merges tool lifecycle events by call id into the transient assistant message", () => {

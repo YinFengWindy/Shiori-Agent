@@ -9,6 +9,10 @@ function normalizeClientMessageId(message: SessionMessage): string {
   return String(message.metadata?.client_message_id ?? "").trim();
 }
 
+function isInterruptedAssistantMessage(message: SessionMessage): boolean {
+  return message.role === "assistant" && message.metadata?.interrupted_reply === true;
+}
+
 function normalizeReplyMetadata(message: SessionMessage) {
   return {
     messageId: String(message.metadata?.reply_to_message_id ?? "").trim(),
@@ -103,6 +107,94 @@ function findMissingOptimisticUserMessage(
     return areEquivalentMessagesIgnoringMissingIds(optimisticUserMessage, message);
   });
   return alreadyPersisted ? null : optimisticUserMessage;
+}
+
+function findIncomingMessageIndex(
+  message: SessionMessage,
+  incomingSession: SessionPayload,
+): number {
+  const clientMessageId = normalizeClientMessageId(message);
+  if (clientMessageId) {
+    return incomingSession.messages.findIndex((incomingMessage) => (
+      normalizeClientMessageId(incomingMessage) === clientMessageId
+    ));
+  }
+  return incomingSession.messages.findIndex((incomingMessage) => (
+    Boolean(normalizeMessageId(incomingMessage))
+      && areEquivalentMessagesIgnoringMissingIds(message, incomingMessage)
+  ));
+}
+
+function findAcknowledgedUserMessageIndex(
+  pendingUserMessage: SessionMessage,
+  incomingSession: SessionPayload,
+): number {
+  return findIncomingMessageIndex(pendingUserMessage, incomingSession);
+}
+
+function findNextIncomingMessageIndex(
+  currentMessages: SessionMessage[],
+  startIndex: number,
+  incomingSession: SessionPayload,
+): number {
+  for (let index = startIndex + 1; index < currentMessages.length; index += 1) {
+    const incomingIndex = findIncomingMessageIndex(currentMessages[index], incomingSession);
+    if (incomingIndex >= 0) return incomingIndex;
+  }
+  return -1;
+}
+
+function findCurrentPendingUserIndex(
+  currentSession: SessionPayload,
+  pendingUserMessage: SessionMessage,
+): number {
+  const clientMessageId = normalizeClientMessageId(pendingUserMessage);
+  if (clientMessageId) {
+    return currentSession.messages.findIndex((message) => (
+      normalizeClientMessageId(message) === clientMessageId
+    ));
+  }
+  return currentSession.messages.findIndex((message) => (
+    areEquivalentMessagesIgnoringMissingIds(pendingUserMessage, message)
+  ));
+}
+
+function preserveInterruptedAssistantTrace(
+  currentSession: SessionPayload,
+  incomingSession: SessionPayload,
+  pendingUserMessage: SessionMessage | null,
+): SessionPayload {
+  if (!pendingUserMessage || !isPendingUserMessageAcknowledged(pendingUserMessage, incomingSession)) {
+    return incomingSession;
+  }
+  const incomingUserIndex = findAcknowledgedUserMessageIndex(pendingUserMessage, incomingSession);
+  if (incomingUserIndex < 0) return incomingSession;
+  const currentUserIndex = findCurrentPendingUserIndex(currentSession, pendingUserMessage);
+  const interruptedMessagesByIncomingIndex = new Map<number, SessionMessage[]>();
+  currentSession.messages.forEach((message, index) => {
+    if (!isInterruptedAssistantMessage(message) || (currentUserIndex >= 0 && index >= currentUserIndex)) {
+      return;
+    }
+    if (findIncomingMessageIndex(message, incomingSession) >= 0) return;
+    const anchorIndex = findNextIncomingMessageIndex(currentSession.messages, index, incomingSession);
+    const targetIndex = anchorIndex >= 0 ? anchorIndex : incomingUserIndex;
+    const anchoredMessages = interruptedMessagesByIncomingIndex.get(targetIndex) ?? [];
+    anchoredMessages.push(message);
+    interruptedMessagesByIncomingIndex.set(targetIndex, anchoredMessages);
+  });
+  const interruptedMessages = [...interruptedMessagesByIncomingIndex.values()].flat();
+  if (interruptedMessages.length === 0) return incomingSession;
+  return {
+    ...incomingSession,
+    metadata: {
+      ...(currentSession.metadata ?? {}),
+      ...(incomingSession.metadata ?? {}),
+    },
+    messages: incomingSession.messages.flatMap((message, index) => [
+      ...(interruptedMessagesByIncomingIndex.get(index) ?? []),
+      message,
+    ]),
+  };
 }
 
 /** Returns whether an authoritative session contains the persisted form of one pending user message. */
@@ -207,6 +299,15 @@ export function mergeIncomingSessionDuringSend(
     optimisticUserMessage,
     incomingSession,
   );
+
+  const incomingWithInterruptedTrace = preserveInterruptedAssistantTrace(
+    currentSession,
+    incomingSession,
+    pendingUserMessage,
+  );
+  if (incomingWithInterruptedTrace !== incomingSession) {
+    return incomingWithInterruptedTrace;
+  }
 
   if (!sending && !missingOptimisticUserMessage) {
     return incomingSession;

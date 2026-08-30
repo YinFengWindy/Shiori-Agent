@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { finishChatStream } from "../chat/chatStreamingState";
+import { interruptChatStream } from "../chat/chatStreamingState";
 import { buildOptimisticUserChatMessage, normalizeChatAttachmentPaths } from "../chat/chatComposerState";
 import { ensureChatMessageRenderId, reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
 import {
@@ -538,7 +538,7 @@ export function useDesktopSessionState({
         throw new Error(String(res.payload.message ?? "中止回复失败"));
       }
       if (isCurrentChatTurn(sessionKey, turnId)) {
-        updateCommittedActiveSession((current) => current?.key === sessionKey ? finishChatStream(current) : current);
+        updateCommittedActiveSession((current) => current?.key === sessionKey ? interruptChatStream(current) : current);
         completeChatTurn(sessionKey, turnId);
       }
       return true;
