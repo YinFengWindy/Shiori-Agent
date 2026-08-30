@@ -48,6 +48,9 @@ const api: DesktopApi = {
     return (ipcRenderer.invoke("desktop:pick-chat-attachments", options) as Promise<LocalAssetTransport<string[]>>)
       .then((transport) => localAssets.consume(transport));
   },
+  openExternal(url) {
+    return ipcRenderer.invoke("desktop:open-external", { url }) as Promise<import("./bridge/shared.js").ExternalLinkOpenResult>;
+  },
   pickPetPackage() {
     return (ipcRenderer.invoke("desktop:pick-pet-package") as Promise<LocalAssetTransport<string[]>>)
       .then((transport) => localAssets.consume(transport)[0] ?? null);

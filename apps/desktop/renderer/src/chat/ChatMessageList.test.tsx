@@ -9,6 +9,40 @@ import { ChatMessageList } from "./ChatMessageList";
 import { getVisibleChatMessages } from "./chatMessageWindow";
 
 describe("ChatMessageList", () => {
+  function renderMessage(message: SessionMessage): string {
+    return renderToStaticMarkup(
+      <ChatMessageList
+        activeRole={null}
+        conversationEndRef={React.createRef<HTMLDivElement>()}
+        conversationListRef={React.createRef<HTMLDivElement>()}
+        highlightedMessageKey=""
+        visibleMessageWindow={getVisibleChatMessages([message], 10)}
+        onBeginAttachmentDrag={() => undefined}
+        onExpandOlderMessages={() => undefined}
+        onJumpToMessage={() => undefined}
+        onOpenContextMenu={() => undefined}
+        onOpenImagePreview={() => undefined}
+      />,
+    );
+  }
+
+  it("renders assistant Markdown while preserving user message text", () => {
+    const assistantMarkup = renderMessage({
+      id: "assistant-markdown",
+      role: "assistant",
+      content: "**formatted**",
+    });
+    const userMarkup = renderMessage({
+      id: "user-plain-text",
+      role: "user",
+      content: "**原文**",
+    });
+
+    assert.ok(assistantMarkup.includes("<strong>formatted</strong>"));
+    assert.ok(userMarkup.includes("**原文**"));
+    assert.ok(!userMarkup.includes("<strong>"));
+  });
+
   it("keeps text and Thinking emitted before a tool call visible after the final snapshot", () => {
     const message: SessionMessage = {
       id: "assistant-1",
