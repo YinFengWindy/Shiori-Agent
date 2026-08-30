@@ -7,6 +7,7 @@ import {
   applyChatStreamDelta,
   applyChatToolCompleted,
   applyChatToolStarted,
+  finalizeChatCancellation,
   finishChatStream,
   interruptChatStream,
 } from "./chatStreamingState";
@@ -65,6 +66,22 @@ describe("chat streaming state", () => {
     });
     assert.equal(interrupted.messages.at(-1)?.reasoning_content, "partial thinking");
     assert.equal(interrupted.messages.at(-1)?.render_id, streaming.messages.at(-1)?.render_id);
+  });
+
+  it("keeps a naturally completed reply distinct when cancellation reports idle", () => {
+    const streaming = applyChatStreamDelta(session(), "complete answer", "complete thinking");
+    const completed = finalizeChatCancellation(streaming, "idle");
+
+    assert.equal(completed.messages.at(-1)?.streaming, false);
+    assert.equal(completed.messages.at(-1)?.metadata?.streamed_reply, true);
+    assert.equal(completed.messages.at(-1)?.metadata?.interrupted_reply, undefined);
+  });
+
+  it("marks the reply interrupted only when cancellation interrupted the active turn", () => {
+    const streaming = applyChatStreamDelta(session(), "partial answer", "partial thinking");
+    const interrupted = finalizeChatCancellation(streaming, "interrupted");
+
+    assert.equal(interrupted.messages.at(-1)?.metadata?.interrupted_reply, true);
   });
 
   it("does not alter an already finished or non-assistant session", () => {

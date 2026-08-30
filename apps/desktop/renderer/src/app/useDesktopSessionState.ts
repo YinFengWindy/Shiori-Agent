@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
-import { interruptChatStream } from "../chat/chatStreamingState";
+import { finalizeChatCancellation } from "../chat/chatStreamingState";
+import {
+  isActiveChatTurn,
+  shouldSurfaceChatCancellationFailure,
+} from "../chat/chatTurnOwnership";
 import { buildOptimisticUserChatMessage, normalizeChatAttachmentPaths } from "../chat/chatComposerState";
 import { ensureChatMessageRenderId, reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
 import {
@@ -313,7 +317,7 @@ export function useDesktopSessionState({
   }
 
   function isCurrentChatTurn(sessionKey: string, turnId: string): boolean {
-    return Boolean(sessionKey && turnId && activeTurnIdsRef.current[sessionKey] === turnId);
+    return isActiveChatTurn(activeTurnIdsRef.current, sessionKey, turnId);
   }
 
   function isChatTurnCancelling(sessionKey: string, turnId: string): boolean {
@@ -538,13 +542,17 @@ export function useDesktopSessionState({
         throw new Error(String(res.payload.message ?? "中止回复失败"));
       }
       if (isCurrentChatTurn(sessionKey, turnId)) {
-        updateCommittedActiveSession((current) => current?.key === sessionKey ? interruptChatStream(current) : current);
+        updateCommittedActiveSession((current) => current?.key === sessionKey
+          ? finalizeChatCancellation(current, status as "interrupted" | "idle")
+          : current);
         completeChatTurn(sessionKey, turnId);
       }
       return true;
     } catch (error) {
-      clearSessionCancelling(sessionKey);
-      window.alert(error instanceof Error ? error.message : String(error));
+      if (shouldSurfaceChatCancellationFailure(activeTurnIdsRef.current, sessionKey, turnId)) {
+        clearSessionCancelling(sessionKey);
+        window.alert(error instanceof Error ? error.message : String(error));
+      }
       return false;
     }
   }

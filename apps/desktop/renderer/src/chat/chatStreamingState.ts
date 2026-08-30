@@ -74,6 +74,14 @@ export function interruptChatStream(session: SessionPayload): SessionPayload {
   return { ...session, messages };
 }
 
+/** Finishes cancellation according to the backend's final turn state. */
+export function finalizeChatCancellation(
+  session: SessionPayload,
+  status: "interrupted" | "idle",
+): SessionPayload {
+  return status === "interrupted" ? interruptChatStream(session) : finishChatStream(session);
+}
+
 type ToolStartedEvent = {
   iteration: number;
   callId: string;
