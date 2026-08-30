@@ -17,6 +17,11 @@ describe("chatMessageActions", () => {
     assert.equal(getChatMessageCopyText({ role: "assistant", content: "  hello  " }), "hello");
   });
 
+  it("preserves assistant Markdown source for copy actions", () => {
+    const markdown = "**bold**\n\n| A | B |\n| --- | --- |\n| 1 | 2 |";
+    assert.equal(getChatMessageCopyText({ role: "assistant", content: `  ${markdown}  ` }), markdown);
+  });
+
   it("uses media placeholders when quoted messages have no text", () => {
     assert.equal(getChatMessageReplyContent({ role: "assistant", content: "", media: ["photo.png"] }), "[图片]");
     assert.equal(getChatMessageReplyContent({ role: "assistant", content: "", media: ["report.pdf"] }), "[附件]");

@@ -191,6 +191,12 @@ export type LocalAssetOpenResult = {
   error: string | null;
 };
 
+/** Result returned after attempting to open a validated external URL. */
+export type ExternalLinkOpenResult = {
+  ok: boolean;
+  error: string | null;
+};
+
 export type RendererDiagnosticPayload = {
   kind: "error" | "unhandledrejection" | "error-boundary";
   message: string;
@@ -207,6 +213,8 @@ export type DesktopApi = {
   onEvent(listener: (event: BridgeEvent) => void): () => void;
   pickImages(options?: { multiple?: boolean }): Promise<string[]>;
   pickChatAttachments(options?: { multiple?: boolean }): Promise<string[]>;
+  /** Opens an http, https, or mailto link through the operating system. */
+  openExternal(url: string): Promise<ExternalLinkOpenResult>;
   /** Opens a picker for a self-contained Codex-compatible desktop-pet package. */
   pickPetPackage(): Promise<string | null>;
   /** Resolves a previously transported local path to its opaque asset URL. */

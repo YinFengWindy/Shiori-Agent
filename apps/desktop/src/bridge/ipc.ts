@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -16,6 +16,7 @@ import type { BrowserVoiceRecorder } from "../voice/recorder.js";
 import type { DesktopVoiceController } from "../voice/controller.js";
 import type { BrowserVoicePlayback } from "../voice/playback.js";
 import { registerVoiceIpc } from "../voice/ipc.js";
+import { openExternalLink } from "../externalLinks.js";
 import type {
   LocalAssetOpenRequest,
   LocalAssetOpenResult,
@@ -320,5 +321,8 @@ export function registerDesktopIpc({
   ipcMain.handle("desktop:open-attachment", async (_event: IpcMainInvokeEvent, request: LocalAssetOpenRequest) => {
     const value = String(request?.url || request?.path || "").trim();
     return await openLocalAttachment(value);
+  });
+  ipcMain.handle("desktop:open-external", async (_event: IpcMainInvokeEvent, request?: { url?: unknown }) => {
+    return await openExternalLink(String(request?.url ?? ""), (url) => shell.openExternal(url));
   });
 }

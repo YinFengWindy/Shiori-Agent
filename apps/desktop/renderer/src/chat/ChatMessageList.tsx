@@ -3,6 +3,7 @@ import { ChatMessageImage } from "./ChatMessageImage";
 import { ChatThinkingBlock } from "./ChatThinkingBlock";
 import { ChatToolCalls } from "./ChatToolCalls";
 import { ChatReplyMetrics } from "./ChatReplyMetrics";
+import { ChatMarkdownContent } from "./ChatMarkdownContent";
 import { getChatMessagePresentation } from "./chatMessagePresentation";
 import { parseChatTurnMetrics } from "./chatTurnMetrics";
 import {
@@ -94,6 +95,7 @@ export const ChatMessageList = React.memo(function ChatMessageList({
           const index = visibleMessageWindow.startIndex + visibleIndex;
           const isUser = message.role === "user";
           const isError = message.role === "error";
+          const isAssistant = message.role === "assistant";
           const authorLabel = isError ? "系统提示" : (isUser ? "你" : (activeRole?.name || "Agent"));
           const messageReactKey = getChatMessageReactKey(message, index);
           const messageDomKey = getChatMessageDomKey(message, index);
@@ -190,9 +192,7 @@ export const ChatMessageList = React.memo(function ChatMessageList({
                             />
                           ) : null}
                           {group.text.trim() ? (
-                            <div className="message-content whitespace-pre-wrap break-words">
-                              {group.text}
-                            </div>
+                            <ChatMarkdownContent content={group.text} />
                           ) : null}
                           {group.calls.length ? (
                             <ChatToolCalls groups={[group]} streaming={isStreaming} />
@@ -212,10 +212,17 @@ export const ChatMessageList = React.memo(function ChatMessageList({
                         thinkingDurationMs={thinkingDurationMs}
                       />
                     ) : null}
-                    <div className="message-content whitespace-pre-wrap break-words">
-                      {message.content}
-                      {isStreaming && (message.content || !thinking) ? <span className="chat-stream-cursor ml-0.5" aria-hidden="true" /> : null}
-                    </div>
+                    {!isAssistant ? (
+                      <div className="message-content whitespace-pre-wrap break-words">
+                        {message.content}
+                        {isStreaming && (message.content || !thinking) ? <span className="chat-stream-cursor ml-0.5" aria-hidden="true" /> : null}
+                      </div>
+                    ) : (
+                      <>
+                        <ChatMarkdownContent content={message.content} />
+                        {isStreaming && (message.content || !thinking) ? <span className="chat-stream-cursor ml-0.5" aria-hidden="true" /> : null}
+                      </>
+                    )}
                     {!isStreaming ? <ChatReplyMetrics metrics={turnMetrics} hasThinking={Boolean(thinking)} /> : null}
                   </div>
                   {media.length ? (
