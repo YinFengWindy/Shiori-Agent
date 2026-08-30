@@ -7,9 +7,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 /** Absolute path to the built desktop package root. */
 export const desktopRoot = resolve(here, "..");
 
+const repositoryRoot = resolve(desktopRoot, "..", "..");
+
 const packagedAssetsRoot = app.isPackaged && process.resourcesPath
   ? resolve(process.resourcesPath, "assets")
-  : resolve(desktopRoot, "assets");
+  : resolve(repositoryRoot, "assets");
 
 /** Absolute path to the desktop shell icon asset used by Electron windows. */
 export const desktopWindowIcon = resolve(

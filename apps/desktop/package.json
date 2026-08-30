@@ -76,12 +76,12 @@
         "to": "config.example.toml"
       },
       {
-        "from": "assets",
+        "from": "../../assets",
         "to": "assets"
       }
     ],
     "win": {
-      "icon": "assets/shiori-app-icon.ico",
+      "icon": "../../assets/shiori-app-icon.ico",
       "target": [
         {
           "target": "nsis",
