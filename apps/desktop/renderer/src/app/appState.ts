@@ -22,6 +22,15 @@ export const sidebarAnimationDurationMs = 480;
 export const sidebarAutoCollapseWindowWidth = 980;
 export const minRoleCardBusyMs = 600;
 
+/** Keeps optimistic role-card actions visible long enough for the transition to be perceived. */
+export async function waitForMinimumRoleCardBusy(startedAt: number): Promise<void> {
+  const elapsed = Date.now() - startedAt;
+  if (elapsed >= minRoleCardBusyMs) {
+    return;
+  }
+  await new Promise((resolve) => window.setTimeout(resolve, minRoleCardBusyMs - elapsed));
+}
+
 export type SearchableSessionRecord = {
   roleId: string;
   roleName: string;

@@ -6,7 +6,6 @@ import {
   chatLatestImageSidebarDefaultWidth,
   chatLatestImageSidebarMaxWidth,
   chatLatestImageSidebarMinWidth,
-  createEmptyNewRoleForm,
   createEmptyRoleForm,
   historySidebarDefaultWidth,
   historySidebarMaxWidth,
@@ -28,6 +27,7 @@ import { useChatImageState } from "./app/useChatImageState";
 import { useChatInteractions } from "./app/useChatInteractions";
 import { useNavigationHistory } from "./app/useNavigationHistory";
 import { useRoleManagement } from "./app/useRoleManagement";
+import { useRoleCreationController } from "./app/useRoleCreationController";
 import { useRoleSearch } from "./app/roleSearch";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
@@ -83,7 +83,6 @@ function App(): React.ReactElement {
   const [activeSession, setActiveSession] = useState<SessionPayload | null>(null);
   const [, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [creating, setCreating] = useState(false);
   const [savingRole, setSavingRole] = useState(false);
   const [savingRoleAssets, setSavingRoleAssets] = useState(false);
   const [deletingRole, setDeletingRole] = useState(false);
@@ -107,7 +106,6 @@ function App(): React.ReactElement {
   const [selectedAvatarAsset, setSelectedAvatarAsset] = useState("");
   const [selectedChatBackground, setSelectedChatBackground] = useState("");
   const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
-  const [newRoleForm, setNewRoleForm] = useState(createEmptyNewRoleForm);
   const [settingsSearch, setSettingsSearch] = useState("");
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
   const [, setSettingsConfigPath] = useState("");
@@ -142,7 +140,6 @@ function App(): React.ReactElement {
   const sendingSessionsRef = useLatestRef(sendingSessions);
   const unreadCountsRef = useLatestRef(unreadCounts);
   const roleFormRef = useLatestRef(roleForm);
-  const newRoleFormRef = useLatestRef(newRoleForm);
   const lastNonSettingsViewRef = useDesktopViewSynchronization({
     mainView,
     activeRoleId,
@@ -168,11 +165,9 @@ function App(): React.ReactElement {
     activeRole: roles.find((role) => role.id === activeRoleId) ?? null,
     roles,
   });
-  const { updateRoleForm, updateNewRoleForm } = useRoleFormAdapters({
+  const { updateRoleForm } = useRoleFormAdapters({
     roleFormRef,
-    newRoleFormRef,
     setRoleForm,
-    setNewRoleForm,
   });
 
   function queueMessageNavigation(roleId: string, messageKey: string): void {
@@ -371,8 +366,22 @@ function App(): React.ReactElement {
     setNotice,
   });
 
+  const roleCreation = useRoleCreationController({
+    activeRoleIdRef,
+    setPendingRoleCardAction,
+    setWorkspaceFeedback,
+    setError,
+    setRoles,
+    setActiveRoleId,
+    openRoleWorkspace,
+    buildNavigationEntry,
+    replaceNavigationEntry,
+    loadRolesFromBridge,
+    openRole,
+    applyRoleSnapshot,
+  });
+
   const {
-    createRole,
     saveRole,
     saveRoleAssets,
     confirmDeleteRole,
@@ -390,9 +399,6 @@ function App(): React.ReactElement {
     selectedAvatarAsset,
     selectedChatBackground,
     roleFormRef,
-    newRoleFormRef,
-    activeRoleIdRef,
-    setCreating,
     setSavingRole,
     setSavingRoleAssets,
     setDeletingRole,
@@ -406,7 +412,6 @@ function App(): React.ReactElement {
     setSelectedChatBackground,
     setActiveIllustration,
     updateRoleForm,
-    updateNewRoleForm,
     openRoleWorkspace,
     buildNavigationEntry,
     replaceNavigationEntry,
@@ -476,11 +481,6 @@ function App(): React.ReactElement {
     if (!detailRole) return;
     updateRoleForm(createRoleFormFromRole(detailRole));
     setNotice("角色表单已重置。");
-  }
-
-  function resetNewRoleForm(): void {
-    updateNewRoleForm(createEmptyNewRoleForm());
-    setWorkspaceFeedback({ tone: "success", message: "新建角色表单已重置。" });
   }
 
   if (mainView.kind === "story") {
@@ -576,12 +576,12 @@ function App(): React.ReactElement {
       pendingRoleCardAction={pendingRoleCardAction}
       onOpenRoleManagementDetail={(roleId) => void openRoleDetail(roleId)}
       onRequestDeleteRole={setPendingDeleteRoleId}
-      creating={creating}
-      newRoleForm={newRoleForm}
-      onBackToRoleList={() => openRoleWorkspace({ kind: "roles-list" })}
-      onCreateNewRole={() => void createRole()}
-      onResetNewRoleForm={resetNewRoleForm}
-      onUpdateNewRoleForm={updateNewRoleForm}
+      creating={roleCreation.creating}
+      newRoleForm={roleCreation.newRoleForm}
+      onBackToRoleList={roleCreation.cancelCreateRole}
+      onCreateNewRole={() => void roleCreation.createRole()}
+      onResetNewRoleForm={roleCreation.resetNewRoleForm}
+      onUpdateNewRoleForm={roleCreation.updateNewRoleForm}
       detailRoleId={detailRoleId}
       activeIllustration={activeIllustration}
       previewAvatar={previewAvatar}

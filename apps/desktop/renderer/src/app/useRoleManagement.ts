@@ -1,6 +1,6 @@
 import type React from "react";
-import { createEmptyNewRoleForm, createPendingRoleRecord, minRoleCardBusyMs } from "./appState";
-import type { RoleAssetCategory, RoleRecord, RoleFormState, NewRoleFormState, PendingRoleCardAction, SessionPayload } from "../shared/types";
+import { waitForMinimumRoleCardBusy } from "./appState";
+import type { RoleAssetCategory, RoleRecord, RoleFormState, PendingRoleCardAction, SessionPayload } from "../shared/types";
 import type { AppMainView } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import { writeRoleMoodConfigToRuntimeConfig } from "../roles/roleMoodConfig";
@@ -15,9 +15,6 @@ type UseRoleManagementArgs = {
   selectedAvatarAsset: string;
   selectedChatBackground: string;
   roleFormRef: React.MutableRefObject<RoleFormState>;
-  newRoleFormRef: React.MutableRefObject<NewRoleFormState>;
-  activeRoleIdRef: React.MutableRefObject<string>;
-  setCreating: React.Dispatch<React.SetStateAction<boolean>>;
   setSavingRole: React.Dispatch<React.SetStateAction<boolean>>;
   setSavingRoleAssets: React.Dispatch<React.SetStateAction<boolean>>;
   setDeletingRole: React.Dispatch<React.SetStateAction<boolean>>;
@@ -31,7 +28,6 @@ type UseRoleManagementArgs = {
   setSelectedChatBackground: React.Dispatch<React.SetStateAction<string>>;
   setActiveIllustration: React.Dispatch<React.SetStateAction<string>>;
   updateRoleForm: (next: React.SetStateAction<RoleFormState>) => void;
-  updateNewRoleForm: (next: React.SetStateAction<NewRoleFormState>) => void;
   openRoleWorkspace: (
     nextView: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" | "role-assets" }>,
     options?: { recordHistory?: boolean },
@@ -50,15 +46,7 @@ type UseRoleManagementArgs = {
   roleAssetSaveRequestIdRef: React.MutableRefObject<number>;
 };
 
-async function waitForMinimumRoleCardBusy(startedAt: number): Promise<void> {
-  const elapsed = Date.now() - startedAt;
-  if (elapsed >= minRoleCardBusyMs) {
-    return;
-  }
-  await new Promise((resolve) => window.setTimeout(resolve, minRoleCardBusyMs - elapsed));
-}
-
-/** Owns role CRUD and role asset operations so the root app only composes them. */
+/** Owns persisted role editing, deletion, and asset operations. */
 export function useRoleManagement({
   activeRoleId,
   detailRoleId,
@@ -67,9 +55,6 @@ export function useRoleManagement({
   selectedAvatarAsset,
   selectedChatBackground,
   roleFormRef,
-  newRoleFormRef,
-  activeRoleIdRef,
-  setCreating,
   setSavingRole,
   setSavingRoleAssets,
   setDeletingRole,
@@ -83,7 +68,6 @@ export function useRoleManagement({
   setSelectedChatBackground,
   setActiveIllustration,
   updateRoleForm,
-  updateNewRoleForm,
   openRoleWorkspace,
   buildNavigationEntry,
   replaceNavigationEntry,
@@ -114,78 +98,6 @@ export function useRoleManagement({
   function navigateToRolesList(roleId: string): void {
     openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
     replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, roleId));
-  }
-
-  async function createRole(): Promise<void> {
-    const name = newRoleFormRef.current.name.trim();
-    const systemPrompt = newRoleFormRef.current.systemPrompt.trim();
-    if (!name || !systemPrompt) {
-      const message = "角色名称和系统提示词不能为空。";
-      setError(message);
-      setWorkspaceFeedback({ tone: "error", message: `角色创建失败：${message}` });
-      return;
-    }
-    const pendingRoleId = `pending-create:${Date.now()}`;
-    const pendingRole = createPendingRoleRecord(pendingRoleId, newRoleFormRef.current);
-    const previousActiveRoleId = activeRoleIdRef.current;
-    const startedAt = Date.now();
-    setCreating(true);
-    setError("");
-    setWorkspaceFeedback(null);
-    setPendingRoleCardAction({ roleId: pendingRoleId, action: "create" });
-    setRoles((current) => [pendingRole, ...current]);
-    applyRoleSnapshot(pendingRole);
-    openRoleWorkspace({ kind: "roles-list" }, { recordHistory: false });
-    replaceNavigationEntry(buildNavigationEntry({ kind: "roles-list" }, pendingRoleId));
-    const res = await window.miraDesktop.invoke({
-      method: "roles.create",
-      payload: {
-        name,
-        description: newRoleFormRef.current.description,
-        system_prompt: systemPrompt,
-      },
-    });
-    await waitForMinimumRoleCardBusy(startedAt);
-    setCreating(false);
-    if (res.error) {
-      setPendingRoleCardAction(null);
-      setRoles((current) => current.filter((item) => item.id !== pendingRoleId));
-      setActiveRoleId(previousActiveRoleId);
-      activeRoleIdRef.current = previousActiveRoleId;
-      openRoleWorkspace({ kind: "role-create" }, { recordHistory: false });
-      replaceNavigationEntry(buildNavigationEntry({ kind: "role-create" }, previousActiveRoleId));
-      setError(res.error.message);
-      setWorkspaceFeedback({ tone: "error", message: `角色创建失败：${res.error.message}` });
-      return;
-    }
-    const role = res.payload.role as RoleRecord;
-    activeRoleIdRef.current = role.id;
-    setActiveRoleId(role.id);
-    setPendingRoleCardAction({ roleId: role.id, action: "create" });
-    setRoles((current) => {
-      const withoutPending = current.filter((item) => item.id !== pendingRoleId);
-      const existing = withoutPending.find((item) => item.id === role.id);
-      if (existing) {
-        return [role, ...withoutPending.filter((item) => item.id !== role.id)];
-      }
-      return [role, ...withoutPending];
-    });
-    applyRoleSnapshot(role);
-    const { resolvedRole, nextRoles } = await refreshRolesAndResolveRole(role);
-    if (!nextRoles?.some((item) => item.id === role.id)) {
-      setRoles((current) => {
-        const existing = current.find((item) => item.id === role.id);
-        if (existing) {
-          return [resolvedRole, ...current.filter((item) => item.id !== role.id)];
-        }
-        return [resolvedRole, ...current];
-      });
-    }
-    await openRole(role.id, resolvedRole, { recordHistory: false });
-    navigateToRolesList(resolvedRole.id);
-    setPendingRoleCardAction(null);
-    updateNewRoleForm(createEmptyNewRoleForm());
-    setWorkspaceFeedback({ tone: "success", message: "角色创建成功。" });
   }
 
   async function saveRole(): Promise<void> {
@@ -488,7 +400,6 @@ export function useRoleManagement({
   }
 
   return {
-    createRole,
     saveRole,
     saveRoleAssets,
     confirmDeleteRole,
