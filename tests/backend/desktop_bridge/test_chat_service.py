@@ -270,9 +270,9 @@ async def test_cancel_chat_turn_interrupts_only_the_matching_session_and_turn() 
     started = asyncio.Event()
     interrupt = Mock(
         return_value=SimpleNamespace(
-            status="idle",
+            status="interrupted",
             session_key="role:role-1",
-            message="not registered yet",
+            message="cancelled",
         )
     )
 
@@ -326,8 +326,10 @@ async def test_cancel_chat_turn_interrupts_only_the_matching_session_and_turn() 
 
 
 @pytest.mark.asyncio
-async def test_cancel_chat_turn_releases_the_session_for_an_immediate_follow_up() -> None:
+async def test_cancel_chat_turn_waits_for_old_listener_cleanup_before_follow_up() -> None:
     started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    release_cleanup = asyncio.Event()
     calls = 0
 
     async def _process_direct(*_args, **_kwargs) -> None:
@@ -335,7 +337,11 @@ async def test_cancel_chat_turn_releases_the_session_for_an_immediate_follow_up(
         calls += 1
         if calls == 1:
             started.set()
-            await asyncio.Event().wait()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleanup_started.set()
+                await release_cleanup.wait()
 
     service = DesktopChatService(
         agent_loop=SimpleNamespace(
@@ -364,7 +370,21 @@ async def test_cancel_chat_turn_releases_the_session_for_an_immediate_follow_up(
     service.start_chat_turn(**arguments)
     await started.wait()
 
-    result = service.cancel_chat_turn("role:role-1", "turn-1")
+    cancel_task = asyncio.create_task(
+        service.cancel_chat_turn_async("role:role-1", "turn-1")
+    )
+    await cleanup_started.wait()
+
+    with pytest.raises(ChatTurnBusyError):
+        service.start_chat_turn(**{
+            **arguments,
+            "request_id": "request-2",
+            "turn_id": "turn-2",
+            "content": "follow up",
+        })
+
+    release_cleanup.set()
+    result = await cancel_task
 
     assert result.status == "interrupted"
     service.start_chat_turn(**{
@@ -375,6 +395,65 @@ async def test_cancel_chat_turn_releases_the_session_for_an_immediate_follow_up(
     })
     await asyncio.sleep(0)
     assert calls == 2
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancel_chat_turn_keeps_naturally_completed_turn_when_interrupt_is_idle() -> None:
+    process_completed = asyncio.Event()
+    session_update_started = asyncio.Event()
+    session_update_completed = asyncio.Event()
+    release_session_update = asyncio.Event()
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        process_completed.set()
+
+    async def _emit_session_updated(**_kwargs) -> None:
+        session_update_started.set()
+        await release_session_update.wait()
+        session_update_completed.set()
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(
+            process_direct=_process_direct,
+            request_interrupt=Mock(
+                return_value=SimpleNamespace(
+                    status="idle",
+                    message="turn already completed",
+                )
+            ),
+        ),
+        event_bus=EventBus(),
+        session_manager=SimpleNamespace(get_or_create=Mock()),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=AsyncMock(),
+        emit_session_updated=_emit_session_updated,
+    )
+    service.start_chat_turn(
+        request_id="request-1",
+        turn_id="turn-1",
+        session_key="role:role-1",
+        content="hello",
+        media=[],
+        metadata={},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+    await process_completed.wait()
+    await session_update_started.wait()
+
+    cancel_task = asyncio.create_task(
+        service.cancel_chat_turn_async("role:role-1", "turn-1")
+    )
+    await asyncio.sleep(0)
+
+    assert cancel_task.done() is False
+    release_session_update.set()
+    result = await cancel_task
+
+    assert result.status == "idle"
+    assert session_update_completed.is_set()
     await service.aclose()
 
 
