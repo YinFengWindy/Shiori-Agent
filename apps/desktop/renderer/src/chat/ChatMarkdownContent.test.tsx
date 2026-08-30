@@ -3,7 +3,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ChatMarkdownContent, safeMarkdownUrl } from "./ChatMarkdownContent";
+import { normalizeExternalLink } from "../../../src/externalLinks";
+import { ChatMarkdownContent } from "./ChatMarkdownContent";
 
 describe("ChatMarkdownContent", () => {
   it("renders common Markdown structures with GFM support", () => {
@@ -31,7 +32,16 @@ describe("ChatMarkdownContent", () => {
     assert.match(rawHtmlMarkup, /visible text/);
     assert.doesNotMatch(unsafeLinkMarkup, /href=/);
     assert.match(unsafeLinkMarkup, /run/);
-    assert.equal(safeMarkdownUrl("data:text/plain,hello"), null);
+    assert.equal(normalizeExternalLink("data:text/plain,hello"), null);
+  });
+
+  it("does not load remote Markdown images", () => {
+    const markup = renderToStaticMarkup(
+      <ChatMarkdownContent content="![remote image](https://example.com/image.png)" />,
+    );
+
+    assert.doesNotMatch(markup, /<img/);
+    assert.match(markup, /remote image/);
   });
 
   it("keeps authorized links as links and normalizes supported URLs", () => {
@@ -41,6 +51,6 @@ describe("ChatMarkdownContent", () => {
 
     assert.match(markup, /href="https:\/\/example\.com\/docs"/);
     assert.match(markup, /href="mailto:hello@example\.com"/);
-    assert.equal(safeMarkdownUrl("javascript:alert(1)"), null);
+    assert.equal(normalizeExternalLink("javascript:alert(1)"), null);
   });
 });

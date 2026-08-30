@@ -63,3 +63,11 @@ test("pet bubble size reports are restricted to the active pet window", () => {
   assert.match(source, /desktopPet\.isPetWindow\(petWindow\)/);
   assert.match(source, /desktopPet\.setBubbleHeight\(Number\(height\)\)/);
 });
+
+test("external links pass through the shared policy before opening in the shell", () => {
+  const start = ipcSource.indexOf('ipcMain.handle("desktop:open-external"');
+  assert.notEqual(start, -1, "desktop:open-external handler must exist");
+  const source = ipcSource.slice(start);
+
+  assert.match(source, /openExternalLink\(String\(request\?\.url \?\? ""\), \(url\) => shell\.openExternal\(url\)\)/);
+});

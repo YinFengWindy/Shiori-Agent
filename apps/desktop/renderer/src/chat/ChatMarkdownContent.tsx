@@ -4,13 +4,9 @@ import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { normalizeExternalLink } from "../../../src/externalLinks";
 
-function safeMarkdownUrl(value: string): string | null {
-  return normalizeExternalLink(value);
-}
-
 const markdownComponents: Components = {
   a({ href, children }) {
-    const safeHref = href ? safeMarkdownUrl(href) : null;
+    const safeHref = href ? normalizeExternalLink(href) : null;
     if (!safeHref) return <>{children}</>;
     return (
       <a
@@ -25,6 +21,9 @@ const markdownComponents: Components = {
       </a>
     );
   },
+  img({ alt }) {
+    return alt ? <span>{alt}</span> : null;
+  },
   table({ children }) {
     return <div className="my-2 max-w-full overflow-x-auto"><table>{children}</table></div>;
   },
@@ -35,7 +34,7 @@ const markdownComponents: Components = {
     const isBlock = Boolean(className);
     return isBlock
       ? <code className={className}>{children}</code>
-      : <code className="rounded bg-[#F0F1F3] px-1 py-0.5 font-mono text-[0.9em]">{children}</code>;
+      : <code className="rounded-md bg-[#F0F1F3] px-1 py-0.5 font-mono text-[0.9em]">{children}</code>;
   },
   blockquote({ children }) {
     return <blockquote className="my-2 border-l-2 border-[#C9CED8] pl-3 text-[#626A78]">{children}</blockquote>;
@@ -65,5 +64,3 @@ export const ChatMarkdownContent = React.memo(function ChatMarkdownContent({ con
     </div>
   );
 });
-
-export { safeMarkdownUrl };
