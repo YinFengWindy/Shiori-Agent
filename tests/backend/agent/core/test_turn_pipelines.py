@@ -424,6 +424,37 @@ async def test_resumed_interrupt_state_completes_normally(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_desktop_interrupt_state_is_not_spliced_into_follow_up_message(tmp_path: Path):
+    loop = _make_loop(tmp_path)
+    session_key = "role:mira"
+    loop._interrupt_states[session_key] = TurnInterruptState(  # type: ignore[attr-defined]
+        session_key=session_key,
+        original_user_message="原始消息 A",
+        partial_reply="半截回答",
+    )
+    captured = {}
+
+    async def _process(msg, *_args, **_kwargs):
+        captured["msg"] = msg
+        return MagicMock(content="ok")
+
+    loop._core_runner.process = _process  # type: ignore[attr-defined]
+
+    msg = InboundMessage(
+        channel="desktop",
+        sender="user",
+        chat_id="role:mira",
+        content="补充 B",
+    )
+    outbound = await loop._process(msg)
+
+    assert outbound.content == "ok"
+    assert captured["msg"].content == "补充 B"
+    assert captured["msg"].metadata == {}
+    assert session_key in loop._interrupt_states  # persisted by desktop bridge
+
+
+@pytest.mark.asyncio
 async def test_agent_loop_afterstep_fires_with_turn_lifecycle_wiring(tmp_path: Path):
     RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
     loop = _make_loop(tmp_path)

@@ -16,6 +16,9 @@ from .helpers import (
 )
 
 
+INTERRUPTED_TURN_METADATA_KEY = "interrupted_turn"
+
+
 @dataclass
 class Session:
     """单次对话中的 session。"""

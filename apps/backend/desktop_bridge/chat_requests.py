@@ -46,7 +46,7 @@ class DesktopChatRequestHandler:
                 payload, request_id=request_id, emit_event=emit_event
             )
         if method == "chat.cancel":
-            result = self._chat_service.cancel_chat_turn(
+            result = await self._chat_service.cancel_chat_turn_async(
                 str(payload.get("session_key") or "").strip(),
                 str(payload.get("turn_id") or "").strip(),
             )

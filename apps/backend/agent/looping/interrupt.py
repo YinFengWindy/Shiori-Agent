@@ -17,7 +17,7 @@ _DEFAULT_TTL_S = 1800  # 30 分钟
 
 @dataclass
 class TurnInterruptState:
-    """一个被中断的 turn 的快照，纯内存态，不落库。"""
+    """一个被中断的 turn 的快照，供控制面和持久化边界共同使用。"""
 
     session_key: str
     original_user_message: str
@@ -42,6 +42,7 @@ class InterruptResult:
     status: str  # "interrupted" | "idle"
     session_key: str = ""
     message: str = ""
+    state: TurnInterruptState | None = None
 
 
 class InterruptController(Protocol):

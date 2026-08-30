@@ -15,6 +15,9 @@ from bus.events_lifecycle import (
 )
 from desktop_bridge.chat_service import ChatTurnBusyError, DesktopChatService
 from desktop_bridge.voice.voice_service import VoiceOperationMetrics, VoiceSynthesisResult
+from agent.looping.interrupt import TurnInterruptState
+from session.manager import Session
+from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 
 
 class _VoiceService:
@@ -427,6 +430,83 @@ async def test_cancel_chat_turn_stops_the_associated_voice_tts_coordinator() -> 
     assert result.status == "interrupted"
     coordinator.cancel.assert_called_once_with()
     await asyncio.sleep(0)
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancel_chat_turn_persists_partial_reply_and_reasoning() -> None:
+    started = asyncio.Event()
+    session = Session("role:role-1")
+    interrupt_state = TurnInterruptState(
+        session_key=session.key,
+        original_user_message="hello",
+        partial_reply="partial answer",
+        partial_thinking="retain this reasoning",
+        tools_used=["web_search"],
+        tool_chain_partial=[
+            {
+                "text": "",
+                "calls": [
+                    {
+                        "call_id": "call-1",
+                        "name": "web_search",
+                        "arguments": {"query": "weather"},
+                        "result": "sunny",
+                    }
+                ],
+            }
+        ],
+    )
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    session_manager = SimpleNamespace(
+        get_or_create=Mock(return_value=session),
+        append_messages=AsyncMock(),
+    )
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(
+            process_direct=_process_direct,
+            request_interrupt=Mock(
+                return_value=SimpleNamespace(
+                    status="interrupted",
+                    message="cancelled",
+                    state=interrupt_state,
+                )
+            ),
+            discard_interrupt_state=Mock(),
+        ),
+        event_bus=EventBus(),
+        session_manager=session_manager,
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=AsyncMock(),
+        emit_session_updated=AsyncMock(),
+    )
+    service.start_chat_turn(
+        request_id="request-1",
+        turn_id="turn-1",
+        session_key=session.key,
+        content="hello",
+        media=[],
+        metadata={},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+    await started.wait()
+
+    result = await service.cancel_chat_turn_async(session.key, "turn-1")
+
+    assert result.status == "interrupted"
+    assistant = session.messages[-1]
+    assert assistant["role"] == "assistant"
+    assert assistant["content"] == "partial answer"
+    assert assistant["reasoning_content"] == "retain this reasoning"
+    assert assistant["metadata"]["interrupted_reply"] is True
+    assert session.metadata[INTERRUPTED_TURN_METADATA_KEY]["turn_id"] == "turn-1"
+    session_manager.append_messages.assert_awaited_once_with(session, [assistant])
     await service.aclose()
 
 

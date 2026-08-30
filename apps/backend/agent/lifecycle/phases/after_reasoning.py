@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 from agent.core.mood_resolver import resolve_role_mood
 from agent.core.passive_support import update_session_runtime_metadata
+from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 from agent.core.response_parser import parse_response
 from agent.lifecycle.phase import (
     PhaseFrame,
@@ -303,6 +304,8 @@ class _UpdateSessionMetadataModule:
         if raw_session is None:
             raise RuntimeError("AfterReasoning requires TurnState.session")
         session = cast("Session", raw_session)
+        # A normally committed assistant reply closes any older interrupted snapshot.
+        _ = session.metadata.pop(INTERRUPTED_TURN_METADATA_KEY, None)
         update_session_runtime_metadata(
             session,
             tools_used=list(ctx.tools_used),
