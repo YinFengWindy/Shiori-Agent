@@ -55,9 +55,10 @@ async def test_desktop_chat_service_emits_chat_error_event(tmp_path):
             "id": "1",
             "type": "event",
             "method": "chat.error",
-            "payload": {
-                "session_key": "role:mira",
-                "message": "boom",
-            },
+                "payload": {
+                    "session_key": "role:mira",
+                    "turn_id": "1",
+                    "message": "boom",
+                },
         }
     ]

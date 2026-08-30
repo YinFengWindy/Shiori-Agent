@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { finishChatStream } from "../chat/chatStreamingState";
 import { buildOptimisticUserChatMessage, normalizeChatAttachmentPaths } from "../chat/chatComposerState";
 import { ensureChatMessageRenderId, reconcileSessionMessageRenderIds } from "../chat/chatMessageIdentity";
 import {
@@ -38,6 +39,7 @@ type UseDesktopSessionStateArgs = {
   setSelectedChatBackground: React.Dispatch<React.SetStateAction<string>>;
   setActiveIllustration: React.Dispatch<React.SetStateAction<string>>;
   setSendingSessions: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setCancellingSessions: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   chooseIllustration: (
     role: RoleRecord | null,
     session: SessionPayload | null,
@@ -57,6 +59,7 @@ type UseDesktopSessionStateArgs = {
   mainViewRef: React.MutableRefObject<AppMainView>;
   rolesRef: React.MutableRefObject<RoleRecord[]>;
   sendingSessionsRef: React.MutableRefObject<Record<string, string>>;
+  cancellingSessionsRef: React.MutableRefObject<Record<string, string>>;
   unreadCountsRef: React.MutableRefObject<Record<string, number>>;
   openRoleRequestIdRef: React.MutableRefObject<number>;
 };
@@ -111,6 +114,7 @@ export function useDesktopSessionState({
   setSelectedChatBackground,
   setActiveIllustration,
   setSendingSessions,
+  setCancellingSessions,
   chooseIllustration,
   applyRoleSnapshot,
   buildNavigationEntry,
@@ -122,6 +126,7 @@ export function useDesktopSessionState({
   mainViewRef,
   rolesRef,
   sendingSessionsRef,
+  cancellingSessionsRef,
   unreadCountsRef,
   openRoleRequestIdRef,
 }: UseDesktopSessionStateArgs) {
@@ -131,6 +136,7 @@ export function useDesktopSessionState({
   const replaceNavigationEntryRef = useRef(replaceNavigationEntry);
   const applyRoleSnapshotRef = useRef(applyRoleSnapshot);
   const pendingUserMessagesRef = useRef<Record<string, SessionMessage>>({});
+  const activeTurnIdsRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     chooseIllustrationRef.current = chooseIllustration;
@@ -288,10 +294,48 @@ export function useDesktopSessionState({
     setSendingSessions((current) => clearSendingSessionState(current, sessionKey));
   }
 
+  function markSessionCancelling(sessionKey: string, roleId: string): void {
+    cancellingSessionsRef.current = { ...cancellingSessionsRef.current, [sessionKey]: roleId };
+    setCancellingSessions((current) => current[sessionKey] === roleId ? current : { ...current, [sessionKey]: roleId });
+  }
+
+  function clearSessionCancelling(sessionKey: string): void {
+    if (!cancellingSessionsRef.current[sessionKey]) return;
+    const next = { ...cancellingSessionsRef.current };
+    delete next[sessionKey];
+    cancellingSessionsRef.current = next;
+    setCancellingSessions((current) => {
+      if (!current[sessionKey]) return current;
+      const updated = { ...current };
+      delete updated[sessionKey];
+      return updated;
+    });
+  }
+
+  function isCurrentChatTurn(sessionKey: string, turnId: string): boolean {
+    return Boolean(sessionKey && turnId && activeTurnIdsRef.current[sessionKey] === turnId);
+  }
+
+  function isChatTurnCancelling(sessionKey: string, turnId: string): boolean {
+    return isCurrentChatTurn(sessionKey, turnId)
+      && Boolean(cancellingSessionsRef.current[sessionKey]);
+  }
+
+  /** Releases renderer ownership after the matching backend turn reaches a terminal state. */
+  function completeChatTurn(sessionKey: string, turnId: string): void {
+    if (!isCurrentChatTurn(sessionKey, turnId)) return;
+    delete activeTurnIdsRef.current[sessionKey];
+    clearSessionCancelling(sessionKey);
+    clearSessionSending(sessionKey);
+  }
+
   function clearAllSendingSessions(): void {
     pendingUserMessagesRef.current = {};
+    activeTurnIdsRef.current = {};
     sendingSessionsRef.current = clearAllSendingSessionsState(sendingSessionsRef.current);
     setSendingSessions((current) => clearAllSendingSessionsState(current));
+    cancellingSessionsRef.current = {};
+    setCancellingSessions((current) => clearAllSendingSessionsState(current));
   }
 
   async function openRole(
@@ -399,6 +443,7 @@ export function useDesktopSessionState({
     if (!canSendSessionState(sendingSessionsRef.current, sessionKey)) return false;
     const persistedReplyTarget = currentReplyTarget;
     const clientMessageId = window.crypto.randomUUID();
+    const turnId = window.crypto.randomUUID();
     const pendingUserMessage = buildOptimisticUserChatMessage(
       content,
       media,
@@ -406,6 +451,7 @@ export function useDesktopSessionState({
       clientMessageId,
     );
     pendingUserMessagesRef.current[sessionKey] = pendingUserMessage;
+    activeTurnIdsRef.current[sessionKey] = turnId;
     markSessionSending(sessionKey, roleId);
     setError("");
     updateCommittedActiveSession((current) =>
@@ -427,6 +473,7 @@ export function useDesktopSessionState({
           content,
           media,
           client_message_id: clientMessageId,
+          turn_id: turnId,
           reply_to_message_id: persistedReplyTarget?.messageId ?? "",
           reply_to_content: persistedReplyTarget?.content ?? "",
           reply_to_sender: persistedReplyTarget?.sender ?? "",
@@ -435,6 +482,7 @@ export function useDesktopSessionState({
       if (res.error) {
         delete pendingUserMessagesRef.current[sessionKey];
         clearSessionSending(sessionKey);
+        delete activeTurnIdsRef.current[sessionKey];
         const { session: recoveredSession } = await fetchRoleSession(roleId);
         if (recoveredSession) {
           cacheRoleSession(roleId, recoveredSession);
@@ -456,6 +504,7 @@ export function useDesktopSessionState({
     } catch (error) {
       delete pendingUserMessagesRef.current[sessionKey];
       clearSessionSending(sessionKey);
+      delete activeTurnIdsRef.current[sessionKey];
       const { session: recoveredSession } = await fetchRoleSession(roleId);
       if (recoveredSession) {
         cacheRoleSession(roleId, recoveredSession);
@@ -473,6 +522,33 @@ export function useDesktopSessionState({
     }
   }
 
+  async function cancelChatTurn(sessionKey: string, roleId: string): Promise<boolean> {
+    const turnId = activeTurnIdsRef.current[sessionKey] ?? "";
+    if (!turnId || !sessionKey) return false;
+    if (cancellingSessionsRef.current[sessionKey]) return false;
+    markSessionCancelling(sessionKey, roleId);
+    try {
+      const res = await window.miraDesktop.invoke({
+        method: "chat.cancel",
+        payload: { session_key: sessionKey, turn_id: turnId },
+      });
+      if (res.error) throw new Error(res.error.message);
+      const status = String(res.payload.status ?? "");
+      if (status !== "interrupted" && status !== "idle") {
+        throw new Error(String(res.payload.message ?? "中止回复失败"));
+      }
+      if (isCurrentChatTurn(sessionKey, turnId)) {
+        updateCommittedActiveSession((current) => current?.key === sessionKey ? finishChatStream(current) : current);
+        completeChatTurn(sessionKey, turnId);
+      }
+      return true;
+    } catch (error) {
+      clearSessionCancelling(sessionKey);
+      window.alert(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  }
+
   return {
     cacheRoleSession,
     removeCachedRoleSession,
@@ -481,6 +557,10 @@ export function useDesktopSessionState({
     refreshSession,
     clearAllSendingSessions,
     clearSessionSending,
+    cancelChatTurn,
+    isCurrentChatTurn,
+    isChatTurnCancelling,
+    completeChatTurn,
     appendSessionErrorMessage,
     openRole,
     sendMessage,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from agent.looping.core import AgentLoop
@@ -47,6 +48,25 @@ class ChatTurnBusyError(RuntimeError):
     """Raised when a desktop session already owns an active chat turn."""
 
 
+@dataclass(frozen=True)
+class ChatTurnCancelResult:
+    """Result of a session-scoped desktop chat cancellation request."""
+
+    status: str
+    session_key: str
+    turn_id: str
+    message: str
+
+
+@dataclass(frozen=True)
+class _DesktopChatTurn:
+    """Tracks one renderer-owned turn without sharing state across sessions."""
+
+    task: asyncio.Task[None]
+    turn_id: str
+    voice_turn_id: str
+
+
 class DesktopChatService:
     """Runs desktop chat turns and bridges lifecycle events back to the bridge stream."""
 
@@ -75,7 +95,7 @@ class DesktopChatService:
         self._emit_session_updated = emit_session_updated
         self._tts_service = tts_service
         self._streaming_enabled = bool(streaming_enabled)
-        self._tasks_by_session: dict[str, asyncio.Task[None]] = {}
+        self._tasks_by_session: dict[str, _DesktopChatTurn] = {}
         self._voice_turn_tasks: dict[str, tuple[str, asyncio.Task[None]]] = {}
         self._tts_tasks: set[asyncio.Task[None]] = set()
         self._tts_coordinators: dict[str, TtsTurnCoordinator] = {}
@@ -83,8 +103,58 @@ class DesktopChatService:
     def is_busy(self, session_key: str) -> bool:
         """Returns whether the session already has an active desktop turn."""
 
-        task = self._tasks_by_session.get(session_key)
-        return task is not None and not task.done()
+        turn = self._tasks_by_session.get(session_key)
+        return turn is not None and not turn.task.done()
+
+    def cancel_chat_turn(self, session_key: str, turn_id: str) -> ChatTurnCancelResult:
+        """Interrupts exactly one active renderer chat turn when its identity matches."""
+
+        normalized_session_key = session_key.strip()
+        normalized_turn_id = turn_id.strip()
+        if not normalized_session_key or not normalized_turn_id:
+            raise ValueError("session_key 和 turn_id 不能为空")
+        active_turn = self._tasks_by_session.get(normalized_session_key)
+        if active_turn is None or active_turn.task.done():
+            return ChatTurnCancelResult(
+                status="idle",
+                session_key=normalized_session_key,
+                turn_id=normalized_turn_id,
+                message="当前回合已经结束",
+            )
+        if active_turn.turn_id != normalized_turn_id:
+            return ChatTurnCancelResult(
+                status="mismatch",
+                session_key=normalized_session_key,
+                turn_id=normalized_turn_id,
+                message="当前会话正在执行另一个回合",
+            )
+
+        result = self._agent_loop.request_interrupt(
+            normalized_session_key,
+            sender="desktop",
+            command="/cancel",
+        )
+        # The direct AgentLoop task may not have registered yet. Cancelling the
+        # desktop-owned wrapper closes that narrow race without touching other sessions.
+        active_turn.task.cancel()
+        # Release the renderer-owned session slot before the cancellation task
+        # finishes so a follow-up message can start immediately.
+        _ = self._tasks_by_session.pop(normalized_session_key, None)
+        if active_turn.voice_turn_id and self._voice_turn_tasks.get(active_turn.voice_turn_id) == (
+            normalized_session_key,
+            active_turn.task,
+        ):
+            _ = self._voice_turn_tasks.pop(active_turn.voice_turn_id, None)
+        if active_turn.voice_turn_id:
+            coordinator = self._tts_coordinators.pop(active_turn.voice_turn_id, None)
+            if coordinator is not None:
+                coordinator.cancel()
+        return ChatTurnCancelResult(
+            status="interrupted",
+            session_key=normalized_session_key,
+            turn_id=normalized_turn_id,
+            message=result.message if result.status == "interrupted" else "已中止当前回复",
+        )
 
     def cancel_voice_turn(self, turn_id: str) -> bool:
         """Cancels chat and synthesis work owned by one voice input turn."""
@@ -119,7 +189,9 @@ class DesktopChatService:
         metadata: dict[str, object] | None,
         omit_user_turn: bool,
         emit_event: EventEmitter,
+        turn_id: str | None = None,
     ) -> tuple[Session, list[BridgeEvent]]:
+        turn_id = turn_id or request_id
         collected: list[BridgeEvent] = []
         tts = self._create_tts_coordinator(
             request_id=request_id,
@@ -162,6 +234,7 @@ class DesktopChatService:
                 method="chat.delta",
                 payload={
                     "session_key": event.session_key,
+                    "turn_id": turn_id,
                     "content_delta": event.content_delta,
                     "thinking_delta": event.thinking_delta,
                 },
@@ -181,6 +254,7 @@ class DesktopChatService:
                 method="chat.done",
                 payload={
                     "session_key": event.session_key,
+                    "turn_id": turn_id,
                     "role_id": self._role_id_from_session_key(event.session_key),
                     "reply": event.assistant_response,
                     "thinking": event.thinking,
@@ -213,6 +287,7 @@ class DesktopChatService:
                 method="chat.tool.started",
                 payload={
                     "session_key": event.session_key,
+                    "turn_id": turn_id,
                     "iteration": event.iteration,
                     "call_id": call_id,
                     "tool_name": tool_name,
@@ -235,6 +310,7 @@ class DesktopChatService:
                 method="chat.tool.completed",
                 payload={
                     "session_key": event.session_key,
+                    "turn_id": turn_id,
                     "iteration": event.iteration,
                     "call_id": call_id,
                     "tool_name": tool_name,
@@ -299,6 +375,7 @@ class DesktopChatService:
                 method="chat.error",
                 payload={
                     "session_key": session_key,
+                    "turn_id": turn_id,
                     "message": str(exc),
                 },
             )
@@ -322,7 +399,9 @@ class DesktopChatService:
         metadata: dict[str, object] | None,
         omit_user_turn: bool,
         emit_event: EventEmitter,
+        turn_id: str | None = None,
     ) -> None:
+        turn_id = turn_id or request_id
         if self.is_busy(session_key):
             raise ChatTurnBusyError(f"会话 {session_key} 已有正在执行的聊天任务")
 
@@ -330,6 +409,7 @@ class DesktopChatService:
             try:
                 _ = await self.run_chat_turn(
                     request_id=request_id,
+                    turn_id=turn_id,
                     session_key=session_key,
                     content=content,
                     media=media,
@@ -337,15 +417,21 @@ class DesktopChatService:
                     omit_user_turn=omit_user_turn,
                     emit_event=emit_event,
                 )
+            except asyncio.CancelledError:
+                return
             except Exception:
                 logger.exception("desktop chat turn failed: %s", session_key)
 
-        task = asyncio.create_task(_runner(), name=f"desktop-chat:{session_key}")
-        self._tasks_by_session[session_key] = task
         voice_turn_id = (
             str(metadata.get("voice_turn_id") or "").strip()
             if isinstance(metadata, dict) and metadata.get("input_method") == "voice"
             else ""
+        )
+        task = asyncio.create_task(_runner(), name=f"desktop-chat:{session_key}")
+        self._tasks_by_session[session_key] = _DesktopChatTurn(
+            task=task,
+            turn_id=turn_id,
+            voice_turn_id=voice_turn_id,
         )
         if voice_turn_id:
             self._voice_turn_tasks[voice_turn_id] = (session_key, task)
@@ -360,7 +446,7 @@ class DesktopChatService:
     async def aclose(self) -> None:
         """Cancels and awaits every desktop-owned chat turn."""
 
-        tasks = list(self._tasks_by_session.values())
+        tasks = [turn.task for turn in self._tasks_by_session.values()]
         for task in tasks:
             if not task.done():
                 _ = task.cancel()
@@ -466,7 +552,8 @@ class DesktopChatService:
         task: asyncio.Task[None],
         voice_turn_id: str,
     ) -> None:
-        if self._tasks_by_session.get(session_key) is task:
+        active_turn = self._tasks_by_session.get(session_key)
+        if active_turn is not None and active_turn.task is task:
             _ = self._tasks_by_session.pop(session_key, None)
         if voice_turn_id and self._voice_turn_tasks.get(voice_turn_id) == (
             session_key,

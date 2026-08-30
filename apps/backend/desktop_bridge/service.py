@@ -228,7 +228,6 @@ class DesktopBridgeService:
                 chat_service=self.chat_service,
                 start_chat_turn=lambda **kwargs: self._start_chat_turn(**kwargs),
                 session_presenter=self.session_presenter,
-                agent_loop=agent_loop,
                 sanitize_voice_metrics=_sanitize_voice_metrics,
             ),
             images=DesktopImageRequestHandler(
@@ -378,6 +377,7 @@ class DesktopBridgeService:
         self,
         *,
         request_id: str,
+        turn_id: str,
         session_key: str,
         content: str,
         media: list[str],
@@ -387,6 +387,7 @@ class DesktopBridgeService:
     ) -> None:
         self.chat_service.start_chat_turn(
             request_id=request_id,
+            turn_id=turn_id,
             session_key=session_key,
             content=content,
             media=media,

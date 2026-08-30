@@ -75,6 +75,7 @@ describe("desktopSelectors", () => {
       selectedChatImageKey: "",
       health: "online",
       sendingSessions: {},
+      cancellingSessions: {},
     });
 
     assert.equal(viewModel.roleFormDirty, true);
@@ -91,10 +92,12 @@ describe("desktopSelectors", () => {
       selectedChatImageKey: "",
       health: "online",
       sendingSessions: { "role:mira": "mira" },
+      cancellingSessions: { "role:mira": "mira" },
     });
 
     assert.equal(viewModel.headerTitle, "正在输入中...");
     assert.equal(viewModel.bridgeReady, true);
+    assert.equal(viewModel.isVisibleChatCancelling, true);
   });
 
   it("keeps duplicate latest images distinct when selection uses the history entry key", () => {
@@ -124,6 +127,7 @@ describe("desktopSelectors", () => {
       selectedChatImageKey: "message-2:0",
       health: "online",
       sendingSessions: {},
+      cancellingSessions: {},
     });
 
     assert.equal(viewModel.selectedChatImageIndex, 1);
@@ -152,6 +156,7 @@ describe("desktopSelectors", () => {
       selectedChatImageKey: "",
       health: "online",
       sendingSessions: {},
+      cancellingSessions: {},
     });
 
     assert.equal(viewModel.currentMood, "开心");
@@ -182,6 +187,7 @@ describe("desktopSelectors", () => {
       selectedChatImageKey: "",
       health: "online",
       sendingSessions: {},
+      cancellingSessions: {},
     });
 
     assert.equal(viewModel.moodIllustration, "D:\\roles\\mira\\happy.png");
@@ -228,6 +234,7 @@ describe("desktopSelectors", () => {
       selectedChatImageKey: "",
       health: "online",
       sendingSessions: {},
+      cancellingSessions: {},
     });
 
     assert.equal(viewModel.roleSelfView, "我最近会不自觉地去想你会不会来找我。");
@@ -273,6 +280,7 @@ describe("desktopSelectors", () => {
       selectedChatImageKey: "",
       health: "online",
       sendingSessions: {},
+      cancellingSessions: {},
     });
 
     assert.equal(viewModel.roleSelfView, "我还是会留意你有没有想起我。");
@@ -305,6 +313,7 @@ describe("desktopSelectors", () => {
       selectedChatImageKey: "",
       health: "online",
       sendingSessions: {},
+      cancellingSessions: {},
     });
 
     assert.equal(viewModel.roleSelfView, "");

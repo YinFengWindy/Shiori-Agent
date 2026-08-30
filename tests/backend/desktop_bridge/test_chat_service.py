@@ -117,6 +117,7 @@ async def test_chat_service_bridges_tool_call_lifecycle_for_current_session() ->
     ]
     assert tool_events[0]["payload"] == {
         "session_key": "role:role-1",
+        "turn_id": "request-tools",
         "iteration": 1,
         "call_id": "call-1",
         "tool_name": "web_search",
@@ -259,6 +260,174 @@ async def test_chat_service_allows_only_one_turn_per_session() -> None:
 
     await service.aclose()
     assert service.is_busy("role:role-1") is False
+
+
+@pytest.mark.asyncio
+async def test_cancel_chat_turn_interrupts_only_the_matching_session_and_turn() -> None:
+    started = asyncio.Event()
+    interrupt = Mock(
+        return_value=SimpleNamespace(
+            status="idle",
+            session_key="role:role-1",
+            message="not registered yet",
+        )
+    )
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(
+            process_direct=_process_direct,
+            request_interrupt=interrupt,
+        ),
+        event_bus=EventBus(),
+        session_manager=SimpleNamespace(get_or_create=Mock()),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=AsyncMock(),
+        emit_session_updated=AsyncMock(),
+    )
+    service.start_chat_turn(
+        request_id="request-1",
+        turn_id="turn-current",
+        session_key="role:role-1",
+        content="hello",
+        media=[],
+        metadata={},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+    await started.wait()
+
+    wrong_session = service.cancel_chat_turn("role:other", "turn-current")
+    wrong_turn = service.cancel_chat_turn("role:role-1", "turn-old")
+
+    assert wrong_session.status == "idle"
+    assert wrong_turn.status == "mismatch"
+    assert service.is_busy("role:role-1") is True
+    interrupt.assert_not_called()
+
+    result = service.cancel_chat_turn("role:role-1", "turn-current")
+
+    assert result.status == "interrupted"
+    interrupt.assert_called_once_with(
+        "role:role-1",
+        sender="desktop",
+        command="/cancel",
+    )
+    await asyncio.sleep(0)
+    assert service.is_busy("role:role-1") is False
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancel_chat_turn_releases_the_session_for_an_immediate_follow_up() -> None:
+    started = asyncio.Event()
+    calls = 0
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            started.set()
+            await asyncio.Event().wait()
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(
+            process_direct=_process_direct,
+            request_interrupt=Mock(
+                return_value=SimpleNamespace(status="interrupted", message="cancelled")
+            ),
+        ),
+        event_bus=EventBus(),
+        session_manager=SimpleNamespace(get_or_create=Mock()),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=AsyncMock(),
+        emit_session_updated=AsyncMock(),
+    )
+    arguments = {
+        "request_id": "request-1",
+        "turn_id": "turn-1",
+        "session_key": "role:role-1",
+        "content": "first",
+        "media": [],
+        "metadata": {},
+        "omit_user_turn": True,
+        "emit_event": AsyncMock(),
+    }
+    service.start_chat_turn(**arguments)
+    await started.wait()
+
+    result = service.cancel_chat_turn("role:role-1", "turn-1")
+
+    assert result.status == "interrupted"
+    service.start_chat_turn(**{
+        **arguments,
+        "request_id": "request-2",
+        "turn_id": "turn-2",
+        "content": "follow up",
+    })
+    await asyncio.sleep(0)
+    assert calls == 2
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancel_chat_turn_stops_the_associated_voice_tts_coordinator() -> None:
+    started = asyncio.Event()
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    service = DesktopChatService(
+        agent_loop=SimpleNamespace(
+            process_direct=_process_direct,
+            request_interrupt=Mock(
+                return_value=SimpleNamespace(status="interrupted", message="cancelled")
+            ),
+        ),
+        event_bus=EventBus(),
+        session_manager=SimpleNamespace(
+            get_or_create=Mock(
+                return_value=SimpleNamespace(
+                    metadata={"role_runtime_config": {"tts": {"voice_id": "mira"}}}
+                )
+            )
+        ),
+        role_id_from_session_key=Mock(return_value="role-1"),
+        sync_desktop_session_thread=Mock(),
+        emit_payload=AsyncMock(),
+        emit_session_updated=AsyncMock(),
+        tts_service=SimpleNamespace(
+            tts_enabled=True,
+            tts_provider="minimax",
+            stream_synthesize_result=Mock(),
+        ),
+    )
+    service.start_chat_turn(
+        request_id="request-voice-1",
+        turn_id="turn-voice",
+        session_key="role:role-1",
+        content="hello",
+        media=[],
+        metadata={"input_method": "voice", "voice_turn_id": "voice-turn-1"},
+        omit_user_turn=True,
+        emit_event=AsyncMock(),
+    )
+    await started.wait()
+    coordinator = Mock()
+    service._tts_coordinators["voice-turn-1"] = coordinator
+
+    result = service.cancel_chat_turn("role:role-1", "turn-voice")
+
+    assert result.status == "interrupted"
+    coordinator.cancel.assert_called_once_with()
+    await asyncio.sleep(0)
+    await service.aclose()
 
 
 @pytest.mark.asyncio

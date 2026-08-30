@@ -1,4 +1,5 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
+import { Stop } from "@phosphor-icons/react";
 import { ChatEmojiPicker } from "./ChatEmojiPicker";
 import { canSubmitChatMessage, normalizeChatAttachmentPaths } from "./chatComposerState";
 import { insertEmojiIntoChatDraft } from "./chatEmojiState";
@@ -14,8 +15,10 @@ type ChatComposerProps = {
   sessionKey: string;
   bridgeReady: boolean;
   sending: boolean;
+  cancelling: boolean;
   replyTarget: ChatReplyTarget | null;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
+  onCancelChat: () => void;
   onClearReplyTarget: () => void;
   onJumpToMessage: (messageKey: string) => void;
 };
@@ -39,8 +42,10 @@ export const ChatComposer = React.memo(function ChatComposer({
   sessionKey,
   bridgeReady,
   sending,
+  cancelling,
   replyTarget,
   onSendMessage,
+  onCancelChat,
   onClearReplyTarget,
   onJumpToMessage,
 }: ChatComposerProps) {
@@ -248,9 +253,21 @@ export const ChatComposer = React.memo(function ChatComposer({
               onSelectEmoji={handleSelectEmoji}
               onToggle={() => setEmojiPickerOpen((current) => !current)}
             />
-            <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="发送消息" onClick={() => void submitMessage()} disabled={!activeRoleId || !canSubmit || sending || !bridgeReady}>
-              <SendIcon className="h-[15px] w-[15px] fill-current" />
-            </button>
+            {sending ? (
+              <button
+                className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40"
+                type="button"
+                aria-label="中止回复"
+                onClick={onCancelChat}
+                disabled={cancelling}
+              >
+                <Stop className="h-[15px] w-[15px] fill-current" />
+              </button>
+            ) : (
+              <button className="send-btn grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-full border-0 bg-[#1f1f1f] p-0 text-white disabled:cursor-default disabled:opacity-40" type="button" aria-label="发送消息" onClick={() => void submitMessage()} disabled={!activeRoleId || !canSubmit || !bridgeReady}>
+                <SendIcon className="h-[15px] w-[15px] fill-current" />
+              </button>
+            )}
           </div>
         </div>
       </div>

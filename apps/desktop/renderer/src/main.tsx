@@ -88,6 +88,7 @@ function App(): React.ReactElement {
   const [deletingRole, setDeletingRole] = useState(false);
   // Track in-flight chat turns by session so role switches don't leak typing state into other chats.
   const [sendingSessions, setSendingSessions] = useState<Record<string, string>>({});
+  const [cancellingSessions, setCancellingSessions] = useState<Record<string, string>>({});
   const [pendingRoleCardAction, setPendingRoleCardAction] = useState<PendingRoleCardAction>(null);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [pendingDeleteRoleId, setPendingDeleteRoleId] = useState("");
@@ -138,6 +139,7 @@ function App(): React.ReactElement {
   const mainViewRef = useLatestRef<AppMainView>(mainView);
   const rolesRef = useLatestRef(roles);
   const sendingSessionsRef = useLatestRef(sendingSessions);
+  const cancellingSessionsRef = useLatestRef(cancellingSessions);
   const unreadCountsRef = useLatestRef(unreadCounts);
   const roleFormRef = useLatestRef(roleForm);
   const lastNonSettingsViewRef = useDesktopViewSynchronization({
@@ -228,6 +230,10 @@ function App(): React.ReactElement {
     refreshSession,
     clearAllSendingSessions,
     clearSessionSending,
+    cancelChatTurn,
+    completeChatTurn,
+    isCurrentChatTurn,
+    isChatTurnCancelling,
     appendSessionErrorMessage,
     openRole,
     sendMessage,
@@ -244,6 +250,7 @@ function App(): React.ReactElement {
     setSelectedChatBackground,
     setActiveIllustration,
     setSendingSessions,
+    setCancellingSessions,
     chooseIllustration,
     applyRoleSnapshot,
     buildNavigationEntry,
@@ -255,6 +262,7 @@ function App(): React.ReactElement {
     mainViewRef,
     rolesRef,
     sendingSessionsRef,
+    cancellingSessionsRef,
     unreadCountsRef,
     openRoleRequestIdRef,
   });
@@ -278,6 +286,9 @@ function App(): React.ReactElement {
     cacheRoleSession,
     clearAllSendingSessions,
     clearSessionSending,
+    completeChatTurn,
+    isCurrentChatTurn,
+    isChatTurnCancelling,
     commitActiveSession,
     updateCommittedActiveSession,
     appendSessionErrorMessage,
@@ -316,6 +327,7 @@ function App(): React.ReactElement {
     chatBackgroundUrl,
     activeSessionKey,
     isVisibleChatSending,
+    isVisibleChatCancelling,
     headerTitle,
     chatImageHistory,
     resolvedChatImagePath,
@@ -333,6 +345,7 @@ function App(): React.ReactElement {
     selectedChatImageKey,
     health,
     sendingSessions,
+    cancellingSessions,
   });
 
   const {
@@ -560,6 +573,7 @@ function App(): React.ReactElement {
       highlightedMessageKey={highlightedMessageKey}
       notice={notice}
       isVisibleChatSending={isVisibleChatSending}
+      isVisibleChatCancelling={isVisibleChatCancelling}
       visibleIllustrationUrl={visibleIllustrationUrl}
       windowVisible={windowVisible}
       onGoToNextChatImage={selectNextChatImage}
@@ -571,6 +585,7 @@ function App(): React.ReactElement {
       onBeginAttachmentDrag={beginAttachmentDrag}
       onCopyMessage={(content) => void copyChatMessage(content)}
       onSendMessage={sendMessage}
+      onCancelChat={() => void cancelChatTurn(activeSessionKey, activeRoleId)}
       imageHistorySidebar={imageHistorySidebar}
       detailRole={detailRole}
       pendingRoleCardAction={pendingRoleCardAction}

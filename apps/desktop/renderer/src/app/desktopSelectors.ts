@@ -27,6 +27,7 @@ type BuildDesktopViewModelArgs = {
   selectedChatImageKey: string;
   health: string;
   sendingSessions: Record<string, string>;
+  cancellingSessions: Record<string, string>;
 };
 
 /** Builds the derived desktop view model from persisted app state. */
@@ -40,6 +41,7 @@ export function buildDesktopViewModel({
   selectedChatImageKey,
   health,
   sendingSessions,
+  cancellingSessions,
 }: BuildDesktopViewModelArgs) {
   const activeRole = roles.find((role) => role.id === activeRoleId) ?? null;
   const detailRoleId = mainView.kind === "role-detail" ? mainView.roleId : activeRoleId;
@@ -71,6 +73,7 @@ export function buildDesktopViewModel({
   const activeSessionKey = activeSession?.key ?? "";
   const visibleChatSessionKey = resolveVisibleChatSessionKey(activeRoleId, activeSessionKey);
   const isVisibleChatSending = Boolean(visibleChatSessionKey && sendingSessions[visibleChatSessionKey]);
+  const isVisibleChatCancelling = Boolean(visibleChatSessionKey && cancellingSessions[visibleChatSessionKey]);
   const headerTitle = resolveChatHeaderTitle({
     activeRoleName: activeRole?.name ?? null,
     activeSessionKey: visibleChatSessionKey,
@@ -125,6 +128,7 @@ export function buildDesktopViewModel({
     activeSessionKey,
     visibleChatSessionKey,
     isVisibleChatSending,
+    isVisibleChatCancelling,
     headerTitle,
     chatImageHistory,
     resolvedChatImagePath,
