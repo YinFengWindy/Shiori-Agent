@@ -109,6 +109,7 @@ type DesktopAppFrameProps = {
   highlightedMessageKey: string;
   notice: string;
   isVisibleChatSending: boolean;
+  isVisibleChatCancelling: boolean;
   visibleIllustrationUrl: string;
   windowVisible: boolean;
   onGoToNextChatImage: () => void;
@@ -120,6 +121,7 @@ type DesktopAppFrameProps = {
   onBeginAttachmentDrag: (path: string) => void;
   onCopyMessage: (content: string) => void;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
+  onCancelChat: () => void;
   imageHistorySidebar: RightSidebarViewState;
   detailRole: RoleRecord | null;
   pendingRoleCardAction: PendingRoleCardAction;
@@ -244,6 +246,7 @@ export function DesktopAppFrame({
   highlightedMessageKey,
   notice,
   isVisibleChatSending,
+  isVisibleChatCancelling,
   visibleIllustrationUrl,
   windowVisible,
   onGoToNextChatImage,
@@ -255,6 +258,7 @@ export function DesktopAppFrame({
   onBeginAttachmentDrag,
   onCopyMessage,
   onSendMessage,
+  onCancelChat,
   imageHistorySidebar,
   detailRole,
   pendingRoleCardAction,
@@ -456,6 +460,7 @@ export function DesktopAppFrame({
               highlightedMessageKey={highlightedMessageKey}
               notice={notice}
               sending={isVisibleChatSending}
+              cancelling={isVisibleChatCancelling}
               visibleIllustrationUrl={visibleIllustrationUrl}
               windowVisible={windowVisible}
               onBeginChatLatestImageSidebarResize={chatLatestImageSidebar.beginResize}
@@ -468,6 +473,7 @@ export function DesktopAppFrame({
               onBeginAttachmentDrag={onBeginAttachmentDrag}
               onCopyMessage={onCopyMessage}
               onSendMessage={onSendMessage}
+              onCancelChat={onCancelChat}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
             />
           ) : null}

@@ -46,11 +46,15 @@ class _InterruptMixin:
                 session_key=session_key,
                 original_user_message="",
             )
-        self._interrupt_states[session_key] = replace(
+        snapshot = replace(
             active_state,
+            original_metadata=dict(active_state.original_metadata),
+            tools_used=list(active_state.tools_used),
+            tool_chain_partial=list(active_state.tool_chain_partial),
             interrupted_by=command,
             interrupted_at=time.monotonic(),
         )
+        self._interrupt_states[session_key] = snapshot
         task.cancel()
         logger.info(
             f"Turn interrupted  session_key={session_key}  "
@@ -60,7 +64,18 @@ class _InterruptMixin:
             status="interrupted",
             session_key=session_key,
             message="本轮已中断。你可以继续补充要求，我会接着这件事处理。",
+            state=snapshot,
         )
+
+    def discard_interrupt_state(
+        self,
+        session_key: str,
+        state: TurnInterruptState,
+    ) -> None:
+        """Drops a snapshot after its channel has durably persisted it."""
+
+        if self._interrupt_states.get(session_key) is state:
+            _ = self._interrupt_states.pop(session_key, None)
 
     def _get_interrupt_state(self, session_key: str) -> TurnInterruptState | None:
         """读取中断态（含 TTL 过期检查），不提前消费。"""
@@ -101,6 +116,10 @@ class _InterruptMixin:
     ) -> tuple[InboundItem, bool]:
         # 1. 只有普通入站消息参与续跑，内部工作项不消费中断态。
         if not isinstance(msg, InboundMessage):
+            return msg, False
+        # Desktop persists the partial assistant trace and exposes the interruption
+        # as a separate session context frame; never duplicate it in user content.
+        if msg.channel == "desktop":
             return msg, False
         interrupted = self._get_interrupt_state(key)
         if interrupted is None:

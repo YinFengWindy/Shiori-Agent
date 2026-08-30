@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from agent.looping.core import AgentLoop
+from agent.looping.interrupt import TurnInterruptState
 from bus.event_bus import EventBus
 from bus.events_lifecycle import (
     StreamDeltaReady,
@@ -19,6 +21,7 @@ from desktop_bridge.tool_call_preview import truncate_desktop_tool_result
 from desktop_bridge.voice.tts_coordinator import TtsTurnCoordinator
 from desktop_bridge.voice.voice_service import VoiceService
 from session.manager import Session, SessionManager
+from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 
 logger = logging.getLogger("desktop.bridge.chat")
 
@@ -45,6 +48,25 @@ class EmitSessionUpdated(Protocol):
 
 class ChatTurnBusyError(RuntimeError):
     """Raised when a desktop session already owns an active chat turn."""
+
+
+@dataclass(frozen=True)
+class ChatTurnCancelResult:
+    """Result of a session-scoped desktop chat cancellation request."""
+
+    status: str
+    session_key: str
+    turn_id: str
+    message: str
+
+
+@dataclass(frozen=True)
+class _DesktopChatTurn:
+    """Tracks one renderer-owned turn without sharing state across sessions."""
+
+    task: asyncio.Task[None]
+    turn_id: str
+    voice_turn_id: str
 
 
 class DesktopChatService:
@@ -75,7 +97,7 @@ class DesktopChatService:
         self._emit_session_updated = emit_session_updated
         self._tts_service = tts_service
         self._streaming_enabled = bool(streaming_enabled)
-        self._tasks_by_session: dict[str, asyncio.Task[None]] = {}
+        self._tasks_by_session: dict[str, _DesktopChatTurn] = {}
         self._voice_turn_tasks: dict[str, tuple[str, asyncio.Task[None]]] = {}
         self._tts_tasks: set[asyncio.Task[None]] = set()
         self._tts_coordinators: dict[str, TtsTurnCoordinator] = {}
@@ -83,8 +105,262 @@ class DesktopChatService:
     def is_busy(self, session_key: str) -> bool:
         """Returns whether the session already has an active desktop turn."""
 
-        task = self._tasks_by_session.get(session_key)
-        return task is not None and not task.done()
+        turn = self._tasks_by_session.get(session_key)
+        return turn is not None and not turn.task.done()
+
+    def cancel_chat_turn(
+        self,
+        session_key: str,
+        turn_id: str,
+    ) -> ChatTurnCancelResult:
+        """Interrupts exactly one active renderer chat turn when its identity matches."""
+
+        normalized_session_key = session_key.strip()
+        normalized_turn_id = turn_id.strip()
+        if not normalized_session_key or not normalized_turn_id:
+            raise ValueError("session_key 和 turn_id 不能为空")
+        active_turn = self._tasks_by_session.get(normalized_session_key)
+        if active_turn is None or active_turn.task.done():
+            return ChatTurnCancelResult(
+                status="idle",
+                session_key=normalized_session_key,
+                turn_id=normalized_turn_id,
+                message="当前回合已经结束",
+            )
+        if active_turn.turn_id != normalized_turn_id:
+            return ChatTurnCancelResult(
+                status="mismatch",
+                session_key=normalized_session_key,
+                turn_id=normalized_turn_id,
+                message="当前会话正在执行另一个回合",
+            )
+
+        result, interrupt_state = self._prepare_cancel(
+            normalized_session_key,
+        )
+        self._schedule_interrupted_persistence(
+            session_key=normalized_session_key,
+            turn_id=normalized_turn_id,
+            state=interrupt_state,
+            task=active_turn.task,
+        )
+        return ChatTurnCancelResult(
+            status=result.status,
+            session_key=normalized_session_key,
+            turn_id=normalized_turn_id,
+            message=result.message,
+        )
+
+    async def cancel_chat_turn_async(
+        self,
+        session_key: str,
+        turn_id: str,
+    ) -> ChatTurnCancelResult:
+        """Cancels a turn and waits for its partial reply to be durable."""
+
+        normalized_session_key = session_key.strip()
+        normalized_turn_id = turn_id.strip()
+        if not normalized_session_key or not normalized_turn_id:
+            raise ValueError("session_key 和 turn_id 不能为空")
+        active_turn = self._tasks_by_session.get(normalized_session_key)
+        if active_turn is None or active_turn.task.done():
+            return ChatTurnCancelResult(
+                status="idle",
+                session_key=normalized_session_key,
+                turn_id=normalized_turn_id,
+                message="当前回合已经结束",
+            )
+        if active_turn.turn_id != normalized_turn_id:
+            return ChatTurnCancelResult(
+                status="mismatch",
+                session_key=normalized_session_key,
+                turn_id=normalized_turn_id,
+                message="当前会话正在执行另一个回合",
+            )
+        result, interrupt_state = self._prepare_cancel(
+            normalized_session_key,
+            normalized_turn_id=normalized_turn_id,
+        )
+        if active_turn is not None:
+            await self._await_turn_cleanup(normalized_session_key, active_turn)
+        if result.status == "interrupted" and isinstance(interrupt_state, TurnInterruptState):
+            await self._persist_interrupted_turn(
+                session_key=normalized_session_key,
+                turn_id=normalized_turn_id,
+                state=interrupt_state,
+            )
+            discard = getattr(self._agent_loop, "discard_interrupt_state", None)
+            if callable(discard):
+                discard(normalized_session_key, interrupt_state)
+        return result
+
+    async def _persist_and_discard_interrupted_turn(
+        self,
+        *,
+        session_key: str,
+        turn_id: str,
+        state: TurnInterruptState,
+    ) -> None:
+        await self._persist_interrupted_turn(
+            session_key=session_key,
+            turn_id=turn_id,
+            state=state,
+        )
+        discard = getattr(self._agent_loop, "discard_interrupt_state", None)
+        if callable(discard):
+            discard(session_key, state)
+
+    def _schedule_interrupted_persistence(
+        self,
+        *,
+        session_key: str,
+        turn_id: str,
+        state: TurnInterruptState | None,
+        task: asyncio.Task[None] | None = None,
+    ) -> None:
+        """Schedules compatibility-path persistence when no async caller can await it."""
+
+        if state is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(
+            self._persist_after_turn_cleanup(
+                session_key=session_key,
+                turn_id=turn_id,
+                state=state,
+                task=task,
+            )
+        )
+
+    async def _persist_after_turn_cleanup(
+        self,
+        *,
+        session_key: str,
+        turn_id: str,
+        state: TurnInterruptState,
+        task: asyncio.Task[None] | None,
+    ) -> None:
+        if task is not None:
+            active_turn = self._tasks_by_session.get(session_key)
+            if active_turn is not None and active_turn.task is task:
+                await self._await_turn_cleanup(session_key, active_turn)
+        await self._persist_and_discard_interrupted_turn(
+            session_key=session_key,
+            turn_id=turn_id,
+            state=state,
+        )
+
+    def _prepare_cancel(
+        self,
+        session_key: str,
+        normalized_turn_id: str | None = None,
+    ) -> tuple[ChatTurnCancelResult, TurnInterruptState | None]:
+        """Stops renderer-owned work and returns the immutable interrupt snapshot."""
+
+        active_turn = self._tasks_by_session.get(session_key)
+        turn_id = normalized_turn_id or (active_turn.turn_id if active_turn else "")
+        raw_result = self._agent_loop.request_interrupt(
+            session_key,
+            sender="desktop",
+            command="/cancel",
+        )
+        interrupt_state = getattr(raw_result, "state", None)
+        # Keep a naturally completed wrapper alive when AgentLoop reports idle;
+        # it still needs to publish its final session update.
+        if active_turn is not None and raw_result.status == "interrupted":
+            _ = active_turn.task.cancel()
+        if active_turn is not None and active_turn.voice_turn_id:
+            coordinator = self._tts_coordinators.pop(active_turn.voice_turn_id, None)
+            if coordinator is not None:
+                coordinator.cancel()
+        return (
+            ChatTurnCancelResult(
+                status=str(getattr(raw_result, "status", "interrupted")),
+                session_key=session_key,
+                turn_id=turn_id,
+                message=(
+                    raw_result.message
+                    if raw_result.status == "interrupted"
+                    else "已中止当前回合"
+                ),
+            ),
+            interrupt_state if isinstance(interrupt_state, TurnInterruptState) else None,
+        )
+
+    async def _await_turn_cleanup(
+        self,
+        session_key: str,
+        active_turn: _DesktopChatTurn,
+    ) -> None:
+        try:
+            await active_turn.task
+        except asyncio.CancelledError:
+            pass
+        self._discard_task(session_key, active_turn.task, active_turn.voice_turn_id)
+
+    async def _persist_interrupted_turn(
+        self,
+        *,
+        session_key: str,
+        turn_id: str,
+        state: TurnInterruptState,
+    ) -> None:
+        """Persists one cancelled desktop reply before its session can be reused."""
+
+        session = self._session_manager.get_or_create(session_key)
+        if self._has_completed_turn(session, turn_id):
+            return
+        has_trace = bool(
+            state.partial_reply
+            or state.partial_thinking
+            or state.tools_used
+            or state.tool_chain_partial
+        )
+        assistant_metadata = {
+            "interrupted_reply": True,
+            "turn_id": turn_id,
+            "interrupted_by": state.interrupted_by,
+        }
+        assistant_kwargs: dict[str, Any] = {
+            "metadata": assistant_metadata,
+            "tools_used": list(state.tools_used) if state.tools_used else None,
+            "tool_chain": (
+                list(state.tool_chain_partial) if state.tool_chain_partial else None
+            ),
+        }
+        if state.partial_thinking is not None:
+            assistant_kwargs["reasoning_content"] = state.partial_thinking
+        assistant_message: dict[str, Any] | None = None
+        if has_trace:
+            session.add_message("assistant", state.partial_reply, **assistant_kwargs)
+            assistant_message = session.messages[-1]
+        session.metadata[INTERRUPTED_TURN_METADATA_KEY] = {
+            "turn_id": turn_id,
+            "interrupted_by": state.interrupted_by,
+        }
+        await self._session_manager.append_messages(
+            session,
+            [assistant_message] if assistant_message is not None else [],
+        )
+        role_id = self._role_id_from_session_key(session_key)
+        if role_id:
+            self._sync_desktop_session_thread(session, role_id=role_id)
+
+    @staticmethod
+    def _has_completed_turn(session: Session, turn_id: str) -> bool:
+        for message in reversed(session.messages):
+            if message.get("role") != "assistant":
+                continue
+            metadata = message.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+            if metadata.get("turn_id") != turn_id:
+                continue
+            return True
+        return False
 
     def cancel_voice_turn(self, turn_id: str) -> bool:
         """Cancels chat and synthesis work owned by one voice input turn."""
@@ -93,20 +369,33 @@ class DesktopChatService:
         if not normalized_turn_id:
             return False
         cancelled = False
-        coordinator = self._tts_coordinators.pop(normalized_turn_id, None)
-        if coordinator is not None:
-            coordinator.cancel()
-            cancelled = True
         owner = self._voice_turn_tasks.get(normalized_turn_id)
         if owner is not None:
             session_key, task = owner
-            if not task.done():
+            active_turn = self._tasks_by_session.get(session_key)
+            if active_turn is not None and active_turn.task is task and not task.done():
+                _, interrupt_state = self._prepare_cancel(
+                    session_key,
+                    normalized_turn_id=active_turn.turn_id,
+                )
+                self._schedule_interrupted_persistence(
+                    session_key=session_key,
+                    turn_id=active_turn.turn_id,
+                    state=interrupt_state,
+                    task=task,
+                )
+                cancelled = True
+            elif not task.done():
                 _ = self._agent_loop.request_interrupt(
                     session_key,
                     sender="desktop",
                     command="/cancel",
                 )
                 cancelled = True
+        coordinator = self._tts_coordinators.pop(normalized_turn_id, None)
+        if coordinator is not None:
+            coordinator.cancel()
+            cancelled = True
         return cancelled
 
     async def run_chat_turn(
@@ -119,7 +408,9 @@ class DesktopChatService:
         metadata: dict[str, object] | None,
         omit_user_turn: bool,
         emit_event: EventEmitter,
+        turn_id: str | None = None,
     ) -> tuple[Session, list[BridgeEvent]]:
+        turn_id = turn_id or request_id
         collected: list[BridgeEvent] = []
         tts = self._create_tts_coordinator(
             request_id=request_id,
@@ -162,6 +453,7 @@ class DesktopChatService:
                 method="chat.delta",
                 payload={
                     "session_key": event.session_key,
+                    "turn_id": turn_id,
                     "content_delta": event.content_delta,
                     "thinking_delta": event.thinking_delta,
                 },
@@ -181,6 +473,7 @@ class DesktopChatService:
                 method="chat.done",
                 payload={
                     "session_key": event.session_key,
+                    "turn_id": turn_id,
                     "role_id": self._role_id_from_session_key(event.session_key),
                     "reply": event.assistant_response,
                     "thinking": event.thinking,
@@ -213,6 +506,7 @@ class DesktopChatService:
                 method="chat.tool.started",
                 payload={
                     "session_key": event.session_key,
+                    "turn_id": turn_id,
                     "iteration": event.iteration,
                     "call_id": call_id,
                     "tool_name": tool_name,
@@ -235,6 +529,7 @@ class DesktopChatService:
                 method="chat.tool.completed",
                 payload={
                     "session_key": event.session_key,
+                    "turn_id": turn_id,
                     "iteration": event.iteration,
                     "call_id": call_id,
                     "tool_name": tool_name,
@@ -299,6 +594,7 @@ class DesktopChatService:
                 method="chat.error",
                 payload={
                     "session_key": session_key,
+                    "turn_id": turn_id,
                     "message": str(exc),
                 },
             )
@@ -322,7 +618,9 @@ class DesktopChatService:
         metadata: dict[str, object] | None,
         omit_user_turn: bool,
         emit_event: EventEmitter,
+        turn_id: str | None = None,
     ) -> None:
+        turn_id = turn_id or request_id
         if self.is_busy(session_key):
             raise ChatTurnBusyError(f"会话 {session_key} 已有正在执行的聊天任务")
 
@@ -330,6 +628,7 @@ class DesktopChatService:
             try:
                 _ = await self.run_chat_turn(
                     request_id=request_id,
+                    turn_id=turn_id,
                     session_key=session_key,
                     content=content,
                     media=media,
@@ -337,15 +636,21 @@ class DesktopChatService:
                     omit_user_turn=omit_user_turn,
                     emit_event=emit_event,
                 )
+            except asyncio.CancelledError:
+                return
             except Exception:
                 logger.exception("desktop chat turn failed: %s", session_key)
 
-        task = asyncio.create_task(_runner(), name=f"desktop-chat:{session_key}")
-        self._tasks_by_session[session_key] = task
         voice_turn_id = (
             str(metadata.get("voice_turn_id") or "").strip()
             if isinstance(metadata, dict) and metadata.get("input_method") == "voice"
             else ""
+        )
+        task = asyncio.create_task(_runner(), name=f"desktop-chat:{session_key}")
+        self._tasks_by_session[session_key] = _DesktopChatTurn(
+            task=task,
+            turn_id=turn_id,
+            voice_turn_id=voice_turn_id,
         )
         if voice_turn_id:
             self._voice_turn_tasks[voice_turn_id] = (session_key, task)
@@ -360,7 +665,7 @@ class DesktopChatService:
     async def aclose(self) -> None:
         """Cancels and awaits every desktop-owned chat turn."""
 
-        tasks = list(self._tasks_by_session.values())
+        tasks = [turn.task for turn in self._tasks_by_session.values()]
         for task in tasks:
             if not task.done():
                 _ = task.cancel()
@@ -466,7 +771,8 @@ class DesktopChatService:
         task: asyncio.Task[None],
         voice_turn_id: str,
     ) -> None:
-        if self._tasks_by_session.get(session_key) is task:
+        active_turn = self._tasks_by_session.get(session_key)
+        if active_turn is not None and active_turn.task is task:
             _ = self._tasks_by_session.pop(session_key, None)
         if voice_turn_id and self._voice_turn_tasks.get(voice_turn_id) == (
             session_key,

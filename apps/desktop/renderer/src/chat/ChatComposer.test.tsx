@@ -6,15 +6,20 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChatComposer } from "./ChatComposer";
 
-function renderChatComposer(): string {
+function renderChatComposer({
+  sending = false,
+  cancelling = false,
+}: { sending?: boolean; cancelling?: boolean } = {}): string {
   return renderToStaticMarkup(
     <ChatComposer
       activeRoleId="mira"
       sessionKey="role:mira"
       bridgeReady
-      sending={false}
+      sending={sending}
+      cancelling={cancelling}
       replyTarget={null}
       onSendMessage={async () => true}
+      onCancelChat={() => undefined}
       onClearReplyTarget={() => undefined}
       onJumpToMessage={() => undefined}
     />,
@@ -28,6 +33,19 @@ describe("ChatComposer", () => {
     assert.match(markup, /aria-label="添加附件"/);
     assert.match(markup, /aria-label="打开常用表情面板"/);
     assert.match(markup, /aria-label="发送消息"/);
+  });
+
+  it("replaces send with a stable stop action while a reply streams", () => {
+    const markup = renderChatComposer({ sending: true });
+
+    assert.match(markup, /aria-label="中止回复"/);
+    assert.doesNotMatch(markup, /aria-label="发送消息"/);
+  });
+
+  it("disables the stop action while cancellation is in progress", () => {
+    const markup = renderChatComposer({ sending: true, cancelling: true });
+
+    assert.match(markup, /aria-label="中止回复"[^>]*disabled=""/);
   });
 
   it("uses a contained text mirror instead of synchronous textarea measurement", () => {

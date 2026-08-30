@@ -43,6 +43,7 @@ type ChatSurfaceProps = {
   highlightedMessageKey: string;
   notice: string;
   sending: boolean;
+  cancelling: boolean;
   visibleIllustrationUrl: string;
   windowVisible: boolean;
   onBeginChatLatestImageSidebarResize: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -55,6 +56,7 @@ type ChatSurfaceProps = {
   onBeginAttachmentDrag: (path: string) => void;
   onCopyMessage: (content: string) => void;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
+  onCancelChat: () => void;
   onToggleChatLatestImageSidebar: () => void;
 };
 
@@ -85,6 +87,7 @@ export function ChatSurface({
   highlightedMessageKey,
   notice,
   sending,
+  cancelling,
   visibleIllustrationUrl,
   windowVisible,
   onBeginChatLatestImageSidebarResize,
@@ -97,6 +100,7 @@ export function ChatSurface({
   onBeginAttachmentDrag,
   onCopyMessage,
   onSendMessage,
+  onCancelChat,
   onToggleChatLatestImageSidebar,
 }: ChatSurfaceProps) {
   const [visualsActive, setVisualsActive] = useState(() => (
@@ -502,8 +506,10 @@ export function ChatSurface({
           sessionKey={activeSession?.key ?? ""}
           bridgeReady={bridgeReady}
           sending={sending}
+          cancelling={cancelling}
           replyTarget={composerReplyTarget}
           onSendMessage={onSendMessage}
+          onCancelChat={onCancelChat}
           onClearReplyTarget={handleClearReplyTarget}
           onJumpToMessage={onJumpToMessage}
         />

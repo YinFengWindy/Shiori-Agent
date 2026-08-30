@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from agent.looping.core import AgentLoop
 from core.roles import RoleAggregateService
 from infra.channels.reply_context import build_inbound_text_with_reply_context
 
@@ -25,7 +24,6 @@ class DesktopChatRequestHandler:
         chat_service: DesktopChatService,
         start_chat_turn: Callable[..., None],
         session_presenter: DesktopSessionPresenter,
-        agent_loop: AgentLoop,
         sanitize_voice_metrics: Callable[[object], dict[str, str | int] | None],
     ) -> None:
         self._role_service = role_service
@@ -33,7 +31,6 @@ class DesktopChatRequestHandler:
         self._chat_service = chat_service
         self._start_chat_turn = start_chat_turn
         self._session_presenter = session_presenter
-        self._agent_loop = agent_loop
         self._sanitize_voice_metrics = sanitize_voice_metrics
 
     async def handle(
@@ -49,18 +46,15 @@ class DesktopChatRequestHandler:
                 payload, request_id=request_id, emit_event=emit_event
             )
         if method == "chat.cancel":
-            aggregate = await self._role_service.open_role_async(
-                str(payload.get("role_id") or "").strip()
-            )
-            result = self._agent_loop.request_interrupt(
-                self._role_service.sessions.derive_session_key(aggregate.role.id),
-                sender="desktop",
-                command="/cancel",
+            result = await self._chat_service.cancel_chat_turn_async(
+                str(payload.get("session_key") or "").strip(),
+                str(payload.get("turn_id") or "").strip(),
             )
             return {
                 "status": result.status,
                 "message": result.message,
                 "session_key": result.session_key,
+                "turn_id": result.turn_id,
             }
         return None
 
@@ -72,6 +66,9 @@ class DesktopChatRequestHandler:
         emit_event: EventEmitter,
     ) -> dict[str, Any]:
         role_id = str(payload.get("role_id") or "").strip()
+        turn_id = str(
+            payload.get("turn_id") or payload.get("client_message_id") or request_id
+        ).strip()
         content = str(payload.get("content") or "").strip()
         raw_media = payload.get("media")
         media = (
@@ -81,6 +78,8 @@ class DesktopChatRequestHandler:
         )
         if not content and not media:
             raise ValueError("content 和 media 不能同时为空")
+        if not turn_id:
+            raise ValueError("turn_id 不能为空")
         aggregate = await self._role_service.open_role_async(role_id)
         session = aggregate.session
         if self._chat_service.is_busy(session.key):
@@ -112,6 +111,7 @@ class DesktopChatRequestHandler:
         )
         self._start_chat_turn(
             request_id=request_id,
+            turn_id=turn_id,
             session_key=session.key,
             content=inbound_content,
             media=media,
@@ -119,7 +119,11 @@ class DesktopChatRequestHandler:
             omit_user_turn=True,
             emit_event=emit_event,
         )
-        return {"session": self._session_presenter.serialize(session), "events": []}
+        return {
+            "session": self._session_presenter.serialize(session),
+            "turn_id": turn_id,
+            "events": [],
+        }
 
     def _build_metadata(
         self,
@@ -134,6 +138,9 @@ class DesktopChatRequestHandler:
         client_message_id = str(payload.get("client_message_id") or "").strip()
         if client_message_id:
             metadata["client_message_id"] = client_message_id
+        turn_id = str(payload.get("turn_id") or client_message_id or request_id).strip()
+        if turn_id:
+            metadata["turn_id"] = turn_id
         if str(payload.get("input_method") or "").strip() == "voice":
             metadata["input_method"] = "voice"
             voice_turn_id = str(payload.get("voice_turn_id") or "").strip()

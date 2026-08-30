@@ -139,6 +139,105 @@ describe("mergeIncomingSessionDuringSend", () => {
     assert.equal(merged, incomingSession);
   });
 
+  it("keeps a cancelled local assistant trace before the newly persisted user turn", () => {
+    const pendingUserMessage: SessionMessage = {
+      role: "user",
+      content: "follow up",
+      metadata: { client_message_id: "desktop-message-follow-up" },
+    };
+    const interruptedAssistant: SessionMessage = {
+      role: "assistant",
+      content: "partial answer",
+      reasoning_content: "partial thinking",
+      metadata: { streamed_reply: true, interrupted_reply: true },
+      streaming: false,
+    };
+    const currentSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "user",
+        content: "first message",
+      },
+      interruptedAssistant,
+      pendingUserMessage,
+    ]);
+    const incomingSession = createSession([
+      {
+        id: "role:mira:1",
+        role: "user",
+        content: "first message",
+      },
+      {
+        id: "role:mira:2",
+        role: "user",
+        content: "follow up",
+        metadata: { client_message_id: "desktop-message-follow-up" },
+      },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(
+      currentSession,
+      incomingSession,
+      true,
+      pendingUserMessage,
+    );
+
+    assert.deepEqual(merged?.messages, [
+      incomingSession.messages[0],
+      interruptedAssistant,
+      incomingSession.messages[1],
+    ]);
+  });
+
+  it("preserves multiple cancelled traces in their original turn order", () => {
+    const pendingUserMessage: SessionMessage = {
+      role: "user",
+      content: "third turn",
+      metadata: { client_message_id: "desktop-message-third" },
+    };
+    const firstInterruptedAssistant: SessionMessage = {
+      role: "assistant",
+      content: "first partial answer",
+      reasoning_content: "first partial thinking",
+      metadata: { streamed_reply: true, interrupted_reply: true },
+      streaming: false,
+    };
+    const secondInterruptedAssistant: SessionMessage = {
+      role: "assistant",
+      content: "second partial answer",
+      reasoning_content: "second partial thinking",
+      metadata: { streamed_reply: true, interrupted_reply: true },
+      streaming: false,
+    };
+    const currentSession = createSession([
+      { id: "role:mira:1", role: "user", content: "first turn" },
+      firstInterruptedAssistant,
+      { id: "role:mira:2", role: "user", content: "second turn" },
+      secondInterruptedAssistant,
+      pendingUserMessage,
+    ]);
+    const incomingSession = createSession([
+      { id: "role:mira:1", role: "user", content: "first turn" },
+      { id: "role:mira:2", role: "user", content: "second turn" },
+      { id: "role:mira:4", role: "user", content: "third turn", metadata: { client_message_id: "desktop-message-third" } },
+    ]);
+
+    const merged = mergeIncomingSessionDuringSend(
+      currentSession,
+      incomingSession,
+      true,
+      pendingUserMessage,
+    );
+
+    assert.deepEqual(merged?.messages, [
+      incomingSession.messages[0],
+      firstInterruptedAssistant,
+      incomingSession.messages[1],
+      secondInterruptedAssistant,
+      incomingSession.messages[2],
+    ]);
+  });
+
   it("accepts divergent incoming snapshots instead of forcing the optimistic turn into unrelated history", () => {
     const currentSession = createSession([
       {

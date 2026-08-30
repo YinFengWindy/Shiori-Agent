@@ -30,6 +30,9 @@ type UseDesktopBridgeLifecycleArgs = {
   cacheRoleSession: (roleId: string, session: SessionPayload) => void;
   clearAllSendingSessions: () => void;
   clearSessionSending: (sessionKey: string) => void;
+  completeChatTurn: (sessionKey: string, turnId: string) => void;
+  isCurrentChatTurn: (sessionKey: string, turnId: string) => boolean;
+  isChatTurnCancelling: (sessionKey: string, turnId: string) => boolean;
   commitActiveSession: (nextSession: SessionPayload | null) => void;
   updateCommittedActiveSession: (updater: (current: SessionPayload | null) => SessionPayload | null) => void;
   appendSessionErrorMessage: (sessionKey: string, message: string) => void;
@@ -59,6 +62,9 @@ export function useDesktopBridgeLifecycle({
   cacheRoleSession,
   clearAllSendingSessions,
   clearSessionSending,
+  completeChatTurn,
+  isCurrentChatTurn,
+  isChatTurnCancelling,
   commitActiveSession,
   updateCommittedActiveSession,
   appendSessionErrorMessage,
@@ -74,6 +80,9 @@ export function useDesktopBridgeLifecycle({
     chooseIllustration,
     clearAllSendingSessions,
     clearSessionSending,
+    completeChatTurn,
+    isCurrentChatTurn,
+    isChatTurnCancelling,
     commitActiveSession,
     loadRolesFromBridge,
     openRole,
@@ -200,6 +209,9 @@ export function useDesktopBridgeLifecycle({
         }
 
         const eventSessionKey = String(event.payload.session_key ?? "");
+        const eventTurnId = String(event.payload.turn_id ?? "");
+        if (["chat.delta", "chat.tool.started", "chat.tool.completed", "chat.done", "chat.error"].includes(event.method)
+          && !callbacks.isCurrentChatTurn(eventSessionKey, eventTurnId)) return;
         if (event.method === "chat.delta") {
           const currentSession = activeSessionRef.current;
           if (!currentSession || eventSessionKey !== currentSession.key) return;
@@ -253,7 +265,6 @@ export function useDesktopBridgeLifecycle({
         }
 
         if (event.method === "chat.done") {
-          callbacks.clearSessionSending(eventSessionKey);
           callbacks.updateCommittedActiveSession((current) => {
             if (!current || current.key !== eventSessionKey) return current;
             return finishChatStream(current, parseChatTurnMetrics({
@@ -261,16 +272,19 @@ export function useDesktopBridgeLifecycle({
               thinking_duration_ms: event.payload.thinking_duration_ms,
             }));
           });
+          callbacks.completeChatTurn(eventSessionKey, eventTurnId);
           return;
         }
 
         if (event.method === "chat.error") {
-          callbacks.clearSessionSending(eventSessionKey);
+          const cancelling = callbacks.isChatTurnCancelling(eventSessionKey, eventTurnId);
           const currentSession = activeSessionRef.current;
-          if (!currentSession || eventSessionKey !== currentSession.key) return;
-          const message = String(event.payload.message ?? "对话失败");
-          setError(message);
-          callbacks.appendSessionErrorMessage(currentSession.key, message);
+          if (!cancelling && currentSession && eventSessionKey === currentSession.key) {
+            const message = String(event.payload.message ?? "对话失败");
+            setError(message);
+            callbacks.appendSessionErrorMessage(currentSession.key, message);
+          }
+          callbacks.completeChatTurn(eventSessionKey, eventTurnId);
         }
       };
 

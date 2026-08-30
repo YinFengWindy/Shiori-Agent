@@ -32,6 +32,7 @@ from agent.plugins.role_prompt import (
     build_role_system_section,
 )
 from agent.skills import SkillsLoader
+from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
 from prompts.agent import (
     build_agent_static_identity_prompt,
     build_current_message_time_envelope,
@@ -278,10 +279,18 @@ class ContextBuilder:
         self,
         *,
         turn_injection_prompt: str | None = None,
+        session_metadata: dict[str, Any] | None = None,
     ) -> dict[str, str]:
-        if not turn_injection_prompt:
-            return {}
-        return {"turn_injection": turn_injection_prompt}
+        context: dict[str, str] = {}
+        if turn_injection_prompt:
+            context["turn_injection"] = turn_injection_prompt
+        if isinstance((session_metadata or {}).get(INTERRUPTED_TURN_METADATA_KEY), dict):
+            context["interrupted_turn"] = (
+                "上一轮助手回复因用户主动中断而未完成。已保留的 assistant "
+                "content 和 reasoning_content 只是中断时的原始快照，不能视为完整结论，"
+                "也不要续写或改写其中的 reasoning_content；请基于当前用户消息自然回应。"
+            )
+        return context
 
     def render(
         self,
@@ -309,7 +318,8 @@ class ContextBuilder:
             insert_index = 1 if role_cache_prefix is not None else 0
             merged_top.insert(insert_index, role_section)
         turn_injection_context = self.build_turn_injection_context(
-            turn_injection_prompt=request.turn_injection_prompt
+            turn_injection_prompt=request.turn_injection_prompt,
+            session_metadata=session_metadata,
         )
         assembled = self._assembler.assemble(
             history=request.history,

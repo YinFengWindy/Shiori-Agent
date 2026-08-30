@@ -72,6 +72,7 @@ function renderChatSurface(
       highlightedMessageKey=""
       notice=""
       sending={false}
+      cancelling={false}
       visibleIllustrationUrl=""
       windowVisible={options.windowVisible ?? true}
       onBeginChatLatestImageSidebarResize={() => undefined}
@@ -84,6 +85,7 @@ function renderChatSurface(
       onBeginAttachmentDrag={() => undefined}
       onCopyMessage={() => undefined}
       onSendMessage={async () => true}
+      onCancelChat={() => undefined}
       onToggleChatLatestImageSidebar={() => undefined}
     />,
   );

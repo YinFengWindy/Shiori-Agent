@@ -56,6 +56,32 @@ export function finishChatStream(
   return { ...session, messages };
 }
 
+/** Marks a cancelled transient assistant reply complete while retaining its local trace for the next turn. */
+export function interruptChatStream(session: SessionPayload): SessionPayload {
+  const lastIndex = session.messages.length - 1;
+  const last = session.messages[lastIndex];
+  if (!last || last.role !== "assistant" || !last.streaming) return session;
+  const messages = [...session.messages];
+  messages[lastIndex] = {
+    ...last,
+    streaming: false,
+    metadata: {
+      ...last.metadata,
+      streamed_reply: true,
+      interrupted_reply: true,
+    },
+  };
+  return { ...session, messages };
+}
+
+/** Finishes cancellation according to the backend's final turn state. */
+export function finalizeChatCancellation(
+  session: SessionPayload,
+  status: "interrupted" | "idle",
+): SessionPayload {
+  return status === "interrupted" ? interruptChatStream(session) : finishChatStream(session);
+}
+
 type ToolStartedEvent = {
   iteration: number;
   callId: string;

@@ -235,6 +235,7 @@ async def test_desktop_bridge_chat_send_merges_reply_context_for_agent(tmp_path:
     assert seen["metadata"] == {
         "request_id": "1",
         "delivery_key": "1",
+        "turn_id": "1",
         "reply_to_message_id": "message-1",
         "reply_to_sender": "Mira",
         "reply_to_content": "她沉默了很久。",
@@ -1391,8 +1392,14 @@ async def test_desktop_bridge_chat_cancel_uses_interrupt_controller(tmp_path: Pa
         system_prompt="you are mira",
     )
     session_manager = SessionManager(tmp_path)
+    started = asyncio.Event()
+
+    async def _process_direct(*_args, **_kwargs) -> None:
+        started.set()
+        await asyncio.Event().wait()
+
     loop = SimpleNamespace(
-        process_direct=AsyncMock(),
+        process_direct=_process_direct,
         request_interrupt=lambda session_key, sender="", command="/stop": SimpleNamespace(
             status="interrupted",
             session_key=session_key,
@@ -1407,11 +1414,26 @@ async def test_desktop_bridge_chat_cancel_uses_interrupt_controller(tmp_path: Pa
         event_bus=EventBus(),
     )
 
-    response = await service.handle(
+    sent = await service.handle(
         {
             "id": "1",
+            "method": "chat.send",
+            "payload": {
+                "role_id": role.id,
+                "content": "please wait",
+                "turn_id": "turn-cancel",
+            },
+        },
+        emit_event=lambda payload: None,
+    )
+    assert sent.error is None
+    await started.wait()
+
+    response = await service.handle(
+        {
+            "id": "2",
             "method": "chat.cancel",
-            "payload": {"role_id": role.id},
+            "payload": {"session_key": "role:mira", "turn_id": "turn-cancel"},
         },
         emit_event=lambda payload: None,
     )
@@ -1419,6 +1441,8 @@ async def test_desktop_bridge_chat_cancel_uses_interrupt_controller(tmp_path: Pa
     assert response.error is None
     assert response.payload["status"] == "interrupted"
     assert response.payload["session_key"] == "role:mira"
+    assert response.payload["turn_id"] == "turn-cancel"
+    await service.aclose()
 
 
 @pytest.mark.asyncio
