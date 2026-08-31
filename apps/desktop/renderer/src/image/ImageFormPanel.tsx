@@ -310,7 +310,7 @@ export function ImageFormPanel({
                 : onChange({ negativePrompt: event.target.value })
             )}
           />
-          <div className="mt-2 pt-2">
+          <div>
             {form.baseImagePath ? (
               <div className="relative overflow-hidden rounded-[18px] border border-[#D6DCE3] bg-transparent">
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,18,28,0.08)_0%,rgba(13,18,28,0.16)_56%,rgba(13,18,28,0.22)_100%)]" />
