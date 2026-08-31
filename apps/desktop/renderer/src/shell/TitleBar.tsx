@@ -3,7 +3,7 @@ import type { WindowControlAction } from "../../../src/bridge/shared";
 import { cx } from "../shared/styles";
 
 const titlebarIconClass =
-  "[-webkit-app-region:no-drag] m-0 grid h-[calc(var(--titlebar-height)_+_1px)] w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-[#5f6b76] transition-colors hover:bg-black/5 hover:text-[#2c3440] disabled:text-[#b8b8b8] disabled:hover:bg-transparent disabled:hover:text-[#b8b8b8]";
+  "[-webkit-app-region:no-drag] m-0 grid h-6 w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-[#5f6b76] transition-colors hover:bg-black/5 hover:text-[#2c3440] disabled:text-[#b8b8b8] disabled:hover:bg-transparent disabled:hover:text-[#b8b8b8]";
 const titlebarSidebarIconClass =
   "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 const windowControlClass =
