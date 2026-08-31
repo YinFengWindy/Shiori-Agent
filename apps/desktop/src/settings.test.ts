@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { configureSettingsConfigPath, loadSettingsData } from "./settings.js";
+import { configureSettingsConfigPath, loadSettingsData, saveSettings } from "./settings.js";
 import { desktopSettingsDefaults } from "./settingsContract.js";
 
 describe("desktop settings config path", () => {
@@ -38,6 +38,37 @@ describe("desktop settings config path", () => {
         ttsApiKey: "",
         ttsVolume: desktopSettingsDefaults.ttsVolume,
       });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("saves without restarting the bridge", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "shiori-settings-save-"));
+    const configPath = join(directory, "workspace", "config.toml");
+    try {
+      mkdirSync(join(directory, "workspace"), { recursive: true });
+      writeFileSync(configPath, "[llm]\n", { encoding: "utf-8" });
+      configureSettingsConfigPath(configPath);
+      const formData = loadSettingsData().formData;
+      formData.models.registrations = [{
+        id: "00000000-0000-4000-a000-000000000001",
+        provider: "openai",
+        baseUrl: "",
+        apiKey: "",
+        model: "test-model",
+        effort: "none",
+      }];
+      let healthChecks = 0;
+
+      const result = await saveSettings(formData, async () => {
+        healthChecks += 1;
+        return { ok: true, message: "ok" };
+      });
+
+      assert.equal(healthChecks, 1);
+      assert.equal(result.ok, true);
+      assert.match(readFileSync(configPath, "utf-8"), /model = "test-model"/);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

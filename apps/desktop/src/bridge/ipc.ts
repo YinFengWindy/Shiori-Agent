@@ -161,22 +161,6 @@ export function registerDesktopIpc({
     const result = await saveSettings(
       formData,
       async () => {
-        try {
-          await bridge.restart();
-          return {
-            ok: true,
-            running: bridge.isRunning(),
-            lastError: bridge.getLastError(),
-          };
-        } catch (error) {
-          return {
-            ok: false,
-            running: false,
-            lastError: String(error),
-          };
-        }
-      },
-      async () => {
         const health = await bridge.invoke({
           method: "health",
           payload: {},

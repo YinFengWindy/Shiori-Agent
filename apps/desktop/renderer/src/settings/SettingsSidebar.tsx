@@ -1,5 +1,5 @@
 import type React from "react";
-import { cx, sidebarNavItemClass } from "../shared/styles";
+import { cx, secondarySidebarSurfaceClass, sidebarNavItemClass } from "../shared/styles";
 
 export type SettingsSectionId =
   | "models"
@@ -10,7 +10,7 @@ export type SettingsSectionId =
   | "advanced";
 
 export const settingsSections: Array<{ id: SettingsSectionId; label: string }> = [
-  { id: "models", label: "模型与提供方" },
+  { id: "models", label: "模型" },
   { id: "channels", label: "频道" },
   { id: "memory", label: "记忆" },
   { id: "integrations", label: "集成" },
@@ -44,7 +44,7 @@ export function SettingsSidebar({
     <aside
       className={cx(
         "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] py-5",
-        "bg-[#FBFAF8]",
+        secondarySidebarSurfaceClass,
         animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
       )}

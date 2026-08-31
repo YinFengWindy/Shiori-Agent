@@ -48,7 +48,7 @@ export async function loadSettingsPageData(api: SettingsLoadApi): Promise<Settin
   };
 }
 
-/** Saves settings and reloads the persisted snapshot after the bridge restarts. */
+/** Saves settings and reloads the persisted snapshot without restarting the bridge. */
 export async function saveSettingsPageData(
   api: SettingsSaveApi,
   draft: SettingsFormData,

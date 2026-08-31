@@ -1,6 +1,6 @@
 import type { SettingsFormData } from "../shared/types";
 
-export type SettingsSavePhase = "idle" | "saving" | "saved" | "restart-failed" | "error";
+export type SettingsSavePhase = "idle" | "saving" | "saved" | "error";
 
 /** Applies one immutable update to the current settings draft. */
 export type SettingsDraftUpdater = (

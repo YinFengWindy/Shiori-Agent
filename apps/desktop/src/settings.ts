@@ -9,12 +9,6 @@ import type {
 import { parseHotkey } from "./voice/hotkey.js";
 import { desktopSettingsDefaults } from "./settingsContract.js";
 
-type BridgeRestarter = () => Promise<{
-  ok: boolean;
-  running: boolean;
-  lastError: string | null;
-}>;
-
 type BridgeHealthChecker = () => Promise<{
   ok: boolean;
   message: string;
@@ -422,21 +416,13 @@ function validateSettings(formData: SettingsFormData): void {
 
 export async function saveSettings(
   formData: SettingsFormData,
-  restartBridge: BridgeRestarter,
   checkHealth: BridgeHealthChecker,
 ): Promise<SaveSettingsResult> {
   validateSettings(formData);
   writeFileSync(requireConfigPath(), renderSettingsToml(formData), { encoding: "utf-8" });
-  const restart = await restartBridge();
-  const health = restart.ok
-    ? await checkHealth()
-    : {
-        ok: false,
-        message: restart.lastError || "bridge restart failed",
-      };
+  const health = await checkHealth();
   return {
-    ok: restart.ok && health.ok,
-    restart,
+    ok: health.ok,
     health,
   };
 }

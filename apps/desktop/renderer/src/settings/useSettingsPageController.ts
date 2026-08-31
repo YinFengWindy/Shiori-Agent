@@ -108,7 +108,7 @@ export function useSettingsPageController({ bridgeReady }: UseSettingsPageContro
       }
       const feedback = resolveSettingsSaveFeedback(result.saveResult);
       setSavePhase(feedback.phase);
-      setStatusMessage(feedback.phase === "restart-failed" ? feedback.message : "");
+      setStatusMessage(feedback.message);
     } catch (error) {
       setSavePhase("error");
       setStatusMessage(error instanceof Error ? error.message : String(error));
