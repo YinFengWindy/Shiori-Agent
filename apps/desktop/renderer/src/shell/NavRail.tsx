@@ -28,7 +28,7 @@ type NavRailProps = {
 };
 
 const railButtonClass =
-  "relative grid h-10 w-10 place-items-center rounded-md text-[#5f6b76] transition-colors focus:outline-none focus-visible:bg-white/80 hover:bg-white/80 hover:text-[#2c3440]";
+  "relative grid h-9 w-9 place-items-center rounded-md text-[#5f6b76] transition-colors focus:outline-none focus-visible:bg-white/80 hover:bg-white/80 hover:text-[#2c3440]";
 
 /** Renders the primary icon navigation rail shown across every workspace. */
 export function NavRail({
@@ -67,17 +67,17 @@ export function NavRail({
         title={entry.label}
         onClick={entry.onSelect}
       >
-        {entry.imageSrc ? <img className="h-[21px] w-[21px]" src={entry.imageSrc} alt="" /> : null}
-        {!entry.imageSrc && Icon ? <Icon className="h-[21px] w-[21px]" weight="regular" aria-hidden="true" /> : null}
+        {entry.imageSrc ? <img className="h-[19px] w-[19px]" src={entry.imageSrc} alt="" /> : null}
+        {!entry.imageSrc && Icon ? <Icon className="h-[19px] w-[19px]" weight="regular" aria-hidden="true" /> : null}
         {showBadge ? (
-          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#DA4B4B]" aria-hidden="true" />
+          <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[#DA4B4B]" aria-hidden="true" />
         ) : null}
       </button>
     );
   }
 
   return (
-    <nav className="nav-rail flex w-[52px] shrink-0 flex-col items-center gap-1.5 py-3" aria-label="主导航">
+    <nav className="nav-rail flex w-12 shrink-0 flex-col items-center gap-1 py-2.5" aria-label="主导航">
       {entries.map(renderEntry)}
       <div className="mt-auto">{renderEntry({ id: "settings", label: "设置", icon: GearSix, onSelect: onOpenSettings })}</div>
     </nav>
