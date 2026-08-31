@@ -32,10 +32,15 @@ describe("NavRail", () => {
     assert.match(markup, /aria-label="主导航"/);
   });
 
-  it("marks the active workspace entry and fills its glyph", () => {
+  it("highlights the active workspace without recoloring or filling its glyph", () => {
     const markup = renderRail({ activeView: "messages" });
 
-    assert.match(markup, /aria-label="消息"[^>]*aria-current="page"/);
+    const activeEntry = markup.match(/<button[^>]*aria-label="消息"[^>]*aria-current="page"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
+    const inactiveMarkup = renderRail();
+    const inactiveEntry = inactiveMarkup.match(/<button[^>]*aria-label="消息"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
+    assert.match(activeEntry, /border-stroke bg-white text-\[#5f6b76\]/);
+    assert.doesNotMatch(activeEntry, /text-accent/);
+    assert.equal(activeEntry.match(/<svg[\s\S]*?<\/svg>/)?.[0], inactiveEntry.match(/<svg[\s\S]*?<\/svg>/)?.[0]);
     assert.doesNotMatch(markup, /aria-label="角色"[^>]*aria-current="page"/);
     assert.doesNotMatch(markup, /aria-label="设置"[^>]*aria-current="page"/);
   });

@@ -59,7 +59,7 @@ export function NavRail({
         className={cx(
           railButtonClass,
           active
-            && "border-stroke bg-white text-accent shadow-[0_1px_2px_rgba(15,23,42,0.06)] hover:border-stroke hover:bg-white hover:text-accent",
+            && "border-stroke bg-white text-[#5f6b76] shadow-[0_1px_2px_rgba(15,23,42,0.06)] hover:border-stroke hover:bg-white hover:text-[#5f6b76]",
         )}
         type="button"
         aria-label={showBadge ? `${entry.label}（${unreadTotal} 条未读）` : entry.label}
@@ -68,7 +68,7 @@ export function NavRail({
         onClick={entry.onSelect}
       >
         {entry.imageSrc ? <img className="h-[21px] w-[21px]" src={entry.imageSrc} alt="" /> : null}
-        {!entry.imageSrc && Icon ? <Icon className="h-[21px] w-[21px]" weight={active ? "fill" : "regular"} aria-hidden="true" /> : null}
+        {!entry.imageSrc && Icon ? <Icon className="h-[21px] w-[21px]" weight="regular" aria-hidden="true" /> : null}
         {showBadge ? (
           <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#DA4B4B]" aria-hidden="true" />
         ) : null}
