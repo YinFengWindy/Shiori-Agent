@@ -29,6 +29,7 @@ import { useNavigationHistory } from "./app/useNavigationHistory";
 import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleCreationController } from "./app/useRoleCreationController";
 import { useRoleSearch } from "./app/roleSearch";
+import { navigateToRoleSearchResult } from "./app/roleSearchNavigation";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
 import { useStoryWorkspacePresentation } from "./app/useStoryWorkspacePresentation";
@@ -622,20 +623,20 @@ function App(): React.ReactElement {
       onSelectSearchResult={(result) => {
         setShowSearchDialog(false);
         setSearchQuery("");
-        if (result.matchedField === "message") {
-          const messageKey = getMessageKey(
-            result.roleId,
-            result.matchedMessageId,
-            result.matchedMessageIndex,
-          );
-          if (messageKey) {
-            queueMessageNavigation(result.roleId, messageKey);
-          }
-        } else {
-          setPendingMessageNavigation(null);
-          setHighlightedMessageKey("");
-        }
-        void openRole(result.roleId, null, { recordHistory: true });
+        const messageKey = result.matchedField === "message"
+          ? getMessageKey(result.roleId, result.matchedMessageId, result.matchedMessageIndex)
+          : "";
+        navigateToRoleSearchResult({
+          result,
+          messageKey,
+          openChatView,
+          queueMessageNavigation,
+          clearMessageNavigation: () => {
+            setPendingMessageNavigation(null);
+            setHighlightedMessageKey("");
+          },
+          openRole: (roleId, options) => openRole(roleId, null, options),
+        });
       }}
       onUpdateSearchQuery={setSearchQuery}
       pendingDeleteRole={pendingDeleteRole}
