@@ -86,7 +86,7 @@ export function ImageFormPanel({
     "min-h-[96px] resize-none overflow-hidden rounded-md border-[#D6DCE3] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus-visible:border-[#D6DCE3]",
   );
   const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-md bg-[#F3F5F7] p-1";
-  const segmentedButtonBaseClassName = "min-w-0 rounded-md px-3 py-1.5 text-[13px] font-semibold transition";
+  const segmentedButtonBaseClassName = "min-w-0 rounded-md px-2 py-1.5 text-[13px] font-semibold transition";
   const customSizeReady = form.sizePreset !== "custom"
     || (hasPositiveIntegerText(form.customWidth) && hasPositiveIntegerText(form.customHeight));
   const generateDisabled =
@@ -129,7 +129,7 @@ export function ImageFormPanel({
   }
 
   return (
-    <section className="grid min-h-0 min-w-0 content-start gap-4 rounded-[24px] border border-[#E4EAF0] bg-white p-5">
+    <section className="grid min-h-0 min-w-0 content-start gap-4">
       <div className="flex items-center gap-2">
       <div className="relative min-w-0 flex-1" ref={rolePanelRef}>
         <button
@@ -376,7 +376,7 @@ export function ImageFormPanel({
               </div>
             ) : (
               <div className="flex min-w-0 items-center justify-between gap-3 border-t border-[#E7EAF0] pt-3">
-                <div className="min-w-0 flex-1 text-[15px] text-[#5B616A]">Add a Base Img (Optional)</div>
+                <div className="min-w-0 flex-1 truncate whitespace-nowrap text-[15px] text-[#5B616A]" title="Add a Base Img (Optional)">Add a Base Img (Optional)</div>
                 <div className="flex flex-none items-center gap-2">
                     <button
                       type="button"
