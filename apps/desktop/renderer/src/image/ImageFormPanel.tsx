@@ -89,8 +89,8 @@ export function ImageFormPanel({
     inputClass,
     "min-h-[96px] resize-none overflow-hidden rounded-md border-[#D6DCE3] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus-visible:border-[#D6DCE3]",
   );
-  const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-md bg-[#F3F5F7] p-0.5";
-  const segmentedButtonBaseClassName = "grid h-7 min-w-0 place-items-center rounded-md px-1.5 text-xs font-semibold transition";
+  const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 overflow-hidden rounded-md bg-[#F3F5F7] p-0.5";
+  const segmentedButtonBaseClassName = "grid h-7 min-w-0 w-full place-items-center overflow-hidden rounded-md px-1.5 text-xs font-semibold transition";
   const customSizeReady = form.sizePreset !== "custom"
     || (hasPositiveIntegerText(form.customWidth) && hasPositiveIntegerText(form.customHeight));
   const generateDisabled =
@@ -204,7 +204,7 @@ export function ImageFormPanel({
                 )}
                 onClick={() => setPromptTab("prompt")}
               >
-                <span className="block truncate">Base Prompt</span>
+                <span className="block min-w-0 max-w-full truncate">Base Prompt</span>
               </button>
               <button
                 type="button"
@@ -216,7 +216,7 @@ export function ImageFormPanel({
                 )}
                 onClick={() => setPromptTab("negative")}
               >
-                <span className="block truncate">Undesired Content</span>
+                <span className="block min-w-0 max-w-full truncate">Undesired Content</span>
               </button>
             </div>
             <div className="ml-auto flex-none">
