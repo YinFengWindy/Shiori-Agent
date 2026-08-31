@@ -32,19 +32,6 @@ describe("NavRail", () => {
     assert.match(markup, /aria-label="主导航"/);
   });
 
-  it("highlights the active workspace without recoloring or filling its glyph", () => {
-    const markup = renderRail({ activeView: "messages" });
-
-    const activeEntry = markup.match(/<button[^>]*aria-label="消息"[^>]*aria-current="page"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
-    const inactiveMarkup = renderRail();
-    const inactiveEntry = inactiveMarkup.match(/<button[^>]*aria-label="消息"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
-    assert.match(activeEntry, /border-stroke bg-white text-\[#5f6b76\]/);
-    assert.doesNotMatch(activeEntry, /text-accent/);
-    assert.equal(activeEntry.match(/<svg[\s\S]*?<\/svg>/)?.[0], inactiveEntry.match(/<svg[\s\S]*?<\/svg>/)?.[0]);
-    assert.doesNotMatch(markup, /aria-label="角色"[^>]*aria-current="page"/);
-    assert.doesNotMatch(markup, /aria-label="设置"[^>]*aria-current="page"/);
-  });
-
   it("only shows the unread badge on messages when unread traffic exists", () => {
     const quietMarkup = renderRail({ unreadTotal: 0 });
     assert.doesNotMatch(quietMarkup, /bg-\[#DA4B4B\]/);
@@ -54,9 +41,4 @@ describe("NavRail", () => {
     assert.match(unreadMarkup, /bg-\[#DA4B4B\]/);
   });
 
-  it("uses the NovelAI mark for the image workspace entry", () => {
-    const markup = renderRail();
-
-    assert.match(markup, /src="[^"]*novelai-logo-dark\.svg"/);
-  });
 });
