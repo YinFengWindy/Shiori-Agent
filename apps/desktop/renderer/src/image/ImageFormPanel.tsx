@@ -188,14 +188,14 @@ export function ImageFormPanel({
 
       <div className="grid min-w-0 gap-2">
         <div className="min-w-0 rounded-[18px] border border-[#E4EAF0] bg-white p-3">
-          <div className="mb-3 flex min-w-0 items-start gap-2">
+          <div className="relative z-20 mb-3 flex min-w-0 items-start gap-2" ref={settingsPanelRef}>
             <div className={cx(segmentedControlClassName, "max-w-[calc(100%-2.75rem)]")}>
               <button
                 type="button"
                 className={cx(
                   segmentedButtonBaseClassName,
                   promptTab === "prompt"
-                    ? "bg-[#F3F5F7] text-[#20242A] shadow-none"
+                    ? "bg-[#F3F5F7] font-bold text-[#20242A] shadow-none ring-1 ring-inset ring-[#D6DCE3]"
                     : "bg-transparent text-[#5B616A] hover:bg-white hover:text-[#20242A]",
                 )}
                 onClick={() => setPromptTab("prompt")}
@@ -207,7 +207,7 @@ export function ImageFormPanel({
                 className={cx(
                   segmentedButtonBaseClassName,
                   promptTab === "negative"
-                    ? "bg-[#F3F5F7] text-[#20242A] shadow-none"
+                    ? "bg-[#F3F5F7] font-bold text-[#20242A] shadow-none ring-1 ring-inset ring-[#D6DCE3]"
                     : "bg-transparent text-[#5B616A] hover:bg-white hover:text-[#20242A]",
                 )}
                 onClick={() => setPromptTab("negative")}
@@ -215,7 +215,7 @@ export function ImageFormPanel({
                 <span className="block truncate">Undesired Content</span>
               </button>
             </div>
-            <div className="relative ml-auto flex-none" ref={settingsPanelRef}>
+            <div className="ml-auto flex-none">
               <button
                 type="button"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-[#D6DCE3] hover:text-[#20242A] focus:outline-none focus:ring-0 focus-visible:border-[#D6DCE3]"
@@ -228,7 +228,7 @@ export function ImageFormPanel({
                 </svg>
               </button>
               {settingsOpen ? (
-                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-[320px] max-w-[calc(100vw-2rem)] rounded-md border border-[#D6DCE3] bg-[#F3F5F7] p-4">
+                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-[320px] max-w-full rounded-md border border-[#D6DCE3] bg-[#F3F5F7] p-4">
                   <div className="mb-4 flex items-center gap-2 border-b border-[#D6DCE3] pb-3">
                     <div className="rounded-md bg-white px-2 py-1 text-xs font-medium text-[#20242A]">Settings</div>
                   </div>
@@ -375,16 +375,16 @@ export function ImageFormPanel({
                 </div>
               </div>
             ) : (
-              <div className="flex min-w-0 items-center justify-between gap-3 border-t border-[#E7EAF0] pt-3">
-                <div className="min-w-0 flex-1 truncate whitespace-nowrap text-[15px] text-[#5B616A]" title="Add a Base Img (Optional)">Add a Base Img (Optional)</div>
+              <div className="flex min-w-0 items-center justify-between gap-3 border-t border-[#E7EAF0] pt-2">
+                <div className="min-w-0 flex-1 truncate whitespace-nowrap text-[13px] text-[#5B616A]" title="Add a Base Img (Optional)">Add a Base Img (Optional)</div>
                 <div className="flex flex-none items-center gap-2">
                     <button
                       type="button"
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-[#D6DCE3] hover:text-[#20242A] focus:outline-none focus:ring-0 focus-visible:border-[#D6DCE3]"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-[#D6DCE3] hover:text-[#20242A] focus:outline-none focus:ring-0 focus-visible:border-[#D6DCE3]"
                       aria-label="上传 Base Img"
                       onClick={onPickBaseImage}
                     >
-                    <UploadIcon className="h-4.5 w-4.5 fill-current" />
+                    <UploadIcon className="h-4 w-4 fill-current" />
                   </button>
                 </div>
               </div>
