@@ -6,7 +6,7 @@ import { SettingsToggleCard } from "./SettingsToggleCard";
 import { cx } from "../shared/styles";
 
 /** Shared compact field styling for editable settings values. */
-export const settingsInputClass = "w-full border-0 border-b border-[#DDE5EC] bg-[#F7F9FB] px-3 py-2.5 text-sm text-[#182230] transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-[#98A2B3]";
+export const settingsInputClass = "w-full rounded-md border border-[#D8DCE2] bg-[#F7F9FB] px-3 py-2.5 text-sm text-[#182230] transition placeholder:text-[#98A2B3] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
 
 /** Renders a settings row containing the shared toggle control. */
 export function SettingsToggleField({
@@ -25,7 +25,7 @@ export function SettingsToggleField({
   return (
     <SettingsField label={label} hint={hint}>
       <div className="flex w-full items-center justify-end gap-3">
-        <span className={checked ? "text-xs text-[#2E7D5B]" : "text-xs text-[#7B8794]"}>{checked ? "已启用" : "未启用"}</span>
+        <span className={checked ? "text-xs text-accent-deep" : "text-xs text-[#98A2B3]"}>{checked ? "已启用" : "未启用"}</span>
         <SettingsToggleCard
           checked={checked}
           disabled={disabled}
@@ -62,7 +62,7 @@ export function SettingsSecretInput({
   );
 }
 
-/** Groups the fields belonging to one settings subsection. */
+/** Groups the fields belonging to one settings subsection into a card. */
 export function SettingsSectionCard({ children }: { children: React.ReactNode }) {
-  return <section className="grid">{children}</section>;
+  return <section className="grid rounded-md border border-stroke bg-white px-5 sm:px-6">{children}</section>;
 }

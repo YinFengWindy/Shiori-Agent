@@ -21,11 +21,11 @@ type SettingsPageProps = {
 /** Shared surface style for every settings page state. */
 export const settingsPageSurfaceClass = "settings-page bg-white";
 
-/** Responsive spacing for the settings toolbar. */
-export const settingsToolbarClass = "settings-hover-toolbar border-b border-[#E8EBF0] bg-white px-3 py-3 sm:px-5 lg:px-7";
+/** Responsive spacing for the always-visible settings toolbar. */
+export const settingsToolbarClass = "settings-toolbar border-b border-stroke bg-white px-4 py-3 sm:px-6 lg:px-8";
 
 /** Responsive spacing for the scrollable settings content. */
-export const settingsContentClass = "relative scrollbar-soft overflow-y-auto bg-white px-3 py-5 sm:px-5 lg:px-7 lg:py-7";
+export const settingsContentClass = "relative scrollbar-soft overflow-y-auto bg-white px-4 py-6 sm:px-6 lg:px-8 lg:py-8";
 
 /** Renders the active settings domain and delegates persistence to its controller. */
 export function SettingsPage({ bridgeReady, search, section, onMetaChange }: SettingsPageProps) {
@@ -89,6 +89,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             currentSubsectionId={currentSubsectionId}
             isDirty={controller.isDirty}
             savePhase={controller.savePhase}
+            sectionLabel={currentSection?.label ?? "设置"}
             subsections={visibleSubsections}
             onReset={controller.reset}
             onSave={controller.save}
@@ -96,7 +97,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
           />
         </div>
         <div className={settingsContentClass}>
-          <div className="mx-auto w-full max-w-none">
+          <div className="mx-auto w-full max-w-[760px]">
             {!currentSection ? (
               <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-[#7f8490]")}>
                 没有匹配的设置项

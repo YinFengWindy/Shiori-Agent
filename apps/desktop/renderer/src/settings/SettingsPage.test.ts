@@ -12,18 +12,17 @@ describe("SettingsPage layout", () => {
     assert.match(settingsPageSurfaceClass, /bg-white/);
     assert.match(settingsToolbarClass, /bg-white/);
     assert.match(settingsContentClass, /bg-white/);
-    assert.doesNotMatch(settingsPageSurfaceClass, /#F7F8FB/);
-    assert.doesNotMatch(settingsToolbarClass, /#F7F8FB/);
   });
 
-  it("reduces toolbar and content padding by four pixels", () => {
-    assert.match(settingsToolbarClass, /px-3 py-3 sm:px-5 lg:px-7/);
-    assert.match(settingsContentClass, /px-3 py-5 sm:px-5 lg:px-7 lg:py-7/);
-  });
-
-  it("keeps the hover toolbar in layout flow so expansion pushes content down", () => {
-    assert.match(settingsToolbarClass, /settings-hover-toolbar/);
+  it("keeps the toolbar persistently visible in layout flow", () => {
+    assert.doesNotMatch(settingsToolbarClass, /settings-hover-toolbar/);
     assert.doesNotMatch(settingsToolbarClass, /absolute/);
     assert.doesNotMatch(settingsContentClass, /h-full/);
+  });
+
+  it("aligns toolbar and content gutters so both columns share one rhythm", () => {
+    assert.match(settingsToolbarClass, /border-b border-stroke/);
+    assert.match(settingsToolbarClass, /px-4 py-3 sm:px-6 lg:px-8/);
+    assert.match(settingsContentClass, /px-4 py-6 sm:px-6 lg:px-8 lg:py-8/);
   });
 });

@@ -1,6 +1,6 @@
 import type React from "react";
-import { Brain, ChatCircleDots, GearSix, Microphone, PlugsConnected } from "@phosphor-icons/react";
-import { cx, inputClass, secondarySidebarSurfaceClass } from "../shared/styles";
+import { ArrowLeft, Brain, ChatCircleDots, Cpu, GearSix, Microphone, PlugsConnected } from "@phosphor-icons/react";
+import { cx, inputClass, secondarySidebarSurfaceClass, sidebarNavItemClass } from "../shared/styles";
 
 export type SettingsSectionId =
   | "models"
@@ -19,7 +19,7 @@ export const settingsSections: Array<{ id: SettingsSectionId; label: string }> =
   { id: "advanced", label: "高级" },
 ];
 
-const settingsSectionIcons = { models: Brain, channels: ChatCircleDots, memory: Brain, integrations: PlugsConnected, voice: Microphone, advanced: GearSix } as const;
+const settingsSectionIcons = { models: Cpu, channels: ChatCircleDots, memory: Brain, integrations: PlugsConnected, voice: Microphone, advanced: GearSix } as const;
 
 type SettingsSidebarProps = {
   activeSection: SettingsSectionId;
@@ -53,10 +53,14 @@ export function SettingsSidebar({
 }: SettingsSidebarProps) {
   const query = search.trim().toLowerCase();
   const visibleSections = settingsSections.filter((section) => sectionMatches(section, query));
-  const sidebarActionClass =
-    "flex min-h-[38px] items-center justify-between rounded-md border border-transparent px-3 text-left text-sm text-[#32363C] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
-  const sidebarBackClass =
-    "mb-3 flex h-8 items-center gap-2 rounded-md border border-transparent bg-transparent px-2 text-left text-sm text-[#6E737A] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
+  const sidebarActionClass = cx(
+    sidebarNavItemClass,
+    "flex min-h-[38px] items-center justify-between px-3 text-left text-sm text-[#3a4453]",
+  );
+  const sidebarBackClass = cx(
+    sidebarNavItemClass,
+    "mb-3 flex h-9 items-center gap-2 px-2 text-left text-sm text-[#6b7683]",
+  );
 
   return (
     <aside
@@ -70,13 +74,13 @@ export function SettingsSidebar({
       style={{ width }}
     >
       <button data-testid="settings-back-button" className={sidebarBackClass} type="button" onClick={onBackToChat}>
-        <span className="text-base leading-none">←</span>
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         <span>返回应用</span>
       </button>
       <input
         className={cx(
           inputClass,
-          "mb-3 h-10 rounded-md px-4 py-0 text-sm",
+          "mb-3 h-10 rounded-md px-4 text-sm",
         )}
         placeholder="搜索设置..."
         value={search}
@@ -90,13 +94,17 @@ export function SettingsSidebar({
               key={section.id}
               className={cx(
                 sidebarActionClass,
-                activeSection === section.id && "border-[#D9E0E8] bg-white/80 font-medium shadow-[0_1px_2px_rgba(15,23,42,0.05)]",
+                activeSection === section.id
+                  && "border-[rgba(202,93,46,0.28)] bg-white/90 font-medium text-accent-deep shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:border-[rgba(202,93,46,0.4)] hover:bg-white focus-visible:border-[rgba(202,93,46,0.4)] focus-visible:bg-white",
               )}
               type="button"
               onClick={() => onOpenSection(section.id)}
             >
-              <span className="inline-flex items-center gap-2"><Icon className="h-4 w-4 text-[#7B8794]" weight="duotone" aria-hidden="true" />{section.label}</span>
-              {dirty && activeSection === section.id ? <span className="h-2.5 w-2.5 rounded-full bg-[#2176FF]" /> : null}
+              <span className="inline-flex items-center gap-2">
+                <Icon className={cx("h-4 w-4", activeSection === section.id ? "text-accent" : "text-[#8a94a3]")} weight="duotone" aria-hidden="true" />
+                {section.label}
+              </span>
+              {dirty && activeSection === section.id ? <span className="h-2.5 w-2.5 rounded-full bg-primary" /> : null}
             </button>
           })}
         </div>
