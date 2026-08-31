@@ -79,14 +79,18 @@ export function ImageFormPanel({
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectClass = cx(
     inputClass,
-    "h-11 appearance-none py-0 pr-10 text-sm leading-5 focus:border-[#D8DCE2] focus-visible:border-[#D8DCE2]",
+    "h-10 appearance-none py-0 pr-8 text-xs leading-4 focus:border-[#D8DCE2] focus-visible:border-[#D8DCE2]",
+  );
+  const settingsSelectClass = cx(
+    inputClass,
+    "h-9 appearance-none py-0 pr-8 text-xs leading-4 focus:border-[#D8DCE2] focus-visible:border-[#D8DCE2]",
   );
   const promptTextareaClass = cx(
     inputClass,
     "min-h-[96px] resize-none overflow-hidden rounded-md border-[#D6DCE3] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus-visible:border-[#D6DCE3]",
   );
-  const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-md bg-[#F3F5F7] p-1";
-  const segmentedButtonBaseClassName = "min-w-0 rounded-md px-2 py-1.5 text-[13px] font-semibold transition";
+  const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-md bg-[#F3F5F7] p-0.5";
+  const segmentedButtonBaseClassName = "min-w-0 rounded-md px-1.5 py-1 text-xs font-semibold transition";
   const customSizeReady = form.sizePreset !== "custom"
     || (hasPositiveIntegerText(form.customWidth) && hasPositiveIntegerText(form.customHeight));
   const generateDisabled =
@@ -129,27 +133,27 @@ export function ImageFormPanel({
   }
 
   return (
-    <section className="grid min-h-0 min-w-0 content-start gap-4">
+    <section className="grid min-h-0 min-w-0 content-start gap-3">
       <div className="flex min-w-0 items-center gap-2">
       <div className="relative min-w-0 flex-1" ref={rolePanelRef}>
         <button
           type="button"
-          className="flex h-11 w-full min-w-0 items-center gap-3 rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-3 pr-4 text-left transition hover:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2]"
+          className="flex h-10 w-full min-w-0 items-center gap-2 rounded-md border border-[#D8DCE2] bg-[#F3F5F7] px-2.5 pr-3 text-left transition hover:border-[#D8DCE2] focus:outline-none focus:ring-0 focus-visible:border-[#D8DCE2]"
           aria-expanded={rolePanelOpen}
           onClick={() => setRolePanelOpen((current) => !current)}
         >
           {activeRole?.avatarAbs ? (
             <img
-              className="h-7 w-7 rounded-full object-cover"
+              className="h-6 w-6 rounded-full object-cover"
               src={toFileUrl(activeRole.avatarAbs)}
               alt={activeRole.label}
             />
           ) : (
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-[#F3F5F7] text-[12px] font-semibold text-[#20242A]">
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-[#F3F5F7] text-[11px] font-semibold text-[#20242A]">
               {currentAvatarLabel}
             </span>
           )}
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-[#20242A]">{activeRole?.label || "选择角色"}</span>
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#20242A]">{activeRole?.label || "选择角色"}</span>
           <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 flex-none fill-current text-[#737781]" aria-hidden="true">
             <path d="M2.2 4.2 6 8l3.8-3.8.8.8L6 9.8 1.4 5z" />
           </svg>
@@ -162,7 +166,7 @@ export function ImageFormPanel({
                   key={item.id}
                   type="button"
                   className={cx(
-                    "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition hover:bg-[#F5F6F8] focus:outline-none focus:ring-0",
+                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-[#F5F6F8] focus:outline-none focus:ring-0",
                     form.roleId === item.id && "bg-[#F5F6F8]",
                   )}
                   onClick={() => {
@@ -171,13 +175,13 @@ export function ImageFormPanel({
                   }}
                 >
                   {item.avatarAbs ? (
-                    <img className="h-9 w-9 rounded-full object-cover" src={toFileUrl(item.avatarAbs)} alt={item.label} />
+                    <img className="h-8 w-8 rounded-full object-cover" src={toFileUrl(item.avatarAbs)} alt={item.label} />
                   ) : (
-                    <span className="grid h-9 w-9 place-items-center rounded-full bg-[#F3F5F7] text-[12px] font-semibold text-[#20242A]">
+                    <span className="grid h-8 w-8 place-items-center rounded-full bg-[#F3F5F7] text-[11px] font-semibold text-[#20242A]">
                       {item.label.slice(0, 1).toUpperCase()}
                     </span>
                   )}
-                  <span className="truncate text-sm text-[#20242A]">{item.label}</span>
+                  <span className="truncate text-xs text-[#20242A]">{item.label}</span>
                 </button>
               ))}
             </div>
@@ -187,7 +191,7 @@ export function ImageFormPanel({
       </div>
 
       <div className="grid min-w-0 gap-2">
-        <div className="min-w-0 rounded-[18px] border border-[#E4EAF0] bg-white p-3">
+        <div className="min-w-0 rounded-[18px] border border-[#E4EAF0] bg-white p-2.5">
           <div className="relative z-20 mb-3 flex min-w-0 items-start gap-2" ref={settingsPanelRef}>
             <div className={cx(segmentedControlClassName, "max-w-[calc(100%-2.75rem)]")}>
               <button
@@ -229,15 +233,15 @@ export function ImageFormPanel({
               </button>
               {settingsOpen ? (
                 <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-[320px] max-w-full rounded-md border border-[#D6DCE3] bg-[#F3F5F7] p-4">
-                  <div className="mb-4 flex items-center gap-2 border-b border-[#D6DCE3] pb-3">
-                    <div className="rounded-md bg-white px-2 py-1 text-xs font-medium text-[#20242A]">Settings</div>
+                  <div className="mb-3 flex items-center gap-2 border-b border-[#D6DCE3] pb-2">
+                    <div className="rounded-md bg-white px-2 py-1 text-[11px] font-medium text-[#20242A]">Settings</div>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-[#20242A]">NSFW</div>
+                    <div className="text-xs font-semibold text-[#20242A]">NSFW</div>
                     <button
                       type="button"
                       className={cx(
-                        "relative inline-flex h-7 w-12 rounded-full transition",
+                        "relative inline-flex h-6 w-10 rounded-full transition",
                         focusResetClass,
                         nsfwEnabled ? "bg-[#20242A]" : "bg-[#BFC6D0]",
                       )}
@@ -246,18 +250,18 @@ export function ImageFormPanel({
                     >
                       <span
                         className={cx(
-                          "absolute top-1 h-5 w-5 rounded-full bg-white transition",
-                          nsfwEnabled ? "left-6" : "left-1",
+                          "absolute top-1 h-4 w-4 rounded-full bg-white transition",
+                          nsfwEnabled ? "left-5" : "left-1",
                         )}
                       />
                     </button>
                   </div>
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-[#20242A]">Add Quality Tags</div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <div className="text-xs font-semibold text-[#20242A]">Add Quality Tags</div>
                     <button
                       type="button"
                       className={cx(
-                        "relative inline-flex h-7 w-12 rounded-full transition",
+                        "relative inline-flex h-6 w-10 rounded-full transition",
                         focusResetClass,
                         addQualityTags ? "bg-[#20242A]" : "bg-[#BFC6D0]",
                       )}
@@ -266,17 +270,17 @@ export function ImageFormPanel({
                     >
                       <span
                         className={cx(
-                          "absolute top-1 h-5 w-5 rounded-full bg-white transition",
-                          addQualityTags ? "left-6" : "left-1",
+                          "absolute top-1 h-4 w-4 rounded-full bg-white transition",
+                          addQualityTags ? "left-5" : "left-1",
                         )}
                       />
                     </button>
                   </div>
-                  <div className="mt-4 grid gap-2">
-                    <div className="text-sm font-semibold text-[#20242A]">Undesired Content Preset</div>
+                  <div className="mt-3 grid gap-1.5">
+                    <div className="text-xs font-semibold text-[#20242A]">Undesired Content Preset</div>
                     <div className="relative">
                       <select
-                        className={selectClass}
+                        className={settingsSelectClass}
                         value={String(undesiredContentPreset)}
                         onChange={(event) => onChangeUndesiredContentPreset(Number(event.target.value) || 0)}
                       >
@@ -306,7 +310,7 @@ export function ImageFormPanel({
                 : onChange({ negativePrompt: event.target.value })
             )}
           />
-          <div className="mt-3 border-t border-[#E7EAF0] pt-3">
+          <div className="mt-2 border-t border-[#E7EAF0] pt-2">
             {form.baseImagePath ? (
               <div className="relative overflow-hidden rounded-[18px] border border-[#D6DCE3] bg-transparent">
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,18,28,0.08)_0%,rgba(13,18,28,0.16)_56%,rgba(13,18,28,0.22)_100%)]" />
@@ -393,7 +397,7 @@ export function ImageFormPanel({
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-2">
+      <div className="grid min-w-0 gap-1.5">
         <div className="text-xs font-medium text-[#4A4F57]">尺寸</div>
         <div className="relative min-w-0">
           <select
@@ -437,7 +441,7 @@ export function ImageFormPanel({
 
       <button
         className={cx(
-          "w-full min-w-0 rounded-md bg-[#1F1F1F] px-4 py-3 text-sm text-white transition hover:bg-[#2A2A2A] disabled:cursor-default disabled:opacity-40",
+          "w-full min-w-0 rounded-md bg-[#1F1F1F] px-3 py-2.5 text-xs text-white transition hover:bg-[#2A2A2A] disabled:cursor-default disabled:opacity-40",
           focusResetClass,
         )}
         type="button"
