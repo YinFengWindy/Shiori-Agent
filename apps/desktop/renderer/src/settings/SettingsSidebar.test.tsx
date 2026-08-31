@@ -13,7 +13,6 @@ describe("SettingsSidebar", () => {
         collapsed={false}
         animating={false}
         width={240}
-        onBackToChat={() => undefined}
         onOpenSection={() => undefined}
         onSearchChange={() => undefined}
         onBeginResize={() => undefined}

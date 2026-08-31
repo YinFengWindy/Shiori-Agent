@@ -1,5 +1,5 @@
 import type React from "react";
-import { ArrowLeft, Brain, ChatCircleDots, Cpu, GearSix, Microphone, PlugsConnected } from "@phosphor-icons/react";
+import { Brain, ChatCircleDots, Cpu, GearSix, Microphone, PlugsConnected } from "@phosphor-icons/react";
 import { cx, inputClass, secondarySidebarSurfaceClass, sidebarNavItemClass } from "../shared/styles";
 
 export type SettingsSectionId =
@@ -27,7 +27,6 @@ type SettingsSidebarProps = {
   collapsed: boolean;
   animating: boolean;
   width: number;
-  onBackToChat: () => void;
   onOpenSection: (section: SettingsSectionId) => void;
   onSearchChange: (value: string) => void;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -45,7 +44,6 @@ export function SettingsSidebar({
   collapsed,
   animating,
   width,
-  onBackToChat,
   onOpenSection,
   onSearchChange,
   onBeginResize,
@@ -57,15 +55,11 @@ export function SettingsSidebar({
     sidebarNavItemClass,
     "flex min-h-[38px] items-center justify-between px-3 text-left text-sm text-[#3a4453]",
   );
-  const sidebarBackClass = cx(
-    sidebarNavItemClass,
-    "mb-3 flex h-9 items-center gap-2 px-2 text-left text-sm text-[#6b7683]",
-  );
 
   return (
     <aside
       className={cx(
-        "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] py-3",
+        "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] py-3",
         secondarySidebarSurfaceClass,
         animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
@@ -73,10 +67,6 @@ export function SettingsSidebar({
       aria-hidden={collapsed}
       style={{ width }}
     >
-      <button data-testid="settings-back-button" className={sidebarBackClass} type="button" onClick={onBackToChat}>
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        <span>返回应用</span>
-      </button>
       <input
         className={cx(
           inputClass,
@@ -86,7 +76,7 @@ export function SettingsSidebar({
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
       />
-      <nav className="scrollbar-soft grid min-h-0 content-start gap-4 overflow-y-auto pr-0">
+      <nav className="scrollbar-soft grid min-h-0 content-start gap-1 overflow-y-auto pr-0 pt-3">
         <div className="grid gap-1">
           {visibleSections.map((section) => {
             const Icon = settingsSectionIcons[section.id];

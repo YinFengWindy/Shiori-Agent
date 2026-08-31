@@ -17,6 +17,7 @@ import { RoleWorkspaceSidebar, type RoleWorkspaceSectionId } from "../roles/Role
 import { SettingsPage } from "../settings/SettingsPage";
 import { SettingsSidebar, type SettingsSectionId } from "../settings/SettingsSidebar";
 import { cx } from "../shared/styles";
+import { NavRail, type NavRailViewId } from "../shell/NavRail";
 import type {
   AppMainView,
   ChatSendRequest,
@@ -321,6 +322,19 @@ export function DesktopAppFrame({
   onLocateSelectedChatImageMessage,
   onRegenerateSelectedChatImage,
 }: DesktopAppFrameProps) {
+  const navRailActiveView: NavRailViewId | null = mainView.kind === "chat"
+    ? "messages"
+    : roleWorkspaceViewActive
+      ? "roles"
+      : imageStudioViewActive || imagePromptTagsViewActive
+        ? "image"
+        : mainView.kind === "story"
+          ? "story"
+          : mainView.kind === "settings"
+            ? "settings"
+            : null;
+  const navRailUnreadTotal = Object.values(unreadCounts).reduce((total, count) => total + count, 0);
+
   return (
     <div className="app-frame grid h-screen grid-rows-app overflow-hidden bg-[var(--app-bg)]">
       <TitleBar
@@ -346,9 +360,19 @@ export function DesktopAppFrame({
           shellResizing && "sidebar-resizing cursor-col-resize select-none",
         )}
         style={{
-          gridTemplateColumns: "minmax(0, auto) minmax(0, 1fr)",
+          gridTemplateColumns: "52px minmax(0, auto) minmax(0, 1fr)",
         }}
       >
+        <NavRail
+          activeView={navRailActiveView}
+          unreadTotal={navRailUnreadTotal}
+          onOpenSearch={onOpenSearch}
+          onBackToChat={onBackToChat}
+          onOpenRolesWorkspace={onOpenRolesWorkspace}
+          onOpenImageStudio={onOpenImageStudio}
+          onOpenStory={onOpenStory}
+          onOpenSettings={onOpenSettings}
+        />
         <div
           className={cx(
             "sidebar-track relative min-h-0 overflow-hidden",
@@ -363,14 +387,13 @@ export function DesktopAppFrame({
               collapsed={sidebarState.collapsed}
               dirty={settingsDirty}
               width={sidebarState.width}
-              onBackToChat={onBackToChat}
               onOpenSection={onOpenSettingsSection}
               onSearchChange={onSettingsSearchChange}
               onBeginResize={sidebarState.onBeginResize}
               search={settingsSearch}
             />
           ) : imagePromptTagsViewActive ? (
-            <PromptTagWorkspaceSidebar activeSection={promptTagWorkspaceSection} animating={sidebarState.animating && !sidebarState.resizing} collapsed={sidebarState.collapsed} width={sidebarState.width} onBackToChat={onBackToChat} onOpenSection={onOpenPromptTagWorkspaceSection} onBeginResize={sidebarState.onBeginResize} />
+            <PromptTagWorkspaceSidebar activeSection={promptTagWorkspaceSection} animating={sidebarState.animating && !sidebarState.resizing} collapsed={sidebarState.collapsed} width={sidebarState.width} onOpenSection={onOpenPromptTagWorkspaceSection} onBeginResize={sidebarState.onBeginResize} />
           ) : imageStudioViewActive ? (
             <ImageStudioSidebar
               bridgeReady={bridgeReady}
@@ -384,7 +407,7 @@ export function DesktopAppFrame({
               roleItems={imageStudioState.roleItems}
               submitting={imageStudioState.submitting}
               validationError={imageStudioState.validationError}
-              onBackToChat={onBackToChat}
+              onOpenPromptTagLibrary={onOpenPromptTagLibrary}
               onBeginResize={sidebarState.onBeginResize}
               onChange={imageStudioState.onChange}
               onPickBaseImage={imageStudioState.onPickBaseImage}
@@ -399,7 +422,6 @@ export function DesktopAppFrame({
               animating={sidebarState.animating && !sidebarState.resizing}
               collapsed={sidebarState.collapsed}
               width={sidebarState.width}
-              onBackToChat={onBackToChat}
               onOpenSection={onOpenRoleWorkspaceSection}
               onBeginResize={sidebarState.onBeginResize}
             />
@@ -412,13 +434,7 @@ export function DesktopAppFrame({
               bridgeReady={bridgeReady}
               collapsed={sidebarState.collapsed}
               width={sidebarState.width}
-              onOpenSearch={onOpenSearch}
-              onOpenRolesWorkspace={onOpenRolesWorkspace}
-              onOpenStory={onOpenStory}
               onOpenRole={onOpenRole}
-              onOpenImageStudio={onOpenImageStudio}
-              onOpenPromptTagLibrary={onOpenPromptTagLibrary}
-              onOpenSettings={onOpenSettings}
               onBeginResize={sidebarState.onBeginResize}
             />
           )}

@@ -1,7 +1,8 @@
 import type React from "react";
 import { ImageFormPanel } from "./ImageFormPanel";
 import type { ImageStudioFormState } from "./types";
-import { cx, secondarySidebarSurfaceClass } from "../shared/styles";
+import { PromptLibraryIcon } from "../shared/icons";
+import { cx, secondarySidebarSurfaceClass, sidebarNavItemClass } from "../shared/styles";
 
 export type ImageStudioSidebarSectionId = "generate";
 
@@ -17,7 +18,7 @@ type ImageStudioSidebarProps = {
   roleItems: Array<{ id: string; label: string; avatarAbs: string | null }>;
   submitting: boolean;
   validationError: string;
-  onBackToChat: () => void;
+  onOpenPromptTagLibrary: () => void;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
   onChange: (next: Partial<ImageStudioFormState>) => void;
   onPickBaseImage: () => void;
@@ -40,7 +41,7 @@ export function ImageStudioSidebar({
   roleItems,
   submitting,
   validationError,
-  onBackToChat,
+  onOpenPromptTagLibrary,
   onBeginResize,
   onChange,
   onPickBaseImage,
@@ -49,8 +50,10 @@ export function ImageStudioSidebar({
   onToggleAddQualityTags,
   onChangeUndesiredContentPreset,
 }: ImageStudioSidebarProps) {
-  const sidebarBackClass =
-    "mb-3 flex h-8 items-center gap-2 rounded-md border border-transparent bg-transparent px-2 text-left text-sm text-[#6E737A] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
+  const promptLibraryClass = cx(
+    sidebarNavItemClass,
+    "mb-3 flex h-9 items-center gap-2 px-2 text-left text-sm text-[#6b7683]",
+  );
 
   return (
     <aside
@@ -64,13 +67,13 @@ export function ImageStudioSidebar({
       style={{ width }}
     >
       <button
-        data-testid="image-studio-back-button"
-        className={sidebarBackClass}
+        data-testid="open-prompt-tag-library-button"
+        className={promptLibraryClass}
         type="button"
-        onClick={onBackToChat}
+        onClick={onOpenPromptTagLibrary}
       >
-        <span className="text-base leading-none">←</span>
-        <span>返回应用</span>
+        <PromptLibraryIcon className="h-4 w-4 fill-current" />
+        <span>提示词库</span>
       </button>
       <div className="scrollbar-soft min-h-0 overflow-y-auto px-2 pb-1">
         <ImageFormPanel
