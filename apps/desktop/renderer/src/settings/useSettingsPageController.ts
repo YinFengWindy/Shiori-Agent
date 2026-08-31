@@ -8,12 +8,7 @@ import {
   shouldRetryFailedSettingsLoad,
 } from "./settingsPersistence";
 import type { SettingsDraftUpdater, SettingsSavePhase } from "./settingsPageTypes";
-import {
-  getSettingsFeedbackTimeoutMs,
-  resolveSettingsSaveFeedback,
-} from "./settingsSaveState";
-
-const SETTINGS_SAVE_DEBOUNCE_MS = 300;
+import { getSettingsFeedbackTimeoutMs } from "./settingsSaveState";
 
 type UseSettingsPageControllerArgs = {
   bridgeReady: boolean;
@@ -29,6 +24,7 @@ export function useSettingsPageController({ bridgeReady }: UseSettingsPageContro
   const loadRequestIdRef = useRef(0);
   const draftRef = useRef<SettingsFormData | null>(null);
   const saveInFlightRef = useRef(false);
+  const queuedDraftRef = useRef<SettingsFormData | null>(null);
   const attemptedDraftRef = useRef<string | null>(null);
 
   const loadPageData = useEffectEvent(async () => {
@@ -43,6 +39,7 @@ export function useSettingsPageController({ bridgeReady }: UseSettingsPageContro
       setSnapshot(loaded.snapshot);
       setDraft(cloneSettings(loaded.snapshot.formData));
       draftRef.current = cloneSettings(loaded.snapshot.formData);
+      queuedDraftRef.current = null;
       attemptedDraftRef.current = null;
       setLoadError("");
       setSavePhase("idle");
@@ -88,7 +85,10 @@ export function useSettingsPageController({ bridgeReady }: UseSettingsPageContro
   };
 
   const persistDraft = useEffectEvent(async (nextDraft: SettingsFormData) => {
-    if (saveInFlightRef.current) return;
+    if (saveInFlightRef.current) {
+      queuedDraftRef.current = cloneSettings(nextDraft);
+      return;
+    }
     if (typeof window.miraDesktop.saveSettings !== "function") {
       setSavePhase("error");
       setStatusMessage("当前桌面进程版本过旧，请完全关闭并重新打开桌面端。");
@@ -106,14 +106,23 @@ export function useSettingsPageController({ bridgeReady }: UseSettingsPageContro
         setDraft(result.nextDraft);
         draftRef.current = result.nextDraft;
       }
-      const feedback = resolveSettingsSaveFeedback(result.saveResult);
-      setSavePhase(feedback.phase);
-      setStatusMessage(feedback.message);
+      if (result.saveResult.ok) {
+        setSavePhase("idle");
+        setStatusMessage("");
+      } else {
+        setSavePhase("error");
+        setStatusMessage(result.saveResult.health.message || "配置保存后的健康检查失败。");
+      }
     } catch (error) {
       setSavePhase("error");
       setStatusMessage(error instanceof Error ? error.message : String(error));
     } finally {
       saveInFlightRef.current = false;
+      const queuedDraft = queuedDraftRef.current;
+      queuedDraftRef.current = null;
+      if (queuedDraft && !settingsEqual(queuedDraft, nextDraft)) {
+        void persistDraft(queuedDraft);
+      }
     }
   });
 
@@ -121,10 +130,8 @@ export function useSettingsPageController({ bridgeReady }: UseSettingsPageContro
     if (!snapshot || !draft || settingsEqual(snapshot.formData, draft)) return undefined;
     const serializedDraft = JSON.stringify(draft);
     if (attemptedDraftRef.current === serializedDraft) return undefined;
-    const timer = window.setTimeout(() => {
-      void persistDraft(cloneSettings(draft));
-    }, SETTINGS_SAVE_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
+    void persistDraft(cloneSettings(draft));
+    return undefined;
   }, [draft, snapshot]);
 
   return {
