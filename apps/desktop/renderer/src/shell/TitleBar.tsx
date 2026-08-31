@@ -164,10 +164,10 @@ export function TitleBar({
         <button className={cx("window-control", windowControlClass)} type="button" aria-label="最大化" onClick={() => controlWindow("toggleMaximize")}>
           <span
             className={cx(
-              "window-maximize relative block h-[10px] w-[10px] border-current",
+              "window-maximize relative block h-[11px] w-[11px] border-current",
               windowMaximized
-                ? "rounded-[1.5px] border-[1.3px] before:absolute before:-bottom-[2.5px] before:-right-[2.5px] before:h-[9px] before:w-[9px] before:rounded-[2px] before:border-[1.3px] before:border-current before:bg-white before:content-['']"
-                : "rounded-[1.5px] border-[1.3px]",
+                ? "before:absolute before:bottom-0 before:left-0 before:h-[8px] before:w-[8px] before:rounded-[1.5px] before:border-[1.3px] before:border-current before:content-[''] after:absolute after:right-0 after:top-0 after:h-[8px] after:w-[8px] after:rounded-[1.5px] after:border-[1.3px] after:border-current after:content-['']"
+                : "block rounded-[1.5px] border-[1.3px]",
             )}
           />
         </button>
