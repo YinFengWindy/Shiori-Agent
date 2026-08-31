@@ -75,7 +75,7 @@ export function ImageStudioSidebar({
         <PromptLibraryIcon className="h-4 w-4 fill-current" />
         <span>提示词库</span>
       </button>
-      <div className="scrollbar-soft min-h-0 overflow-y-auto px-2 pb-1">
+      <div className="scrollbar-soft min-h-0 min-w-0 overflow-x-hidden overflow-y-auto px-2 pb-1">
         <ImageFormPanel
           bridgeReady={bridgeReady}
           form={form}

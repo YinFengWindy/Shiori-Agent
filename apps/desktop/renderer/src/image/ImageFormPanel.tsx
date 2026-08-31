@@ -130,7 +130,7 @@ export function ImageFormPanel({
 
   return (
     <section className="grid min-h-0 min-w-0 content-start gap-4">
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
       <div className="relative min-w-0 flex-1" ref={rolePanelRef}>
         <button
           type="button"
@@ -186,16 +186,16 @@ export function ImageFormPanel({
       </div>
       </div>
 
-      <div className="grid gap-2">
-        <div className="rounded-[18px] border border-[#E4EAF0] bg-white p-3">
-          <div className="mb-3 flex items-start gap-2">
+      <div className="grid min-w-0 gap-2">
+        <div className="min-w-0 rounded-[18px] border border-[#E4EAF0] bg-white p-3">
+          <div className="mb-3 flex min-w-0 items-start gap-2">
             <div className={cx(segmentedControlClassName, "max-w-[calc(100%-2.75rem)]")}>
               <button
                 type="button"
                 className={cx(
                   segmentedButtonBaseClassName,
                   promptTab === "prompt"
-                    ? "bg-white text-[#20242A] shadow-sm"
+                    ? "bg-[#F3F5F7] text-[#20242A] shadow-none"
                     : "bg-transparent text-[#5B616A] hover:bg-white hover:text-[#20242A]",
                 )}
                 onClick={() => setPromptTab("prompt")}
@@ -207,7 +207,7 @@ export function ImageFormPanel({
                 className={cx(
                   segmentedButtonBaseClassName,
                   promptTab === "negative"
-                    ? "bg-white text-[#20242A] shadow-sm"
+                    ? "bg-[#F3F5F7] text-[#20242A] shadow-none"
                     : "bg-transparent text-[#5B616A] hover:bg-white hover:text-[#20242A]",
                 )}
                 onClick={() => setPromptTab("negative")}
@@ -393,9 +393,9 @@ export function ImageFormPanel({
         </div>
       </div>
 
-      <div className="grid gap-2">
+      <div className="grid min-w-0 gap-2">
         <div className="text-xs font-medium text-[#4A4F57]">尺寸</div>
-        <div className="relative">
+        <div className="relative min-w-0">
           <select
             className={selectClass}
             value={form.sizePreset}
@@ -412,7 +412,7 @@ export function ImageFormPanel({
           </span>
         </div>
         {form.sizePreset === "custom" ? (
-          <div className="grid gap-2 md:grid-cols-2">
+          <div className="grid min-w-0 gap-2 md:grid-cols-2">
             <input
               className={cx(inputClass, "bg-white")}
               value={form.customWidth}
@@ -430,14 +430,14 @@ export function ImageFormPanel({
       </div>
 
       {validationError ? (
-        <div className="rounded-md border border-[rgba(176,58,58,0.18)] bg-[#FFF1F1] px-3 py-2 text-[12px] leading-5 text-[#9A2F2F]">
+        <div className="min-w-0 rounded-md border border-[rgba(176,58,58,0.18)] bg-[#FFF1F1] px-3 py-2 text-[12px] leading-5 text-[#9A2F2F]">
           {validationError}
         </div>
       ) : null}
 
       <button
         className={cx(
-          "rounded-md bg-[#1F1F1F] px-4 py-3 text-sm text-white transition hover:bg-[#2A2A2A] disabled:cursor-default disabled:opacity-40",
+          "w-full min-w-0 rounded-md bg-[#1F1F1F] px-4 py-3 text-sm text-white transition hover:bg-[#2A2A2A] disabled:cursor-default disabled:opacity-40",
           focusResetClass,
         )}
         type="button"
