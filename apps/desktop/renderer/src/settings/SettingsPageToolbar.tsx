@@ -1,4 +1,4 @@
-import { ArrowCounterClockwise, FloppyDisk } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowsClockwise, FloppyDisk, Power } from "@phosphor-icons/react";
 import type { SettingsSubsection } from "./settingsSectionMetadata";
 import type { SettingsSavePhase } from "./settingsPageTypes";
 import { cx, panelTitleClass } from "../shared/styles";
@@ -13,6 +13,8 @@ type SettingsPageToolbarProps = {
   onReset: () => void;
   onSave: () => Promise<void>;
   onSubsectionChange: (subsectionId: string) => void;
+  onRefreshBridge?: () => void;
+  onRestartBridge?: () => void;
 };
 
 /** Renders the section header, subsection navigation, and the reset/save actions. */
@@ -26,9 +28,13 @@ export function SettingsPageToolbar({
   onReset,
   onSave,
   onSubsectionChange,
+  onRefreshBridge,
+  onRestartBridge,
 }: SettingsPageToolbarProps) {
   const toolbarActionClass =
     "flex h-9 items-center gap-1.5 rounded-md border px-3.5 text-[13px] font-medium transition focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-default disabled:shadow-none";
+  const bridgeActionClass =
+    "grid h-9 w-9 place-items-center rounded-md border border-stroke bg-white text-[#667085] transition hover:bg-[#F7F9FB] hover:text-[#182230] focus:outline-none focus:ring-2 focus:ring-primary/20";
   return (
     <div className="mx-auto flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex min-w-0 flex-col gap-2.5">
@@ -40,6 +46,16 @@ export function SettingsPageToolbar({
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {onRefreshBridge ? (
+          <button className={bridgeActionClass} type="button" aria-label="刷新连接桥" title="刷新连接桥" onClick={onRefreshBridge}>
+            <ArrowsClockwise className="h-4 w-4" aria-hidden="true" />
+          </button>
+        ) : null}
+        {onRestartBridge ? (
+          <button className={bridgeActionClass} type="button" aria-label="重启连接桥" title="重启连接桥" onClick={onRestartBridge}>
+            <Power className="h-4 w-4" aria-hidden="true" />
+          </button>
+        ) : null}
         <button
           className={cx(
             toolbarActionClass,

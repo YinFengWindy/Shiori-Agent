@@ -56,13 +56,10 @@ type DesktopAppFrameProps = {
   canGoBack: boolean;
   canGoForward: boolean;
   canRefreshSession: boolean;
-  canEditRole: boolean;
   onToggleSidebar: () => void;
   onGoBack: () => void;
   onGoForward: () => void;
   onRefreshSession: () => void;
-  onCreateRole: () => void;
-  onEditRole: () => void;
   onOpenSettings: () => void;
   onRefreshBridge: () => void;
   onRestartBridge: () => void;
@@ -193,13 +190,10 @@ export function DesktopAppFrame({
   canGoBack,
   canGoForward,
   canRefreshSession,
-  canEditRole,
   onToggleSidebar,
   onGoBack,
   onGoForward,
   onRefreshSession,
-  onCreateRole,
-  onEditRole,
   onOpenSettings,
   onRefreshBridge,
   onRestartBridge,
@@ -343,16 +337,10 @@ export function DesktopAppFrame({
         canGoBack={canGoBack}
         canGoForward={canGoForward}
         canRefreshSession={canRefreshSession}
-        canEditRole={canEditRole}
         onToggleSidebar={onToggleSidebar}
         onGoBack={onGoBack}
         onGoForward={onGoForward}
         onRefreshSession={onRefreshSession}
-        onCreateRole={onCreateRole}
-        onEditRole={onEditRole}
-        onOpenSettings={onOpenSettings}
-        onRefreshBridge={onRefreshBridge}
-        onRestartBridge={onRestartBridge}
       />
       <div
         className={cx(
@@ -585,6 +573,8 @@ export function DesktopAppFrame({
               search={settingsSearch}
               section={settingsSection}
               onMetaChange={onSettingsMetaChange}
+              onRefreshBridge={onRefreshBridge}
+              onRestartBridge={onRestartBridge}
             />
           ) : null}
         </main>

@@ -48,4 +48,10 @@ describe("NavRail", () => {
     assert.match(unreadMarkup, /aria-label="消息（3 条未读）"/);
     assert.match(unreadMarkup, /bg-\[#DA4B4B\]/);
   });
+
+  it("uses the NovelAI mark for the image workspace entry", () => {
+    const markup = renderRail();
+
+    assert.match(markup, /src="[^"]*novelai-logo-dark\.svg"/);
+  });
 });

@@ -507,13 +507,10 @@ function App(): React.ReactElement {
       canGoBack={canGoBack}
       canGoForward={canGoForward}
       canRefreshSession={mainView.kind === "chat" && Boolean(activeRoleId)}
-      canEditRole={mainView.kind === "chat" && Boolean(activeRoleId)}
       onToggleSidebar={leftSidebar.toggle}
       onGoBack={() => void navigateHistory("back", openRole)}
       onGoForward={() => void navigateHistory("forward", openRole)}
       onRefreshSession={() => void refreshSession()}
-      onCreateRole={() => openRoleWorkspace({ kind: "role-create" })}
-      onEditRole={() => openRoleWorkspace(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
       onOpenSettings={() => openSettingsWorkspace()}
       onRefreshBridge={() => void refreshBridge()}
       onRestartBridge={() => void restartBridge()}

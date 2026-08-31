@@ -1,6 +1,8 @@
 import type React from "react";
-import { BookOpenText, Chats, GearSix, Images, MagnifyingGlass, Users } from "@phosphor-icons/react";
+import { BookOpenText, Chats, GearSix, MagnifyingGlass, Users } from "@phosphor-icons/react";
 import { cx } from "../shared/styles";
+
+const novelAiLogoDark = new URL("../assets/novelai-logo-dark.svg", import.meta.url).href;
 
 /** Identifies the workspace a rail entry points to; null when no view entry is active. */
 export type NavRailViewId = "messages" | "roles" | "image" | "story" | "settings";
@@ -8,7 +10,8 @@ export type NavRailViewId = "messages" | "roles" | "image" | "story" | "settings
 type NavRailEntry = {
   id: NavRailViewId | "search";
   label: string;
-  icon: typeof Chats;
+  icon?: typeof Chats;
+  imageSrc?: string;
   onSelect: () => void;
   showUnreadBadge?: boolean;
 };
@@ -42,13 +45,14 @@ export function NavRail({
     { id: "search", label: "搜索", icon: MagnifyingGlass, onSelect: onOpenSearch },
     { id: "messages", label: "消息", icon: Chats, onSelect: onBackToChat, showUnreadBadge: true },
     { id: "roles", label: "角色", icon: Users, onSelect: onOpenRolesWorkspace },
-    { id: "image", label: "生图", icon: Images, onSelect: onOpenImageStudio },
+    { id: "image", label: "生图", imageSrc: novelAiLogoDark, onSelect: onOpenImageStudio },
     { id: "story", label: "故事", icon: BookOpenText, onSelect: onOpenStory },
   ];
 
   function renderEntry(entry: NavRailEntry): React.ReactNode {
     const active = entry.id === activeView;
     const showBadge = Boolean(entry.showUnreadBadge && unreadTotal > 0);
+    const Icon = entry.icon;
     return (
       <button
         key={entry.id}
@@ -63,7 +67,8 @@ export function NavRail({
         title={entry.label}
         onClick={entry.onSelect}
       >
-        <entry.icon className="h-[21px] w-[21px]" weight={active ? "fill" : "regular"} aria-hidden="true" />
+        {entry.imageSrc ? <img className="h-[21px] w-[21px]" src={entry.imageSrc} alt="" /> : null}
+        {!entry.imageSrc && Icon ? <Icon className="h-[21px] w-[21px]" weight={active ? "fill" : "regular"} aria-hidden="true" /> : null}
         {showBadge ? (
           <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#DA4B4B]" aria-hidden="true" />
         ) : null}

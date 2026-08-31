@@ -65,4 +65,25 @@ describe("SettingsPageToolbar", () => {
     assert.match(markup, /aria-current="page"[^>]*>Telegram/);
     assert.match(markup, />QQ</);
   });
+
+  it("renders bridge recovery actions when provided", () => {
+    const markup = renderToStaticMarkup(
+      <SettingsPageToolbar
+        bridgeReady
+        currentSubsectionId="main"
+        isDirty={false}
+        savePhase="idle"
+        sectionLabel="模型"
+        subsections={[{ id: "main", label: "主模型" }]}
+        onReset={() => undefined}
+        onSave={async () => undefined}
+        onSubsectionChange={() => undefined}
+        onRefreshBridge={() => undefined}
+        onRestartBridge={() => undefined}
+      />,
+    );
+
+    assert.match(markup, /aria-label="刷新连接桥"/);
+    assert.match(markup, /aria-label="重启连接桥"/);
+  });
 });

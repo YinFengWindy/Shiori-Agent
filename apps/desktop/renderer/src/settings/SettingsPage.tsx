@@ -16,6 +16,8 @@ type SettingsPageProps = {
   search: string;
   section: SettingsSectionId;
   onMetaChange?: (meta: { configPath: string; dirty: boolean }) => void;
+  onRefreshBridge?: () => void;
+  onRestartBridge?: () => void;
 };
 
 /** Shared surface style for every settings page state. */
@@ -28,7 +30,14 @@ export const settingsToolbarClass = "settings-toolbar border-b border-stroke bg-
 export const settingsContentClass = "relative scrollbar-soft overflow-y-auto bg-white px-4 py-6 sm:px-6 lg:px-8 lg:py-8";
 
 /** Renders the active settings domain and delegates persistence to its controller. */
-export function SettingsPage({ bridgeReady, search, section, onMetaChange }: SettingsPageProps) {
+export function SettingsPage({
+  bridgeReady,
+  search,
+  section,
+  onMetaChange,
+  onRefreshBridge,
+  onRestartBridge,
+}: SettingsPageProps) {
   const [activeSubsections, setActiveSubsections] = useState<Record<SettingsSectionId, string>>(
     createInitialSettingsSubsectionState,
   );
@@ -94,6 +103,8 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
             onReset={controller.reset}
             onSave={controller.save}
             onSubsectionChange={updateActiveSubsection}
+            onRefreshBridge={onRefreshBridge}
+            onRestartBridge={onRestartBridge}
           />
         </div>
         <div className={settingsContentClass}>
