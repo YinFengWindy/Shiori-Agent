@@ -107,10 +107,7 @@ function App(): React.ReactElement {
   const [selectedAvatarAsset, setSelectedAvatarAsset] = useState("");
   const [selectedChatBackground, setSelectedChatBackground] = useState("");
   const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
-  const [settingsSearch, setSettingsSearch] = useState("");
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
-  const [, setSettingsConfigPath] = useState("");
-  const [settingsDirty, setSettingsDirty] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const imageHistorySidebar = useRightSidebarState({
     minWidth: historySidebarMinWidth,
@@ -212,7 +209,6 @@ function App(): React.ReactElement {
     roles,
     setError,
     setNotice,
-    setSettingsSearch,
     setSettingsSection,
     setSidebarAnimating: leftSidebar.setAnimating,
     setSidebarCollapsed: leftSidebar.setCollapsed,
@@ -267,7 +263,7 @@ function App(): React.ReactElement {
     openRoleRequestIdRef,
   });
 
-  const { refreshBridge, restartBridge } = useDesktopBridgeLifecycle({
+  useDesktopBridgeLifecycle({
     activeRoleId,
     activeIllustration,
     setActiveRoleId,
@@ -512,8 +508,6 @@ function App(): React.ReactElement {
       onGoForward={() => void navigateHistory("forward", openRole)}
       onRefreshSession={() => void refreshSession()}
       onOpenSettings={() => openSettingsWorkspace()}
-      onRefreshBridge={() => void refreshBridge()}
-      onRestartBridge={() => void restartBridge()}
       shellResizing={leftSidebar.resizing || imageHistorySidebar.resizing || chatLatestImageSidebar.resizing}
       sidebarState={{
         collapsed: leftSidebar.collapsed,
@@ -524,9 +518,6 @@ function App(): React.ReactElement {
       }}
       mainView={mainView}
       settingsSection={settingsSection}
-      settingsDirty={settingsDirty}
-      settingsSearch={settingsSearch}
-      onSettingsSearchChange={setSettingsSearch}
       onBackToChat={() => openChatView()}
       onOpenSettingsSection={(section) => openSettingsWorkspace(section)}
       imageStudioViewActive={imageStudioViewActive}
@@ -620,10 +611,6 @@ function App(): React.ReactElement {
       onSaveRoleAssets={(nextSelection) => void saveRoleAssets(nextSelection)}
       differenceGeneration={roleDifferenceGeneration.state}
       onGenerateDifferences={(baseAsset) => void roleDifferenceGeneration.generate(baseAsset)}
-      onSettingsMetaChange={({ configPath, dirty }) => {
-        setSettingsConfigPath(configPath);
-        setSettingsDirty(dirty);
-      }}
       showSearchDialog={showSearchDialog}
       searchQuery={searchQuery}
       searchingSessions={searchingSessions}

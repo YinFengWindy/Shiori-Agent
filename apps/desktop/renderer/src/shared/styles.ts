@@ -11,14 +11,14 @@ export const secondarySidebarSurfaceClass = "bg-[#EFF4F9]";
 
 /** Shared interaction styling for sidebar navigation entries. */
 export const sidebarNavItemClass =
-  "rounded-md border border-transparent transition-colors hover:border-stroke hover:bg-white/80 focus-visible:border-stroke focus-visible:bg-white/80 focus-visible:outline-none";
+  "rounded-md transition-colors hover:bg-white/80 focus-visible:bg-white/80 focus-visible:outline-none";
 
 /** Shared small-body text class for non-titlebar desktop content. */
 export const bodyTextClass = "text-xs leading-5";
 
 /** Shared input styling for form controls outside the chat composer. */
 export const inputClass =
-  "w-full rounded-md border border-[#D8DCE2] bg-[#F7F9FB] px-3.5 py-2.5 text-sm text-text transition placeholder:text-[#98A2B3] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
+  "w-full rounded-md border border-[#D8DCE2] bg-[#F7F9FB] px-3.5 py-2.5 text-sm text-text transition placeholder:text-[#98A2B3] focus:border-[#D8DCE2] focus:outline-none";
 
 /** Shared textarea styling for role prompt fields. */
 export const textareaClass = cx(inputClass, "min-h-24 resize-y");

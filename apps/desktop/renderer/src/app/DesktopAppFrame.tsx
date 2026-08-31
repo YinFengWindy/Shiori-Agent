@@ -61,15 +61,10 @@ type DesktopAppFrameProps = {
   onGoForward: () => void;
   onRefreshSession: () => void;
   onOpenSettings: () => void;
-  onRefreshBridge: () => void;
-  onRestartBridge: () => void;
   shellResizing: boolean;
   sidebarState: SidebarViewState;
   mainView: AppMainView;
   settingsSection: SettingsSectionId;
-  settingsDirty: boolean;
-  settingsSearch: string;
-  onSettingsSearchChange: (value: string) => void;
   onBackToChat: () => void;
   onOpenSettingsSection: (section: SettingsSectionId) => void;
   imageStudioViewActive: boolean;
@@ -157,7 +152,6 @@ type DesktopAppFrameProps = {
   onSaveRoleAssets: (nextSelection?: { avatarAsset?: string; chatBackground?: string; moodIllustrationBindings?: Record<string, string> }) => void;
   differenceGeneration: import("../roles/roleDifferenceGeneration").RoleDifferenceGenerationState;
   onGenerateDifferences: (baseAsset: string) => void;
-  onSettingsMetaChange: (meta: { configPath: string; dirty: boolean }) => void;
   showSearchDialog: boolean;
   searchQuery: string;
   searchingSessions: boolean;
@@ -195,15 +189,10 @@ export function DesktopAppFrame({
   onGoForward,
   onRefreshSession,
   onOpenSettings,
-  onRefreshBridge,
-  onRestartBridge,
   shellResizing,
   sidebarState,
   mainView,
   settingsSection,
-  settingsDirty,
-  settingsSearch,
-  onSettingsSearchChange,
   onBackToChat,
   onOpenSettingsSection,
   imageStudioViewActive,
@@ -291,7 +280,6 @@ export function DesktopAppFrame({
   onSaveRoleAssets,
   differenceGeneration,
   onGenerateDifferences,
-  onSettingsMetaChange,
   showSearchDialog,
   searchQuery,
   searchingSessions,
@@ -373,12 +361,9 @@ export function DesktopAppFrame({
               activeSection={settingsSection}
               animating={sidebarState.animating && !sidebarState.resizing}
               collapsed={sidebarState.collapsed}
-              dirty={settingsDirty}
               width={sidebarState.width}
               onOpenSection={onOpenSettingsSection}
-              onSearchChange={onSettingsSearchChange}
               onBeginResize={sidebarState.onBeginResize}
-              search={settingsSearch}
             />
           ) : imagePromptTagsViewActive ? (
             <PromptTagWorkspaceSidebar activeSection={promptTagWorkspaceSection} animating={sidebarState.animating && !sidebarState.resizing} collapsed={sidebarState.collapsed} width={sidebarState.width} onOpenSection={onOpenPromptTagWorkspaceSection} onBeginResize={sidebarState.onBeginResize} />
@@ -570,11 +555,7 @@ export function DesktopAppFrame({
           {mainView.kind === "settings" ? (
             <SettingsPage
               bridgeReady={bridgeReady}
-              search={settingsSearch}
               section={settingsSection}
-              onMetaChange={onSettingsMetaChange}
-              onRefreshBridge={onRefreshBridge}
-              onRestartBridge={onRestartBridge}
             />
           ) : null}
         </main>

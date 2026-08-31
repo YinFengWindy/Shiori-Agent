@@ -29,7 +29,7 @@ export function ModelRegistrationList({
     <section className="grid gap-3">
       <div className="flex justify-end">
         <button
-          className="grid h-9 w-9 place-items-center rounded-md border border-[#D8DFE7] bg-white text-[#344054] transition hover:border-[#B9C6D4] hover:bg-[#F7F9FB] focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="grid h-9 w-9 place-items-center rounded-md border border-[#D8DFE7] bg-white text-[#344054] transition hover:border-[#B9C6D4] hover:bg-[#F7F9FB] focus:outline-none"
           type="button"
           aria-label="新建模型注册"
           title="新建模型注册"
@@ -41,7 +41,7 @@ export function ModelRegistrationList({
       <div className="grid gap-3">
         {registrations.map((registration) => (
           <button
-            className="group grid min-h-[92px] w-full grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-4 rounded-md border border-[#DDE4EC] bg-white px-4 py-3 text-left transition hover:border-[#9FC5E8] hover:bg-[#F7FBFF] focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="group grid min-h-[92px] w-full grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-4 rounded-md border border-[#DDE4EC] bg-white px-4 py-3 text-left transition hover:border-[#9FC5E8] hover:bg-[#F7FBFF] focus:outline-none"
             type="button"
             key={registration.id}
             onClick={() => onOpen(registration.id)}

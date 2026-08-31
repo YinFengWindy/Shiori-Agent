@@ -10,7 +10,7 @@ type RoleVoiceSettingsPanelProps = {
   onUpdate: (next: React.SetStateAction<RoleFormState>) => void;
 };
 
-const voiceFieldClass = "w-full border-0 border-b border-[#DDE5EC] bg-[#F7F9FB] px-3 py-2.5 text-sm text-[#182230] transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-[#98A2B3]";
+const voiceFieldClass = "w-full border-0 border-b border-[#DDE5EC] bg-[#F7F9FB] px-3 py-2.5 text-sm text-[#182230] transition focus:border-[#DDE5EC] focus:outline-none placeholder:text-[#98A2B3]";
 
 /** Renders role-owned voice selection, speed, and mood mapping fields. */
 export function RoleVoiceSettingsPanel({ roleForm, onUpdate }: RoleVoiceSettingsPanelProps) {
@@ -36,7 +36,7 @@ export function RoleVoiceSettingsPanel({ roleForm, onUpdate }: RoleVoiceSettings
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-[#52606D] transition hover:bg-[#F3F6FA] hover:text-[#182230] focus:outline-none focus:ring-2 focus:ring-primary/20" type="button" aria-expanded={technicalFieldsOpen} onClick={() => setTechnicalFieldsOpen((current) => !current)}>
+          <button className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-[#52606D] transition hover:bg-[#F3F6FA] hover:text-[#182230] focus:outline-none" type="button" aria-expanded={technicalFieldsOpen} onClick={() => setTechnicalFieldsOpen((current) => !current)}>
             <PencilSimple className="h-4 w-4" weight="bold" />编辑参数
           </button>
           <span className={roleForm.voiceEnabled ? "text-xs text-[#2E7D5B]" : "text-xs text-[#7B8794]"}>{roleForm.voiceEnabled ? "已启用" : "未启用"}</span>
@@ -60,7 +60,7 @@ export function RoleVoiceSettingsPanel({ roleForm, onUpdate }: RoleVoiceSettings
             {moods.map((mood) => (
               <label className="grid grid-cols-[minmax(0,1fr)_132px] items-center gap-3 border-b border-[#EEF2F5] py-2.5 text-sm" key={mood}>
                 <span className="truncate text-[#475467]">{mood}</span>
-                <select className="rounded-md border-0 bg-[#F7F9FB] px-2.5 py-2 text-xs text-[#344054] transition focus:outline-none focus:ring-2 focus:ring-primary/20" value={roleForm.voiceMoodEmotions[mood] ?? ""} onChange={(event) => onUpdate((current) => {
+                <select className="rounded-md border-0 bg-[#F7F9FB] px-2.5 py-2 text-xs text-[#344054] transition focus:outline-none" value={roleForm.voiceMoodEmotions[mood] ?? ""} onChange={(event) => onUpdate((current) => {
                   const next = { ...current.voiceMoodEmotions };
                   if (event.target.value) next[mood] = event.target.value;
                   else delete next[mood];

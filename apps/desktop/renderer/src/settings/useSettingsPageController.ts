@@ -13,22 +13,23 @@ import {
   resolveSettingsSaveFeedback,
 } from "./settingsSaveState";
 
+const SETTINGS_SAVE_DEBOUNCE_MS = 300;
+
 type UseSettingsPageControllerArgs = {
   bridgeReady: boolean;
-  onMetaChange?: (meta: { configPath: string; dirty: boolean }) => void;
 };
 
-/** Owns settings loading, draft mutation, save feedback, and reset behavior. */
-export function useSettingsPageController({
-  bridgeReady,
-  onMetaChange,
-}: UseSettingsPageControllerArgs) {
+/** Owns settings loading, immediate persistence, and save feedback. */
+export function useSettingsPageController({ bridgeReady }: UseSettingsPageControllerArgs) {
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
   const [draft, setDraft] = useState<SettingsFormData | null>(null);
   const [loadError, setLoadError] = useState("");
   const [savePhase, setSavePhase] = useState<SettingsSavePhase>("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const loadRequestIdRef = useRef(0);
+  const draftRef = useRef<SettingsFormData | null>(null);
+  const saveInFlightRef = useRef(false);
+  const attemptedDraftRef = useRef<string | null>(null);
 
   const loadPageData = useEffectEvent(async () => {
     const requestId = loadRequestIdRef.current + 1;
@@ -41,6 +42,8 @@ export function useSettingsPageController({
       if (loadRequestIdRef.current !== requestId) return;
       setSnapshot(loaded.snapshot);
       setDraft(cloneSettings(loaded.snapshot.formData));
+      draftRef.current = cloneSettings(loaded.snapshot.formData);
+      attemptedDraftRef.current = null;
       setLoadError("");
       setSavePhase("idle");
       setStatusMessage("");
@@ -48,10 +51,6 @@ export function useSettingsPageController({
       if (loadRequestIdRef.current !== requestId) return;
       setLoadError(error instanceof Error ? error.message : String(error));
     }
-  });
-
-  const notifyMetaChange = useEffectEvent((meta: { configPath: string; dirty: boolean }) => {
-    onMetaChange?.(meta);
   });
 
   useEffect(() => {
@@ -68,14 +67,6 @@ export function useSettingsPageController({
   }, []);
 
   useEffect(() => {
-    if (!snapshot || !draft) return;
-    notifyMetaChange({
-      configPath: snapshot.configPath,
-      dirty: !settingsEqual(snapshot.formData, draft),
-    });
-  }, [draft, snapshot]);
-
-  useEffect(() => {
     const timeoutMs = getSettingsFeedbackTimeoutMs(savePhase);
     if (timeoutMs === null) return undefined;
     const timer = window.setTimeout(() => {
@@ -88,44 +79,57 @@ export function useSettingsPageController({
   }, [savePhase]);
 
   const updateDraft: SettingsDraftUpdater = (mutator) => {
-    setDraft((current) => current ? mutator(cloneSettings(current)) : current);
+    setDraft((current) => {
+      if (!current) return current;
+      const nextDraft = mutator(cloneSettings(current));
+      draftRef.current = nextDraft;
+      return nextDraft;
+    });
   };
 
-  async function save(): Promise<void> {
-    if (!draft) return;
+  const persistDraft = useEffectEvent(async (nextDraft: SettingsFormData) => {
+    if (saveInFlightRef.current) return;
     if (typeof window.miraDesktop.saveSettings !== "function") {
       setSavePhase("error");
       setStatusMessage("当前桌面进程版本过旧，请完全关闭并重新打开桌面端。");
       return;
     }
+    saveInFlightRef.current = true;
+    attemptedDraftRef.current = JSON.stringify(nextDraft);
     setSavePhase("saving");
-    setStatusMessage("正在写入 config.toml...");
+    setStatusMessage("");
     try {
-      const result = await saveSettingsPageData(window.miraDesktop, draft);
+      const result = await saveSettingsPageData(window.miraDesktop, nextDraft);
       setSnapshot(result.snapshot);
-      setDraft(result.nextDraft);
+      const latestDraft = draftRef.current;
+      if (!latestDraft || settingsEqual(latestDraft, nextDraft)) {
+        setDraft(result.nextDraft);
+        draftRef.current = result.nextDraft;
+      }
       const feedback = resolveSettingsSaveFeedback(result.saveResult);
       setSavePhase(feedback.phase);
-      setStatusMessage(feedback.message);
+      setStatusMessage(feedback.phase === "restart-failed" ? feedback.message : "");
     } catch (error) {
       setSavePhase("error");
       setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      saveInFlightRef.current = false;
     }
-  }
+  });
 
-  function reset(): void {
-    if (!snapshot) return;
-    setDraft(cloneSettings(snapshot.formData));
-    setStatusMessage("");
-    setSavePhase("idle");
-  }
+  useEffect(() => {
+    if (!snapshot || !draft || settingsEqual(snapshot.formData, draft)) return undefined;
+    const serializedDraft = JSON.stringify(draft);
+    if (attemptedDraftRef.current === serializedDraft) return undefined;
+    const timer = window.setTimeout(() => {
+      void persistDraft(cloneSettings(draft));
+    }, SETTINGS_SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [draft, snapshot]);
 
   return {
     draft,
-    isDirty: Boolean(snapshot && draft && !settingsEqual(snapshot.formData, draft)),
     loadError,
-    reset,
-    save,
     savePhase,
     statusMessage,
     updateDraft,

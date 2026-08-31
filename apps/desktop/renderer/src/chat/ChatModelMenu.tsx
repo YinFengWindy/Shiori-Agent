@@ -110,7 +110,7 @@ export function ChatModelMenu({ activeRoleId, bridgeReady }: ChatModelMenuProps)
   return (
     <div className="relative" ref={containerRef}>
       <button
-        className="inline-flex h-[30px] max-w-[190px] items-center rounded-md px-2 text-xs text-[#5B6472] transition hover:bg-[#F3F5F7] hover:text-[#22272E] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-40"
+        className="inline-flex h-[30px] max-w-[190px] items-center rounded-md px-2 text-xs text-[#5B6472] transition hover:bg-[#F3F5F7] hover:text-[#22272E] focus:outline-none disabled:opacity-40"
         type="button"
         aria-label="选择聊天模型"
         aria-expanded={open}

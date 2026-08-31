@@ -26,7 +26,7 @@ export function RoleWorkspaceSidebar({
     "flex min-h-[38px] items-center justify-between px-3 text-left text-sm text-[#3a4453]",
   );
   const activeSectionClass =
-    "border-[rgba(202,93,46,0.28)] bg-white/90 font-medium text-accent-deep shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:border-[rgba(202,93,46,0.4)] hover:bg-white focus-visible:border-[rgba(202,93,46,0.4)] focus-visible:bg-white";
+    "bg-white/90 font-medium text-[#3a4453] shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:bg-white focus-visible:bg-white";
 
   return (
     <aside

@@ -49,7 +49,7 @@ export function RoleSidebar({
           <button
             key={role.id}
             data-testid={`role-card-${role.id}`}
-            className={cx(roleCardClass, role.id === activeRoleId && "active border-stroke bg-white text-[#2c3440] shadow-[0_6px_18px_rgba(15,23,42,0.08)]")}
+            className={cx(roleCardClass, role.id === activeRoleId && "active bg-white text-[#2c3440] shadow-[0_6px_18px_rgba(15,23,42,0.08)]")}
             type="button"
             disabled={!bridgeReady}
             onClick={() => onOpenRole(role.id)}

@@ -25,7 +25,7 @@ export function ModelRegistrationDetails({
     <section className="grid">
       <header className="flex min-h-11 items-center gap-3 border-b border-[#E7ECF1] pb-3">
         <button
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#667085] transition hover:bg-[#F3F6FA] hover:text-[#182230] focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#667085] transition hover:bg-[#F3F6FA] hover:text-[#182230] focus:outline-none"
           type="button"
           aria-label="返回模型注册列表"
           title="返回模型注册列表"
@@ -37,7 +37,7 @@ export function ModelRegistrationDetails({
           {registration.model || "未配置模型"}
         </strong>
         <button
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#8A94A3] transition hover:bg-[#FFF1F1] hover:text-[#C83E3E] focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-35"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#8A94A3] transition hover:bg-[#FFF1F1] hover:text-[#C83E3E] focus:outline-none disabled:cursor-not-allowed disabled:opacity-35"
           type="button"
           aria-label="删除模型注册"
           title="删除模型注册"

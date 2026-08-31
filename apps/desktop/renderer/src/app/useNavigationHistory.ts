@@ -21,7 +21,6 @@ type UseNavigationHistoryArgs = {
   roles: RoleRecord[];
   setError: React.Dispatch<React.SetStateAction<string>>;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
-  setSettingsSearch: React.Dispatch<React.SetStateAction<string>>;
   setSettingsSection: React.Dispatch<React.SetStateAction<SettingsSectionId>>;
   setSidebarAnimating: React.Dispatch<React.SetStateAction<boolean>>;
   setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
@@ -40,7 +39,6 @@ export function useNavigationHistory({
   roles,
   setError,
   setNotice,
-  setSettingsSearch,
   setSettingsSection,
   setSidebarAnimating,
   setSidebarCollapsed,
@@ -105,7 +103,6 @@ export function useNavigationHistory({
 
   function openSettingsView(section: SettingsSectionId = "models"): void {
     lastNonSettingsViewRef.current = mainView;
-    setSettingsSearch("");
     setSettingsSection(section);
     setSidebarAnimating(true);
     setSidebarCollapsed(false);
