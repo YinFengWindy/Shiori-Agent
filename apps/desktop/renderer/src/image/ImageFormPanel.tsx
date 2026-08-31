@@ -90,7 +90,7 @@ export function ImageFormPanel({
     "min-h-[96px] resize-none overflow-hidden rounded-md border-[#D6DCE3] px-3 py-2 leading-7 shadow-none hover:border-[#D6DCE3] focus:border-[#D6DCE3] focus-visible:border-[#D6DCE3]",
   );
   const segmentedControlClassName = "grid min-w-0 flex-1 grid-cols-2 rounded-md bg-[#F3F5F7] p-0.5";
-  const segmentedButtonBaseClassName = "min-w-0 rounded-md px-1.5 py-1 text-xs font-semibold transition";
+  const segmentedButtonBaseClassName = "grid h-7 min-w-0 place-items-center rounded-md px-1.5 text-xs font-semibold transition";
   const customSizeReady = form.sizePreset !== "custom"
     || (hasPositiveIntegerText(form.customWidth) && hasPositiveIntegerText(form.customHeight));
   const generateDisabled =
@@ -222,12 +222,12 @@ export function ImageFormPanel({
             <div className="ml-auto flex-none">
               <button
                 type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-[#D6DCE3] hover:text-[#20242A] focus:outline-none focus:ring-0 focus-visible:border-[#D6DCE3]"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-[#D6DCE3] hover:text-[#20242A] focus:outline-none focus:ring-0 focus-visible:border-[#D6DCE3]"
                 aria-label="Prompt 设置"
                 aria-expanded={settingsOpen}
                 onClick={() => setSettingsOpen((current) => !current)}
               >
-                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
                   <path d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.08 7.08 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7.08 7.08 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94 7.43 7.43 0 0 0 .05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.39 1.04.71 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.59-.23 1.13-.55 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z" />
                 </svg>
               </button>
@@ -241,7 +241,7 @@ export function ImageFormPanel({
                     <button
                       type="button"
                       className={cx(
-                        "relative inline-flex h-6 w-10 rounded-full transition",
+                        "relative inline-flex h-[22px] w-9 rounded-full transition",
                         focusResetClass,
                         nsfwEnabled ? "bg-[#20242A]" : "bg-[#BFC6D0]",
                       )}
@@ -250,8 +250,8 @@ export function ImageFormPanel({
                     >
                       <span
                         className={cx(
-                          "absolute top-1 h-4 w-4 rounded-full bg-white transition",
-                          nsfwEnabled ? "left-5" : "left-1",
+                          "absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition",
+                          nsfwEnabled ? "left-[18px]" : "left-0.5",
                         )}
                       />
                     </button>
@@ -261,7 +261,7 @@ export function ImageFormPanel({
                     <button
                       type="button"
                       className={cx(
-                        "relative inline-flex h-6 w-10 rounded-full transition",
+                        "relative inline-flex h-[22px] w-9 rounded-full transition",
                         focusResetClass,
                         addQualityTags ? "bg-[#20242A]" : "bg-[#BFC6D0]",
                       )}
@@ -270,8 +270,8 @@ export function ImageFormPanel({
                     >
                       <span
                         className={cx(
-                          "absolute top-1 h-4 w-4 rounded-full bg-white transition",
-                          addQualityTags ? "left-5" : "left-1",
+                          "absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition",
+                          addQualityTags ? "left-[18px]" : "left-0.5",
                         )}
                       />
                     </button>
@@ -310,7 +310,7 @@ export function ImageFormPanel({
                 : onChange({ negativePrompt: event.target.value })
             )}
           />
-          <div className="mt-2 border-t border-[#E7EAF0] pt-2">
+          <div className="mt-2 pt-2">
             {form.baseImagePath ? (
               <div className="relative overflow-hidden rounded-[18px] border border-[#D6DCE3] bg-transparent">
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,18,28,0.08)_0%,rgba(13,18,28,0.16)_56%,rgba(13,18,28,0.22)_100%)]" />
@@ -327,7 +327,7 @@ export function ImageFormPanel({
                   <div className="flex flex-none items-center gap-2">
                       <button
                         type="button"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none"
                         aria-label="重新选择 Base Img"
                         onClick={onPickBaseImage}
                       >
@@ -335,7 +335,7 @@ export function ImageFormPanel({
                     </button>
                       <button
                         type="button"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/12 bg-[rgba(21,25,34,0.32)] text-white/85 transition hover:border-white/24 hover:bg-[rgba(21,25,34,0.42)] hover:text-white focus:outline-none"
                         aria-label="移除 Base Img"
                         onClick={() => onChange({ baseImagePath: "" })}
                       >
@@ -379,16 +379,16 @@ export function ImageFormPanel({
                 </div>
               </div>
             ) : (
-              <div className="flex min-w-0 items-center justify-between gap-3 border-t border-[#E7EAF0] pt-2">
+              <div className="flex min-w-0 items-center justify-between gap-3 pt-2">
                 <div className="min-w-0 flex-1 truncate whitespace-nowrap text-[13px] text-[#5B616A]" title="Add a Base Img (Optional)">Add a Base Img (Optional)</div>
                 <div className="flex flex-none items-center gap-2">
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-[#D6DCE3] hover:text-[#20242A] focus:outline-none focus:ring-0 focus-visible:border-[#D6DCE3]"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#D6DCE3] bg-[#F3F5F7] text-[#666F7A] transition hover:border-[#D6DCE3] hover:text-[#20242A] focus:outline-none focus:ring-0 focus-visible:border-[#D6DCE3]"
                       aria-label="上传 Base Img"
                       onClick={onPickBaseImage}
                     >
-                    <UploadIcon className="h-4 w-4 fill-current" />
+                    <UploadIcon className="h-3.5 w-3.5 fill-current" />
                   </button>
                 </div>
               </div>
