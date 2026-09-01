@@ -690,6 +690,16 @@ async def test_session_read_bridge_methods_return_bounded_desktop_projections(
     assert search.payload["has_more"] is False
     assert [message["seq"] for message in around.payload["around"]["messages"]] == [0, 1, 2]
     assert around.payload["around"]["messages"][1]["is_target"] is True
+    around_without_context = await service.handle(
+        {
+            "id": "around-zero-context",
+            "method": "session.messagesAround",
+            "payload": {"message_id": "role:mira:1", "context": 0},
+        },
+        emit_event=Mock(),
+    )
+    assert around_without_context.error is None
+    assert [message["seq"] for message in around_without_context.payload["around"]["messages"]] == [1]
     assert image_history.error is None
     assert image_history.payload == {"session_key": "role:mira", "messages": []}
 
@@ -711,12 +721,13 @@ async def test_session_read_bridge_methods_return_bounded_desktop_projections(
         {
             "id": "around-mismatch",
             "method": "session.messagesAround",
-            "payload": {"role_id": "mira", "message_id": "role:other:1"},
+            "payload": {"role_id": "mira", "message_id": "role:other:0"},
         },
         emit_event=Mock(),
     )
     assert mismatched.error is not None
     assert mismatched.error.code == "invalid_request"
+    assert mismatched.error.message == "message_id 不属于指定会话"
 
     invalid_page = await service.handle(
         {

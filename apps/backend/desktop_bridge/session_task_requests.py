@@ -84,9 +84,10 @@ class DesktopSessionTaskRequestHandler:
             if not message_id:
                 raise ValueError("message_id 不能为空")
             requested_session_key = self._desktop_session_key(payload, required=False)
+            raw_context = payload.get("context")
             around = self._session_presenter.serialize_around(
                 message_id,
-                context=int(payload.get("context") or 5),
+                context=5 if raw_context is None else int(raw_context),
             )
             if not around.get("messages"):
                 raise ValueError(f"消息不存在: {message_id}")

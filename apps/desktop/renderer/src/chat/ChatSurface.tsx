@@ -459,6 +459,7 @@ export function ChatSurface({
         {notice ? <div className="notice-chip absolute left-1/2 top-4 z-[2] -translate-x-1/2 rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[#edf8f0] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
         <ChatMessageList
           activeRole={activeRole}
+          sessionKey={activeSession?.key ?? ""}
           conversationEndRef={conversationEndRef}
           conversationListRef={conversationListRef}
           highlightedMessageKey={highlightedMessageKey}

@@ -10,9 +10,13 @@ export function getPaginatedChatMessageWindow(
   if (!session?.pagination) {
     return getVisibleChatMessages(messages, visibleMessageCount);
   }
+  const loadedPersistedMessageCount = messages.reduce(
+    (count, message) => count + (typeof message.seq === "number" ? 1 : 0),
+    0,
+  );
   return {
     startIndex: 0,
-    hiddenMessageCount: Math.max(0, session.pagination.total_count - messages.length),
+    hiddenMessageCount: Math.max(0, session.pagination.total_count - loadedPersistedMessageCount),
     messages,
   };
 }

@@ -153,6 +153,7 @@ class DesktopSessionPresenter:
             "tool_chain",
             "media",
             "metadata",
+            "is_target",
         }
         for key, value in message.items():
             if key not in skip_keys:

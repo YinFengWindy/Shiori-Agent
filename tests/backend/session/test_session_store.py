@@ -107,6 +107,35 @@ def test_fetch_message_around_locates_by_id_with_seq_holes(tmp_path: Path) -> No
     store.close()
 
 
+def test_fetch_message_around_uses_authoritative_message_id_across_sessions(
+    tmp_path: Path,
+) -> None:
+    store = SessionStore(tmp_path / "sessions.db")
+    store.create_session(key="role:mira", metadata={})
+    store.create_session(key="role:other", metadata={})
+    store.insert_message(
+        "role:mira",
+        role="assistant",
+        content="Mira",
+        ts="2026-07-13T12:00:00+08:00",
+        seq=0,
+    )
+    store.insert_message(
+        "role:other",
+        role="assistant",
+        content="Other",
+        ts="2026-07-13T12:00:00+08:00",
+        seq=0,
+    )
+
+    around = store.fetch_message_around("role:other:0", context=0)
+
+    assert around["session_key"] == "role:other"
+    assert [message["id"] for message in around["messages"]] == ["role:other:0"]
+    assert around["messages"][0]["is_target"] is True
+    store.close()
+
+
 def test_search_message_previews_omit_heavy_fields(tmp_path: Path) -> None:
     store = SessionStore(tmp_path / "sessions.db")
     store.create_session(key="role:mira", metadata={})

@@ -129,6 +129,7 @@ def test_session_presenter_search_and_around_serialize_light_results(tmp_path) -
     assert search["results"][0]["preview"] == "请搜索天气"
     assert "tool_chain" not in search["results"][0]
     assert around["messages"][0]["is_target"] is True
+    assert "is_target" not in around["messages"][0]["metadata"]
     assert around["messages"][0]["seq"] == 0
 
 

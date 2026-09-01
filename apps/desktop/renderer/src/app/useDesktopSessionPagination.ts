@@ -19,16 +19,22 @@ type UseDesktopSessionPaginationArgs = {
   ) => void;
 };
 
-/** Owns cursor reads and discards responses that no longer belong to the visible session generation. */
-export function useDesktopSessionPagination({
+type DesktopSessionPaginationControllerArgs = UseDesktopSessionPaginationArgs & {
+  invoke: typeof window.miraDesktop.invoke;
+  generationRef: React.MutableRefObject<Record<string, number>>;
+  loadingOlderRef: React.MutableRefObject<Record<string, boolean>>;
+};
+
+/** Creates cursor actions that discard responses no longer belonging to the visible session generation. */
+export function createDesktopSessionPaginationController({
   activeRoleIdRef,
   activeSessionRef,
   setError,
   updateCommittedActiveSession,
-}: UseDesktopSessionPaginationArgs) {
-  const generationRef = useRef<Record<string, number>>({});
-  const loadingOlderRef = useRef<Record<string, boolean>>({});
-
+  invoke,
+  generationRef,
+  loadingOlderRef,
+}: DesktopSessionPaginationControllerArgs) {
   function invalidateSessionPagination(sessionKey: string): void {
     if (!sessionKey) return;
     generationRef.current[sessionKey] = (generationRef.current[sessionKey] ?? 0) + 1;
@@ -51,7 +57,7 @@ export function useDesktopSessionPagination({
     loadingOlderRef.current[sessionKey] = true;
     try {
       const roleId = getRoleIdFromSession(current) || activeRoleIdRef.current;
-      const res = await window.miraDesktop.invoke({
+      const res = await invoke({
         method: "session.messagesPage",
         payload: {
           role_id: roleId,
@@ -90,7 +96,7 @@ export function useDesktopSessionPagination({
     if (!normalizedMessageId || !expectedSessionKey) return false;
     const generation = generationRef.current[expectedSessionKey] ?? 0;
     try {
-      const res = await window.miraDesktop.invoke({
+      const res = await invoke({
         method: "session.messagesAround",
         payload: { message_id: normalizedMessageId, context: 8 },
       });
@@ -117,4 +123,17 @@ export function useDesktopSessionPagination({
     loadOlderMessages,
     loadMessagesAround,
   };
+}
+
+/** Owns cursor reads and discards responses that no longer belong to the visible session generation. */
+export function useDesktopSessionPagination(args: UseDesktopSessionPaginationArgs) {
+  const generationRef = useRef<Record<string, number>>({});
+  const loadingOlderRef = useRef<Record<string, boolean>>({});
+
+  return createDesktopSessionPaginationController({
+    ...args,
+    invoke: (request) => window.miraDesktop.invoke(request),
+    generationRef,
+    loadingOlderRef,
+  });
 }

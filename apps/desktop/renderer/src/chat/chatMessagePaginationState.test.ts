@@ -25,7 +25,7 @@ function session(messages: number): SessionPayload {
 }
 
 describe("getPaginatedChatMessageWindow", () => {
-  it("renders every server-loaded message and reports only remote history as hidden", () => {
+  it("keeps every server-loaded message available to the data window and reports remote history as hidden", () => {
     const current = session(50);
     current.pagination = {
       limit: 50,
@@ -42,6 +42,24 @@ describe("getPaginatedChatMessageWindow", () => {
     assert.equal(window.startIndex, 0);
     assert.equal(window.messages.length, 50);
     assert.equal(window.hiddenMessageCount, 150);
+  });
+
+  it("does not count optimistic messages as loaded persisted history", () => {
+    const current = session(2);
+    current.messages[0]!.seq = 198;
+    current.messages[1]!.seq = 199;
+    current.messages.push({ role: "user", content: "optimistic" });
+    current.pagination = {
+      limit: 50,
+      has_more: true,
+      oldest_seq: 198,
+      newest_seq: 199,
+      total_count: 200,
+      before_seq: null,
+      next_before_seq: 198,
+    };
+
+    assert.equal(getPaginatedChatMessageWindow(current, 10).hiddenMessageCount, 198);
   });
 });
 
