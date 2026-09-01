@@ -15,6 +15,7 @@ describe("SettingsField", () => {
     assert.match(markup, /xl:items-center/);
     assert.doesNotMatch(markup, /xl:items-start/);
     assert.match(markup, /py-6/);
+    assert.doesNotMatch(markup, /first:pt-0|last:pb-0/);
   });
 
   it("keeps rows with supporting text aligned to the top", () => {

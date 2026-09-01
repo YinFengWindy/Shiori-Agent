@@ -19,7 +19,7 @@ export function SettingsField({
   const stacked = layout === "stack";
   return (
     <div className={cx(
-      "grid gap-3 border-b border-stroke py-6 first:pt-0 last:border-b-0 last:pb-0",
+      "grid gap-3 border-b border-stroke py-6 last:border-b-0",
       stacked
         ? "grid-cols-[minmax(0,1fr)]"
         : cx(
