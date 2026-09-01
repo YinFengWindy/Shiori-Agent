@@ -91,7 +91,7 @@ export function RoleManagementPage({
                           alt={`${role.name} avatar`}
                         />
                       ) : (
-                        <span className="grid h-14 w-14 place-items-center rounded-full border border-[rgba(255,255,255,0.38)] bg-white/75 text-lg font-bold text-[#8a3211] shadow-[0_4px_16px_rgba(15,23,42,0.12)]">
+                        <span className="grid h-14 w-14 place-items-center rounded-full border border-[rgba(255,255,255,0.38)] bg-white/75 text-lg font-bold text-accent-deep shadow-[0_4px_16px_rgba(15,23,42,0.12)]">
                           {role.name.slice(0, 1).toUpperCase()}
                         </span>
                       )}

@@ -12,8 +12,8 @@
     --panel-strong: #ffffff;
     --text: #1f1a15;
     --muted: #766554;
-    --accent: #ca5d2e;
-    --accent-deep: #8a3211;
+    --accent: #339CFF;
+    --accent-deep: #1468BF;
     --stroke: rgba(76, 48, 24, 0.14);
     --shadow: 0 28px 60px rgba(75, 43, 18, 0.12);
     --titlebar-height: 30px;
@@ -71,7 +71,7 @@
   }
 
   .scrollbar-soft-accent::-webkit-scrollbar-thumb:hover {
-    background: rgba(202, 93, 46, 0.68);
+    background: color-mix(in srgb, var(--accent) 68%, transparent);
     background-clip: padding-box;
   }
 
