@@ -24,8 +24,7 @@ export function SettingsToggleField({
 }) {
   return (
     <SettingsField label={label} hint={hint}>
-      <div className="flex w-full items-center justify-end gap-3">
-        <span className={checked ? "text-[11px] text-accent-deep" : "text-[11px] text-[#98A2B3]"}>{checked ? "已启用" : "未启用"}</span>
+      <div className="flex w-full items-center justify-end">
         <SettingsToggleCard
           checked={checked}
           disabled={disabled}

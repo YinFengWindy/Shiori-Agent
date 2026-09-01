@@ -22,5 +22,6 @@ describe("SettingsFieldPrimitives", () => {
     assert.match(toggleMarkup, /role="switch"/);
     assert.match(toggleMarkup, /aria-checked="true"/);
     assert.match(toggleMarkup, /aria-label="启用功能"/);
+    assert.doesNotMatch(toggleMarkup, /已启用|未启用/);
   });
 });
