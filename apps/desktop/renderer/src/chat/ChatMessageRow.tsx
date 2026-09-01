@@ -87,7 +87,6 @@ export const ChatMessageRow = React.memo(function ChatMessageRow({
         isHighlighted && "message-hit-anchor",
         isUser && "text-right",
       )}
-      style={{ contentVisibility: "auto", containIntrinsicSize: "0 120px" }}
       onContextMenu={openContextMenu}
     >
       <div className={cx("message-row flex w-full items-start gap-3", isUser && "flex-row-reverse justify-start")}>

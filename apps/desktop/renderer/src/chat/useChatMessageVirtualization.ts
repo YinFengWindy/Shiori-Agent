@@ -13,6 +13,7 @@ type UseChatMessageVirtualizationArgs = {
   messageStartIndex: number;
   highlightedMessageKey: string;
   conversationListRef: React.RefObject<HTMLDivElement | null>;
+  onContentSizeChange?: () => void;
 };
 
 type Viewport = {
@@ -31,14 +32,16 @@ export function useChatMessageVirtualization({
   messageStartIndex,
   highlightedMessageKey,
   conversationListRef,
+  onContentSizeChange,
 }: UseChatMessageVirtualizationArgs) {
   // The first paint follows the chat's bottom-anchored startup behavior; the
   // mounted container is read immediately after commit and takes over.
   const [viewport, setViewport] = useState<Viewport>({ scrollTop: Number.POSITIVE_INFINITY, height: 0 });
-  const [measurementVersion, setMeasurementVersion] = useState(0);
   const measurementsRef = useRef(new Map<string, number>());
+  const [measuredHeights, setMeasuredHeights] = useState(() => new Map<string, number>());
   const observersRef = useRef(new Map<string, ResizeObserver>());
   const firstVisibleIndexRef = useRef(0);
+  const contentSizeFrameRef = useRef<number | null>(null);
   const messageKeys = useMemo(
     () => messages.map((message, index) => getChatMessageReactKey(message, messageStartIndex + index)),
     [messageStartIndex, messages],
@@ -53,14 +56,17 @@ export function useChatMessageVirtualization({
     () => getVirtualChatMessageWindow({
       messages,
       messageKeys,
-      measuredHeights: measurementsRef.current,
+      measuredHeights,
       scrollTop: viewport.scrollTop,
       viewportHeight: viewport.height,
       pinnedMessageIndex,
     }),
-    [measurementVersion, messageKeys, messages, pinnedMessageIndex, viewport],
+    [measuredHeights, messageKeys, messages, pinnedMessageIndex, viewport],
   );
-  firstVisibleIndexRef.current = virtualMessageWindow.firstVisibleIndex;
+
+  useLayoutEffect(() => {
+    firstVisibleIndexRef.current = virtualMessageWindow.firstVisibleIndex;
+  }, [virtualMessageWindow.firstVisibleIndex]);
 
   const refreshViewport = useCallback(() => {
     const container = conversationListRef.current;
@@ -70,6 +76,15 @@ export function useChatMessageVirtualization({
       current.scrollTop === next.scrollTop && current.height === next.height ? current : next
     ));
   }, [conversationListRef]);
+
+  const requestContentSizeChange = useCallback(() => {
+    if (!onContentSizeChange || typeof window === "undefined") return;
+    if (contentSizeFrameRef.current !== null) return;
+    contentSizeFrameRef.current = window.requestAnimationFrame(() => {
+      contentSizeFrameRef.current = null;
+      onContentSizeChange();
+    });
+  }, [onContentSizeChange]);
 
   useEffect(() => {
     const container = conversationListRef.current;
@@ -88,10 +103,15 @@ export function useChatMessageVirtualization({
     measurementsRef.current.clear();
     observersRef.current.forEach((observer) => observer.disconnect());
     observersRef.current.clear();
-    setMeasurementVersion((version) => version + 1);
-  }, [sessionKey]);
+    setMeasuredHeights(new Map());
+    requestContentSizeChange();
+  }, [requestContentSizeChange, sessionKey]);
 
   useEffect(() => () => {
+    if (contentSizeFrameRef.current !== null) {
+      window.cancelAnimationFrame(contentSizeFrameRef.current);
+      contentSizeFrameRef.current = null;
+    }
     observersRef.current.forEach((observer) => observer.disconnect());
     observersRef.current.clear();
   }, []);
@@ -102,6 +122,12 @@ export function useChatMessageVirtualization({
     const previousHeight = measurementsRef.current.get(messageKey) ?? estimateChatMessageHeight(message);
     if (Math.abs(nextHeight - previousHeight) < 1) return;
     measurementsRef.current.set(messageKey, nextHeight);
+    setMeasuredHeights((current) => {
+      if (current.get(messageKey) === nextHeight) return current;
+      const next = new Map(current);
+      next.set(messageKey, nextHeight);
+      return next;
+    });
     const localIndex = index - messageStartIndex;
     if (localIndex < firstVisibleIndexRef.current) {
       const container = conversationListRef.current;
@@ -109,8 +135,8 @@ export function useChatMessageVirtualization({
         container.scrollTop += nextHeight - previousHeight;
       }
     }
-    setMeasurementVersion((version) => version + 1);
-  }, [conversationListRef, messageStartIndex]);
+    requestContentSizeChange();
+  }, [conversationListRef, messageStartIndex, requestContentSizeChange]);
 
   const observeMessageElement = useCallback((
     message: SessionMessage,

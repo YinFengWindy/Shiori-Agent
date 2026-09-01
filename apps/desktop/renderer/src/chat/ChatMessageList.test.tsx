@@ -144,4 +144,29 @@ describe("ChatMessageList", () => {
 
     assert.match(markup, /style="[^"]*overflow-anchor:none[^"]*"/);
   });
+
+  it("does not add a second intrinsic-size virtualization layer to message rows", () => {
+    const markup = renderToStaticMarkup(
+      <ChatMessageList
+        activeRole={null}
+        sessionKey="role:mira"
+        conversationEndRef={React.createRef<HTMLDivElement>()}
+        conversationListRef={React.createRef<HTMLDivElement>()}
+        highlightedMessageKey=""
+        visibleMessageWindow={getVisibleChatMessages([{
+          id: "message-1",
+          role: "assistant",
+          content: "消息内容",
+        }], 10)}
+        onBeginAttachmentDrag={() => undefined}
+        onExpandOlderMessages={() => undefined}
+        onJumpToMessage={() => undefined}
+        onOpenContextMenu={() => undefined}
+        onOpenImagePreview={() => undefined}
+      />,
+    );
+
+    assert.doesNotMatch(markup, /content-visibility/);
+    assert.doesNotMatch(markup, /contain-intrinsic-size/);
+  });
 });

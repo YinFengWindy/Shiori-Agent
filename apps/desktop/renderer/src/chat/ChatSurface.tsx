@@ -9,11 +9,15 @@ import {
   type MessageContextMenuState,
 } from "./chatMessageActions";
 import { ChatRightSidebar, type ChatSidebarMode } from "./ChatRightSidebar";
-import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
+import {
+  shouldAutoScrollOnContentSizeChange,
+  shouldAutoScrollOnNewMessage,
+} from "./chatAutoScroll";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { useRoleTasks } from "./useRoleTasks";
 import { useChatMessagePagination } from "./useChatMessagePagination";
 import { cx } from "../shared/styles";
+import { useLatestRef } from "../shared/useLatestRef";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
 
 type ChatSurfaceProps = {
@@ -112,6 +116,7 @@ export function ChatSurface({
   const imagePriorityUserMessageCountRef = useRef(-1);
   const autoScrollingRef = useRef(false);
   const stickToBottomRef = useRef(true);
+  const highlightedMessageKeyRef = useLatestRef(highlightedMessageKey);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
@@ -146,14 +151,14 @@ export function ChatSurface({
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 
-  const scrollConversationToBottom = useEffectEvent((behavior: ScrollBehavior): void => {
+  const scrollConversationToBottom = useCallback((behavior: ScrollBehavior): void => {
     autoScrollingRef.current = true;
     stickToBottomRef.current = true;
     conversationEndRef.current?.scrollIntoView({ behavior, block: "end" });
     window.setTimeout(() => {
       autoScrollingRef.current = false;
     }, behavior === "smooth" ? 320 : 0);
-  });
+  }, [conversationEndRef]);
 
   const resetConversationForSession = useEffectEvent(() => {
     previousMessageCountRef.current = activeSession?.messages.length ?? 0;
@@ -166,6 +171,16 @@ export function ChatSurface({
     stickToBottomRef.current = true;
     scrollConversationToBottom("auto");
   });
+
+  const handleChatContentSizeChange = useCallback(() => {
+    if (!shouldAutoScrollOnContentSizeChange({
+      highlightedMessageKey: highlightedMessageKeyRef.current,
+      wasAtBottom: stickToBottomRef.current,
+    })) {
+      return;
+    }
+    scrollConversationToBottom("auto");
+  }, [highlightedMessageKeyRef, scrollConversationToBottom]);
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -337,7 +352,7 @@ export function ChatSurface({
       return;
     }
     scrollConversationToBottom("auto");
-  }, [activeSession?.messages.length, currentLastMessageContent, conversationEndRef, highlightedMessageKey, sending]);
+  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, scrollConversationToBottom, sending]);
 
   const renderHeavyVisuals = visualsActive && windowVisible;
   const hasIllustration = Boolean(visibleIllustrationUrl) && renderHeavyVisuals;
@@ -465,6 +480,7 @@ export function ChatSurface({
           highlightedMessageKey={highlightedMessageKey}
           visibleMessageWindow={visibleMessageWindow}
           onBeginAttachmentDrag={onBeginAttachmentDrag}
+          onContentSizeChange={handleChatContentSizeChange}
           canLoadOlderMessages={canLoadOlderMessages}
           loadingOlderMessages={loadingOlderMessages}
           onExpandOlderMessages={handleLoadOlderMessages}

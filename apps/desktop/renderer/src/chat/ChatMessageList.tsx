@@ -16,6 +16,7 @@ type ChatMessageListProps = {
   canLoadOlderMessages?: boolean;
   loadingOlderMessages?: boolean;
   onBeginAttachmentDrag: (path: string) => void;
+  onContentSizeChange?: () => void;
   onExpandOlderMessages: () => void;
   onJumpToMessage: (messageKey: string) => void;
   onOpenContextMenu: (
@@ -41,6 +42,7 @@ export const ChatMessageList = React.memo(function ChatMessageList({
   canLoadOlderMessages = visibleMessageWindow.hiddenMessageCount > 0,
   loadingOlderMessages = false,
   onBeginAttachmentDrag,
+  onContentSizeChange,
   onExpandOlderMessages,
   onJumpToMessage,
   onOpenContextMenu,
@@ -52,6 +54,7 @@ export const ChatMessageList = React.memo(function ChatMessageList({
     messageStartIndex: visibleMessageWindow.startIndex,
     highlightedMessageKey,
     conversationListRef,
+    onContentSizeChange,
   });
 
   return (
