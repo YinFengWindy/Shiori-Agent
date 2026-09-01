@@ -42,10 +42,20 @@ class DesktopImageRequestHandler:
                 request_id=request_id,
                 session=session,
                 emit_event=emit_event,
+                message_id=str(payload.get("message_id") or "").strip(),
+                change="message_updated",
             )
             return {
                 "result": result,
-                "session": self._session_presenter.serialize(session),
+                "session": self._session_presenter.serialize_summary(session),
+                "message": self._session_presenter.serialize_message(
+                    next(
+                        message
+                        for message in session.messages
+                        if str(message.get("id") or "")
+                        == str(payload.get("message_id") or "").strip()
+                    )
+                ),
             }
         if method == "novelai.history":
             return {"records": self._image_service.history(payload)}

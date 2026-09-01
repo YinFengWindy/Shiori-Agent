@@ -438,12 +438,30 @@ class DesktopBridgeService:
         request_id: str,
         session: Session,
         emit_event,
+        message_id: str | None = None,
+        change: str = "message_appended",
+        include_message: bool = True,
     ) -> None:
+        message = (
+            self._session_message_for_event(session, message_id)
+            if include_message
+            else None
+        )
         event = BridgeEvent(
             id=request_id,
             type="event",
             method="session.updated",
-            payload={"session": self.session_presenter.serialize(session)},
+            payload={
+                "session": self.session_presenter.serialize_summary(session),
+                "change": change,
+                "message": (
+                    self.session_presenter.serialize_message(message)
+                    if message is not None
+                    else None
+                ),
+                "session_key": session.key,
+                "role_id": self._role_id_from_desktop_session_key(session.key),
+            },
         )
         await self._emit_event(emit_event, event.to_dict())
 
@@ -477,14 +495,43 @@ class DesktopBridgeService:
         *,
         request_id: str,
         session: Session,
+        message_id: str | None = None,
+        change: str = "message_appended",
+        include_message: bool = True,
     ) -> None:
+        message = (
+            self._session_message_for_event(session, message_id)
+            if include_message
+            else None
+        )
         event = BridgeEvent(
             id=request_id,
             type="event",
             method="session.updated",
-            payload={"session": self.session_presenter.serialize(session)},
+            payload={
+                "session": self.session_presenter.serialize_summary(session),
+                "change": change,
+                "message": (
+                    self.session_presenter.serialize_message(message)
+                    if message is not None
+                    else None
+                ),
+                "session_key": session.key,
+                "role_id": self._role_id_from_desktop_session_key(session.key),
+            },
         )
         await self._broadcast_event(event.to_dict())
+
+    @staticmethod
+    def _session_message_for_event(
+        session: Session,
+        message_id: str | None,
+    ) -> dict[str, Any] | None:
+        if message_id:
+            for message in session.messages:
+                if str(message.get("id") or "") == message_id:
+                    return message
+        return session.messages[-1] if session.messages else None
 
     def _normalize_desktop_session_key(self, chat_id: str) -> str:
         return self.app_service.normalize_desktop_session_key(chat_id)

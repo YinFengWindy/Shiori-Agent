@@ -115,6 +115,7 @@ type DesktopAppFrameProps = {
   onCopyMessage: (content: string) => void;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
   onCancelChat: () => void;
+  onLoadOlderMessages: (sessionKey: string) => Promise<boolean>;
   imageHistorySidebar: RightSidebarViewState;
   detailRole: RoleRecord | null;
   pendingRoleCardAction: PendingRoleCardAction;
@@ -243,6 +244,7 @@ export function DesktopAppFrame({
   onCopyMessage,
   onSendMessage,
   onCancelChat,
+  onLoadOlderMessages,
   imageHistorySidebar,
   detailRole,
   pendingRoleCardAction,
@@ -463,6 +465,7 @@ export function DesktopAppFrame({
               onCopyMessage={onCopyMessage}
               onSendMessage={onSendMessage}
               onCancelChat={onCancelChat}
+              onLoadOlderMessages={onLoadOlderMessages}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
             />
           ) : null}

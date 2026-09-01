@@ -136,6 +136,79 @@ describe("desktopSelectors", () => {
     assert.equal(viewModel.resolvedChatImagePath, "D:\\images\\latest.png");
   });
 
+  it("keeps indexed images outside the loaded page while adding incremental media", () => {
+    const session = createSession();
+    session.messages = [{
+      id: "role:mira:9",
+      role: "assistant",
+      content: "最新图片",
+      media: ["D:\\images\\latest.png"],
+    }];
+
+    const viewModel = buildDesktopViewModel({
+      roles: [createRole()],
+      activeRoleId: "mira",
+      mainView: { kind: "chat" },
+      roleForm: createRoleForm(),
+      activeIllustration: "",
+      activeSession: session,
+      imageHistoryMessages: [{
+        id: "role:mira:1",
+        seq: 1,
+        timestamp: "2026-07-04T12:00:00+08:00",
+        media: ["D:\\images\\older.png"],
+      }],
+      selectedChatImageKey: "role:mira:1:0",
+      health: "online",
+      sendingSessions: {},
+      cancellingSessions: {},
+    });
+
+    assert.equal(viewModel.chatImageHistory.length, 2);
+    assert.equal(viewModel.selectedChatImageEntry?.messageId, "role:mira:1");
+    assert.equal(viewModel.resolvedChatImagePath, "D:\\images\\older.png");
+  });
+
+  it("uses the complete media projection when the visible chat page is paginated", () => {
+    const session = createSession();
+    session.pagination = {
+      limit: 50,
+      has_more: true,
+      oldest_seq: 50,
+      newest_seq: 99,
+      total_count: 100,
+      before_seq: null,
+      next_before_seq: 50,
+    };
+    session.messages = [{
+      id: "role:mira:99",
+      seq: 99,
+      role: "assistant",
+      content: "当前页消息",
+    }];
+
+    const viewModel = buildDesktopViewModel({
+      roles: [createRole()],
+      activeRoleId: "mira",
+      mainView: { kind: "chat" },
+      roleForm: createRoleForm(),
+      activeIllustration: "",
+      activeSession: session,
+      imageHistoryMessages: [{
+        id: "role:mira:4",
+        timestamp: "2026-07-04T12:00:00+08:00",
+        media: ["D:\\images\\old.png"],
+      }],
+      selectedChatImageKey: "",
+      health: "online",
+      sendingSessions: {},
+      cancellingSessions: {},
+    });
+
+    assert.equal(viewModel.chatImageHistory.length, 1);
+    assert.equal(viewModel.selectedChatImageEntry?.messageId, "role:mira:4");
+  });
+
   it("derives the current mood illustration from session metadata and role bindings", () => {
     const session = createSession();
     session.metadata = {

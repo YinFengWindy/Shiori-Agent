@@ -1,7 +1,9 @@
 import {
   collectChatImageHistory,
+  collectChatImageHistoryFromMessages,
   findChatImageHistoryEntry,
   findChatImageHistoryIndex,
+  mergeChatImageHistory,
   resolveChatImageSelectionKey,
 } from "../chat/chatImageHistory";
 import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/chatHeaderState";
@@ -24,6 +26,7 @@ type BuildDesktopViewModelArgs = {
   roleForm: RoleFormState;
   activeIllustration: string;
   activeSession: SessionPayload | null;
+  imageHistoryMessages?: Parameters<typeof collectChatImageHistoryFromMessages>[0];
   selectedChatImageKey: string;
   health: string;
   sendingSessions: Record<string, string>;
@@ -38,6 +41,7 @@ export function buildDesktopViewModel({
   roleForm,
   activeIllustration,
   activeSession,
+  imageHistoryMessages,
   selectedChatImageKey,
   health,
   sendingSessions,
@@ -79,7 +83,9 @@ export function buildDesktopViewModel({
     activeSessionKey: visibleChatSessionKey,
     sendingSessions,
   });
-  const chatImageHistory = collectChatImageHistory(activeSession);
+  const chatImageHistory = imageHistoryMessages
+    ? mergeChatImageHistory(imageHistoryMessages, activeSession?.messages ?? [])
+    : collectChatImageHistory(activeSession);
   const resolvedSelectedChatImageKey = resolveChatImageSelectionKey(chatImageHistory, selectedChatImageKey);
   const selectedChatImageIndex = findChatImageHistoryIndex(chatImageHistory, resolvedSelectedChatImageKey);
   const selectedChatImageEntry = findChatImageHistoryEntry(chatImageHistory, resolvedSelectedChatImageKey);

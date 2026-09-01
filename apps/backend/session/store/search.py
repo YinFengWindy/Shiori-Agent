@@ -75,6 +75,84 @@ class _SearchMixin:
             rows = self._conn.execute(sql, tuple(ids + ids)).fetchall()
         return [self._row_to_message(row) for row in rows]
 
+    def fetch_message_around(
+        self,
+        message_id: str,
+        *,
+        context: int = 5,
+    ) -> dict[str, Any]:
+        """Fetch a message and nearby persisted messages by its real id."""
+        safe_context = max(0, min(int(context), 100))
+        with self._lock:
+            target = self._conn.execute(
+                f"SELECT {_MESSAGE_SELECT_COLUMNS} FROM messages WHERE id = ?",
+                (message_id,),
+            ).fetchone()
+            if target is None:
+                return {
+                    "messages": [],
+                    "target_message_id": message_id,
+                    "has_more_before": False,
+                    "has_more_after": False,
+                    "total_count": 0,
+                }
+            session_key = str(target["session_key"])
+            target_seq = int(target["seq"])
+            before_rows = self._conn.execute(
+                f"""
+                SELECT {_MESSAGE_SELECT_COLUMNS}
+                FROM messages
+                WHERE session_key = ? AND seq < ?
+                ORDER BY seq DESC LIMIT ?
+                """,
+                (session_key, target_seq, safe_context),
+            ).fetchall()
+            after_rows = self._conn.execute(
+                f"""
+                SELECT {_MESSAGE_SELECT_COLUMNS}
+                FROM messages
+                WHERE session_key = ? AND seq > ?
+                ORDER BY seq ASC LIMIT ?
+                """,
+                (session_key, target_seq, safe_context),
+            ).fetchall()
+            rows = [*reversed(before_rows), target, *after_rows]
+            stats = self._conn.execute(
+                """
+                SELECT COUNT(1) AS total_count, MIN(seq) AS oldest_seq, MAX(seq) AS newest_seq
+                FROM messages WHERE session_key = ?
+                """,
+                (session_key,),
+            ).fetchone()
+        messages = [self._row_to_message(row) for row in rows]
+        for message in messages:
+            message["is_target"] = message["id"] == message_id
+        oldest_seq = stats["oldest_seq"] if stats else None
+        newest_seq = stats["newest_seq"] if stats else None
+        return {
+            "messages": messages,
+            "target_message_id": message_id,
+            "session_key": session_key,
+            "has_more_before": (
+                bool(
+                    oldest_seq is not None
+                    and messages
+                    and messages[0]["seq"] > int(oldest_seq)
+                )
+            ),
+            "has_more_after": (
+                bool(
+                    newest_seq is not None
+                    and messages
+                    and messages[-1]["seq"] < int(newest_seq)
+                )
+            ),
+            "oldest_seq": int(oldest_seq) if oldest_seq is not None else None,
+            "newest_seq": int(newest_seq) if newest_seq is not None else None,
+            "total_count": int((stats["total_count"] if stats else 0) or 0),
+            "context": safe_context,
+        }
+
     def search_messages(
         self,
         query: str,
@@ -154,7 +232,7 @@ class _SearchMixin:
                     pass
 
         # LIKE fallback: OR across all terms so any hit surfaces; rank by match count descending.
-        like_params = params[:]
+        like_params: list[Any] = []
         count_params = params[:]
         connector = "AND" if where_sql else "WHERE"
         count_sql = f"SELECT COUNT(1) AS c FROM messages m {where_sql} {connector} ({term_conditions_or}) "
@@ -168,6 +246,7 @@ class _SearchMixin:
         )
         # score_expr binds: one %t% per term; term_conditions_or binds: one %t% per term
         like_params.extend(f"%{t}%" for t in terms)  # for score_expr
+        like_params.extend(params)
         like_params.extend(f"%{t}%" for t in terms)  # for WHERE OR
         like_params.extend([limit, offset])
         with self._lock:
@@ -175,6 +254,41 @@ class _SearchMixin:
             rows = self._conn.execute(like_sql, tuple(like_params)).fetchall()
         total = int((count_row["c"] if count_row else 0) or 0)
         return [self._row_to_message(row) for row in rows], total
+
+    def search_message_previews(
+        self,
+        query: str,
+        *,
+        session_key: str | None = None,
+        role: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+        preview_length: int = 240,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Search messages for desktop navigation without returning heavy fields."""
+        messages, total = self.search_messages(
+            query,
+            session_key=session_key,
+            role=role,
+            limit=limit,
+            offset=offset,
+        )
+        safe_length = max(40, min(int(preview_length), 1000))
+        previews: list[dict[str, Any]] = []
+        for message in messages:
+            content = str(message.get("content") or "")
+            previews.append(
+                {
+                    "id": message.get("id"),
+                    "session_key": message.get("session_key"),
+                    "seq": message.get("seq"),
+                    "role": message.get("role"),
+                    "preview": content[:safe_length]
+                    + ("..." if len(content) > safe_length else ""),
+                    "timestamp": message.get("timestamp"),
+                }
+            )
+        return previews, total
 
     def _row_to_message(self, row: sqlite3.Row) -> dict[str, Any]:
         row_keys = set(row.keys())

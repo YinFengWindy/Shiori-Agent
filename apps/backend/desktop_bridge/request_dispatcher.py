@@ -19,6 +19,10 @@ _READ_ONLY_METHODS = frozenset(
         "stories.list",
         "stories.get",
         "stories.cg.list",
+        "session.messagesPage",
+        "session.messagesAround",
+        "session.search",
+        "session.imageHistory",
     }
 )
 _INTEGRATION_METHODS = frozenset(

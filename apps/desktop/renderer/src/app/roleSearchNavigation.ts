@@ -11,24 +11,31 @@ type NavigateToRoleSearchResultArgs = {
   queueMessageNavigation: (roleId: string, messageKey: string) => void;
   clearMessageNavigation: () => void;
   openRole: (roleId: string, options?: SearchNavigationOptions) => Promise<boolean>;
+  loadMessagesAround: (messageId: string, sessionKey: string) => Promise<boolean>;
 };
 
 /** Applies the navigation actions for one selected role or message search result. */
-export function navigateToRoleSearchResult({
+export async function navigateToRoleSearchResult({
   result,
   messageKey,
   openChatView,
   queueMessageNavigation,
   clearMessageNavigation,
   openRole,
-}: NavigateToRoleSearchResultArgs): void {
+  loadMessagesAround,
+}: NavigateToRoleSearchResultArgs): Promise<void> {
   openChatView({ recordHistory: false });
-  if (result.matchedField === "message") {
-    if (messageKey) {
-      queueMessageNavigation(result.roleId, messageKey);
-    }
-  } else {
+  if (result.matchedField !== "message") {
     clearMessageNavigation();
+    await openRole(result.roleId, { recordHistory: true });
+    return;
   }
-  void openRole(result.roleId, { recordHistory: true });
+  clearMessageNavigation();
+  if (!messageKey) return;
+  const opened = await openRole(result.roleId, { recordHistory: true });
+  if (!opened) return;
+  const loaded = await loadMessagesAround(messageKey, result.sessionKey);
+  if (loaded) {
+    queueMessageNavigation(result.roleId, messageKey);
+  }
 }

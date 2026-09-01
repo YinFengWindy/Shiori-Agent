@@ -21,6 +21,7 @@ type UseChatImageStateArgs = {
   updateCommittedActiveSession: (
     updater: (current: SessionPayload | null) => SessionPayload | null,
   ) => void;
+  loadMessagesAround: (messageId: string, sessionKey: string) => Promise<boolean>;
   queueMessageNavigation: (roleId: string, messageKey: string) => void;
   setError: React.Dispatch<React.SetStateAction<string>>;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
@@ -43,6 +44,7 @@ export function useChatImageState({
   openChatLatestImageSidebar,
   loadRolesFromBridge,
   updateCommittedActiveSession,
+  loadMessagesAround,
   queueMessageNavigation,
   setError,
   setNotice,
@@ -76,11 +78,16 @@ export function useChatImageState({
   }
 
   function locateSelectedChatImageMessage(): void {
-    if (!activeRoleId || !selectedChatImageEntry?.messageId) {
+    const messageId = selectedChatImageEntry?.messageId ?? "";
+    if (!activeRoleId || !activeSessionKey || !messageId) {
       return;
     }
     setChatImageLightboxOpen(false);
-    queueMessageNavigation(activeRoleId, selectedChatImageEntry.messageId);
+    void loadMessagesAround(messageId, activeSessionKey).then((loaded) => {
+      if (loaded) {
+        queueMessageNavigation(activeRoleId, messageId);
+      }
+    });
   }
 
   async function addSelectedChatImageToAssetLibrary(): Promise<void> {

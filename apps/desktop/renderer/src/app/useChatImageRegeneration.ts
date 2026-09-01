@@ -1,6 +1,10 @@
 import { useRef, useState } from "react";
 import type { ChatImageHistoryEntry } from "../chat/chatImageHistory";
-import type { SessionPayload } from "../shared/types";
+import type { SessionMessage, SessionPayload, SessionSummary } from "../shared/types";
+import {
+  mergeSessionSummaryAndMessage,
+  parseSessionMessageUpdatePayload,
+} from "./useDesktopSessionState";
 
 type UseChatImageRegenerationArgs = {
   activeSessionKey: string;
@@ -12,16 +16,17 @@ type UseChatImageRegenerationArgs = {
   setNotice: React.Dispatch<React.SetStateAction<string>>;
 };
 
-/** Applies a regenerated snapshot only while its original session remains active. */
+/** Applies a regenerated message only while its original session remains active. */
 export function applyRegeneratedSession(
   current: SessionPayload | null,
   targetSessionKey: string,
-  regenerated: SessionPayload,
+  summary: SessionSummary,
+  message: SessionMessage,
 ): SessionPayload | null {
-  if (current?.key !== targetSessionKey || regenerated.key !== targetSessionKey) {
+  if (current?.key !== targetSessionKey || summary.key !== targetSessionKey) {
     return current;
   }
-  return regenerated;
+  return mergeSessionSummaryAndMessage(current, summary, message);
 }
 
 /** Owns desktop-only NovelAI regeneration state for chat image history entries. */
@@ -57,13 +62,14 @@ export function useChatImageRegeneration({
         setError(res.error.message);
         return;
       }
-      const regeneratedSession = res.payload.session as SessionPayload;
-      if (regeneratedSession.key !== targetSessionKey) {
+      const update = parseSessionMessageUpdatePayload(res.payload);
+      if (!update || !update.message || update.session.key !== targetSessionKey) {
         setError("重新生成返回了不匹配的会话。");
         return;
       }
+      const regeneratedMessage = update.message;
       updateCommittedActiveSession((current) => (
-        applyRegeneratedSession(current, targetSessionKey, regeneratedSession)
+        applyRegeneratedSession(current, targetSessionKey, update.session, regeneratedMessage)
       ));
       setNotice("图片已重新生成。");
     } catch (error) {

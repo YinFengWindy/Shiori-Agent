@@ -94,3 +94,59 @@ def test_session_presenter_truncates_results_and_skips_unidentified_tools(tmp_pa
     assert [call["call_id"] for call in calls] == ["call-1"]
     assert len(calls[0]["result"]) == 2000
     assert calls[0]["result"].endswith("...")
+
+
+def test_session_presenter_page_and_summary_use_store_projection(tmp_path) -> None:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.add_message("user", "旧消息")
+    session.add_message("assistant", "新消息")
+    manager.save(session)
+    presenter = DesktopSessionPresenter(ConversationService(manager))
+
+    summary = presenter.serialize_summary(session)
+    page = presenter.serialize_page(session, limit=1)
+
+    assert summary["key"] == "role:mira"
+    assert "messages" not in summary
+    assert [message["role"] for message in page["messages"]] == ["assistant"]
+    assert page["messages"][0]["seq"] == 1
+    assert page["messages"][0]["session_key"] == "role:mira"
+
+
+def test_session_presenter_search_and_around_serialize_light_results(tmp_path) -> None:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.add_message("assistant", "请搜索天气")
+    manager.save(session)
+    presenter = DesktopSessionPresenter(ConversationService(manager))
+
+    search = presenter.serialize_search("天气", session_key="role:mira")
+    around = presenter.serialize_around("role:mira:0", context=0)
+
+    assert search["total_count"] == 1
+    assert search["results"][0]["id"] == "role:mira:0"
+    assert search["results"][0]["preview"] == "请搜索天气"
+    assert "tool_chain" not in search["results"][0]
+    assert around["messages"][0]["is_target"] is True
+    assert around["messages"][0]["seq"] == 0
+
+
+def test_session_presenter_image_history_excludes_chat_content(tmp_path) -> None:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:mira")
+    session.add_message("assistant", "很长的聊天正文", media=["old.png"])
+    manager.save(session)
+    presenter = DesktopSessionPresenter(ConversationService(manager))
+
+    history = presenter.serialize_image_history(session.key)
+
+    assert history == {
+        "session_key": "role:mira",
+        "messages": [{
+            "id": "role:mira:0",
+            "seq": 0,
+            "timestamp": session.messages[0]["timestamp"],
+            "media": ["old.png"],
+        }],
+    }

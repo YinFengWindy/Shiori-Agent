@@ -20,7 +20,9 @@ test("Codex pet maps desktop bridge task events to the documented animation rows
     type: "event",
     method: "session.updated",
     payload: {
-      session: { key: "role-b", messages: [{ role: "assistant", metadata: { proactive: true } }] },
+      session_key: "role-b",
+      session: { key: "role-b" },
+      message: { role: "assistant", metadata: { proactive: true } },
     },
   });
   assert.equal(needsInput.state, "waiting");
@@ -39,7 +41,9 @@ test("Codex pet maps desktop bridge task events to the documented animation rows
     type: "event",
     method: "session.updated",
     payload: {
-      session: { key: "role-b", messages: [{ role: "assistant", metadata: { proactive: false } }] },
+      session_key: "role-b",
+      session: { key: "role-b" },
+      message: { role: "assistant", metadata: { proactive: false } },
     },
   });
   assert.equal(reviewed.state, "failed");

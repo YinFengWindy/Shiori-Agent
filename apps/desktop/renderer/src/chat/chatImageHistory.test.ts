@@ -5,6 +5,8 @@ import { describe, it } from "node:test";
 import {
   buildChatImageHistoryKey,
   collectChatImageHistory,
+  mergeChatImageHistory,
+  collectChatImageHistoryFromMessages,
   findChatImageHistoryEntry,
   findChatImageHistoryIndex,
   isChatImageAsset,
@@ -96,6 +98,36 @@ describe("collectChatImageHistory", () => {
     ]);
   });
 
+  it("keeps old media available from a projection outside the loaded chat page", () => {
+    assert.deepEqual(collectChatImageHistoryFromMessages([
+      {
+        id: "role:mira:4",
+        timestamp: "2026-07-03T10:01:00.000Z",
+        media: ["outputs/old.png"],
+      },
+      {
+        id: "role:mira:99",
+        timestamp: "2026-07-03T10:05:00.000Z",
+        media: ["outputs/latest.webp"],
+      },
+    ]), [
+      {
+        historyKey: "role:mira:4:0",
+        path: "outputs/old.png",
+        messageId: "role:mira:4",
+        mediaIndex: 0,
+        timestamp: "2026-07-03T10:01:00.000Z",
+      },
+      {
+        historyKey: "role:mira:99:0",
+        path: "outputs/latest.webp",
+        messageId: "role:mira:99",
+        mediaIndex: 0,
+        timestamp: "2026-07-03T10:05:00.000Z",
+      },
+    ]);
+  });
+
   it("ignores malformed non-string media entries instead of crashing the renderer", () => {
     const session = createSession([
       {
@@ -129,6 +161,55 @@ describe("collectChatImageHistory", () => {
 
     assert.equal(collectChatImageHistory(session)[0]?.mediaIndex, 1);
     assert.equal(collectChatImageHistory(session)[0]?.historyKey, "message-1:1");
+  });
+});
+
+describe("mergeChatImageHistory", () => {
+  it("keeps older indexed images while adding an incremental image outside the loaded page", () => {
+    assert.deepEqual(
+      mergeChatImageHistory(
+        [{
+          id: "role:mira:1",
+          timestamp: "2026-08-01T10:00:00.000Z",
+          media: ["outputs/older.png"],
+        }],
+        [{
+          id: "role:mira:9",
+          role: "assistant",
+          timestamp: "2026-08-01T10:09:00.000Z",
+          media: ["outputs/latest.png"],
+        }],
+      ),
+      [{
+        historyKey: "role:mira:1:0",
+        path: "outputs/older.png",
+        messageId: "role:mira:1",
+        mediaIndex: 0,
+        timestamp: "2026-08-01T10:00:00.000Z",
+      }, {
+        historyKey: "role:mira:9:0",
+        path: "outputs/latest.png",
+        messageId: "role:mira:9",
+        mediaIndex: 0,
+        timestamp: "2026-08-01T10:09:00.000Z",
+      }],
+    );
+  });
+
+  it("uses the updated loaded message for a regenerated indexed image", () => {
+    assert.deepEqual(
+      mergeChatImageHistory(
+        [{ id: "role:mira:1", media: ["outputs/old.png"] }],
+        [{ id: "role:mira:1", role: "assistant", media: ["outputs/new.png"] }],
+      ),
+      [{
+        historyKey: "role:mira:1:0",
+        path: "outputs/new.png",
+        messageId: "role:mira:1",
+        mediaIndex: 0,
+        timestamp: null,
+      }],
+    );
   });
 });
 

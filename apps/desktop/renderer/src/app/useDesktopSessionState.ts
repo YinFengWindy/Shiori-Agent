@@ -19,18 +19,75 @@ import {
   type RoleSessionCache,
 } from "../chat/roleSessionCache";
 import { getRoleIdFromSession } from "./appState";
+import {
+  getSessionPaginationState,
+  mergeSessionSummaryAndMessage,
+  parseSessionMessagePage,
+  parseSessionSummary,
+} from "./sessionMessagePagination";
+import { useDesktopSessionPagination } from "./useDesktopSessionPagination";
+export {
+  mergeSessionMessagePage,
+  mergeSessionSummaryAndMessage,
+  parseSessionMessagePage,
+} from "./sessionMessagePagination";
 import { reconcileRoles } from "../roles/roleListState";
 import type {
   AppMainView,
   ChatSendRequest,
   RoleRecord,
   SessionMessage,
+  SessionMessagePage,
+  SessionMessageUpdatePayload,
   SessionPayload,
+  SessionSummary,
 } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
 
 type SendingSessionsMap = Record<string, string>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Parses the paginated bridge response into the renderer's loaded-message session shape. */
+export function parseOpenedSessionPayload(payload: Record<string, unknown>): SessionPayload | null {
+  const session = parseSessionSummary(payload.session);
+  if (session && isRecord(payload.session) && Array.isArray(payload.session.messages)
+    && payload.session.messages.every((message) => isRecord(message)
+      && typeof message.role === "string" && typeof message.content === "string")) {
+    return {
+      ...session,
+      messages: payload.session.messages,
+    };
+  }
+  const page = parseSessionMessagePage(payload.page);
+  if (!session || !page) {
+    return null;
+  }
+  return {
+    ...session,
+    messages: page.messages,
+    pagination: getSessionPaginationState(page),
+  };
+}
+
+/** Parses a bridge event or mutation response carrying a summary and at most one changed message. */
+export function parseSessionMessageUpdatePayload(
+  payload: Record<string, unknown>,
+): SessionMessageUpdatePayload | null {
+  const session = parseSessionSummary(payload.session);
+  const rawMessage = payload.message;
+  if (!session || (rawMessage != null && (!isRecord(rawMessage)
+    || typeof rawMessage.role !== "string" || typeof rawMessage.content !== "string"))) {
+    return null;
+  }
+  return {
+    session,
+    message: rawMessage as SessionMessage | null,
+  };
+}
 
 type UseDesktopSessionStateArgs = {
   setRoles: React.Dispatch<React.SetStateAction<RoleRecord[]>>;
@@ -212,6 +269,17 @@ export function useDesktopSessionState({
     setActiveSession(nextSession);
   }
 
+  const {
+    invalidateSessionPagination,
+    loadOlderMessages,
+    loadMessagesAround,
+  } = useDesktopSessionPagination({
+    activeRoleIdRef,
+    activeSessionRef,
+    setError,
+    updateCommittedActiveSession,
+  });
+
   async function loadRolesFromBridge(): Promise<RoleRecord[] | null> {
     const rolesRes = await window.miraDesktop.invoke({
       method: "roles.list",
@@ -244,6 +312,7 @@ export function useDesktopSessionState({
   async function fetchRoleSession(roleId: string): Promise<{
     error: string | null;
     session: SessionPayload | null;
+    page: SessionMessagePage | null;
   }> {
     try {
       const res = await window.miraDesktop.invoke({
@@ -254,16 +323,28 @@ export function useDesktopSessionState({
         return {
           error: res.error.message,
           session: null,
+          page: null,
         };
       }
+      const session = parseOpenedSessionPayload(res.payload);
+      if (!session) {
+        return {
+          error: "打开角色会话响应无效",
+          session: null,
+          page: null,
+        };
+      }
+      const page = parseSessionMessagePage(res.payload.page);
       return {
-        error: null,
-        session: res.payload.session as SessionPayload,
+        error: page ? null : "打开角色会话分页响应无效",
+        session: page ? session : null,
+        page,
       };
     } catch (error) {
       return {
         error: error instanceof Error ? error.message : String(error),
         session: null,
+        page: null,
       };
     }
   }
@@ -347,6 +428,10 @@ export function useDesktopSessionState({
     roleOverride: RoleRecord | null = null,
     options?: { recordHistory?: boolean },
   ): Promise<boolean> {
+    const currentSessionKey = activeSessionRef.current?.key ?? "";
+    if (currentSessionKey) {
+      invalidateSessionPagination(currentSessionKey);
+    }
     const requestId = openRoleRequestIdRef.current + 1;
     openRoleRequestIdRef.current = requestId;
     const previousRoleId = activeRoleIdRef.current;
@@ -406,6 +491,7 @@ export function useDesktopSessionState({
       return false;
     }
     cacheRoleSession(roleId, session);
+    invalidateSessionPagination(session.key);
     setActiveRoleId(roleId);
     commitActiveSession(session);
     setError("");
@@ -501,9 +587,16 @@ export function useDesktopSessionState({
         window.alert(res.error.message);
         return false;
       }
-      const nextSession = res.payload.session as SessionPayload;
-      // Keep the optimistic user turn visible when chat.send resolves with a stale session snapshot.
-      commitActiveSession(nextSession);
+      const update = parseSessionMessageUpdatePayload(res.payload);
+      if (!update || update.session.key !== sessionKey || !update.message) {
+        throw new Error("发送消息响应无效");
+      }
+      // Preserve the loaded page and replace the optimistic user message with the persisted turn.
+      commitActiveSession(mergeSessionSummaryAndMessage(
+        activeSessionRef.current,
+        update.session,
+        update.message,
+      ));
       return true;
     } catch (error) {
       delete pendingUserMessagesRef.current[sessionKey];
@@ -562,6 +655,8 @@ export function useDesktopSessionState({
     removeCachedRoleSession,
     loadRolesFromBridge,
     fetchRoleSession,
+    loadOlderMessages,
+    loadMessagesAround,
     refreshSession,
     clearAllSendingSessions,
     clearSessionSending,

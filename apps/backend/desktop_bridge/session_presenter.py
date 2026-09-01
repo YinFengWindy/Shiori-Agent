@@ -19,14 +19,107 @@ class DesktopSessionPresenter:
 
     def serialize(self, session: Session) -> dict[str, Any]:
         """Returns the desktop-compatible role session snapshot."""
+        payload = self.serialize_summary(session)
+        payload["messages"] = [self.serialize_message(message) for message in session.messages]
+        return payload
+
+    def serialize_summary(self, session: Session) -> dict[str, Any]:
+        """Returns session metadata without the full message history."""
         return {
             "key": session.key,
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
             "last_consolidated": session.last_consolidated,
             "metadata": self._enrich_metadata(dict(session.metadata)),
-            "messages": [self._serialize_message(message) for message in session.messages],
         }
+
+    def serialize_message(self, message: dict[str, Any]) -> dict[str, Any]:
+        """Serializes one message using the same desktop sanitization contract."""
+        serialized = self._serialize_message(message)
+        if message.get("seq") is not None:
+            serialized["seq"] = int(message["seq"])
+        if message.get("session_key"):
+            serialized["session_key"] = str(message["session_key"])
+        if message.get("is_target") is not None:
+            serialized["is_target"] = bool(message["is_target"])
+        return serialized
+
+    def serialize_page(
+        self,
+        session: Session,
+        *,
+        before_seq: int | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Reads a bounded message page directly from the session store."""
+        store = self._session_store()
+        page = store.fetch_messages_page(
+            session.key,
+            before_seq=before_seq,
+            limit=limit,
+        )
+        page["messages"] = [
+            self.serialize_message(message) for message in page["messages"]
+        ]
+        return page
+
+    def serialize_around(
+        self,
+        message_id: str,
+        *,
+        context: int = 5,
+    ) -> dict[str, Any]:
+        """Serializes a message and nearby messages for search navigation."""
+        result = self._session_store().fetch_message_around(
+            message_id,
+            context=context,
+        )
+        result["messages"] = [
+            self.serialize_message(message) for message in result["messages"]
+        ]
+        return result
+
+    def serialize_search(
+        self,
+        query: str,
+        *,
+        session_key: str | None = None,
+        role: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Returns lightweight search results suitable for the renderer."""
+        results, total = self._session_store().search_message_previews(
+            query,
+            session_key=session_key,
+            role=role,
+            limit=limit,
+            offset=offset,
+        )
+        safe_limit = max(1, min(int(limit), 100))
+        safe_offset = max(0, int(offset))
+        return {
+            "results": results,
+            "total_count": total,
+            "query": query,
+            "limit": safe_limit,
+            "offset": safe_offset,
+            "has_more": safe_offset + len(results) < total,
+        }
+
+    def serialize_image_history(self, session_key: str) -> dict[str, Any]:
+        """Returns media-only history without expanding the chat message window."""
+        return {
+            "session_key": session_key,
+            "messages": self._session_store().fetch_image_history(session_key),
+        }
+
+    def _session_store(self):
+        manager = getattr(self._conversation_service, "_session_manager", None)
+        store = getattr(manager, "_store", None)
+        if store is None:
+            raise RuntimeError("session store unavailable for desktop pagination")
+        return store
 
     def _enrich_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
         if self._relationship_runtime is None:

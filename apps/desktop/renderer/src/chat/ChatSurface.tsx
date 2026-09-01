@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessageContextMenu } from "./ChatMessageContextMenu";
@@ -9,15 +9,10 @@ import {
   type MessageContextMenuState,
 } from "./chatMessageActions";
 import { ChatRightSidebar, type ChatSidebarMode } from "./ChatRightSidebar";
-import {
-  getExpandedVisibleChatMessageCountForKey,
-  getVisibleChatMessages,
-  initialVisibleChatMessageCount,
-  visibleChatMessageCountStep,
-} from "./chatMessageWindow";
 import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { useRoleTasks } from "./useRoleTasks";
+import { useChatMessagePagination } from "./useChatMessagePagination";
 import { cx } from "../shared/styles";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
 
@@ -57,6 +52,7 @@ type ChatSurfaceProps = {
   onCopyMessage: (content: string) => void;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
   onCancelChat: () => void;
+  onLoadOlderMessages?: (sessionKey: string) => Promise<boolean>;
   onToggleChatLatestImageSidebar: () => void;
 };
 
@@ -101,6 +97,7 @@ export function ChatSurface({
   onCopyMessage,
   onSendMessage,
   onCancelChat,
+  onLoadOlderMessages = async () => false,
   onToggleChatLatestImageSidebar,
 }: ChatSurfaceProps) {
   const [visualsActive, setVisualsActive] = useState(() => (
@@ -119,7 +116,6 @@ export function ChatSurface({
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
-  const [visibleMessageCount, setVisibleMessageCount] = useState(initialVisibleChatMessageCount);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const hasStatusContent = hasStatusIllustration || Boolean(roleSelfView);
   const [sidebarMode, setSidebarMode] = useState<ChatSidebarMode>(
@@ -136,6 +132,17 @@ export function ChatSurface({
     0,
   );
   const currentLastMessageContent = sessionMessages.at(-1)?.content ?? "";
+  const {
+    visibleMessageWindow,
+    loading: loadingOlderMessages,
+    canLoadOlderMessages,
+    onLoadOlderMessages: handleLoadOlderMessages,
+  } = useChatMessagePagination({
+    activeSession,
+    conversationListRef,
+    highlightedMessageKey,
+    loadOlderMessages: onLoadOlderMessages,
+  });
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 
@@ -313,30 +320,6 @@ export function ChatSurface({
   }, [activeRoleId, activeSession?.key]);
 
   useEffect(() => {
-    setVisibleMessageCount(initialVisibleChatMessageCount);
-  }, [activeSession?.key]);
-
-  const visibleMessageWindow = useMemo(
-    () => getVisibleChatMessages(sessionMessages, visibleMessageCount),
-    [sessionMessages, visibleMessageCount],
-  );
-
-  const handleExpandOlderMessages = useCallback(() => {
-    setVisibleMessageCount((current) => current + visibleChatMessageCountStep);
-  }, []);
-
-  useLayoutEffect(() => {
-    const nextVisibleMessageCount = getExpandedVisibleChatMessageCountForKey(
-      sessionMessages,
-      visibleMessageCount,
-      highlightedMessageKey,
-    );
-    if (nextVisibleMessageCount !== visibleMessageCount) {
-      setVisibleMessageCount(nextVisibleMessageCount);
-    }
-  }, [highlightedMessageKey, sessionMessages, visibleMessageCount]);
-
-  useEffect(() => {
     const currentMessageCount = activeSession?.messages.length ?? 0;
     const previousMessageCount = previousMessageCountRef.current;
     const previousLastMessageContent = previousLastMessageContentRef.current;
@@ -481,7 +464,9 @@ export function ChatSurface({
           highlightedMessageKey={highlightedMessageKey}
           visibleMessageWindow={visibleMessageWindow}
           onBeginAttachmentDrag={onBeginAttachmentDrag}
-          onExpandOlderMessages={handleExpandOlderMessages}
+          canLoadOlderMessages={canLoadOlderMessages}
+          loadingOlderMessages={loadingOlderMessages}
+          onExpandOlderMessages={handleLoadOlderMessages}
           onJumpToMessage={onJumpToMessage}
           onOpenContextMenu={openMessageContextMenu}
           onOpenImagePreview={handleOpenChatImagePreview}

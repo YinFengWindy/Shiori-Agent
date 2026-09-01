@@ -48,6 +48,35 @@ test("proactive session updates expose the new assistant message as a bubble", (
   assert.deepEqual(accepted, [{ roleId: "mira", reply: "主动来找你了。" }]);
 });
 
+test("incremental proactive updates read the changed message without a full session snapshot", () => {
+  const bridge = new EventEmitter();
+  const accepted: Array<{ roleId: string; reply: string }> = [];
+  wireRoleReplyBubbles(bridge as never, {
+    acceptRoleReply: (roleId, reply) => accepted.push({ roleId, reply }),
+  });
+
+  bridge.emit("event", {
+    id: "proactive",
+    method: "session.updated",
+    payload: {
+      role_id: "mira",
+      session: {
+        key: "role:mira",
+        metadata: {},
+      },
+      change: "message_appended",
+      message: {
+        id: "role:mira:9",
+        role: "assistant",
+        content: "增量主动消息。",
+        metadata: { proactive: true },
+      },
+    },
+  });
+
+  assert.deepEqual(accepted, [{ roleId: "mira", reply: "增量主动消息。" }]);
+});
+
 test("ordinary session updates and stale proactive snapshots do not create bubbles", () => {
   const bridge = new EventEmitter();
   const accepted: Array<{ roleId: string; reply: string }> = [];

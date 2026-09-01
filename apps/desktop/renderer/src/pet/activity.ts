@@ -63,11 +63,20 @@ function eventSessionKey(event: BridgeEvent): string | null {
 }
 
 function sessionNeedsUserReply(event: BridgeEvent): boolean {
+  const changedMessage = event.payload.message;
+  if (changedMessage && typeof changedMessage === "object") {
+    return messageNeedsUserReply(changedMessage);
+  }
   const session = event.payload.session;
   if (!session || typeof session !== "object") return false;
   const messages = (session as { messages?: unknown }).messages;
   if (!Array.isArray(messages) || messages.length === 0) return false;
   const lastMessage = messages[messages.length - 1];
+  return messageNeedsUserReply(lastMessage);
+}
+
+function messageNeedsUserReply(value: unknown): boolean {
+  const lastMessage = value;
   if (!lastMessage || typeof lastMessage !== "object") return false;
   const message = lastMessage as { role?: unknown; metadata?: unknown };
   if (message.role !== "assistant" || !message.metadata || typeof message.metadata !== "object") return false;

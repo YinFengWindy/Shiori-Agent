@@ -1,5 +1,5 @@
 import type React from "react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { DesktopAppFrame } from "./app/DesktopAppFrame";
 import {
@@ -53,6 +53,7 @@ import type {
   AppMainView,
   PendingRoleCardAction,
   RoleRecord,
+  SessionImageHistoryMessage,
   SessionPayload,
 } from "./shared/types";
 import "./styles.css";
@@ -124,6 +125,7 @@ function App(): React.ReactElement {
     defaultCollapsed: true,
   });
   const [selectedChatImageKey, setSelectedChatImageKey] = useState("");
+  const [imageHistoryMessages, setImageHistoryMessages] = useState<SessionImageHistoryMessage[]>([]);
   const [chatImageLightboxOpen, setChatImageLightboxOpen] = useState(false);
   const [addingChatImageToAssetLibrary, setAddingChatImageToAssetLibrary] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
@@ -140,6 +142,9 @@ function App(): React.ReactElement {
   const cancellingSessionsRef = useLatestRef(cancellingSessions);
   const unreadCountsRef = useLatestRef(unreadCounts);
   const roleFormRef = useLatestRef(roleForm);
+  const imageHistorySessionKeyRef = useRef("");
+  const activeSessionKeyForImages = activeSession?.key ?? "";
+  const activeSessionUpdatedAtForImages = activeSession?.updated_at ?? "";
   const lastNonSettingsViewRef = useDesktopViewSynchronization({
     mainView,
     activeRoleId,
@@ -234,6 +239,8 @@ function App(): React.ReactElement {
     appendSessionErrorMessage,
     openRole,
     sendMessage,
+    loadOlderMessages,
+    loadMessagesAround,
     commitActiveSession,
     updateCommittedActiveSession,
   } = useDesktopSessionState({
@@ -263,6 +270,38 @@ function App(): React.ReactElement {
     unreadCountsRef,
     openRoleRequestIdRef,
   });
+
+  useEffect(() => {
+    const sessionKey = activeSessionKeyForImages;
+    if (!sessionKey) {
+      setImageHistoryMessages([]);
+      imageHistorySessionKeyRef.current = "";
+      return;
+    }
+    const sessionChanged = imageHistorySessionKeyRef.current !== sessionKey;
+    imageHistorySessionKeyRef.current = sessionKey;
+    // Do not expose the previous role's media while the new index is loading.
+    if (sessionChanged) setImageHistoryMessages([]);
+    let cancelled = false;
+    void window.miraDesktop.invoke({
+      method: "session.imageHistory",
+      payload: { session_key: sessionKey },
+    }).then((response) => {
+      if (cancelled || response.error) return;
+      if (response.payload.session_key !== sessionKey) return;
+      const messages = response.payload.messages;
+      if (!Array.isArray(messages)) return;
+      setImageHistoryMessages(messages.filter((message): message is SessionImageHistoryMessage => (
+        Boolean(message) && typeof message === "object"
+        && typeof (message as { id?: unknown }).id === "string"
+        && typeof (message as { seq?: unknown }).seq === "number"
+        && Array.isArray((message as { media?: unknown }).media)
+      )));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionKeyForImages, activeSessionUpdatedAtForImages]);
 
   useDesktopBridgeLifecycle({
     activeRoleId,
@@ -339,6 +378,7 @@ function App(): React.ReactElement {
     roleForm,
     activeIllustration,
     activeSession,
+    imageHistoryMessages,
     selectedChatImageKey,
     health,
     sendingSessions,
@@ -371,6 +411,7 @@ function App(): React.ReactElement {
     openChatLatestImageSidebar: chatLatestImageSidebar.open,
     loadRolesFromBridge,
     updateCommittedActiveSession,
+    loadMessagesAround,
     queueMessageNavigation,
     setError,
     setNotice,
@@ -575,6 +616,7 @@ function App(): React.ReactElement {
       onCopyMessage={(content) => void copyChatMessage(content)}
       onSendMessage={sendMessage}
       onCancelChat={() => void cancelChatTurn(activeSessionKey, activeRoleId)}
+      onLoadOlderMessages={loadOlderMessages}
       imageHistorySidebar={imageHistorySidebar}
       detailRole={detailRole}
       pendingRoleCardAction={pendingRoleCardAction}
@@ -626,7 +668,7 @@ function App(): React.ReactElement {
         const messageKey = result.matchedField === "message"
           ? getMessageKey(result.roleId, result.matchedMessageId, result.matchedMessageIndex)
           : "";
-        navigateToRoleSearchResult({
+        void navigateToRoleSearchResult({
           result,
           messageKey,
           openChatView,
@@ -636,6 +678,7 @@ function App(): React.ReactElement {
             setHighlightedMessageKey("");
           },
           openRole: (roleId, options) => openRole(roleId, null, options),
+          loadMessagesAround,
         });
       }}
       onUpdateSearchQuery={setSearchQuery}

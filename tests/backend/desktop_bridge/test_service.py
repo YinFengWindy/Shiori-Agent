@@ -109,10 +109,11 @@ async def test_novelai_regenerate_message_media_returns_updated_session(
 
     assert response.error is None
     assert response.payload["result"]["record_id"] == "new-record"
-    assert response.payload["session"]["messages"][-1]["media"] == [
+    assert response.payload["message"]["media"] == [
         str(tmp_path / "new.png")
     ]
     assert emitted.call_args.args[0]["method"] == "session.updated"
+    assert emitted.call_args.args[0]["payload"]["change"] == "message_updated"
 
 
 @pytest.mark.asyncio
@@ -556,7 +557,7 @@ async def test_external_proactive_media_commit_broadcasts_role_session(
 
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
-    assert emitted[0]["payload"]["session"]["messages"][-1]["media"] == [
+    assert emitted[0]["payload"]["message"]["media"] == [
         "D:\\media\\scene.png"
     ]
 
@@ -615,4 +616,155 @@ async def test_external_image_push_persists_and_broadcasts_desktop_session(
     assert result == "图片已发送"
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
-    assert emitted[0]["payload"]["session"]["messages"][-1]["media"] == [image]
+    assert emitted[0]["payload"]["message"]["media"] == [image]
+
+
+@pytest.mark.asyncio
+async def test_session_read_bridge_methods_return_bounded_desktop_projections(
+    tmp_path,
+) -> None:
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="You are Mira.",
+    )
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.get_or_create("role:mira")
+    session.add_message("user", "最早的消息")
+    session.add_message("assistant", "搜索天气")
+    session.add_message("user", "最新的消息")
+    session_manager.save(session)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+
+    page = await service.handle(
+        {
+            "id": "page-1",
+            "method": "session.messagesPage",
+            "payload": {"role_id": "mira", "limit": 2},
+        },
+        emit_event=Mock(),
+    )
+    search = await service.handle(
+        {
+            "id": "search-1",
+            "method": "session.search",
+            "payload": {"role_id": "mira", "query": "天气"},
+        },
+        emit_event=Mock(),
+    )
+    around = await service.handle(
+        {
+            "id": "around-1",
+            "method": "session.messagesAround",
+            "payload": {"message_id": "role:mira:1", "context": 1},
+        },
+        emit_event=Mock(),
+    )
+    image_history = await service.handle(
+        {
+            "id": "image-history-1",
+            "method": "session.imageHistory",
+            "payload": {"role_id": "mira"},
+        },
+        emit_event=Mock(),
+    )
+
+    assert page.error is None
+    assert [message["seq"] for message in page.payload["page"]["messages"]] == [1, 2]
+    assert page.payload["page"]["has_more"] is True
+    assert search.payload["results"] == [{
+        "id": "role:mira:1",
+        "session_key": "role:mira",
+        "seq": 1,
+        "role": "assistant",
+        "timestamp": session.messages[1]["timestamp"],
+        "preview": "搜索天气",
+    }]
+    assert search.payload["has_more"] is False
+    assert [message["seq"] for message in around.payload["around"]["messages"]] == [0, 1, 2]
+    assert around.payload["around"]["messages"][1]["is_target"] is True
+    assert image_history.error is None
+    assert image_history.payload == {"session_key": "role:mira", "messages": []}
+
+    missing = await service.handle(
+        {
+            "id": "around-missing",
+            "method": "session.messagesAround",
+            "payload": {"message_id": "role:mira:missing"},
+        },
+        emit_event=Mock(),
+    )
+    assert missing.error is not None
+    assert missing.error.code == "invalid_request"
+
+    other_session = session_manager.get_or_create("role:other")
+    other_session.add_message("assistant", "other role message")
+    session_manager.save(other_session)
+    mismatched = await service.handle(
+        {
+            "id": "around-mismatch",
+            "method": "session.messagesAround",
+            "payload": {"role_id": "mira", "message_id": "role:other:1"},
+        },
+        emit_event=Mock(),
+    )
+    assert mismatched.error is not None
+    assert mismatched.error.code == "invalid_request"
+
+    invalid_page = await service.handle(
+        {
+            "id": "page-mismatch",
+            "method": "session.messagesPage",
+            "payload": {"role_id": "mira", "session_key": "role:other"},
+        },
+        emit_event=Mock(),
+    )
+    assert invalid_page.error is not None
+    assert invalid_page.error.code == "invalid_request"
+
+
+@pytest.mark.asyncio
+async def test_session_image_history_returns_media_only_projection(tmp_path) -> None:
+    role_store = RoleStore(tmp_path)
+    role_store.create_role(
+        role_id="mira",
+        name="Mira",
+        system_prompt="You are Mira.",
+    )
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.get_or_create("role:mira")
+    session.add_message("assistant", "旧图片", media=["D:\\images\\old.png"])
+    session.add_message("assistant", "最新文本")
+    session_manager.save(session)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=role_store,
+        session_manager=session_manager,
+        agent_loop=SimpleNamespace(),
+        event_bus=EventBus(),
+    )
+
+    response = await service.handle(
+        {
+            "id": "image-history-1",
+            "method": "session.imageHistory",
+            "payload": {"role_id": "mira"},
+        },
+        emit_event=Mock(),
+    )
+
+    assert response.error is None
+    assert response.payload["session_key"] == "role:mira"
+    assert response.payload["messages"] == [{
+        "id": "role:mira:0",
+        "seq": 0,
+        "timestamp": session.messages[0]["timestamp"],
+        "media": ["D:\\images\\old.png"],
+    }]

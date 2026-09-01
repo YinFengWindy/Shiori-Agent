@@ -30,14 +30,18 @@ function createHarness() {
       actions.push("open-role");
       return true;
     },
+    loadMessagesAround: async () => {
+      actions.push("load-around");
+      return true;
+    },
   };
 }
 
 describe("roleSearchNavigation", () => {
-  it("enters the message view before opening a role result", () => {
+  it("enters the message view before opening a role result", async () => {
     const harness = createHarness();
 
-    navigateToRoleSearchResult({
+    await navigateToRoleSearchResult({
       result: createResult("role"),
       messageKey: "",
       ...harness,
@@ -46,15 +50,31 @@ describe("roleSearchNavigation", () => {
     assert.deepEqual(harness.actions, ["open-chat", "clear-message", "open-role"]);
   });
 
-  it("enters the message view before queuing a message result", () => {
+  it("loads matching context before queuing a message result", async () => {
     const harness = createHarness();
 
-    navigateToRoleSearchResult({
+    await navigateToRoleSearchResult({
       result: createResult("message"),
       messageKey: "message-1",
       ...harness,
     });
 
-    assert.deepEqual(harness.actions, ["open-chat", "queue-message", "open-role"]);
+    assert.deepEqual(harness.actions, ["open-chat", "clear-message", "open-role", "load-around", "queue-message"]);
+  });
+
+  it("does not queue a DOM highlight when the persisted context cannot be loaded", async () => {
+    const harness = createHarness();
+    harness.loadMessagesAround = async () => {
+      harness.actions.push("load-around");
+      return false;
+    };
+
+    await navigateToRoleSearchResult({
+      result: createResult("message"),
+      messageKey: "message-1",
+      ...harness,
+    });
+
+    assert.deepEqual(harness.actions, ["open-chat", "clear-message", "open-role", "load-around"]);
   });
 });

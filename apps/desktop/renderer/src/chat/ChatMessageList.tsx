@@ -26,6 +26,8 @@ type ChatMessageListProps = {
   conversationListRef: React.RefObject<HTMLDivElement | null>;
   highlightedMessageKey: string;
   visibleMessageWindow: ReturnType<typeof getVisibleChatMessages>;
+  canLoadOlderMessages?: boolean;
+  loadingOlderMessages?: boolean;
   onBeginAttachmentDrag: (path: string) => void;
   onExpandOlderMessages: () => void;
   onJumpToMessage: (messageKey: string) => void;
@@ -55,6 +57,8 @@ export const ChatMessageList = React.memo(function ChatMessageList({
   conversationListRef,
   highlightedMessageKey,
   visibleMessageWindow,
+  canLoadOlderMessages = visibleMessageWindow.hiddenMessageCount > 0,
+  loadingOlderMessages = false,
   onBeginAttachmentDrag,
   onExpandOlderMessages,
   onJumpToMessage,
@@ -77,7 +81,7 @@ export const ChatMessageList = React.memo(function ChatMessageList({
       )}
     >
       <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
-        {visibleMessageWindow.hiddenMessageCount > 0 ? (
+        {canLoadOlderMessages ? (
           <div className="flex justify-center">
             <button
               className={cx(
@@ -85,9 +89,10 @@ export const ChatMessageList = React.memo(function ChatMessageList({
                 focusResetClass,
               )}
               type="button"
+              disabled={loadingOlderMessages}
               onClick={onExpandOlderMessages}
             >
-              {`更早消息 ${visibleMessageWindow.hiddenMessageCount} 条`}
+              {loadingOlderMessages ? "正在加载更早消息" : `更早消息 ${visibleMessageWindow.hiddenMessageCount} 条`}
             </button>
           </div>
         ) : null}

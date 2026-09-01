@@ -135,6 +135,8 @@ export type RoleTask = {
 /** Single message in a role-bound session. */
 export type SessionMessage = {
   id?: string;
+  /** Stable persisted ordering cursor assigned by the session store. */
+  seq?: number;
   /** Stable renderer-only identity used to keep one visual message node mounted across local and bridge updates. */
   render_id?: string;
   role: string;
@@ -195,6 +197,56 @@ export type SessionPayload = {
     loneliness_runtime?: LonelinessRuntime | null;
   };
   messages: SessionMessage[];
+  /** Present for sessions opened through the paginated desktop bridge contract. */
+  pagination?: SessionPaginationState;
+};
+
+/** Session fields sent by the bridge when message history is intentionally omitted. */
+export type SessionSummary = Omit<SessionPayload, "messages" | "pagination">;
+
+/** One bounded group of persisted session messages. */
+export type SessionMessagePage = {
+  messages: SessionMessage[];
+  limit: number;
+  has_more: boolean;
+  oldest_seq: number | null;
+  newest_seq: number | null;
+  total_count: number;
+  before_seq: number | null;
+  next_before_seq: number | null;
+};
+
+/** Renderer-owned cursor metadata for the messages currently loaded in one session. */
+export type SessionPaginationState = Omit<SessionMessagePage, "messages">;
+
+/** Paginated session payload returned when a role session is opened. */
+export type SessionOpenPayload = {
+  session: SessionSummary;
+  page: SessionMessagePage;
+};
+
+/** Summary plus one changed message used by incremental bridge responses and events. */
+export type SessionMessageUpdatePayload = {
+  session: SessionSummary;
+  message: SessionMessage | null;
+};
+
+/** Lightweight persisted-message hit returned by the desktop search API. */
+export type SessionSearchResult = {
+  id: string;
+  session_key: string;
+  seq: number;
+  role: string;
+  preview: string;
+  timestamp: string | null;
+};
+
+/** Lightweight persisted media projection used outside the paginated chat window. */
+export type SessionImageHistoryMessage = {
+  id: string;
+  seq: number;
+  timestamp: string | null;
+  media: unknown[];
 };
 
 /** Editable role form state used by the role editor. */
