@@ -1,20 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { ArrowsClockwise, CaretLeft, CaretRight, Minus, X } from "@phosphor-icons/react";
 import type { WindowControlAction } from "../../../src/bridge/shared";
-import { DeleteIcon, ResetIcon } from "../shared/icons";
 import { cx } from "../shared/styles";
 
-const menuItems = ["文件", "编辑", "视图", "帮助"] as const;
-type MenuItem = {
-  label: string;
-  onSelect: () => void;
-  disabled?: boolean;
-};
 const titlebarIconClass =
-  "[-webkit-app-region:no-drag] m-0 grid h-[calc(var(--titlebar-height)_+_1px)] w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-inherit disabled:text-[#b8b8b8] enabled:hover:bg-black/5";
-const titlebarArrowClass =
-  "relative h-2.5 w-[13px] before:absolute before:top-[4.5px] before:h-[1.3px] before:w-[11px] before:rounded-full before:bg-current before:content-[''] after:absolute after:top-[2.5px] after:h-[5px] after:w-[5px] after:border-l-[1.3px] after:border-t-[1.3px] after:border-current after:content-['']";
+  "[-webkit-app-region:no-drag] m-0 grid h-6 w-6 place-items-center rounded-md border-0 bg-transparent p-0 text-[#5f6b76] transition-colors hover:bg-black/5 hover:text-[#2c3440] disabled:text-[#b8b8b8] disabled:hover:bg-transparent disabled:hover:text-[#b8b8b8]";
+const titlebarSidebarIconClass =
+  "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 const windowControlClass =
-  "[-webkit-app-region:no-drag] m-0 grid h-[calc(var(--titlebar-height)_+_1px)] w-[46px] place-items-center border-0 bg-transparent p-0 text-inherit hover:bg-black/5";
+  "[-webkit-app-region:no-drag] m-0 grid h-[calc(var(--titlebar-height)_+_1px)] w-[46px] place-items-center border-0 bg-transparent p-0 text-[#5f6b76] transition-colors hover:bg-black/5 hover:text-[#2c3440]";
 
 /** Renders the frameless desktop title bar and window controls. */
 export function TitleBar({
@@ -23,89 +16,27 @@ export function TitleBar({
   canGoBack,
   canGoForward,
   canRefreshSession,
-  canEditRole,
   onToggleSidebar,
   onGoBack,
   onGoForward,
   onRefreshSession,
-  onCreateRole,
-  onEditRole,
-  onOpenSettings,
-  onRefreshBridge,
-  onRestartBridge,
 }: {
   sidebarCollapsed: boolean;
   windowMaximized: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
   canRefreshSession: boolean;
-  canEditRole: boolean;
   onToggleSidebar: () => void;
   onGoBack: () => void;
   onGoForward: () => void;
   onRefreshSession: () => void;
-  onCreateRole: () => void;
-  onEditRole: () => void;
-  onOpenSettings: () => void;
-  onRefreshBridge: () => void;
-  onRestartBridge: () => void;
 }) {
-  const [openMenu, setOpenMenu] = useState<typeof menuItems[number] | null>(null);
-  const rootRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    function handlePointerDown(event: PointerEvent): void {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpenMenu(null);
-      }
-    }
-
-    function handleEscape(event: KeyboardEvent): void {
-      if (event.key === "Escape") {
-        setOpenMenu(null);
-      }
-    }
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleEscape);
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, []);
-
   function controlWindow(action: WindowControlAction) {
     void window.miraDesktop.windowControl(action);
   }
 
-  function toggleMenu(menu: typeof menuItems[number]): void {
-    setOpenMenu((current) => (current === menu ? null : menu));
-  }
-
-  function selectMenuItem(action: () => void): void {
-    setOpenMenu(null);
-    action();
-  }
-
-  const menuActions: Record<typeof menuItems[number], MenuItem[]> = {
-    文件: [
-      { label: "新对话", onSelect: onCreateRole },
-    ],
-    编辑: [
-      { label: "编辑当前角色", onSelect: onEditRole, disabled: !canEditRole },
-    ],
-    视图: [
-      { label: sidebarCollapsed ? "展开侧边栏" : "收起侧边栏", onSelect: onToggleSidebar },
-      { label: "设置", onSelect: onOpenSettings },
-    ],
-    帮助: [
-      { label: "刷新连接桥", onSelect: onRefreshBridge },
-      { label: "重启连接桥", onSelect: onRestartBridge },
-    ],
-  };
-
   return (
-    <header ref={rootRef} className="titlebar [-webkit-app-region:drag] flex h-[calc(var(--titlebar-height)+5px)] select-none items-center justify-between bg-transparent text-[#747474]">
+    <header className="titlebar [-webkit-app-region:drag] flex h-[calc(var(--titlebar-height)+5px)] select-none items-center justify-between bg-transparent text-[#747474]">
       <div className="titlebar-left flex h-full items-center gap-0 pl-0.5">
         <button
           className={cx("titlebar-icon titlebar-sidebar", titlebarIconClass)}
@@ -116,72 +47,40 @@ export function TitleBar({
         >
           <span
             className={cx(
-              "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']",
+              titlebarSidebarIconClass,
               sidebarCollapsed
                 ? "before:bottom-[2.2px] before:left-[0.8px] before:top-[2.2px]"
                 : "before:bottom-0 before:left-[3.3px] before:top-0",
             )}
+            aria-hidden="true"
           />
         </button>
         <button className={cx("titlebar-icon titlebar-back", titlebarIconClass)} type="button" aria-label="后退" onClick={onGoBack} disabled={!canGoBack}>
-          <span className={cx(titlebarArrowClass, "before:left-0.5 after:left-[1.5px] after:-rotate-45")} />
+          <CaretLeft className="h-[17px] w-[17px]" weight="bold" aria-hidden="true" />
         </button>
         <button className={cx("titlebar-icon titlebar-forward", titlebarIconClass)} type="button" aria-label="前进" onClick={onGoForward} disabled={!canGoForward}>
-          <span className={cx(titlebarArrowClass, "before:right-0.5 after:right-[1.5px] after:rotate-[135deg]")} />
+          <CaretRight className="h-[17px] w-[17px]" weight="bold" aria-hidden="true" />
         </button>
         <button className={cx("titlebar-icon titlebar-refresh", titlebarIconClass)} type="button" aria-label="刷新会话" onClick={onRefreshSession} disabled={!canRefreshSession}>
-          <ResetIcon className="h-[15px] w-[15px] fill-current" />
+          <ArrowsClockwise className="h-[14px] w-[14px]" aria-hidden="true" />
         </button>
-        <nav className="titlebar-menu ml-0.5 flex h-full items-center gap-0" aria-label="应用菜单">
-          {menuItems.map((item) => (
-            <div key={item} className="titlebar-menu-entry relative">
-              <button
-                className={cx(
-                  "titlebar-menu-item [-webkit-app-region:no-drag] m-0 h-6 min-w-11 rounded-md border-0 bg-transparent px-2 text-[13px] tracking-normal text-inherit hover:bg-black/5",
-                  openMenu === item ? "bg-black/5" : "cursor-default",
-                )}
-                type="button"
-                aria-haspopup="menu"
-                aria-expanded={openMenu === item}
-                onClick={() => toggleMenu(item)}
-              >
-                {item}
-              </button>
-              {openMenu === item ? (
-                <div className="titlebar-dropdown [-webkit-app-region:no-drag] absolute left-0 top-[calc(100%+2px)] z-20 min-w-max rounded-[7px] border border-[#e7e7e7] bg-white px-1 py-1.5 shadow-[0_6px_18px_rgba(0,0,0,0.08)]">
-                  {menuActions[item].map((menuAction) => (
-                    <button
-                      key={menuAction.label}
-                      className="flex h-7 w-full items-center justify-start rounded-[5px] border-0 bg-transparent px-2.5 text-left text-[12px] leading-none text-[#4b4b4b] whitespace-nowrap hover:bg-[#f0f0f0] disabled:cursor-default disabled:text-[#b8b8b8] disabled:hover:bg-transparent"
-                      type="button"
-                      disabled={menuAction.disabled}
-                      onClick={() => selectMenuItem(menuAction.onSelect)}
-                    >
-                      {menuAction.label}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </nav>
       </div>
       <div className="window-controls ml-auto flex h-full items-center">
         <button className={cx("window-control", windowControlClass)} type="button" aria-label="最小化" onClick={() => controlWindow("minimize")}>
-          <span className="window-minimize relative h-[11px] w-[11px] before:absolute before:inset-x-0 before:top-1.5 before:h-[1.5px] before:bg-current before:content-['']" />
+          <Minus className="h-3 w-3" aria-hidden="true" />
         </button>
         <button className={cx("window-control", windowControlClass)} type="button" aria-label="最大化" onClick={() => controlWindow("toggleMaximize")}>
           <span
             className={cx(
-              "window-maximize relative h-[11px] w-[11px]",
+              "window-maximize relative block h-[11px] w-[11px] border-current",
               windowMaximized
-                ? "before:absolute before:right-0 before:top-0 before:h-[8px] before:w-[8px] before:rounded-[1px] before:border-[1.3px] before:border-current before:bg-transparent before:content-[''] after:absolute after:bottom-0 after:left-0 after:h-[8px] after:w-[8px] after:rounded-[1px] after:border-[1.3px] after:border-current after:bg-transparent after:content-['']"
-                : "rounded-sm border-[1.5px] border-current",
+                ? "before:absolute before:bottom-0 before:left-0 before:h-[8px] before:w-[8px] before:rounded-[1.5px] before:border-[1.3px] before:border-current before:content-[''] after:absolute after:right-0 after:top-0 after:h-[8px] after:w-[8px] after:rounded-[1.5px] after:border-[1.3px] after:border-current after:content-['']"
+                : "block rounded-[1.5px] border-[1.3px]",
             )}
           />
         </button>
         <button className={cx("window-control window-control-close", windowControlClass, "hover:bg-[#c42b1c] hover:text-white")} type="button" aria-label="关闭" onClick={() => controlWindow("close")}>
-          <DeleteIcon className="h-[11px] w-[11px] fill-current" />
+          <X className="h-[13px] w-[13px]" aria-hidden="true" />
         </button>
       </div>
     </header>

@@ -1,5 +1,5 @@
 import type React from "react";
-import { cx, secondarySidebarSurfaceClass } from "../shared/styles";
+import { cx, secondarySidebarSurfaceClass, sidebarNavItemClass } from "../shared/styles";
 
 export type RoleWorkspaceSectionId = "roles-list" | "role-create" | "role-detail" | "role-assets";
 
@@ -8,7 +8,6 @@ type RoleWorkspaceSidebarProps = {
   collapsed: boolean;
   animating: boolean;
   width: number;
-  onBackToChat: () => void;
   onOpenSection: (section: RoleWorkspaceSectionId) => void;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
 };
@@ -19,19 +18,20 @@ export function RoleWorkspaceSidebar({
   collapsed,
   animating,
   width,
-  onBackToChat,
   onOpenSection,
   onBeginResize,
 }: RoleWorkspaceSidebarProps) {
-  const sidebarActionClass =
-    "flex min-h-[38px] items-center justify-between rounded-xl border border-transparent px-3 text-left text-sm text-[#32363C] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
-  const sidebarBackClass =
-    "mb-3 flex h-8 items-center gap-2 rounded-md border border-transparent bg-transparent px-2 text-left text-sm text-[#6E737A] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
+  const sidebarActionClass = cx(
+    sidebarNavItemClass,
+    "flex min-h-[38px] items-center justify-between px-3 text-left text-sm text-[#3a4453]",
+  );
+  const activeSectionClass =
+    "bg-white/90 font-medium text-[#3a4453] shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:bg-white focus-visible:bg-white";
 
   return (
     <aside
       className={cx(
-        "role-workspace-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] py-3",
+        "role-workspace-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] py-3",
         secondarySidebarSurfaceClass,
         animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
@@ -39,31 +39,16 @@ export function RoleWorkspaceSidebar({
       aria-hidden={collapsed}
       style={{ width }}
     >
-      <button
-        data-testid="role-workspace-back-button"
-        className={sidebarBackClass}
-        type="button"
-        onClick={onBackToChat}
-      >
-        <span className="text-base leading-none">←</span>
-        <span>返回应用</span>
-      </button>
-      <div className="mb-3 grid gap-1 px-2">
+      <div className="grid gap-1 px-2">
         <button
-          className={cx(
-            sidebarActionClass,
-            activeSection === "roles-list" && "border-[#D9E0E8] bg-white/80 font-medium shadow-[0_1px_2px_rgba(15,23,42,0.05)]",
-          )}
+          className={cx(sidebarActionClass, activeSection === "roles-list" && activeSectionClass)}
           type="button"
           onClick={() => onOpenSection("roles-list")}
         >
           <span>角色列表</span>
         </button>
         <button
-          className={cx(
-            sidebarActionClass,
-            activeSection === "role-create" && "border-[#D9E0E8] bg-white/80 font-medium shadow-[0_1px_2px_rgba(15,23,42,0.05)]",
-          )}
+          className={cx(sidebarActionClass, activeSection === "role-create" && activeSectionClass)}
           type="button"
           onClick={() => onOpenSection("role-create")}
         >

@@ -56,7 +56,7 @@ export function RoleProfilePanel({
       </div>
       <label className="grid gap-2 text-sm text-[#374151]">
         <span className="font-medium">系统提示词</span>
-        <textarea ref={promptRef} className={cx(inputClass, "min-h-[320px] resize-none overflow-hidden border-[#D8DCE2] !bg-white px-4 py-3 font-mono text-[13px] leading-6 text-[#1F2937] placeholder:text-[#9CA3AF] focus:border-[#2176FF] focus:ring-2 focus:ring-[#2176FF]/15")} data-testid="edit-role-prompt" value={roleForm.systemPrompt} placeholder="定义这个角色的行为、语气和边界" onChange={(event) => onUpdate((current) => ({ ...current, systemPrompt: event.target.value }))} />
+        <textarea ref={promptRef} className={cx(inputClass, "min-h-[320px] resize-none overflow-hidden border-[#D8DCE2] !bg-white px-4 py-3 font-mono text-[13px] leading-6 text-[#1F2937] placeholder:text-[#9CA3AF] focus:border-[#D8DCE2]")} data-testid="edit-role-prompt" value={roleForm.systemPrompt} placeholder="定义这个角色的行为、语气和边界" onChange={(event) => onUpdate((current) => ({ ...current, systemPrompt: event.target.value }))} />
       </label>
     </div>
   );

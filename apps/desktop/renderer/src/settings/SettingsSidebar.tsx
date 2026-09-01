@@ -1,6 +1,5 @@
 import type React from "react";
-import { Brain, ChatCircleDots, GearSix, Microphone, PlugsConnected } from "@phosphor-icons/react";
-import { cx, inputClass, secondarySidebarSurfaceClass } from "../shared/styles";
+import { cx, secondarySidebarSurfaceClass, sidebarNavItemClass } from "../shared/styles";
 
 export type SettingsSectionId =
   | "models"
@@ -19,49 +18,32 @@ export const settingsSections: Array<{ id: SettingsSectionId; label: string }> =
   { id: "advanced", label: "高级" },
 ];
 
-const settingsSectionIcons = { models: Brain, channels: ChatCircleDots, memory: Brain, integrations: PlugsConnected, voice: Microphone, advanced: GearSix } as const;
-
 type SettingsSidebarProps = {
   activeSection: SettingsSectionId;
-  dirty: boolean;
   collapsed: boolean;
   animating: boolean;
   width: number;
-  onBackToChat: () => void;
   onOpenSection: (section: SettingsSectionId) => void;
-  onSearchChange: (value: string) => void;
   onBeginResize: (event: React.PointerEvent<HTMLDivElement>) => void;
-  search: string;
 };
-
-function sectionMatches(section: { id: SettingsSectionId; label: string }, query: string): boolean {
-  if (!query) return true;
-  return section.label.toLowerCase().includes(query) || section.id.toLowerCase().includes(query);
-}
 
 export function SettingsSidebar({
   activeSection,
-  dirty,
   collapsed,
   animating,
   width,
-  onBackToChat,
   onOpenSection,
-  onSearchChange,
   onBeginResize,
-  search,
 }: SettingsSidebarProps) {
-  const query = search.trim().toLowerCase();
-  const visibleSections = settingsSections.filter((section) => sectionMatches(section, query));
-  const sidebarActionClass =
-    "flex min-h-[38px] items-center justify-between rounded-md border border-transparent px-3 text-left text-sm text-[#32363C] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
-  const sidebarBackClass =
-    "mb-3 flex h-8 items-center gap-2 rounded-md border border-transparent bg-transparent px-2 text-left text-sm text-[#6E737A] transition-colors hover:border-[#D9E0E8] hover:bg-white/70 focus-visible:border-[#D9E0E8] focus-visible:bg-white/70 focus-visible:outline-none";
+  const sidebarActionClass = cx(
+    sidebarNavItemClass,
+    "flex min-h-[38px] items-center px-3 text-left text-sm text-[#3a4453]",
+  );
 
   return (
     <aside
       className={cx(
-        "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] py-3",
+        "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] py-5",
         secondarySidebarSurfaceClass,
         animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
@@ -69,36 +51,20 @@ export function SettingsSidebar({
       aria-hidden={collapsed}
       style={{ width }}
     >
-      <button data-testid="settings-back-button" className={sidebarBackClass} type="button" onClick={onBackToChat}>
-        <span className="text-base leading-none">←</span>
-        <span>返回应用</span>
-      </button>
-      <input
-        className={cx(
-          inputClass,
-          "mb-3 h-10 rounded-md px-4 py-0 text-sm",
-        )}
-        placeholder="搜索设置..."
-        value={search}
-        onChange={(event) => onSearchChange(event.target.value)}
-      />
-      <nav className="scrollbar-soft grid min-h-0 content-start gap-4 overflow-y-auto pr-0">
+      <nav className="scrollbar-soft grid min-h-0 content-start gap-1 overflow-y-auto px-2 pr-0">
         <div className="grid gap-1">
-          {visibleSections.map((section) => {
-            const Icon = settingsSectionIcons[section.id];
-            return <button
+          {settingsSections.map((section) => <button
               key={section.id}
               className={cx(
                 sidebarActionClass,
-                activeSection === section.id && "border-[#D9E0E8] bg-white/80 font-medium shadow-[0_1px_2px_rgba(15,23,42,0.05)]",
+                activeSection === section.id
+                  && "bg-white/80 font-medium text-[#3a4453] shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:bg-white focus-visible:bg-white",
               )}
               type="button"
               onClick={() => onOpenSection(section.id)}
             >
-              <span className="inline-flex items-center gap-2"><Icon className="h-4 w-4 text-[#7B8794]" weight="duotone" aria-hidden="true" />{section.label}</span>
-              {dirty && activeSection === section.id ? <span className="h-2.5 w-2.5 rounded-full bg-[#2176FF]" /> : null}
-            </button>
-          })}
+              <span>{section.label}</span>
+            </button>)}
         </div>
       </nav>
       <div

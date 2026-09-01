@@ -141,11 +141,6 @@ export type SettingsSnapshot = {
 
 export type SaveSettingsResult = {
   ok: boolean;
-  restart: {
-    ok: boolean;
-    running: boolean;
-    lastError: string | null;
-  };
   health: {
     ok: boolean;
     message: string;

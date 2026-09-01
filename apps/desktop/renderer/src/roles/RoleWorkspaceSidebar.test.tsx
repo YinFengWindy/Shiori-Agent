@@ -12,7 +12,6 @@ describe("RoleWorkspaceSidebar", () => {
         collapsed={false}
         animating={false}
         width={240}
-        onBackToChat={() => undefined}
         onOpenSection={() => undefined}
         onBeginResize={() => undefined}
       />,

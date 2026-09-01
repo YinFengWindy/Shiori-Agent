@@ -104,7 +104,6 @@ describe("saveSettingsPageData", () => {
           calls.push("saveSettings");
           return {
             ok: true,
-            restart: { ok: true, running: true, lastError: null },
             health: { ok: true, message: "ok" },
           };
         },
@@ -133,7 +132,7 @@ describe("saveSettingsPageData", () => {
     await saveSettingsPageData({
       saveSettings: async (value) => {
         calls.push(`save:${String("pendingRoleModelUpdates" in value)}`);
-        return { ok: true, restart: { ok: true, running: true, lastError: null }, health: { ok: true, message: "ok" } };
+        return { ok: true, health: { ok: true, message: "ok" } };
       },
       invoke: async (request) => {
         calls.push(`${request.method}:${String(request.payload.role_id)}`);
@@ -144,17 +143,16 @@ describe("saveSettingsPageData", () => {
     assert.deepEqual(calls, ["save:false", "roles.update:role-1"]);
   });
 
-  it("keeps deferred role changes when the settings restart fails", async () => {
+  it("keeps deferred role changes when the settings health check fails", async () => {
     const draft = createSettingsFormData();
     draft.pendingRoleModelUpdates = [{ roleId: "role-1", runtimeConfig: { dialogue_model_registration_id: "registration-2" } }];
     const result = await saveSettingsPageData({
       saveSettings: async () => ({
         ok: false,
-        restart: { ok: false, running: false, lastError: "restart failed" },
-        health: { ok: false, message: "restart failed" },
+        health: { ok: false, message: "bridge unavailable" },
       }),
       invoke: async () => {
-        throw new Error("role updates must wait for a healthy restart");
+        throw new Error("role updates must wait for a healthy bridge");
       },
       readSettings: async () => createSettingsSnapshot(),
     }, draft);

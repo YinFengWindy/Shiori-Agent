@@ -1,5 +1,4 @@
-import { useDeferredValue, useState } from "react";
-import { SettingsPageToolbar } from "./SettingsPageToolbar";
+import { useState } from "react";
 import { SettingsSaveFeedback } from "./SettingsSaveFeedback";
 import { SettingsSectionContent } from "./SettingsSectionContent";
 import { type SettingsSectionId, settingsSections } from "./SettingsSidebar";
@@ -13,27 +12,24 @@ import { cardClass, cx } from "../shared/styles";
 
 type SettingsPageProps = {
   bridgeReady: boolean;
-  search: string;
   section: SettingsSectionId;
-  onMetaChange?: (meta: { configPath: string; dirty: boolean }) => void;
 };
 
 /** Shared surface style for every settings page state. */
 export const settingsPageSurfaceClass = "settings-page bg-white";
 
-/** Responsive spacing for the settings toolbar. */
-export const settingsToolbarClass = "settings-hover-toolbar border-b border-[#E8EBF0] bg-white px-3 py-3 sm:px-5 lg:px-7";
-
 /** Responsive spacing for the scrollable settings content. */
-export const settingsContentClass = "relative scrollbar-soft overflow-y-auto bg-white px-3 py-5 sm:px-5 lg:px-7 lg:py-7";
+export const settingsContentClass = "relative scrollbar-soft overflow-y-auto bg-white px-4 py-8 sm:px-10 lg:px-16 lg:py-10";
 
 /** Renders the active settings domain and delegates persistence to its controller. */
-export function SettingsPage({ bridgeReady, search, section, onMetaChange }: SettingsPageProps) {
+export function SettingsPage({
+  bridgeReady,
+  section,
+}: SettingsPageProps) {
   const [activeSubsections, setActiveSubsections] = useState<Record<SettingsSectionId, string>>(
     createInitialSettingsSubsectionState,
   );
-  const deferredSearch = useDeferredValue(search.trim().toLowerCase());
-  const controller = useSettingsPageController({ bridgeReady, onMetaChange });
+  const controller = useSettingsPageController({ bridgeReady });
 
   if (controller.loadError) {
     return (
@@ -53,14 +49,7 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
     );
   }
 
-  const visibleSections = settingsSections.filter((item) => (
-    !deferredSearch
-    || item.label.toLowerCase().includes(deferredSearch)
-    || item.id.toLowerCase().includes(deferredSearch)
-  ));
-  const currentSection = visibleSections.find((item) => item.id === section)
-    ?? visibleSections[0]
-    ?? null;
+  const currentSection = settingsSections.find((item) => item.id === section) ?? settingsSections[0] ?? null;
   const currentId = currentSection?.id ?? null;
   const visibleSubsections = currentId ? settingsSubsections[currentId] : [];
   const currentSubsectionId = currentId
@@ -77,40 +66,50 @@ export function SettingsPage({ bridgeReady, search, section, onMetaChange }: Set
   }
 
   return (
-    <section className={cx(settingsPageSurfaceClass, "relative grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden")} data-testid="settings-page">
+    <section className={cx(settingsPageSurfaceClass, "relative grid h-full grid-rows-[minmax(0,1fr)] overflow-hidden")} data-testid="settings-page">
       <SettingsSaveFeedback
         phase={controller.savePhase}
         message={controller.statusMessage}
       />
-      <div className="settings-content grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-        <div className={settingsToolbarClass}>
-          <SettingsPageToolbar
-            bridgeReady={bridgeReady}
-            currentSubsectionId={currentSubsectionId}
-            isDirty={controller.isDirty}
-            savePhase={controller.savePhase}
-            subsections={visibleSubsections}
-            onReset={controller.reset}
-            onSave={controller.save}
-            onSubsectionChange={updateActiveSubsection}
-          />
-        </div>
-        <div className={settingsContentClass}>
-          <div className="mx-auto w-full max-w-none">
-            {!currentSection ? (
-              <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-[#7f8490]")}>
-                没有匹配的设置项
-              </div>
-            ) : null}
-            {currentId && currentSubsectionId ? (
-              <SettingsSectionContent
-                sectionId={currentId}
-                subsectionId={currentSubsectionId}
-                draft={controller.draft}
-                updateDraft={controller.updateDraft}
-              />
-            ) : null}
-          </div>
+      <div className={settingsContentClass}>
+        <div className="mx-auto w-full max-w-[840px]">
+          {!currentSection ? (
+            <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-[#7f8490]")}>
+              没有匹配的设置项
+            </div>
+          ) : (
+            <header className="mb-6">
+              <h2 className="m-0 text-[22px] font-normal leading-tight text-[#182230]">{currentSection.label}</h2>
+              {visibleSubsections.length > 1 ? (
+                <nav className="mt-7 flex max-w-full gap-7 overflow-x-auto" aria-label="设置子区">
+                  {visibleSubsections.map((item) => (
+                    <button
+                      className={cx(
+                        "relative shrink-0 border-0 bg-transparent px-0 pb-2 text-[13px] transition focus:outline-none",
+                        item.id === currentSubsectionId
+                          ? "font-medium text-[#182230] after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[#182230]"
+                          : "text-[#98A2B3] hover:text-[#3a4453]",
+                      )}
+                      key={item.id}
+                      type="button"
+                      aria-current={item.id === currentSubsectionId ? "page" : undefined}
+                      onClick={() => updateActiveSubsection(item.id)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </nav>
+              ) : null}
+            </header>
+          )}
+          {currentId && currentSubsectionId ? (
+            <SettingsSectionContent
+              sectionId={currentId}
+              subsectionId={currentSubsectionId}
+              draft={controller.draft}
+              updateDraft={controller.updateDraft}
+            />
+          ) : null}
         </div>
       </div>
     </section>

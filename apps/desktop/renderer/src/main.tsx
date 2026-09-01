@@ -29,6 +29,7 @@ import { useNavigationHistory } from "./app/useNavigationHistory";
 import { useRoleManagement } from "./app/useRoleManagement";
 import { useRoleCreationController } from "./app/useRoleCreationController";
 import { useRoleSearch } from "./app/roleSearch";
+import { navigateToRoleSearchResult } from "./app/roleSearchNavigation";
 import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
 import { useStoryWorkspacePresentation } from "./app/useStoryWorkspacePresentation";
@@ -107,10 +108,7 @@ function App(): React.ReactElement {
   const [selectedAvatarAsset, setSelectedAvatarAsset] = useState("");
   const [selectedChatBackground, setSelectedChatBackground] = useState("");
   const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
-  const [settingsSearch, setSettingsSearch] = useState("");
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
-  const [, setSettingsConfigPath] = useState("");
-  const [settingsDirty, setSettingsDirty] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const imageHistorySidebar = useRightSidebarState({
     minWidth: historySidebarMinWidth,
@@ -212,7 +210,6 @@ function App(): React.ReactElement {
     roles,
     setError,
     setNotice,
-    setSettingsSearch,
     setSettingsSection,
     setSidebarAnimating: leftSidebar.setAnimating,
     setSidebarCollapsed: leftSidebar.setCollapsed,
@@ -267,7 +264,7 @@ function App(): React.ReactElement {
     openRoleRequestIdRef,
   });
 
-  const { refreshBridge, restartBridge } = useDesktopBridgeLifecycle({
+  useDesktopBridgeLifecycle({
     activeRoleId,
     activeIllustration,
     setActiveRoleId,
@@ -507,16 +504,11 @@ function App(): React.ReactElement {
       canGoBack={canGoBack}
       canGoForward={canGoForward}
       canRefreshSession={mainView.kind === "chat" && Boolean(activeRoleId)}
-      canEditRole={mainView.kind === "chat" && Boolean(activeRoleId)}
       onToggleSidebar={leftSidebar.toggle}
       onGoBack={() => void navigateHistory("back", openRole)}
       onGoForward={() => void navigateHistory("forward", openRole)}
       onRefreshSession={() => void refreshSession()}
-      onCreateRole={() => openRoleWorkspace({ kind: "role-create" })}
-      onEditRole={() => openRoleWorkspace(activeRoleId ? { kind: "role-detail", roleId: activeRoleId } : { kind: "roles-list" })}
       onOpenSettings={() => openSettingsWorkspace()}
-      onRefreshBridge={() => void refreshBridge()}
-      onRestartBridge={() => void restartBridge()}
       shellResizing={leftSidebar.resizing || imageHistorySidebar.resizing || chatLatestImageSidebar.resizing}
       sidebarState={{
         collapsed: leftSidebar.collapsed,
@@ -527,9 +519,6 @@ function App(): React.ReactElement {
       }}
       mainView={mainView}
       settingsSection={settingsSection}
-      settingsDirty={settingsDirty}
-      settingsSearch={settingsSearch}
-      onSettingsSearchChange={setSettingsSearch}
       onBackToChat={() => openChatView()}
       onOpenSettingsSection={(section) => openSettingsWorkspace(section)}
       imageStudioViewActive={imageStudioViewActive}
@@ -623,10 +612,6 @@ function App(): React.ReactElement {
       onSaveRoleAssets={(nextSelection) => void saveRoleAssets(nextSelection)}
       differenceGeneration={roleDifferenceGeneration.state}
       onGenerateDifferences={(baseAsset) => void roleDifferenceGeneration.generate(baseAsset)}
-      onSettingsMetaChange={({ configPath, dirty }) => {
-        setSettingsConfigPath(configPath);
-        setSettingsDirty(dirty);
-      }}
       showSearchDialog={showSearchDialog}
       searchQuery={searchQuery}
       searchingSessions={searchingSessions}
@@ -638,20 +623,20 @@ function App(): React.ReactElement {
       onSelectSearchResult={(result) => {
         setShowSearchDialog(false);
         setSearchQuery("");
-        if (result.matchedField === "message") {
-          const messageKey = getMessageKey(
-            result.roleId,
-            result.matchedMessageId,
-            result.matchedMessageIndex,
-          );
-          if (messageKey) {
-            queueMessageNavigation(result.roleId, messageKey);
-          }
-        } else {
-          setPendingMessageNavigation(null);
-          setHighlightedMessageKey("");
-        }
-        void openRole(result.roleId, null, { recordHistory: true });
+        const messageKey = result.matchedField === "message"
+          ? getMessageKey(result.roleId, result.matchedMessageId, result.matchedMessageIndex)
+          : "";
+        navigateToRoleSearchResult({
+          result,
+          messageKey,
+          openChatView,
+          queueMessageNavigation,
+          clearMessageNavigation: () => {
+            setPendingMessageNavigation(null);
+            setHighlightedMessageKey("");
+          },
+          openRole: (roleId, options) => openRole(roleId, null, options),
+        });
       }}
       onUpdateSearchQuery={setSearchQuery}
       pendingDeleteRole={pendingDeleteRole}
