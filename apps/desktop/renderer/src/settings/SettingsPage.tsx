@@ -78,8 +78,8 @@ export function SettingsPage({
               没有匹配的设置项
             </div>
           ) : (
-            <header className="mb-9">
-              <h2 className="m-0 text-[30px] font-semibold leading-tight text-[#182230]">{currentSection.label}</h2>
+            <header className="mb-6">
+              <h2 className="m-0 text-[26px] font-semibold leading-tight text-[#182230]">{currentSection.label}</h2>
               {visibleSubsections.length > 1 ? (
                 <nav className="mt-7 flex max-w-full gap-7 overflow-x-auto" aria-label="设置子区">
                   {visibleSubsections.map((item) => (

@@ -51,8 +51,8 @@ export function SettingsSidebar({
       aria-hidden={collapsed}
       style={{ width }}
     >
-      <h1 className="m-0 px-5 text-[26px] font-semibold leading-tight text-[#182230]">设置</h1>
-      <nav className="scrollbar-soft grid min-h-0 content-start gap-1 overflow-y-auto px-2 pt-8 pr-0">
+      <h1 className="m-0 px-5 text-[22px] font-semibold leading-tight text-[#182230]">设置</h1>
+      <nav className="scrollbar-soft grid min-h-0 content-start gap-1 overflow-y-auto px-2 pt-4 pr-0">
         <div className="grid gap-1">
           {settingsSections.map((section) => <button
               key={section.id}
