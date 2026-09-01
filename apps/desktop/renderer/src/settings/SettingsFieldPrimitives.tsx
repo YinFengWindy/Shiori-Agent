@@ -8,6 +8,9 @@ import { cx } from "../shared/styles";
 /** Shared compact field styling for editable settings values. */
 export const settingsInputClass = "w-full rounded-md border border-[#D8DCE2] bg-[#F7F9FB] px-2.5 py-2 text-[13px] text-[#182230] transition placeholder:text-[#98A2B3] focus:border-[#D8DCE2] focus:outline-none";
 
+/** Shared icon-only action styling for compact settings controls. */
+export const settingsIconButtonClass = "grid h-8 w-8 shrink-0 place-items-center rounded-md text-[#667085] transition hover:bg-[#F3F6FA] hover:text-[#182230] focus:outline-none";
+
 /** Renders a settings row containing the shared toggle control. */
 export function SettingsToggleField({
   label,
@@ -49,7 +52,7 @@ export function SettingsSecretInput({
     <div className="flex items-center gap-3">
       <input className={cx(settingsInputClass, "flex-1")} type={visible ? "text" : "password"} value={value} onChange={(event) => onChange(event.target.value)} />
       <button
-        className="grid h-8 w-8 place-items-center rounded-md text-[#667085] transition hover:bg-[#F3F6FA] hover:text-[#182230] focus:outline-none"
+        className={settingsIconButtonClass}
         type="button"
         onClick={() => setVisible((current) => !current)}
         aria-label={visible ? "隐藏密钥" : "显示密钥"}

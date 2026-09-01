@@ -1,10 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+import { Microphone, Stop } from "@phosphor-icons/react";
 import type { VoiceInputDevice } from "../../../src/bridge/shared.js";
 import { SettingsField as Field } from "./SettingsField";
-import { SettingsSectionCard, SettingsToggleField, settingsInputClass } from "./SettingsFieldPrimitives";
-import type { SettingsSectionEditorProps } from "./settingsPageTypes";
+import {
+  SettingsSectionCard,
+  SettingsToggleField,
+  settingsIconButtonClass,
+  settingsInputClass,
+} from "./SettingsFieldPrimitives";
+import type { SettingsFormData } from "../../../src/bridge/shared.js";
+import type { SettingsDraftUpdater } from "./settingsPageTypes";
+import { cx } from "../shared/styles";
 
-type VoiceInputSettingsSectionProps = Pick<SettingsSectionEditorProps, "draft" | "updateDraft">;
+type VoiceInputSettingsSectionProps = {
+  draft: Pick<SettingsFormData, "voice">;
+  updateDraft: SettingsDraftUpdater;
+};
 
 /** Owns microphone enumeration and the bounded test-recording lifecycle. */
 export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSettingsSectionProps) {
@@ -28,15 +39,6 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
       }
     };
   }, []);
-
-  async function refreshDevices(): Promise<void> {
-    setTestError("");
-    try {
-      setDevices(await window.miraDesktop.listVoiceInputDevices());
-    } catch (error) {
-      setTestError(error instanceof Error ? error.message : String(error));
-    }
-  }
 
   async function toggleTestRecording(): Promise<void> {
     setTestError("");
@@ -82,19 +84,26 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
         />
       </Field>
       <Field label="麦克风设备">
-        <select
-          className={settingsInputClass}
-          value={draft.voice.microphoneDeviceId}
-          onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, microphoneDeviceId: event.target.value } }))}
-        >
-          <option value="">系统默认设备</option>
-          {devices.map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label || device.deviceId}</option>)}
-        </select>
+        <div className="flex min-w-0 items-center gap-2">
+          <select
+            className={cx(settingsInputClass, "min-w-0 flex-1")}
+            value={draft.voice.microphoneDeviceId}
+            onChange={(event) => updateDraft((current) => ({ ...current, voice: { ...current.voice, microphoneDeviceId: event.target.value } }))}
+          >
+            <option value="">系统默认设备</option>
+            {devices.map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label || device.deviceId}</option>)}
+          </select>
+          <button
+            className={cx(settingsIconButtonClass, testing && "text-[#C83E3E] hover:bg-[#FFF1F1] hover:text-[#C83E3E]")}
+            type="button"
+            aria-label={testing ? "停止麦克风测试" : "测试麦克风"}
+            title={testing ? "停止麦克风测试" : "测试麦克风"}
+            onClick={() => void toggleTestRecording()}
+          >
+            {testing ? <Stop className="h-3.5 w-3.5 fill-current" weight="bold" /> : <Microphone className="h-3.5 w-3.5" weight="bold" />}
+          </button>
+        </div>
       </Field>
-      <div className="flex flex-wrap gap-2">
-        <button className="rounded-md border border-[#D8DCE2] px-2.5 py-1.5 text-[13px] transition hover:border-primary" type="button" onClick={() => void refreshDevices()}>刷新设备</button>
-        <button className="rounded-md border border-[#D8DCE2] px-2.5 py-1.5 text-[13px] transition hover:border-primary" type="button" onClick={() => void toggleTestRecording()}>{testing ? "停止并播放" : "测试录音"}</button>
-      </div>
       {testError ? <div className="text-[11px] text-[#8f2d2d]">{testError}</div> : null}
     </SettingsSectionCard>
   );
