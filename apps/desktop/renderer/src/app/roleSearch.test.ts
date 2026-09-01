@@ -4,67 +4,84 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createRoleSearchResults,
+  parseRoleSearchMessageResults,
   resolveSearchResultMessageKey,
+  resolveRoleSearchMessageResults,
 } from "./roleSearch";
-import type { SearchableSessionRecord } from "./appState";
-import type { SessionPayload } from "../shared/types";
+import type { RoleRecord, SessionSearchResult } from "../shared/types";
 
-function createSession(roleId: string, content: string): SessionPayload {
-  return {
-    key: `role:${roleId}`,
-    created_at: "2026-07-04T12:00:00+08:00",
-    updated_at: "2026-07-04T12:00:00+08:00",
-    last_consolidated: 0,
-    metadata: { role_id: roleId },
-    messages: [
-      {
-        id: `${roleId}-message-1`,
-        role: "assistant",
-        content,
-        timestamp: "2026-07-04T12:00:00+08:00",
-      },
-    ],
-  };
-}
+const roles = [{
+  id: "mira",
+  name: "Mira",
+  avatar_abs: "C:\\roles\\mira.png",
+}] as RoleRecord[];
 
 describe("roleSearch", () => {
-  it("builds both role-name and message-content search hits", () => {
-    const index: SearchableSessionRecord[] = [
-      {
-        roleId: "mira",
-        roleName: "Mira",
-        roleAvatarAbs: null,
-        session: createSession("mira", "hello from the archive"),
-      },
-    ];
+  it("combines local role-name matches with backend FTS hits", () => {
+    const results = createRoleSearchResults(roles, [{
+      id: "role:mira:42",
+      session_key: "role:mira",
+      seq: 42,
+      role: "assistant",
+      preview: "archive memory about the starlight station",
+      timestamp: "2026-07-04T12:00:00+08:00",
+    }] satisfies SessionSearchResult[], "mir");
 
-    const results = createRoleSearchResults(index, "mir");
-
-    assert.equal(results[0]?.matchedField, "role");
-    assert.match(results[0]?.matchedMessagePreview ?? "", /角色 Mira/);
+    assert.deepEqual(results, [{
+      roleId: "mira",
+      roleName: "Mira",
+      roleAvatarAbs: "C:\\roles\\mira.png",
+      sessionKey: "role:mira",
+      matchedMessageTimestamp: null,
+      matchedMessageId: null,
+      matchedMessageIndex: null,
+      matchedMessagePreview: "角色 Mira",
+      matchedField: "role",
+    }, {
+      roleId: "mira",
+      roleName: "Mira",
+      roleAvatarAbs: "C:\\roles\\mira.png",
+      sessionKey: "role:mira",
+      matchedMessageTimestamp: "2026-07-04T12:00:00+08:00",
+      matchedMessageId: "role:mira:42",
+      matchedMessageIndex: null,
+      matchedMessagePreview: "archive memory about the starlight station",
+      matchedField: "message",
+    }]);
   });
 
-  it("falls back to role-and-index keys when a message id is missing", () => {
-    const activeSession = createSession("mira", "hello");
-    activeSession.messages[0].id = undefined;
-    const searchIndex: SearchableSessionRecord[] = [
-      {
-        roleId: "mira",
-        roleName: "Mira",
-        roleAvatarAbs: null,
-        session: activeSession,
-      },
-    ];
+  it("uses a backend message id directly as the navigation key", () => {
+    assert.equal(resolveSearchResultMessageKey("role:mira:42"), "role:mira:42");
+    assert.equal(resolveSearchResultMessageKey(null), "");
+  });
 
-    const messageKey = resolveSearchResultMessageKey({
-      roleId: "mira",
-      messageId: null,
-      messageIndex: 0,
-      activeRoleId: "mira",
-      activeSession,
-      searchIndex,
-    });
+  it("returns no message hits for a malformed bridge payload", () => {
+    assert.deepEqual(parseRoleSearchMessageResults({ results: [{
+      id: "role:mira:42",
+      session_key: "role:mira",
+      seq: "42",
+      role: "assistant",
+      preview: "malformed sequence",
+      timestamp: "2026-07-04T12:00:00+08:00",
+    }] }), []);
+    assert.deepEqual(parseRoleSearchMessageResults({}), []);
+  });
 
-    assert.equal(messageKey, "assistant-0");
+  it("clears message hits when the bridge returns an error", () => {
+    const payload = {
+      results: [{
+        id: "role:mira:42",
+        session_key: "role:mira",
+        seq: 42,
+        role: "assistant",
+        preview: "previous query hit",
+        timestamp: "2026-07-04T12:00:00+08:00",
+      }],
+    };
+
+    assert.deepEqual(
+      resolveRoleSearchMessageResults(payload, { message: "bridge unavailable" }),
+      [],
+    );
   });
 });
