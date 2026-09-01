@@ -116,4 +116,32 @@ describe("ChatMessageList", () => {
     assert.ok(markup.includes('data-message-key="message-999"'));
     assert.ok((markup.match(/data-message-key=/g) ?? []).length < 80);
   });
+
+  it("disables browser scroll anchoring while the virtual window changes", () => {
+    const markup = renderToStaticMarkup(
+      <ChatMessageList
+        activeRole={null}
+        sessionKey="role:mira"
+        conversationEndRef={React.createRef<HTMLDivElement>()}
+        conversationListRef={React.createRef<HTMLDivElement>()}
+        highlightedMessageKey=""
+        visibleMessageWindow={{
+          startIndex: 0,
+          hiddenMessageCount: 0,
+          messages: Array.from({ length: 200 }, (_value, index): SessionMessage => ({
+            id: `message-${index}`,
+            role: "assistant",
+            content: `message-${index}`,
+          })),
+        }}
+        onBeginAttachmentDrag={() => undefined}
+        onExpandOlderMessages={() => undefined}
+        onJumpToMessage={() => undefined}
+        onOpenContextMenu={() => undefined}
+        onOpenImagePreview={() => undefined}
+      />,
+    );
+
+    assert.match(markup, /style="[^"]*overflow-anchor:none[^"]*"/);
+  });
 });

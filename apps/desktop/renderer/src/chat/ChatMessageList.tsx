@@ -61,6 +61,7 @@ export const ChatMessageList = React.memo(function ChatMessageList({
         "conversation-list scrollbar-soft scrollbar-soft-muted relative z-[1] h-full min-h-0 overflow-auto pb-5 pt-7",
         chatBodyClass,
       )}
+      style={{ overflowAnchor: "none" }}
     >
       <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
         {canLoadOlderMessages ? (
