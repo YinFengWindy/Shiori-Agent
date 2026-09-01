@@ -79,13 +79,13 @@ export function SettingsPage({
             </div>
           ) : (
             <header className="mb-6">
-              <h2 className="m-0 text-[26px] font-semibold leading-tight text-[#182230]">{currentSection.label}</h2>
+              <h2 className="m-0 text-[22px] font-normal leading-tight text-[#182230]">{currentSection.label}</h2>
               {visibleSubsections.length > 1 ? (
                 <nav className="mt-7 flex max-w-full gap-7 overflow-x-auto" aria-label="设置子区">
                   {visibleSubsections.map((item) => (
                     <button
                       className={cx(
-                        "relative shrink-0 border-0 bg-transparent px-0 pb-2 text-sm transition focus:outline-none",
+                        "relative shrink-0 border-0 bg-transparent px-0 pb-2 text-[13px] transition focus:outline-none",
                         item.id === currentSubsectionId
                           ? "font-medium text-[#182230] after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[#182230]"
                           : "text-[#98A2B3] hover:text-[#3a4453]",

@@ -28,8 +28,8 @@ export function SettingsField({
           ),
     )}>
       <div className="grid gap-1.5">
-        <div className="text-sm font-medium text-[#182230]">{label}</div>
-        {hint ? <div className="max-w-[680px] text-xs leading-5 text-[#7B8794]">{hint}</div> : null}
+        <div className="text-[13px] font-medium text-[#182230]">{label}</div>
+        {hint ? <div className="max-w-[680px] text-[11px] leading-[18px] text-[#7B8794]">{hint}</div> : null}
       </div>
       <div className={cx("w-full", !stacked && "xl:justify-self-end")}>{children}</div>
     </div>

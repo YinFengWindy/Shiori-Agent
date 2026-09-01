@@ -92,10 +92,10 @@ export function VoiceInputSettingsSection({ draft, updateDraft }: VoiceInputSett
         </select>
       </Field>
       <div className="flex flex-wrap gap-2">
-        <button className="rounded-md border border-[#D8DCE2] px-3 py-2 text-sm transition hover:border-primary" type="button" onClick={() => void refreshDevices()}>刷新设备</button>
-        <button className="rounded-md border border-[#D8DCE2] px-3 py-2 text-sm transition hover:border-primary" type="button" onClick={() => void toggleTestRecording()}>{testing ? "停止并播放" : "测试录音"}</button>
+        <button className="rounded-md border border-[#D8DCE2] px-2.5 py-1.5 text-[13px] transition hover:border-primary" type="button" onClick={() => void refreshDevices()}>刷新设备</button>
+        <button className="rounded-md border border-[#D8DCE2] px-2.5 py-1.5 text-[13px] transition hover:border-primary" type="button" onClick={() => void toggleTestRecording()}>{testing ? "停止并播放" : "测试录音"}</button>
       </div>
-      {testError ? <div className="text-xs text-[#8f2d2d]">{testError}</div> : null}
+      {testError ? <div className="text-[11px] text-[#8f2d2d]">{testError}</div> : null}
     </SettingsSectionCard>
   );
 }

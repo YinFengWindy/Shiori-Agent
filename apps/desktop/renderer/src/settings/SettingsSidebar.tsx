@@ -43,7 +43,7 @@ export function SettingsSidebar({
   return (
     <aside
       className={cx(
-        "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] py-5",
+        "settings-sidebar relative grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] py-5",
         secondarySidebarSurfaceClass,
         animating && "transition-[opacity,transform] duration-[480ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
         collapsed ? "pointer-events-none -translate-x-4 px-0 opacity-0" : "translate-x-0 pl-[10px] pr-[6px] opacity-100",
@@ -51,8 +51,7 @@ export function SettingsSidebar({
       aria-hidden={collapsed}
       style={{ width }}
     >
-      <h1 className="m-0 px-5 text-[22px] font-semibold leading-tight text-[#182230]">设置</h1>
-      <nav className="scrollbar-soft grid min-h-0 content-start gap-1 overflow-y-auto px-2 pt-4 pr-0">
+      <nav className="scrollbar-soft grid min-h-0 content-start gap-1 overflow-y-auto px-2 pr-0">
         <div className="grid gap-1">
           {settingsSections.map((section) => <button
               key={section.id}
