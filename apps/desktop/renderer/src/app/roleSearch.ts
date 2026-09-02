@@ -153,7 +153,7 @@ export function useRoleSearch({
     [messageResults, roles, searchQuery],
   );
 
-  function getMessageKey(_roleId: string, messageId: string | null, _messageIndex: number | null): string {
+  function getMessageKey(messageId: string | null): string {
     return resolveSearchResultMessageKey(messageId);
   }
 

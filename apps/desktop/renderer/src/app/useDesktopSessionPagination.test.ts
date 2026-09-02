@@ -131,8 +131,8 @@ function createHarness(initialSession: SessionPayload) {
     return requestDeferred.promise;
   };
   const controller = createDesktopSessionPaginationController({
-    activeRoleIdRef,
-    activeSessionRef,
+    getActiveRoleId: () => activeRoleIdRef.current,
+    getActiveSession: () => activeSessionRef.current,
     setError,
     updateCommittedActiveSession,
     invoke,

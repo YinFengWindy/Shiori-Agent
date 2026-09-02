@@ -40,7 +40,6 @@ import type {
   SessionMessagePage,
   SessionMessageUpdatePayload,
   SessionPayload,
-  SessionSummary,
 } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";

@@ -17,7 +17,8 @@ function session(key: string, imagePath: string): SessionPayload {
 }
 
 function summary(key: string): SessionSummary {
-  const { messages: _messages, ...sessionSummary } = session(key, "");
+  const { messages, ...sessionSummary } = session(key, "");
+  void messages;
   return sessionSummary;
 }
 

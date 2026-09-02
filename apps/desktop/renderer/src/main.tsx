@@ -666,7 +666,7 @@ function App(): React.ReactElement {
         setShowSearchDialog(false);
         setSearchQuery("");
         const messageKey = result.matchedField === "message"
-          ? getMessageKey(result.roleId, result.matchedMessageId, result.matchedMessageIndex)
+          ? getMessageKey(result.matchedMessageId)
           : "";
         void navigateToRoleSearchResult({
           result,
