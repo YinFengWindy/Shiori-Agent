@@ -41,6 +41,7 @@ type ChatSurfaceProps = {
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
+  onMessageNavigationTargetMounted?: (messageKey: string, target: HTMLElement) => void;
   notice: string;
   sending: boolean;
   cancelling: boolean;
@@ -86,6 +87,7 @@ export function ChatSurface({
   conversationEndRef,
   headerTitle,
   highlightedMessageKey,
+  onMessageNavigationTargetMounted,
   notice,
   sending,
   cancelling,
@@ -486,6 +488,7 @@ export function ChatSurface({
           conversationEndRef={conversationEndRef}
           conversationListRef={conversationListRef}
           highlightedMessageKey={highlightedMessageKey}
+          onMessageNavigationTargetMounted={onMessageNavigationTargetMounted}
           isAutoScrollingRef={isAutoScrollingRef}
           visibleMessageWindow={visibleMessageWindow}
           onBeginAttachmentDrag={onBeginAttachmentDrag}

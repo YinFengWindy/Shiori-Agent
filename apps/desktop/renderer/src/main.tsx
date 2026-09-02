@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { DesktopAppFrame } from "./app/DesktopAppFrame";
 import {
@@ -136,10 +136,6 @@ function App(): React.ReactElement {
   const activeRoleIdRef = useLatestRef(activeRoleId);
   const activeSessionRef = useLatestRef(activeSession);
   const pendingMessageNavigationRef = useLatestRef(pendingMessageNavigation);
-  const activeSessionMessageKeys = useMemo(
-    () => activeSession?.messages.map((message) => String(message.id ?? "").trim()).filter(Boolean) ?? [],
-    [activeSession?.messages],
-  );
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
   const mainViewRef = useLatestRef<AppMainView>(mainView);
   const rolesRef = useLatestRef(roles);
@@ -200,6 +196,23 @@ function App(): React.ReactElement {
     setPendingMessageNavigation(null);
     setHighlightedMessageKey("");
   }
+
+  const handleMessageNavigationTargetMounted = useCallback((
+    messageKey: string,
+    target: HTMLElement,
+  ): void => {
+    const current = pendingMessageNavigationRef.current;
+    if (
+      !current
+      || current.roleId !== activeRoleIdRef.current
+      || current.messageKey !== messageKey
+    ) {
+      return;
+    }
+    target.scrollIntoView({ behavior: "auto", block: "center" });
+    setPendingMessageNavigation(null);
+    setHighlightedMessageKey("");
+  }, [activeRoleIdRef, pendingMessageNavigationRef]);
 
   const { chooseIllustration, applyRoleSnapshot, rememberIllustration } = useRolePresentation({
     activeRoleIdRef,
@@ -527,10 +540,7 @@ function App(): React.ReactElement {
   useDesktopUiEffects({
     sidebarAnimating: leftSidebar.animating,
     setSidebarAnimating: leftSidebar.setAnimating,
-    activeSessionKey,
-    activeSessionMessageKeys,
     pendingMessageNavigation,
-    activeRoleId,
     setHighlightedMessageKey,
     setPendingMessageNavigation,
     notice,
@@ -620,6 +630,7 @@ function App(): React.ReactElement {
       conversationEndRef={conversationEndRef}
       headerTitle={headerTitle}
       highlightedMessageKey={highlightedMessageKey}
+      onMessageNavigationTargetMounted={handleMessageNavigationTargetMounted}
       notice={notice}
       isVisibleChatSending={isVisibleChatSending}
       isVisibleChatCancelling={isVisibleChatCancelling}

@@ -100,6 +100,7 @@ type DesktopAppFrameProps = {
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
+  onMessageNavigationTargetMounted?: (messageKey: string, target: HTMLElement) => void;
   notice: string;
   isVisibleChatSending: boolean;
   isVisibleChatCancelling: boolean;
@@ -229,6 +230,7 @@ export function DesktopAppFrame({
   conversationEndRef,
   headerTitle,
   highlightedMessageKey,
+  onMessageNavigationTargetMounted,
   notice,
   isVisibleChatSending,
   isVisibleChatCancelling,
@@ -449,6 +451,7 @@ export function DesktopAppFrame({
               conversationEndRef={conversationEndRef}
               headerTitle={headerTitle}
               highlightedMessageKey={highlightedMessageKey}
+              onMessageNavigationTargetMounted={onMessageNavigationTargetMounted}
               notice={notice}
               sending={isVisibleChatSending}
               cancelling={isVisibleChatCancelling}

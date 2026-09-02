@@ -1,16 +1,11 @@
 import { useEffect } from "react";
 import type React from "react";
-import { findChatMessageElement } from "../chat/chatMessageDom";
-import { watchForChatMessageTarget } from "../chat/chatMessageNavigation";
 import type { WorkspaceFeedback } from "./appState";
 
 type UseDesktopUiEffectsArgs = {
   sidebarAnimating: boolean;
   setSidebarAnimating: React.Dispatch<React.SetStateAction<boolean>>;
-  activeSessionKey: string;
-  activeSessionMessageKeys: readonly string[];
   pendingMessageNavigation: { roleId: string; messageKey: string } | null;
-  activeRoleId: string;
   setHighlightedMessageKey: React.Dispatch<React.SetStateAction<string>>;
   setPendingMessageNavigation: React.Dispatch<React.SetStateAction<{ roleId: string; messageKey: string } | null>>;
   notice: string;
@@ -48,10 +43,7 @@ export function shouldWaitForMessageNavigation(
 export function useDesktopUiEffects({
   sidebarAnimating,
   setSidebarAnimating,
-  activeSessionKey,
-  activeSessionMessageKeys,
   pendingMessageNavigation,
-  activeRoleId,
   setHighlightedMessageKey,
   setPendingMessageNavigation,
   notice,
@@ -102,7 +94,6 @@ export function useDesktopUiEffects({
     if (!highlightedMessageKey) return;
     if (
       pendingMessageNavigation
-      && pendingMessageNavigation.roleId === activeRoleId
       && pendingMessageNavigation.messageKey === highlightedMessageKey
     ) {
       return;
@@ -110,52 +101,9 @@ export function useDesktopUiEffects({
     const timer = window.setTimeout(() => setHighlightedMessageKey(""), 2400);
     return () => window.clearTimeout(timer);
   }, [
-    activeRoleId,
     highlightedMessageKey,
     pendingMessageNavigation,
     setHighlightedMessageKey,
-  ]);
-
-  useEffect(() => {
-    if (!pendingMessageNavigation) return;
-    if (shouldWaitForMessageNavigation(
-      pendingMessageNavigation,
-      activeSessionKey,
-      activeRoleId,
-      activeSessionMessageKeys,
-    )) {
-      return;
-    }
-    const messageKey = pendingMessageNavigation.messageKey;
-    // Highlighting pins an offscreen virtualized row into the DOM. The watcher
-    // then waits for that render instead of expiring after a timing guess.
-    setHighlightedMessageKey(messageKey);
-    return watchForChatMessageTarget({
-      findTarget: () => findChatMessageElement(messageKey),
-      onTarget: (target) => {
-        target.scrollIntoView({ behavior: "smooth", block: "center" });
-        setPendingMessageNavigation(null);
-      },
-      requestAnimationFrame: window.requestAnimationFrame.bind(window),
-      cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-      setTimeout: window.setTimeout.bind(window),
-      clearTimeout: window.clearTimeout.bind(window),
-      observeMutations: (callback) => {
-        if (typeof MutationObserver === "undefined" || !document.body) {
-          return () => undefined;
-        }
-        const observer = new MutationObserver(callback);
-        observer.observe(document.body, { childList: true, subtree: true });
-        return () => observer.disconnect();
-      },
-    });
-  }, [
-    activeRoleId,
-    activeSessionKey,
-    activeSessionMessageKeys,
-    pendingMessageNavigation,
-    setHighlightedMessageKey,
-    setPendingMessageNavigation,
   ]);
 
   useEffect(() => {

@@ -14,6 +14,7 @@ type UseChatMessageVirtualizationArgs = {
   highlightedMessageKey: string;
   conversationListRef: React.RefObject<HTMLDivElement | null>;
   isAutoScrollingRef: React.RefObject<boolean>;
+  onMessageNavigationTargetMounted?: (messageKey: string, target: HTMLElement) => void;
   onContentSizeChange?: () => void;
 };
 
@@ -34,6 +35,7 @@ export function useChatMessageVirtualization({
   highlightedMessageKey,
   conversationListRef,
   isAutoScrollingRef,
+  onMessageNavigationTargetMounted,
   onContentSizeChange,
 }: UseChatMessageVirtualizationArgs) {
   // The first paint follows the chat's bottom-anchored startup behavior; the
@@ -146,6 +148,10 @@ export function useChatMessageVirtualization({
     element: HTMLElement | null,
   ) => {
     const messageKey = getChatMessageReactKey(message, index);
+    const domKey = getChatMessageDomKey(message, index);
+    if (element && domKey === highlightedMessageKey) {
+      onMessageNavigationTargetMounted?.(domKey, element);
+    }
     observersRef.current.get(messageKey)?.disconnect();
     observersRef.current.delete(messageKey);
     if (!element || typeof ResizeObserver === "undefined") return;
@@ -158,7 +164,7 @@ export function useChatMessageVirtualization({
     observersRef.current.set(messageKey, observer);
     observer.observe(element);
     updateMeasuredHeight(message, index, element.getBoundingClientRect().height, element);
-  }, [updateMeasuredHeight]);
+  }, [highlightedMessageKey, onMessageNavigationTargetMounted, updateMeasuredHeight]);
 
   return { virtualMessageWindow, observeMessageElement };
 }
