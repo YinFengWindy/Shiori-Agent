@@ -136,6 +136,10 @@ function App(): React.ReactElement {
   const activeRoleIdRef = useLatestRef(activeRoleId);
   const activeSessionRef = useLatestRef(activeSession);
   const pendingMessageNavigationRef = useLatestRef(pendingMessageNavigation);
+  const activeSessionMessageKeys = useMemo(
+    () => activeSession?.messages.map((message) => String(message.id ?? "").trim()).filter(Boolean) ?? [],
+    [activeSession?.messages],
+  );
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
   const mainViewRef = useLatestRef<AppMainView>(mainView);
   const rolesRef = useLatestRef(roles);
@@ -524,6 +528,7 @@ function App(): React.ReactElement {
     sidebarAnimating: leftSidebar.animating,
     setSidebarAnimating: leftSidebar.setAnimating,
     activeSessionKey,
+    activeSessionMessageKeys,
     pendingMessageNavigation,
     activeRoleId,
     setHighlightedMessageKey,

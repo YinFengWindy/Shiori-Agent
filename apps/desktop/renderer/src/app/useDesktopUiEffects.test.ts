@@ -11,6 +11,7 @@ describe("shouldWaitForMessageNavigation", () => {
         { roleId: "mira", messageKey: "role:mira:2" },
         "role:shiori",
         "shiori",
+        [],
       ),
       true,
     );
@@ -22,8 +23,21 @@ describe("shouldWaitForMessageNavigation", () => {
         { roleId: "mira", messageKey: "role:mira:2" },
         "role:mira",
         "mira",
+        ["role:mira:2"],
       ),
       false,
+    );
+  });
+
+  it("keeps navigation pending until the target message is loaded into the session", () => {
+    assert.equal(
+      shouldWaitForMessageNavigation(
+        { roleId: "mira", messageKey: "role:mira:2" },
+        "role:mira",
+        "mira",
+        ["role:mira:199"],
+      ),
+      true,
     );
   });
 });

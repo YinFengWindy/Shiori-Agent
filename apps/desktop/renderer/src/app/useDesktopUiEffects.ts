@@ -8,6 +8,7 @@ type UseDesktopUiEffectsArgs = {
   sidebarAnimating: boolean;
   setSidebarAnimating: React.Dispatch<React.SetStateAction<boolean>>;
   activeSessionKey: string;
+  activeSessionMessageKeys: readonly string[];
   pendingMessageNavigation: { roleId: string; messageKey: string } | null;
   activeRoleId: string;
   setHighlightedMessageKey: React.Dispatch<React.SetStateAction<string>>;
@@ -31,10 +32,15 @@ export function shouldWaitForMessageNavigation(
   pendingMessageNavigation: { roleId: string; messageKey: string } | null,
   activeSessionKey: string,
   activeRoleId: string,
+  activeSessionMessageKeys: readonly string[],
 ): boolean {
   return Boolean(
     pendingMessageNavigation
-    && (!activeSessionKey || pendingMessageNavigation.roleId !== activeRoleId),
+    && (
+      !activeSessionKey
+      || pendingMessageNavigation.roleId !== activeRoleId
+      || !activeSessionMessageKeys.includes(pendingMessageNavigation.messageKey)
+    ),
   );
 }
 
@@ -43,6 +49,7 @@ export function useDesktopUiEffects({
   sidebarAnimating,
   setSidebarAnimating,
   activeSessionKey,
+  activeSessionMessageKeys,
   pendingMessageNavigation,
   activeRoleId,
   setHighlightedMessageKey,
@@ -111,7 +118,12 @@ export function useDesktopUiEffects({
 
   useEffect(() => {
     if (!pendingMessageNavigation) return;
-    if (shouldWaitForMessageNavigation(pendingMessageNavigation, activeSessionKey, activeRoleId)) {
+    if (shouldWaitForMessageNavigation(
+      pendingMessageNavigation,
+      activeSessionKey,
+      activeRoleId,
+      activeSessionMessageKeys,
+    )) {
       return;
     }
     const messageKey = pendingMessageNavigation.messageKey;
@@ -140,6 +152,7 @@ export function useDesktopUiEffects({
   }, [
     activeRoleId,
     activeSessionKey,
+    activeSessionMessageKeys,
     pendingMessageNavigation,
     setHighlightedMessageKey,
     setPendingMessageNavigation,
