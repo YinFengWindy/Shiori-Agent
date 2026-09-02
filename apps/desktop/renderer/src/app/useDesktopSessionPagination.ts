@@ -19,9 +19,7 @@ type UseDesktopSessionPaginationArgs = {
   ) => void;
 };
 
-type DesktopSessionPaginationControllerArgs = {
-  getActiveRoleId: () => string;
-  getActiveSession: () => SessionPayload | null;
+type DesktopSessionPaginationControllerArgs = UseDesktopSessionPaginationArgs & {
   setError: React.Dispatch<React.SetStateAction<string>>;
   updateCommittedActiveSession: (
     updater: (current: SessionPayload | null) => SessionPayload | null,
@@ -33,8 +31,8 @@ type DesktopSessionPaginationControllerArgs = {
 
 /** Creates cursor actions that discard responses no longer belonging to the visible session generation. */
 export function createDesktopSessionPaginationController({
-  getActiveRoleId,
-  getActiveSession,
+  activeRoleIdRef,
+  activeSessionRef,
   setError,
   updateCommittedActiveSession,
   invoke,
@@ -47,13 +45,13 @@ export function createDesktopSessionPaginationController({
   }
 
   function isCurrentGeneration(sessionKey: string, generation: number): boolean {
-    return getActiveSession()?.key === sessionKey
+    return activeSessionRef.current?.key === sessionKey
       && (generationRef.current[sessionKey] ?? 0) === generation;
   }
 
   /** Loads the page immediately preceding the oldest persisted message currently in memory. */
-  async function loadOlderMessages(sessionKey = getActiveSession()?.key ?? ""): Promise<boolean> {
-    const current = getActiveSession();
+  async function loadOlderMessages(sessionKey = activeSessionRef.current?.key ?? ""): Promise<boolean> {
+    const current = activeSessionRef.current;
     if (!current || current.key !== sessionKey) return false;
     const pagination = current.pagination;
     if (!pagination?.has_more || pagination.next_before_seq == null || loadingOlderRef.current[sessionKey]) {
@@ -62,7 +60,7 @@ export function createDesktopSessionPaginationController({
     const generation = generationRef.current[sessionKey] ?? 0;
     loadingOlderRef.current[sessionKey] = true;
     try {
-      const roleId = getRoleIdFromSession(current) || getActiveRoleId();
+      const roleId = getRoleIdFromSession(current) || activeRoleIdRef.current;
       const res = await invoke({
         method: "session.messagesPage",
         payload: {
@@ -96,7 +94,7 @@ export function createDesktopSessionPaginationController({
   /** Loads a bounded persisted context before the DOM layer highlights a search result. */
   async function loadMessagesAround(
     messageId: string,
-    expectedSessionKey = getActiveSession()?.key ?? "",
+    expectedSessionKey = activeSessionRef.current?.key ?? "",
   ): Promise<boolean> {
     const normalizedMessageId = messageId.trim();
     if (!normalizedMessageId || !expectedSessionKey) return false;
@@ -136,10 +134,10 @@ export function useDesktopSessionPagination(args: UseDesktopSessionPaginationArg
   const generationRef = useRef<Record<string, number>>({});
   const loadingOlderRef = useRef<Record<string, boolean>>({});
 
+  // The controller captures these refs for deferred bridge actions; it never reads them during render.
+  // eslint-disable-next-line react-hooks/refs
   return createDesktopSessionPaginationController({
     ...args,
-    getActiveRoleId: () => args.activeRoleIdRef.current,
-    getActiveSession: () => args.activeSessionRef.current,
     invoke: (request) => window.miraDesktop.invoke(request),
     generationRef,
     loadingOlderRef,
