@@ -455,6 +455,16 @@ async def test_external_turn_committed_broadcasts_role_session_once(tmp_path) ->
 
     session = session_manager.get_or_create("role:mira")
     session.add_message(
+        "user",
+        "hello",
+        metadata={
+            "role_id": "mira",
+            "thread_id": "thread:mira:telegram:123",
+            "transport_channel": "telegram",
+            "transport_chat_id": "123",
+        },
+    )
+    session.add_message(
         "assistant",
         "来自 Telegram",
         metadata={
@@ -492,6 +502,14 @@ async def test_external_turn_committed_broadcasts_role_session_once(tmp_path) ->
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
     assert emitted[0]["payload"]["session"]["key"] == "role:mira"
+    assert [message["role"] for message in emitted[0]["payload"]["messages"]] == [
+        "user",
+        "assistant",
+    ]
+    assert [message["content"] for message in emitted[0]["payload"]["messages"]] == [
+        "hello",
+        "来自 Telegram",
+    ]
 
     await event_bus.fanout(
         TurnCommitted(

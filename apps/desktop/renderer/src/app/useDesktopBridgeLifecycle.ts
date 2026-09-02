@@ -197,6 +197,7 @@ export function useDesktopBridgeLifecycle({
             isActiveSession ? currentSession : null,
             update.session,
             update.message,
+            update.messages,
           );
           const roleId = getRoleIdFromSession(session);
           const isVisibleChat = isActiveSession && currentView.kind === "chat";

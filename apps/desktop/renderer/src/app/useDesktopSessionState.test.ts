@@ -169,6 +169,50 @@ describe("desktop paginated session protocol", () => {
     ]);
   });
 
+  it("merges every message appended by an external channel turn", () => {
+    const current = createSession([
+      { id: "role:shiori:5", seq: 5, role: "assistant", content: "上一条" },
+    ]);
+    current.pagination = {
+      limit: 50,
+      has_more: false,
+      oldest_seq: 5,
+      newest_seq: 5,
+      total_count: 1,
+      before_seq: null,
+      next_before_seq: null,
+    };
+    const update = parseSessionMessageUpdatePayload({
+      session: {
+        key: current.key,
+        created_at: current.created_at,
+        updated_at: "2026-07-06T12:03:00+08:00",
+        last_consolidated: 0,
+        metadata: { role_id: "shiori" },
+      },
+      message: { id: "role:shiori:7", seq: 7, role: "assistant", content: "来自渠道的回复" },
+      messages: [
+        { id: "role:shiori:6", seq: 6, role: "user", content: "来自渠道的问题" },
+        { id: "role:shiori:7", seq: 7, role: "assistant", content: "来自渠道的回复" },
+      ],
+    });
+
+    assert.ok(update);
+    const merged = mergeSessionSummaryAndMessage(
+      current,
+      update.session,
+      update.message,
+      update.messages,
+    );
+
+    assert.deepEqual(merged.messages.map((item) => item.content), [
+      "上一条",
+      "来自渠道的问题",
+      "来自渠道的回复",
+    ]);
+    assert.equal(merged.pagination?.total_count, 3);
+  });
+
   it("replaces an optimistic user message after the bridge confirms its client message id", () => {
     const current = createSession([
       {

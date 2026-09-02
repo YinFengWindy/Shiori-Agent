@@ -225,10 +225,12 @@ export type SessionOpenPayload = {
   page: SessionMessagePage;
 };
 
-/** Summary plus one changed message used by incremental bridge responses and events. */
+/** Summary plus changed messages used by incremental bridge responses and events. */
 export type SessionMessageUpdatePayload = {
   session: SessionSummary;
   message: SessionMessage | null;
+  /** Contains every persisted message appended by one external turn when available. */
+  messages?: SessionMessage[];
 };
 
 /** Lightweight persisted-message hit returned by the desktop search API. */

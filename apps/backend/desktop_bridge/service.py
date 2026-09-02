@@ -256,6 +256,7 @@ class DesktopBridgeService:
         await self._broadcast_session_updated(
             request_id=request_id,
             session=session,
+            messages=self._session_messages_for_turn(session, event),
         )
 
     async def _on_proactive_message_committed(
@@ -441,27 +442,19 @@ class DesktopBridgeService:
         message_id: str | None = None,
         change: str = "message_appended",
         include_message: bool = True,
+        messages: list[dict[str, Any]] | None = None,
     ) -> None:
-        message = (
-            self._session_message_for_event(session, message_id)
-            if include_message
-            else None
-        )
         event = BridgeEvent(
             id=request_id,
             type="event",
             method="session.updated",
-            payload={
-                "session": self.session_presenter.serialize_summary(session),
-                "change": change,
-                "message": (
-                    self.session_presenter.serialize_message(message)
-                    if message is not None
-                    else None
-                ),
-                "session_key": session.key,
-                "role_id": self._role_id_from_desktop_session_key(session.key),
-            },
+            payload=self._build_session_update_payload(
+                session,
+                message_id=message_id,
+                change=change,
+                include_message=include_message,
+                messages=messages,
+            ),
         )
         await self._emit_event(emit_event, event.to_dict())
 
@@ -498,29 +491,81 @@ class DesktopBridgeService:
         message_id: str | None = None,
         change: str = "message_appended",
         include_message: bool = True,
+        messages: list[dict[str, Any]] | None = None,
     ) -> None:
-        message = (
-            self._session_message_for_event(session, message_id)
-            if include_message
-            else None
-        )
         event = BridgeEvent(
             id=request_id,
             type="event",
             method="session.updated",
-            payload={
-                "session": self.session_presenter.serialize_summary(session),
-                "change": change,
-                "message": (
-                    self.session_presenter.serialize_message(message)
-                    if message is not None
-                    else None
-                ),
-                "session_key": session.key,
-                "role_id": self._role_id_from_desktop_session_key(session.key),
-            },
+            payload=self._build_session_update_payload(
+                session,
+                message_id=message_id,
+                change=change,
+                include_message=include_message,
+                messages=messages,
+            ),
         )
         await self._broadcast_event(event.to_dict())
+
+    def _build_session_update_payload(
+        self,
+        session: Session,
+        *,
+        message_id: str | None,
+        change: str,
+        include_message: bool,
+        messages: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        changed_messages = list(messages or []) if include_message else []
+        if include_message and messages is None:
+            message = self._session_message_for_event(session, message_id)
+            if message is not None:
+                changed_messages = [message]
+        primary_message = changed_messages[-1] if changed_messages else None
+        return {
+            "session": self.session_presenter.serialize_summary(session),
+            "change": change,
+            "message": (
+                self.session_presenter.serialize_message(primary_message)
+                if primary_message is not None
+                else None
+            ),
+            "messages": [
+                self.session_presenter.serialize_message(message)
+                for message in changed_messages
+            ],
+            "session_key": session.key,
+            "role_id": self._role_id_from_desktop_session_key(session.key),
+        }
+
+    @staticmethod
+    def _session_messages_for_turn(
+        session: Session,
+        event: TurnCommitted,
+    ) -> list[dict[str, Any]]:
+        """Returns the persisted user/assistant pair belonging to one external turn."""
+        assistant_index = next(
+            (
+                index
+                for index in range(len(session.messages) - 1, -1, -1)
+                if session.messages[index].get("role") == "assistant"
+                and str(session.messages[index].get("content") or "")
+                == event.assistant_response
+            ),
+            -1,
+        )
+        if assistant_index < 0:
+            return [session.messages[-1]] if session.messages else []
+
+        first_index = assistant_index
+        if event.persisted_user_message is not None and assistant_index > 0:
+            previous = session.messages[assistant_index - 1]
+            if (
+                previous.get("role") == "user"
+                and str(previous.get("content") or "") == event.persisted_user_message
+            ):
+                first_index -= 1
+        return session.messages[first_index : assistant_index + 1]
 
     @staticmethod
     def _session_message_for_event(

@@ -83,9 +83,16 @@ export function parseSessionMessageUpdatePayload(
     || typeof rawMessage.role !== "string" || typeof rawMessage.content !== "string"))) {
     return null;
   }
+  const rawMessages = payload.messages;
+  if (rawMessages != null && (!Array.isArray(rawMessages)
+    || !rawMessages.every((item) => isRecord(item)
+      && typeof item.role === "string" && typeof item.content === "string"))) {
+    return null;
+  }
   return {
     session,
     message: rawMessage as SessionMessage | null,
+    messages: rawMessages as SessionMessage[] | undefined,
   };
 }
 

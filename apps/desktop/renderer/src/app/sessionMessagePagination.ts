@@ -136,35 +136,45 @@ export function mergeSessionMessage(
   return sortSessionMessages([...messages, incoming]);
 }
 
-/** Merges one bridge summary/message change without replacing the loaded history page. */
+/** Merges bridge summary/message changes without replacing the loaded history page. */
 export function mergeSessionSummaryAndMessage(
   current: SessionPayload | null,
   summary: SessionSummary,
   message: SessionMessage | null,
+  additionalMessages: readonly SessionMessage[] = [],
 ): SessionPayload {
   const messages = current?.key === summary.key ? current.messages : [];
-  const matchedMessageIndex = message
-    ? findMatchingMessageIndex(messages, message)
-    : -1;
-  const matchedPersistedMessage = matchedMessageIndex >= 0
-    && typeof messages[matchedMessageIndex]?.seq === "number";
+  const incomingMessages = additionalMessages.length > 0
+    ? additionalMessages
+    : (message ? [message] : []);
+  let mergedMessages = messages;
+  let appendedPersistedCount = 0;
+  let newestSequence = current?.key === summary.key
+    ? current.pagination?.newest_seq ?? null
+    : null;
+  for (const incomingMessage of incomingMessages) {
+    const matchedMessageIndex = findMatchingMessageIndex(mergedMessages, incomingMessage);
+    const matchedMessage = matchedMessageIndex >= 0 ? mergedMessages[matchedMessageIndex] : null;
+    if (typeof incomingMessage.seq === "number"
+      && (matchedMessageIndex < 0 || typeof matchedMessage?.seq !== "number")) {
+      appendedPersistedCount += 1;
+    }
+    if (typeof incomingMessage.seq === "number") {
+      newestSequence = Math.max(newestSequence ?? incomingMessage.seq, incomingMessage.seq);
+    }
+    mergedMessages = mergeSessionMessage(mergedMessages, incomingMessage);
+  }
   const currentPagination = current?.key === summary.key ? current.pagination : undefined;
   const pagination = currentPagination
     ? {
         ...currentPagination,
-        total_count: currentPagination.total_count + (
-          message && typeof message.seq === "number" && !matchedPersistedMessage
-            ? 1
-            : 0
-        ),
-        newest_seq: message && typeof message.seq === "number"
-          ? Math.max(currentPagination.newest_seq ?? message.seq, message.seq)
-          : currentPagination.newest_seq,
+        total_count: currentPagination.total_count + appendedPersistedCount,
+        newest_seq: newestSequence,
       }
     : undefined;
   return {
     ...summary,
-    messages: message ? mergeSessionMessage(messages, message) : messages,
+    messages: mergedMessages,
     ...(pagination ? { pagination } : {}),
   };
 }
