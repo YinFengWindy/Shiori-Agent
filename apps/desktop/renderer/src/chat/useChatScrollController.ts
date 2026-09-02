@@ -4,6 +4,9 @@ import {
   getChatScrollAnimationDuration,
   getChatScrollAnimationTop,
   getChatScrollMaxTop,
+  getChatSessionRestoreScrollTop,
+  rememberChatSessionScrollState,
+  type ChatSessionScrollState,
 } from "./chatScrollController";
 
 type UseChatScrollControllerArgs = {
@@ -19,6 +22,8 @@ export function useChatScrollController({
   const animationFrameRef = useRef<number | null>(null);
   const isAutoScrollingRef = useRef(false);
   const expectedScrollTopRef = useRef<number | null>(null);
+  const sessionScrollStatesRef = useRef(new Map<string, ChatSessionScrollState>());
+  const sessionKeyRef = useRef(sessionKey);
 
   const cancelAnimation = useCallback(() => {
     if (animationFrameRef.current !== null && typeof window !== "undefined") {
@@ -28,6 +33,38 @@ export function useChatScrollController({
     expectedScrollTopRef.current = null;
     isAutoScrollingRef.current = false;
   }, []);
+
+  const rememberSessionScroll = useCallback((targetSessionKey = sessionKeyRef.current) => {
+    const container = conversationListRef.current;
+    if (!container) return;
+    rememberChatSessionScrollState(
+      sessionScrollStatesRef.current,
+      targetSessionKey,
+      container.scrollTop,
+      container.scrollHeight,
+      container.clientHeight,
+    );
+  }, [conversationListRef]);
+
+  useLayoutEffect(() => {
+    if (sessionKeyRef.current !== sessionKey) {
+      rememberSessionScroll(sessionKeyRef.current);
+    }
+    sessionKeyRef.current = sessionKey;
+  }, [rememberSessionScroll, sessionKey]);
+
+  const restoreSessionScroll = useCallback((targetSessionKey: string) => {
+    const state = sessionScrollStatesRef.current.get(targetSessionKey);
+    const container = conversationListRef.current;
+    if (!state || !container) return null;
+    cancelAnimation();
+    container.scrollTop = getChatSessionRestoreScrollTop(
+      state,
+      container.scrollHeight,
+      container.clientHeight,
+    );
+    return state;
+  }, [cancelAnimation, conversationListRef]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
     const container = conversationListRef.current;
@@ -40,6 +77,7 @@ export function useChatScrollController({
       if (isAutoScrollingRef.current) return;
       cancelAnimation();
       container.scrollTop = getChatScrollMaxTop(container);
+      rememberSessionScroll();
       return;
     }
 
@@ -50,6 +88,7 @@ export function useChatScrollController({
     if (distance <= 1) {
       expectedScrollTopRef.current = getChatScrollMaxTop(container);
       container.scrollTop = getChatScrollMaxTop(container);
+      rememberSessionScroll();
       return;
     }
 
@@ -72,6 +111,7 @@ export function useChatScrollController({
       if (progress >= 1) {
         expectedScrollTopRef.current = getChatScrollMaxTop(currentContainer);
         currentContainer.scrollTop = getChatScrollMaxTop(currentContainer);
+        rememberSessionScroll();
         cancelAnimation();
         return;
       }
@@ -79,7 +119,7 @@ export function useChatScrollController({
     };
 
     animationFrameRef.current = window.requestAnimationFrame(animate);
-  }, [cancelAnimation, conversationListRef]);
+  }, [cancelAnimation, conversationListRef, rememberSessionScroll]);
 
   useEffect(() => {
     const container = conversationListRef.current;
@@ -87,6 +127,7 @@ export function useChatScrollController({
 
     const interruptAnimation = () => cancelAnimation();
     const handleScroll = () => {
+      rememberSessionScroll();
       if (!isAutoScrollingRef.current) return;
       const expectedScrollTop = expectedScrollTopRef.current;
       if (expectedScrollTop === null || Math.abs(container.scrollTop - expectedScrollTop) > 1) {
@@ -103,9 +144,9 @@ export function useChatScrollController({
       window.removeEventListener("pointerdown", interruptAnimation);
       container.removeEventListener("scroll", handleScroll);
     };
-  }, [cancelAnimation, conversationListRef, sessionKey]);
+  }, [cancelAnimation, conversationListRef, rememberSessionScroll]);
 
   useLayoutEffect(() => cancelAnimation, [cancelAnimation, sessionKey]);
 
-  return { isAutoScrollingRef, scrollToBottom };
+  return { isAutoScrollingRef, restoreSessionScroll, scrollToBottom };
 }

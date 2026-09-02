@@ -152,6 +152,7 @@ export function ChatSurface({
   });
   const {
     isAutoScrollingRef,
+    restoreSessionScroll,
     scrollToBottom,
   } = useChatScrollController({
     conversationListRef,
@@ -175,8 +176,17 @@ export function ChatSurface({
     imagePriorityUserMessageCountRef.current = -1;
     const hasPendingMessageNavigation = Boolean(highlightedMessageKeyRef.current);
     const container = conversationListRef.current;
-    stickToBottomRef.current = !hasPendingMessageNavigation;
-    if (!container || hasPendingMessageNavigation) return;
+    if (hasPendingMessageNavigation) {
+      stickToBottomRef.current = false;
+      return;
+    }
+    if (!container) return;
+    const restoredSessionScroll = restoreSessionScroll(sessionKey);
+    if (restoredSessionScroll) {
+      stickToBottomRef.current = restoredSessionScroll.wasAtBottom;
+      return;
+    }
+    stickToBottomRef.current = true;
     scrollConversationToBottom(getChatSessionResetScrollBehavior(previousSessionKey, sessionKey));
   });
 
