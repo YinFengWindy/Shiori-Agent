@@ -26,6 +26,18 @@ type UseDesktopUiEffectsArgs = {
   setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
+/** Keeps a message target pending while its destination role session is opening. */
+export function shouldWaitForMessageNavigation(
+  pendingMessageNavigation: { roleId: string; messageKey: string } | null,
+  activeSessionKey: string,
+  activeRoleId: string,
+): boolean {
+  return Boolean(
+    pendingMessageNavigation
+    && (!activeSessionKey || pendingMessageNavigation.roleId !== activeRoleId),
+  );
+}
+
 /** Runs UI-only desktop effects such as dismiss timers and message highlight retries. */
 export function useDesktopUiEffects({
   sidebarAnimating,
@@ -99,8 +111,7 @@ export function useDesktopUiEffects({
 
   useEffect(() => {
     if (!pendingMessageNavigation) return;
-    if (!activeSessionKey || pendingMessageNavigation.roleId !== activeRoleId) {
-      setPendingMessageNavigation(null);
+    if (shouldWaitForMessageNavigation(pendingMessageNavigation, activeSessionKey, activeRoleId)) {
       return;
     }
     const messageKey = pendingMessageNavigation.messageKey;

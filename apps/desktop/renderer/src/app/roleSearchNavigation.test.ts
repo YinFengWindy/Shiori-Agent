@@ -51,7 +51,7 @@ describe("roleSearchNavigation", () => {
     assert.deepEqual(harness.actions, ["open-chat", "clear-message", "open-role"]);
   });
 
-  it("loads matching context before queuing a message result", async () => {
+  it("queues the message target before opening its role session", async () => {
     const harness = createHarness();
 
     await navigateToRoleSearchResult({
@@ -60,7 +60,7 @@ describe("roleSearchNavigation", () => {
       ...harness,
     });
 
-    assert.deepEqual(harness.actions, ["open-chat", "clear-message", "open-role", "load-around", "queue-message"]);
+    assert.deepEqual(harness.actions, ["open-chat", "clear-message", "queue-message", "open-role", "load-around"]);
   });
 
   it("keeps the current session mounted when its own historical message is selected", async () => {
@@ -73,7 +73,23 @@ describe("roleSearchNavigation", () => {
       ...harness,
     });
 
-    assert.deepEqual(harness.actions, ["open-chat", "clear-message", "load-around", "queue-message"]);
+    assert.deepEqual(harness.actions, ["open-chat", "clear-message", "queue-message", "load-around"]);
+  });
+
+  it("clears a queued message target when opening its role session fails", async () => {
+    const harness = createHarness();
+    harness.openRole = async () => {
+      harness.actions.push("open-role");
+      return false;
+    };
+
+    await navigateToRoleSearchResult({
+      result: createResult("message"),
+      messageKey: "message-1",
+      ...harness,
+    });
+
+    assert.deepEqual(harness.actions, ["open-chat", "clear-message", "queue-message", "open-role", "clear-message"]);
   });
 
   it("does not queue a DOM highlight when the persisted context cannot be loaded", async () => {
@@ -89,6 +105,6 @@ describe("roleSearchNavigation", () => {
       ...harness,
     });
 
-    assert.deepEqual(harness.actions, ["open-chat", "clear-message", "open-role", "load-around"]);
+    assert.deepEqual(harness.actions, ["open-chat", "clear-message", "queue-message", "open-role", "load-around", "clear-message"]);
   });
 });

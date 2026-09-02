@@ -135,6 +135,7 @@ function App(): React.ReactElement {
   const roleAssetSaveRequestIdRef = useRef(0);
   const activeRoleIdRef = useLatestRef(activeRoleId);
   const activeSessionRef = useLatestRef(activeSession);
+  const pendingMessageNavigationRef = useLatestRef(pendingMessageNavigation);
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
   const mainViewRef = useLatestRef<AppMainView>(mainView);
   const rolesRef = useLatestRef(roles);
@@ -181,6 +182,19 @@ function App(): React.ReactElement {
       return;
     }
     setPendingMessageNavigation({ roleId, messageKey: nextMessageKey });
+    setHighlightedMessageKey(nextMessageKey);
+  }
+
+  function clearMessageNavigation(target?: { roleId: string; messageKey: string }): void {
+    const current = pendingMessageNavigationRef.current;
+    if (
+      target
+      && (!current || current.roleId !== target.roleId || current.messageKey !== target.messageKey)
+    ) {
+      return;
+    }
+    setPendingMessageNavigation(null);
+    setHighlightedMessageKey("");
   }
 
   const { chooseIllustration, applyRoleSnapshot, rememberIllustration } = useRolePresentation({
@@ -676,10 +690,7 @@ function App(): React.ReactElement {
             activeRoleIdRef.current === roleId && activeSessionRef.current?.key === sessionKey
           ),
           queueMessageNavigation,
-          clearMessageNavigation: () => {
-            setPendingMessageNavigation(null);
-            setHighlightedMessageKey("");
-          },
+          clearMessageNavigation,
           openRole: (roleId, options) => openRole(roleId, null, options),
           loadMessagesAround,
         });

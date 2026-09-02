@@ -168,9 +168,10 @@ export function ChatSurface({
     previousChatImageCountRef.current = chatLatestImageSidebarCount;
     previousRoleSelfViewRef.current = roleSelfView;
     imagePriorityUserMessageCountRef.current = -1;
+    const hasPendingMessageNavigation = Boolean(highlightedMessageKeyRef.current);
     const container = conversationListRef.current;
-    if (!container) return;
-    stickToBottomRef.current = true;
+    stickToBottomRef.current = !hasPendingMessageNavigation;
+    if (!container || hasPendingMessageNavigation) return;
     scrollConversationToBottom("auto");
   });
 

@@ -8,6 +8,21 @@ import {
 } from "./chatAutoScroll";
 
 describe("shouldAutoScrollOnNewMessage", () => {
+  it("does not return to the bottom while historical message navigation is highlighted", () => {
+    assert.equal(
+      shouldAutoScrollOnNewMessage({
+        currentMessageCount: 3,
+        previousMessageCount: 1,
+        lastMessageContent: "最新",
+        previousLastMessageContent: "命中附近",
+        highlightedMessageKey: "role:mira:2",
+        sending: false,
+        wasAtBottom: true,
+      }),
+      false,
+    );
+  });
+
   it("scrolls when a new message is appended and the viewer was already at the bottom", () => {
     assert.equal(
       shouldAutoScrollOnNewMessage({
