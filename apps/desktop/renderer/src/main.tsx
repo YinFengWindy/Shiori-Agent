@@ -1,5 +1,5 @@
 import type React from "react";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { DesktopAppFrame } from "./app/DesktopAppFrame";
 import {
@@ -34,6 +34,7 @@ import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
 import { useStoryWorkspacePresentation } from "./app/useStoryWorkspacePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
+import type { ChatMessageNavigationScroller } from "./chat/useChatScrollController";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalDiagnostics";
 import { useImageStudioState } from "./image/useImageStudioState";
@@ -53,6 +54,7 @@ import type {
   AppMainView,
   PendingRoleCardAction,
   RoleRecord,
+  SessionImageHistoryMessage,
   SessionPayload,
 } from "./shared/types";
 import "./styles.css";
@@ -124,6 +126,7 @@ function App(): React.ReactElement {
     defaultCollapsed: true,
   });
   const [selectedChatImageKey, setSelectedChatImageKey] = useState("");
+  const [imageHistoryMessages, setImageHistoryMessages] = useState<SessionImageHistoryMessage[]>([]);
   const [chatImageLightboxOpen, setChatImageLightboxOpen] = useState(false);
   const [addingChatImageToAssetLibrary, setAddingChatImageToAssetLibrary] = useState(false);
   const [windowMaximized, setWindowMaximized] = useState(false);
@@ -133,6 +136,7 @@ function App(): React.ReactElement {
   const roleAssetSaveRequestIdRef = useRef(0);
   const activeRoleIdRef = useLatestRef(activeRoleId);
   const activeSessionRef = useLatestRef(activeSession);
+  const pendingMessageNavigationRef = useLatestRef(pendingMessageNavigation);
   const roleSessionCacheRef = useRef<RoleSessionCache>({});
   const mainViewRef = useLatestRef<AppMainView>(mainView);
   const rolesRef = useLatestRef(roles);
@@ -140,6 +144,9 @@ function App(): React.ReactElement {
   const cancellingSessionsRef = useLatestRef(cancellingSessions);
   const unreadCountsRef = useLatestRef(unreadCounts);
   const roleFormRef = useLatestRef(roleForm);
+  const imageHistorySessionKeyRef = useRef("");
+  const activeSessionKeyForImages = activeSession?.key ?? "";
+  const activeSessionUpdatedAtForImages = activeSession?.updated_at ?? "";
   const lastNonSettingsViewRef = useDesktopViewSynchronization({
     mainView,
     activeRoleId,
@@ -176,7 +183,47 @@ function App(): React.ReactElement {
       return;
     }
     setPendingMessageNavigation({ roleId, messageKey: nextMessageKey });
+    setHighlightedMessageKey(nextMessageKey);
   }
+
+  function clearMessageNavigation(target?: { roleId: string; messageKey: string }): void {
+    const current = pendingMessageNavigationRef.current;
+    if (
+      target
+      && (!current || current.roleId !== target.roleId || current.messageKey !== target.messageKey)
+    ) {
+      return;
+    }
+    setPendingMessageNavigation(null);
+    setHighlightedMessageKey("");
+  }
+
+  const handleMessageNavigationTargetMounted = useCallback((
+    messageKey: string,
+    target: HTMLElement,
+    scrollToMessage: ChatMessageNavigationScroller,
+  ): void => {
+    const current = pendingMessageNavigationRef.current;
+    if (
+      !current
+      || current.roleId !== activeRoleIdRef.current
+      || current.messageKey !== messageKey
+    ) {
+      return;
+    }
+    scrollToMessage(target, () => {
+      const latest = pendingMessageNavigationRef.current;
+      if (
+        !latest
+        || latest.roleId !== activeRoleIdRef.current
+        || latest.messageKey !== messageKey
+      ) {
+        return;
+      }
+      setPendingMessageNavigation(null);
+      setHighlightedMessageKey("");
+    });
+  }, [activeRoleIdRef, pendingMessageNavigationRef]);
 
   const { chooseIllustration, applyRoleSnapshot, rememberIllustration } = useRolePresentation({
     activeRoleIdRef,
@@ -234,6 +281,8 @@ function App(): React.ReactElement {
     appendSessionErrorMessage,
     openRole,
     sendMessage,
+    loadOlderMessages,
+    loadMessagesAround,
     commitActiveSession,
     updateCommittedActiveSession,
   } = useDesktopSessionState({
@@ -263,6 +312,38 @@ function App(): React.ReactElement {
     unreadCountsRef,
     openRoleRequestIdRef,
   });
+
+  useEffect(() => {
+    const sessionKey = activeSessionKeyForImages;
+    if (!sessionKey) {
+      setImageHistoryMessages([]);
+      imageHistorySessionKeyRef.current = "";
+      return;
+    }
+    const sessionChanged = imageHistorySessionKeyRef.current !== sessionKey;
+    imageHistorySessionKeyRef.current = sessionKey;
+    // Do not expose the previous role's media while the new index is loading.
+    if (sessionChanged) setImageHistoryMessages([]);
+    let cancelled = false;
+    void window.miraDesktop.invoke({
+      method: "session.imageHistory",
+      payload: { session_key: sessionKey },
+    }).then((response) => {
+      if (cancelled || response.error) return;
+      if (response.payload.session_key !== sessionKey) return;
+      const messages = response.payload.messages;
+      if (!Array.isArray(messages)) return;
+      setImageHistoryMessages(messages.filter((message): message is SessionImageHistoryMessage => (
+        Boolean(message) && typeof message === "object"
+        && typeof (message as { id?: unknown }).id === "string"
+        && typeof (message as { seq?: unknown }).seq === "number"
+        && Array.isArray((message as { media?: unknown }).media)
+      )));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionKeyForImages, activeSessionUpdatedAtForImages]);
 
   useDesktopBridgeLifecycle({
     activeRoleId,
@@ -339,6 +420,7 @@ function App(): React.ReactElement {
     roleForm,
     activeIllustration,
     activeSession,
+    imageHistoryMessages,
     selectedChatImageKey,
     health,
     sendingSessions,
@@ -371,6 +453,7 @@ function App(): React.ReactElement {
     openChatLatestImageSidebar: chatLatestImageSidebar.open,
     loadRolesFromBridge,
     updateCommittedActiveSession,
+    loadMessagesAround,
     queueMessageNavigation,
     setError,
     setNotice,
@@ -468,11 +551,8 @@ function App(): React.ReactElement {
   useDesktopUiEffects({
     sidebarAnimating: leftSidebar.animating,
     setSidebarAnimating: leftSidebar.setAnimating,
-    activeSessionKey,
     pendingMessageNavigation,
-    activeRoleId,
     setHighlightedMessageKey,
-    setPendingMessageNavigation,
     notice,
     setNotice,
     workspaceFeedback,
@@ -560,6 +640,7 @@ function App(): React.ReactElement {
       conversationEndRef={conversationEndRef}
       headerTitle={headerTitle}
       highlightedMessageKey={highlightedMessageKey}
+      onMessageNavigationTargetMounted={handleMessageNavigationTargetMounted}
       notice={notice}
       isVisibleChatSending={isVisibleChatSending}
       isVisibleChatCancelling={isVisibleChatCancelling}
@@ -575,6 +656,7 @@ function App(): React.ReactElement {
       onCopyMessage={(content) => void copyChatMessage(content)}
       onSendMessage={sendMessage}
       onCancelChat={() => void cancelChatTurn(activeSessionKey, activeRoleId)}
+      onLoadOlderMessages={loadOlderMessages}
       imageHistorySidebar={imageHistorySidebar}
       detailRole={detailRole}
       pendingRoleCardAction={pendingRoleCardAction}
@@ -624,18 +706,19 @@ function App(): React.ReactElement {
         setShowSearchDialog(false);
         setSearchQuery("");
         const messageKey = result.matchedField === "message"
-          ? getMessageKey(result.roleId, result.matchedMessageId, result.matchedMessageIndex)
+          ? getMessageKey(result.matchedMessageId)
           : "";
-        navigateToRoleSearchResult({
+        void navigateToRoleSearchResult({
           result,
           messageKey,
           openChatView,
+          isSearchResultSessionActive: (roleId, sessionKey) => (
+            activeRoleIdRef.current === roleId && activeSessionRef.current?.key === sessionKey
+          ),
           queueMessageNavigation,
-          clearMessageNavigation: () => {
-            setPendingMessageNavigation(null);
-            setHighlightedMessageKey("");
-          },
+          clearMessageNavigation,
           openRole: (roleId, options) => openRole(roleId, null, options),
+          loadMessagesAround,
         });
       }}
       onUpdateSearchQuery={setSearchQuery}

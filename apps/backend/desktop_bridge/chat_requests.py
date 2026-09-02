@@ -120,7 +120,8 @@ class DesktopChatRequestHandler:
             emit_event=emit_event,
         )
         return {
-            "session": self._session_presenter.serialize(session),
+            "session": self._session_presenter.serialize_summary(session),
+            "message": self._session_presenter.serialize_message(session.messages[-1]),
             "turn_id": turn_id,
             "events": [],
         }

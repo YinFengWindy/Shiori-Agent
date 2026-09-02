@@ -1,6 +1,7 @@
 import type React from "react";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { ChatSurface } from "../chat/ChatSurface";
+import type { ChatMessageNavigationScroller } from "../chat/useChatScrollController";
 import { ImageStudioPage } from "../image/ImageStudioPage";
 import { ImageStudioSidebar } from "../image/ImageStudioSidebar";
 import { PromptTagLibraryPage } from "../image/PromptTagLibraryPage";
@@ -100,6 +101,11 @@ type DesktopAppFrameProps = {
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
+  onMessageNavigationTargetMounted?: (
+    messageKey: string,
+    target: HTMLElement,
+    scrollToMessage: ChatMessageNavigationScroller,
+  ) => void;
   notice: string;
   isVisibleChatSending: boolean;
   isVisibleChatCancelling: boolean;
@@ -115,6 +121,7 @@ type DesktopAppFrameProps = {
   onCopyMessage: (content: string) => void;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
   onCancelChat: () => void;
+  onLoadOlderMessages: (sessionKey: string) => Promise<boolean>;
   imageHistorySidebar: RightSidebarViewState;
   detailRole: RoleRecord | null;
   pendingRoleCardAction: PendingRoleCardAction;
@@ -228,6 +235,7 @@ export function DesktopAppFrame({
   conversationEndRef,
   headerTitle,
   highlightedMessageKey,
+  onMessageNavigationTargetMounted,
   notice,
   isVisibleChatSending,
   isVisibleChatCancelling,
@@ -243,6 +251,7 @@ export function DesktopAppFrame({
   onCopyMessage,
   onSendMessage,
   onCancelChat,
+  onLoadOlderMessages,
   imageHistorySidebar,
   detailRole,
   pendingRoleCardAction,
@@ -447,6 +456,7 @@ export function DesktopAppFrame({
               conversationEndRef={conversationEndRef}
               headerTitle={headerTitle}
               highlightedMessageKey={highlightedMessageKey}
+              onMessageNavigationTargetMounted={onMessageNavigationTargetMounted}
               notice={notice}
               sending={isVisibleChatSending}
               cancelling={isVisibleChatCancelling}
@@ -463,6 +473,7 @@ export function DesktopAppFrame({
               onCopyMessage={onCopyMessage}
               onSendMessage={onSendMessage}
               onCancelChat={onCancelChat}
+              onLoadOlderMessages={onLoadOlderMessages}
               onToggleChatLatestImageSidebar={chatLatestImageSidebar.toggle}
             />
           ) : null}

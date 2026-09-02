@@ -125,6 +125,32 @@ describe("chat streaming state", () => {
     assert.equal(completed.messages.at(-1)?.streaming, true);
   });
 
+  it("starts a new assistant trace after the previous streamed reply has finished", () => {
+    const previousReply = finishChatStream(
+      applyChatStreamDelta(session(), "上一轮回复", "上一轮思考"),
+    );
+
+    const nextTurn = applyChatToolStarted(previousReply, {
+      iteration: 1,
+      callId: "call-next-turn",
+      toolName: "web_search",
+      arguments: { query: "新一轮" },
+    });
+
+    assert.equal(nextTurn.messages.length, 3);
+    assert.equal(nextTurn.messages[1]?.content, "上一轮回复");
+    assert.equal(nextTurn.messages[1]?.streaming, false);
+    assert.equal(nextTurn.messages[1]?.tool_chain, undefined);
+    assert.deepEqual(nextTurn.messages[2]?.tool_chain?.[0]?.calls?.[0]?.call_id, "call-next-turn");
+    assert.equal(nextTurn.messages[2]?.streaming, true);
+
+    const nextTextTurn = applyChatStreamDelta(previousReply, "新一轮文本", "");
+    assert.equal(nextTextTurn.messages.length, 3);
+    assert.equal(nextTextTurn.messages[1]?.content, "上一轮回复");
+    assert.equal(nextTextTurn.messages[2]?.content, "新一轮文本");
+    assert.equal(nextTextTurn.messages[2]?.streaming, true);
+  });
+
   it("ignores tool lifecycle events without stable identifiers", () => {
     const original = session();
 

@@ -19,18 +19,82 @@ import {
   type RoleSessionCache,
 } from "../chat/roleSessionCache";
 import { getRoleIdFromSession } from "./appState";
+import {
+  getSessionPaginationState,
+  mergeOpenedSessionSnapshot,
+  mergeSessionSummaryAndMessage,
+  parseSessionMessagePage,
+  parseSessionSummary,
+} from "./sessionMessagePagination";
+import { useDesktopSessionPagination } from "./useDesktopSessionPagination";
+export {
+  mergeSessionMessagePage,
+  mergeSessionSummaryAndMessage,
+  parseSessionMessagePage,
+} from "./sessionMessagePagination";
 import { reconcileRoles } from "../roles/roleListState";
 import type {
   AppMainView,
   ChatSendRequest,
   RoleRecord,
   SessionMessage,
+  SessionMessagePage,
+  SessionMessageUpdatePayload,
   SessionPayload,
 } from "../shared/types";
 import type { NavigationEntry } from "./appState";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
 
 type SendingSessionsMap = Record<string, string>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Parses the paginated bridge response into the renderer's loaded-message session shape. */
+export function parseOpenedSessionPayload(payload: Record<string, unknown>): SessionPayload | null {
+  const session = parseSessionSummary(payload.session);
+  if (session && isRecord(payload.session) && Array.isArray(payload.session.messages)
+    && payload.session.messages.every((message) => isRecord(message)
+      && typeof message.role === "string" && typeof message.content === "string")) {
+    return {
+      ...session,
+      messages: payload.session.messages,
+    };
+  }
+  const page = parseSessionMessagePage(payload.page);
+  if (!session || !page) {
+    return null;
+  }
+  return {
+    ...session,
+    messages: page.messages,
+    pagination: getSessionPaginationState(page),
+  };
+}
+
+/** Parses a bridge event or mutation response carrying a summary and at most one changed message. */
+export function parseSessionMessageUpdatePayload(
+  payload: Record<string, unknown>,
+): SessionMessageUpdatePayload | null {
+  const session = parseSessionSummary(payload.session);
+  const rawMessage = payload.message;
+  if (!session || (rawMessage != null && (!isRecord(rawMessage)
+    || typeof rawMessage.role !== "string" || typeof rawMessage.content !== "string"))) {
+    return null;
+  }
+  const rawMessages = payload.messages;
+  if (rawMessages != null && (!Array.isArray(rawMessages)
+    || !rawMessages.every((item) => isRecord(item)
+      && typeof item.role === "string" && typeof item.content === "string"))) {
+    return null;
+  }
+  return {
+    session,
+    message: rawMessage as SessionMessage | null,
+    messages: rawMessages as SessionMessage[] | undefined,
+  };
+}
 
 type UseDesktopSessionStateArgs = {
   setRoles: React.Dispatch<React.SetStateAction<RoleRecord[]>>;
@@ -170,22 +234,25 @@ export function useDesktopSessionState({
   }
 
   function commitActiveSession(nextSession: SessionPayload | null): void {
-    const pendingUserMessage = nextSession
-      ? pendingUserMessagesRef.current[nextSession.key] ?? null
+    const incomingSession = nextSession
+      ? mergeOpenedSessionSnapshot(activeSessionRef.current, nextSession)
       : null;
-    const sending = Boolean(nextSession?.key && sendingSessionsRef.current[nextSession.key]);
+    const pendingUserMessage = incomingSession
+      ? pendingUserMessagesRef.current[incomingSession.key] ?? null
+      : null;
+    const sending = Boolean(incomingSession?.key && sendingSessionsRef.current[incomingSession.key]);
     const mergedSession = mergeIncomingSessionDuringSend(
       activeSessionRef.current,
-      nextSession,
+      incomingSession,
       sending,
       pendingUserMessage,
     );
     if (
       pendingUserMessage
-      && nextSession
-      && shouldClearPendingUserMessage(pendingUserMessage, nextSession, sending)
+      && incomingSession
+      && shouldClearPendingUserMessage(pendingUserMessage, incomingSession, sending)
     ) {
-      delete pendingUserMessagesRef.current[nextSession.key];
+      delete pendingUserMessagesRef.current[incomingSession.key];
     }
     const resolvedSession = reconcileSessionMessageRenderIds(activeSessionRef.current, mergedSession);
     activeSessionRef.current = resolvedSession;
@@ -211,6 +278,17 @@ export function useDesktopSessionState({
     }
     setActiveSession(nextSession);
   }
+
+  const {
+    invalidateSessionPagination,
+    loadOlderMessages,
+    loadMessagesAround,
+  } = useDesktopSessionPagination({
+    activeRoleIdRef,
+    activeSessionRef,
+    setError,
+    updateCommittedActiveSession,
+  });
 
   async function loadRolesFromBridge(): Promise<RoleRecord[] | null> {
     const rolesRes = await window.miraDesktop.invoke({
@@ -244,6 +322,7 @@ export function useDesktopSessionState({
   async function fetchRoleSession(roleId: string): Promise<{
     error: string | null;
     session: SessionPayload | null;
+    page: SessionMessagePage | null;
   }> {
     try {
       const res = await window.miraDesktop.invoke({
@@ -254,16 +333,28 @@ export function useDesktopSessionState({
         return {
           error: res.error.message,
           session: null,
+          page: null,
         };
       }
+      const session = parseOpenedSessionPayload(res.payload);
+      if (!session) {
+        return {
+          error: "打开角色会话响应无效",
+          session: null,
+          page: null,
+        };
+      }
+      const page = parseSessionMessagePage(res.payload.page);
       return {
-        error: null,
-        session: res.payload.session as SessionPayload,
+        error: page ? null : "打开角色会话分页响应无效",
+        session: page ? session : null,
+        page,
       };
     } catch (error) {
       return {
         error: error instanceof Error ? error.message : String(error),
         session: null,
+        page: null,
       };
     }
   }
@@ -345,8 +436,12 @@ export function useDesktopSessionState({
   async function openRole(
     roleId: string,
     roleOverride: RoleRecord | null = null,
-    options?: { recordHistory?: boolean },
+    options?: { recordHistory?: boolean; preserveCurrentSession?: boolean },
   ): Promise<boolean> {
+    const currentSessionKey = activeSessionRef.current?.key ?? "";
+    if (currentSessionKey) {
+      invalidateSessionPagination(currentSessionKey);
+    }
     const requestId = openRoleRequestIdRef.current + 1;
     openRoleRequestIdRef.current = requestId;
     const previousRoleId = activeRoleIdRef.current;
@@ -364,11 +459,12 @@ export function useDesktopSessionState({
       cachedSession,
     });
     const role = roleOverride ?? rolesRef.current.find((item) => item.id === roleId) ?? null;
-    if (role) {
+    const preserveCurrentSession = Boolean(options?.preserveCurrentSession && !cachedSession);
+    if (role && !preserveCurrentSession) {
       applyRoleSnapshotRef.current(role, cachedSession);
       setError("");
     }
-    if (immediateSession !== activeSessionRef.current) {
+    if (!preserveCurrentSession && immediateSession !== activeSessionRef.current) {
       commitActiveSession(immediateSession);
     }
     const { error: sessionError, session } = await fetchRoleSession(roleId);
@@ -406,6 +502,7 @@ export function useDesktopSessionState({
       return false;
     }
     cacheRoleSession(roleId, session);
+    invalidateSessionPagination(session.key);
     setActiveRoleId(roleId);
     commitActiveSession(session);
     setError("");
@@ -501,9 +598,16 @@ export function useDesktopSessionState({
         window.alert(res.error.message);
         return false;
       }
-      const nextSession = res.payload.session as SessionPayload;
-      // Keep the optimistic user turn visible when chat.send resolves with a stale session snapshot.
-      commitActiveSession(nextSession);
+      const update = parseSessionMessageUpdatePayload(res.payload);
+      if (!update || update.session.key !== sessionKey || !update.message) {
+        throw new Error("发送消息响应无效");
+      }
+      // Preserve the loaded page and replace the optimistic user message with the persisted turn.
+      commitActiveSession(mergeSessionSummaryAndMessage(
+        activeSessionRef.current,
+        update.session,
+        update.message,
+      ));
       return true;
     } catch (error) {
       delete pendingUserMessagesRef.current[sessionKey];
@@ -562,6 +666,8 @@ export function useDesktopSessionState({
     removeCachedRoleSession,
     loadRolesFromBridge,
     fetchRoleSession,
+    loadOlderMessages,
+    loadMessagesAround,
     refreshSession,
     clearAllSendingSessions,
     clearSessionSending,

@@ -89,4 +89,84 @@ describe("ChatMessageList", () => {
     );
     assert.ok(markup.indexOf("memorize") < markup.indexOf("已经为你记住了。"));
   });
+
+  it("mounts a bounded DOM window for a large loaded history", () => {
+    const messages = Array.from({ length: 1_000 }, (_value, index): SessionMessage => ({
+      id: `message-${index}`,
+      role: index % 2 === 0 ? "assistant" : "user",
+      content: `message-${index}`,
+    }));
+    const markup = renderToStaticMarkup(
+      <ChatMessageList
+        activeRole={null}
+        sessionKey="role:mira"
+        conversationEndRef={React.createRef<HTMLDivElement>()}
+        conversationListRef={React.createRef<HTMLDivElement>()}
+        highlightedMessageKey=""
+        visibleMessageWindow={{ startIndex: 0, hiddenMessageCount: 0, messages }}
+        onBeginAttachmentDrag={() => undefined}
+        onExpandOlderMessages={() => undefined}
+        onJumpToMessage={() => undefined}
+        onOpenContextMenu={() => undefined}
+        onOpenImagePreview={() => undefined}
+      />,
+    );
+
+    assert.ok(!markup.includes('data-message-key="message-0"'));
+    assert.ok(markup.includes('data-message-key="message-999"'));
+    assert.ok((markup.match(/data-message-key=/g) ?? []).length < 80);
+  });
+
+  it("disables browser scroll anchoring while the virtual window changes", () => {
+    const markup = renderToStaticMarkup(
+      <ChatMessageList
+        activeRole={null}
+        sessionKey="role:mira"
+        conversationEndRef={React.createRef<HTMLDivElement>()}
+        conversationListRef={React.createRef<HTMLDivElement>()}
+        highlightedMessageKey=""
+        visibleMessageWindow={{
+          startIndex: 0,
+          hiddenMessageCount: 0,
+          messages: Array.from({ length: 200 }, (_value, index): SessionMessage => ({
+            id: `message-${index}`,
+            role: "assistant",
+            content: `message-${index}`,
+          })),
+        }}
+        onBeginAttachmentDrag={() => undefined}
+        onExpandOlderMessages={() => undefined}
+        onJumpToMessage={() => undefined}
+        onOpenContextMenu={() => undefined}
+        onOpenImagePreview={() => undefined}
+      />,
+    );
+
+    assert.match(markup, /style="[^"]*overflow-anchor:none[^"]*"/);
+  });
+
+  it("does not add a second intrinsic-size virtualization layer to message rows", () => {
+    const markup = renderToStaticMarkup(
+      <ChatMessageList
+        activeRole={null}
+        sessionKey="role:mira"
+        conversationEndRef={React.createRef<HTMLDivElement>()}
+        conversationListRef={React.createRef<HTMLDivElement>()}
+        highlightedMessageKey=""
+        visibleMessageWindow={getVisibleChatMessages([{
+          id: "message-1",
+          role: "assistant",
+          content: "消息内容",
+        }], 10)}
+        onBeginAttachmentDrag={() => undefined}
+        onExpandOlderMessages={() => undefined}
+        onJumpToMessage={() => undefined}
+        onOpenContextMenu={() => undefined}
+        onOpenImagePreview={() => undefined}
+      />,
+    );
+
+    assert.doesNotMatch(markup, /content-visibility/);
+    assert.doesNotMatch(markup, /contain-intrinsic-size/);
+  });
 });

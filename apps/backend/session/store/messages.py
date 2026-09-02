@@ -201,6 +201,99 @@ class _MessageMixin:
             ).fetchall()
         return [self._row_to_message(row) for row in rows]
 
+    def fetch_messages_page(
+        self,
+        session_key: str,
+        *,
+        before_seq: int | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Fetch one desktop message page using a stable sequence cursor."""
+        safe_limit = max(1, min(int(limit), 100))
+        clean_before = int(before_seq) if before_seq is not None else None
+        where = "session_key = ?"
+        params: list[Any] = [session_key]
+        if clean_before is not None:
+            where += " AND seq < ?"
+            params.append(clean_before)
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT {_MESSAGE_SELECT_COLUMNS}
+                FROM messages
+                WHERE {where}
+                ORDER BY seq DESC
+                LIMIT ?
+                """,
+                tuple([*params, safe_limit]),
+            ).fetchall()
+            stats = self._conn.execute(
+                """
+                SELECT COUNT(1) AS total_count,
+                       MIN(seq) AS oldest_seq,
+                       MAX(seq) AS newest_seq
+                FROM messages
+                WHERE session_key = ?
+                """,
+                (session_key,),
+            ).fetchone()
+        messages = [self._row_to_message(row) for row in reversed(rows)]
+        total_count = int((stats["total_count"] if stats else 0) or 0)
+        session_oldest_seq = stats["oldest_seq"] if stats else None
+        session_newest_seq = stats["newest_seq"] if stats else None
+        returned_oldest = messages[0]["seq"] if messages else None
+        returned_newest = messages[-1]["seq"] if messages else None
+        return {
+            "messages": messages,
+            "limit": safe_limit,
+            "has_more": (
+                returned_oldest is not None
+                and session_oldest_seq is not None
+                and int(returned_oldest) > int(session_oldest_seq)
+            ),
+            "oldest_seq": returned_oldest,
+            "newest_seq": returned_newest,
+            "session_oldest_seq": (
+                int(session_oldest_seq) if session_oldest_seq is not None else None
+            ),
+            "session_newest_seq": (
+                int(session_newest_seq) if session_newest_seq is not None else None
+            ),
+            "total_count": total_count,
+            "before_seq": clean_before,
+            "next_before_seq": returned_oldest,
+        }
+
+    def fetch_image_history(self, session_key: str) -> list[dict[str, Any]]:
+        """Returns the lightweight media projection for every persisted message."""
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT id, seq, ts, media
+                FROM messages
+                WHERE session_key = ? AND media IS NOT NULL
+                ORDER BY seq ASC
+                """,
+                (session_key,),
+            ).fetchall()
+        history: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                media = json.loads(row["media"] or "[]")
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(media, list):
+                continue
+            history.append(
+                {
+                    "id": str(row["id"]),
+                    "seq": int(row["seq"]),
+                    "timestamp": str(row["ts"] or "") or None,
+                    "media": media,
+                }
+            )
+        return history
+
     def list_messages_for_admin(
         self,
         *,

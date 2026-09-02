@@ -8,6 +8,14 @@ export type ChatImageHistoryEntry = {
   timestamp: string | null;
 };
 
+export type ChatImageHistorySourceMessage = {
+  id?: string;
+  seq?: number;
+  role?: string;
+  timestamp?: string | null;
+  media?: unknown;
+};
+
 const supportedImageExtensions = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"]);
 
 /** Returns whether a media path points to a chat image asset that can be previewed in the sidebar. */
@@ -25,13 +33,17 @@ export function buildChatImageHistoryKey(messageId: string, mediaIndex: number):
 
 /** Collects every image that appeared in the current chat session, preserving message order. */
 export function collectChatImageHistory(session: SessionPayload | null): ChatImageHistoryEntry[] {
-  if (!session) {
-    return [];
-  }
+  return collectChatImageHistoryFromMessages(session?.messages ?? []);
+}
+
+/** Builds chat-image entries from either the loaded chat window or a media-only bridge projection. */
+export function collectChatImageHistoryFromMessages(
+  messages: ReadonlyArray<ChatImageHistorySourceMessage>,
+): ChatImageHistoryEntry[] {
 
   const history: ChatImageHistoryEntry[] = [];
-  for (let messageIndex = 0; messageIndex < session.messages.length; messageIndex += 1) {
-    const message = session.messages[messageIndex];
+  for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
+    const message = messages[messageIndex];
     const media = Array.isArray(message?.media) ? message.media : [];
     for (let mediaIndex = 0; mediaIndex < media.length; mediaIndex += 1) {
       const rawPath = media[mediaIndex];
@@ -50,6 +62,23 @@ export function collectChatImageHistory(session: SessionPayload | null): ChatIma
     }
   }
   return history;
+}
+
+/** Merges the persisted media index with loaded and incremental message media. */
+export function mergeChatImageHistory(
+  indexedMessages: ReadonlyArray<ChatImageHistorySourceMessage>,
+  loadedMessages: ReadonlyArray<ChatImageHistorySourceMessage>,
+): ChatImageHistoryEntry[] {
+  const historyByKey = new Map<string, ChatImageHistoryEntry>();
+  for (const entry of collectChatImageHistoryFromMessages(indexedMessages)) {
+    historyByKey.set(entry.historyKey, entry);
+  }
+  // Loaded pages and bridge updates are newer than the index fetch, so they
+  // replace an existing media slot and append newly generated images.
+  for (const entry of collectChatImageHistoryFromMessages(loadedMessages)) {
+    historyByKey.set(entry.historyKey, entry);
+  }
+  return [...historyByKey.values()];
 }
 
 /** Keeps the current selection when possible and otherwise falls back to the newest chat image. */

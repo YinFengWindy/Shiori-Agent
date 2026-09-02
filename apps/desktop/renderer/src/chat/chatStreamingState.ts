@@ -10,7 +10,7 @@ export function applyChatStreamDelta(
   if (!contentDelta && !thinkingDelta) return session;
   const messages = [...session.messages];
   const last = messages[messages.length - 1];
-  if (last?.role === "assistant" && !last.id) {
+  if (last?.role === "assistant" && !last.id && last.streaming === true) {
     messages[messages.length - 1] = {
       ...last,
       content: last.content + contentDelta,
@@ -134,7 +134,7 @@ function updateTransientAssistantTool(
 ): SessionPayload {
   const messages = [...session.messages];
   const last = messages[messages.length - 1];
-  const assistant = last?.role === "assistant" && !last.id
+  const assistant = last?.role === "assistant" && !last.id && last.streaming === true
     ? last
     : ensureChatMessageRenderId({ role: "assistant", content: "", streaming: true });
   const nextAssistant = mergeToolCall(assistant, iteration, toolCall);

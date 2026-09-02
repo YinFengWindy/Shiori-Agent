@@ -118,7 +118,8 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
     assert opened.payload["session"]["created_at"]
     assert opened.payload["session"]["updated_at"]
     assert opened.payload["session"]["last_consolidated"] == 0
-    assert opened.payload["session"]["messages"] == []
+    assert "messages" not in opened.payload["session"]
+    assert opened.payload["page"]["messages"] == []
 
     response = await service.handle(
         {
@@ -137,14 +138,12 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
     assert response.error is None
     assert response.payload["session"]["key"] == f"role:{role_id}"
     assert "thread" not in response.payload["session"]
-    assert [item["role"] for item in response.payload["session"]["messages"]] == [
-        "user"
-    ]
-    assert response.payload["session"]["messages"][0]["content"] == "hi"
-    assert response.payload["session"]["messages"][0]["media"] == [
+    assert response.payload["message"]["role"] == "user"
+    assert response.payload["message"]["content"] == "hi"
+    assert response.payload["message"]["media"] == [
         "D:\\files\\scene.png"
     ]
-    assert response.payload["session"]["messages"][0]["metadata"][
+    assert response.payload["message"]["metadata"][
         "client_message_id"
     ] == "desktop-message-1"
     await _wait_until(
@@ -156,12 +155,9 @@ async def test_desktop_bridge_role_lifecycle_and_chat_send(tmp_path: Path):
     delta_event = next(item for item in emitted if item["method"] == "chat.delta")
     done_event = next(item for item in emitted if item["method"] == "chat.done")
     session_updated_event = emitted[-1]
-    assert [
-        item["role"] for item in session_updated_event["payload"]["session"]["messages"]
-    ] == ["user", "assistant"]
-    assert session_updated_event["payload"]["session"]["messages"][0]["media"] == [
-        "D:\\files\\scene.png"
-    ]
+    assert session_updated_event["payload"]["change"] == "message_appended"
+    assert session_updated_event["payload"]["message"]["role"] == "assistant"
+    assert session_updated_event["payload"]["message"]["content"] == "hello"
     assert delta_event["payload"]["content_delta"] == "hel"
     assert done_event["payload"]["reply"] == "hello"
     assert session_manager.conversation_store.list_message_thread_ids(f"role:{role_id}") == [
@@ -743,10 +739,11 @@ async def test_desktop_bridge_emits_session_updated_for_background_desktop_push(
     assert len(emitted) == 1
     assert emitted[0]["method"] == "session.updated"
     assert "thread" not in emitted[0]["payload"]["session"]
-    messages = emitted[0]["payload"]["session"]["messages"]
-    assert messages[-1]["content"] == "主动消息"
-    assert messages[-1]["metadata"]["proactive"] is True
-    assert messages[-1]["metadata"]["tools_used"] == ["message_push"]
+    message = emitted[0]["payload"]["message"]
+    assert emitted[0]["payload"]["change"] == "message_appended"
+    assert message["content"] == "主动消息"
+    assert message["metadata"]["proactive"] is True
+    assert message["metadata"]["tools_used"] == ["message_push"]
     assert session_manager.conversation_store.list_message_thread_ids("role:mira") == [
         "thread:mira:desktop"
     ]

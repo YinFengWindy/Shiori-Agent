@@ -27,3 +27,14 @@ export function shouldAutoScrollOnNewMessage({
   }
   return sending || wasAtBottom;
 }
+
+/** Keeps a following chat pinned while virtualization settles measured row heights. */
+export function shouldAutoScrollOnContentSizeChange({
+  highlightedMessageKey,
+  wasAtBottom,
+}: {
+  highlightedMessageKey: string;
+  wasAtBottom: boolean;
+}): boolean {
+  return wasAtBottom && !highlightedMessageKey;
+}

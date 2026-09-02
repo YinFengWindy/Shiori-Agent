@@ -1,16 +1,12 @@
 import { useEffect } from "react";
 import type React from "react";
-import { findChatMessageElement } from "../chat/chatMessageDom";
 import type { WorkspaceFeedback } from "./appState";
 
 type UseDesktopUiEffectsArgs = {
   sidebarAnimating: boolean;
   setSidebarAnimating: React.Dispatch<React.SetStateAction<boolean>>;
-  activeSessionKey: string;
   pendingMessageNavigation: { roleId: string; messageKey: string } | null;
-  activeRoleId: string;
   setHighlightedMessageKey: React.Dispatch<React.SetStateAction<string>>;
-  setPendingMessageNavigation: React.Dispatch<React.SetStateAction<{ roleId: string; messageKey: string } | null>>;
   notice: string;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
   workspaceFeedback: WorkspaceFeedback | null;
@@ -25,15 +21,29 @@ type UseDesktopUiEffectsArgs = {
   setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
+/** Keeps a message target pending while its destination role session is opening. */
+export function shouldWaitForMessageNavigation(
+  pendingMessageNavigation: { roleId: string; messageKey: string } | null,
+  activeSessionKey: string,
+  activeRoleId: string,
+  activeSessionMessageKeys: readonly string[],
+): boolean {
+  return Boolean(
+    pendingMessageNavigation
+    && (
+      !activeSessionKey
+      || pendingMessageNavigation.roleId !== activeRoleId
+      || !activeSessionMessageKeys.includes(pendingMessageNavigation.messageKey)
+    ),
+  );
+}
+
 /** Runs UI-only desktop effects such as dismiss timers and message highlight retries. */
 export function useDesktopUiEffects({
   sidebarAnimating,
   setSidebarAnimating,
-  activeSessionKey,
   pendingMessageNavigation,
-  activeRoleId,
   setHighlightedMessageKey,
-  setPendingMessageNavigation,
   notice,
   setNotice,
   workspaceFeedback,
@@ -80,45 +90,18 @@ export function useDesktopUiEffects({
 
   useEffect(() => {
     if (!highlightedMessageKey) return;
+    if (
+      pendingMessageNavigation
+      && pendingMessageNavigation.messageKey === highlightedMessageKey
+    ) {
+      return;
+    }
     const timer = window.setTimeout(() => setHighlightedMessageKey(""), 2400);
     return () => window.clearTimeout(timer);
-  }, [highlightedMessageKey, setHighlightedMessageKey]);
-
-  useEffect(() => {
-    if (!activeSessionKey || !pendingMessageNavigation) return;
-    if (pendingMessageNavigation.roleId !== activeRoleId) return;
-    let cancelled = false;
-    let attempts = 0;
-    const maxAttempts = 12;
-
-    const tryHighlight = () => {
-      if (cancelled) return;
-      setHighlightedMessageKey(pendingMessageNavigation.messageKey);
-      const target = findChatMessageElement(pendingMessageNavigation.messageKey);
-      if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "center" });
-        setPendingMessageNavigation(null);
-        return;
-      }
-      attempts += 1;
-      if (attempts >= maxAttempts) {
-        setPendingMessageNavigation(null);
-        return;
-      }
-      window.setTimeout(tryHighlight, 80);
-    };
-
-    const frame = window.requestAnimationFrame(tryHighlight);
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(frame);
-    };
   }, [
-    activeRoleId,
-    activeSessionKey,
+    highlightedMessageKey,
     pendingMessageNavigation,
     setHighlightedMessageKey,
-    setPendingMessageNavigation,
   ]);
 
   useEffect(() => {

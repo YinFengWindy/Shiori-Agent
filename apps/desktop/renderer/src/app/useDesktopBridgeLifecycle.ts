@@ -9,6 +9,10 @@ import { useLatestRef } from "../shared/useLatestRef";
 import { parseChatTurnMetrics } from "../chat/chatTurnMetrics";
 import { getRoleIdFromSession, isProactiveAssistantMessage, type NavigationEntry } from "./appState";
 import { shouldProcessDesktopBridgeEventSynchronously } from "./desktopBridgeEventPriority";
+import {
+  mergeSessionSummaryAndMessage,
+  parseSessionMessageUpdatePayload,
+} from "./useDesktopSessionState";
 import type { RoleRecord, SessionPayload, AppMainView } from "../shared/types";
 
 type UseDesktopBridgeLifecycleArgs = {
@@ -184,17 +188,23 @@ export function useDesktopBridgeLifecycle({
         }
 
         if (event.method === "session.updated") {
-          const session = event.payload.session as SessionPayload | undefined;
-          if (!session) return;
+          const update = parseSessionMessageUpdatePayload(event.payload);
+          if (!update) return;
           const currentSession = activeSessionRef.current;
           const currentView = mainViewRef.current;
+          const isActiveSession = currentSession?.key === update.session.key;
+          const session = mergeSessionSummaryAndMessage(
+            isActiveSession ? currentSession : null,
+            update.session,
+            update.message,
+            update.messages,
+          );
           const roleId = getRoleIdFromSession(session);
-          const isActiveSession = currentSession?.key === session.key;
           const isVisibleChat = isActiveSession && currentView.kind === "chat";
-          if (roleId) {
-            callbacks.cacheRoleSession(roleId, session);
-          }
           if (isActiveSession) {
+            if (roleId) {
+              callbacks.cacheRoleSession(roleId, session);
+            }
             callbacks.commitActiveSession(session);
             const currentRole = rolesRef.current.find((item) => item.id === activeRoleIdRef.current) ?? null;
             setActiveIllustration((current) => callbacks.chooseIllustration(currentRole, session, current));

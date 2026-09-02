@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessageContextMenu } from "./ChatMessageContextMenu";
@@ -10,15 +10,18 @@ import {
 } from "./chatMessageActions";
 import { ChatRightSidebar, type ChatSidebarMode } from "./ChatRightSidebar";
 import {
-  getExpandedVisibleChatMessageCountForKey,
-  getVisibleChatMessages,
-  initialVisibleChatMessageCount,
-  visibleChatMessageCountStep,
-} from "./chatMessageWindow";
-import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
+  shouldAutoScrollOnContentSizeChange,
+  shouldAutoScrollOnNewMessage,
+} from "./chatAutoScroll";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { useRoleTasks } from "./useRoleTasks";
+import { useChatMessagePagination } from "./useChatMessagePagination";
+import {
+  type ChatMessageNavigationScroller,
+  useChatScrollController,
+} from "./useChatScrollController";
 import { cx } from "../shared/styles";
+import { useLatestRef } from "../shared/useLatestRef";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
 
 type ChatSurfaceProps = {
@@ -41,6 +44,11 @@ type ChatSurfaceProps = {
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
+  onMessageNavigationTargetMounted?: (
+    messageKey: string,
+    target: HTMLElement,
+    scrollToMessage: ChatMessageNavigationScroller,
+  ) => void;
   notice: string;
   sending: boolean;
   cancelling: boolean;
@@ -57,6 +65,7 @@ type ChatSurfaceProps = {
   onCopyMessage: (content: string) => void;
   onSendMessage: (request: ChatSendRequest) => Promise<boolean>;
   onCancelChat: () => void;
+  onLoadOlderMessages?: (sessionKey: string) => Promise<boolean>;
   onToggleChatLatestImageSidebar: () => void;
 };
 
@@ -85,6 +94,7 @@ export function ChatSurface({
   conversationEndRef,
   headerTitle,
   highlightedMessageKey,
+  onMessageNavigationTargetMounted,
   notice,
   sending,
   cancelling,
@@ -101,6 +111,7 @@ export function ChatSurface({
   onCopyMessage,
   onSendMessage,
   onCancelChat,
+  onLoadOlderMessages = async () => false,
   onToggleChatLatestImageSidebar,
 }: ChatSurfaceProps) {
   const [visualsActive, setVisualsActive] = useState(() => (
@@ -113,13 +124,12 @@ export function ChatSurface({
   const previousChatImageCountRef = useRef(0);
   const previousRoleSelfViewRef = useRef(roleSelfView);
   const imagePriorityUserMessageCountRef = useRef(-1);
-  const autoScrollingRef = useRef(false);
   const stickToBottomRef = useRef(true);
+  const highlightedMessageKeyRef = useLatestRef(highlightedMessageKey);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
-  const [visibleMessageCount, setVisibleMessageCount] = useState(initialVisibleChatMessageCount);
   const hasStatusIllustration = Boolean(moodIllustrationUrl);
   const hasStatusContent = hasStatusIllustration || Boolean(roleSelfView);
   const [sidebarMode, setSidebarMode] = useState<ChatSidebarMode>(
@@ -136,29 +146,68 @@ export function ChatSurface({
     0,
   );
   const currentLastMessageContent = sessionMessages.at(-1)?.content ?? "";
+  const {
+    visibleMessageWindow,
+    loading: loadingOlderMessages,
+    canLoadOlderMessages,
+    onLoadOlderMessages: handleLoadOlderMessages,
+  } = useChatMessagePagination({
+    activeSession,
+    conversationListRef,
+    highlightedMessageKey,
+    loadOlderMessages: onLoadOlderMessages,
+  });
+  const {
+    isAutoScrollingRef,
+    restoreSessionScroll,
+    scrollToBottom,
+    scrollToMessage,
+  } = useChatScrollController({
+    conversationListRef,
+    sessionKey: activeSession?.key ?? "",
+  });
+  const handleMessageNavigationTargetMounted = useCallback((messageKey: string, target: HTMLElement) => {
+    onMessageNavigationTargetMounted?.(messageKey, target, scrollToMessage);
+  }, [onMessageNavigationTargetMounted, scrollToMessage]);
+  const scrollConversationToBottom = useCallback((behavior: ScrollBehavior) => {
+    stickToBottomRef.current = true;
+    scrollToBottom(behavior);
+  }, [scrollToBottom]);
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 
-  const scrollConversationToBottom = useEffectEvent((behavior: ScrollBehavior): void => {
-    autoScrollingRef.current = true;
-    stickToBottomRef.current = true;
-    conversationEndRef.current?.scrollIntoView({ behavior, block: "end" });
-    window.setTimeout(() => {
-      autoScrollingRef.current = false;
-    }, behavior === "smooth" ? 320 : 0);
-  });
-
   const resetConversationForSession = useEffectEvent(() => {
+    const sessionKey = activeSession?.key ?? "";
     previousMessageCountRef.current = activeSession?.messages.length ?? 0;
     previousLastMessageContentRef.current = activeSession?.messages.at(-1)?.content ?? "";
     previousChatImageCountRef.current = chatLatestImageSidebarCount;
     previousRoleSelfViewRef.current = roleSelfView;
     imagePriorityUserMessageCountRef.current = -1;
+    const hasPendingMessageNavigation = Boolean(highlightedMessageKeyRef.current);
     const container = conversationListRef.current;
+    if (hasPendingMessageNavigation) {
+      stickToBottomRef.current = false;
+      return;
+    }
     if (!container) return;
+    const restoredSessionScroll = restoreSessionScroll(sessionKey);
+    if (restoredSessionScroll) {
+      stickToBottomRef.current = restoredSessionScroll.wasAtBottom;
+      return;
+    }
     stickToBottomRef.current = true;
     scrollConversationToBottom("auto");
   });
+
+  const handleChatContentSizeChange = useCallback(() => {
+    if (!shouldAutoScrollOnContentSizeChange({
+      highlightedMessageKey: highlightedMessageKeyRef.current,
+      wasAtBottom: stickToBottomRef.current,
+    })) {
+      return;
+    }
+    scrollConversationToBottom("auto");
+  }, [highlightedMessageKeyRef, scrollConversationToBottom]);
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -197,7 +246,7 @@ export function ChatSurface({
 
       if (nextState.isAtBottom) {
         stickToBottomRef.current = true;
-      } else if (options?.allowUnstick && !autoScrollingRef.current) {
+      } else if (options?.allowUnstick && !isAutoScrollingRef.current) {
         stickToBottomRef.current = false;
       }
 
@@ -227,7 +276,7 @@ export function ChatSurface({
       window.removeEventListener("resize", handleResize);
       resizeObserver.disconnect();
     };
-  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, sending]);
+  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, isAutoScrollingRef, sending]);
 
   useEffect(() => {
     if (!chatLatestImageSidebarCollapsed) {
@@ -275,7 +324,7 @@ export function ChatSurface({
     };
   }, [messageContextMenu]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     resetConversationForSession();
   }, [activeSession?.key]);
 
@@ -313,30 +362,6 @@ export function ChatSurface({
   }, [activeRoleId, activeSession?.key]);
 
   useEffect(() => {
-    setVisibleMessageCount(initialVisibleChatMessageCount);
-  }, [activeSession?.key]);
-
-  const visibleMessageWindow = useMemo(
-    () => getVisibleChatMessages(sessionMessages, visibleMessageCount),
-    [sessionMessages, visibleMessageCount],
-  );
-
-  const handleExpandOlderMessages = useCallback(() => {
-    setVisibleMessageCount((current) => current + visibleChatMessageCountStep);
-  }, []);
-
-  useLayoutEffect(() => {
-    const nextVisibleMessageCount = getExpandedVisibleChatMessageCountForKey(
-      sessionMessages,
-      visibleMessageCount,
-      highlightedMessageKey,
-    );
-    if (nextVisibleMessageCount !== visibleMessageCount) {
-      setVisibleMessageCount(nextVisibleMessageCount);
-    }
-  }, [highlightedMessageKey, sessionMessages, visibleMessageCount]);
-
-  useEffect(() => {
     const currentMessageCount = activeSession?.messages.length ?? 0;
     const previousMessageCount = previousMessageCountRef.current;
     const previousLastMessageContent = previousLastMessageContentRef.current;
@@ -354,7 +379,7 @@ export function ChatSurface({
       return;
     }
     scrollConversationToBottom("auto");
-  }, [activeSession?.messages.length, currentLastMessageContent, conversationEndRef, highlightedMessageKey, sending]);
+  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, scrollConversationToBottom, sending]);
 
   const renderHeavyVisuals = visualsActive && windowVisible;
   const hasIllustration = Boolean(visibleIllustrationUrl) && renderHeavyVisuals;
@@ -366,14 +391,8 @@ export function ChatSurface({
   const detailRole = canOpenRoleDetail ? activeRole : null;
 
   const handleScrollToBottom = () => {
-    const container = conversationListRef.current;
-    if (!container) return;
-    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-    autoScrollingRef.current = true;
+    scrollConversationToBottom("smooth");
     stickToBottomRef.current = true;
-    window.setTimeout(() => {
-      autoScrollingRef.current = false;
-    }, 320);
   };
 
   const handleOpenChatImagePreview = useCallback((historyKey: string) => {
@@ -476,12 +495,18 @@ export function ChatSurface({
         {notice ? <div className="notice-chip absolute left-1/2 top-4 z-[2] -translate-x-1/2 rounded-[14px] border border-[rgba(26,106,58,0.18)] bg-[#edf8f0] px-3.5 py-2.5 text-[#1a6a3a]">{notice}</div> : null}
         <ChatMessageList
           activeRole={activeRole}
+          sessionKey={activeSession?.key ?? ""}
           conversationEndRef={conversationEndRef}
           conversationListRef={conversationListRef}
           highlightedMessageKey={highlightedMessageKey}
+          onMessageNavigationTargetMounted={handleMessageNavigationTargetMounted}
+          isAutoScrollingRef={isAutoScrollingRef}
           visibleMessageWindow={visibleMessageWindow}
           onBeginAttachmentDrag={onBeginAttachmentDrag}
-          onExpandOlderMessages={handleExpandOlderMessages}
+          onContentSizeChange={handleChatContentSizeChange}
+          canLoadOlderMessages={canLoadOlderMessages}
+          loadingOlderMessages={loadingOlderMessages}
+          onExpandOlderMessages={handleLoadOlderMessages}
           onJumpToMessage={onJumpToMessage}
           onOpenContextMenu={openMessageContextMenu}
           onOpenImagePreview={handleOpenChatImagePreview}

@@ -2,9 +2,27 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { shouldAutoScrollOnNewMessage } from "./chatAutoScroll";
+import {
+  shouldAutoScrollOnContentSizeChange,
+  shouldAutoScrollOnNewMessage,
+} from "./chatAutoScroll";
 
 describe("shouldAutoScrollOnNewMessage", () => {
+  it("does not return to the bottom while historical message navigation is highlighted", () => {
+    assert.equal(
+      shouldAutoScrollOnNewMessage({
+        currentMessageCount: 3,
+        previousMessageCount: 1,
+        lastMessageContent: "最新",
+        previousLastMessageContent: "命中附近",
+        highlightedMessageKey: "role:mira:2",
+        sending: false,
+        wasAtBottom: true,
+      }),
+      false,
+    );
+  });
+
   it("scrolls when a new message is appended and the viewer was already at the bottom", () => {
     assert.equal(
       shouldAutoScrollOnNewMessage({
@@ -61,6 +79,22 @@ describe("shouldAutoScrollOnNewMessage", () => {
         sending: false,
         wasAtBottom: false,
       }),
+      false,
+    );
+  });
+});
+
+describe("shouldAutoScrollOnContentSizeChange", () => {
+  it("keeps a bottom-following chat at the bottom after row measurement", () => {
+    assert.equal(
+      shouldAutoScrollOnContentSizeChange({ highlightedMessageKey: "", wasAtBottom: true }),
+      true,
+    );
+  });
+
+  it("does not reposition a viewer who scrolled upward", () => {
+    assert.equal(
+      shouldAutoScrollOnContentSizeChange({ highlightedMessageKey: "", wasAtBottom: false }),
       false,
     );
   });

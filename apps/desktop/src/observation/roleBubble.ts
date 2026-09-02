@@ -19,32 +19,39 @@ export function wireRoleReplyBubbles(
     }
     if (event.method !== "session.updated" || event.id !== "proactive") return;
     const session = event.payload.session;
-    if (!session || typeof session !== "object") return;
-    const sessionValue = session as {
-      metadata?: unknown;
-      messages?: unknown;
-    };
-    const metadata = sessionValue.metadata;
-    const roleId = metadata && typeof metadata === "object"
-      && typeof (metadata as { role_id?: unknown }).role_id === "string"
-      ? (metadata as { role_id: string }).role_id
+    const sessionValue = session && typeof session === "object"
+      ? session as { metadata?: unknown; messages?: unknown }
+      : null;
+    const sessionMetadata = sessionValue?.metadata;
+    const sessionRoleId = sessionMetadata && typeof sessionMetadata === "object"
+      && typeof (sessionMetadata as { role_id?: unknown }).role_id === "string"
+      ? (sessionMetadata as { role_id: string }).role_id
       : "";
-    const messages = sessionValue.messages;
-    if (!Array.isArray(messages) || messages.length === 0) return;
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || typeof lastMessage !== "object") return;
-    const message = lastMessage as {
+    const roleId = typeof event.payload.role_id === "string"
+      ? event.payload.role_id
+      : sessionRoleId;
+
+    // New incremental events carry the changed message directly. Keep the old
+    // full-snapshot fallback for older bridge versions and persisted fixtures.
+    const changedMessage = event.payload.message;
+    const message = changedMessage && typeof changedMessage === "object"
+      ? changedMessage
+      : sessionValue?.messages && Array.isArray(sessionValue.messages)
+        ? sessionValue.messages.at(-1)
+        : null;
+    if (!message || typeof message !== "object") return;
+    const messageValue = message as {
       role?: unknown;
       content?: unknown;
       metadata?: unknown;
       proactive?: unknown;
     };
-    const messageMetadata = message.metadata;
-    const proactive = message.proactive === true
+    const messageMetadata = messageValue.metadata;
+    const proactive = messageValue.proactive === true
       || (messageMetadata && typeof messageMetadata === "object"
         && (messageMetadata as { proactive?: unknown }).proactive === true);
-    if (message.role !== "assistant" || !proactive) return;
-    const reply = typeof message.content === "string" ? message.content : "";
+    if (messageValue.role !== "assistant" || !proactive) return;
+    const reply = typeof messageValue.content === "string" ? messageValue.content : "";
     publishReply(target, roleId, reply);
   });
 }
