@@ -6,6 +6,7 @@ import {
   getChatScrollMaxTop,
   getChatSessionRestoreScrollTop,
   rememberChatSessionScrollState,
+  scheduleChatScrollAfterLayout,
   type ChatSessionScrollState,
 } from "./chatScrollController";
 
@@ -24,8 +25,11 @@ export function useChatScrollController({
   const expectedScrollTopRef = useRef<number | null>(null);
   const sessionScrollStatesRef = useRef(new Map<string, ChatSessionScrollState>());
   const sessionKeyRef = useRef(sessionKey);
+  const cancelSettledScrollRef = useRef<(() => void) | null>(null);
 
   const cancelAnimation = useCallback(() => {
+    cancelSettledScrollRef.current?.();
+    cancelSettledScrollRef.current = null;
     if (animationFrameRef.current !== null && typeof window !== "undefined") {
       window.cancelAnimationFrame(animationFrameRef.current);
     }
@@ -121,6 +125,19 @@ export function useChatScrollController({
     animationFrameRef.current = window.requestAnimationFrame(animate);
   }, [cancelAnimation, conversationListRef, rememberSessionScroll]);
 
+  const scrollToBottomAfterLayout = useCallback(() => {
+    if (typeof window === "undefined") return;
+    cancelAnimation();
+    cancelSettledScrollRef.current = scheduleChatScrollAfterLayout(
+      (callback) => window.requestAnimationFrame(callback),
+      (handle) => window.cancelAnimationFrame(handle),
+      () => {
+        cancelSettledScrollRef.current = null;
+        scrollToBottom("auto");
+      },
+    );
+  }, [cancelAnimation, scrollToBottom]);
+
   useEffect(() => {
     const container = conversationListRef.current;
     if (!container) return undefined;
@@ -148,5 +165,10 @@ export function useChatScrollController({
 
   useLayoutEffect(() => cancelAnimation, [cancelAnimation, sessionKey]);
 
-  return { isAutoScrollingRef, restoreSessionScroll, scrollToBottom };
+  return {
+    isAutoScrollingRef,
+    restoreSessionScroll,
+    scrollToBottom,
+    scrollToBottomAfterLayout,
+  };
 }

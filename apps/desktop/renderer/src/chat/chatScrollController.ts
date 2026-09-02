@@ -13,6 +13,37 @@ export function getChatScrollMaxTop(container: HTMLDivElement): number {
   return Math.max(0, container.scrollHeight - container.clientHeight);
 }
 
+/** Defers a bottom-anchor callback until two browser layout frames have settled. */
+export function scheduleChatScrollAfterLayout(
+  requestFrame: (callback: FrameRequestCallback) => number,
+  cancelFrame: (handle: number) => void,
+  callback: () => void,
+) {
+  let remainingFrames = 2;
+  let frameHandle: number | null = null;
+  let cancelled = false;
+
+  const settle = () => {
+    if (cancelled) return;
+    remainingFrames -= 1;
+    if (remainingFrames > 0) {
+      frameHandle = requestFrame(settle);
+      return;
+    }
+    frameHandle = null;
+    callback();
+  };
+
+  frameHandle = requestFrame(settle);
+  return () => {
+    cancelled = true;
+    if (frameHandle !== null) {
+      cancelFrame(frameHandle);
+      frameHandle = null;
+    }
+  };
+}
+
 /** Captures a session's scroll position and whether it was anchored to the bottom. */
 export function captureChatSessionScrollState(
   scrollTop: number,

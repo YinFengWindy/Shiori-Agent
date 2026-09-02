@@ -152,6 +152,7 @@ export function ChatSurface({
     isAutoScrollingRef,
     restoreSessionScroll,
     scrollToBottom,
+    scrollToBottomAfterLayout,
   } = useChatScrollController({
     conversationListRef,
     sessionKey: activeSession?.key ?? "",
@@ -183,7 +184,7 @@ export function ChatSurface({
       return;
     }
     stickToBottomRef.current = true;
-    scrollConversationToBottom("auto");
+    scrollToBottomAfterLayout();
   });
 
   const handleChatContentSizeChange = useCallback(() => {
