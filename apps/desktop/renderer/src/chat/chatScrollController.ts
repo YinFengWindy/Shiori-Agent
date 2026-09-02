@@ -7,6 +7,11 @@ export function getChatScrollMaxTop(container: HTMLDivElement): number {
   return Math.max(0, container.scrollHeight - container.clientHeight);
 }
 
+/** Uses instant positioning for the first session and smooth positioning for session switches. */
+export function getChatSessionResetScrollBehavior(previousSessionKey: string, sessionKey: string) {
+  return previousSessionKey && sessionKey && previousSessionKey !== sessionKey ? "smooth" : "auto";
+}
+
 /** Scales long bottom jumps without making short jumps feel sluggish. */
 export function getChatScrollAnimationDuration(distance: number): number {
   return Math.min(
