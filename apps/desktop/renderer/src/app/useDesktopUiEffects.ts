@@ -81,13 +81,28 @@ export function useDesktopUiEffects({
 
   useEffect(() => {
     if (!highlightedMessageKey) return;
+    if (
+      pendingMessageNavigation
+      && pendingMessageNavigation.roleId === activeRoleId
+      && pendingMessageNavigation.messageKey === highlightedMessageKey
+    ) {
+      return;
+    }
     const timer = window.setTimeout(() => setHighlightedMessageKey(""), 2400);
     return () => window.clearTimeout(timer);
-  }, [highlightedMessageKey, setHighlightedMessageKey]);
+  }, [
+    activeRoleId,
+    highlightedMessageKey,
+    pendingMessageNavigation,
+    setHighlightedMessageKey,
+  ]);
 
   useEffect(() => {
-    if (!activeSessionKey || !pendingMessageNavigation) return;
-    if (pendingMessageNavigation.roleId !== activeRoleId) return;
+    if (!pendingMessageNavigation) return;
+    if (!activeSessionKey || pendingMessageNavigation.roleId !== activeRoleId) {
+      setPendingMessageNavigation(null);
+      return;
+    }
     const messageKey = pendingMessageNavigation.messageKey;
     // Highlighting pins an offscreen virtualized row into the DOM. The watcher
     // then waits for that render instead of expiring after a timing guess.
