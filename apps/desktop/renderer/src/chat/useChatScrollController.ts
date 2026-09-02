@@ -220,7 +220,9 @@ export function useChatScrollController({
     };
   }, [conversationListRef, rememberSessionScroll, stopAnimation]);
 
-  useLayoutEffect(() => () => stopAnimation(true), [sessionKey, stopAnimation]);
+  // A session switch cancels the old animation; it must not settle its
+  // navigation callback after the next session has started mounting.
+  useLayoutEffect(() => cancelAnimation, [cancelAnimation, sessionKey]);
 
   return { isAutoScrollingRef, restoreSessionScroll, scrollToBottom, scrollToMessage };
 }
