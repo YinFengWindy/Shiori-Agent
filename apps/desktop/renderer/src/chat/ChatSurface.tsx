@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import React, { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { ChatComposer } from "./ChatComposer";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessageContextMenu } from "./ChatMessageContextMenu";
@@ -16,6 +16,7 @@ import {
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { useRoleTasks } from "./useRoleTasks";
 import { useChatMessagePagination } from "./useChatMessagePagination";
+import { useChatScrollController } from "./useChatScrollController";
 import { cx } from "../shared/styles";
 import { useLatestRef } from "../shared/useLatestRef";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
@@ -114,7 +115,6 @@ export function ChatSurface({
   const previousChatImageCountRef = useRef(0);
   const previousRoleSelfViewRef = useRef(roleSelfView);
   const imagePriorityUserMessageCountRef = useRef(-1);
-  const autoScrollingRef = useRef(false);
   const stickToBottomRef = useRef(true);
   const highlightedMessageKeyRef = useLatestRef(highlightedMessageKey);
   const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
@@ -148,17 +148,19 @@ export function ChatSurface({
     highlightedMessageKey,
     loadOlderMessages: onLoadOlderMessages,
   });
+  const {
+    isAutoScrollingRef,
+    scrollToBottom,
+  } = useChatScrollController({
+    conversationListRef,
+    sessionKey: activeSession?.key ?? "",
+  });
+  const scrollConversationToBottom = useCallback((behavior: ScrollBehavior) => {
+    stickToBottomRef.current = true;
+    scrollToBottom(behavior);
+  }, [scrollToBottom]);
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
-
-  const scrollConversationToBottom = useCallback((behavior: ScrollBehavior): void => {
-    autoScrollingRef.current = true;
-    stickToBottomRef.current = true;
-    conversationEndRef.current?.scrollIntoView({ behavior, block: "end" });
-    window.setTimeout(() => {
-      autoScrollingRef.current = false;
-    }, behavior === "smooth" ? 320 : 0);
-  }, [conversationEndRef]);
 
   const resetConversationForSession = useEffectEvent(() => {
     previousMessageCountRef.current = activeSession?.messages.length ?? 0;
@@ -219,7 +221,7 @@ export function ChatSurface({
 
       if (nextState.isAtBottom) {
         stickToBottomRef.current = true;
-      } else if (options?.allowUnstick && !autoScrollingRef.current) {
+      } else if (options?.allowUnstick && !isAutoScrollingRef.current) {
         stickToBottomRef.current = false;
       }
 
@@ -249,7 +251,7 @@ export function ChatSurface({
       window.removeEventListener("resize", handleResize);
       resizeObserver.disconnect();
     };
-  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, sending]);
+  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, isAutoScrollingRef, sending]);
 
   useEffect(() => {
     if (!chatLatestImageSidebarCollapsed) {
@@ -297,7 +299,7 @@ export function ChatSurface({
     };
   }, [messageContextMenu]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     resetConversationForSession();
   }, [activeSession?.key]);
 
@@ -364,14 +366,8 @@ export function ChatSurface({
   const detailRole = canOpenRoleDetail ? activeRole : null;
 
   const handleScrollToBottom = () => {
-    const container = conversationListRef.current;
-    if (!container) return;
-    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-    autoScrollingRef.current = true;
+    scrollConversationToBottom("smooth");
     stickToBottomRef.current = true;
-    window.setTimeout(() => {
-      autoScrollingRef.current = false;
-    }, 320);
   };
 
   const handleOpenChatImagePreview = useCallback((historyKey: string) => {
@@ -478,6 +474,7 @@ export function ChatSurface({
           conversationEndRef={conversationEndRef}
           conversationListRef={conversationListRef}
           highlightedMessageKey={highlightedMessageKey}
+          isAutoScrollingRef={isAutoScrollingRef}
           visibleMessageWindow={visibleMessageWindow}
           onBeginAttachmentDrag={onBeginAttachmentDrag}
           onContentSizeChange={handleChatContentSizeChange}

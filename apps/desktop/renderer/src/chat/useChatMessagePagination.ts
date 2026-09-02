@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import {
   getExpandedVisibleChatMessageCountForKey,
@@ -10,6 +10,8 @@ import {
   getPrependAnchorScrollTop,
 } from "./chatMessagePaginationState";
 import type { SessionPayload } from "../shared/types";
+
+const emptySessionMessages: SessionPayload["messages"] = [];
 
 type UseChatMessagePaginationArgs = {
   activeSession: SessionPayload | null;
@@ -29,11 +31,11 @@ export function useChatMessagePagination({
   const [loadingSessionKey, setLoadingSessionKey] = useState("");
   const anchorRef = useRef<{ sessionKey: string; scrollHeight: number; scrollTop: number } | null>(null);
   const sessionKey = activeSession?.key ?? "";
-  const messages = activeSession?.messages ?? [];
+  const messages = activeSession?.messages ?? emptySessionMessages;
   const hasServerPagination = Boolean(activeSession?.pagination);
   const loading = loadingSessionKey === sessionKey;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setVisibleMessageCount(initialVisibleChatMessageCount);
     anchorRef.current = null;
     setLoadingSessionKey("");
@@ -45,14 +47,14 @@ export function useChatMessagePagination({
   );
 
   const handleExpandOlderMessages = useCallback(() => {
+    const container = conversationListRef.current;
+    if (!container || !sessionKey || loading) return;
+    anchorRef.current = {
+      sessionKey,
+      scrollHeight: container.scrollHeight,
+      scrollTop: container.scrollTop,
+    };
     if (hasServerPagination) {
-      const container = conversationListRef.current;
-      if (!container || !sessionKey || loading) return;
-      anchorRef.current = {
-        sessionKey,
-        scrollHeight: container.scrollHeight,
-        scrollTop: container.scrollTop,
-      };
       setLoadingSessionKey(sessionKey);
       void loadOlderMessages(sessionKey).finally(() => {
         setLoadingSessionKey((current) => current === sessionKey ? "" : current);
@@ -72,7 +74,7 @@ export function useChatMessagePagination({
       container.scrollHeight,
     );
     anchorRef.current = null;
-  }, [conversationListRef, loading, messages.length, sessionKey]);
+  }, [conversationListRef, loading, messages.length, sessionKey, visibleMessageWindow.startIndex]);
 
   useLayoutEffect(() => {
     if (hasServerPagination) return;

@@ -12,6 +12,7 @@ type ChatMessageListProps = {
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   conversationListRef: React.RefObject<HTMLDivElement | null>;
   highlightedMessageKey: string;
+  isAutoScrollingRef?: React.RefObject<boolean>;
   visibleMessageWindow: ReturnType<typeof getVisibleChatMessages>;
   canLoadOlderMessages?: boolean;
   loadingOlderMessages?: boolean;
@@ -38,6 +39,7 @@ export const ChatMessageList = React.memo(function ChatMessageList({
   conversationEndRef,
   conversationListRef,
   highlightedMessageKey,
+  isAutoScrollingRef,
   visibleMessageWindow,
   canLoadOlderMessages = visibleMessageWindow.hiddenMessageCount > 0,
   loadingOlderMessages = false,
@@ -48,12 +50,14 @@ export const ChatMessageList = React.memo(function ChatMessageList({
   onOpenContextMenu,
   onOpenImagePreview,
 }: ChatMessageListProps) {
+  const fallbackAutoScrollingRef = React.useRef(false);
   const { virtualMessageWindow, observeMessageElement } = useChatMessageVirtualization({
     sessionKey,
     messages: visibleMessageWindow.messages,
     messageStartIndex: visibleMessageWindow.startIndex,
     highlightedMessageKey,
     conversationListRef,
+    isAutoScrollingRef: isAutoScrollingRef ?? fallbackAutoScrollingRef,
     onContentSizeChange,
   });
 
