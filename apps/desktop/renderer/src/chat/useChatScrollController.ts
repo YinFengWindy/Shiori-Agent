@@ -145,7 +145,7 @@ export function useChatScrollController({
       return;
     }
 
-    stopAnimation(true);
+    stopAnimation(false);
     const getTargetScrollTop = (currentContainer: HTMLDivElement) => {
       const containerRect = currentContainer.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
@@ -175,8 +175,11 @@ export function useChatScrollController({
 
     const animate = (now: number) => {
       const currentContainer = conversationListRef.current;
-      if (!currentContainer || !target.isConnected) {
-        stopAnimation(true);
+      if (
+        !currentContainer
+        || !target.isConnected
+      ) {
+        stopAnimation(false);
         return;
       }
       const progress = Math.min(1, Math.max(0, (now - startedAt) / duration));
@@ -200,14 +203,7 @@ export function useChatScrollController({
     if (!container) return undefined;
 
     const interruptAnimation = () => stopAnimation(true);
-    const handleScroll = () => {
-      rememberSessionScroll();
-      if (!isAutoScrollingRef.current) return;
-      const expectedScrollTop = expectedScrollTopRef.current;
-      if (expectedScrollTop === null || Math.abs(container.scrollTop - expectedScrollTop) > 1) {
-        stopAnimation(true);
-      }
-    };
+    const handleScroll = () => rememberSessionScroll();
     window.addEventListener("wheel", interruptAnimation, { passive: true });
     window.addEventListener("touchstart", interruptAnimation, { passive: true });
     window.addEventListener("pointerdown", interruptAnimation, { passive: true });
@@ -219,10 +215,6 @@ export function useChatScrollController({
       container.removeEventListener("scroll", handleScroll);
     };
   }, [conversationListRef, rememberSessionScroll, stopAnimation]);
-
-  // A session switch cancels the old animation; it must not settle its
-  // navigation callback after the next session has started mounting.
-  useLayoutEffect(() => cancelAnimation, [cancelAnimation, sessionKey]);
 
   return { isAutoScrollingRef, restoreSessionScroll, scrollToBottom, scrollToMessage };
 }
