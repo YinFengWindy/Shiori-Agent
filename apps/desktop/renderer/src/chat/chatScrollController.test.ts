@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   getChatSessionRestoreScrollTop,
-  getChatSessionResetScrollBehavior,
   rememberChatSessionScrollState,
   type ChatSessionScrollState,
 } from "./chatScrollController";
@@ -39,15 +38,5 @@ describe("rememberChatSessionScrollState", () => {
       getChatSessionRestoreScrollTop(cache.get("role:mira")!, 1_400, 400),
       1_000,
     );
-  });
-});
-
-describe("getChatSessionResetScrollBehavior", () => {
-  it("jumps to the bottom on the first session load", () => {
-    assert.equal(getChatSessionResetScrollBehavior("", "role:mira"), "auto");
-  });
-
-  it("smoothly moves to the bottom when switching between loaded sessions", () => {
-    assert.equal(getChatSessionResetScrollBehavior("role:shiori", "role:mira"), "smooth");
   });
 });

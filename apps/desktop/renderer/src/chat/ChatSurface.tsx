@@ -13,7 +13,6 @@ import {
   shouldAutoScrollOnContentSizeChange,
   shouldAutoScrollOnNewMessage,
 } from "./chatAutoScroll";
-import { getChatSessionResetScrollBehavior } from "./chatScrollController";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { useRoleTasks } from "./useRoleTasks";
 import { useChatMessagePagination } from "./useChatMessagePagination";
@@ -111,7 +110,6 @@ export function ChatSurface({
   ));
   const conversationListRef = useRef<HTMLDivElement | null>(null);
   const messageContextMenuRef = useRef<HTMLDivElement | null>(null);
-  const previousSessionKeyRef = useRef(activeSession?.key ?? "");
   const previousMessageCountRef = useRef(0);
   const previousLastMessageContentRef = useRef("");
   const previousChatImageCountRef = useRef(0);
@@ -167,8 +165,6 @@ export function ChatSurface({
 
   const resetConversationForSession = useEffectEvent(() => {
     const sessionKey = activeSession?.key ?? "";
-    const previousSessionKey = previousSessionKeyRef.current;
-    previousSessionKeyRef.current = sessionKey;
     previousMessageCountRef.current = activeSession?.messages.length ?? 0;
     previousLastMessageContentRef.current = activeSession?.messages.at(-1)?.content ?? "";
     previousChatImageCountRef.current = chatLatestImageSidebarCount;
@@ -187,7 +183,7 @@ export function ChatSurface({
       return;
     }
     stickToBottomRef.current = true;
-    scrollConversationToBottom(getChatSessionResetScrollBehavior(previousSessionKey, sessionKey));
+    scrollConversationToBottom("auto");
   });
 
   const handleChatContentSizeChange = useCallback(() => {
