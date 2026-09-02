@@ -209,7 +209,7 @@ function App(): React.ReactElement {
     ) {
       return;
     }
-    target.scrollIntoView({ behavior: "auto", block: "center" });
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
     setPendingMessageNavigation(null);
     setHighlightedMessageKey("");
   }, [activeRoleIdRef, pendingMessageNavigationRef]);
