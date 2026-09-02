@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type React from "react";
 import { findChatMessageElement } from "../chat/chatMessageDom";
+import { watchForChatMessageTarget } from "../chat/chatMessageNavigation";
 import type { WorkspaceFeedback } from "./appState";
 
 type UseDesktopUiEffectsArgs = {
@@ -87,32 +88,29 @@ export function useDesktopUiEffects({
   useEffect(() => {
     if (!activeSessionKey || !pendingMessageNavigation) return;
     if (pendingMessageNavigation.roleId !== activeRoleId) return;
-    let cancelled = false;
-    let attempts = 0;
-    const maxAttempts = 12;
-
-    const tryHighlight = () => {
-      if (cancelled) return;
-      setHighlightedMessageKey(pendingMessageNavigation.messageKey);
-      const target = findChatMessageElement(pendingMessageNavigation.messageKey);
-      if (target) {
+    const messageKey = pendingMessageNavigation.messageKey;
+    // Highlighting pins an offscreen virtualized row into the DOM. The watcher
+    // then waits for that render instead of expiring after a timing guess.
+    setHighlightedMessageKey(messageKey);
+    return watchForChatMessageTarget({
+      findTarget: () => findChatMessageElement(messageKey),
+      onTarget: (target) => {
         target.scrollIntoView({ behavior: "smooth", block: "center" });
         setPendingMessageNavigation(null);
-        return;
-      }
-      attempts += 1;
-      if (attempts >= maxAttempts) {
-        setPendingMessageNavigation(null);
-        return;
-      }
-      window.setTimeout(tryHighlight, 80);
-    };
-
-    const frame = window.requestAnimationFrame(tryHighlight);
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(frame);
-    };
+      },
+      requestAnimationFrame: window.requestAnimationFrame.bind(window),
+      cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+      setTimeout: window.setTimeout.bind(window),
+      clearTimeout: window.clearTimeout.bind(window),
+      observeMutations: (callback) => {
+        if (typeof MutationObserver === "undefined" || !document.body) {
+          return () => undefined;
+        }
+        const observer = new MutationObserver(callback);
+        observer.observe(document.body, { childList: true, subtree: true });
+        return () => observer.disconnect();
+      },
+    });
   }, [
     activeRoleId,
     activeSessionKey,
