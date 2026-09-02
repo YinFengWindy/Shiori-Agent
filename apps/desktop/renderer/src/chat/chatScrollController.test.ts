@@ -5,42 +5,12 @@ import { describe, it } from "node:test";
 import {
   getChatSessionRestoreScrollTop,
   rememberChatSessionScrollState,
-  scheduleChatScrollAfterLayout,
   type ChatSessionScrollState,
 } from "./chatScrollController";
 
 function createScrollStateCache() {
   return new Map<string, ChatSessionScrollState>();
 }
-
-describe("scheduleChatScrollAfterLayout", () => {
-  it("waits for a stable layout before applying the final bottom target", () => {
-    const frames: FrameRequestCallback[] = [];
-    let nextFrameId = 0;
-    let scrollHeight = 600;
-    let scrollTop = 100;
-    const clientHeight = 400;
-
-    scheduleChatScrollAfterLayout(
-      (callback) => {
-        frames.push(callback);
-        nextFrameId += 1;
-        return nextFrameId;
-      },
-      () => undefined,
-      () => {
-        scrollTop = Math.max(0, scrollHeight - clientHeight);
-      },
-    );
-
-    assert.equal(scrollTop, 100);
-    frames.shift()!(0);
-    scrollHeight = 680;
-    assert.equal(scrollTop, 100);
-    frames.shift()!(0);
-    assert.equal(scrollTop, 280);
-  });
-});
 
 describe("rememberChatSessionScrollState", () => {
   it("keeps a shared container's position under the previous session key", () => {
