@@ -672,6 +672,9 @@ function App(): React.ReactElement {
           result,
           messageKey,
           openChatView,
+          isSearchResultSessionActive: (roleId, sessionKey) => (
+            activeRoleIdRef.current === roleId && activeSessionRef.current?.key === sessionKey
+          ),
           queueMessageNavigation,
           clearMessageNavigation: () => {
             setPendingMessageNavigation(null);

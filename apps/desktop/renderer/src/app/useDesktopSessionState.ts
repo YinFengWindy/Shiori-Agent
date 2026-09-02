@@ -21,6 +21,7 @@ import {
 import { getRoleIdFromSession } from "./appState";
 import {
   getSessionPaginationState,
+  mergeOpenedSessionSnapshot,
   mergeSessionSummaryAndMessage,
   parseSessionMessagePage,
   parseSessionSummary,
@@ -233,22 +234,25 @@ export function useDesktopSessionState({
   }
 
   function commitActiveSession(nextSession: SessionPayload | null): void {
-    const pendingUserMessage = nextSession
-      ? pendingUserMessagesRef.current[nextSession.key] ?? null
+    const incomingSession = nextSession
+      ? mergeOpenedSessionSnapshot(activeSessionRef.current, nextSession)
       : null;
-    const sending = Boolean(nextSession?.key && sendingSessionsRef.current[nextSession.key]);
+    const pendingUserMessage = incomingSession
+      ? pendingUserMessagesRef.current[incomingSession.key] ?? null
+      : null;
+    const sending = Boolean(incomingSession?.key && sendingSessionsRef.current[incomingSession.key]);
     const mergedSession = mergeIncomingSessionDuringSend(
       activeSessionRef.current,
-      nextSession,
+      incomingSession,
       sending,
       pendingUserMessage,
     );
     if (
       pendingUserMessage
-      && nextSession
-      && shouldClearPendingUserMessage(pendingUserMessage, nextSession, sending)
+      && incomingSession
+      && shouldClearPendingUserMessage(pendingUserMessage, incomingSession, sending)
     ) {
-      delete pendingUserMessagesRef.current[nextSession.key];
+      delete pendingUserMessagesRef.current[incomingSession.key];
     }
     const resolvedSession = reconcileSessionMessageRenderIds(activeSessionRef.current, mergedSession);
     activeSessionRef.current = resolvedSession;
@@ -432,7 +436,7 @@ export function useDesktopSessionState({
   async function openRole(
     roleId: string,
     roleOverride: RoleRecord | null = null,
-    options?: { recordHistory?: boolean },
+    options?: { recordHistory?: boolean; preserveCurrentSession?: boolean },
   ): Promise<boolean> {
     const currentSessionKey = activeSessionRef.current?.key ?? "";
     if (currentSessionKey) {
@@ -455,11 +459,12 @@ export function useDesktopSessionState({
       cachedSession,
     });
     const role = roleOverride ?? rolesRef.current.find((item) => item.id === roleId) ?? null;
-    if (role) {
+    const preserveCurrentSession = Boolean(options?.preserveCurrentSession && !cachedSession);
+    if (role && !preserveCurrentSession) {
       applyRoleSnapshotRef.current(role, cachedSession);
       setError("");
     }
-    if (immediateSession !== activeSessionRef.current) {
+    if (!preserveCurrentSession && immediateSession !== activeSessionRef.current) {
       commitActiveSession(immediateSession);
     }
     const { error: sessionError, session } = await fetchRoleSession(roleId);

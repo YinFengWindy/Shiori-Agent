@@ -195,6 +195,24 @@ export function mergeSessionMessagePage(
   };
 }
 
+/** Preserves the loaded history when a refreshed snapshot contains only the newest page. */
+export function mergeOpenedSessionSnapshot(
+  current: SessionPayload | null,
+  incoming: SessionPayload,
+): SessionPayload {
+  if (!current || current.key !== incoming.key || !incoming.pagination) {
+    return incoming;
+  }
+  const merged = mergeSessionMessagePage(current, {
+    ...incoming.pagination,
+    messages: incoming.messages,
+  });
+  return {
+    ...incoming,
+    messages: merged.messages,
+  };
+}
+
 export type SessionMessagesAround = {
   sessionKey: string;
   targetMessageId: string;

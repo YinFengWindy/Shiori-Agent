@@ -24,6 +24,7 @@ function createHarness() {
   return {
     actions,
     openChatView: () => actions.push("open-chat"),
+    isSearchResultSessionActive: () => false,
     queueMessageNavigation: () => actions.push("queue-message"),
     clearMessageNavigation: () => actions.push("clear-message"),
     openRole: async () => {
@@ -60,6 +61,19 @@ describe("roleSearchNavigation", () => {
     });
 
     assert.deepEqual(harness.actions, ["open-chat", "clear-message", "open-role", "load-around", "queue-message"]);
+  });
+
+  it("keeps the current session mounted when its own historical message is selected", async () => {
+    const harness = createHarness();
+    harness.isSearchResultSessionActive = () => true;
+
+    await navigateToRoleSearchResult({
+      result: createResult("message"),
+      messageKey: "message-1",
+      ...harness,
+    });
+
+    assert.deepEqual(harness.actions, ["open-chat", "clear-message", "load-around", "queue-message"]);
   });
 
   it("does not queue a DOM highlight when the persisted context cannot be loaded", async () => {

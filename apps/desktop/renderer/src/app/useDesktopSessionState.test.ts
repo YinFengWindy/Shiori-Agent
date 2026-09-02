@@ -14,6 +14,7 @@ import {
 import {
   mergeSessionMessagePage,
   mergeSessionMessagesAround,
+  mergeOpenedSessionSnapshot,
   mergeSessionSummaryAndMessage,
   parseSessionMessagesAround,
 } from "./sessionMessagePagination";
@@ -310,6 +311,45 @@ describe("desktop paginated session protocol", () => {
     assert.ok(around);
     const merged = mergeSessionMessagesAround(current, around);
     assert.deepEqual(merged.messages.map((message) => message.id), ["role:shiori:0", "role:shiori:2", "role:shiori:9"]);
+    assert.equal(merged.pagination?.next_before_seq, 9);
+  });
+
+  it("keeps loaded historical messages when reopening the active session returns only its newest page", () => {
+    const current = createSession([
+      { id: "role:shiori:2", seq: 2, role: "user", content: "历史命中" },
+      { id: "role:shiori:9", seq: 9, role: "assistant", content: "最新" },
+    ]);
+    current.pagination = {
+      limit: 50,
+      has_more: true,
+      oldest_seq: 2,
+      newest_seq: 9,
+      total_count: 10,
+      before_seq: null,
+      next_before_seq: 2,
+    };
+    const incoming = createSession([{
+      id: "role:shiori:9",
+      seq: 9,
+      role: "assistant",
+      content: "最新",
+    }]);
+    incoming.pagination = {
+      limit: 50,
+      has_more: true,
+      oldest_seq: 9,
+      newest_seq: 9,
+      total_count: 10,
+      before_seq: null,
+      next_before_seq: 9,
+    };
+
+    const merged = mergeOpenedSessionSnapshot(current, incoming);
+
+    assert.deepEqual(merged.messages.map((message) => message.id), [
+      "role:shiori:2",
+      "role:shiori:9",
+    ]);
     assert.equal(merged.pagination?.next_before_seq, 9);
   });
 });

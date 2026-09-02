@@ -4,13 +4,18 @@ type SearchNavigationOptions = {
   recordHistory?: boolean;
 };
 
+type SearchRoleOpenOptions = SearchNavigationOptions & {
+  preserveCurrentSession?: boolean;
+};
+
 type NavigateToRoleSearchResultArgs = {
   result: RoleSearchResult;
   messageKey: string;
   openChatView: (options?: SearchNavigationOptions) => void;
+  isSearchResultSessionActive: (roleId: string, sessionKey: string) => boolean;
   queueMessageNavigation: (roleId: string, messageKey: string) => void;
   clearMessageNavigation: () => void;
-  openRole: (roleId: string, options?: SearchNavigationOptions) => Promise<boolean>;
+  openRole: (roleId: string, options?: SearchRoleOpenOptions) => Promise<boolean>;
   loadMessagesAround: (messageId: string, sessionKey: string) => Promise<boolean>;
 };
 
@@ -19,6 +24,7 @@ export async function navigateToRoleSearchResult({
   result,
   messageKey,
   openChatView,
+  isSearchResultSessionActive,
   queueMessageNavigation,
   clearMessageNavigation,
   openRole,
@@ -32,7 +38,8 @@ export async function navigateToRoleSearchResult({
   }
   clearMessageNavigation();
   if (!messageKey) return;
-  const opened = await openRole(result.roleId, { recordHistory: true });
+  const opened = isSearchResultSessionActive(result.roleId, result.sessionKey)
+    || await openRole(result.roleId, { recordHistory: true, preserveCurrentSession: true });
   if (!opened) return;
   const loaded = await loadMessagesAround(messageKey, result.sessionKey);
   if (loaded) {
