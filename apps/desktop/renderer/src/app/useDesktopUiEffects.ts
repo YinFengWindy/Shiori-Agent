@@ -7,7 +7,6 @@ type UseDesktopUiEffectsArgs = {
   setSidebarAnimating: React.Dispatch<React.SetStateAction<boolean>>;
   pendingMessageNavigation: { roleId: string; messageKey: string } | null;
   setHighlightedMessageKey: React.Dispatch<React.SetStateAction<string>>;
-  setPendingMessageNavigation: React.Dispatch<React.SetStateAction<{ roleId: string; messageKey: string } | null>>;
   notice: string;
   setNotice: React.Dispatch<React.SetStateAction<string>>;
   workspaceFeedback: WorkspaceFeedback | null;
@@ -45,7 +44,6 @@ export function useDesktopUiEffects({
   setSidebarAnimating,
   pendingMessageNavigation,
   setHighlightedMessageKey,
-  setPendingMessageNavigation,
   notice,
   setNotice,
   workspaceFeedback,

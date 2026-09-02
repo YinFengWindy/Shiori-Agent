@@ -553,7 +553,6 @@ function App(): React.ReactElement {
     setSidebarAnimating: leftSidebar.setAnimating,
     pendingMessageNavigation,
     setHighlightedMessageKey,
-    setPendingMessageNavigation,
     notice,
     setNotice,
     workspaceFeedback,
