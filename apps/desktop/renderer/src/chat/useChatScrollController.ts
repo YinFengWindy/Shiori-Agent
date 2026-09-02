@@ -4,6 +4,7 @@ import {
   getChatScrollAnimationDuration,
   getChatScrollAnimationTop,
   getChatScrollMaxTop,
+  getChatScrollTargetTop,
   getChatSessionRestoreScrollTop,
   rememberChatSessionScrollState,
   type ChatSessionScrollState,
@@ -14,6 +15,12 @@ type UseChatScrollControllerArgs = {
   sessionKey: string;
 };
 
+/** Scrolls a mounted message and reports when its navigation animation settles. */
+export type ChatMessageNavigationScroller = (
+  target: HTMLElement,
+  onSettled: () => void,
+) => void;
+
 /** Owns interruptible bottom scrolling so virtual row measurement cannot cancel a long jump. */
 export function useChatScrollController({
   conversationListRef,
@@ -22,17 +29,27 @@ export function useChatScrollController({
   const animationFrameRef = useRef<number | null>(null);
   const isAutoScrollingRef = useRef(false);
   const expectedScrollTopRef = useRef<number | null>(null);
+  const animationSettledRef = useRef<(() => void) | null>(null);
   const sessionScrollStatesRef = useRef(new Map<string, ChatSessionScrollState>());
   const sessionKeyRef = useRef(sessionKey);
 
-  const cancelAnimation = useCallback(() => {
+  const stopAnimation = useCallback((settle: boolean) => {
     if (animationFrameRef.current !== null && typeof window !== "undefined") {
       window.cancelAnimationFrame(animationFrameRef.current);
     }
     animationFrameRef.current = null;
     expectedScrollTopRef.current = null;
     isAutoScrollingRef.current = false;
+    const onSettled = animationSettledRef.current;
+    animationSettledRef.current = null;
+    if (settle) {
+      onSettled?.();
+    }
   }, []);
+
+  const cancelAnimation = useCallback(() => {
+    stopAnimation(false);
+  }, [stopAnimation]);
 
   const rememberSessionScroll = useCallback((targetSessionKey = sessionKeyRef.current) => {
     const container = conversationListRef.current;
@@ -82,7 +99,7 @@ export function useChatScrollController({
     }
 
     if (typeof window === "undefined") return;
-    cancelAnimation();
+    stopAnimation(true);
     const startTop = container.scrollTop;
     const distance = Math.max(0, getChatScrollMaxTop(container) - startTop);
     if (distance <= 1) {
@@ -112,26 +129,83 @@ export function useChatScrollController({
         expectedScrollTopRef.current = getChatScrollMaxTop(currentContainer);
         currentContainer.scrollTop = getChatScrollMaxTop(currentContainer);
         rememberSessionScroll();
-        cancelAnimation();
+        stopAnimation(true);
         return;
       }
       animationFrameRef.current = window.requestAnimationFrame(animate);
     };
 
     animationFrameRef.current = window.requestAnimationFrame(animate);
-  }, [cancelAnimation, conversationListRef, rememberSessionScroll]);
+  }, [cancelAnimation, conversationListRef, rememberSessionScroll, stopAnimation]);
+
+  const scrollToMessage = useCallback<ChatMessageNavigationScroller>((target, onSettled) => {
+    const container = conversationListRef.current;
+    if (!container || typeof window === "undefined") {
+      onSettled();
+      return;
+    }
+
+    stopAnimation(true);
+    const getTargetScrollTop = (currentContainer: HTMLDivElement) => {
+      const containerRect = currentContainer.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      return getChatScrollTargetTop({
+        currentScrollTop: currentContainer.scrollTop,
+        containerTop: containerRect.top,
+        containerHeight: currentContainer.clientHeight,
+        targetTop: targetRect.top,
+        targetHeight: targetRect.height,
+        maxTop: getChatScrollMaxTop(currentContainer),
+      });
+    };
+    const startTop = container.scrollTop;
+    const initialTargetTop = getTargetScrollTop(container);
+    const distance = Math.abs(initialTargetTop - startTop);
+    if (distance <= 1) {
+      container.scrollTop = initialTargetTop;
+      onSettled();
+      return;
+    }
+
+    const startedAt = window.performance.now();
+    const duration = getChatScrollAnimationDuration(distance);
+    animationSettledRef.current = onSettled;
+    isAutoScrollingRef.current = true;
+    expectedScrollTopRef.current = startTop;
+
+    const animate = (now: number) => {
+      const currentContainer = conversationListRef.current;
+      if (!currentContainer || !target.isConnected) {
+        stopAnimation(true);
+        return;
+      }
+      const progress = Math.min(1, Math.max(0, (now - startedAt) / duration));
+      const targetTop = getTargetScrollTop(currentContainer);
+      const nextScrollTop = getChatScrollAnimationTop(startTop, targetTop, progress);
+      expectedScrollTopRef.current = nextScrollTop;
+      currentContainer.scrollTop = nextScrollTop;
+      if (progress >= 1) {
+        currentContainer.scrollTop = getTargetScrollTop(currentContainer);
+        stopAnimation(true);
+        return;
+      }
+      animationFrameRef.current = window.requestAnimationFrame(animate);
+    };
+
+    animationFrameRef.current = window.requestAnimationFrame(animate);
+  }, [conversationListRef, stopAnimation]);
 
   useEffect(() => {
     const container = conversationListRef.current;
     if (!container) return undefined;
 
-    const interruptAnimation = () => cancelAnimation();
+    const interruptAnimation = () => stopAnimation(true);
     const handleScroll = () => {
       rememberSessionScroll();
       if (!isAutoScrollingRef.current) return;
       const expectedScrollTop = expectedScrollTopRef.current;
       if (expectedScrollTop === null || Math.abs(container.scrollTop - expectedScrollTop) > 1) {
-        cancelAnimation();
+        stopAnimation(true);
       }
     };
     window.addEventListener("wheel", interruptAnimation, { passive: true });
@@ -144,9 +218,9 @@ export function useChatScrollController({
       window.removeEventListener("pointerdown", interruptAnimation);
       container.removeEventListener("scroll", handleScroll);
     };
-  }, [cancelAnimation, conversationListRef, rememberSessionScroll]);
+  }, [conversationListRef, rememberSessionScroll, stopAnimation]);
 
-  useLayoutEffect(() => cancelAnimation, [cancelAnimation, sessionKey]);
+  useLayoutEffect(() => () => stopAnimation(true), [sessionKey, stopAnimation]);
 
-  return { isAutoScrollingRef, restoreSessionScroll, scrollToBottom };
+  return { isAutoScrollingRef, restoreSessionScroll, scrollToBottom, scrollToMessage };
 }

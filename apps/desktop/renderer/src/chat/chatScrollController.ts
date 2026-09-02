@@ -71,3 +71,26 @@ export function getChatScrollAnimationTop(
   const easedProgress = 1 - ((1 - progress) ** 3);
   return startTop + (targetTop - startTop) * easedProgress;
 }
+
+/** Resolves the scrollTop that places a message element at the center of its chat viewport. */
+export function getChatScrollTargetTop({
+  currentScrollTop,
+  containerTop,
+  containerHeight,
+  targetTop,
+  targetHeight,
+  maxTop,
+}: {
+  currentScrollTop: number;
+  containerTop: number;
+  containerHeight: number;
+  targetTop: number;
+  targetHeight: number;
+  maxTop: number;
+}): number {
+  const centeredTop = currentScrollTop
+    + targetTop
+    - containerTop
+    - (containerHeight - targetHeight) / 2;
+  return Math.max(0, Math.min(centeredTop, maxTop));
+}

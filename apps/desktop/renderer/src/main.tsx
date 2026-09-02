@@ -34,6 +34,7 @@ import { buildDesktopViewModel } from "./app/desktopSelectors";
 import { useRolePresentation } from "./app/useRolePresentation";
 import { useStoryWorkspacePresentation } from "./app/useStoryWorkspacePresentation";
 import type { RoleSessionCache } from "./chat/roleSessionCache";
+import type { ChatMessageNavigationScroller } from "./chat/useChatScrollController";
 import { DesktopErrorBoundary } from "./diagnostics/DesktopErrorBoundary";
 import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalDiagnostics";
 import { useImageStudioState } from "./image/useImageStudioState";
@@ -200,6 +201,7 @@ function App(): React.ReactElement {
   const handleMessageNavigationTargetMounted = useCallback((
     messageKey: string,
     target: HTMLElement,
+    scrollToMessage: ChatMessageNavigationScroller,
   ): void => {
     const current = pendingMessageNavigationRef.current;
     if (
@@ -209,9 +211,18 @@ function App(): React.ReactElement {
     ) {
       return;
     }
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
-    setPendingMessageNavigation(null);
-    setHighlightedMessageKey("");
+    scrollToMessage(target, () => {
+      const latest = pendingMessageNavigationRef.current;
+      if (
+        !latest
+        || latest.roleId !== activeRoleIdRef.current
+        || latest.messageKey !== messageKey
+      ) {
+        return;
+      }
+      setPendingMessageNavigation(null);
+      setHighlightedMessageKey("");
+    });
   }, [activeRoleIdRef, pendingMessageNavigationRef]);
 
   const { chooseIllustration, applyRoleSnapshot, rememberIllustration } = useRolePresentation({

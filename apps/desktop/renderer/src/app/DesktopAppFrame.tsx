@@ -1,6 +1,7 @@
 import type React from "react";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { ChatSurface } from "../chat/ChatSurface";
+import type { ChatMessageNavigationScroller } from "../chat/useChatScrollController";
 import { ImageStudioPage } from "../image/ImageStudioPage";
 import { ImageStudioSidebar } from "../image/ImageStudioSidebar";
 import { PromptTagLibraryPage } from "../image/PromptTagLibraryPage";
@@ -100,7 +101,11 @@ type DesktopAppFrameProps = {
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
-  onMessageNavigationTargetMounted?: (messageKey: string, target: HTMLElement) => void;
+  onMessageNavigationTargetMounted?: (
+    messageKey: string,
+    target: HTMLElement,
+    scrollToMessage: ChatMessageNavigationScroller,
+  ) => void;
   notice: string;
   isVisibleChatSending: boolean;
   isVisibleChatCancelling: boolean;

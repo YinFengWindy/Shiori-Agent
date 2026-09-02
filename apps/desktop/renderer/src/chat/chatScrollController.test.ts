@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  getChatScrollTargetTop,
   getChatSessionRestoreScrollTop,
   rememberChatSessionScrollState,
   type ChatSessionScrollState,
@@ -37,6 +38,36 @@ describe("rememberChatSessionScrollState", () => {
     assert.equal(
       getChatSessionRestoreScrollTop(cache.get("role:mira")!, 1_400, 400),
       1_000,
+    );
+  });
+});
+
+describe("getChatScrollTargetTop", () => {
+  it("centers a mounted message inside the scroll container", () => {
+    assert.equal(
+      getChatScrollTargetTop({
+        currentScrollTop: 100,
+        containerTop: 40,
+        containerHeight: 500,
+        targetTop: 740,
+        targetHeight: 100,
+        maxTop: 2_000,
+      }),
+      600,
+    );
+  });
+
+  it("clamps a centered target to the scrollable range", () => {
+    assert.equal(
+      getChatScrollTargetTop({
+        currentScrollTop: 100,
+        containerTop: 40,
+        containerHeight: 500,
+        targetTop: 60,
+        targetHeight: 100,
+        maxTop: 1_000,
+      }),
+      0,
     );
   });
 });

@@ -16,7 +16,10 @@ import {
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { useRoleTasks } from "./useRoleTasks";
 import { useChatMessagePagination } from "./useChatMessagePagination";
-import { useChatScrollController } from "./useChatScrollController";
+import {
+  type ChatMessageNavigationScroller,
+  useChatScrollController,
+} from "./useChatScrollController";
 import { cx } from "../shared/styles";
 import { useLatestRef } from "../shared/useLatestRef";
 import type { ChatReplyTarget, ChatSendRequest, RoleRecord, SessionMessage, SessionPayload } from "../shared/types";
@@ -41,7 +44,11 @@ type ChatSurfaceProps = {
   conversationEndRef: React.RefObject<HTMLDivElement | null>;
   headerTitle: string;
   highlightedMessageKey: string;
-  onMessageNavigationTargetMounted?: (messageKey: string, target: HTMLElement) => void;
+  onMessageNavigationTargetMounted?: (
+    messageKey: string,
+    target: HTMLElement,
+    scrollToMessage: ChatMessageNavigationScroller,
+  ) => void;
   notice: string;
   sending: boolean;
   cancelling: boolean;
@@ -154,10 +161,14 @@ export function ChatSurface({
     isAutoScrollingRef,
     restoreSessionScroll,
     scrollToBottom,
+    scrollToMessage,
   } = useChatScrollController({
     conversationListRef,
     sessionKey: activeSession?.key ?? "",
   });
+  const handleMessageNavigationTargetMounted = useCallback((messageKey: string, target: HTMLElement) => {
+    onMessageNavigationTargetMounted?.(messageKey, target, scrollToMessage);
+  }, [onMessageNavigationTargetMounted, scrollToMessage]);
   const scrollConversationToBottom = useCallback((behavior: ScrollBehavior) => {
     stickToBottomRef.current = true;
     scrollToBottom(behavior);
@@ -488,7 +499,7 @@ export function ChatSurface({
           conversationEndRef={conversationEndRef}
           conversationListRef={conversationListRef}
           highlightedMessageKey={highlightedMessageKey}
-          onMessageNavigationTargetMounted={onMessageNavigationTargetMounted}
+          onMessageNavigationTargetMounted={handleMessageNavigationTargetMounted}
           isAutoScrollingRef={isAutoScrollingRef}
           visibleMessageWindow={visibleMessageWindow}
           onBeginAttachmentDrag={onBeginAttachmentDrag}
