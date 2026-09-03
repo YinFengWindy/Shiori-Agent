@@ -55,4 +55,11 @@ describe("ChatComposer", () => {
     assert.match(markup, /contain:layout/);
     assert.doesNotMatch(markup, /field-sizing/);
   });
+
+  it("does not intercept pointer events outside the visible composer", () => {
+    const markup = renderChatComposer();
+
+    assert.match(markup, /composer-wrap pointer-events-none/);
+    assert.match(markup, /pointer-events-auto mx-auto w-full max-w-\[700px\]/);
+  });
 });
