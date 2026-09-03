@@ -1,6 +1,26 @@
 import { getVisibleChatMessages } from "./chatMessageWindow";
 import type { SessionPayload } from "../shared/types";
 
+export const chatMessagePaginationTopThreshold = 96;
+
+/** Returns whether a user scroll near the top should request an older page. */
+export function shouldLoadOlderChatMessages({
+  scrollTop,
+  canLoadOlderMessages,
+  loading,
+  isAutoScrolling,
+}: {
+  scrollTop: number;
+  canLoadOlderMessages: boolean;
+  loading: boolean;
+  isAutoScrolling: boolean;
+}): boolean {
+  return scrollTop <= chatMessagePaginationTopThreshold
+    && canLoadOlderMessages
+    && !loading
+    && !isAutoScrolling;
+}
+
 /** Chooses either the server-backed loaded history or the legacy local render window. */
 export function getPaginatedChatMessageWindow(
   session: SessionPayload | null,

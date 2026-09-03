@@ -17,6 +17,51 @@ function messages(count: number): SessionMessage[] {
 }
 
 describe("getVirtualChatMessageWindow", () => {
+  it("keeps the mounted message window bounded at 1k, 5k, and 10k history sizes", () => {
+    for (const count of [1_000, 5_000, 10_000]) {
+      const source = messages(count);
+      const messageKeys = source.map((message) => message.id ?? "");
+      const totalHeight = getVirtualChatMessageWindow({
+        messages: source,
+        messageKeys,
+        measuredHeights: new Map(),
+        scrollTop: Number.POSITIVE_INFINITY,
+        viewportHeight: 720,
+        pinnedMessageIndex: -1,
+      }).totalHeight;
+
+      for (const [position, scrollTop] of [
+        ["top", 0],
+        ["middle", totalHeight / 2],
+        ["bottom", Number.POSITIVE_INFINITY],
+      ] as const) {
+        const window = getVirtualChatMessageWindow({
+          messages: source,
+          messageKeys,
+          measuredHeights: new Map(),
+          scrollTop,
+          viewportHeight: 720,
+          pinnedMessageIndex: -1,
+        });
+
+        assert.ok(
+          window.messages.length < 80,
+          `${count} messages at the ${position} must mount fewer than 80 rows`,
+        );
+        assert.equal(window.messages[0]?.id, `message-${window.startIndex}`);
+        assert.equal(window.messages.at(-1)?.id, `message-${window.endIndex - 1}`);
+        if (position === "top") {
+          assert.equal(window.topSpacerHeight, 0);
+        } else if (position === "middle") {
+          assert.ok(window.topSpacerHeight > 0);
+          assert.ok(window.bottomSpacerHeight > 0);
+        } else {
+          assert.equal(window.bottomSpacerHeight, 0);
+        }
+      }
+    }
+  });
+
   it("keeps a 10k-message React window bounded around the viewport", () => {
     const source = messages(10_000);
     const window = getVirtualChatMessageWindow({

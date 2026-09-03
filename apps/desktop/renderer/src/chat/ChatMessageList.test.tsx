@@ -18,7 +18,6 @@ describe("ChatMessageList", () => {
         highlightedMessageKey=""
         visibleMessageWindow={getVisibleChatMessages([message], 10)}
         onBeginAttachmentDrag={() => undefined}
-        onExpandOlderMessages={() => undefined}
         onJumpToMessage={() => undefined}
         onOpenContextMenu={() => undefined}
         onOpenImagePreview={() => undefined}
@@ -72,7 +71,6 @@ describe("ChatMessageList", () => {
         highlightedMessageKey=""
         visibleMessageWindow={getVisibleChatMessages([message], 10)}
         onBeginAttachmentDrag={() => undefined}
-        onExpandOlderMessages={() => undefined}
         onJumpToMessage={() => undefined}
         onOpenContextMenu={() => undefined}
         onOpenImagePreview={() => undefined}
@@ -105,7 +103,6 @@ describe("ChatMessageList", () => {
         highlightedMessageKey=""
         visibleMessageWindow={{ startIndex: 0, hiddenMessageCount: 0, messages }}
         onBeginAttachmentDrag={() => undefined}
-        onExpandOlderMessages={() => undefined}
         onJumpToMessage={() => undefined}
         onOpenContextMenu={() => undefined}
         onOpenImagePreview={() => undefined}
@@ -135,7 +132,6 @@ describe("ChatMessageList", () => {
           })),
         }}
         onBeginAttachmentDrag={() => undefined}
-        onExpandOlderMessages={() => undefined}
         onJumpToMessage={() => undefined}
         onOpenContextMenu={() => undefined}
         onOpenImagePreview={() => undefined}
@@ -159,7 +155,6 @@ describe("ChatMessageList", () => {
           content: "消息内容",
         }], 10)}
         onBeginAttachmentDrag={() => undefined}
-        onExpandOlderMessages={() => undefined}
         onJumpToMessage={() => undefined}
         onOpenContextMenu={() => undefined}
         onOpenImagePreview={() => undefined}

@@ -3,7 +3,7 @@ import { ChatMessageRow } from "./ChatMessageRow";
 import { useChatMessageVirtualization } from "./useChatMessageVirtualization";
 import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
 import type { getVisibleChatMessages } from "./chatMessageWindow";
-import { cx, focusResetClass } from "../shared/styles";
+import { cx } from "../shared/styles";
 import type { RoleRecord, SessionMessage } from "../shared/types";
 
 type ChatMessageListProps = {
@@ -15,11 +15,8 @@ type ChatMessageListProps = {
   onMessageNavigationTargetMounted?: (messageKey: string, target: HTMLElement) => void;
   isAutoScrollingRef?: React.RefObject<boolean>;
   visibleMessageWindow: ReturnType<typeof getVisibleChatMessages>;
-  canLoadOlderMessages?: boolean;
-  loadingOlderMessages?: boolean;
   onBeginAttachmentDrag: (path: string) => void;
   onContentSizeChange?: () => void;
-  onExpandOlderMessages: () => void;
   onJumpToMessage: (messageKey: string) => void;
   onOpenContextMenu: (
     event: React.MouseEvent<HTMLElement>,
@@ -43,11 +40,8 @@ export const ChatMessageList = React.memo(function ChatMessageList({
   onMessageNavigationTargetMounted,
   isAutoScrollingRef,
   visibleMessageWindow,
-  canLoadOlderMessages = visibleMessageWindow.hiddenMessageCount > 0,
-  loadingOlderMessages = false,
   onBeginAttachmentDrag,
   onContentSizeChange,
-  onExpandOlderMessages,
   onJumpToMessage,
   onOpenContextMenu,
   onOpenImagePreview,
@@ -74,21 +68,6 @@ export const ChatMessageList = React.memo(function ChatMessageList({
       style={{ overflowAnchor: "none" }}
     >
       <div className={cx("grid content-start gap-3", chatContentTrackClass)}>
-        {canLoadOlderMessages ? (
-          <div className="flex justify-center">
-            <button
-              className={cx(
-                "rounded-md border border-[#D8DEE8] bg-white/85 px-3 py-1.5 text-[12px] text-[#5B6472] transition hover:border-[#C6CEDA] hover:bg-white",
-                focusResetClass,
-              )}
-              type="button"
-              disabled={loadingOlderMessages}
-              onClick={onExpandOlderMessages}
-            >
-              {loadingOlderMessages ? "正在加载更早消息" : `更早消息 ${visibleMessageWindow.hiddenMessageCount} 条`}
-            </button>
-          </div>
-        ) : null}
         {virtualMessageWindow.topSpacerHeight > 0 ? (
           <div aria-hidden="true" className="pointer-events-none" style={{ height: virtualMessageWindow.topSpacerHeight }} />
         ) : null}

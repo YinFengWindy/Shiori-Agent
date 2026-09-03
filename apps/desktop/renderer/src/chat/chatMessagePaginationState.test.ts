@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import {
   getPaginatedChatMessageWindow,
   getPrependAnchorScrollTop,
+  shouldLoadOlderChatMessages,
 } from "./chatMessagePaginationState";
 import type { SessionPayload } from "../shared/types";
 
@@ -66,5 +67,18 @@ describe("getPaginatedChatMessageWindow", () => {
 describe("getPrependAnchorScrollTop", () => {
   it("compensates exactly for the height added above the visible anchor", () => {
     assert.equal(getPrependAnchorScrollTop(800, 280, 1260), 740);
+  });
+});
+
+describe("shouldLoadOlderChatMessages", () => {
+  it("triggers only for a user scroll within the top threshold", () => {
+    const base = { canLoadOlderMessages: true, loading: false, isAutoScrolling: false };
+
+    assert.equal(shouldLoadOlderChatMessages({ ...base, scrollTop: 96 }), true);
+    assert.equal(shouldLoadOlderChatMessages({ ...base, scrollTop: 0 }), true);
+    assert.equal(shouldLoadOlderChatMessages({ ...base, scrollTop: 97 }), false);
+    assert.equal(shouldLoadOlderChatMessages({ ...base, scrollTop: 96, loading: true }), false);
+    assert.equal(shouldLoadOlderChatMessages({ ...base, scrollTop: 96, canLoadOlderMessages: false }), false);
+    assert.equal(shouldLoadOlderChatMessages({ ...base, scrollTop: 96, isAutoScrolling: true }), false);
   });
 });
