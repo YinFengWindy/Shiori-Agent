@@ -52,7 +52,7 @@ export function useChatMessagePagination({
     ? Boolean(activeSession?.pagination?.has_more)
     : visibleMessageWindow.hiddenMessageCount > 0;
 
-  const handleExpandOlderMessages = useCallback(() => {
+  const loadOlderPage = useCallback(() => {
     const container = conversationListRef.current;
     if (!container || !sessionKey || loading || !canLoadOlderMessages || loadingGateRef.current === sessionKey) return;
     loadingGateRef.current = sessionKey;
@@ -79,8 +79,8 @@ export function useChatMessagePagination({
       loading,
       isAutoScrolling,
     })) return;
-    handleExpandOlderMessages();
-  }, [canLoadOlderMessages, handleExpandOlderMessages, loading]);
+    loadOlderPage();
+  }, [canLoadOlderMessages, loadOlderPage, loading]);
 
   useLayoutEffect(() => {
     if (!hasServerPagination && loadingGateRef.current === sessionKey) {
@@ -116,7 +116,6 @@ export function useChatMessagePagination({
     visibleMessageWindow,
     loading,
     canLoadOlderMessages,
-    onLoadOlderMessages: handleExpandOlderMessages,
     maybeLoadOlderMessages,
   };
 }
