@@ -81,7 +81,7 @@ export function useChatMessagePagination({
       isAutoScrolling,
       loadOlderPage,
     });
-  }, [canLoadOlderMessages, loadOlderPage, loading]);
+  }, [canLoadOlderMessages, loadOlderPage, loading, sessionKey]);
 
   useLayoutEffect(() => {
     if (!hasServerPagination && loadingGateRef.current === sessionKey) {
