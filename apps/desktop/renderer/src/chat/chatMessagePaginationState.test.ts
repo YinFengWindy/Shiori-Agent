@@ -6,6 +6,8 @@ import {
   getPaginatedChatMessageWindow,
   getPrependAnchorScrollTop,
   shouldLoadOlderChatMessages,
+  shouldLoadOlderChatMessagesAfterSessionRestore,
+  triggerOlderChatMessagesLoad,
 } from "./chatMessagePaginationState";
 import type { SessionPayload } from "../shared/types";
 
@@ -80,5 +82,87 @@ describe("shouldLoadOlderChatMessages", () => {
     assert.equal(shouldLoadOlderChatMessages({ ...base, scrollTop: 96, loading: true }), false);
     assert.equal(shouldLoadOlderChatMessages({ ...base, scrollTop: 96, canLoadOlderMessages: false }), false);
     assert.equal(shouldLoadOlderChatMessages({ ...base, scrollTop: 96, isAutoScrolling: true }), false);
+  });
+});
+
+describe("triggerOlderChatMessagesLoad", () => {
+  const base = {
+    canLoadOlderMessages: true,
+    loading: false,
+    isAutoScrolling: false,
+  };
+
+  it("routes a near-top user scroll to the older-page loader", () => {
+    let loadCount = 0;
+    const triggered = triggerOlderChatMessagesLoad({
+      ...base,
+      scrollTop: 0,
+      loadOlderPage: () => { loadCount += 1; },
+    });
+
+    assert.equal(triggered, true);
+    assert.equal(loadCount, 1);
+  });
+
+  it("keeps the loading gate from invoking a duplicate request", () => {
+    let loadCount = 0;
+    const loadOlderPage = () => { loadCount += 1; };
+    const first = triggerOlderChatMessagesLoad({ ...base, scrollTop: 24, loadOlderPage });
+    const duplicate = triggerOlderChatMessagesLoad({ ...base, scrollTop: 24, loading: true, loadOlderPage });
+
+    assert.equal(first, true);
+    assert.equal(duplicate, false);
+    assert.equal(loadCount, 1);
+  });
+
+  it("does not route programmatic scrolling or positions outside the threshold", () => {
+    let loadCount = 0;
+    const loadOlderPage = () => { loadCount += 1; };
+    assert.equal(triggerOlderChatMessagesLoad({ ...base, scrollTop: 0, isAutoScrolling: true, loadOlderPage }), false);
+    assert.equal(triggerOlderChatMessagesLoad({ ...base, scrollTop: 97, loadOlderPage }), false);
+    assert.equal(loadCount, 0);
+  });
+});
+
+describe("shouldLoadOlderChatMessagesAfterSessionRestore", () => {
+  const base = {
+    canLoadOlderMessages: true,
+    loading: false,
+  };
+
+  it("checks for older history when a non-bottom session restores near the top", () => {
+    assert.equal(shouldLoadOlderChatMessagesAfterSessionRestore({
+      ...base,
+      scrollTop: 0,
+      restoredWasAtBottom: false,
+    }), true);
+  });
+
+  it("does not treat the initial bottom restore as a pagination request", () => {
+    assert.equal(shouldLoadOlderChatMessagesAfterSessionRestore({
+      ...base,
+      scrollTop: 0,
+      restoredWasAtBottom: true,
+    }), false);
+  });
+
+  it("keeps the same loading and threshold gates as user scrolling", () => {
+    assert.equal(shouldLoadOlderChatMessagesAfterSessionRestore({
+      ...base,
+      scrollTop: 97,
+      restoredWasAtBottom: false,
+    }), false);
+    assert.equal(shouldLoadOlderChatMessagesAfterSessionRestore({
+      ...base,
+      loading: true,
+      scrollTop: 0,
+      restoredWasAtBottom: false,
+    }), false);
+    assert.equal(shouldLoadOlderChatMessagesAfterSessionRestore({
+      ...base,
+      canLoadOlderMessages: false,
+      scrollTop: 0,
+      restoredWasAtBottom: false,
+    }), false);
   });
 });

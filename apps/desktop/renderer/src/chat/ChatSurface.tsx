@@ -13,6 +13,7 @@ import {
   shouldAutoScrollOnContentSizeChange,
   shouldAutoScrollOnNewMessage,
 } from "./chatAutoScroll";
+import { shouldLoadOlderChatMessagesAfterSessionRestore } from "./chatMessagePaginationState";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { useRoleTasks } from "./useRoleTasks";
 import { useChatMessagePagination } from "./useChatMessagePagination";
@@ -148,6 +149,8 @@ export function ChatSurface({
   const currentLastMessageContent = sessionMessages.at(-1)?.content ?? "";
   const {
     visibleMessageWindow,
+    canLoadOlderMessages,
+    loading: loadingOlderMessages,
     maybeLoadOlderMessages,
   } = useChatMessagePagination({
     activeSession,
@@ -191,6 +194,14 @@ export function ChatSurface({
     const restoredSessionScroll = restoreSessionScroll(sessionKey);
     if (restoredSessionScroll) {
       stickToBottomRef.current = restoredSessionScroll.wasAtBottom;
+      if (shouldLoadOlderChatMessagesAfterSessionRestore({
+        scrollTop: container.scrollTop,
+        restoredWasAtBottom: restoredSessionScroll.wasAtBottom,
+        canLoadOlderMessages,
+        loading: loadingOlderMessages,
+      })) {
+        maybeLoadOlderMessages(container.scrollTop, false);
+      }
       return;
     }
     stickToBottomRef.current = true;

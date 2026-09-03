@@ -21,6 +21,50 @@ export function shouldLoadOlderChatMessages({
     && !isAutoScrolling;
 }
 
+/** Invokes the older-page loader when a scroll event crosses the paging gates. */
+export function triggerOlderChatMessagesLoad({
+  scrollTop,
+  canLoadOlderMessages,
+  loading,
+  isAutoScrolling,
+  loadOlderPage,
+}: {
+  scrollTop: number;
+  canLoadOlderMessages: boolean;
+  loading: boolean;
+  isAutoScrolling: boolean;
+  loadOlderPage: () => void;
+}): boolean {
+  if (!shouldLoadOlderChatMessages({
+    scrollTop,
+    canLoadOlderMessages,
+    loading,
+    isAutoScrolling,
+  })) return false;
+  loadOlderPage();
+  return true;
+}
+
+/** Returns whether restoring a previously browsed session should check for older history. */
+export function shouldLoadOlderChatMessagesAfterSessionRestore({
+  scrollTop,
+  restoredWasAtBottom,
+  canLoadOlderMessages,
+  loading,
+}: {
+  scrollTop: number;
+  restoredWasAtBottom: boolean;
+  canLoadOlderMessages: boolean;
+  loading: boolean;
+}): boolean {
+  return !restoredWasAtBottom && shouldLoadOlderChatMessages({
+    scrollTop,
+    canLoadOlderMessages,
+    loading,
+    isAutoScrolling: false,
+  });
+}
+
 /** Chooses either the server-backed loaded history or the legacy local render window. */
 export function getPaginatedChatMessageWindow(
   session: SessionPayload | null,

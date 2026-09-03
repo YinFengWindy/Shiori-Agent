@@ -8,7 +8,7 @@ import {
 import {
   getPaginatedChatMessageWindow,
   getPrependAnchorScrollTop,
-  shouldLoadOlderChatMessages,
+  triggerOlderChatMessagesLoad,
 } from "./chatMessagePaginationState";
 import type { SessionPayload } from "../shared/types";
 
@@ -73,13 +73,13 @@ export function useChatMessagePagination({
   }, [canLoadOlderMessages, conversationListRef, hasServerPagination, loadOlderMessages, loading, sessionKey]);
 
   const maybeLoadOlderMessages = useCallback((scrollTop: number, isAutoScrolling: boolean) => {
-    if (!shouldLoadOlderChatMessages({
+    triggerOlderChatMessagesLoad({
       scrollTop,
       canLoadOlderMessages,
       loading,
       isAutoScrolling,
-    })) return;
-    loadOlderPage();
+      loadOlderPage,
+    });
   }, [canLoadOlderMessages, loadOlderPage, loading]);
 
   useLayoutEffect(() => {
