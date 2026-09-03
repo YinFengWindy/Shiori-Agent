@@ -77,6 +77,7 @@ export function useChatMessagePagination({
       scrollTop,
       canLoadOlderMessages,
       loading,
+      loadingGateActive: loadingGateRef.current === sessionKey,
       isAutoScrolling,
       loadOlderPage,
     });

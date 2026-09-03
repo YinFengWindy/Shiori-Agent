@@ -26,16 +26,18 @@ export function triggerOlderChatMessagesLoad({
   scrollTop,
   canLoadOlderMessages,
   loading,
+  loadingGateActive = false,
   isAutoScrolling,
   loadOlderPage,
 }: {
   scrollTop: number;
   canLoadOlderMessages: boolean;
   loading: boolean;
+  loadingGateActive?: boolean;
   isAutoScrolling: boolean;
   loadOlderPage: () => void;
 }): boolean {
-  if (!shouldLoadOlderChatMessages({
+  if (loadingGateActive || !shouldLoadOlderChatMessages({
     scrollTop,
     canLoadOlderMessages,
     loading,

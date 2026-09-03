@@ -89,6 +89,7 @@ describe("triggerOlderChatMessagesLoad", () => {
   const base = {
     canLoadOlderMessages: true,
     loading: false,
+    loadingGateActive: false,
     isAutoScrolling: false,
   };
 
@@ -108,7 +109,7 @@ describe("triggerOlderChatMessagesLoad", () => {
     let loadCount = 0;
     const loadOlderPage = () => { loadCount += 1; };
     const first = triggerOlderChatMessagesLoad({ ...base, scrollTop: 24, loadOlderPage });
-    const duplicate = triggerOlderChatMessagesLoad({ ...base, scrollTop: 24, loading: true, loadOlderPage });
+    const duplicate = triggerOlderChatMessagesLoad({ ...base, scrollTop: 24, loadingGateActive: true, loadOlderPage });
 
     assert.equal(first, true);
     assert.equal(duplicate, false);
