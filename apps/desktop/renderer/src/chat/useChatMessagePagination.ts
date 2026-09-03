@@ -8,6 +8,7 @@ import {
 import {
   getPaginatedChatMessageWindow,
   getPrependAnchorScrollTop,
+  triggerOlderChatMessagesLoad,
 } from "./chatMessagePaginationState";
 import type { SessionPayload } from "../shared/types";
 
@@ -34,21 +35,27 @@ export function useChatMessagePagination({
   const messages = activeSession?.messages ?? emptySessionMessages;
   const hasServerPagination = Boolean(activeSession?.pagination);
   const loading = loadingSessionKey === sessionKey;
+  const loadingGateRef = useRef("");
 
   useLayoutEffect(() => {
     setVisibleMessageCount(initialVisibleChatMessageCount);
     anchorRef.current = null;
     setLoadingSessionKey("");
+    loadingGateRef.current = "";
   }, [sessionKey]);
 
   const visibleMessageWindow = useMemo(
     () => getPaginatedChatMessageWindow(activeSession, visibleMessageCount),
     [activeSession, visibleMessageCount],
   );
+  const canLoadOlderMessages = hasServerPagination
+    ? Boolean(activeSession?.pagination?.has_more)
+    : visibleMessageWindow.hiddenMessageCount > 0;
 
-  const handleExpandOlderMessages = useCallback(() => {
+  const loadOlderPage = useCallback(() => {
     const container = conversationListRef.current;
-    if (!container || !sessionKey || loading) return;
+    if (!container || !sessionKey || loading || !canLoadOlderMessages || loadingGateRef.current === sessionKey) return;
+    loadingGateRef.current = sessionKey;
     anchorRef.current = {
       sessionKey,
       scrollHeight: container.scrollHeight,
@@ -58,11 +65,29 @@ export function useChatMessagePagination({
       setLoadingSessionKey(sessionKey);
       void loadOlderMessages(sessionKey).finally(() => {
         setLoadingSessionKey((current) => current === sessionKey ? "" : current);
+        if (loadingGateRef.current === sessionKey) loadingGateRef.current = "";
       });
       return;
     }
     setVisibleMessageCount((current) => current + visibleChatMessageCountStep);
-  }, [conversationListRef, hasServerPagination, loadOlderMessages, loading, sessionKey]);
+  }, [canLoadOlderMessages, conversationListRef, hasServerPagination, loadOlderMessages, loading, sessionKey]);
+
+  const maybeLoadOlderMessages = useCallback((scrollTop: number, isAutoScrolling: boolean) => {
+    triggerOlderChatMessagesLoad({
+      scrollTop,
+      canLoadOlderMessages,
+      loading,
+      loadingGateActive: loadingGateRef.current === sessionKey,
+      isAutoScrolling,
+      loadOlderPage,
+    });
+  }, [canLoadOlderMessages, loadOlderPage, loading, sessionKey]);
+
+  useLayoutEffect(() => {
+    if (!hasServerPagination && loadingGateRef.current === sessionKey) {
+      loadingGateRef.current = "";
+    }
+  }, [hasServerPagination, sessionKey, visibleMessageCount]);
 
   useLayoutEffect(() => {
     const anchor = anchorRef.current;
@@ -91,9 +116,7 @@ export function useChatMessagePagination({
   return {
     visibleMessageWindow,
     loading,
-    canLoadOlderMessages: hasServerPagination
-      ? Boolean(activeSession?.pagination?.has_more)
-      : visibleMessageWindow.hiddenMessageCount > 0,
-    onLoadOlderMessages: handleExpandOlderMessages,
+    canLoadOlderMessages,
+    maybeLoadOlderMessages,
   };
 }

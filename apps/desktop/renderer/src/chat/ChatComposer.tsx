@@ -136,8 +136,8 @@ export const ChatComposer = React.memo(function ChatComposer({
   }
 
   return (
-    <div className="composer-wrap absolute inset-x-0 bottom-10 z-[2] flex min-w-0 justify-center overflow-visible">
-      <div className="mx-auto w-full max-w-[700px] px-5 md:px-6">
+    <div className="composer-wrap pointer-events-none absolute inset-x-0 bottom-10 z-[2] flex min-w-0 justify-center overflow-visible">
+      <div className="pointer-events-auto mx-auto w-full max-w-[700px] px-5 md:px-6">
         <div className="composer grid w-full flex-none gap-1.5 rounded-[18px] border border-[#E4E4E4] bg-[#FFFEFF] px-3 pb-2 pt-2.5">
           {replyTarget ? (
             <div className="flex min-w-0 items-start gap-2 rounded-md border border-[#E5E7EB] bg-[#F8FAFC] px-2.5 py-2 text-left">

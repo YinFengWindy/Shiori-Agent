@@ -225,7 +225,7 @@ describe("ChatSurface", () => {
     assert.match(markup, /ml-auto items-end/);
   });
 
-  it("renders only the recent chat window first and shows an affordance for older messages", () => {
+  it("renders only the recent chat window first without a manual older-message control", () => {
     const session = createSession();
     session.messages = Array.from({ length: 220 }, (_value, index) => ({
       id: `message-${index + 1}`,
@@ -235,7 +235,7 @@ describe("ChatSurface", () => {
 
     const markup = renderChatSurface(createRole(), "mira", { activeSession: session });
 
-    assert.match(markup, />更早消息 60 条</);
+    assert.doesNotMatch(markup, />更早消息/);
     assert.doesNotMatch(markup, /data-message-key="message-1"/);
     assert.match(markup, /data-message-key="message-220"/);
   });

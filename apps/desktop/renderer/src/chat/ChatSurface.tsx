@@ -13,6 +13,7 @@ import {
   shouldAutoScrollOnContentSizeChange,
   shouldAutoScrollOnNewMessage,
 } from "./chatAutoScroll";
+import { shouldLoadOlderChatMessagesAfterSessionRestore } from "./chatMessagePaginationState";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { useRoleTasks } from "./useRoleTasks";
 import { useChatMessagePagination } from "./useChatMessagePagination";
@@ -148,9 +149,9 @@ export function ChatSurface({
   const currentLastMessageContent = sessionMessages.at(-1)?.content ?? "";
   const {
     visibleMessageWindow,
-    loading: loadingOlderMessages,
     canLoadOlderMessages,
-    onLoadOlderMessages: handleLoadOlderMessages,
+    loading: loadingOlderMessages,
+    maybeLoadOlderMessages,
   } = useChatMessagePagination({
     activeSession,
     conversationListRef,
@@ -193,6 +194,14 @@ export function ChatSurface({
     const restoredSessionScroll = restoreSessionScroll(sessionKey);
     if (restoredSessionScroll) {
       stickToBottomRef.current = restoredSessionScroll.wasAtBottom;
+      if (shouldLoadOlderChatMessagesAfterSessionRestore({
+        scrollTop: container.scrollTop,
+        restoredWasAtBottom: restoredSessionScroll.wasAtBottom,
+        canLoadOlderMessages,
+        loading: loadingOlderMessages,
+      })) {
+        maybeLoadOlderMessages(container.scrollTop, false);
+      }
       return;
     }
     stickToBottomRef.current = true;
@@ -262,7 +271,13 @@ export function ChatSurface({
     const container = conversationListRef.current;
     if (!container) return;
 
-    const handleScroll = () => updateScrollState({ allowUnstick: true });
+    const handleScroll = () => {
+      updateScrollState({ allowUnstick: true });
+      const container = conversationListRef.current;
+      if (container) {
+        maybeLoadOlderMessages(container.scrollTop, isAutoScrollingRef.current);
+      }
+    };
     const handleResize = () => updateScrollState();
 
     container.addEventListener("scroll", handleScroll, { passive: true });
@@ -276,7 +291,7 @@ export function ChatSurface({
       window.removeEventListener("resize", handleResize);
       resizeObserver.disconnect();
     };
-  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, isAutoScrollingRef, sending]);
+  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, isAutoScrollingRef, maybeLoadOlderMessages, sending]);
 
   useEffect(() => {
     if (!chatLatestImageSidebarCollapsed) {
@@ -504,9 +519,6 @@ export function ChatSurface({
           visibleMessageWindow={visibleMessageWindow}
           onBeginAttachmentDrag={onBeginAttachmentDrag}
           onContentSizeChange={handleChatContentSizeChange}
-          canLoadOlderMessages={canLoadOlderMessages}
-          loadingOlderMessages={loadingOlderMessages}
-          onExpandOlderMessages={handleLoadOlderMessages}
           onJumpToMessage={onJumpToMessage}
           onOpenContextMenu={openMessageContextMenu}
           onOpenImagePreview={handleOpenChatImagePreview}
