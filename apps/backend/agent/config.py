@@ -106,6 +106,15 @@ def load_config_data(data: dict[str, Any]) -> Config:
         memory_window=int(
             agent_context.get("memory_window", data.get("memory_window", 40))
         ),
+        memory_consolidation_input_token_threshold=max(
+            0,
+            int(
+                agent_maintenance.get(
+                    "consolidation_input_token_threshold",
+                    75000,
+                )
+            ),
+        ),
         base_url=primary_registration.base_url if primary_registration else None,
         extra_body=(
             _effort_extra_body(primary_registration.effort)

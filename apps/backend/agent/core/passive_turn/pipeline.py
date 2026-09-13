@@ -71,6 +71,7 @@ class AgentCoreDeps:
     event_bus: "EventBus | None" = None
     outbound_port: "OutboundPort | None" = None
     history_window: int = 500
+    memory_input_token_threshold: int = 75000
     memory_consolidator: MemoryConsolidator | None = None
     before_turn_plugin_modules: list[object] | None = None
     before_reasoning_plugin_modules: list[object] | None = None
@@ -167,6 +168,9 @@ class PassiveTurnPipeline:
             add_after_step(list(deps.after_step_plugin_modules or []))
         self._outbound_port = deps.outbound_port or _NoopOutboundPort()
         self._history_window = deps.history_window
+        self._memory_input_token_threshold = max(
+            0, int(deps.memory_input_token_threshold)
+        )
         self._memory_consolidator = deps.memory_consolidator
         self._before_turn_plugin_modules = list(deps.before_turn_plugin_modules or [])
         self._before_reasoning_plugin_modules = list(
@@ -222,6 +226,7 @@ class PassiveTurnPipeline:
                 self._context_store,
                 keep_count=self._history_window,
                 consolidator=self._memory_consolidator,
+                input_token_threshold=self._memory_input_token_threshold,
                 plugin_modules=cast("list[Any]", self._before_turn_plugin_modules),
             ),
             frame_factory=BeforeTurnFrame,

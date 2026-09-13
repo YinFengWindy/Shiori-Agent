@@ -208,6 +208,15 @@ def test_load_config_defaults_memory_window_and_optimizer_interval(tmp_path: Pat
 
     assert cfg.memory_window == 40
     assert cfg.memory_optimizer_interval_seconds == 64800
+    assert cfg.memory_consolidation_input_token_threshold == 75000
+
+
+def test_load_config_reads_consolidation_input_token_threshold_from_maintenance():
+    loaded = config.load_config_data(
+        {"agent": {"maintenance": {"consolidation_input_token_threshold": 12345}}}
+    )
+
+    assert loaded.memory_consolidation_input_token_threshold == 12345
 
 
 def test_load_config_upgrades_plugin_markers_but_candidate_parsing_is_pure(

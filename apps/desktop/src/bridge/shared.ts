@@ -219,6 +219,7 @@ export type SettingsFormData = {
     sceneObservationEnabled?: boolean;
     memoryOptimizerEnabled: boolean;
     memoryOptimizerIntervalSeconds: number;
+    consolidationInputTokenThreshold: number;
   };
   pendingRoleModelUpdates?: PendingRoleModelUpdate[];
 };
