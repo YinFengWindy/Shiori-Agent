@@ -64,6 +64,7 @@ search_enabled = true
 # [agent.maintenance]
 # memory_optimizer_enabled = true
 # memory_optimizer_interval_seconds = 64800
+# consolidation_input_token_threshold = 75000
 
 # 可选：控制加载哪些工具集（默认值适合大多数场景）
 # [agent.wiring]

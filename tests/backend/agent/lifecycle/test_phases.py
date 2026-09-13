@@ -612,6 +612,62 @@ async def test_before_turn_memory_context_guard_schedules_consolidation_without_
 
 
 @pytest.mark.asyncio
+async def test_before_turn_token_pressure_waits_for_consolidation_before_context_prepare():
+    bus = EventBus()
+
+    class _TokenSession(_DummySession):
+        def get_history(
+            self, max_messages: int = 500, *, start_index: int | None = None
+        ) -> list[dict[str, object]]:
+            return list(self.messages[max(0, int(start_index or 0)) :])
+
+    session = _TokenSession("telegram:123")
+    session.messages = [{"role": "user", "content": "x" * 600}]
+    session_mgr = SimpleNamespace(get_or_create=lambda key: session)
+    ctx_store = SimpleNamespace(
+        prepare=AsyncMock(return_value=ContextBundle(history_messages=[]))
+    )
+
+    class _Consolidator:
+        def __init__(self) -> None:
+            self.ensure_calls = 0
+
+        def get_memory_consolidation_failure(self, session_key: str) -> str | None:
+            return None
+
+        def request_memory_consolidation(self, session_key: str) -> None:
+            raise AssertionError("token pressure must use awaited consolidation")
+
+        async def ensure_memory_consolidation(
+            self, session_key: str, current_content: str = ""
+        ) -> bool:
+            self.ensure_calls += 1
+            session.last_consolidated = len(session.messages)
+            return True
+
+    consolidator = _Consolidator()
+    phase = Phase(
+        default_before_turn_modules(
+            bus,
+            cast(SessionManager, session_mgr),
+            cast(ContextStore, ctx_store),
+            keep_count=20,
+            input_token_threshold=100,
+            consolidator=cast(Any, consolidator),
+        ),
+        frame_factory=BeforeTurnFrame,
+    )
+
+    ctx = await phase.run(
+        TurnState(msg=_inbound(), session_key="telegram:123", dispatch_outbound=True)
+    )
+
+    assert ctx.abort is False
+    assert consolidator.ensure_calls == 1
+    ctx_store.prepare.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_before_turn_memory_context_guard_blocks_after_consolidation_failure():
     bus = EventBus()
     session = _DummySession("telegram:123")

@@ -148,6 +148,8 @@ class _AssemblyMixin:
             context=self._context,
             session_manager=self.session_manager,
             event_bus=self._event_bus,
+            memory_consolidator=cast("MemoryConsolidator", self),
+            memory_input_token_threshold=config.memory.input_token_threshold,
         )
 
         # 3. 最后串 passive prepare / execute / commit 主链。
@@ -172,6 +174,7 @@ class _AssemblyMixin:
                 event_bus=self._event_bus,
                 outbound_port=BusOutboundPort(self.bus),
                 history_window=config.memory.keep_count,
+                memory_input_token_threshold=config.memory.input_token_threshold,
                 memory_consolidator=cast("MemoryConsolidator", self),
             )
         )

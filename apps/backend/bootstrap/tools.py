@@ -555,6 +555,7 @@ def build_core_runtime(
             ),
             memory=MemoryConfig(
                 window=config.memory_window,
+                input_token_threshold=config.memory_consolidation_input_token_threshold,
             ),
         ),
     )

@@ -67,6 +67,8 @@ def _select_consolidation_window(
     consolidation_min_new_messages: int,
     archive_all: bool,
     force: bool = False,
+    input_token_threshold: int = 0,
+    input_token_estimate: int | None = None,
 ) -> _ConsolidationWindow | None:
     total_messages = len(session.messages)
     if archive_all:
@@ -79,22 +81,55 @@ def _select_consolidation_window(
     if total_messages - session.last_consolidated <= 0:
         return None
 
+    token_pressure = (
+        input_token_threshold > 0
+        and (input_token_estimate or 0) >= input_token_threshold
+    )
+
     if force:
         consolidate_up_to = total_messages
     else:
-        if total_messages <= keep_count:
+        if total_messages <= keep_count and not token_pressure:
             return None
         consolidate_up_to = total_messages - keep_count
+        if total_messages <= keep_count:
+            consolidate_up_to = total_messages
     old_messages = session.messages[session.last_consolidated : consolidate_up_to]
     if not old_messages:
         return None
-    if not force and len(old_messages) < max(1, int(consolidation_min_new_messages)):
+    if (
+        not force
+        and not token_pressure
+        and len(old_messages) < max(1, int(consolidation_min_new_messages))
+    ):
         return None
     return _ConsolidationWindow(
         old_messages=old_messages,
-        keep_count=0 if force else keep_count,
+        keep_count=0 if force or total_messages <= keep_count else keep_count,
         consolidate_up_to=consolidate_up_to,
     )
+
+
+def _estimate_session_input_tokens(session: object, current_content: str = "") -> int:
+    """Conservatively estimate serialized model-facing session history size."""
+    messages = getattr(session, "messages", [])
+    if not isinstance(messages, list):
+        return 0
+    try:
+        history = session.get_history(
+            max_messages=500,
+            start_index=max(0, int(getattr(session, "last_consolidated", 0))),
+        )
+    except (AttributeError, TypeError):
+        history = messages[max(0, int(getattr(session, "last_consolidated", 0))) :]
+    if not isinstance(history, list):
+        history = list(messages)
+    payload = json.dumps(history, ensure_ascii=False, default=str)
+    if current_content:
+        payload += json.dumps(
+            {"role": "user", "content": current_content}, ensure_ascii=False
+        )
+    return max(1, len(payload) // 3) if payload else 0
 
 
 def _build_consolidation_source_ref(window: _ConsolidationWindow) -> str:

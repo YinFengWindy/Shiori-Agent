@@ -40,6 +40,7 @@ class LLMConfig:
 @dataclass
 class MemoryConfig:
     window: int = 40
+    input_token_threshold: int = 75000
 
     @property
     def keep_count(self) -> int:

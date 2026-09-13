@@ -71,6 +71,16 @@ class AgentLoop(
             return
         self._markdown_memory.maintenance.request_background_consolidation(session_key)
 
+    async def ensure_memory_consolidation(
+        self, session_key: str, current_content: str = ""
+    ) -> bool:
+        """Wait for token-triggered memory consolidation before a model request."""
+        if self._markdown_memory is None:
+            return False
+        return await self._markdown_memory.maintenance.ensure_consolidation(
+            session_key, current_content
+        )
+
     def get_memory_consolidation_failure(self, session_key: str) -> str | None:
         """返回指定会话最近一次后台记忆整理的明确失败原因。"""
         if self._markdown_memory is None:

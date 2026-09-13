@@ -25,6 +25,7 @@ from .formatting import (
     _append_entries_to_journal,
     _format_consolidation_error,
     _select_consolidation_window,
+    _estimate_session_input_tokens,
 )
 from .runtime import MarkdownMemoryStore, resolve_markdown_store
 
@@ -35,6 +36,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger("memory.markdown")
 
 
+def _session_input_over_budget(
+    session: object, threshold: int, current_content: str = ""
+) -> bool:
+    return (
+        threshold > 0
+        and _estimate_session_input_tokens(session, current_content) >= threshold
+    )
+
+
 class MarkdownMemoryMaintenance:
     def __init__(
         self,
@@ -43,6 +53,7 @@ class MarkdownMemoryMaintenance:
         provider: "LLMProvider",
         model: str,
         keep_count: int,
+        input_token_threshold: int = 75000,
         event_bus: "EventBus | None" = None,
         recent_context_provider: "LLMProvider | None" = None,
         recent_context_model: str | None = None,
@@ -54,10 +65,12 @@ class MarkdownMemoryMaintenance:
             provider=provider,
             model=model,
             keep_count=keep_count,
+            input_token_threshold=input_token_threshold,
             recent_context_provider=recent_context_provider,
             recent_context_model=recent_context_model,
         )
         self._keep_count = keep_count
+        self._input_token_threshold = max(0, int(input_token_threshold))
         self._consolidation_min_new_messages = max(5, keep_count // 2)
         self._get_session: Callable[[str], object] | None = None
         self._commit_consolidation: (
@@ -120,6 +133,44 @@ class MarkdownMemoryMaintenance:
     def get_consolidation_failure(self, session_key: str) -> str | None:
         """返回指定会话最近一次后台记忆整理的明确失败原因。"""
         return self._maintenance_failures.get(session_key)
+
+    async def ensure_consolidation(
+        self, session_key: str, current_content: str = ""
+    ) -> bool:
+        """Finish token-triggered consolidation before sending a model request."""
+        if self._get_session is None or self._commit_consolidation is None:
+            return False
+        existing = self._maintenance_tasks.get(session_key)
+        if existing is not None and not existing.done():
+            try:
+                await existing
+            except Exception:
+                # The queue records the definitive failure; the caller must
+                # stop before issuing a model request instead of leaking the
+                # background task's implementation exception.
+                return False
+        session = self._get_session(session_key)
+        if session is None:
+            return False
+        for force in (False, True):
+            result = await self.consolidate(
+                ConsolidateRequest(
+                    session=session,
+                    force=force,
+                    current_content=current_content,
+                )
+            )
+            if result.trace.get("mode") == "failed":
+                return False
+            if not _session_input_over_budget(
+                session, self._input_token_threshold, current_content
+            ):
+                return True
+            if result.trace.get("mode") != "markdown":
+                return False
+        return not _session_input_over_budget(
+            session, self._input_token_threshold, current_content
+        )
 
     def _enqueue_maintenance(self, session_key: str) -> None:
         if self._get_session is None or self._commit_consolidation is None:
@@ -211,6 +262,8 @@ class MarkdownMemoryMaintenance:
                 session,
                 keep_count=self._keep_count,
                 consolidation_min_new_messages=self._consolidation_min_new_messages,
+                input_token_threshold=self._input_token_threshold,
+                input_token_estimate=_estimate_session_input_tokens(session),
                 archive_all=False,
                 force=False,
             )
@@ -239,6 +292,9 @@ class MarkdownMemoryMaintenance:
             request.session,
             archive_all=request.archive_all,
             force=request.force,
+            input_token_estimate=_estimate_session_input_tokens(
+                request.session, request.current_content
+            ),
         )
         if draft is None:
             if session_key:

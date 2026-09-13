@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
+from typing import TYPE_CHECKING, Awaitable, Callable, Protocol, TypeAlias, cast
 
 from bus.event_bus import EventBus
 from agent.core.runtime_support import SessionLike
@@ -15,6 +15,7 @@ from agent.lifecycle.phase import (
     topo_sort_modules,
 )
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
+from agent.core.passive_support import estimate_messages_tokens
 
 if TYPE_CHECKING:
     from agent.core.passive_turn import ContextStore
@@ -37,6 +38,10 @@ class MemoryConsolidator(Protocol):
     def request_memory_consolidation(self, session_key: str) -> None: ...
 
     def get_memory_consolidation_failure(self, session_key: str) -> str | None: ...
+
+    async def ensure_memory_consolidation(
+        self, session_key: str, current_content: str = ""
+    ) -> bool: ...
 
 
 class MemoryConsolidationFailedError(RuntimeError):
@@ -113,10 +118,12 @@ class _MemoryContextGuardModule:
         self,
         keep_count: int,
         consolidator: MemoryConsolidator | None = None,
+        input_token_threshold: int = 75000,
     ) -> None:
         self._keep_count = max(1, int(keep_count))
         self._min_new = max(5, self._keep_count // 2)
         self._threshold = self._keep_count + self._min_new
+        self._input_token_threshold = max(0, int(input_token_threshold))
         self._consolidator = consolidator
 
     async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
@@ -132,7 +139,12 @@ class _MemoryContextGuardModule:
             len(messages),
         )
         pending = len(messages) - last
-        if pending < self._threshold:
+        input_tokens = _estimate_session_input_tokens(session, state.msg.content, last)
+        token_pressure = (
+            self._input_token_threshold > 0
+            and input_tokens >= self._input_token_threshold
+        )
+        if pending < self._threshold and not token_pressure:
             return frame
 
         if self._consolidator is not None:
@@ -143,7 +155,31 @@ class _MemoryContextGuardModule:
                 raise MemoryConsolidationFailedError(
                     f"记忆整理失败，请检查模型或网络配置后重试。详情：{failure}"
                 )
-            self._consolidator.request_memory_consolidation(state.session_key)
+            if token_pressure:
+                ensure = getattr(
+                    self._consolidator, "ensure_memory_consolidation", None
+                )
+                ensure_fn = cast("Callable[[str, str], Awaitable[bool]]", ensure)
+                if not callable(ensure) or not await ensure_fn(
+                    state.session_key, state.msg.content
+                ):
+                    raise MemoryConsolidationFailedError(
+                        "记忆整理没有可处理的历史或未产生进展，已停止发送超限上下文。"
+                    )
+                input_tokens = _estimate_session_input_tokens(
+                    session,
+                    state.msg.content,
+                    _clamp_last_consolidated(
+                        getattr(session, "last_consolidated", 0),
+                        len(getattr(session, "messages", [])),
+                    ),
+                )
+                if input_tokens >= self._input_token_threshold:
+                    raise MemoryConsolidationFailedError(
+                        "记忆整理后输入仍超过预算，已停止发送超限上下文。"
+                    )
+            else:
+                self._consolidator.request_memory_consolidation(state.session_key)
             logger.info(
                 "memory context guard continued with hot window while consolidation runs: session=%s pending=%d threshold=%d",
                 state.session_key,
@@ -262,11 +298,16 @@ def default_before_turn_modules(
     *,
     keep_count: int = 20,
     consolidator: MemoryConsolidator | None = None,
+    input_token_threshold: int = 75000,
     plugin_modules: BeforeTurnModules | None = None,
 ) -> BeforeTurnModules:
     builtins: BeforeTurnModules = [
         _AcquireSessionModule(session_manager),
-        _MemoryContextGuardModule(keep_count, consolidator),
+        _MemoryContextGuardModule(
+            keep_count,
+            consolidator,
+            input_token_threshold=input_token_threshold,
+        ),
         _PrepareContextModule(context_store),
         _BuildBeforeTurnCtxModule(),
         _EmitBeforeTurnCtxModule(bus),
@@ -290,6 +331,24 @@ def _clamp_last_consolidated(value: object, total_messages: int) -> int:
     else:
         last = 0
     return min(max(0, last), max(0, int(total_messages)))
+
+
+def _estimate_session_input_tokens(
+    session: SessionLike,
+    current_content: str,
+    last_consolidated: int,
+) -> int:
+    """Estimate the next model input from unarchived history and current turn."""
+    try:
+        history = session.get_history(
+            max_messages=500,
+            start_index=last_consolidated,
+        )
+    except TypeError:
+        history = session.get_history(max_messages=500)
+    return estimate_messages_tokens(
+        [*history, {"role": "user", "content": current_content}]
+    )
 
 
 def _memory_context_guard_reply(

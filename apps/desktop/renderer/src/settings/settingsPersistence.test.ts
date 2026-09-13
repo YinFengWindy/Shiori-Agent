@@ -52,7 +52,8 @@ function createSettingsFormData(
       searchEnabled: true,
       spawnEnabled: true,
       memoryOptimizerEnabled: false,
-      memoryOptimizerIntervalSeconds: 3600
+      memoryOptimizerIntervalSeconds: 3600,
+      consolidationInputTokenThreshold: 75000
     },
   };
 }
