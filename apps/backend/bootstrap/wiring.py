@@ -30,9 +30,15 @@ _MEMORY_WIRING: dict[str, ToolsetProviderFactory] = {
 
 
 def _build_default_memory_plugin() -> MemoryPlugin:
-    plugin = _load_memory_plugin_from_dir("default_memory")
-    if plugin is None:
-        raise ImportError("default_memory 插件不可用")
+    module = importlib.import_module(
+        "plugins." + "default_memory.backend.memory_plugin"
+    )
+    plugin_cls = getattr(module, "MemoryPlugin", None)
+    if plugin_cls is None:
+        raise ImportError("default_memory 插件入口不可用")
+    plugin = plugin_cls()
+    if not isinstance(plugin, MemoryPlugin):
+        raise TypeError("default_memory 插件入口类型错误")
     return plugin
 
 
