@@ -103,6 +103,11 @@ def open_db(db_path: Path) -> sqlite3.Connection:
     """打开（或新建）observe.db，初始化 schema，返回连接。"""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
-    _ = conn.executescript(_SCHEMA_SQL)
-    conn.commit()
+    try:
+        _ = conn.executescript(_SCHEMA_SQL)
+        conn.commit()
+    except BaseException:
+        # 连接在 schema 就绪前仍由本函数持有，不能交给未启动的 writer 清理。
+        conn.close()
+        raise
     return conn

@@ -55,7 +55,7 @@ def _run_cleanup(db_path: Path) -> None:
                 deleted[table] = cur.rowcount
 
         logger.info("observe retention done: %s", deleted)
-        _ = _stamp_path(db_path).write_text("ok")
+        _ = _stamp_path(db_path).write_text("ok", encoding="utf-8")
     except Exception:
         logger.exception("observe retention failed")
     finally:
@@ -69,7 +69,13 @@ async def run_retention_if_needed(db_path: Path) -> None:
     if not _should_run(db_path):
         return
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _run_cleanup, db_path)
+    worker = loop.run_in_executor(None, _run_cleanup, db_path)
+    try:
+        await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        # 取消 asyncio 等待不会停止线程；清理返回前必须等 SQLite 连接关闭。
+        await worker
+        raise
 
 
 def _retention_ts_col(table: str) -> str:

@@ -20,7 +20,7 @@ logger = logging.getLogger("plugin.observe")
 
 
 async def setup(ctx: "PluginRuntimeContext") -> None:
-    """装配 observe：workspace 存在时启动 writer/retention 后台任务并订阅遥测事件。
+    """等待 writer 数据库就绪后，再装配 retention、错误采集和遥测订阅。
 
     登记顺序刻意保持 [writer 后台任务, retention 后台任务, 全局错误采集器,
     三个事件订阅]：卸载按 LIFO 逆序处置，因此实际清理顺序是
@@ -37,12 +37,14 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
     db_path = workspace / "observe" / "observe.db"
     writer = TraceWriter(db_path)
-    _ = ctx.background.spawn(writer.run(), name="writer")
+    writer_task = ctx.background.spawn(writer.run(), name="writer")
+    await writer.wait_ready(writer_task)
     _ = ctx.background.spawn(run_retention_if_needed(db_path), name="retention")
 
     collector = GlobalErrorCollector(writer)
-    collector.install()
+    # 安装过程本身可能部分成功，先登记清理以覆盖 setup 的失败回滚。
     ctx.effect("collector", collector.uninstall)
+    collector.install()
 
     ctx.events.on(TurnCommitted, lambda event: _observe_turn_committed(writer, event))
     ctx.events.on(RetrievalCompleted, lambda event: _observe_retrieval(writer, event))
