@@ -89,6 +89,7 @@ class MarkdownMemoryMaintenance:
         self._maintenance_tasks: dict[str, asyncio.Task[None]] = {}
         self._maintenance_locks: dict[str, asyncio.Lock] = {}
         self._maintenance_failures: dict[str, str] = {}
+        self._ensure_tasks: dict[str, asyncio.Task[bool]] = {}
         if event_bus is not None:
             event_bus.on(TurnCommitted, self.on_turn_committed)
 
@@ -138,17 +139,29 @@ class MarkdownMemoryMaintenance:
         self, session_key: str, current_content: str = ""
     ) -> bool:
         """Finish token-triggered consolidation before sending a model request."""
+        existing_ensure = self._ensure_tasks.get(session_key)
+        if existing_ensure is not None and not existing_ensure.done():
+            return await existing_ensure
+        task = asyncio.create_task(
+            self._ensure_consolidation(session_key, current_content),
+            name=f"markdown-memory-ensure:{session_key}",
+        )
+        self._ensure_tasks[session_key] = task
+        try:
+            return await task
+        finally:
+            if self._ensure_tasks.get(session_key) is task:
+                self._ensure_tasks.pop(session_key, None)
+
+    async def _ensure_consolidation(
+        self, session_key: str, current_content: str
+    ) -> bool:
+        """Run the token-triggered consolidation shared by concurrent callers."""
         if self._get_session is None or self._commit_consolidation is None:
             return False
         existing = self._maintenance_tasks.get(session_key)
         if existing is not None and not existing.done():
-            try:
-                await existing
-            except Exception:
-                # The queue records the definitive failure; the caller must
-                # stop before issuing a model request instead of leaking the
-                # background task's implementation exception.
-                return False
+            await existing
         session = self._get_session(session_key)
         if session is None:
             return False
