@@ -22,6 +22,7 @@ from agent.tool_runtime import (
 )
 from agent.tools.base import normalize_tool_result
 from agent.tools.registry import ToolRegistry
+from agent.provider import ContextLengthError
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -39,6 +40,11 @@ class _PassiveReasoningLoopMixin:
     """实现 DefaultReasoner 的多轮工具调用循环。"""
 
     _tools: ToolRegistry
+
+    def _request_tokens_with_tools(
+        self, messages: list[dict], schemas: list[dict]
+    ) -> int:
+        return support.estimate_messages_tokens(messages, schemas)
 
     async def run(
         self,
@@ -169,9 +175,18 @@ class _PassiveReasoningLoopMixin:
                 schema_names = self._tools.get_registered_names() - disabled
             elif schema_names is not None:
                 schema_names = [name for name in schema_names if name not in disabled]
+            schemas = self._tools.get_schemas(names=schema_names)
+            threshold = int(getattr(self, "_memory_input_token_threshold", 0))
+            if (
+                threshold > 0
+                and self._request_tokens_with_tools(messages, schemas) >= threshold
+            ):
+                raise ContextLengthError(
+                    "推理过程中追加工具结果后输入超过预算，已停止继续调用模型。"
+                )
             response = await self._llm.provider.chat(
                 messages=messages,
-                tools=self._tools.get_schemas(names=schema_names),
+                tools=schemas,
                 model=self._llm_config.model,
                 max_tokens=self._llm_config.max_tokens,
                 tool_choice="auto",
@@ -639,6 +654,14 @@ class _PassiveReasoningLoopMixin:
                         "content": "你刚才只输出了思考过程，没有给出正式回复。请直接回复用户，不要重复思考。",
                     }
                 )
+                threshold = int(getattr(self, "_memory_input_token_threshold", 0))
+                if (
+                    threshold > 0
+                    and self._request_tokens_with_tools(messages, []) >= threshold
+                ):
+                    raise ContextLengthError(
+                        "空回复重试追加提示后输入超过预算，已停止继续调用模型。"
+                    )
                 retry_response = await self._llm.provider.chat(
                     messages=messages,
                     tools=[],

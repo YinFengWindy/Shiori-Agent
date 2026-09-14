@@ -16,12 +16,17 @@ from .helpers import (
 from .reasoning_loop import _PassiveReasoningLoopMixin
 from .reasoning_result import _PassiveReasoningResultMixin
 from agent.core.runtime_support import ToolDiscoveryState
+from agent.core import passive_support
 from agent.core.types import ReasonerResult
 from agent.lifecycle.phase import Phase
 from agent.lifecycle.phases.after_step import AfterStepFrame, default_after_step_modules
 from agent.lifecycle.phases.before_step import (
     BeforeStepFrame,
     default_before_step_modules,
+)
+from agent.lifecycle.phases.before_turn import (
+    MemoryConsolidationFailedError,
+    MemoryConsolidator,
 )
 from agent.lifecycle.phases.prompt_render import (
     PromptRenderFrame,
@@ -145,6 +150,8 @@ class DefaultReasoner(
         context: "ContextBuilder | None" = None,
         session_manager: "SessionManager | None" = None,
         event_bus: "EventBus | None" = None,
+        memory_consolidator: MemoryConsolidator | None = None,
+        memory_input_token_threshold: int = 75000,
     ) -> None:
         self._llm = llm
         self._llm_config = llm_config
@@ -155,6 +162,8 @@ class DefaultReasoner(
         self._context = context
         self._session_manager = session_manager
         self._event_bus = event_bus
+        self._memory_consolidator = memory_consolidator
+        self._memory_input_token_threshold = max(0, int(memory_input_token_threshold))
         self._prompt_render_plugin_modules: list[object] = []
         self._before_step_plugin_modules: list[object] = []
         self._after_step_plugin_modules: list[object] = []
@@ -324,6 +333,7 @@ class DefaultReasoner(
             measured_stream_sink = _measure_stream_delta
         disabled_tools = _disabled_tools_from_msg(msg)
         tool_execution_context = self._tools.get_context()
+        budget_repaired = False
 
         # 2. 再按 trim plan + history window 顺序逐轮尝试。
         attempts = self._build_attempt_plans(total_history)
@@ -340,33 +350,100 @@ class DefaultReasoner(
                 source_history,
                 plan["history_window"],
             )
-            turn_injection_prompt = build_turn_injection_prompt(
-                tools=self._tools,
-                tool_search_enabled=self._tool_search_enabled,
-                visible_names=(
-                    (preloaded or set()) | disabled_tools
-                    if self._tool_search_enabled
-                    else None
-                ),
-            )
-            prompt_render = await self.render_prompt(
-                PromptRenderInput(
-                    session_key=session.key,
-                    channel=msg.channel,
-                    chat_id=msg.chat_id,
-                    content=msg.content,
-                    media=msg.media if msg.media else None,
-                    timestamp=msg.timestamp,
-                    history=history_for_attempt,
-                    skill_names=skill_names,
-                    retrieved_memory_block=retrieved_memory_block,
-                    disabled_sections=plan["disabled_sections"],
-                    turn_injection_prompt=turn_injection_prompt,
-                    extra_hints=extra_hints,
-                    session_metadata=get_session_metadata(session),
+            while True:
+                turn_injection_prompt = build_turn_injection_prompt(
+                    tools=self._tools,
+                    tool_search_enabled=self._tool_search_enabled,
+                    visible_names=(
+                        (preloaded or set()) | disabled_tools
+                        if self._tool_search_enabled
+                        else None
+                    ),
                 )
-            )
-            initial_messages = prompt_render.messages
+                prompt_render = await self.render_prompt(
+                    PromptRenderInput(
+                        session_key=session.key,
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=msg.content,
+                        media=msg.media if msg.media else None,
+                        timestamp=msg.timestamp,
+                        history=history_for_attempt,
+                        skill_names=skill_names,
+                        retrieved_memory_block=retrieved_memory_block,
+                        disabled_sections=plan["disabled_sections"],
+                        turn_injection_prompt=turn_injection_prompt,
+                        extra_hints=extra_hints,
+                        session_metadata=get_session_metadata(session),
+                    )
+                )
+                initial_messages = prompt_render.messages
+                schema_names: list[str] | set[str] | None = None
+                if self._tool_search_enabled:
+                    visible_names = (
+                        self._tools.get_always_on_names() | (preloaded or set())
+                    ) - disabled_tools
+                    get_registered_order = getattr(
+                        self._tools, "get_registered_order", None
+                    )
+                    ordered_names = cast(
+                        "Callable[[set[str]], list[str]]", get_registered_order
+                    )
+                    schema_names = (
+                        ordered_names(visible_names)
+                        if callable(ordered_names)
+                        else visible_names
+                    )
+                if schema_names is None and disabled_tools:
+                    schema_names = self._tools.get_registered_names() - disabled_tools
+                elif schema_names is not None:
+                    schema_names = [
+                        name for name in schema_names if name not in disabled_tools
+                    ]
+                schemas = self._tools.get_schemas(names=schema_names)
+                request_tokens = passive_support.estimate_messages_tokens(
+                    initial_messages, schemas
+                )
+                if (
+                    self._memory_input_token_threshold <= 0
+                    or request_tokens < self._memory_input_token_threshold
+                ):
+                    break
+                if budget_repaired:
+                    break
+                ensure = cast(
+                    "Callable[[str, str], Awaitable[bool]]",
+                    getattr(
+                        self._memory_consolidator,
+                        "ensure_memory_consolidation",
+                        None,
+                    ),
+                )
+                if not callable(ensure) or not await ensure(session.key, msg.content):
+                    raise MemoryConsolidationFailedError(
+                        "记忆整理没有可处理的历史或未产生进展，已停止发送超限上下文。"
+                    )
+                budget_repaired = True
+                source_history = get_history_since_consolidated(
+                    session, self._memory_window
+                )
+                history_for_attempt = self._slice_history(
+                    source_history,
+                    plan["history_window"],
+                )
+            if (
+                self._memory_input_token_threshold > 0
+                and request_tokens >= self._memory_input_token_threshold
+                and attempt + 1 < len(attempts)
+            ):
+                continue
+            if (
+                self._memory_input_token_threshold > 0
+                and request_tokens >= self._memory_input_token_threshold
+            ):
+                raise MemoryConsolidationFailedError(
+                    "记忆整理和上下文裁剪后输入仍超过预算，已停止发送超限上下文。"
+                )
             llm_user_content, llm_context_frame = extract_model_facing_turn(
                 initial_messages
             )

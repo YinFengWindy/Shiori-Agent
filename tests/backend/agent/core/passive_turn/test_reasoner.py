@@ -112,3 +112,53 @@ async def test_run_turn_retry_preserves_persisted_history(
     assert reloaded.messages[-1]["content"] == result.reply
     assert reloaded.messages[-1]["seq"] == total_messages
     assert reloaded.last_consolidated == last_consolidated
+
+
+async def test_run_turn_repairs_rendered_input_budget_before_reasoning(tmp_path):
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("cli:budget")
+    session.add_message("user", "x" * 1000)
+    await manager.save_async(session)
+    msg = SimpleNamespace(
+        channel="cli",
+        chat_id="budget",
+        content="hello",
+        media=[],
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    async def consolidate(_session_key: str, _content: str) -> bool:
+        session.last_consolidated = len(session.messages)
+        return True
+
+    reasoner = DefaultReasoner(
+        llm=LLMServices(provider=AsyncMock(), light_provider=AsyncMock()),
+        llm_config=LLMConfig(),
+        tools=ToolRegistry(),
+        discovery=ToolDiscoveryState(),
+        tool_search_enabled=False,
+        memory_window=40,
+        context=AsyncMock(),
+        session_manager=manager,
+        memory_consolidator=SimpleNamespace(
+            ensure_memory_consolidation=AsyncMock(side_effect=consolidate)
+        ),
+        memory_input_token_threshold=100,
+    )
+    reasoner.render_prompt = AsyncMock(
+        side_effect=lambda request: PromptRenderResult(
+            messages=[
+                *request.history,
+                {"role": "user", "content": request.content},
+            ]
+        )
+    )
+    reasoner.run = AsyncMock(return_value=ReasonerResult(reply="ok"))
+
+    result = await reasoner.run_turn(msg=msg, session=session)
+
+    assert result.reply == "ok"
+    reasoner._memory_consolidator.ensure_memory_consolidation.assert_awaited_once_with(
+        "cli:budget", "hello"
+    )
+    assert reasoner.run.await_args.args[0] == [{"role": "user", "content": "hello"}]

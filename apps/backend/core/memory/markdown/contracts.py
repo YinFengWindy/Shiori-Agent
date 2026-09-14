@@ -14,6 +14,7 @@ class ConsolidateRequest:
     session: object
     archive_all: bool = False
     force: bool = False
+    current_content: str = ""
 
 
 @dataclass

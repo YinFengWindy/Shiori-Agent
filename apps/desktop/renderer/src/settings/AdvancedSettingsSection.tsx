@@ -24,6 +24,9 @@ export function AdvancedSettingsSection({
       <Field label="memory_optimizer_interval_seconds" hint="设置记忆优化任务的执行间隔，单位为秒。">
         <input className={settingsInputClass} value={String(draft.advanced.memoryOptimizerIntervalSeconds)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, memoryOptimizerIntervalSeconds: parseSettingsNumber(event.target.value, current.advanced.memoryOptimizerIntervalSeconds) } }))} placeholder="记忆优化间隔秒数" />
       </Field>
+      <Field label="consolidation_input_token_threshold" hint="超过该输入 token 估算值时，先整理旧会话历史。">
+        <input className={settingsInputClass} value={String(draft.advanced.consolidationInputTokenThreshold)} onChange={(event) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, consolidationInputTokenThreshold: parseSettingsNumber(event.target.value, current.advanced.consolidationInputTokenThreshold) } }))} placeholder="整理输入 token 阈值" />
+      </Field>
       <SettingsToggleField label="dev_mode" hint="启用后暴露更偏开发调试的运行行为和输出。" checked={draft.advanced.devMode} onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, devMode: checked } }))} />
       <SettingsToggleField label="streaming_enabled" hint="实时显示角色的 Thinking 与回复正文。" checked={draft.advanced.streamingEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, streamingEnabled: checked } }))} />
       <SettingsToggleField label="search_enabled" hint="控制 Agent 是否允许使用搜索能力。" checked={draft.advanced.searchEnabled} onChange={(checked) => updateDraft((current) => ({ ...current, advanced: { ...current.advanced, searchEnabled: checked } }))} />

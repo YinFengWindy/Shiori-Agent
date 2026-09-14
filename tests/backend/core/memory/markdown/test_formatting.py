@@ -98,6 +98,50 @@ def test_select_consolidation_window_archive_all_takes_whole_history():
     assert window and window.consolidate_up_to == 4
 
 
+def test_select_consolidation_window_uses_token_pressure_without_message_count():
+    session = SimpleNamespace(
+        key="telegram:tokens",
+        last_consolidated=0,
+        messages=[
+            {"role": "user", "content": "x" * 600},
+            {"role": "assistant", "content": "y" * 600},
+            {"role": "user", "content": "z"},
+        ],
+    )
+    window = _select_consolidation_window(
+        session,
+        keep_count=1,
+        consolidation_min_new_messages=99,
+        archive_all=False,
+        input_token_threshold=100,
+        input_token_estimate=500,
+    )
+
+    assert window is not None
+    assert len(window.old_messages) == 2
+    assert window.keep_count == 1
+
+
+def test_select_consolidation_window_archives_small_session_when_only_turn_is_huge():
+    session = SimpleNamespace(
+        key="telegram:huge",
+        last_consolidated=0,
+        messages=[{"role": "user", "content": "x" * 600}],
+    )
+    window = _select_consolidation_window(
+        session,
+        keep_count=20,
+        consolidation_min_new_messages=10,
+        archive_all=False,
+        input_token_threshold=100,
+        input_token_estimate=500,
+    )
+
+    assert window is not None
+    assert window.consolidate_up_to == 1
+    assert window.keep_count == 0
+
+
 def test_build_consolidation_source_ref_keeps_only_messages_with_ids():
     window = SimpleNamespace(
         old_messages=[

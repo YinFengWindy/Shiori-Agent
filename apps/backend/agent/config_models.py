@@ -84,6 +84,7 @@ class Config:
     max_tokens: int = 8192
     max_iterations: int = 10
     memory_window: int = 40
+    memory_consolidation_input_token_threshold: int = 75000
     base_url: str | None = None
     extra_body: dict = field(default_factory=dict)
     channels: ChannelsConfig = field(default_factory=ChannelsConfig)

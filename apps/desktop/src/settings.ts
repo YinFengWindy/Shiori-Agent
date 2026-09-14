@@ -150,6 +150,9 @@ export function loadSettingsData(contentOverride?: string): SettingsSnapshot {
         memoryOptimizerIntervalSeconds: Number(
           agentMaintenance.memory_optimizer_interval_seconds ?? 64800,
         ),
+        consolidationInputTokenThreshold: Number(
+          agentMaintenance.consolidation_input_token_threshold ?? 75000,
+        ),
       },
     },
   };
@@ -198,6 +201,7 @@ function renderSettingsToml(formData: SettingsFormData): string {
       formData.advanced.memoryOptimizerEnabled ? "true" : "false"
     }`,
     `memory_optimizer_interval_seconds = ${formData.advanced.memoryOptimizerIntervalSeconds}`,
+    `consolidation_input_token_threshold = ${formData.advanced.consolidationInputTokenThreshold}`,
     "",
     "[agent.wiring]",
     'context = "default"',

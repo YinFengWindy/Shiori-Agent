@@ -100,6 +100,7 @@ def build_memory_runtime(
         provider=provider,
         model=config.model,
         keep_count=_memory_keep_count(config.memory_window),
+        input_token_threshold=config.memory_consolidation_input_token_threshold,
         event_bus=event_publisher,
         recent_context_provider=light_provider or provider,
         recent_context_model=config.light_model or config.model,

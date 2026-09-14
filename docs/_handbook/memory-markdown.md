@@ -143,6 +143,10 @@ PENDING.md（增量事实缓冲区）
 
 Optimizer 在主 agent 启动时注册为后台任务（`memory_optimizer_enabled = true`）。
 
+普通会话整理由消息数阈值和单次输入 token 阈值共同保护：任一阈值达到，就会在下一次模型请求前整理旧历史。`[agent.maintenance]` 下的
+`consolidation_input_token_threshold` 默认是 `75000`，这是按序列化会话历史做的保守估算值，不是供应商返回的精确 token 计费量。
+当整理失败或整理后仍超过预算时，本轮请求会停止，不会把超限上下文发送给模型。
+
 ---
 
 ## 这些文件怎么进入 System Prompt

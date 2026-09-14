@@ -327,3 +327,99 @@ async def test_manual_timeout_keeps_lock_until_threaded_markdown_commit_finishes
         await asyncio.wait_for(finished.wait(), timeout=2)
         memory_store.close()
         await event_bus.aclose()
+
+
+@pytest.mark.asyncio
+async def test_ensure_consolidation_runs_non_force_then_force_when_budget_remains(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    manager, session, maintenance, event_bus = _setup(tmp_path)
+    calls: list[bool] = []
+    budget_states = iter((True, True, False))
+
+    async def consolidate(request: ConsolidateRequest):
+        calls.append(request.force)
+        return SimpleNamespace(trace={"mode": "markdown"})
+
+    monkeypatch.setattr(maintenance, "consolidate", consolidate)
+    monkeypatch.setattr(
+        "core.memory.markdown.maintenance._session_input_over_budget",
+        lambda *_args, **_kwargs: next(budget_states),
+    )
+    try:
+        assert await maintenance.ensure_consolidation(session.key) is True
+        assert calls == [False, True]
+    finally:
+        await event_bus.aclose()
+
+
+@pytest.mark.asyncio
+async def test_ensure_consolidation_returns_false_when_no_progress(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _manager, session, maintenance, event_bus = _setup(tmp_path)
+
+    async def consolidate(_request: ConsolidateRequest):
+        return SimpleNamespace(trace={"mode": "skipped"})
+
+    monkeypatch.setattr(maintenance, "consolidate", consolidate)
+    monkeypatch.setattr(
+        "core.memory.markdown.maintenance._session_input_over_budget",
+        lambda *_args, **_kwargs: True,
+    )
+    try:
+        assert await maintenance.ensure_consolidation(session.key) is False
+    finally:
+        await event_bus.aclose()
+
+
+@pytest.mark.asyncio
+async def test_ensure_consolidation_propagates_existing_background_failure(
+    tmp_path: Path,
+):
+    _manager, session, maintenance, event_bus = _setup(tmp_path)
+
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def fail():
+        started.set()
+        await release.wait()
+        raise RuntimeError("provider failed")
+
+    maintenance._maintenance_tasks[session.key] = asyncio.create_task(fail())
+    try:
+        await started.wait()
+        pending = asyncio.create_task(maintenance.ensure_consolidation(session.key))
+        await asyncio.sleep(0)
+        release.set()
+        with pytest.raises(RuntimeError, match="provider failed"):
+            await pending
+    finally:
+        await event_bus.aclose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_ensure_consolidation_shares_in_flight_task(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _manager, session, maintenance, event_bus = _setup(tmp_path)
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    async def ensure_impl(_session_key: str, _current_content: str):
+        nonlocal calls
+        calls += 1
+        entered.set()
+        await release.wait()
+        return True
+
+    monkeypatch.setattr(maintenance, "_ensure_consolidation", ensure_impl)
+    first = asyncio.create_task(maintenance.ensure_consolidation(session.key))
+    await entered.wait()
+    second = asyncio.create_task(maintenance.ensure_consolidation(session.key))
+    release.set()
+    try:
+        assert await asyncio.gather(first, second) == [True, True]
+        assert calls == 1
+    finally:
+        await event_bus.aclose()
