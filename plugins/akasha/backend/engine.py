@@ -108,7 +108,7 @@ class AkashaMemoryEngine:
             }
         ),
         notes={
-            "owner": "plugins.akasha.backend.engine",
+            "owner": __name__,
             "truth": "sessions.db/messages",
         },
     )

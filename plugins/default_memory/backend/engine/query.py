@@ -15,7 +15,7 @@ from memory2.query_builder import build_procedure_queries
 
 from .prompts import _explicit_hypothesis_prompt
 
-logger = logging.getLogger("plugins.default_memory.backend.engine")
+logger = logging.getLogger(__name__)
 
 _HYPOTHESIS_MAX_TOKENS = 80
 _HYPOTHESIS_TIMEOUT_S = 3.0

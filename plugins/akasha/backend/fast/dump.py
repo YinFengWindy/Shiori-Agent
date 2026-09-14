@@ -14,8 +14,8 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from plugins.akasha.backend.core import serialize_f32
-from plugins.akasha.backend.store import AkashaStore
+from ..core import serialize_f32
+from ..store import AkashaStore
 
 
 def _now_iso() -> str:
