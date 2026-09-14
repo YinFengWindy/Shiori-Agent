@@ -7,7 +7,6 @@ from uuid import uuid4
 from agent.plugin_host.bridge_events import PluginRpcError
 from agent.plugin_host.runtime_context import PluginRuntimeContext
 from core.roles import RoleStore
-from plugins.novelai.backend.tool import GenerateImageTool
 from .errors import StorySimulationError
 from .rpc import StorySimulationHandler
 
@@ -16,8 +15,6 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     from desktop_bridge.method_policy import Concurrency
 
     novelai = ctx.dependencies.require("novelai")
-    if not isinstance(novelai, GenerateImageTool):
-        raise TypeError("NovelAI 插件未提供兼容的生图接口")
     handler = StorySimulationHandler(
         workspace=ctx.workspace,
         role_store=RoleStore(ctx.workspace),
