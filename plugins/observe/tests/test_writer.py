@@ -31,6 +31,52 @@ _write_turn = getattr(_observe_writer, "_write_turn")
 TraceWriter = getattr(_observe_writer, "TraceWriter")
 
 
+@pytest.mark.asyncio
+async def test_readiness_reports_original_startup_error(tmp_path: Path):
+    db_path = tmp_path / "observe" / "observe.db"
+    _ = db_path.parent.write_text("occupied", encoding="utf-8")
+    writer = TraceWriter(db_path)
+    task = asyncio.create_task(writer.run())
+    with pytest.raises(FileExistsError) as error:
+        await asyncio.wait_for(writer.wait_ready(task), timeout=2)
+    assert task.done()
+    assert task.exception() is error.value
+
+
+@pytest.mark.asyncio
+async def test_readiness_handles_writer_cancelled_before_running(tmp_path: Path):
+    writer = TraceWriter(tmp_path / "observe.db")
+    task = asyncio.create_task(writer.run())
+    _ = task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(writer.wait_ready(task), timeout=2)
+
+
+@pytest.mark.asyncio
+async def test_ready_writer_persists_queued_event(tmp_path: Path):
+    db_path = tmp_path / "observe.db"
+    writer = TraceWriter(db_path)
+    task = asyncio.create_task(writer.run())
+    try:
+        await asyncio.wait_for(writer.wait_ready(task), timeout=2)
+        writer.emit(
+            TurnTrace(
+                source="agent", session_key="ready", user_msg="hi", llm_output="ok"
+            )
+        )
+        await asyncio.wait_for(writer.drain(), timeout=2)
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute("SELECT llm_output FROM turns").fetchone()
+        finally:
+            conn.close()
+        assert row == ("ok",)
+    finally:
+        _ = task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
 def test_diagnostic_line_uses_fixed_field_order():
     line = diagnostic_line(
         "PassiveTurnPipeline.run",

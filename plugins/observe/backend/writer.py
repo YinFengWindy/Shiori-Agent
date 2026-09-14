@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,6 +48,7 @@ class TraceWriter:
             TurnTrace | RagQueryLog | MemoryWriteTrace | GlobalErrorTrace
         ] = asyncio.Queue(maxsize=_QUEUE_MAX)
         self._dropped = 0
+        self._ready = asyncio.Event()
 
     # ── 公共接口 ─────────────────────────────────
 
@@ -65,11 +67,25 @@ class TraceWriter:
         """等待已入队事件写入完成。"""
         await self._queue.join()
 
+    async def wait_ready(self, task: asyncio.Task[None]) -> None:
+        """等待 run 的数据库就绪；提前退出时将原始异常交给装配方回滚。"""
+        ready = asyncio.create_task(self._ready.wait())
+        try:
+            _ = await asyncio.wait((task, ready), return_when=asyncio.FIRST_COMPLETED)
+            if task.done():
+                await task
+                raise RuntimeError("observe writer exited before readiness")
+        finally:
+            _ = ready.cancel()
+            with suppress(asyncio.CancelledError):
+                await ready
+
     async def run(self) -> None:
         """后台循环，持续消费队列写 DB。作为 asyncio task 运行。"""
         conn = open_db(self._db_path)
-        logger.info("observe writer started: %s", self._db_path)
         try:
+            logger.info("observe writer started: %s", self._db_path)
+            self._ready.set()
             while True:
                 event = await self._queue.get()
                 try:

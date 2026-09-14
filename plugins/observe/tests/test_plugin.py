@@ -2,19 +2,249 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sqlite3
+import sys
+import threading
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import pytest
 from shiori_plugin_testkit.packages import stage_plugin_package
 
 from agent.plugin_host import HostServices, PluginKernel
+from agent.plugin_host.capabilities import BackgroundCapability
+from agent.plugin_host.runtime_context import PluginRuntimeContext
 from bus.event_bus import EventBus
 from bus.events_lifecycle import TurnCommitted
 from core.memory.events import MemoryWritten, RetrievalCompleted, RetrievalHitSummary
+from core.common import global_hook_stack
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
+
+
+def _global_hooks():
+    return (
+        sys.excepthook,
+        threading.excepthook,
+        asyncio.get_running_loop().get_exception_handler(),
+        tuple(logging.getLogger().handlers),
+    )
+
+
+def _observe_tasks():
+    return {
+        task
+        for task in asyncio.all_tasks()
+        if task.get_name().startswith(("plugin:observe:", "observe_error_flush"))
+    }
+
+
+@pytest.fixture
+def opened_connections(monkeypatch: pytest.MonkeyPatch):
+    """Track real SQLite connections so lifecycle tests can verify closure."""
+    opened: list[sqlite3.Connection] = []
+    connect = sqlite3.connect
+
+    def track_connection(*args: Any, **kwargs: Any):
+        conn = connect(*args, **kwargs)
+        opened.append(conn)
+        return conn
+
+    monkeypatch.setattr(sqlite3, "connect", track_connection)
+    return opened
+
+
+def _assert_connections_closed(opened: list[sqlite3.Connection]) -> None:
+    for conn in opened:
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            _ = conn.execute("SELECT 1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_partial_collector_install_is_rolled_back(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cancel: bool,
+    opened_connections: list[sqlite3.Connection],
+) -> None:
+    kernel, bus = _load_observe_kernel(tmp_path, workspace=tmp_path / "workspace")
+    hooks = _global_hooks()
+    tasks = _observe_tasks()
+    install = global_hook_stack.install_global_hooks
+
+    def fail_install(*args: Any, **kwargs: Any):
+        _ = install(*args, **kwargs)
+        if cancel:
+            raise asyncio.CancelledError("collector install cancelled")
+        raise RuntimeError("collector install failed")
+
+    monkeypatch.setattr(global_hook_stack, "install_global_hooks", fail_install)
+    try:
+        if cancel:
+            with pytest.raises(asyncio.CancelledError, match="install cancelled"):
+                _ = await kernel.load("observe")
+        else:
+            assert await kernel.load("observe") is False
+            assert "collector install failed" in kernel.states()[0]["error"]
+        assert kernel.states()[0]["state"] == "FAILED"
+        assert _global_hooks() == hooks
+        assert _observe_tasks() == tasks
+        assert not bus._handlers
+        assert opened_connections
+        _assert_connections_closed(opened_connections)
+    finally:
+        await kernel.terminate_all()
+
+
+@pytest.mark.asyncio
+async def test_cancel_setup_during_readiness_closes_started_writer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    opened_connections: list[sqlite3.Connection],
+) -> None:
+    kernel, bus = _load_observe_kernel(tmp_path, workspace=tmp_path / "workspace")
+    hooks = _global_hooks()
+    tasks = _observe_tasks()
+    spawn = BackgroundCapability.spawn
+
+    def cancel_after_spawn(self: BackgroundCapability, coro: Any, *, name: str):
+        task = spawn(self, coro, name=name)
+        if name == "writer":
+            setup_task = asyncio.current_task()
+            assert setup_task is not None
+            _ = asyncio.get_running_loop().call_soon(setup_task.cancel)
+        return task
+
+    monkeypatch.setattr(BackgroundCapability, "spawn", cancel_after_spawn)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            _ = await asyncio.create_task(kernel.load("observe"))
+        assert kernel.states()[0]["state"] == "FAILED"
+        assert _global_hooks() == hooks
+        assert _observe_tasks() == tasks
+        assert not bus._handlers
+        assert len(opened_connections) == 1
+        _assert_connections_closed(opened_connections)
+    finally:
+        await kernel.terminate_all()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["path_collision", "schema"])
+async def test_initialization_failure_rolls_back_and_can_reload(
+    tmp_path: Path, failure: str, opened_connections: list[sqlite3.Connection]
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    db_path = workspace / "observe" / "observe.db"
+    if failure == "path_collision":
+        _ = db_path.parent.write_text("occupied", encoding="utf-8")
+        expected_error = repr(str(db_path.parent))
+    else:
+        db_path.parent.mkdir()
+        with closing(sqlite3.connect(db_path)) as conn:
+            _ = conn.execute("CREATE TABLE turns (id INTEGER)")
+        expected_error = "no such column: session_key"
+
+    kernel, bus = _load_observe_kernel(tmp_path, workspace=workspace)
+    healthy = tmp_path / "plugins" / "healthy"
+    (healthy / "backend").mkdir(parents=True)
+    _ = (healthy / "manifest.yaml").write_text(
+        "api: 2\nid: healthy\ncapabilities: [events]\n", encoding="utf-8"
+    )
+    _ = (healthy / "backend" / "plugin.py").write_text(
+        "from bus.events_lifecycle import TurnCommitted\n"
+        "async def setup(ctx):\n"
+        "    ctx.events.on(TurnCommitted, lambda event: None)\n",
+        encoding="utf-8",
+    )
+    hooks = _global_hooks()
+    tasks = _observe_tasks()
+    try:
+        await kernel.load_all()
+        states = {entry["id"]: entry for entry in kernel.states()}
+        assert states["observe"]["state"] == "FAILED"
+        assert expected_error in states["observe"]["error"]
+        assert states["healthy"]["state"] == "ACTIVE"
+        assert _global_hooks() == hooks
+        assert _observe_tasks() == tasks
+        _assert_connections_closed(opened_connections)
+        # The healthy plugin remains subscribed; observe leaves no subscriptions.
+        assert len(bus._handlers[TurnCommitted]) == 1
+        assert not bus._handlers.get(RetrievalCompleted)
+        assert not bus._handlers.get(MemoryWritten)
+
+        if failure == "path_collision":
+            db_path.parent.unlink()
+        else:
+            db_path.unlink()
+        assert await kernel.load("observe") is True
+        assert db_path.exists()
+        _ = await bus.emit(_turn_committed())
+        assert await _wait_for_turn_row(db_path) == 1
+    finally:
+        await kernel.terminate_all()
+    assert _global_hooks() == hooks
+    assert _observe_tasks() == tasks
+    _assert_connections_closed(opened_connections)
+
+
+@pytest.mark.asyncio
+async def test_setup_failure_after_registration_cleans_all_resources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    opened_connections: list[sqlite3.Connection],
+) -> None:
+    kernel, bus = _load_observe_kernel(tmp_path, workspace=tmp_path / "workspace")
+    hooks = _global_hooks()
+    tasks = _observe_tasks()
+
+    def fail_expose(self: PluginRuntimeContext, api: object) -> None:
+        raise RuntimeError("expose failed after subscriptions")
+
+    monkeypatch.setattr(PluginRuntimeContext, "expose", fail_expose)
+    try:
+        assert await kernel.load("observe") is False
+        assert "expose failed after subscriptions" in kernel.states()[0]["error"]
+        assert _global_hooks() == hooks
+        assert _observe_tasks() == tasks
+        assert not bus._handlers.get(TurnCommitted)
+        assert not bus._handlers.get(RetrievalCompleted)
+        assert not bus._handlers.get(MemoryWritten)
+        assert opened_connections
+        _assert_connections_closed(opened_connections)
+    finally:
+        await kernel.terminate_all()
+
+
+@pytest.mark.asyncio
+async def test_unload_persists_final_collector_flush(
+    tmp_path: Path, opened_connections: list[sqlite3.Connection]
+) -> None:
+    workspace = tmp_path / "workspace"
+    kernel, _ = _load_observe_kernel(tmp_path, workspace=workspace)
+    hooks = _global_hooks()
+    tasks = _observe_tasks()
+    try:
+        assert await kernel.load("observe")
+        db_path = workspace / "observe" / "observe.db"
+        assert db_path.exists(), "setup must wait for database readiness"
+        logging.getLogger("test.final_flush").error("last collected error")
+        assert await kernel.unload("observe") == []
+        with closing(sqlite3.connect(db_path)) as conn:
+            row = conn.execute(
+                "SELECT message FROM global_errors WHERE logger_name = ?",
+                ("test.final_flush",),
+            ).fetchone()
+        assert row == ("last collected error",)
+        assert _global_hooks() == hooks
+        assert _observe_tasks() == tasks
+        _assert_connections_closed(opened_connections)
+    finally:
+        await kernel.terminate_all()
 
 
 def _load_observe_kernel(
