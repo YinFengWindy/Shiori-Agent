@@ -1,4 +1,6 @@
 import { createPluginRpcClient } from "../plugins/pluginBridgeClient";
+import { SurfaceFailure } from "./SurfaceFailure";
+import { SurfaceErrorBoundary } from "./SurfaceErrorBoundary";
 // The main process builds this query string; sharing the parser keeps the two
 // sides from drifting. `entry.ts` only imports a *type* from `host.ts`, so
 // nothing main-process-only is pulled into the surface bundle.
@@ -25,38 +27,20 @@ export function SurfaceRoot(props: {
 }) {
   const key = surfaceKeyFromSearch(props.search);
   if (!key) {
-    console.error("[surface] 窗口 URL 缺少 plugin/surface 参数，无法确定要挂载哪个插件");
-    return <SurfaceFailure detail="窗口参数缺失" />;
+    return <SurfaceFailure detail="窗口参数缺失" surface={props.surface} />;
   }
   const entry = (props.registry ?? pluginSurfaceRegistry).get(key.pluginId);
   if (!entry) {
-    console.error(`[surface] 插件 ${key.pluginId} 没有注册 desktop.surface`);
-    return <SurfaceFailure detail={`插件 ${key.pluginId} 未提供桌面窗口`} />;
+    return <SurfaceFailure detail={`插件 ${key.pluginId} 未提供桌面窗口`} surface={props.surface} />;
   }
   const Component = entry.Component;
   return (
-    <Component
-      surfaceId={key.surfaceId}
-      surface={props.surface}
-      client={createPluginRpcClient(key.pluginId)}
-    />
-  );
-}
-
-/** A deliberately visible, draggable-free failure card; see `SurfaceRoot`. */
-function SurfaceFailure(props: { detail: string }) {
-  return (
-    <div
-      role="alert"
-      style={{
-        padding: "8px 12px",
-        borderRadius: 8,
-        background: "rgba(24, 24, 27, 0.92)",
-        color: "#fca5a5",
-        font: "12px/1.5 system-ui, sans-serif",
-      }}
-    >
-      桌面窗口加载失败：{props.detail}
-    </div>
+    <SurfaceErrorBoundary key={`${key.pluginId}/${key.surfaceId}`} surface={props.surface}>
+      <Component
+        surfaceId={key.surfaceId}
+        surface={props.surface}
+        client={createPluginRpcClient(key.pluginId)}
+      />
+    </SurfaceErrorBoundary>
   );
 }

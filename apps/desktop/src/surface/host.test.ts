@@ -390,8 +390,23 @@ test("a surface is revealed only once its renderer reports ready", () => {
   // over the desktop until the renderer painted.
   assert.equal(windows[0].shown, 0);
 
+  host.show(key);
+  assert.equal(windows[0].shown, 0, "an early show request cannot bypass readiness");
+
   host.markReady(key);
 
+  assert.equal(windows[0].shown, 1);
+});
+
+test("hide before ready cancels an early show request until explicitly shown again", () => {
+  const { host, windows } = setup();
+  host.create(key, spec, { x: 0, y: 0 });
+  host.show(key);
+  host.hide(key);
+  host.markReady(key);
+  assert.equal(windows[0].shown, 0);
+  assert.equal(windows[0].hidden, true);
+  host.show(key);
   assert.equal(windows[0].shown, 1);
 });
 

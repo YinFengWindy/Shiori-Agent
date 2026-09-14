@@ -161,6 +161,8 @@ type SurfaceRecord = {
    * surface the plugin had explicitly hidden.
    */
   visible: boolean;
+  /** Whether the renderer has installed its listeners at least once. */
+  ready: boolean;
 };
 
 /**
@@ -215,6 +217,7 @@ export class DesktopSurfaceHost {
       moveTimer: null,
       retained: null,
       visible: true,
+      ready: false,
     };
     this.surfaces.set(id, record);
     // A window closed by the OS (or by Electron shutting down) must not leave
@@ -297,7 +300,7 @@ export class DesktopSurfaceHost {
   show(key: SurfaceKey): void {
     const record = this.require(key);
     record.visible = true;
-    record.window.showInactive();
+    if (record.ready) record.window.showInactive();
   }
 
   hide(key: SurfaceKey): void {
@@ -376,18 +379,13 @@ export class DesktopSurfaceHost {
    * never has to ask for either, then re-asserts visibility — with
    * `showInactive`, so a surface never steals focus.
    *
-   * The show matters for *reloads*, not for the first paint: a renderer that
-   * reloads calls `ready()` again, and a surface the plugin had hidden must
-   * not come back with it, which is what `visible` guards. It does not
-   * suppress the empty transparent rectangle between `create` and the first
-   * paint — `desktopSurfaceWindowOptions` does not pass `show: false`, so
-   * Electron shows the window as soon as it is constructed. That predates
-   * this capability (the pet's own window behaved the same) and closing it
-   * needs an end-to-end Electron check this repo cannot run in unit tests.
-   * Tracked in #222.
+   * `ready` gates explicit show requests during startup; `visible` preserves
+   * the plugin's hide intent across reloads. The Electron adapter additionally
+   * waits for the first paint before actually revealing the window.
    */
   markReady(key: SurfaceKey): void {
     const record = this.require(key);
+    record.ready = true;
     if (record.retained) record.window.send(surfaceStateChannel, record.retained.payload);
     this.notifyPlacement(record, "ready");
     if (record.visible) record.window.showInactive();
