@@ -51,6 +51,8 @@ DEFAULT_ENTRY = "backend/plugin.py"
 class ManifestError(Exception):
     """manifest 无法读取、解析，或声明不符合插件契约。"""
 
+    metadata: dict[str, object] | None = None
+
 
 @dataclass
 class PluginManifest:
@@ -93,10 +95,23 @@ def load_manifest(plugin_dir: Path) -> PluginManifest | None:
     if not isinstance(loaded, dict):
         raise ManifestError(f"manifest.yaml 格式错误，期望 dict: {manifest_path}")
     raw: dict[str, object] = loaded
+    try:
+        return _parse_manifest(raw, manifest_path, plugin_dir.name)
+    except ManifestError as exc:
+        # Preserve opt-in package identity so the host can display a rejection.
+        exc.metadata = raw
+        raise
+
+
+def _parse_manifest(
+    raw: dict[str, object], manifest_path: Path, directory_name: str
+) -> PluginManifest:
+    if any(not isinstance(key, str) for key in raw):
+        raise ManifestError("manifest keys must be strings")
     if raw.get("api") != 2 or isinstance(raw.get("api"), bool):
         raise ManifestError(f"插件必须显式声明 api: 2: {manifest_path}")
     api = 2
-    plugin_id = str(raw.get("id") or raw.get("name") or plugin_dir.name)
+    plugin_id = str(raw.get("id") or raw.get("name") or directory_name)
     supports_hot_unload = raw.get("supports_hot_unload", True)
     if not isinstance(supports_hot_unload, bool):
         raise ManifestError("supports_hot_unload 必须是布尔值")
