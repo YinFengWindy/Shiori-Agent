@@ -12,6 +12,7 @@ from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.manifest import PluginManifest
 from agent.plugin_host.diagnostics import PackageContractError
+from agent.plugin_host.dependencies import PluginDependencyError
 
 
 class PluginState(Enum):
@@ -67,7 +68,10 @@ class PluginHandle:
             "diagnostic": (
                 self.error.diagnostic.to_dict()
                 if self.state is PluginState.BLOCKED
-                and isinstance(self.error, PackageContractError)
+                and isinstance(
+                    self.error, (PackageContractError, PluginDependencyError)
+                )
+                and self.error.diagnostic is not None
                 else None
             ),
         }

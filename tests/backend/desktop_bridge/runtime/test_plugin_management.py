@@ -482,7 +482,10 @@ async def test_a_disabled_plugin_cannot_have_its_config_written(tmp_path, monkey
 
 
 @pytest.mark.asyncio
-async def test_list_preserves_external_contract_rejection(tmp_path, monkeypatch):
+@pytest.mark.parametrize("missing_provider", [False, True])
+async def test_list_preserves_external_contract_rejection(
+    tmp_path, monkeypatch, missing_provider
+):
     import yaml
 
     _stage_plugin_dirs(tmp_path, monkeypatch)
@@ -494,6 +497,8 @@ async def test_list_preserves_external_contract_rejection(tmp_path, monkeypatch)
         runtime_api=">=3.0.0 <4.0.0",
         entry="backend/plugin.py",
     )
+    if missing_provider:
+        raw.update(runtime_api=">=2.0.0 <3.0.0", dependencies=["missing-provider"])
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
     service, _, app = await _start_service(tmp_path)
     try:
@@ -503,8 +508,15 @@ async def test_list_preserves_external_contract_rejection(tmp_path, monkeypatch)
             item for item in response.payload["plugins"] if item["id"] == "hello"
         )
         assert item["state"] == "BLOCKED"
-        assert item["diagnostic"]["code"] == "incompatible_runtime"
-        assert item["diagnostic"]["field"] == "runtime_api"
+        assert item["diagnostic"]["code"] == (
+            "missing_dependency" if missing_provider else "incompatible_runtime"
+        )
+        assert item["diagnostic"]["field"] == (
+            "dependencies[0]" if missing_provider else "runtime_api"
+        )
+        assert item["diagnostic"]["stage"] == (
+            "dependency" if missing_provider else "validation"
+        )
         assert item["error"]
     finally:
         await service.aclose()

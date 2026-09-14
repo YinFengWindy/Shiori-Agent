@@ -3,9 +3,14 @@
 from collections.abc import Callable
 from typing import Any
 
+from agent.plugin_host.diagnostics import PluginDiagnostic
+
 
 class PluginDependencyError(RuntimeError):
     """A declared dependency is unavailable or forms a dependency cycle."""
+
+    # Contract-package preflight attaches edge-specific data; legacy errors keep None.
+    diagnostic: PluginDiagnostic | None = None
 
 
 class PluginDependencies:

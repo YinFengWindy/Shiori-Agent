@@ -160,8 +160,11 @@ The host snapshot supplies identity, directory and lifecycle state. `code` is
 machine-readable; `field` identifies the declaration, `reason` retains the cause
 and `path` identifies the artifact when applicable. Kernel `states()` and
 `plugins.list` retain validation diagnostics, including malformed opt-in manifest
-candidates. Runtime failures retain their original `error`; they do not reuse a
-static `BLOCKED` diagnostic. A passing validator alone does not mean trusted,
+candidates. Missing or inactive strong plugin dependencies use stage `dependency`,
+field `dependencies[index]`, and code `missing_dependency` or
+`dependency_unavailable`; their original dependency error is retained in `reason`.
+Runtime failures retain their original `error`; they do not reuse a static
+`BLOCKED` diagnostic. A passing validator alone does not mean trusted,
 active or ready to run in every renderer.
 
 ## Independent example and validation

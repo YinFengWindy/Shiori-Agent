@@ -34,7 +34,7 @@ from agent.plugin_host.dependencies import PluginDependencies, PluginDependencyE
 from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
-from agent.plugin_host.diagnostics import PackageContractError
+from agent.plugin_host.diagnostics import PackageContractError, PluginDiagnostic
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.manifest import (
@@ -196,9 +196,9 @@ class PluginKernel:
             )
         # A disabled plugin must not load its dependencies as a side effect.
         if self._config_enabled(plugin_id):
-            try:
-                for dependency in record.manifest.dependencies:
-                    target = records.get(dependency)
+            for index, dependency in enumerate(record.manifest.dependencies):
+                target = records.get(dependency)
+                try:
                     if target is None:
                         raise PluginDependencyError(
                             f"插件 {plugin_id} 缺少依赖 {dependency}"
@@ -209,11 +209,22 @@ class PluginKernel:
                         raise PluginDependencyError(
                             f"插件 {plugin_id} 的依赖 {dependency} 未启用或加载失败"
                         )
-            except PluginDependencyError as exc:
-                self._handles[record.name] = PluginHandle(
-                    record=record, state=PluginState.BLOCKED, error=exc
-                )
-                return
+                except PluginDependencyError as exc:
+                    if "package_contract" in record.manifest.metadata:
+                        exc.diagnostic = PluginDiagnostic(
+                            code=(
+                                "missing_dependency"
+                                if target is None
+                                else "dependency_unavailable"
+                            ),
+                            stage="dependency",
+                            field=f"dependencies[{index}]",
+                            reason=str(exc),
+                        )
+                    self._handles[record.name] = PluginHandle(
+                        record=record, state=PluginState.BLOCKED, error=exc
+                    )
+                    return
         await self._load_one(record)
 
     async def load(self, name: str) -> bool:

@@ -935,3 +935,51 @@ async def test_contract_package_uses_explicit_host_build_inventory(contract_pack
     await kernel.load_all()
     assert kernel.states()[0]["state"] == "ACTIVE"
     await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider_present", [False, True])
+@pytest.mark.parametrize("contract", [False, True])
+async def test_plugin_dependency_rejection_keeps_contract_diagnostic(
+    contract_package, provider_present, contract
+):
+    import yaml
+
+    path = contract_package / "manifest.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw["dependencies"] = ["provider"]
+    if not contract:
+        del raw["package_contract"]
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    if provider_present:
+        provider = contract_package.parent / "provider"
+        provider.mkdir()
+        (provider / "manifest.yaml").write_text(
+            "api: 2\nid: provider\ncapabilities: []\n", encoding="utf-8"
+        )
+    marker = contract_package / "executed.txt"
+    (contract_package / "backend/plugin.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed', encoding='utf-8')\n"
+        "async def setup(ctx): pass\n",
+        encoding="utf-8",
+    )
+    kernel = make_kernel(
+        [contract_package.parent],
+        event_bus=EventBus(),
+        plugin_configs={"provider": {"enabled": False}},
+    )
+    await kernel.load_all()
+    assert not marker.exists()
+    state = next(state for state in kernel.states() if state["id"] == "external_demo")
+    assert state["state"] == "BLOCKED"
+    if contract:
+        assert state["diagnostic"]["code"] == (
+            "dependency_unavailable" if provider_present else "missing_dependency"
+        )
+        assert state["diagnostic"]["stage"] == "dependency"
+        assert state["diagnostic"]["field"] == "dependencies[0]"
+        assert state["diagnostic"]["state"] == "BLOCKED"
+        assert state["diagnostic"]["reason"] == state["error"]
+    else:
+        assert state["diagnostic"] is None

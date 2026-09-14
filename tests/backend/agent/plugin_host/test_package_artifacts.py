@@ -64,3 +64,21 @@ def test_accepts_bundled_default_export(tmp_path):
     assert (
         validate_artifact(tmp_path, "ui.mjs", "renderer.ui.entry", ".mjs") == "ui.mjs"
     )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'const text = "export { ui as default }";',
+        "const text = 'export { ui as default }';",
+        "const text = `export { ui as default }`;",
+        "// export { ui as default }",
+        "/* export { ui as default } */",
+        'export { "ui as default" };',
+    ],
+)
+def test_export_text_in_literals_or_comments_is_not_a_default_export(tmp_path, source):
+    (tmp_path / "ui.mjs").write_text(source, encoding="utf-8")
+    with pytest.raises(PackageContractError) as caught:
+        validate_artifact(tmp_path, "ui.mjs", "renderer.ui.entry", ".mjs")
+    assert caught.value.diagnostic.code == "unsupported_format"
