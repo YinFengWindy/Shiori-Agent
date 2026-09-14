@@ -101,9 +101,15 @@ def register_memory_plugin(
 def _load_memory_plugin_from_dir(name: str) -> MemoryPlugin | None:
     if "/" in name or "\\" in name or ".." in name:
         raise ValueError(f"memory engine 名称非法: {name}")
-    plugin_path = (
-        _PROJECT_ROOT.parent.parent / "plugins" / name / "backend" / "memory_plugin.py"
-    )
+    candidates = [
+        _PROJECT_ROOT / "plugins" / name / "memory_plugin.py",
+        _PROJECT_ROOT.parent.parent.parent
+        / "plugins"
+        / name
+        / "backend"
+        / "memory_plugin.py",
+    ]
+    plugin_path = next((path for path in candidates if path.exists()), candidates[0])
     if not plugin_path.exists():
         return None
     module_name = f"akasic_memory_plugin_{name}"

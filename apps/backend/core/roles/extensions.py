@@ -40,7 +40,9 @@ class RoleExtensions:
             if participant is None:
                 participant = _Participant(write, project)
                 self._participants[plugin_id] = participant
-            elif (participant.write, participant.project) != (write, project):
+            elif not _same_participant(
+                participant.write, write
+            ) or not _same_participant(participant.project, project):
                 # Runtime preparation may reuse the same stateless owner, but
                 # silently replacing a different schema/owner is never valid.
                 raise ValueError(f"角色扩展已注册: {plugin_id}")
@@ -100,3 +102,12 @@ class RoleExtensions:
                 )
                 for plugin_id, participant in self._participants.items()
             }
+
+
+def _same_participant(left: Callable[..., Any], right: Callable[..., Any]) -> bool:
+    """Recognize the same source callback loaded into two plugin namespaces."""
+    return left is right or (
+        getattr(left, "__module__", "").rsplit(".", 1)[-1]
+        == getattr(right, "__module__", "").rsplit(".", 1)[-1]
+        and getattr(left, "__qualname__", "") == getattr(right, "__qualname__", "")
+    )
