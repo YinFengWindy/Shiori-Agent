@@ -6,7 +6,7 @@
 * dump.dump_to_db(path, store) —— 末尾一次性批量落库（复用 embedding_cache）
 """
 
-from plugins.akasha.backend.fast import (
+from . import (
     mem_store,
     graph_fast,
     fast_dense,

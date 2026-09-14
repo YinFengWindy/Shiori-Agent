@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import itertools
 import logging
 import sys
 from collections.abc import Awaitable, Callable
@@ -58,6 +59,11 @@ logger = logging.getLogger(__name__)
 # 模型的字段。凡是整表读写这张表的地方都必须认得这个键，否则会互相覆盖。
 PLUGIN_ENABLED_CONFIG_KEY = "enabled"
 
+# 每个内核代际都需要独立的包命名空间。使用进程内序号而不是发现根目录
+# 名称，避免插件从仓库搬到任意目录后改变 import 名称，也避免两个发现根
+# 恰好同名时污染 sys.modules。
+_KERNEL_NAMESPACE_COUNTER = itertools.count(1)
+
 
 @dataclass
 class HostServices:
@@ -104,7 +110,7 @@ class PluginKernel:
     ) -> None:
         self._dirs = plugin_dirs
         self._services = services
-        self._namespace = namespace
+        self._namespace = namespace or f"g{next(_KERNEL_NAMESPACE_COUNTER)}"
         self._strict = strict
         self._handles: dict[str, PluginHandle] = {}
         self._active_order: list[str] = []
@@ -152,12 +158,13 @@ class PluginKernel:
         if manifest is None:
             return None
         entry_file = child / manifest.entry
-        suffix = f"_{self._namespace}" if self._namespace else ""
+        # The manifest ID is the stable identity; discovery-root names are
+        # intentionally excluded so a copied package keeps the same shape.
         return PluginRecord(
             name=child.name,
             plugin_dir=child,
             entry_file=entry_file,
-            import_path=f"akasic_plugin_{source}_{child.name}{suffix}",
+            import_path=f"akasic_plugin_{self._namespace}_{manifest.id}",
             manifest=manifest,
         )
 
@@ -285,12 +292,8 @@ class PluginKernel:
 
     def _import_entry(self, handle: PluginHandle) -> None:
         record = handle.record
-        # 先登记命名空间清理（最后处置），代际热重载时不残留 sys.modules 条目
-        if self._namespace:
-            handle.effects.add(
-                "import:namespace",
-                lambda: _purge_modules(record.import_path),
-            )
+        # 先登记命名空间清理（最后处置），代际热重载时不残留 sys.modules 条目。
+        # 入口及其相对导入的子模块都挂在这个动态包下，必须整体清理。
         _import_module(record.import_path, record.entry_file)
 
     def _register_config_schema(self, handle: PluginHandle) -> None:
@@ -399,6 +402,7 @@ class PluginKernel:
     ) -> None:
         logger.warning("插件 %s 加载失败，回滚: %s", handle.record.name, error)
         _ = await handle.effects.dispose_all()
+        _purge_modules(handle.record.import_path)
         handle.contributions = type(handle.contributions)()
         handle.instance = None
         handle.drainers.clear()
@@ -452,6 +456,7 @@ class PluginKernel:
     async def _dispose_handle(self, handle: PluginHandle) -> list[Exception]:
         handle.state = PluginState.UNLOADING
         errors = await handle.effects.dispose_all()
+        _purge_modules(handle.record.import_path)
         handle.contributions = type(handle.contributions)()
         handle.instance = None
         handle.drainers.clear()

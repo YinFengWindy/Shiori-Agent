@@ -8,9 +8,10 @@ from typing import Any, Protocol, cast
 from bus.events_lifecycle import SceneObservationCommitted
 from core.roles.store import RoleStore
 from core.common.runtime_tasks import create_runtime_task
-from plugins.novelai.backend.auto_cg import AutoCgPolicy
-from plugins.novelai.backend.scene_prompt import prepare_scene_prompt
-from plugins.novelai.backend.tool import GenerateImageTool
+
+from .auto_cg import AutoCgPolicy
+from .scene_prompt import prepare_scene_prompt
+from .tool import GenerateImageTool
 
 logger = logging.getLogger(__name__)
 

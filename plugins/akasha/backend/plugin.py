@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
 
 from agent.lifecycle.types import BeforeTurnCtx, TurnState
-from plugins.akasha.backend.config import load_akasha_config, resolve_akasha_db_path
-from plugins.akasha.backend.store import AkashaStore
+
+from .config import load_akasha_config, resolve_akasha_db_path
+from .store import AkashaStore
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext

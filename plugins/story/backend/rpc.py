@@ -12,16 +12,18 @@ from uuid import uuid4
 from core.roles import RoleStore, RoleRuntimeRegistry
 from core.common.runtime_tasks import create_runtime_task
 
-from plugins.story.backend.catalog import StoryCatalog
-from plugins.story.backend.director import ProviderStoryDirector, StoryDirector
-from plugins.story.backend.errors import (
+
+from .catalog import StoryCatalog
+from .director import ProviderStoryDirector, StoryDirector
+from .errors import (
     StoryNotFoundError,
     StoryProviderUnavailableError,
 )
-from plugins.story.backend.models import StoryPlayerProfile, StoryVisualType
-from plugins.story.backend.repository import StoryRepository, payload_hash
-from plugins.story.backend.service import StorySimulationService
-from plugins.story.backend.story_time import (
+
+from .models import StoryPlayerProfile, StoryVisualType
+from .repository import StoryRepository, payload_hash
+from .service import StorySimulationService
+from .story_time import (
     normalize_story_date,
     normalize_story_time_band,
 )

@@ -5,8 +5,9 @@ from collections.abc import Callable
 from typing import Any
 
 from agent.tools.base import Tool
-from plugins.novelai.backend.models import GenerateImageRequest
-from plugins.novelai.backend.service import NovelAIService
+
+from .models import GenerateImageRequest
+from .service import NovelAIService
 
 
 class GenerateImageTool(Tool):

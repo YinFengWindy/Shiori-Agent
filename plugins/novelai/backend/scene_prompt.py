@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from bus.events_lifecycle import SceneObservationCommitted
-from plugins.novelai.backend.prompt_validation import validate_novelai_prompt
+from .prompt_validation import validate_novelai_prompt
 
 _TOOL_NAME = "submit_scene_image_prompt"
 _SCHEMA = {

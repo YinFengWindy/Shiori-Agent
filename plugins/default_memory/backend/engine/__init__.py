@@ -30,4 +30,4 @@ from .query import (
     _VECTOR_TOP_K,
 )
 
-logger = logging.getLogger("plugins.default_memory.backend.engine")
+logger = logging.getLogger(__name__)

@@ -18,7 +18,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from plugins.akasha.backend.core import (
+from ..core import (
     AkashaNode,
     EDGE_DECAY_TAU,
     advance_salience_state,

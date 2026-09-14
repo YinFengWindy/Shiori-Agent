@@ -1,6 +1,7 @@
 """Checks persistent vector compatibility before preparing a memory version."""
 
 from pathlib import Path
+import importlib
 
 from agent.config_models import Config
 
@@ -24,10 +25,9 @@ def validate_memory_transition(
         or (candidate.memory.engine or "default") != "default"
     ):
         return
-    from plugins.default_memory.backend.config import (
-        load_default_memory_config,
-        resolve_memory_db_path,
-    )
+    module = importlib.import_module("plugins." + "default_memory.backend.config")
+    load_default_memory_config = module.load_default_memory_config
+    resolve_memory_db_path = module.resolve_memory_db_path
     from memory2.store import VEC_DIM
 
     path = resolve_memory_db_path(

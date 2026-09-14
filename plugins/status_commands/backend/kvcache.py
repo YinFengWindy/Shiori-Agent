@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from agent.lifecycle.commands import abort_command, normalize_command
@@ -17,7 +17,9 @@ from .formatting import content_to_text, preview_text
 if TYPE_CHECKING:
     from agent.lifecycle.phases.before_turn import BeforeTurnFrame
     from agent.lifecycle.types import TurnState
-    from plugins.observe.backend.telemetry import KVCacheTurn, ObserveTelemetry
+
+    KVCacheTurn = Any
+    ObserveTelemetry = Any
 
 logger = logging.getLogger("plugin.status_commands")
 _SESSION_SLOT = "session:session"
