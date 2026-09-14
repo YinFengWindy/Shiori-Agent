@@ -41,7 +41,9 @@ class _PassiveReasoningLoopMixin:
 
     _tools: ToolRegistry
 
-    def _request_tokens_with_tools(self, messages: list[dict], schemas: list[dict]) -> int:
+    def _request_tokens_with_tools(
+        self, messages: list[dict], schemas: list[dict]
+    ) -> int:
         return support.estimate_messages_tokens(messages, schemas)
 
     async def run(
@@ -175,7 +177,10 @@ class _PassiveReasoningLoopMixin:
                 schema_names = [name for name in schema_names if name not in disabled]
             schemas = self._tools.get_schemas(names=schema_names)
             threshold = int(getattr(self, "_memory_input_token_threshold", 0))
-            if threshold > 0 and self._request_tokens_with_tools(messages, schemas) >= threshold:
+            if (
+                threshold > 0
+                and self._request_tokens_with_tools(messages, schemas) >= threshold
+            ):
                 raise ContextLengthError(
                     "推理过程中追加工具结果后输入超过预算，已停止继续调用模型。"
                 )
@@ -650,7 +655,10 @@ class _PassiveReasoningLoopMixin:
                     }
                 )
                 threshold = int(getattr(self, "_memory_input_token_threshold", 0))
-                if threshold > 0 and self._request_tokens_with_tools(messages, []) >= threshold:
+                if (
+                    threshold > 0
+                    and self._request_tokens_with_tools(messages, []) >= threshold
+                ):
                     raise ContextLengthError(
                         "空回复重试追加提示后输入超过预算，已停止继续调用模型。"
                     )

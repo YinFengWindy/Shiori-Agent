@@ -375,7 +375,7 @@ async def test_ensure_consolidation_returns_false_when_no_progress(
 
 @pytest.mark.asyncio
 async def test_ensure_consolidation_propagates_existing_background_failure(
-    tmp_path: Path
+    tmp_path: Path,
 ):
     _manager, session, maintenance, event_bus = _setup(tmp_path)
 
