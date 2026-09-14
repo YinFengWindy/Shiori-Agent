@@ -1,4 +1,6 @@
 api: 2
 id: shell_restore
+version: 0.1.0
+desc: 将 shell 工具中的 rm 命令改写为移动到还原目录
 capabilities:
   - tool_hooks
