@@ -103,11 +103,7 @@ def _load_memory_plugin_from_dir(name: str) -> MemoryPlugin | None:
         raise ValueError(f"memory engine 名称非法: {name}")
     candidates = [
         _PROJECT_ROOT / "plugins" / name / "memory_plugin.py",
-        _PROJECT_ROOT.parent.parent.parent
-        / "plugins"
-        / name
-        / "backend"
-        / "memory_plugin.py",
+        _PROJECT_ROOT.parent.parent / "plugins" / name / "backend" / "memory_plugin.py",
     ]
     plugin_path = next((path for path in candidates if path.exists()), candidates[0])
     if not plugin_path.exists():
