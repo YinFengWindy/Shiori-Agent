@@ -1,5 +1,6 @@
 api: 2
 id: akasha
+version: 0.1.0
 desc: Akasha 记忆引擎的插件壳（/akashalast 诊断命令）；引擎本体由 core.memory.plugin 独立接线
 capabilities:
   - memory_engine
