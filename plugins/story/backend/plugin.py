@@ -8,9 +8,8 @@ from agent.plugin_host.bridge_events import PluginRpcError
 from agent.plugin_host.runtime_context import PluginRuntimeContext
 from core.roles import RoleStore
 from plugins.novelai.backend.tool import GenerateImageTool
-from plugins.story.backend.errors import StorySimulationError
-from plugins.story.backend.rpc import StorySimulationHandler
-
+from .errors import StorySimulationError
+from .rpc import StorySimulationHandler
 
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Registers Story RPC, storage, background work and its required NovelAI API."""

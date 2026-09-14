@@ -15,11 +15,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from plugins.novelai.backend.models import GenerateImageRequest
-from plugins.novelai.backend.prompt_tags import PromptTagStore
-from plugins.novelai.backend.service import NovelAIService
-from plugins.novelai.backend.store import NovelAIStore
 
+from .models import GenerateImageRequest
+from .prompt_tags import PromptTagStore
+from .service import NovelAIService
+from .store import NovelAIStore
 
 class NovelAIRpcHandlers:
     """Owns the request/response shaping for every ``plugin.novelai.*`` method."""

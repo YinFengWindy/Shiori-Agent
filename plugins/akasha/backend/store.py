@@ -9,8 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from plugins.akasha.backend.core import (
-    AkashaNode,
+from .core import (    AkashaNode,
     ActivationUpdate,
     EdgeUpdate,
     ActivationEventRow,

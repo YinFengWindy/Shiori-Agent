@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from plugins.desktop_pet.backend.rpc import DesktopPetRpcHandlers
-from plugins.desktop_pet.backend.tool import DesktopPetActionTool
 
+from .rpc import DesktopPetRpcHandlers
+from .tool import DesktopPetActionTool
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
@@ -16,7 +16,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
 
     # Prepared and active runtimes share RoleStore; use the same stateless
     # callback identities even though plugin.py is imported per generation.
-    from plugins.desktop_pet.backend.pet_state import PLUGIN_ID, RolePetStateStore
+    from .pet_state import PLUGIN_ID, RolePetStateStore
     from .reconcile import PetStateReconciler
 
     role_store = ctx.role_store

@@ -5,8 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from plugins.story.backend.errors import (
-    StoryInvalidOutputError,
+from .errors import (    StoryInvalidOutputError,
     StoryProviderUnavailableError,
 )
 

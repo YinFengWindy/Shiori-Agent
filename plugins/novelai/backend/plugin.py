@@ -20,17 +20,17 @@ from agent.lifecycle.types import (
 from bus.events_lifecycle import SceneObservationCommitted
 from core.net.http import get_default_http_requester
 from core.roles.store import RoleStore
-from plugins.novelai.backend.auto_cg import AutoCgPolicy
-from plugins.novelai.backend.auto_cg_controller import AutoCgController
-from plugins.novelai.backend.client import NovelAIClient
-from plugins.novelai.backend.config import NovelAIConfig
-from plugins.novelai.backend.models import NovelAISettings
-from plugins.novelai.backend.prompt_tags import PromptTagStore
-from plugins.novelai.backend.rpc import NovelAIRpcHandlers
-from plugins.novelai.backend.service import NovelAIService
-from plugins.novelai.backend.store import NovelAIStore
-from plugins.novelai.backend.tool import GenerateImageTool
 
+from .auto_cg import AutoCgPolicy
+from .auto_cg_controller import AutoCgController
+from .client import NovelAIClient
+from .config import NovelAIConfig
+from .models import NovelAISettings
+from .prompt_tags import PromptTagStore
+from .rpc import NovelAIRpcHandlers
+from .service import NovelAIService
+from .store import NovelAIStore
+from .tool import GenerateImageTool
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
