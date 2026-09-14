@@ -34,8 +34,12 @@ from agent.plugin_host.dependencies import PluginDependencies, PluginDependencyE
 from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
+from agent.plugin_host.diagnostics import PackageContractError
+from agent.plugin_host.host_contract import HostRuntimeContract
+from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.manifest import (
     ManifestError,
+    PluginManifest,
     load_manifest,
 )
 from agent.plugin_host.plugin_data import (
@@ -83,6 +87,8 @@ class HostServices:
     )
     is_reload: bool = False
     previously_active_plugins: frozenset[str] = frozenset()
+    # Frozen hosts may supply their build's dependency inventory and renderer ABI.
+    plugin_runtime_contract: HostRuntimeContract | None = None
 
 
 class PluginKernel:
@@ -136,7 +142,13 @@ class PluginKernel:
             logger.warning("插件 manifest 无效，跳过: %s (%s)", child.name, e)
             if self._strict:
                 raise
-            return None
+            if e.metadata is None or "package_contract" not in e.metadata:
+                return None
+            # Keep invalid contract candidates visible. Static validation reports
+            # the original manifest failure before the fallback record can load.
+            manifest = PluginManifest(
+                id=str(e.metadata.get("id") or child.name), metadata=e.metadata
+            )
         if manifest is None:
             return None
         entry_file = child / manifest.entry
@@ -224,6 +236,19 @@ class PluginKernel:
             handle.state = PluginState.DISABLED
             logger.info("插件已禁用（配置状态）: %s", record.name)
             return
+        # Check every required contribution before importing any plugin code.
+        # Keep this catch outside setup: runtime exceptions must roll back effects.
+        if "package_contract" in record.manifest.metadata:
+            try:
+                _ = validate_package(
+                    record.plugin_dir, host=self._services.plugin_runtime_contract
+                )
+            except PackageContractError as exc:
+                handle.state = PluginState.BLOCKED
+                handle.error = exc
+                if self._strict:
+                    raise
+                return
         handle.state = PluginState.LOADING
         try:
             self._import_entry(handle)
@@ -460,7 +485,7 @@ class PluginKernel:
     def loaded_count(self) -> int:
         return len(self._active_order)
 
-    def states(self) -> list[dict[str, str]]:
+    def states(self) -> list[dict[str, Any]]:
         """Returns per-plugin lifecycle snapshots for diagnostics."""
         return [handle.describe() for handle in self._handles.values()]
 

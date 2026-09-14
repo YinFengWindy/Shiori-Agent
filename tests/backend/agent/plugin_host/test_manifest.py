@@ -129,3 +129,11 @@ def test_existing_manifest_defaults_to_hot_unloadable(tmp_path):
         "api: 2\ncapabilities: []\n", encoding="utf-8"
     )
     assert load_manifest(tmp_path).supports_hot_unload is True
+
+
+def test_manifest_rejects_nonstring_keys(tmp_path):
+    (tmp_path / "manifest.yaml").write_text(
+        "api: 2\ncapabilities: []\n3: value\n", encoding="utf-8"
+    )
+    with pytest.raises(ManifestError, match="keys must be strings"):
+        load_manifest(tmp_path)

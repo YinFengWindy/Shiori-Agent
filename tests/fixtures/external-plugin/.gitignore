@@ -1,0 +1,4 @@
+node_modules/
+package/
+pnpm-lock.yaml
+*.zip

@@ -177,3 +177,8 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 旧停用标记仅由配置启动升级读取：按当前 manifest 身份写入缺失的 `[plugins.<id>].enabled = false`，显式配置优先。持久化失败保留原配置与标记，重试不会覆盖已保存选择；无法确认当前插件身份时保留标记，等待包可用。内核日常启停不读取标记。已归核心的主动/场景偏好保持各自升级逻辑。
 
 通用 KV 位于 `agent/plugin_host/kv.py`，旧 `.kv.json` 的现存可恢复数据仍由 `plugin_data` 原子迁入工作区。历史 `plugin_config.json` 与 `config.local.toml` 的数据归位由 #214 独立跟踪；本轮删除旧 loader，不删除用户这些文件，也不把它们重新作为 v2 配置回退。
+
+External package authors: see [External Plugin Runtime Contract v1](plugin-runtime-contract.md)
+for the versioned distribution layout, compatibility gate, ESM/CSS requirements
+and independent build example. The tutorial's bundled source-plugin workflow
+continues to use the existing v2 path.

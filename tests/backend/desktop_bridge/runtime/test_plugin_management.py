@@ -479,3 +479,33 @@ async def test_a_disabled_plugin_cannot_have_its_config_written(tmp_path, monkey
     finally:
         await service.aclose()
         await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_list_preserves_external_contract_rejection(tmp_path, monkeypatch):
+    import yaml
+
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    path = tmp_path / "plugin_dirs/hello/manifest.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw.update(
+        package_contract=1,
+        version="1.0.0",
+        runtime_api=">=3.0.0 <4.0.0",
+        entry="backend/plugin.py",
+    )
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    service, _, app = await _start_service(tmp_path)
+    try:
+        response = await _request(service, "plugins.list")
+        assert response.error is None
+        item = next(
+            item for item in response.payload["plugins"] if item["id"] == "hello"
+        )
+        assert item["state"] == "BLOCKED"
+        assert item["diagnostic"]["code"] == "incompatible_runtime"
+        assert item["diagnostic"]["field"] == "runtime_api"
+        assert item["error"]
+    finally:
+        await service.aclose()
+        await app.shutdown()

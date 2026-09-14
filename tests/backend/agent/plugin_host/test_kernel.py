@@ -850,3 +850,88 @@ async def test_optional_unsafe_consumer_does_not_block_provider_unload(tmp_path)
         assert kernel.states()[0]["id"] == "consumer"
     finally:
         await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        "runtime_api: '>=3.0.0 <4.0.0'",
+        "renderer: {surface: {entry: missing.mjs, css: []}}",
+        "host_dependencies: {python: [not-installed]}",
+        "capabilities: [unknown]",
+    ],
+)
+async def test_contract_rejection_precedes_backend_execution(
+    contract_package, replacement
+):
+    import yaml
+
+    path = contract_package / "manifest.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw.update(yaml.safe_load(replacement))
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    marker = contract_package / "executed.txt"
+    (contract_package / "backend/plugin.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed', encoding='utf-8')\n"
+        "async def setup(ctx): pass\n",
+        encoding="utf-8",
+    )
+    kernel = make_kernel([contract_package.parent], event_bus=EventBus())
+    await kernel.load_all()
+    assert not marker.exists()
+    assert kernel.states()[0]["state"] == "BLOCKED"
+    assert kernel.states()[0]["diagnostic"]["stage"] == "validation"
+    assert kernel.discover()[0].manifest.id == "external_demo"
+
+
+@pytest.mark.asyncio
+async def test_contract_package_activates_after_preflight(contract_package):
+    kernel = make_kernel([contract_package.parent], event_bus=EventBus())
+    await kernel.load_all()
+    assert kernel.states()[0]["state"] == "ACTIVE"
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_runtime_contract_error_still_rolls_back_failed_setup(contract_package):
+    (contract_package / "backend/plugin.py").write_text(
+        "from agent.plugin_host.diagnostics import PackageContractError\n"
+        "async def setup(ctx):\n"
+        "    values = []\n"
+        "    ctx.expose(values)\n"
+        "    ctx.effect('cleanup', lambda: values.append('disposed'))\n"
+        "    raise PackageContractError('test', 'test', 'runtime failure')\n",
+        encoding="utf-8",
+    )
+    kernel = make_kernel([contract_package.parent], event_bus=EventBus())
+    await kernel.load_all()
+    assert kernel.states()[0]["state"] == "FAILED"
+    assert kernel._handles["external_demo"].effects.labels == []
+    assert kernel.states()[0]["diagnostic"] is None
+
+
+@pytest.mark.asyncio
+async def test_contract_package_uses_explicit_host_build_inventory(contract_package):
+    import yaml
+
+    from agent.plugin_host import HostServices, PluginKernel
+    from agent.plugin_host.host_contract import HostRuntimeContract
+
+    path = contract_package / "manifest.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw["host_dependencies"] = {"python": ["host-build-library"]}
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    kernel = PluginKernel(
+        [contract_package.parent],
+        services=HostServices(
+            event_bus=EventBus(),
+            plugin_runtime_contract=HostRuntimeContract(
+                python_dependencies=frozenset({"host-build-library"})
+            ),
+        ),
+    )
+    await kernel.load_all()
+    assert kernel.states()[0]["state"] == "ACTIVE"
+    await kernel.terminate_all(force=True)

@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.manifest import PluginManifest
+from agent.plugin_host.diagnostics import PackageContractError
 
 
 class PluginState(Enum):
@@ -24,6 +25,9 @@ class PluginState(Enum):
     DISPOSED = auto()
     FAILED = auto()
     BLOCKED = auto()
+    UNTRUSTED = auto()
+    CONFLICT = auto()
+    RESTART_REQUIRED = auto()
 
 
 @dataclass
@@ -53,11 +57,17 @@ class PluginHandle:
     def plugin_id(self) -> str:
         return self.record.manifest.id
 
-    def describe(self) -> dict[str, str]:
+    def describe(self) -> dict[str, Any]:
         """Returns a diagnostic snapshot used by logs and inspection."""
         return {
             "id": self.plugin_id,
             "state": self.state.name,
             "dir": str(self.record.plugin_dir),
             "error": str(self.error) if self.error else "",
+            "diagnostic": (
+                self.error.diagnostic.to_dict()
+                if self.state is PluginState.BLOCKED
+                and isinstance(self.error, PackageContractError)
+                else None
+            ),
         }

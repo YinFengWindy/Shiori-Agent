@@ -1,0 +1,23 @@
+api: 2
+package_contract: 1
+id: external_demo
+version: 1.0.0
+runtime_api: '>=2.0.0 <3.0.0'
+entry: backend/plugin.py
+capabilities: []
+host_dependencies:
+  python: []
+peer_dependencies:
+  react: '>=19.2.0 <20.0.0'
+  react-dom: '>=19.2.0 <20.0.0'
+renderer:
+  ui:
+    entry: renderer/ui.mjs
+    css: [style.css]
+  background:
+    entry: renderer/background.mjs
+    css: []
+  surface:
+    entry: renderer/surface.mjs
+    css: [style.css]
+assets: [assets/label.txt]
