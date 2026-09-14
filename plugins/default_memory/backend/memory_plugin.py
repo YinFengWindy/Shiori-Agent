@@ -24,8 +24,8 @@ class MemoryPlugin:
         config: Config,
         workspace: Path,
     ) -> list[tuple[Path, bool]]:
-        _ = ensure_default_memory_config_file()
-        default_config = load_default_memory_config()
+        _ = ensure_default_memory_config_file(workspace=workspace)
+        default_config = load_default_memory_config(workspace=workspace)
         db_path = resolve_memory_db_path(
             workspace=workspace,
             default_config=default_config,
@@ -41,7 +41,7 @@ class MemoryPlugin:
         self,
         deps: MemoryPluginBuildDeps,
     ) -> MemoryPluginRuntime:
-        default_config = load_default_memory_config()
+        default_config = load_default_memory_config(workspace=deps.workspace)
         engine = DefaultMemoryEngine(
             config=deps.config,
             default_config=default_config,

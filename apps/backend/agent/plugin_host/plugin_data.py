@@ -31,7 +31,7 @@ from infra.persistence.json_store import atomic_save_json
 logger = logging.getLogger(__name__)
 
 # workspace 下存放各插件私有数据的目录名
-PLUGIN_DATA_DIRNAME = "plugins"
+PLUGIN_DATA_DIRNAME = "plugin-data"
 _KV_FILENAME = "kv.json"
 _LEGACY_KV_FILENAME = ".kv.json"
 
@@ -40,6 +40,37 @@ def plugin_data_dir(workspace: Path, plugin_id: str) -> Path:
     """Returns the writable per-plugin data directory under the workspace."""
 
     return workspace / PLUGIN_DATA_DIRNAME / plugin_id
+
+
+def migrate_plugin_file(
+    *,
+    workspace: Path,
+    plugin_id: str,
+    filename: str,
+    sources: list[Path],
+    remove_source: bool = True,
+) -> Path:
+    """Atomically migrate the first legacy file into the independent data root."""
+    target = plugin_data_dir(workspace, plugin_id) / filename
+    if target.exists():
+        return target
+    source = next((path for path in sources if path.exists()), None)
+    if source is None:
+        return target
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if filename.endswith(".json"):
+        atomic_save_json(target, json.loads(source.read_text(encoding="utf-8")))
+    else:
+        from infra.persistence.text_store import atomic_save_text
+
+        atomic_save_text(target, source.read_text(encoding="utf-8"))
+    if not remove_source:
+        return target
+    try:
+        source.unlink()
+    except OSError:
+        logger.warning("插件 %s 的旧文件删除失败，已忽略: %s", plugin_id, source)
+    return target
 
 
 def open_plugin_kv(

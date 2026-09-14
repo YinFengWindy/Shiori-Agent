@@ -27,9 +27,23 @@ class AkashaConfig:
 def load_akasha_config(
     *,
     plugin_dir: Path | None = None,
+    workspace: Path | None = None,
 ) -> AkashaConfig:
     # 1. 读取插件目录下的本地配置。
     root = plugin_dir or Path(__file__).resolve().parent
+    if workspace is not None:
+        from agent.plugin_host.plugin_data import migrate_plugin_file, plugin_data_dir
+
+        migrate_plugin_file(
+            workspace=workspace,
+            plugin_id="akasha",
+            filename="config.local.toml",
+            sources=[
+                root / "config.local.toml",
+                workspace / "plugins" / "akasha" / "config.local.toml",
+            ],
+        )
+        root = plugin_data_dir(workspace, "akasha")
     payload = _read_toml(root / "config.local.toml")
 
     # 2. 把 TOML 字段收敛成强类型配置。

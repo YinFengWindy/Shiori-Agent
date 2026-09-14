@@ -3,9 +3,50 @@ from __future__ import annotations
 from pathlib import Path
 
 from plugins.default_memory.backend.config import (
+    ensure_default_memory_config_file,
     load_default_memory_config,
     resolve_memory_db_path,
 )
+
+
+def test_workspace_legacy_config_migrates_and_wins(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    legacy = workspace / "plugins" / "default_memory" / "config.local.toml"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text('db_path = "legacy.db"\n', encoding="utf-8")
+
+    cfg = load_default_memory_config(workspace=workspace)
+
+    target = workspace / "plugin-data" / "default_memory" / "config.local.toml"
+    assert cfg.db_path == "legacy.db"
+    assert target.exists()
+    assert not legacy.exists()
+
+
+def test_workspace_config_is_preserved_when_legacy_also_exists(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    target = workspace / "plugin-data" / "default_memory" / "config.local.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text('db_path = "current.db"\n', encoding="utf-8")
+    legacy = workspace / "plugins" / "default_memory" / "config.local.toml"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text('db_path = "old.db"\n', encoding="utf-8")
+
+    cfg = load_default_memory_config(workspace=workspace)
+
+    assert cfg.db_path == "current.db"
+    assert legacy.exists()
+
+
+def test_clean_workspace_uses_packaged_default_without_creating_data(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    path = ensure_default_memory_config_file(workspace=workspace)
+
+    assert path.name == "config.local.toml"
+    assert "plugin-data" not in path.parts
+    assert not (workspace / "plugin-data").exists()
 
 
 def test_default_memory_config_reads_example_defaults() -> None:
