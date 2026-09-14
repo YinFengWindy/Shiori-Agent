@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -54,6 +55,7 @@ def contribute_to_list[T](
     四类列表型 capability（tool hook / proactive gate / channel / bot command）
     共用此实现，保证登记与撤销形状一致；移除守卫使重复处置保持幂等。
     """
+    effects.ensure_active(label)
     target.append(item)
 
     def discard() -> None:
@@ -91,6 +93,7 @@ class ToolsCapability:
                 f"插件 {self._plugin_id} 请求 tools 能力，但宿主未提供 ToolRegistry"
             )
         name = str(tool.name)
+        self._effects.ensure_active(f"tool:{name}")
         self._registry.register(
             tool,
             risk=risk,
@@ -141,6 +144,7 @@ class LifecycleCapability:
     def contribute(self, slot: str, modules: list[object]) -> None:
         if slot not in PHASE_SLOTS:
             raise ValueError(f"未知 phase 槽位: {slot}")
+        self._effects.ensure_active(f"phase:{slot}")
         target = self._contributions.phase_modules[slot]
         target.extend(modules)
 
@@ -295,6 +299,7 @@ class RpcCapability:
         from desktop_bridge.method_policy import Concurrency, Handler, MethodPolicy
 
         full_name = f"plugin.{self._plugin_id}.{name}"
+        self._effects.ensure_active(f"rpc:{full_name}")
         policy = MethodPolicy(
             concurrency=concurrency or Concurrency.MUTATION,
             admission_exempt=admission_exempt,
@@ -314,6 +319,13 @@ class BackgroundCapability:
         self._plugin_id = plugin_id
 
     def spawn(self, coro: Any, *, name: str) -> asyncio.Task[Any]:
+        """启动作用域任务；开始卸载后拒绝启动并关闭尚未运行的协程。"""
+        try:
+            self._effects.ensure_active(f"background:{name}")
+        except RuntimeError:
+            if inspect.iscoroutine(coro):
+                coro.close()
+            raise
         task: asyncio.Task[Any] = asyncio.create_task(
             coro, name=f"plugin:{self._plugin_id}:{name}"
         )

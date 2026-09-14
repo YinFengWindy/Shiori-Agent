@@ -22,8 +22,9 @@ logger = logging.getLogger("plugin.observe")
 async def setup(ctx: "PluginRuntimeContext") -> None:
     """装配 observe：workspace 存在时启动 writer/retention 后台任务并订阅遥测事件。
 
-    登记顺序刻意保持 [writer 后台任务, retention 后台任务, 全局错误采集器,
-    三个事件订阅]：卸载按 LIFO 逆序处置，因此实际清理顺序是
+    宿主首先停用并退订事件，与订阅的登记位置无关。其它资源仍刻意保持
+    [writer 后台任务, retention 后台任务, 全局错误采集器] 的登记顺序，
+    按 LIFO 逆序处置，因此实际清理顺序是
     事件订阅 -> 采集器 uninstall（把内存中缓冲的错误 flush 进队列）->
     retention 任务取消 -> writer 任务最后取消，writer 任务的取消时机晚于
     采集器 flush，保证 flush 出的最后一批错误仍有机会被 writer 写盘——
