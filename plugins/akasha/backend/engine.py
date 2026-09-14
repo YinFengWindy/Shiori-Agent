@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import logging
 import sqlite3
 import threading
 from contextlib import closing
@@ -72,6 +73,9 @@ from .store import AkashaStore
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from core.net.http import SharedHttpResources
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -178,9 +182,11 @@ class AkashaMemoryEngine:
         if stale and self._session_db_path.exists():
             try:
                 idf = build_idf_table(sessions_db, conn)
-                print(f"[akasha] built FTS IDF table: {len(idf)} tokens")
+                logger.info("[akasha] built FTS IDF table: %d tokens", len(idf))
             except Exception as exc:  # noqa: BLE001
-                print(f"[akasha] IDF build failed, falling back to no-filter: {exc}")
+                logger.warning(
+                    "[akasha] IDF build failed, falling back to no-filter: %s", exc
+                )
                 set_idf_table({})
                 return
         idf = load_idf_from_db(conn)
