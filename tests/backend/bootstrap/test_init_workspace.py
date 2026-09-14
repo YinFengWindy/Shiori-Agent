@@ -1,5 +1,6 @@
 import json
 import importlib
+import shutil
 import sys
 from pathlib import Path
 
@@ -83,6 +84,12 @@ def test_frozen_workspace_copies_the_bundled_template(
     template.parent.mkdir(parents=True)
     original = workspace_init.CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8")
     template.write_text(original + "\n# bundled template\n", encoding="utf-8")
+    # A frozen workspace must initialize memory from its own bundled package.
+    _ = shutil.copytree(
+        REPOSITORY_ROOT / "plugins/default_memory/backend",
+        tmp_path / "bundle/plugins/default_memory/backend",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
     with monkeypatch.context() as scoped:
         scoped.setattr(sys, "_MEIPASS", str(tmp_path / "bundle"), raising=False)
         importlib.reload(workspace_init)

@@ -694,6 +694,10 @@ def test_wiring_error_messages_list_available_choices():
 
 
 def test_memory_plugin_registry_accepts_custom_engine(monkeypatch):
+    import bootstrap.wiring as wiring
+
+    monkeypatch.setattr(wiring, "_MEMORY_PLUGIN_WIRING", {})
+
     class _Plugin:
         plugin_id = "custom"
 
@@ -706,7 +710,7 @@ def test_memory_plugin_registry_accepts_custom_engine(monkeypatch):
 
 
 def test_memory_plugin_resolver_loads_plugin_directory(monkeypatch, tmp_path: Path):
-    plugin_dir = tmp_path / "plugins" / "demo_memory"
+    plugin_dir = tmp_path / "plugins" / "demo_memory" / "backend"
     plugin_dir.mkdir(parents=True)
     (plugin_dir / "memory_plugin.py").write_text(
         "\n".join(
@@ -721,11 +725,48 @@ def test_memory_plugin_resolver_loads_plugin_directory(monkeypatch, tmp_path: Pa
         ),
         encoding="utf-8",
     )
-    import bootstrap.wiring as wiring
-
-    monkeypatch.setattr(wiring, "_PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        "bootstrap.memory_plugins.plugin_roots", lambda: [tmp_path / "plugins"]
+    )
 
     assert resolve_memory_plugin("demo_memory").plugin_id == "demo_memory"
+
+
+@pytest.mark.parametrize("name", ["default", "akasha"])
+def test_memory_plugin_resolver_loads_real_packages(name):
+    from core.memory.plugin import MemoryPlugin
+
+    plugin = resolve_memory_plugin(name)
+
+    assert isinstance(plugin, MemoryPlugin)
+    assert plugin.plugin_id == name
+    assert type(resolve_memory_plugin(name)) is type(plugin)
+
+
+@pytest.mark.parametrize("name", ["../akasha", "a/b", "a\\b", "a.b", "C:akasha"])
+def test_memory_plugin_resolver_rejects_invalid_names(name):
+    with pytest.raises(ValueError, match="名称非法"):
+        resolve_memory_plugin(name)
+
+
+@pytest.mark.parametrize(
+    ("source", "error", "message"),
+    [
+        ("raise RuntimeError('broken engine')", RuntimeError, "broken engine"),
+        ("value = 1", ValueError, "缺少"),
+        ("def create_memory_plugin(): return object()", TypeError, "未返回"),
+    ],
+)
+def test_memory_plugin_resolver_propagates_invalid_entry_errors(
+    tmp_path, monkeypatch, source, error, message
+):
+    backend = tmp_path / "broken" / "backend"
+    backend.mkdir(parents=True)
+    (backend / "memory_plugin.py").write_text(source, encoding="utf-8")
+    monkeypatch.setattr("bootstrap.memory_plugins.plugin_roots", lambda: [tmp_path])
+
+    with pytest.raises(error, match=message):
+        resolve_memory_plugin("broken")
 
 
 @pytest.mark.asyncio

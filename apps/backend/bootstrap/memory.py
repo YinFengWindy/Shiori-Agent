@@ -16,6 +16,7 @@ from core.memory.plugin import (
 from core.memory.runtime import MemoryRuntime
 from core.net.http import SharedHttpResources
 from bootstrap.runtime.construction import track_build_closeables
+from bootstrap.memory_plugins import normalize_memory_engine
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
@@ -35,7 +36,7 @@ def _build_memory_plugin_runtime(
 ) -> MemoryPluginRuntime:
     from bootstrap.wiring import resolve_memory_plugin
 
-    engine_name = (config.memory.engine or "").strip() or "default"
+    engine_name = normalize_memory_engine(config.memory.engine)
     plugin = resolve_memory_plugin(engine_name)
     return plugin.build(
         MemoryPluginBuildDeps(
@@ -60,7 +61,7 @@ def ensure_memory_plugin_storage(
 ) -> list[tuple[Path, bool]]:
     if not _memory_plugin_enabled(config):
         return []
-    engine_name = (config.memory.engine or "").strip() or "default"
+    engine_name = normalize_memory_engine(config.memory.engine)
     from bootstrap.wiring import resolve_memory_plugin
 
     plugin = resolve_memory_plugin(engine_name)

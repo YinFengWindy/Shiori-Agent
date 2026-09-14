@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, rm } from "node:fs/promises";
 import { basename, delimiter, join, relative, resolve, sep } from "node:path";
 import { resolveReleaseManifest } from "./release-manifest.mjs";
+import { collectPluginBackendModules } from "./runtime-plugin-modules.mjs";
 
 const releaseManifest = resolveReleaseManifest();
 const { backendRoot, repositoryRoot } = releaseManifest;
@@ -19,10 +20,9 @@ await mkdir(runtimeRoot, { recursive: true });
 
 // Plugin packages keep their own `tests/` alongside their source (see
 // plugins/<id>/tests/), so a plain directory copy would ship pytest-only
-// modules (~925K) to end users and make PyInstaller's submodule collector
-// try to import them. Stage a filtered copy of `plugins/` that drops each
-// plugin's `tests/` directory and `__pycache__`, then point PyInstaller at
-// the staging copy instead of the real source tree.
+// modules (~925K) to end users. Stage a filtered copy of `plugins/` that
+// drops each plugin's `tests/` directory and `__pycache__`, then point
+// PyInstaller at the staging copy instead of the real source tree.
 const stagingRoot = resolve(workRoot, "plugins-staging");
 await mkdir(stagingRoot, { recursive: true });
 const stagedPluginsDir = join(stagingRoot, "plugins");
@@ -43,6 +43,10 @@ await cp(pluginsSourceDir, stagedPluginsDir, {
   },
 });
 
+// Namespace directories have no __init__.py, so collect-submodules("plugins")
+// misses their backends. Analyze actual backend modules to retain transitive
+// host/third-party dependencies used by dynamically loaded plugin entry points.
+const pluginModules = await collectPluginBackendModules(stagedPluginsDir);
 const dataSeparator = delimiter;
 const args = [
   "-m",
@@ -70,8 +74,7 @@ const args = [
   `${join(repositoryRoot, "apps", "desktop", "renderer", "src", "chat", "common_emojis.json")}${dataSeparator}.`,
   "--add-data",
   `${join(repositoryRoot, "config", "examples", "config.example.toml")}${dataSeparator}config/examples`,
-  "--collect-submodules",
-  "plugins",
+  ...pluginModules.flatMap((name) => ["--hidden-import", name]),
   "--collect-submodules",
   "desktop_bridge",
   "--collect-submodules",

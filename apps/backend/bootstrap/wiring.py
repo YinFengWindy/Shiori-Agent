@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from agent.context import ContextBuilder
 from agent.lifecycle.facade import TurnLifecycle
 from agent.tools.base import Tool
+from bootstrap.memory_plugins import load_memory_plugin_module, normalize_memory_engine
 from bootstrap.toolsets.mcp import McpToolsetProvider
 from bootstrap.toolsets.memory import MemoryToolsetProvider
 from bootstrap.toolsets.meta import CommonMetaToolsetProvider, SpawnToolsetProvider
@@ -22,7 +21,6 @@ if TYPE_CHECKING:
 ContextFactory = Callable[[Path, Any], Any]
 ToolsetProviderFactory = Callable[[], ToolsetProvider]
 MemoryPluginFactory = Callable[[], MemoryPlugin]
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 _MEMORY_WIRING: dict[str, ToolsetProviderFactory] = {
     "default": MemoryToolsetProvider,
@@ -30,16 +28,7 @@ _MEMORY_WIRING: dict[str, ToolsetProviderFactory] = {
 
 
 def _build_default_memory_plugin() -> MemoryPlugin:
-    module = importlib.import_module(
-        "plugins." + "default_memory.backend.memory_plugin"
-    )
-    plugin_cls = getattr(module, "MemoryPlugin", None)
-    if plugin_cls is None:
-        raise ImportError("default_memory 插件入口不可用")
-    plugin = plugin_cls()
-    if not isinstance(plugin, MemoryPlugin):
-        raise TypeError("default_memory 插件入口类型错误")
-    return plugin
+    return _load_memory_plugin_from_dir("default")
 
 
 _MEMORY_PLUGIN_WIRING: dict[str, MemoryPluginFactory] = {
@@ -84,45 +73,28 @@ def resolve_memory_toolset_provider(name: str) -> ToolsetProvider:
 
 
 def resolve_memory_plugin(name: str) -> MemoryPlugin:
-    normalized = (name or "default").strip() or "default"
+    """Resolve only the selected engine; import/build errors never select another."""
+    normalized = normalize_memory_engine(name)
     if normalized in _MEMORY_PLUGIN_WIRING:
         return _MEMORY_PLUGIN_WIRING[normalized]()
-    plugin = _load_memory_plugin_from_dir(normalized)
-    if plugin is None:
-        choices = ", ".join(sorted(_MEMORY_PLUGIN_WIRING))
-        raise ValueError(f"未知 memory engine: {normalized}；可选值: {choices}")
-    return plugin
+    return _load_memory_plugin_from_dir(normalized)
 
 
 def register_memory_plugin(
     name: str,
     factory: MemoryPluginFactory,
 ) -> None:
+    """Register an explicit memory engine factory without activating it."""
     normalized = name.strip()
     if not normalized:
         raise ValueError("memory engine 名称不能为空")
+    normalized = normalize_memory_engine(normalized)
     _MEMORY_PLUGIN_WIRING[normalized] = factory
 
 
-def _load_memory_plugin_from_dir(name: str) -> MemoryPlugin | None:
-    if "/" in name or "\\" in name or ".." in name:
-        raise ValueError(f"memory engine 名称非法: {name}")
-    candidates = [
-        _PROJECT_ROOT / "plugins" / name / "memory_plugin.py",
-        _PROJECT_ROOT.parent.parent / "plugins" / name / "backend" / "memory_plugin.py",
-    ]
-    plugin_path = next((path for path in candidates if path.exists()), candidates[0])
-    if not plugin_path.exists():
-        return None
-    module_name = f"akasic_memory_plugin_{name}"
-    spec = importlib.util.spec_from_file_location(
-        module_name, plugin_path, submodule_search_locations=[str(plugin_path.parent)]
-    )
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load {plugin_path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)  # type: ignore[union-attr]
+def _load_memory_plugin_from_dir(name: str) -> MemoryPlugin:
+    module = load_memory_plugin_module(name, "memory_plugin")
+    plugin_path = module.__file__
     if hasattr(module, "create_memory_plugin"):
         plugin = module.create_memory_plugin()
     elif hasattr(module, "MemoryPlugin"):

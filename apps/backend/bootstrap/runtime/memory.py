@@ -1,9 +1,9 @@
 """Checks persistent vector compatibility before preparing a memory version."""
 
 from pathlib import Path
-import importlib
 
 from agent.config_models import Config
+from bootstrap.memory_plugins import load_memory_plugin_module, normalize_memory_engine
 
 
 class MemoryStorageIncompatibleError(ValueError):
@@ -22,10 +22,10 @@ def validate_memory_transition(
     """Rejects incompatible vector spaces without silently rebuilding stored data."""
     if (
         not candidate.memory.enabled
-        or (candidate.memory.engine or "default") != "default"
+        or normalize_memory_engine(candidate.memory.engine) != "default"
     ):
         return
-    module = importlib.import_module("plugins." + "default_memory.backend.config")
+    module = load_memory_plugin_module("default", "config")
     load_default_memory_config = module.load_default_memory_config
     resolve_memory_db_path = module.resolve_memory_db_path
     from memory2.store import VEC_DIM
