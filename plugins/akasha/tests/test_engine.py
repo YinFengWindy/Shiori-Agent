@@ -27,11 +27,13 @@ def test_idf_startup_reports_through_logging(
     engine._session_db_path = sessions_path
     engine._store = store
 
-    def fail_build(*_args: object):
-        raise RuntimeError("IDF test failure")
+    def build_idf(*_args: object):
+        if build_fails:
+            raise RuntimeError("IDF test failure")
+        return {"example": 1.0}
 
-    if build_fails:
-        monkeypatch.setattr(core, "build_idf_table", fail_build)
+    # Diagnostics must not depend on the tokenizer's first-import behavior.
+    monkeypatch.setattr(core, "build_idf_table", build_idf)
     caplog.set_level(logging.INFO, logger="plugins.akasha.backend.engine")
     try:
         engine._ensure_idf_table()
@@ -39,5 +41,5 @@ def test_idf_startup_reports_through_logging(
         store.close()
 
     assert capsys.readouterr().out == ""
-    expected = "IDF test failure" if build_fails else "built FTS IDF table: 0 tokens"
+    expected = "IDF test failure" if build_fails else "built FTS IDF table: 1 tokens"
     assert expected in caplog.text
