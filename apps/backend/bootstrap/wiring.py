@@ -30,11 +30,10 @@ _MEMORY_WIRING: dict[str, ToolsetProviderFactory] = {
 
 
 def _build_default_memory_plugin() -> MemoryPlugin:
-    from plugins.default_memory.backend.memory_plugin import (
-        MemoryPlugin as DefaultMemoryPlugin,
-    )
-
-    return DefaultMemoryPlugin()
+    plugin = _load_memory_plugin_from_dir("default_memory")
+    if plugin is None:
+        raise ImportError("default_memory 插件不可用")
+    return plugin
 
 
 _MEMORY_PLUGIN_WIRING: dict[str, MemoryPluginFactory] = {
@@ -102,11 +101,13 @@ def register_memory_plugin(
 def _load_memory_plugin_from_dir(name: str) -> MemoryPlugin | None:
     if "/" in name or "\\" in name or ".." in name:
         raise ValueError(f"memory engine 名称非法: {name}")
-    plugin_path = _PROJECT_ROOT / "plugins" / name / "memory_plugin.py"
+    plugin_path = _PROJECT_ROOT.parent.parent / "plugins" / name / "backend" / "memory_plugin.py"
     if not plugin_path.exists():
         return None
     module_name = f"akasic_memory_plugin_{name}"
-    spec = importlib.util.spec_from_file_location(module_name, plugin_path)
+    spec = importlib.util.spec_from_file_location(
+        module_name, plugin_path, submodule_search_locations=[str(plugin_path.parent)]
+    )
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load {plugin_path}")
     module = importlib.util.module_from_spec(spec)
