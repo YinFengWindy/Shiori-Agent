@@ -649,6 +649,11 @@ class _PassiveReasoningLoopMixin:
                         "content": "你刚才只输出了思考过程，没有给出正式回复。请直接回复用户，不要重复思考。",
                     }
                 )
+                threshold = int(getattr(self, "_memory_input_token_threshold", 0))
+                if threshold > 0 and self._request_tokens_with_tools(messages, []) >= threshold:
+                    raise ContextLengthError(
+                        "空回复重试追加提示后输入超过预算，已停止继续调用模型。"
+                    )
                 retry_response = await self._llm.provider.chat(
                     messages=messages,
                     tools=[],
