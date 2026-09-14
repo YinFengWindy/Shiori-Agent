@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { SettingsSaveFeedback } from "./SettingsSaveFeedback";
+import { SettingsPageLayout, settingsPageSurfaceClass } from "./SettingsPageLayout";
 import { SettingsSectionContent } from "./SettingsSectionContent";
 import type { SettingsSectionId } from "./SettingsSidebar";
 import {
@@ -18,12 +19,6 @@ type SettingsPageProps = {
   isSectionVisible?: (sectionId: SettingsSectionId) => boolean;
 };
 
-/** Shared surface style for every settings page state. */
-export const settingsPageSurfaceClass = "settings-page bg-gradient-app bg-fixed";
-
-/** Responsive spacing for the scrollable settings content. */
-export const settingsContentClass = "relative scrollbar-soft overflow-y-auto px-4 py-8 sm:px-10 lg:px-16 lg:py-10";
-
 /**
  * Renders the active settings domain and delegates persistence to its
  * controller. A "standalone" section (About, and any plugin-contributed
@@ -40,7 +35,11 @@ export function SettingsPage({
   if (entry?.kind === "standalone") {
     const StandaloneComponent = entry.Component;
     const subsectionId = entry.subsections[0]?.id ?? "";
-    return <StandaloneComponent subsectionId={subsectionId} />;
+    return (
+      <SettingsPageLayout>
+        <StandaloneComponent subsectionId={subsectionId} />
+      </SettingsPageLayout>
+    );
   }
   return <EditableSettingsPage bridgeReady={bridgeReady} section={section} isSectionVisible={isSectionVisible} />;
 }
@@ -90,56 +89,53 @@ function EditableSettingsPage({
   }
 
   return (
-    <section className={cx(settingsPageSurfaceClass, "relative grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden")} data-testid="settings-page">
-      <div>
+    <SettingsPageLayout
+      feedback={
         <SettingsSaveFeedback
           phase={controller.savePhase}
           message={controller.statusMessage}
           onRetry={controller.retrySave}
           onReload={controller.reloadSettings}
         />
-      </div>
-      <div className={settingsContentClass}>
-        <div className="mx-auto w-full max-w-[840px]">
-          {!currentSection ? (
-            <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-ink-muted")}>
-              没有匹配的设置项
-            </div>
-          ) : (
-            <header className="mb-6">
-              <h2 className="m-0 font-display text-headline text-ink">{currentSection.label}</h2>
-              {visibleSubsections.length > 1 ? (
-                <nav className="mt-7 flex max-w-full gap-7 overflow-x-auto" aria-label="设置子区">
-                  {visibleSubsections.map((item) => (
-                    <button
-                      className={cx(
-                        "relative shrink-0 border-0 bg-transparent px-0 pb-2 text-[13px] transition focus:outline-none",
-                        item.id === currentSubsectionId
-                          ? "font-medium text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-accent"
-                          : "text-ink-faint hover:text-ink-secondary",
-                      )}
-                      key={item.id}
-                      type="button"
-                      aria-current={item.id === currentSubsectionId ? "page" : undefined}
-                      onClick={() => updateActiveSubsection(item.id)}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </nav>
-              ) : null}
-            </header>
-          )}
-          {currentId && currentSubsectionId ? (
-            <SettingsSectionContent
-              sectionId={currentId}
-              subsectionId={currentSubsectionId}
-              draft={controller.draft}
-              updateDraft={controller.updateDraft}
-            />
-          ) : null}
+      }
+    >
+      {!currentSection ? (
+        <div className={cx(cardClass, "grid min-h-[240px] place-items-center border-dashed text-sm text-ink-muted")}>
+          没有匹配的设置项
         </div>
-      </div>
-    </section>
+      ) : (
+        <header className="mb-6">
+          <h2 className="m-0 font-display text-headline text-ink">{currentSection.label}</h2>
+          {visibleSubsections.length > 1 ? (
+            <nav className="mt-7 flex max-w-full gap-7 overflow-x-auto" aria-label="设置子区">
+              {visibleSubsections.map((item) => (
+                <button
+                  className={cx(
+                    "relative shrink-0 border-0 bg-transparent px-0 pb-2 text-[13px] transition focus:outline-none",
+                    item.id === currentSubsectionId
+                      ? "font-medium text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-accent"
+                      : "text-ink-faint hover:text-ink-secondary",
+                  )}
+                  key={item.id}
+                  type="button"
+                  aria-current={item.id === currentSubsectionId ? "page" : undefined}
+                  onClick={() => updateActiveSubsection(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          ) : null}
+        </header>
+      )}
+      {currentId && currentSubsectionId ? (
+        <SettingsSectionContent
+          sectionId={currentId}
+          subsectionId={currentSubsectionId}
+          draft={controller.draft}
+          updateDraft={controller.updateDraft}
+        />
+      ) : null}
+    </SettingsPageLayout>
   );
 }

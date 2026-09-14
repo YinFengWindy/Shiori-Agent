@@ -37,7 +37,8 @@ export type EditorSettingsSectionEntry = {
  * A settings section that owns its own data end to end (schema-driven
  * plugin forms, custom plugin React components, and the built-in About
  * page). It never touches the shared settings draft, so it can render
- * before that draft has loaded and never blocks on it.
+ * before that draft has loaded and never blocks on it. SettingsPage owns
+ * the surrounding surface, padding and scroll area; components render content.
  */
 export type StandaloneSettingsSectionEntry = {
   kind: "standalone";
