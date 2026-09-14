@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -17,6 +16,7 @@ from .helpers import (
 from .reasoning_loop import _PassiveReasoningLoopMixin
 from .reasoning_result import _PassiveReasoningResultMixin
 from agent.core.runtime_support import ToolDiscoveryState
+from agent.core import passive_support
 from agent.core.types import ReasonerResult
 from agent.lifecycle.phase import Phase
 from agent.lifecycle.phases.after_step import AfterStepFrame, default_after_step_modules
@@ -56,16 +56,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger("agent.core.passive_turn")
 
 _SAFETY_RETRY_RATIOS = (1.0, 0.5, 0.0)
-
-
-def _estimate_request_tokens(messages: list[dict], tools: list[dict]) -> int:
-    """Estimate serialized provider input, including tool schemas."""
-    payload = json.dumps(
-        {"messages": messages, "tools": tools},
-        ensure_ascii=False,
-        default=str,
-    )
-    return max(1, len(payload) // 3) if payload else 0
 
 
 def _disabled_tools_from_msg(msg: object) -> set[str]:
@@ -411,7 +401,9 @@ class DefaultReasoner(
                         name for name in schema_names if name not in disabled_tools
                     ]
                 schemas = self._tools.get_schemas(names=schema_names)
-                request_tokens = _estimate_request_tokens(initial_messages, schemas)
+                request_tokens = passive_support.estimate_messages_tokens(
+                    initial_messages, schemas
+                )
                 if (
                     self._memory_input_token_threshold <= 0
                     or request_tokens < self._memory_input_token_threshold

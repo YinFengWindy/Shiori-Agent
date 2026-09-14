@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from agent.llm_json import load_json_object_loose
 from agent.prompting import is_context_frame
+from agent.core.passive_support import estimate_messages_tokens
 
 from .contracts import _ConsolidationWindow
 
@@ -131,12 +132,13 @@ def _estimate_session_input_tokens(session: object, current_content: str = "") -
         history = messages[max(0, int(getattr(session, "last_consolidated", 0))) :]
     if not isinstance(history, list):
         history = list(messages)
-    payload = json.dumps(history, ensure_ascii=False, default=str)
+    estimate_messages = history
     if current_content:
-        payload += json.dumps(
-            {"role": "user", "content": current_content}, ensure_ascii=False
-        )
-    return max(1, len(payload) // 3) if payload else 0
+        estimate_messages = [
+            *history,
+            {"role": "user", "content": current_content},
+        ]
+    return estimate_messages_tokens(estimate_messages)
 
 
 def _build_consolidation_source_ref(window: _ConsolidationWindow) -> str:

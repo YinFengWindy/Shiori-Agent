@@ -208,11 +208,25 @@ def log_preview(value: object, limit: int = _LOG_PREVIEW_LIMIT) -> str:
     return text[:limit] + "..."
 
 
-def estimate_messages_tokens(messages: list[dict]) -> int:
-    if not messages:
+def estimate_messages_tokens(
+    messages: list[dict],
+    tools: list[dict] | None = None,
+    *,
+    safety_tokens: int = 0,
+) -> int:
+    """Conservatively estimate provider input tokens for messages and tools.
+
+    The shared estimator keeps all request paths on the same serialization and
+    safety margin instead of each caller maintaining a subtly different formula.
+    """
+    if not messages and not tools:
         return 0
-    payload = json.dumps(messages, ensure_ascii=False)
-    return max(1, len(payload) // 3)
+    payload = json.dumps(
+        {"messages": messages, "tools": tools or []},
+        ensure_ascii=False,
+        default=str,
+    )
+    return max(1, len(payload) // 3 + max(0, int(safety_tokens)))
 
 
 def predict_current_user_source_ref(

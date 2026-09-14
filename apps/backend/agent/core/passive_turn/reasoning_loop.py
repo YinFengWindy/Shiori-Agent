@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import json
 from datetime import datetime
 from typing import Any, Awaitable, Callable
 
@@ -43,12 +42,7 @@ class _PassiveReasoningLoopMixin:
     _tools: ToolRegistry
 
     def _request_tokens_with_tools(self, messages: list[dict], schemas: list[dict]) -> int:
-        payload = json.dumps(
-            {"messages": messages, "tools": schemas},
-            ensure_ascii=False,
-            default=str,
-        )
-        return max(1, len(payload) // 3) if payload else 0
+        return support.estimate_messages_tokens(messages, schemas)
 
     async def run(
         self,
