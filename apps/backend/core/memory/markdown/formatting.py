@@ -94,6 +94,13 @@ def _select_consolidation_window(
         consolidate_up_to = total_messages - keep_count
         if total_messages <= keep_count:
             consolidate_up_to = total_messages
+    # Never advance the cursor into the middle of a tool exchange. A tool
+    # result belongs to the assistant tool-call message immediately before it.
+    while consolidate_up_to > session.last_consolidated:
+        tail = session.messages[consolidate_up_to - 1]
+        if str(tail.get("role") or "").lower() != "tool":
+            break
+        consolidate_up_to -= 1
     old_messages = session.messages[session.last_consolidated : consolidate_up_to]
     if not old_messages:
         return None

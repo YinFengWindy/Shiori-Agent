@@ -56,7 +56,11 @@ def _format_recent_context_messages(
         if role == "assistant":
             preview = content[:60]
             if preview:
-                lines.append(f"[a-preview] {preview}")
+                message_id = str(message.get("id") or "").strip()
+                source_ref = str(message.get("source_ref") or "").strip()
+                ref = message_id or source_ref
+                suffix = f" (ref:{ref})" if ref else ""
+                lines.append(f"[a-preview{suffix}] {preview}")
             continue
         lines.append(f"[user] {content}")
     return "\n".join(lines).strip()
