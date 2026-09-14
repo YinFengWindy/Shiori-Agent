@@ -12,6 +12,7 @@ from core.common.runtime_tasks import create_runtime_task
 from .auto_cg import AutoCgPolicy
 from .scene_prompt import prepare_scene_prompt
 from .tool import GenerateImageTool
+
 logger = logging.getLogger(__name__)
 
 _MAX_GENERATION_RETRIES = 1

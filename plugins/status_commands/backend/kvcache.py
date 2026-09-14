@@ -17,6 +17,7 @@ from .formatting import content_to_text, preview_text
 if TYPE_CHECKING:
     from agent.lifecycle.phases.before_turn import BeforeTurnFrame
     from agent.lifecycle.types import TurnState
+
     KVCacheTurn = Any
     ObserveTelemetry = Any
 

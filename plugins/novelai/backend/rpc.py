@@ -21,6 +21,7 @@ from .prompt_tags import PromptTagStore
 from .service import NovelAIService
 from .store import NovelAIStore
 
+
 class NovelAIRpcHandlers:
     """Owns the request/response shaping for every ``plugin.novelai.*`` method."""
 

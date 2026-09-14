@@ -15,14 +15,16 @@ from core.common.runtime_tasks import create_runtime_task
 
 from .catalog import StoryCatalog
 from .director import ProviderStoryDirector, StoryDirector
-from .errors import (    StoryNotFoundError,
+from .errors import (
+    StoryNotFoundError,
     StoryProviderUnavailableError,
 )
 
 from .models import StoryPlayerProfile, StoryVisualType
 from .repository import StoryRepository, payload_hash
 from .service import StorySimulationService
-from .story_time import (    normalize_story_date,
+from .story_time import (
+    normalize_story_date,
     normalize_story_time_band,
 )
 

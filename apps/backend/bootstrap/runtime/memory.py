@@ -25,8 +25,16 @@ def validate_memory_transition(
         or (candidate.memory.engine or "default") != "default"
     ):
         return
-    config_path = Path(__file__).resolve().parents[3] / "plugins" / "default_memory" / "backend" / "config.py"
-    spec = importlib.util.spec_from_file_location("akasic_default_memory_config", config_path)
+    config_path = (
+        Path(__file__).resolve().parents[3]
+        / "plugins"
+        / "default_memory"
+        / "backend"
+        / "config.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "akasic_default_memory_config", config_path
+    )
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load {config_path}")
     module = importlib.util.module_from_spec(spec)

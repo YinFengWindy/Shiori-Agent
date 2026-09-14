@@ -7,11 +7,13 @@ from core.memory.plugin import (
     MemoryPluginBuildDeps,
     MemoryPluginRuntime,
 )
-from .config import (    ensure_default_memory_config_file,
+from .config import (
+    ensure_default_memory_config_file,
     load_default_memory_config,
     resolve_memory_db_path,
 )
 from .engine import DefaultMemoryEngine
+
 
 class MemoryPlugin:
     plugin_id = "default"

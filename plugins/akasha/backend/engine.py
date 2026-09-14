@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from .core import (    # Types shared with core
+from .core import (  # Types shared with core
     ActivationEventRow,
     ActivationTrace,
     AkashaActivationSnapshot,
@@ -68,6 +68,7 @@ from memory2.embedder import Embedder
 
 from .config import AkashaConfig, resolve_akasha_db_path
 from .store import AkashaStore
+
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from core.net.http import SharedHttpResources
@@ -161,7 +162,8 @@ class AkashaMemoryEngine:
 
     # 启动时自动检查 / 建 FTS IDF 表。缺失或漂移过大时重建。
     def _ensure_idf_table(self) -> None:
-        from .core import (            build_idf_table,
+        from .core import (
+            build_idf_table,
             idf_table_is_stale,
             load_idf_from_db,
             set_idf_table,

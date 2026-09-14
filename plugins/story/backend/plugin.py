@@ -10,6 +10,7 @@ from core.roles import RoleStore
 from .errors import StorySimulationError
 from .rpc import StorySimulationHandler
 
+
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Registers Story RPC, storage, background work and its required NovelAI API."""
     from desktop_bridge.method_policy import Concurrency

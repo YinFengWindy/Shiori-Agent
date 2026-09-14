@@ -17,7 +17,8 @@ from core.common.media import detect_image_mime_from_header
 from core.roles.store import RoleStore
 
 from .client import NovelAIClient
-from .models import (    GenerateImageRequest,
+from .models import (
+    GenerateImageRequest,
     GenerateImageResult,
     GeneratedImageRecord,
     NovelAIGenerationSource,
@@ -28,6 +29,7 @@ from .models import (    GenerateImageRequest,
 from .prompt_tags import PromptTagStore
 from .prompt_validation import validate_novelai_prompt
 from .store import NovelAIStore
+
 _SIZE_PRESETS: dict[str, tuple[int, int]] = {
     "square": (1024, 1024),
     "landscape": (1216, 832),

@@ -9,6 +9,7 @@ from agent.tools.base import Tool
 from .models import GenerateImageRequest
 from .service import NovelAIService
 
+
 class GenerateImageTool(Tool):
     """Generate an image through the NovelAI service and return a structured result."""
 

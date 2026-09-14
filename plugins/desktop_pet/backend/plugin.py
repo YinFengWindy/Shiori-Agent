@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from .rpc import DesktopPetRpcHandlers
 from .tool import DesktopPetActionTool
+
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 

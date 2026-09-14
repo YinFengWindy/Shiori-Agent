@@ -13,7 +13,8 @@ import numpy as np
 
 
 from .config import AkashaConfig
-from .core import (    ActivationEventRow,
+from .core import (
+    ActivationEventRow,
     ActivationTrace,
     ActivationUpdate,
     AkashaActivationSnapshot,
@@ -34,7 +35,8 @@ from .core import (    ActivationEventRow,
     parse_ts_unix,
     turn_key,
 )
-from .engine import (    AkashaCard,
+from .engine import (
+    AkashaCard,
     _candidate_signals,
     _card_dedupe_key,
     _format_cards,

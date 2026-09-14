@@ -7,6 +7,7 @@ import httpx
 from core.net.http import HttpRequester
 from .models import NovelAISettings
 
+
 class NovelAIClient:
     """Thin HTTP client responsible for calling the upstream NovelAI API."""
 

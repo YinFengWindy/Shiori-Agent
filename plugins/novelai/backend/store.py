@@ -8,7 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-from .models import (    GeneratedImageRecord,
+from .models import (
+    GeneratedImageRecord,
     NovelAIGenerationSource,
     NovelAIMode,
 )
