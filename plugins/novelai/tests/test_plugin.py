@@ -321,37 +321,12 @@ class _BlockingImageTool:
 def test_unload_unsubscribes_scene_observation_before_terminating_auto_cg(
     tmp_path: Path,
 ) -> None:
-    """Regression for an unload-ordering defect caught in review: in
-    ``setup()``, ``ctx.effect("auto_cg_controller", auto_cg_controller.terminate)``
-    must be registered *before* ``ctx.events.on(SceneObservationCommitted,
-    auto_cg_controller.schedule)`` — ``EffectScope.dispose_all`` pops LIFO
-    (last registered, first disposed), so registering the effect first is
-    what makes unload unsubscribe the event *before* awaiting
-    ``terminate()``. Get the order backwards and ``terminate()`` runs while
-    the subscription is still live.
+    """The host must unsubscribe before controller termination awaits task exit.
 
-    Modeled on ``plugins/scene_awareness/tests/test_plugin.py``'s
-    ``test_unload_unsubscribes_proactive_handler_before_terminating_controller``,
-    which caught the identical defect in that plugin (#183).
-
-    ``AutoCgController.terminate()`` snapshots ``self._tasks``, cancels each,
-    then awaits their completion. If ``SceneObservationCommitted`` is still
-    subscribed during that await, a scene observation landing in the window
-    calls ``schedule()`` and spawns a brand new task that is in neither the
-    snapshot nor ever awaited — an orphaned generation call, leaked forever
-    (``terminate()`` does not run a second time).
-
-    Deterministic by construction: the fake tool blocks the first task at
-    its one await point (``entered``/``release``), and a single
-    ``asyncio.sleep(0)`` after starting ``kernel.unload()`` is enough to run
-    its synchronous prefix — popping every effect down through
-    ``auto_cg_controller.terminate``, whose own body up to the ``gather`` is
-    synchronous too — without yet letting the cancelled first task's
-    ``CancelledError`` actually land. Reverse-verified by hand (not part of
-    this file): swapping the two registration lines back in ``plugin.py``
-    makes this test fail on ``call_count == 1`` (it observes 2); restoring
-    the fixed order makes it pass. Stable across 5 repeated runs in each
-    direction.
+    AutoCgController snapshots its running tasks before cancellation. An event
+    received while it awaits that snapshot could otherwise create an orphan.
+    This integration regression exercises the real controller; host event tests
+    additionally cover both setup registration orders and stale bus snapshots.
     """
     _ = RoleStore(tmp_path).create_role(
         role_id="mira",

@@ -49,7 +49,11 @@ class PluginRuntimeContext:
         return tuple(sorted(self._capabilities))
 
     def effect(self, label: str, dispose: Dispose) -> None:
-        """登记插件自定义副作用（连接、文件监听等），卸载时逆序撤销。"""
+        """登记资源清理；卸载先停用/退订 ctx.events.on，再逆序撤销其它 effect。
+
+        disposer 可同步或异步；单项失败仍继续清理。事件订阅与 effect 的登记
+        先后不影响退订优先规则；开始清理后拒绝新登记。
+        """
         self._effects.add(f"custom:{label}", dispose)
 
     def __getattr__(self, name: str) -> Any:

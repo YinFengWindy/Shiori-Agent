@@ -75,7 +75,7 @@ async def setup(ctx):
 
 | 能力 | 用途 |
 | --- | --- |
-| `events` | `ctx.events.on(EventType, handler)`；订阅自动随插件撤销 |
+| `events` | `ctx.events.on(EventType, handler)`；卸载先停用并退订，再清理其它 effect，与登记先后无关 |
 | `lifecycle` | `ctx.lifecycle.contribute(phase, modules)`；登记阶段模块 |
 | `tools` / `tool_hooks` | 注册工具或工具执行前处理器 |
 | `proactive_gates` | 贡献主动行为准入 gate |
@@ -91,7 +91,9 @@ async def setup(ctx):
 
 能力名的完整权威清单位于 `agent/plugin_host/manifest.py`。不要自己构造另一份 RoleStore 来写同一份角色文件，应获取宿主共享的 `role_store`。能力是架构边界，不是 Python 进程内安全沙箱。
 
-其它外部资源用 `ctx.effect("label", disposer)` 登记清理；disposer 可同步或异步。作用域按逆序处置，一项失败不会跳过剩余 effect。初始化抛错会撤销已登记贡献；再次启用使用新作用域，不能重复保留旧订阅。
+其它外部资源用 `ctx.effect("label", disposer)` 登记清理；disposer 可同步或异步。Python 插件作用域分两段处置：先停止接收新事件并撤销所有 `ctx.events.on` 订阅，再按登记的逆序（LIFO）清理其余 effect，包括自定义 disposer、后台任务与贡献。订阅和资源的登记先后不影响退订优先规则；其它资源之间仍需按依赖顺序登记，例如先登记 writer，再登记需要向 writer 最终 flush 的采集器，使采集器先清理。
+
+开始处置后拒绝新订阅、后台任务和资源登记；即使总线已选中某个 handler，只要它尚未开始也不会再调用。已经执行中的 handler 不会被强制取消，插件应在 disposer 中取消或等待其持有的任务。`ctx.events.off` 使用原始 handler 的对象身份退订，移除同一 handler 的重复订阅，重复退订安全。一项清理失败不会跳过剩余 effect。初始化抛错使用相同规则撤销已登记贡献；再次启用使用新作用域，不能重复保留旧订阅。
 
 ## 阶段与依赖
 

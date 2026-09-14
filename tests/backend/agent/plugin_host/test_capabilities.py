@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 
 import pytest
 
@@ -363,3 +364,61 @@ async def test_background_task_failure_does_not_break_dispose():
 
     # 后台任务自身异常不得让插件卸载失败
     assert await scope.dispose_all() == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("during_cleanup", [True, False])
+async def test_background_spawn_rejected_without_task_or_coroutine_leak(during_cleanup):
+    scope = EffectScope("demo")
+    capability = BackgroundCapability(scope, "demo")
+    started = []
+
+    async def worker():
+        started.append("started")
+
+    def spawn_late():
+        coro = worker()
+        before = asyncio.all_tasks()
+        with pytest.raises(RuntimeError, match="已处置"):
+            capability.spawn(coro, name="late")
+        assert asyncio.all_tasks() == before
+        assert inspect.getcoroutinestate(coro) == inspect.CORO_CLOSED
+
+    if during_cleanup:
+        scope.add("spawn-late", spawn_late)
+    assert await scope.dispose_all() == []
+    if not during_cleanup:
+        spawn_late()
+    await asyncio.sleep(0)
+    assert started == []
+
+
+@pytest.mark.asyncio
+async def test_closed_scope_rejects_contributions_before_mutating_registries():
+    scope = EffectScope("demo")
+    contributions = PluginContributions()
+    registry = _FakeRegistry()
+    rpc = PluginRpcRegistry()
+    target: list[str] = []
+
+    def register_late():
+        with pytest.raises(RuntimeError, match="已处置"):
+            contribute_to_list(target, "late", effects=scope, label="late")
+        with pytest.raises(RuntimeError, match="已处置"):
+            ToolsCapability(registry, scope, contributions, "demo").register(
+                _FakeTool()
+            )
+        with pytest.raises(RuntimeError, match="已处置"):
+            LifecycleCapability(contributions, scope).contribute(
+                "after_turn", [object()]
+            )
+        with pytest.raises(RuntimeError, match="已处置"):
+            RpcCapability(rpc, scope, "demo").register("ping", _ping)
+
+    scope.add("register-late", register_late)
+    assert await scope.dispose_all() == []
+    assert target == []
+    assert registry.registered == []
+    assert contributions.tool_names == []
+    assert contributions.phase_modules["after_turn"] == []
+    assert rpc.resolve("plugin.demo.ping") is None
