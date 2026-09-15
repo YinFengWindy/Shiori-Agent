@@ -13,5 +13,4 @@ test("bridge timeout policy keeps command classes explicit", () => {
   assert.equal(bridgeRequestTimeoutMs("plugin.sample.slow"), bridgeTimeoutPolicy.defaultRequest);
   assert.throws(() => bridgeRequestTimeoutMs("plugin.sample.slow", -1));
   assert.equal(bridgeRequestTimeoutMs("runtime.apply", 1), null);
-  assert.equal(bridgeRequestTimeoutMs("observation.analyze"), bridgeTimeoutPolicy.observation);
 });

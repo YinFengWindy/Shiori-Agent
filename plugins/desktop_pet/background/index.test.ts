@@ -7,7 +7,6 @@ import type {
 import petBackground, {
   desktopPetActionMethod,
   desktopPetCommandMethod,
-  desktopPetObservationMethod,
   desktopPetTrayEntryId,
 } from "./index";
 import { desktopPetSurfaceId } from "./controller";
@@ -93,7 +92,7 @@ function recorder(overrides: Partial<RecorderState> = {}): Recorder {
           return Promise.resolve(state.bindingAnswer() as T);
         },
       },
-      events: { on: (method, handler) => { events.set(method, handler); } },
+      events: { on: (method, handler) => { events.set(method, (payload) => handler(payload, { id: "test", type: "event", method, payload })); } },
       store: {
         read: () => Promise.resolve(state.stored),
         write: (value) => { state.stored = value; return Promise.resolve(); },
@@ -127,7 +126,7 @@ test("setup registers every subscription the pet needs, and one reclaiming effec
   assert.deepEqual([...fake.events.keys()].sort(), [
     desktopPetActionMethod,
     desktopPetCommandMethod,
-    desktopPetObservationMethod,
+    "chat.done", "session.updated", "system.lock-state", "plugin.desktop_pet.bubble.dismissed",
   ].sort());
   assert.deepEqual([...fake.settled.keys()], [desktopPetSurfaceId]);
 });
@@ -161,7 +160,7 @@ test("a failed restore is reported, not rethrown, so the contribution stays aliv
   // nothing retries it — the pet would stay dead until the app restarted.
   await assert.doesNotReject(petBackground.setup(fake.ctx));
   assert.deepEqual(fake.effects, ["desktop_pet_controller"]);
-  assert.deepEqual([...fake.events.keys()].length, 3);
+  assert.deepEqual([...fake.events.keys()].length, 6);
 });
 
 test("a sync command carries forceVisible through, and only when it is a boolean", async () => {
@@ -205,7 +204,7 @@ test("a command kind the host does not send is ignored rather than guessed at", 
   assert.equal(fake.surfaceCalls.length, before);
 });
 
-test("an observation payload reaches the surface as retained state", async () => {
+test("a role reply reaches the surface as retained state", async () => {
   const fake = recorder();
   await petBackground.setup(fake.ctx);
   await flush();
@@ -213,8 +212,8 @@ test("an observation payload reaches the surface as retained state", async () =>
   await flush();
   const before = fake.surfaceCalls.filter(([call]) => call === "setState").length;
 
-  fake.events.get(desktopPetObservationMethod)?.({ status: "observing", enabled: true, bubble: "hi", persistent: false });
 
+  fake.events.get("chat.done")?.({ role_id: "mira", reply: "hi" });
   assert.equal(fake.surfaceCalls.filter(([call]) => call === "setState").length, before + 1);
 });
 

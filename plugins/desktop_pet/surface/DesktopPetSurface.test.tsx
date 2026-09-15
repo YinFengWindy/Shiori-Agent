@@ -5,7 +5,6 @@ import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/te
 import { DesktopPetSurface } from "./DesktopPetSurface";
 import { petBubbleGap } from "./bubbleExtension";
 import type {
-  PluginSurfaceComponentProps,
   SurfacePlacement,
   SurfaceHandle,
 } from "../../../apps/desktop/renderer/src/surface/pluginSurfaceRegistry";
@@ -85,7 +84,6 @@ function fakeMiraDesktop() {
         eventListeners.push(listener);
         return () => { eventListeners.splice(eventListeners.indexOf(listener), 1); };
       },
-      dismissPetObservationBubble: async () => {},
       syncPet: async () => {},
     },
     counts: () => ({ voice: voiceListeners.length, event: eventListeners.length }),
@@ -95,20 +93,33 @@ function fakeMiraDesktop() {
 async function mountSurface() {
   const host = fakeSurface();
   const desktop = fakeMiraDesktop();
+  const rpcCalls: string[] = [];
   const props = {
     surfaceId: "pet",
     surface: host.surface,
-    client: {} as PluginSurfaceComponentProps["client"],
+    client: { call: async <T,>(method: string) => { rpcCalls.push(method); return { ok: true } as T; } },
   };
   const view = await mountTestComponent(<DesktopPetSurface {...props} />, {
     windowGlobals: { miraDesktop: desktop.bridge },
   });
-  return { ...view, host, desktop };
+  return { ...view, host, desktop, rpcCalls };
 }
 
 const idleLoad = { load: { package: { spritesheetUrl }, state: "idle" } };
 
 describe("desktop pet surface", () => {
+  it("dismisses a persistent bubble through the plugin client", async () => {
+    const pet = await mountSurface();
+    try {
+      await pet.host.pushState({ ...idleLoad, reply: { text: "Windows 已锁定", paused: true, persistent: true } });
+      const button = pet.container.querySelector<HTMLButtonElement>(".pet-bubble-dismiss");
+      assert.ok(button);
+      await act(async () => button.click());
+      assert.deepEqual(pet.rpcCalls, ["bubble.dismiss"]);
+    } finally {
+      await pet.cleanup();
+    }
+  });
   it("announces readiness so the host replays the retained state", async () => {
     const pet = await mountSurface();
     try {
@@ -145,7 +156,7 @@ describe("desktop pet surface", () => {
     }
   });
 
-  it("shows an observation bubble without restarting the sprite animation", async () => {
+  it("shows a reply bubble without restarting the sprite animation", async () => {
     const pet = await mountSurface();
     try {
       await pet.host.pushState(idleLoad);
@@ -153,18 +164,18 @@ describe("desktop pet surface", () => {
       // `postMessage` does.
       await pet.host.pushMessage({ state: "waiting" });
 
-      // The host resends the whole retained payload when only the observation
+      // The host resends the whole retained payload when only the reply
       // changed. The sprite must not be reset back to the payload's `idle`.
       await pet.host.pushState({
         ...idleLoad,
-        observation: { status: "observing", enabled: true, bubble: "继续写吧", persistent: false },
+        reply: { paused: false, text: "继续写吧", persistent: false },
       });
 
       const bubble = pet.container.querySelector(".pet-bubble");
-      assert.ok(bubble, "the observation bubble should be rendered");
+      assert.ok(bubble, "the reply bubble should be rendered");
       assert.match(bubble.textContent ?? "", /继续写吧/);
       const sprite = pet.container.querySelector(".pet-drag-region");
-      // Row 6 is `waiting`; row 0 would mean the observation clobbered it.
+      // Row 6 is `waiting`; row 0 would mean the reply clobbered it.
       assert.match(sprite?.getAttribute("style") ?? "", /background-position:[^;]*-1248px/);
     } finally {
       await pet.cleanup();
@@ -199,7 +210,7 @@ describe("desktop pet surface", () => {
       await pet.host.pushPlacement(placement);
       await pet.host.pushState({
         ...idleLoad,
-        observation: { status: "observing", enabled: true, bubble: "继续写吧", persistent: false },
+        reply: { paused: false, text: "继续写吧", persistent: false },
       });
 
       assert.deepEqual(pet.host.extensions(), [{ side: "below", size: 120 + petBubbleGap }]);
@@ -224,7 +235,7 @@ describe("desktop pet surface", () => {
       await pet.host.pushPlacement({ ...placement, anchor: { x: 400, y: 900 } });
       await pet.host.pushState({
         ...idleLoad,
-        observation: { status: "observing", enabled: true, bubble: "继续写吧", persistent: false },
+        reply: { paused: false, text: "继续写吧", persistent: false },
       });
 
       assert.deepEqual(pet.host.extensions(), [{ side: "above", size: 120 + petBubbleGap }]);

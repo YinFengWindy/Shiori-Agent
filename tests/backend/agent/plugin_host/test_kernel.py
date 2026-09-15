@@ -229,6 +229,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "observe",
     "plugin_undo",
     "qqbot",
+    "screen_perception",
     "setup_helper",
     "shell_restore",
     "shell_safety",

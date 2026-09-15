@@ -10,6 +10,8 @@ source_paths:
   - apps/desktop/renderer/src/
   - apps/backend/desktop_bridge/
   - plugins/story/
+  - plugins/desktop_pet/
+  - plugins/screen_perception/
 related:
   - roles.md
   - conversations-and-sessions.md
@@ -44,7 +46,9 @@ Story 插件依赖 NovelAI，进入其全屏插件导航页时才挂载 `StoryPa
 
 角色通过 `pet_action` 操控桌宠时，工具 schema 会按当前回合的角色和渠道动态投影桌宠状态：桌面端角色可看到桌宠开关、当前绑定桌宠包和包声明的动作名及其精灵状态；外部渠道会明确标记为不可用。动作名来自角色素材包的 `actions` 映射，工具执行层仍会再次校验角色绑定、开关、渠道和动作支持情况。
 
-屏幕识别是每个角色默认拥有的 Agent 工具，由核心 runtime 注册，桌面端和 Telegram/QQ 等渠道共用同一能力。`apps/backend/desktop_bridge` 只负责桌面 IPC 的观察分析/记忆接口和环境状态；主屏捕获由 `apps/backend/infra/screen_capture.py` 提供，不读取桌宠绑定配置。Electron 的 `DesktopObservationController` 仍负责桌面端的定时观察、持久化开关和桌宠提示，但不决定 Agent 是否拥有 `observe_screen`。
+角色回复气泡由 `plugins/desktop_pet/background/` 拥有：消费普通聊天和主动消息，按绑定角色过滤，管理五秒计时、锁屏暂停与关闭，并通过通用 surface retained state 保留显示内容。关闭走桌宠自有 `bubble.dismiss` RPC；宿主仅广播 `system.lock-state`，不维护 observation 专用气泡通道。语音状态仍优先覆盖普通回复展示。
+
+按需屏幕识别由「24h视奸插件」（`screen_perception`）提供。截图、只读模型分析与 `observe_screen` 工具均在插件内，使用当前角色身份和视觉模型；停用插件撤销工具及活动分析，桌宠气泡不受影响。旧 observation 分析/记忆 RPC 与无生产调用的记忆写入代码已撤除，持续感知和存储策略留给 #292。`observe` 继续只负责运行遥测。
 
 ## 配置生效与任务版本
 
@@ -70,4 +74,4 @@ Telegram、QQ 和 QQBot 在暂停期间使用有界入站缓冲，复用连接�
 - 修改角色 CRUD：复用统一刷新/派生状态流程，避免各页面重复“调用、刷新、同步、导航”。
 - 修改桌宠拖拽：同步检查 renderer 原生拖拽区域、窗口原生交互注册与 `DesktopPetController`，并验证窗口位置会保存。
 - 修改桌宠绑定或托盘开关：同步检查角色素材选择后的 `syncPet()`、主进程持久化状态和托盘菜单刷新。
-- 修改屏幕识别：同步检查核心工具注册、角色会话中的 `role_id`、渠道回合、截图获取、模型分析和桌面观察调度；桌面 UI 的暂停状态不能改变角色工具的默认归属。
+- 修改屏幕识别：检查 `screen_perception` 插件工具注册与卸载、角色会话中的 `role_id`、渠道回合、截图获取和视觉模型选择。桌宠开关与回复状态不决定屏幕工具是否可用。

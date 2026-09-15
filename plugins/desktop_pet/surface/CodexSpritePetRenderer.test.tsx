@@ -12,7 +12,7 @@ test("desktop pet keeps renderer pointer handling and the Codex grab cursor", ()
     <CodexSpritePetRenderer
       spritesheetUrl="mira-asset://pet"
       state="idle"
-      observation={{ status: "off", enabled: false, bubble: "", persistent: false }}
+      reply={{ paused: false, text: "", persistent: false }}
       bubbleLayout={{ placement: "below", height: 0 }}
     />,
   );
@@ -24,15 +24,15 @@ test("desktop pet keeps renderer pointer handling and the Codex grab cursor", ()
   assert.match(styles, /\.pet-dragging\s*\{[^}]*transform:\s*scale\(0\.95\);/s);
   assert.doesNotMatch(styles, /-webkit-app-region:\s*drag/);
   assert.doesNotMatch(markup, /屏幕观察/);
-  assert.doesNotMatch(styles, /pet-observation-toggle/);
+  assert.doesNotMatch(styles, /pet-reply-toggle/);
 });
 
-test("persistent observation bubbles expose a dismiss control", () => {
+test("persistent reply bubbles expose a dismiss control", () => {
   const markup = renderToStaticMarkup(
     <CodexSpritePetRenderer
       spritesheetUrl="mira-asset://pet"
       state="idle"
-      observation={{ status: "failed", enabled: true, bubble: "观察失败", persistent: true }}
+      reply={{ paused: true, text: "Windows 已锁定", persistent: true }}
       bubbleLayout={{ placement: "below", height: 80 }}
     />,
   );
@@ -40,12 +40,12 @@ test("persistent observation bubbles expose a dismiss control", () => {
   assert.match(markup, /aria-label="关闭消息"/);
 });
 
-test("transient observation bubbles do not expose a dismiss control", () => {
+test("transient reply bubbles do not expose a dismiss control", () => {
   const markup = renderToStaticMarkup(
     <CodexSpritePetRenderer
       spritesheetUrl="mira-asset://pet"
       state="idle"
-      observation={{ status: "observing", enabled: true, bubble: "继续写吧", persistent: false }}
+      reply={{ paused: false, text: "继续写吧", persistent: false }}
       bubbleLayout={{ placement: "below", height: 80 }}
     />,
   );
@@ -56,12 +56,12 @@ test("transient observation bubbles do not expose a dismiss control", () => {
   assert.doesNotMatch(markup, /屏幕观察/);
 });
 
-test("above observation bubbles render ahead of the sprite", () => {
+test("above reply bubbles render ahead of the sprite", () => {
   const markup = renderToStaticMarkup(
     <CodexSpritePetRenderer
       spritesheetUrl="mira-asset://pet"
       state="idle"
-      observation={{ status: "observing", enabled: true, bubble: "继续写吧", persistent: false }}
+      reply={{ paused: false, text: "继续写吧", persistent: false }}
       bubbleLayout={{ placement: "above", height: 80 }}
     />,
   );
@@ -78,7 +78,7 @@ test("oversized reply bubbles keep their full text in a scrollable surface", () 
     <CodexSpritePetRenderer
       spritesheetUrl="mira-asset://pet"
       state="idle"
-      observation={{ status: "observing", enabled: true, bubble: "很长的完整回复", persistent: false }}
+      reply={{ paused: false, text: "很长的完整回复", persistent: false }}
       bubbleLayout={{ placement: "above", height: 80 }}
     />,
   );

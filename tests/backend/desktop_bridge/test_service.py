@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
@@ -141,50 +141,6 @@ async def test_injected_role_service_publishes_role_deleted(tmp_path) -> None:
     assert deleted_role_ids == ["mira"]
     invalidate_role_memories.assert_called_once_with("mira")
     await service.aclose()
-
-
-@pytest.mark.asyncio
-async def test_observation_bridge_routes_only_through_the_owned_service(
-    tmp_path,
-) -> None:
-    role_store = RoleStore(tmp_path)
-    session_manager = SessionManager(tmp_path)
-    observation = SimpleNamespace(
-        analyze=AsyncMock(return_value={"frame_id": "frame-1"}),
-        remember=AsyncMock(return_value={"item_id": "event-1"}),
-    )
-    service = DesktopBridgeService(
-        workspace=tmp_path,
-        role_store=role_store,
-        session_manager=session_manager,
-        agent_loop=SimpleNamespace(),
-        event_bus=EventBus(),
-        observation_service=observation,
-    )
-
-    analyzed = await service.handle(
-        {
-            "id": "observe-1",
-            "method": "observation.analyze",
-            "payload": {"frame_id": "frame-1"},
-        },
-        emit_event=Mock(),
-    )
-    remembered = await service.handle(
-        {
-            "id": "observe-2",
-            "method": "observation.remember",
-            "payload": {"summary": "共同经历"},
-        },
-        emit_event=Mock(),
-    )
-
-    assert analyzed.error is None
-    assert analyzed.payload == {"frame_id": "frame-1"}
-    assert remembered.error is None
-    assert remembered.payload == {"item_id": "event-1"}
-    observation.analyze.assert_awaited_once()
-    observation.remember.assert_awaited_once()
 
 
 @pytest.mark.asyncio

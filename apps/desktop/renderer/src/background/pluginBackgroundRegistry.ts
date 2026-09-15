@@ -1,6 +1,7 @@
 import { PluginContributionRegistry } from "../plugins/pluginContributionRegistry";
 import type { BackgroundEffectDispose } from "./backgroundEffectScope";
 import type {
+  BridgeEvent,
   SurfaceCreateResultPayload,
   SurfacePlacementPayload,
   SurfaceSettledPayload,
@@ -121,7 +122,8 @@ export type PluginBackgroundAssets = {
  * accidentally reacting to, another plugin's events.
  */
 export type PluginBackgroundEvents = {
-  on(method: string, handler: (payload: Record<string, unknown>) => void): void;
+  /** The envelope preserves producer identity for consumers of incremental events. */
+  on(method: string, handler: (payload: Record<string, unknown>, event: BridgeEvent) => void): void;
 };
 
 /**

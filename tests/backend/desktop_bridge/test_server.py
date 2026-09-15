@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import io
 import json
 import sys
@@ -14,8 +13,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bus.event_bus import EventBus
-from core.roles import RoleRepository, RoleStore
-from agent.screen_observation.service import ScreenObservationService
 from desktop_bridge.models import BridgeResponse
 from desktop_bridge.server import DesktopBridgeServer
 from session.manager import SessionManager
@@ -41,15 +38,6 @@ class _ReconfigurableTextStream:
 
     def flush(self) -> None:
         return None
-
-
-def _build_observation_service(runtime, role_store):
-    return ScreenObservationService(
-        roles=RoleRepository(role_store),
-        provider=runtime.provider,
-        memory=runtime.memory_runtime.engine,
-        model=runtime.config.model,
-    )
 
 
 def _build_server(tmp_path: Path, stub_core_runtime) -> DesktopBridgeServer:
@@ -109,114 +97,6 @@ async def test_serve_stdio_forces_utf8_for_all_bridge_streams(
     }
     assert streams["stderr"].buffer.getvalue() == b""
     assert unrelated_output.getvalue() == ""
-
-
-def test_desktop_server_reuses_core_screen_observation_service(
-    tmp_path: Path, stub_core_runtime
-) -> None:
-    observation = SimpleNamespace()
-    runtime = stub_core_runtime(
-        session_manager=SimpleNamespace(workspace=tmp_path),
-        loop=SimpleNamespace(),
-        event_bus=EventBus(),
-        config=SimpleNamespace(multimodal=True, model="main-model"),
-        provider=SimpleNamespace(),
-        memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
-        screen_observation=observation,
-    )
-
-    DesktopBridgeServer(runtime)
-
-    assert runtime.tools.get_tool("observe_screen") is None
-    assert runtime.screen_observation is observation
-
-
-@pytest.mark.asyncio
-async def test_observation_service_reads_roles_through_the_production_repository(
-    tmp_path: Path,
-) -> None:
-    role_store = RoleStore(tmp_path)
-    role_store.create_role(
-        role_id="mira",
-        name="Mira",
-        description="陪伴者",
-        system_prompt="用中文回复",
-    )
-    provider = SimpleNamespace(
-        chat=AsyncMock(
-            return_value=SimpleNamespace(
-                content=(
-                    '{"interface_summary":"空白画面","activity_key":"idle",'
-                    '"targets":[],"risks":[],"bubble":"",'
-                    '"experience_candidate":""}'
-                ),
-                tool_calls=[],
-            )
-        )
-    )
-    runtime = SimpleNamespace(
-        config=SimpleNamespace(multimodal=True, model="main-model"),
-        provider=provider,
-        memory_runtime=SimpleNamespace(engine=SimpleNamespace()),
-    )
-    service = _build_observation_service(runtime, role_store)
-
-    assert service is not None
-    result = await service.analyze(
-        {
-            "role_id": "mira",
-            "frame_id": "frame-1",
-            "captured_at": "2026-07-23T12:00:00Z",
-            "width": 64,
-            "height": 64,
-            "scale_factor": 1,
-            "image_base64": base64.b64encode(b"\x89PNG\r\n\x1a\ncontent").decode(
-                "ascii"
-            ),
-            "previous_observation": None,
-            "recent_bubbles": [],
-        }
-    )
-
-    assert result["activity_key"] == "idle"
-    assert isinstance(service._model_adapter._roles, RoleRepository)
-    assert service._model_adapter._roles is service._memory_writer._roles
-
-
-@pytest.mark.asyncio
-async def test_observation_service_validates_memory_roles_through_the_repository(
-    tmp_path: Path,
-) -> None:
-    role_store = RoleStore(tmp_path)
-    role_store.create_role(role_id="mira", name="Mira", system_prompt="test")
-    memory = SimpleNamespace(
-        mutate=AsyncMock(
-            return_value=SimpleNamespace(
-                accepted=True,
-                item_id="event-1",
-                status="new",
-                actual_kind="event",
-            )
-        )
-    )
-    runtime = SimpleNamespace(
-        config=SimpleNamespace(multimodal=True, model="main-model"),
-        provider=SimpleNamespace(),
-        memory_runtime=SimpleNamespace(engine=memory),
-    )
-    service = _build_observation_service(runtime, role_store)
-
-    assert service is not None
-    result = await service.remember(
-        {
-            "role_id": "mira",
-            "summary": "一起整理了报告",
-            "happened_at": "2026-07-23T12:00:00Z",
-            "source_ref": "screen-observation:session-1:0",
-        }
-    )
-
-    assert result["item_id"] == "event-1"
 
 
 @pytest.mark.asyncio

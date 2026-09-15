@@ -834,7 +834,7 @@ def test_build_registered_tools_without_mcp_toolset_still_returns_empty_registry
         api_key="k",
         wiring=WiringConfig(toolsets=["schedule"]),
     )
-    _, _, _, mcp_registry, _, _ = build_registered_tools(
+    _, _, _, mcp_registry, _ = build_registered_tools(
         config=config,
         workspace=tmp_path,
         http_resources=cast(Any, SimpleNamespace()),

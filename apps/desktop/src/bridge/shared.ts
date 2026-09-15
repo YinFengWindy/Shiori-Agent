@@ -361,14 +361,6 @@ export type DesktopApi = {
   /** Synchronizes the desktop-pet window with the role saved by the detail form. */
   syncPet(forceVisible?: boolean): Promise<void>;
   /**
-   * Dismisses the active safe observation bubble.
-   *
-   * Still a pet-shaped host call: the pet's surface uses it directly until
-   * observation itself becomes a plugin (#220) and reaches the pet over
-   * plugin-to-plugin messaging (#218).
-   */
-  dismissPetObservationBubble(): Promise<void>;
-  /**
    * The DesktopSurface capability (#181): plugin-owned desktop windows.
    *
    * Split in two because the two halves have different trust properties.

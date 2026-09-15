@@ -51,7 +51,10 @@ globalThis.surfaceQa = {
   create(pluginId, spritesheetUrl, alwaysOnTop = true) {
     const key = { pluginId, surfaceId: "main" };
     host.create(key, { body: { width: 320, height: 240 }, alwaysOnTop }, { x: 100, y: 100 });
-    if (spritesheetUrl) host.setState(key, { load: { package: { spritesheetUrl }, state: "idle" } });
+    if (spritesheetUrl) host.setState(key, {
+      load: { package: { spritesheetUrl }, state: "idle" },
+      reply: { text: "角色回复保持可见", paused: false, persistent: true },
+    });
     const record = [...records.values()].find((record) => record.key.pluginId === pluginId);
     host.show(key); // The caller's eager show must not bypass renderer readiness.
     return record.window.id;

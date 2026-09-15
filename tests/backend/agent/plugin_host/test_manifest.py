@@ -14,6 +14,17 @@ def test_missing_manifest_returns_none(tmp_path: Path):
     assert load_manifest(tmp_path) is None
 
 
+def test_display_name_does_not_replace_stable_plugin_identity(tmp_path):
+    (tmp_path / "manifest.yaml").write_text(
+        "api: 2\nid: screen_perception\ndisplay_name: 24h视奸插件\ncapabilities: []\n",
+        encoding="utf-8",
+    )
+    manifest = load_manifest(tmp_path)
+    assert manifest is not None
+    assert manifest.id == "screen_perception"
+    assert manifest.display_name == "24h视奸插件"
+
+
 @pytest.mark.parametrize("content", [b"api: 2\ncapabilities: [\n", b"\xff"])
 def test_manifest_wraps_invalid_yaml_and_encoding(tmp_path, content):
     (tmp_path / "manifest.yaml").write_bytes(content)

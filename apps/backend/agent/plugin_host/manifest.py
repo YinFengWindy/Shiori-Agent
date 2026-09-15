@@ -59,6 +59,8 @@ class PluginManifest:
     """插件包声明：身份、入口与所需 capability。"""
 
     id: str
+    # User-facing title; the stable ID still owns lookup, configuration and imports.
+    display_name: str | None = None
     version: str | None = None
     desc: str | None = None
     author: str | None = None
@@ -124,6 +126,7 @@ def _parse_manifest(
         )
     return PluginManifest(
         id=plugin_id,
+        display_name=_optional_str(raw.get("display_name")),
         version=_optional_str(raw.get("version")),
         desc=_optional_str(raw.get("desc")),
         author=_optional_str(raw.get("author")),

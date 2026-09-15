@@ -1,9 +1,23 @@
-from __future__ import annotations
+"""Validate an ephemeral primary-screen frame without accessing the real display."""
 
 import base64
+import io
+
 from PIL import Image
 
-from infra.screen_capture import PrimaryScreenCapture
+from plugins.screen_perception.backend.capture import PrimaryScreenCapture
+
+
+def test_capture_encodes_rgb_png_and_keeps_role_identity():
+    capture = PrimaryScreenCapture(grab=lambda: Image.new("RGBA", (12, 8), "red"))
+    frame = capture.capture("mira")
+    assert frame["role_id"] == "mira"
+    assert (frame["width"], frame["height"]) == (12, 8)
+    with Image.open(io.BytesIO(base64.b64decode(frame["image_base64"]))) as image:
+        assert image.format == "PNG"
+        assert image.mode == "RGB"
+    assert frame["frame_id"]
+    assert frame["captured_at"].endswith("Z")
 
 
 def test_capture_returns_an_ephemeral_primary_screen_png_for_any_role() -> None:

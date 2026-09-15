@@ -36,7 +36,6 @@ from desktop_bridge.plugin_requests import DesktopPluginRequestHandler
 from desktop_bridge.request_router import DesktopBridgeRequestRouter
 from desktop_bridge.role_requests import DesktopRoleRequestHandler
 from desktop_bridge.role_card_import_service import DesktopRoleCardImportService
-from agent.screen_observation.service import ScreenObservationService
 from desktop_bridge.role_presenter import DesktopRolePresenter
 from desktop_bridge.role_task_service import RoleTaskService
 from desktop_bridge.session_task_requests import DesktopSessionTaskRequestHandler
@@ -87,7 +86,6 @@ class DesktopBridgeService:
         scheduler: Any | None = None,
         subagent_manager: Any | None = None,
         memory_optimizer: Any | None = None,
-        observation_service: ScreenObservationService | None = None,
         voice_service: VoiceService | None = None,
         role_runtime_registry: RoleRuntimeRegistry | None = None,
         memory_engine: Any | None = None,
@@ -195,7 +193,6 @@ class DesktopBridgeService:
             ),
         )
         self.voice_assets = self.voice_handler.assets
-        self.observation_service = observation_service
         self.plugin_rpc_registry = plugin_rpc_registry
         self.request_router = DesktopBridgeRequestRouter(
             roles=DesktopRoleRequestHandler(
@@ -224,7 +221,6 @@ class DesktopBridgeService:
                 sanitize_voice_metrics=_sanitize_voice_metrics,
             ),
             voice=self.voice_handler,
-            observation=observation_service,
             plugins=DesktopPluginRequestHandler(plugin_rpc_registry),
         )
         if push_tool is not None and activate_transport:

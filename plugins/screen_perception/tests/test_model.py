@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.screen_observation.model import ObservationModelAdapter
+from plugins.screen_perception.backend.model import ObservationModelAdapter
 
 
 def _adapter(provider=None) -> ObservationModelAdapter:

@@ -1,5 +1,5 @@
 import { spriteAnimations, type SpriteState } from "./spriteContract";
-import type { PetObservationPayload } from "../../../apps/desktop/src/observation/types";
+import type { PetReplyBubble } from "../shared/replyBubble";
 
 /**
  * What the pet's surface accepts over the DesktopSurface state and message
@@ -21,7 +21,7 @@ export type PetSurfaceLoad = {
 /** The whole retained payload: one slot, so everything durable travels together. */
 export type PetSurfaceState = {
   load: PetSurfaceLoad;
-  observation: PetObservationPayload | null;
+  reply: PetReplyBubble | null;
 };
 
 /** A one-shot animation request. `transient` overlays and then reverts. */
@@ -34,22 +34,11 @@ function isSpriteState(value: unknown): value is SpriteState {
   return typeof value === "string" && value in spriteAnimations;
 }
 
-function readObservation(value: unknown): PetObservationPayload | null {
+function readReply(value: unknown): PetReplyBubble | null {
   if (!value || typeof value !== "object") return null;
-  const source = value as Partial<PetObservationPayload>;
-  const status = source.status;
-  const validStatus = status === "off"
-    || status === "observing"
-    || status === "reviewing"
-    || status === "paused"
-    || status === "failed";
-  if (!validStatus || typeof source.enabled !== "boolean") return null;
-  return {
-    status,
-    enabled: source.enabled,
-    bubble: typeof source.bubble === "string" ? source.bubble : "",
-    persistent: source.persistent === true,
-  };
+  const source = value as Partial<PetReplyBubble>;
+  if (typeof source.text !== "string") return null;
+  return { text: source.text, paused: source.paused === true, persistent: source.persistent === true };
 }
 
 /** Parses a retained state payload, returning null when it is unusable. */
@@ -62,7 +51,7 @@ export function readPetSurfaceState(value: unknown): PetSurfaceState | null {
   if (typeof packageValue?.spritesheetUrl !== "string" || !isSpriteState(state)) return null;
   return {
     load: { package: { spritesheetUrl: packageValue.spritesheetUrl }, state },
-    observation: readObservation((value as { observation?: unknown }).observation),
+    reply: readReply((value as { reply?: unknown }).reply),
   };
 }
 
@@ -75,7 +64,7 @@ export function readPetSurfaceMessage(value: unknown): PetSurfaceMessage | null 
 }
 
 /**
- * Identity of a load, used to tell "same package, new observation" from a real
+ * Identity of a load, used to tell "same package, new reply" from a real
  * package change. A retained payload is resent whenever *any* of its parts
  * changes, so without this an incoming bubble would restart the sprite.
  *

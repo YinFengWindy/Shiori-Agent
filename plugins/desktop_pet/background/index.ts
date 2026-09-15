@@ -4,30 +4,8 @@ import { readDesktopPetBinding } from "./binding";
 import { DesktopPetController, desktopPetSurfaceId } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
 
-/**
- * Bridge events the host still sends the pet, and what removes each.
- *
- * These are *host-originated* events published into the same `desktop:event`
- * stream the backend uses (`main.ts::publishDesktopEvent`), so they arrive
- * through `ctx.events.on` with no extra plugin-facing API. They exist because
- * three host features still hold the pet's leash while #174 finishes:
- *
- * - `desktop.pet.command` — the role detail form's "sync" (`desktop:pet-sync`).
- *   The tray entry no longer comes through here: since #181-D the pet owns its
- *   own menu item via `ctx.tray`. The sync call becomes a plugin RPC with
- *   #181-D's backend work, at which point this event can go too.
- * - `desktop.pet.observation` — screen observation, which becomes a plugin of
- *   its own in #220 and will then talk to the pet over plugin-to-plugin
- *   messaging (#218).
- *
- * The host declares the same two strings in
- * `apps/desktop/src/pluginCoupling/desktopPet.ts`. They are duplicated rather
- * than shared because the dependency would have to point from the host into a
- * plugin; `hostContract.test.ts` beside this file pins the two copies together
- * so they cannot drift apart silently.
- */
+/** Remaining role-settings sync command, published by the desktop host. */
 export const desktopPetCommandMethod = "desktop.pet.command";
-export const desktopPetObservationMethod = "desktop.pet.observation";
 /** The backend event carrying one already-authorized `pet_action` tool call. */
 export const desktopPetActionMethod = "desktop.pet.action";
 
@@ -105,7 +83,13 @@ export default {
       const forceVisible = typeof payload.forceVisible === "boolean" ? payload.forceVisible : undefined;
       void controller.sync(forceVisible).catch((error) => reportError("sync", error));
     });
-    ctx.events.on(desktopPetObservationMethod, (payload) => controller.publishObservation(payload));
+    for (const method of ["chat.done", "session.updated"]) {
+      ctx.events.on(method, (_payload, event) => controller.replies.handleEvent(event));
+    }
+    ctx.events.on("system.lock-state", (payload) => {
+      if (typeof payload.locked === "boolean") controller.replies.setLocked(payload.locked);
+    });
+    ctx.events.on("plugin.desktop_pet.bubble.dismissed", () => controller.replies.dismiss());
 
     // Reported rather than rethrown: a failed restore (the bridge answering
     // late, say) must not fail `setup`, because a thrown `setup` tears the

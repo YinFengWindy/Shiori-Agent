@@ -1,3 +1,5 @@
+import { ReplyBubbleController } from "./replyBubble";
+import { emptyPetReply, type PetReplyBubble } from "../shared/replyBubble";
 import type {
   PluginBackgroundSettled,
   PluginBackgroundSurfaces,
@@ -79,7 +81,9 @@ export class DesktopPetController {
   private settings: DesktopPetSettings;
   private activeRoleId = "";
   private activeLoad: { binding: DesktopPetBinding; state: DesktopPetState } | null = null;
-  private latestObservation: unknown = null;
+  private latestReply: PetReplyBubble = emptyPetReply;
+  /** Reply lifecycle is owned and reclaimed alongside this plugin controller. */
+  readonly replies: ReplyBubbleController;
   private running = false;
   /**
    * Set the moment teardown starts, and never cleared.
@@ -118,6 +122,10 @@ export class DesktopPetController {
   constructor(private readonly options: DesktopPetControllerOptions) {
     this.surfaces = options.surfaces;
     this.settings = options.settings;
+    this.replies = new ReplyBubbleController((payload) => {
+      this.latestReply = payload;
+      this.pushRetainedState();
+    });
   }
 
   /**
@@ -161,6 +169,7 @@ export class DesktopPetController {
       if (this.disposed) return;
       if (!binding) throw new Error("没有已启用且已选择素材的桌宠角色");
       await this.load(binding, "idle");
+      if (this.disposed) return;
       await this.saveSettings(desktopPetBindingPatch(binding, true));
     });
   }
@@ -186,6 +195,7 @@ export class DesktopPetController {
       const visible = forceVisible ?? (changedBinding || current.visible);
       if (visible) await this.load(binding, "idle");
       else await this.destroySurface();
+      if (this.disposed) return;
       await this.saveSettings(desktopPetBindingPatch(binding, visible));
     });
   }
@@ -224,23 +234,10 @@ export class DesktopPetController {
     }).catch((error) => this.options.onError?.("pet-action", error));
   }
 
-  /**
-   * Publishes observation state without exposing frames or model output internals.
-   *
-   * Typed as `unknown` on purpose: the pet does not interpret this payload, it
-   * only carries it into retained surface state, where the surface renderer
-   * validates it (`surface/surfaceState.ts`). That keeps the pet free of
-   * observation's shape, which matters because observation becomes a plugin of
-   * its own in #220 and this becomes plugin-to-plugin messaging (#218).
-   */
-  publishObservation(payload: unknown): void {
-    this.latestObservation = payload;
-    this.pushRetainedState();
-  }
-
   /** Tears the pet's window down when the plugin is disabled or reloaded. */
   async terminate(): Promise<void> {
     this.disposed = true;
+    this.replies.dispose();
     // Through the queue, so a `show()` that is mid-flight finishes (and bails
     // on `disposed`) before the destroy runs, rather than racing it.
     await this.enqueue(() => this.destroySurface());
@@ -253,6 +250,9 @@ export class DesktopPetController {
   }
 
   private async load(binding: DesktopPetBinding, state: DesktopPetState): Promise<void> {
+    // Host window creation is an IPC round trip. Retain replies arriving after
+    // the role is resolved but before the new surface acknowledges creation.
+    this.replies.bind(binding.roleId);
     if (!this.running) {
       // Created at the fallback corner first: only once the window exists can
       // the host say which display it landed on, and the remembered position is
@@ -269,7 +269,11 @@ export class DesktopPetController {
         desktopPetSurfaceId,
         { body: desktopPetBody },
         desktopPetFallbackAnchor,
-      );
+      ).catch((error: unknown) => {
+        this.replies.bind("");
+        throw error;
+      });
+      if (this.disposed) return;
       this.running = true;
       this.anchor = { x: placement.x, y: placement.y };
       this.displayId = placement.displayId;
@@ -291,7 +295,7 @@ export class DesktopPetController {
         package: this.activeLoad.binding.package,
         state: this.activeLoad.state,
       },
-      observation: this.latestObservation,
+      reply: this.latestReply,
     });
   }
 
@@ -334,6 +338,7 @@ export class DesktopPetController {
     this.running = false;
     this.activeRoleId = "";
     this.activeLoad = null;
+    this.replies.bind("");
   }
 }
 

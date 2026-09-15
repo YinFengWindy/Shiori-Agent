@@ -19,15 +19,9 @@ import type {
   PluginSurfaceComponentProps,
   SurfacePlacement,
 } from "../../../apps/desktop/renderer/src/surface/pluginSurfaceRegistry";
-import type { PetObservationPayload } from "../../../apps/desktop/src/observation/types";
+import { emptyPetReply, type PetReplyBubble } from "../shared/replyBubble";
 import type { VoiceStatePayload } from "../../../apps/desktop/src/bridge/shared";
 
-const defaultObservation: PetObservationPayload = {
-  status: "off",
-  enabled: false,
-  bubble: "",
-  persistent: false,
-};
 const defaultVoice: VoiceStatePayload = { status: "idle" };
 const noExtension = { side: "below" as const, size: 0 };
 
@@ -38,7 +32,7 @@ const noExtension = { side: "below" as const, size: 0 };
  * creates and drives it and never learns that it contains a pet. Three details
  * are worth knowing before editing:
  *
- * - **Retained vs transient.** Package, sprite state and observation arrive as
+ * - **Retained vs transient.** Package, sprite state and reply arrive as
  *   one retained `onState` payload that the host replays after `ready()`. A
  *   surface renderer mounts asynchronously and can reload at any time, and on
  *   a transparent window "blank" and "broken" look identical — so nothing the
@@ -50,11 +44,11 @@ const noExtension = { side: "below" as const, size: 0 };
  * - **No per-frame anything.** The pet never tells the host where it is; the
  *   host tells the pet, and only once the motion stops.
  */
-export function DesktopPetSurface({ surface }: PluginSurfaceComponentProps) {
+export function DesktopPetSurface({ surface, client }: PluginSurfaceComponentProps) {
   const [load, setLoad] = useState<PetSurfaceLoad | null>(null);
   const [state, setState] = useState<SpriteState>("idle");
   const [transientState, setTransientState] = useState<SpriteState | null>(null);
-  const [observation, setObservation] = useState<PetObservationPayload>(defaultObservation);
+  const [reply, setReply] = useState<PetReplyBubble>(emptyPetReply);
   const [bubbleLayout, setBubbleLayout] = useState<PetBubblePlacement>(noPetBubble);
   const [voice, setVoice] = useState<VoiceStatePayload>(defaultVoice);
   const activityState = usePetActivityState(state);
@@ -103,7 +97,7 @@ export function DesktopPetSurface({ surface }: PluginSurfaceComponentProps) {
       const next = readPetSurfaceState(value);
       if (!next) return;
       const signature = petSurfaceLoadSignature(next.load);
-      // Observation updates re-send the whole retained payload, so the sprite
+      // Reply updates re-send the whole retained payload, so the sprite
       // state may only be reset when the *package* actually changed — otherwise
       // every bubble would cancel a running animation.
       if (loadSignatureRef.current !== signature) {
@@ -112,7 +106,7 @@ export function DesktopPetSurface({ surface }: PluginSurfaceComponentProps) {
         setState(next.load.state);
         setTransientState(null);
       }
-      setObservation(next.observation ?? defaultObservation);
+      setReply(next.reply ?? emptyPetReply);
     });
     const offMessage = surface.onMessage((value) => {
       const play = readPetSurfaceMessage(value);
@@ -152,7 +146,8 @@ export function DesktopPetSurface({ surface }: PluginSurfaceComponentProps) {
       state={activityState}
       transientState={transientState}
       onTransientFinished={onTransientFinished}
-      observation={observation}
+      reply={reply}
+      onDismissBubble={() => { void client.call("bubble.dismiss"); }}
       bubbleLayout={bubbleLayout}
       voice={voice}
       surface={surface}

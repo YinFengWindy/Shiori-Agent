@@ -8,7 +8,7 @@ source_paths:
   - apps/backend/agent/turns/
   - apps/backend/agent/lifecycle/
   - apps/backend/agent/tools/
-  - apps/backend/agent/screen_observation/
+  - plugins/screen_perception/backend/
   - apps/backend/agent/plugins/
   - apps/backend/agent/mcp/
 related:
@@ -29,7 +29,7 @@ related:
 
 工具搜索的目的是控制可见工具规模；搜索结果进入当前回合，不应永久污染全局 registry。后台 Shell 任务由独立 runtime 管理注册、轮询和停止。
 
-`observe_screen` 是所有角色默认拥有的只读工具，在核心 runtime 注册并可由桌面、Telegram、QQ 等渠道调用。它只读取当前主屏幕并返回经过过滤的摘要，不执行桌面动作；捕获宿主和视觉模型不可用时，工具仍可发现，但执行会返回明确错误。
+`observe_screen` 由独立的「24h视奸插件」（`screen_perception`）注册，启用时桌面、Telegram、QQ 等渠道的当前角色均可使用。插件按需捕获主屏并调用角色配置的视觉模型，只向角色返回经过过滤的活动摘要，不执行桌面动作。停用时撤销工具并取消活动分析；不依赖桌宠或 `observe` 遥测插件。持续感知扩展由 #292 承接。
 
 ## 插件与 MCP
 

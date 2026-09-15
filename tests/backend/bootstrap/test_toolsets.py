@@ -97,21 +97,19 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
         "bootstrap.tools.build_scheduler",
         lambda *_args, **_kwargs: SimpleNamespace(),
     )
-    tools, push_tool, scheduler, mcp_registry, memory_runtime, screen_observation = (
-        build_registered_tools(
-            config=cast(
-                Any, SimpleNamespace(spawn_enabled=False, proactive=SimpleNamespace())
-            ),
-            workspace=tmp_path,
-            http_resources=cast(Any, SimpleNamespace()),
-            bus=cast(Any, SimpleNamespace()),
-            provider=object(),
-            light_provider=object(),
-            session_store=object(),
-            tools=ToolRegistry(),
-            event_publisher=EventBus(),
-            agent_loop_provider=lambda: None,
-        )
+    tools, push_tool, scheduler, mcp_registry, memory_runtime = build_registered_tools(
+        config=cast(
+            Any, SimpleNamespace(spawn_enabled=False, proactive=SimpleNamespace())
+        ),
+        workspace=tmp_path,
+        http_resources=cast(Any, SimpleNamespace()),
+        bus=cast(Any, SimpleNamespace()),
+        provider=object(),
+        light_provider=object(),
+        session_store=object(),
+        tools=ToolRegistry(),
+        event_publisher=EventBus(),
+        agent_loop_provider=lambda: None,
     )
 
     assert calls == ["memory", "meta", "spawn", "schedule", "mcp"]
@@ -119,9 +117,7 @@ def test_build_registered_tools_uses_toolset_providers(monkeypatch, tmp_path: Pa
     assert scheduler is not None
     assert mcp_registry is not None
     assert memory_runtime.engine is not None
-    assert screen_observation is not None
-    assert tools.get_tool("observe_screen") is not None
-    assert "observe_screen" in tools.get_always_on_names()
+    assert tools.get_tool("observe_screen") is None
 
 
 def test_build_registration_result_uses_public_registry_names():
