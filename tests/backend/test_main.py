@@ -1,12 +1,175 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from pathlib import Path
+from textwrap import dedent
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 import main as app_main
+
+
+@pytest.mark.parametrize("initial_encoding", ["utf-8", "cp936"])
+def test_bridge_keeps_dependency_prints_off_protocol_pipe(
+    tmp_path: Path, initial_encoding: str
+):
+    """Exercise the real stdio writer with noisy runtime stages and a worker thread."""
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("", encoding="utf-8")
+    probe = dedent("""
+        import asyncio
+        import json
+        import sys
+        from types import SimpleNamespace
+        import main
+        from desktop_bridge.config_transaction import ConfigTransaction
+        from desktop_bridge.server import DesktopBridgeServer
+
+        sys.stdin.reconfigure(encoding=sys.argv[2])
+        sys.stdout.reconfigure(encoding=sys.argv[2])
+        sys.stderr.reconfigure(encoding=sys.argv[2])
+        protocol_output = sys.stdout
+
+        def recover(self):
+            print("recovery: 配置恢复")
+
+        def load(*args, **kwargs):
+            print("config: 配置加载")
+            return object()
+
+        async def start():
+            print({("ncatbot_status",): None}.keys(), {("ncs",): None}.keys())
+            await asyncio.to_thread(print, "thread: 后台线程")
+
+        async def shutdown():
+            await asyncio.to_thread(print, "shutdown: 关闭通道")
+
+        def build(*args, **kwargs):
+            print("construction: 创建运行时")
+            return SimpleNamespace(core=object(), start=start, shutdown=shutdown)
+
+        class Server(DesktopBridgeServer):
+            def __init__(self, *args, **kwargs):
+                print("server: 创建服务")
+
+            async def serve_streams(self, *, read_line, write_payload):
+                request = json.loads(await read_line())
+                await asyncio.to_thread(print, "runtime: 请求处理")
+                await write_payload({
+                    "id": request["id"], "type": "response",
+                    "method": request["method"], "payload": {"name": "栞"},
+                })
+                await write_payload({
+                    "id": "event-1", "type": "event",
+                    "method": "chat.event", "payload": {"text": "你好"},
+                })
+
+        ConfigTransaction.recover = recover
+        main.Config.load = load
+        main.build_app_runtime = build
+        main.DesktopBridgeServer = Server
+        assert main.main(["bridge", "--config", sys.argv[1]]) == 0
+        assert sys.stdout is protocol_output
+        """)
+    result = subprocess.run(
+        [sys.executable, "-c", probe, str(config_path), initial_encoding],
+        cwd=Path(app_main.__file__).parent,
+        input=(
+            json.dumps({"id": "settings-1", "method": "settings.read"}) + "\n"
+        ).encode("utf-8"),
+        capture_output=True,
+        timeout=30,
+    )
+
+    stderr = result.stderr.decode("utf-8")
+    assert result.returncode == 0, stderr
+    frames = [json.loads(line) for line in result.stdout.decode("utf-8").splitlines()]
+    assert frames == [
+        {
+            "id": "settings-1",
+            "type": "response",
+            "method": "settings.read",
+            "payload": {"name": "栞"},
+        },
+        {
+            "id": "event-1",
+            "type": "event",
+            "method": "chat.event",
+            "payload": {"text": "你好"},
+        },
+    ]
+    for diagnostic in (
+        "recovery: 配置恢复",
+        "config: 配置加载",
+        "construction: 创建运行时",
+        "dict_keys([('ncatbot_status',)]) dict_keys([('ncs',)])",
+        "thread: 后台线程",
+        "server: 创建服务",
+        "runtime: 请求处理",
+        "shutdown: 关闭通道",
+    ):
+        assert diagnostic in stderr
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure_stage", ["recovery", "config", "build", "start", "serve", "shutdown"]
+)
+async def test_bridge_restores_stdout_and_propagates_failures(
+    failure_stage: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    original_stdout = sys.stdout
+    stages: list[str] = []
+
+    def enter(stage):
+        stages.append(stage)
+        print(stage)
+        if stage == failure_stage:
+            raise RuntimeError(f"failed {stage}")
+
+    async def start():
+        enter("start")
+
+    async def shutdown():
+        enter("shutdown")
+
+    async def serve_stdio(**kwargs):
+        enter("serve")
+
+    def build(*args, **kwargs):
+        enter("build")
+        return SimpleNamespace(core=object(), start=start, shutdown=shutdown)
+
+    monkeypatch.setattr(
+        "desktop_bridge.config_transaction.ConfigTransaction.recover",
+        lambda self: enter("recovery"),
+    )
+    monkeypatch.setattr(
+        app_main.Config, "load", lambda *args, **kwargs: enter("config")
+    )
+    monkeypatch.setattr(app_main, "build_app_runtime", build)
+    monkeypatch.setattr(
+        app_main,
+        "DesktopBridgeServer",
+        lambda *args, **kwargs: SimpleNamespace(serve_stdio=serve_stdio),
+    )
+
+    with pytest.raises(RuntimeError, match=f"failed {failure_stage}"):
+        await app_main.serve_bridge(workspace=tmp_path)
+
+    assert sys.stdout is original_stdout
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.splitlines() == stages
+    if failure_stage in {"start", "serve", "shutdown"}:
+        assert stages[-1] == "shutdown"
 
 
 def test_main_help_prints_usage(capsys: pytest.CaptureFixture[str]):
