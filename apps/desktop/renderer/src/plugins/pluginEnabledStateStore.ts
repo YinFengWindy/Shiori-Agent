@@ -1,4 +1,5 @@
 import { createPluginBridgeClient, type PluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
+import { activePluginIds } from "./activePluginIds";
 
 type Listener = () => void;
 
@@ -42,8 +43,8 @@ function notify() {
 }
 
 /** Replaces the cached enabled flags wholesale (after a full `plugins.list` fetch). */
-export function setPluginEnabledSnapshot(plugins: (Pick<PluginSummary, "id" | "enabled"> & Partial<Pick<PluginSummary, "state">>)[]): void {
-  cache = new Map(plugins.map((item) => [item.id, item.enabled && (item.state === undefined || item.state === "ACTIVE")]));
+export function setPluginEnabledSnapshot(plugins: Pick<PluginSummary, "id" | "enabled" | "state">[]): void {
+  cache = new Map([...activePluginIds(plugins)].map((id) => [id, true]));
   notify();
 }
 

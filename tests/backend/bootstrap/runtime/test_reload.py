@@ -221,7 +221,7 @@ async def test_publish_rechecks_hot_unload_before_handover_or_commit(
     from shiori_plugin_testkit.packages import stage_plugin_package
     from agent.plugin_host import PluginRestartRequired
 
-    root = tmp_path / "plugins"
+    root = tmp_path / "host_plugins"
     stage_plugin_package(
         Path(__file__).resolve().parents[3] / "fixtures/plugins/restart_required",
         root / "restart_required",
@@ -250,7 +250,9 @@ async def test_publish_rechecks_hot_unload_before_handover_or_commit(
         original.plugin_manager._services.plugin_configs = {
             "restart_required": {"enabled": True}
         }
-        original.plugin_manager._handles.pop("restart_required", None)
+        original.plugin_manager._handles.pop(
+            str((root / "restart_required").absolute()), None
+        )
         assert await original.plugin_manager.load("restart_required")
         with pytest.raises(PluginRestartRequired):
             await app.publish(prepared, commit=lambda: committed.append(True))
@@ -274,7 +276,7 @@ async def test_unpublished_unsafe_candidate_is_forcibly_reclaimed_on_failure(
     from shiori_plugin_testkit.packages import stage_plugin_package
     import bootstrap.runtime.reload as reload_module
 
-    root = tmp_path / "plugins"
+    root = tmp_path / "host_plugins"
     stage_plugin_package(
         Path(__file__).resolve().parents[3] / "fixtures/plugins/restart_required",
         root / "restart_required",

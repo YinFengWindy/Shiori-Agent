@@ -2,9 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type React from "react";
 import { getChatMessageDomKey, getChatMessageReactKey } from "./chatMessageIdentity";
 import {
-  estimateChatMessageHeight,
   getVirtualChatMessageWindow,
 } from "./chatMessageVirtualization";
+import { useChatMessageMeasurements } from "./useChatMessageMeasurements";
 import type { SessionMessage } from "../shared/types";
 
 type UseChatMessageVirtualizationArgs = {
@@ -41,9 +41,6 @@ export function useChatMessageVirtualization({
   // The first paint follows the chat's bottom-anchored startup behavior; the
   // mounted container is read immediately after commit and takes over.
   const [viewport, setViewport] = useState<Viewport>({ scrollTop: Number.POSITIVE_INFINITY, height: 0 });
-  const measurementsRef = useRef(new Map<string, number>());
-  const [measuredHeights, setMeasuredHeights] = useState(() => new Map<string, number>());
-  const observersRef = useRef(new Map<string, ResizeObserver>());
   const contentSizeFrameRef = useRef<number | null>(null);
   const messageKeys = useMemo(
     () => messages.map((message, index) => getChatMessageReactKey(message, messageStartIndex + index)),
@@ -55,18 +52,6 @@ export function useChatMessageVirtualization({
     )),
     [highlightedMessageKey, messageStartIndex, messages],
   );
-  const virtualMessageWindow = useMemo(
-    () => getVirtualChatMessageWindow({
-      messages,
-      messageKeys,
-      measuredHeights,
-      scrollTop: viewport.scrollTop,
-      viewportHeight: viewport.height,
-      pinnedMessageIndex,
-    }),
-    [measuredHeights, messageKeys, messages, pinnedMessageIndex, viewport],
-  );
-
   const refreshViewport = useCallback(() => {
     const container = conversationListRef.current;
     if (!container) return;
@@ -85,6 +70,23 @@ export function useChatMessageVirtualization({
     });
   }, [onContentSizeChange]);
 
+  const { measuredHeights, observeMessageElement } = useChatMessageMeasurements({
+    sessionKey, highlightedMessageKey, conversationListRef, isAutoScrollingRef,
+    onMessageNavigationTargetMounted, requestContentSizeChange,
+  });
+
+  const virtualMessageWindow = useMemo(
+    () => getVirtualChatMessageWindow({
+      messages,
+      messageKeys,
+      measuredHeights,
+      scrollTop: viewport.scrollTop,
+      viewportHeight: viewport.height,
+      pinnedMessageIndex,
+    }),
+    [measuredHeights, messageKeys, messages, pinnedMessageIndex, viewport],
+  );
+
   useEffect(() => {
     const container = conversationListRef.current;
     if (!container) return undefined;
@@ -99,10 +101,6 @@ export function useChatMessageVirtualization({
   }, [conversationListRef, refreshViewport, sessionKey]);
 
   useLayoutEffect(() => {
-    measurementsRef.current.clear();
-    observersRef.current.forEach((observer) => observer.disconnect());
-    observersRef.current.clear();
-    setMeasuredHeights(new Map());
     requestContentSizeChange();
   }, [requestContentSizeChange, sessionKey]);
 
@@ -111,60 +109,7 @@ export function useChatMessageVirtualization({
       window.cancelAnimationFrame(contentSizeFrameRef.current);
       contentSizeFrameRef.current = null;
     }
-    observersRef.current.forEach((observer) => observer.disconnect());
-    observersRef.current.clear();
   }, []);
-
-  const updateMeasuredHeight = useCallback((
-    message: SessionMessage,
-    index: number,
-    height: number,
-    element: HTMLElement,
-  ) => {
-    const messageKey = getChatMessageReactKey(message, index);
-    const nextHeight = Math.max(1, Math.ceil(height));
-    const previousHeight = measurementsRef.current.get(messageKey) ?? estimateChatMessageHeight(message);
-    if (Math.abs(nextHeight - previousHeight) < 1) return;
-    measurementsRef.current.set(messageKey, nextHeight);
-    setMeasuredHeights((current) => {
-      if (current.get(messageKey) === nextHeight) return current;
-      const next = new Map(current);
-      next.set(messageKey, nextHeight);
-      return next;
-    });
-    const container = conversationListRef.current;
-    const containerRect = container?.getBoundingClientRect();
-    const elementRect = element.getBoundingClientRect();
-    const isAboveViewport = Boolean(containerRect && elementRect.bottom <= containerRect.top);
-    if (container && isAboveViewport && !isAutoScrollingRef.current) {
-      container.scrollTop += nextHeight - previousHeight;
-    }
-    requestContentSizeChange();
-  }, [conversationListRef, isAutoScrollingRef, requestContentSizeChange]);
-
-  const observeMessageElement = useCallback((
-    message: SessionMessage,
-    index: number,
-    element: HTMLElement | null,
-  ) => {
-    const messageKey = getChatMessageReactKey(message, index);
-    const domKey = getChatMessageDomKey(message, index);
-    if (element && domKey === highlightedMessageKey) {
-      onMessageNavigationTargetMounted?.(domKey, element);
-    }
-    observersRef.current.get(messageKey)?.disconnect();
-    observersRef.current.delete(messageKey);
-    if (!element || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver((entries) => {
-      const height = entries[0]?.contentRect.height;
-      if (height != null) {
-        updateMeasuredHeight(message, index, height, element);
-      }
-    });
-    observersRef.current.set(messageKey, observer);
-    observer.observe(element);
-    updateMeasuredHeight(message, index, element.getBoundingClientRect().height, element);
-  }, [highlightedMessageKey, onMessageNavigationTargetMounted, updateMeasuredHeight]);
 
   return { virtualMessageWindow, observeMessageElement };
 }

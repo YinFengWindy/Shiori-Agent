@@ -1,6 +1,23 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createPluginRpcClient } from "./pluginBridgeClient.js";
+import { createPluginBridgeClient, createPluginRpcClient } from "./pluginBridgeClient.js";
+
+it("preserves candidate identity and structured admission diagnostics from the bridge", async () => {
+  const diagnostic = { code: "duplicate_id", stage: "discovery", field: "id", reason: "conflict", path: "C:/workspace/plugins/demo", state: "CONFLICT" };
+  const client = createPluginBridgeClient(async ({ method }) => ({
+    id: "1", type: "response", method, error: null, payload: { plugins: [{
+      id: "demo", candidate_id: "workspace/demo", source: "workspace", directory: "C:/workspace/plugins/demo",
+      name: "demo", version: "1.0.0", description: "", enabled: true, can_toggle: false,
+      state: "CONFLICT", error: "conflict", diagnostic, has_config_schema: false, supports_hot_unload: true,
+    }] },
+  }));
+  const [plugin] = await client.listPlugins();
+  assert.equal(plugin.candidateId, "workspace/demo");
+  assert.equal(plugin.source, "workspace");
+  assert.equal(plugin.directory, "C:/workspace/plugins/demo");
+  assert.equal(plugin.canToggle, false);
+  assert.deepEqual(plugin.diagnostic, diagnostic);
+});
 
 describe("createPluginRpcClient", () => {
   it("prefixes every call with the owning plugin's own plugin.<id>.* namespace", async () => {

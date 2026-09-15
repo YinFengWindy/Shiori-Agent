@@ -1,10 +1,42 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { act, useRef } from "react";
+import { act, useCallback, useRef } from "react";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
 import { useChatScrollController } from "./useChatScrollController";
 
 describe("useChatScrollController", () => {
+  it("restores the outgoing session's last position before replacement rows change the shared container", async () => {
+    let controller!: ReturnType<typeof useChatScrollController>;
+    function Harness({ sessionKey }: { sessionKey: string }) {
+      const containerRef = useRef<HTMLDivElement | null>(null);
+      controller = useChatScrollController({ conversationListRef: containerRef, sessionKey });
+      const attach = useCallback((element: HTMLDivElement | null) => {
+        containerRef.current = element;
+        if (element) {
+          Object.defineProperties(element, {
+            clientHeight: { configurable: true, value: 600 },
+            scrollHeight: { configurable: true, value: 6000 },
+          });
+          // Replacement row measurements happen before the owner's layout effect.
+          element.scrollTop = sessionKey === "first" ? 0 : 100;
+        }
+      }, [sessionKey]);
+      return <div ref={attach} />;
+    }
+    const view = await mountTestComponent(<Harness sessionKey="first" />);
+    try {
+      const container = view.container.firstElementChild as HTMLDivElement;
+      await act(async () => {
+        container.scrollTop = 600;
+        container.dispatchEvent(new Event("scroll"));
+      });
+      await view.render(<Harness sessionKey="second" />);
+      const restored = controller.restoreSessionScroll("first");
+      assert.equal(restored?.scrollTop, 600);
+      assert.equal(container.scrollTop, 600);
+    } finally { await view.cleanup(); }
+  });
+
   it("settles detached navigation exactly once so its owner can release pending state and highlighting", async () => {
     let controller!: ReturnType<typeof useChatScrollController>;
     function Harness() {

@@ -521,3 +521,160 @@ async def test_list_preserves_external_contract_rejection(
     finally:
         await service.aclose()
         await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_workspace_candidates_are_visible_unsafe_and_reload_safe(
+    tmp_path, monkeypatch
+):
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    builtin = tmp_path / "plugin_dirs"
+    external = tmp_path / "plugins"
+    marker = tmp_path / "untrusted-imported"
+    for name, plugin_id in [("hello-copy", "hello"), ("manual", "manual")]:
+        package = external / name
+        (package / "backend").mkdir(parents=True)
+        (package / "manifest.yaml").write_text(
+            f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
+            "version: 1.0.0\nruntime_api: '>=2.0.0 <3.0.0'\nentry: backend/plugin.py\n",
+            encoding="utf-8",
+        )
+        (package / "backend/plugin.py").write_text(
+            "from pathlib import Path\n"
+            f"Path({str(marker)!r}).write_text('imported', encoding='utf-8')\n"
+            "async def setup(ctx): pass\n",
+            encoding="utf-8",
+        )
+    bad = external / "bad"
+    bad.mkdir()
+    (bad / "manifest.yaml").write_text("api: 2\ncapabilities: [", encoding="utf-8")
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda _: [builtin, external]
+    )
+    service, path, app = await _start_service(tmp_path)
+    try:
+        response = await _request(service, "plugins.list")
+        rows = response.payload["plugins"]
+        assert len(rows) == 5
+        assert len({row["candidate_id"] for row in rows}) == 5
+        conflicts = [row for row in rows if row["id"] == "hello"]
+        assert len(conflicts) == 2
+        assert {row["source"] for row in conflicts} == {"builtin", "workspace"}
+        assert {row["state"] for row in conflicts} == {"CONFLICT"}
+        assert all(row["directory"] and row["version"] for row in conflicts)
+        assert all(row["diagnostic"]["code"] == "duplicate_id" for row in conflicts)
+        manual = next(row for row in rows if row["id"] == "manual")
+        assert manual["state"] == "UNTRUSTED"
+        assert manual["enabled"] is True
+        assert not manual["can_toggle"]
+        assert next(row for row in rows if row["id"] == "bad")["state"] == "BLOCKED"
+        before = path.read_text(encoding="utf-8")
+        for plugin_id in ("hello", "manual", "bad"):
+            rejected = await _request(
+                service,
+                "plugins.setEnabled",
+                {
+                    "plugin_id": plugin_id,
+                    "enabled": True,
+                    "operation_id": plugin_id,
+                },
+            )
+            assert rejected.error.code == "plugin_not_admitted"
+            assert path.read_text(encoding="utf-8") == before
+        # A valid builtin toggle prepares a strict generation. Bad external
+        # packages must remain diagnostics rather than aborting unrelated apply.
+        changed = await _request(
+            service,
+            "plugins.setEnabled",
+            {
+                "plugin_id": "qqbot",
+                "enabled": False,
+                "operation_id": "disable-builtin",
+            },
+        )
+        assert changed.error is None
+        again = await _request(service, "plugins.list")
+        assert len(again.payload["plugins"]) == 5
+        assert not marker.exists()
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_workspace_directory_changes_wait_for_application_restart(
+    tmp_path, monkeypatch
+):
+    _stage_plugin_dirs(tmp_path, monkeypatch, with_rpc_demo=True)
+    builtin, external = tmp_path / "plugin_dirs", tmp_path / "plugins"
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda _: [builtin, external]
+    )
+
+    def stage_external(name, plugin_id, *, version="1.0.0", runtime=">=2.0.0 <3.0.0"):
+        package = external / name
+        (package / "backend").mkdir(parents=True, exist_ok=True)
+        (package / "manifest.yaml").write_text(
+            f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
+            f"version: {version}\nruntime_api: '{runtime}'\nentry: backend/plugin.py\n",
+            encoding="utf-8",
+        )
+        (package / "backend/plugin.py").write_text(
+            "async def setup(ctx): pass\n", encoding="utf-8"
+        )
+        return package
+
+    stage_external("manual", "manual")
+    removed = stage_external("removed", "removed")
+    service, _, app = await _start_service(tmp_path)
+    try:
+        before = (await _request(service, "plugins.list")).payload["plugins"]
+        before_by_id = {row["id"]: row for row in before}
+        assert before_by_id["rpc_demo"]["state"] == "ACTIVE"
+        assert before_by_id["manual"]["state"] == "UNTRUSTED"
+        stage_external("new-copy", "rpc_demo")
+        stage_external("manual", "manual", version="2.0.0", runtime=">=3.0.0 <4.0.0")
+        shutil.rmtree(removed)
+
+        for index, enabled in enumerate((False, True)):
+            changed = await _request(
+                service,
+                "plugins.setEnabled",
+                {
+                    "plugin_id": "qqbot",
+                    "enabled": enabled,
+                    "operation_id": f"toggle-{index}",
+                },
+            )
+            assert changed.error is None
+            assert changed.payload["generation"] == index + 2
+            rows = (await _request(service, "plugins.list")).payload["plugins"]
+            assert {row["candidate_id"] for row in rows} == {
+                row["candidate_id"] for row in before
+            }
+            by_id = {row["id"]: row for row in rows}
+            for plugin_id in ("rpc_demo", "hello", "manual", "removed"):
+                assert by_id[plugin_id] == before_by_id[plugin_id]
+            ping = await _request(service, "plugin.rpc_demo.ping", {"value": index})
+            assert ping.error is None
+            assert ping.payload == {"pong": index}
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+    restarted, _, restarted_app = await _start_service(tmp_path)
+    try:
+        rows = (await _request(restarted, "plugins.list")).payload["plugins"]
+        conflict = [row for row in rows if row["id"] == "rpc_demo"]
+        assert len(conflict) == 2
+        assert {row["state"] for row in conflict} == {"CONFLICT"}
+        assert not any(row["id"] == "removed" for row in rows)
+        manual = next(row for row in rows if row["id"] == "manual")
+        assert manual["version"] == "2.0.0"
+        assert manual["state"] == "BLOCKED"
+        assert manual["diagnostic"]["code"] == "incompatible_runtime"
+        ping = await _request(restarted, "plugin.rpc_demo.ping")
+        assert ping.error.code == "unknown_method"
+    finally:
+        await restarted.aclose()
+        await restarted_app.shutdown()

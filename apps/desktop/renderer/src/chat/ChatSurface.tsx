@@ -10,13 +10,13 @@ import {
 } from "./chatMessageActions";
 import { ChatRightSidebar, type ChatSidebarMode } from "./ChatRightSidebar";
 import {
-  shouldAutoScrollOnContentSizeChange,
   shouldAutoScrollOnNewMessage,
 } from "./chatAutoScroll";
 import { shouldLoadOlderChatMessagesAfterSessionRestore } from "./chatMessagePaginationState";
 import { summarizeChatReplyContent } from "./chatComposerState";
 import { useRoleTasks } from "./useRoleTasks";
 import { useChatMessagePagination } from "./useChatMessagePagination";
+import { useChatBottomFollow } from "./useChatBottomFollow";
 import {
   type ChatMessageNavigationScroller,
   useChatScrollController,
@@ -125,9 +125,7 @@ export function ChatSurface({
   const previousChatImageCountRef = useRef(0);
   const previousRoleSelfViewRef = useRef(roleSelfView);
   const imagePriorityUserMessageCountRef = useRef(-1);
-  const stickToBottomRef = useRef(true);
   const highlightedMessageKeyRef = useLatestRef(highlightedMessageKey);
-  const [scrollState, setScrollState] = useState({ isAtBottom: true, isScrollable: false });
   const [chatLatestImageSidebarMounted, setChatLatestImageSidebarMounted] = useState(!chatLatestImageSidebarCollapsed);
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
   const [composerReplyTarget, setComposerReplyTarget] = useState<ChatReplyTarget | null>(null);
@@ -161,6 +159,7 @@ export function ChatSurface({
   const {
     isAutoScrollingRef,
     restoreSessionScroll,
+    cancelScroll,
     scrollToBottom,
     scrollToMessage,
   } = useChatScrollController({
@@ -170,10 +169,15 @@ export function ChatSurface({
   const handleMessageNavigationTargetMounted = useCallback((messageKey: string, target: HTMLElement) => {
     onMessageNavigationTargetMounted?.(messageKey, target, scrollToMessage);
   }, [onMessageNavigationTargetMounted, scrollToMessage]);
-  const scrollConversationToBottom = useCallback((behavior: ScrollBehavior) => {
-    stickToBottomRef.current = true;
-    scrollToBottom(behavior);
-  }, [scrollToBottom]);
+  const { stickToBottomRef, scrollState, scrollConversationToBottom, handleChatContentSizeChange } = useChatBottomFollow({
+    conversationListRef,
+    isAutoScrollingRef,
+    sessionKey: activeSession?.key ?? "",
+    highlightedMessageKey,
+    scrollToBottom,
+    cancelScroll,
+    maybeLoadOlderMessages,
+  });
   const sidebarToggleGlyphClass =
     "relative h-[11px] w-3 rounded-[4px] border-[1.2px] border-current before:absolute before:w-px before:rounded-full before:bg-current before:content-['']";
 
@@ -208,16 +212,6 @@ export function ChatSurface({
     scrollConversationToBottom("auto");
   });
 
-  const handleChatContentSizeChange = useCallback(() => {
-    if (!shouldAutoScrollOnContentSizeChange({
-      highlightedMessageKey: highlightedMessageKeyRef.current,
-      wasAtBottom: stickToBottomRef.current,
-    })) {
-      return;
-    }
-    scrollConversationToBottom("auto");
-  }, [highlightedMessageKeyRef, scrollConversationToBottom]);
-
   useEffect(() => {
     if (typeof document === "undefined") {
       return undefined;
@@ -241,57 +235,6 @@ export function ChatSurface({
       window.removeEventListener("blur", updateVisualsActive);
     };
   }, []);
-
-  useEffect(() => {
-    const updateScrollState = (options?: { allowUnstick?: boolean }) => {
-      const container = conversationListRef.current;
-      if (!container) return;
-
-      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-      const nextState = {
-        isAtBottom: distanceFromBottom <= 24,
-        isScrollable: container.scrollHeight - container.clientHeight > 24,
-      };
-
-      if (nextState.isAtBottom) {
-        stickToBottomRef.current = true;
-      } else if (options?.allowUnstick && !isAutoScrollingRef.current) {
-        stickToBottomRef.current = false;
-      }
-
-      setScrollState((current) => (
-        current.isAtBottom === nextState.isAtBottom && current.isScrollable === nextState.isScrollable
-          ? current
-          : nextState
-      ));
-    };
-
-    updateScrollState();
-
-    const container = conversationListRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      updateScrollState({ allowUnstick: true });
-      const container = conversationListRef.current;
-      if (container) {
-        maybeLoadOlderMessages(container.scrollTop, isAutoScrollingRef.current);
-      }
-    };
-    const handleResize = () => updateScrollState();
-
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("resize", handleResize);
-
-    const resizeObserver = new ResizeObserver(() => updateScrollState());
-    resizeObserver.observe(container);
-
-    return () => {
-      container.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", handleResize);
-      resizeObserver.disconnect();
-    };
-  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, isAutoScrollingRef, maybeLoadOlderMessages, sending]);
 
   useEffect(() => {
     if (!chatLatestImageSidebarCollapsed) {
@@ -394,7 +337,7 @@ export function ChatSurface({
       return;
     }
     scrollConversationToBottom("auto");
-  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, scrollConversationToBottom, sending]);
+  }, [activeSession?.messages.length, currentLastMessageContent, highlightedMessageKey, scrollConversationToBottom, sending, stickToBottomRef]);
 
   const renderHeavyVisuals = visualsActive && windowVisible;
   const hasIllustration = Boolean(visibleIllustrationUrl) && renderHeavyVisuals;

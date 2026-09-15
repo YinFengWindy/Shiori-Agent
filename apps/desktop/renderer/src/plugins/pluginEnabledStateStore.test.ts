@@ -17,13 +17,13 @@ describe("pluginEnabledStateStore", () => {
   });
 
   it("still treats an unrecognized plugin as disabled after the roster has loaded", () => {
-    setPluginEnabledSnapshot([{ id: "demo", enabled: true }]);
+    setPluginEnabledSnapshot([{ id: "demo", enabled: true, state: "ACTIVE" }]);
     assert.equal(isPluginEnabled("some-other-plugin"), false);
   });
 
   it("exposes a predicate whose identity changes whenever the cache changes", () => {
     const before = getPluginEnabledPredicate();
-    setPluginEnabledSnapshot([{ id: "demo", enabled: true }]);
+    setPluginEnabledSnapshot([{ id: "demo", enabled: true, state: "ACTIVE" }]);
     const afterSnapshot = getPluginEnabledPredicate();
     setPluginEnabledSnapshot([{ id: "demo", enabled: false, state: "DISABLED" }]);
     const afterToggle = getPluginEnabledPredicate();
@@ -37,7 +37,7 @@ describe("pluginEnabledStateStore", () => {
 
   it("fetches the roster once and memoizes it across callers", async () => {
     let calls = 0;
-    const client = { listPlugins: async () => { calls += 1; return [{ id: "demo", enabled: false } as never]; } };
+    const client = { listPlugins: async () => { calls += 1; return [{ id: "demo", enabled: false, state: "DISABLED" } as never]; } };
 
     await ensurePluginEnabledStateLoaded(client);
     await ensurePluginEnabledStateLoaded(client);
@@ -48,17 +48,17 @@ describe("pluginEnabledStateStore", () => {
 
   it("coalesces concurrent loads into a single request", async () => {
     let calls = 0;
-    let resolveFetch!: (value: Array<{ id: string; enabled: boolean }>) => void;
+    let resolveFetch!: (value: Array<{ id: string; enabled: boolean; state: string }>) => void;
     const client = {
       listPlugins: async () => {
         calls += 1;
-        return new Promise<Array<{ id: string; enabled: boolean }>>((resolve) => { resolveFetch = resolve; });
+        return new Promise<Array<{ id: string; enabled: boolean; state: string }>>((resolve) => { resolveFetch = resolve; });
       },
     };
 
     const first = ensurePluginEnabledStateLoaded(client as never);
     const second = ensurePluginEnabledStateLoaded(client as never);
-    resolveFetch([{ id: "demo", enabled: true }]);
+    resolveFetch([{ id: "demo", enabled: true, state: "ACTIVE" }]);
     await Promise.all([first, second]);
 
     assert.equal(calls, 1);
@@ -68,7 +68,7 @@ describe("pluginEnabledStateStore", () => {
     let notifications = 0;
     const unsubscribe = subscribePluginEnabledState(() => { notifications += 1; });
 
-    setPluginEnabledSnapshot([{ id: "demo", enabled: true }]);
+    setPluginEnabledSnapshot([{ id: "demo", enabled: true, state: "ACTIVE" }]);
     assert.equal(isPluginEnabled("demo"), true);
     setPluginEnabledSnapshot([{ id: "demo", enabled: false, state: "DISABLED" }]);
     assert.equal(isPluginEnabled("demo"), false);

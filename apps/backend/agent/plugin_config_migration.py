@@ -10,7 +10,7 @@ from agent.plugin_host.plugin_data import (
     plugin_data_dir,
     remove_migrated_source,
 )
-from agent.plugin_host.manifest import ManifestError, load_manifest
+from agent.plugin_host.discovery import discover_plugins
 from bootstrap.paths import REPOSITORY_ROOT, plugin_roots
 from infra.persistence.json_store import atomic_save_json
 from infra.persistence.text_store import atomic_save_text
@@ -22,46 +22,50 @@ _MARKER = "plugin_config.migrated.json"
 
 def _legacy_sources(workspace: Path) -> dict[str, list[Path]]:
     """Uses installed manifests for identity without executing any plugin code."""
-    packages: dict[str, list[Path]] = {}
-    roots = dict.fromkeys(root.resolve() for root in plugin_roots())
-    seen_names: set[str] = set()
-    for root in roots:
-        for manifest_file in sorted(root.glob("*/manifest.yaml")):
-            package = manifest_file.parent
-            if package.name in seen_names:
-                continue
-            try:
-                manifest = load_manifest(package)
-            except ManifestError:
-                continue
-            if manifest is not None:
-                try:
-                    plugin_data_dir(workspace, manifest.id)
-                except ValueError:
-                    continue
-                # Match current host discovery: the first valid package with a
-                # directory name owns it. Old workspace packages are data only.
-                seen_names.add(package.name)
-                packages.setdefault(manifest.id, []).append(package)
+    external_root = workspace / "plugins"
+    records = discover_plugins(
+        [*plugin_roots(), external_root],
+        external_roots=[external_root],
+        namespace="config_migration",
+        strict=False,
+        host=None,
+    )
+    package_directories = {record.plugin_dir.absolute() for record in records}
+    directory_identities: dict[str, set[str]] = {}
+    for record in records:
+        directory_identities.setdefault(record.name, set()).add(record.manifest.id)
     sources: dict[str, list[Path]] = {}
-    for plugin_id, locations in packages.items():
-        if len(locations) != 1:
-            # Conflicting packages have no unambiguous owner for legacy data.
+    for record in records:
+        if record.source != "builtin" or record.admission is not None:
             continue
-        package = locations[0]
-        old = REPOSITORY_ROOT / "apps/backend/plugins" / package.name
-        sources[plugin_id] = list(
-            dict.fromkeys(
-                [
-                    workspace / "plugins" / plugin_id / _FILENAME,
-                    workspace / "plugins" / package.name / _FILENAME,
-                    package / _FILENAME,
-                    package / "backend" / _FILENAME,
-                    old / _FILENAME,
-                    old / "backend" / _FILENAME,
-                ]
-            )
-        )
+        plugin_id = record.manifest.id
+        try:
+            plugin_data_dir(workspace, plugin_id)
+        except ValueError:
+            continue
+        package = record.plugin_dir
+        legacy_names = [plugin_id]
+        if directory_identities[record.name] == {plugin_id}:
+            legacy_names.append(record.name)
+        legacy_names = list(dict.fromkeys(legacy_names))
+        # A discovered workspace package owns its own JSON, regardless of its
+        # admission. Only manifest-free old data directories can supply aliases.
+        workspace_files = [
+            external_root / name / _FILENAME
+            for name in legacy_names
+            if (external_root / name).absolute() not in package_directories
+        ]
+        old_root = REPOSITORY_ROOT / "apps/backend/plugins"
+        sources[plugin_id] = [
+            *workspace_files,
+            package / _FILENAME,
+            package / "backend" / _FILENAME,
+            *(
+                old_root / name / subpath
+                for name in legacy_names
+                for subpath in (_FILENAME, f"backend/{_FILENAME}")
+            ),
+        ]
     return sources
 
 
@@ -89,7 +93,7 @@ def migrate_plugin_config(
         raise ValueError("_migrations.plugin_config_json 必须是插件 ID 数组")
     receipts = list(raw_receipts)
     pending: list[tuple[str, Path | None, list[Path]]] = []
-    for plugin_id in sorted(set(sources) | set(receipts)):
+    for plugin_id in sorted(sources):
         target = plugin_data_dir(workspace, plugin_id) / _FILENAME
         marker = target.with_name(_MARKER)
         if marker.exists():

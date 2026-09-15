@@ -1,6 +1,7 @@
 // Registers every plugin's `background/index.ts` before the host reads the registry.
 import "./pluginBackgroundModules";
 import { createPluginBridgeClient } from "../plugins/pluginBridgeClient";
+import { activePluginIds } from "../plugins/activePluginIds";
 import { reportBackgroundFailure } from "./backgroundDiagnostics";
 import { createBackgroundCtx } from "./pluginBackgroundCtx";
 import { PluginBackgroundHost } from "./pluginBackgroundHost";
@@ -24,7 +25,7 @@ const host = new PluginBackgroundHost({
   registry: pluginBackgroundRegistry,
   async listEnabledPluginIds() {
     const plugins = await pluginBridge.listPlugins();
-    return new Set(plugins.filter((plugin) => plugin.enabled).map((plugin) => plugin.id));
+    return activePluginIds(plugins);
   },
   subscribeRosterChanged(listener) {
     // `runtime.applied` is the roster-changed signal — but note *where* it is

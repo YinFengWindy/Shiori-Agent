@@ -28,7 +28,7 @@ test("independent drafts keep explicit save semantics without touching runtime_c
     read: (state) => ({ enabled: state.enabled === true }),
     afterSave: async (values) => { saved.push(values); },
   });
-  setPluginEnabledSnapshot([{ id: "independent", enabled: true }]);
+  setPluginEnabledSnapshot([{ id: "independent", enabled: true, state: "ACTIVE" }]);
   try {
     const runtime = { other: 42 };
     const snapshot = { independent: { enabled: false, available: true } };
@@ -43,7 +43,7 @@ test("independent drafts keep explicit save semantics without touching runtime_c
     await notifyPluginRoleSaved(edited, runtime, snapshot);
     assert.deepEqual(saved, [{ enabled: true }]);
     assert.deepEqual(buildPluginRoleDraftUpdates(draft, snapshot), {});
-    setPluginEnabledSnapshot([{ id: "independent", enabled: false }]);
+    setPluginEnabledSnapshot([{ id: "independent", enabled: false, state: "DISABLED" }]);
     assert.deepEqual(buildPluginRoleDraftUpdates(edited, snapshot), {});
     assert.equal(pluginRoleSettingsDirty(edited, runtime, snapshot), false);
     await notifyPluginRoleSaved(edited, runtime, snapshot);

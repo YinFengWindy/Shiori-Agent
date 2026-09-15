@@ -24,15 +24,31 @@ export type PluginConfigSaveResult = {
 /** One row of the plugin management list (`plugins.list`). */
 export type PluginSummary = {
   id: string;
+  /** Stable identity of this directory candidate, including duplicate IDs. */
+  candidateId: string;
+  source: "builtin" | "workspace";
+  directory: string;
   name: string;
   version: string;
   description: string;
   enabled: boolean;
+  canToggle: boolean;
   state: string;
   error: string;
+  diagnostic: PluginDiagnostic | null;
   hasConfigSchema: boolean;
   /** Whether an active plugin can be replaced without restarting the process. */
   supportsHotUnload: boolean;
+};
+
+/** Structured static admission or runtime dependency rejection. */
+export type PluginDiagnostic = {
+  code: string;
+  stage: string;
+  field: string;
+  reason: string;
+  path: string;
+  state: string;
 };
 
 export type PluginSetEnabledResult = {
@@ -85,16 +101,23 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
     async listPlugins() {
       const payload = await invokePluginPayload<{ plugins: Array<{
         id: string; name: string; version: string; description: string;
+        candidate_id: string; source: "builtin" | "workspace"; directory: string;
+        can_toggle: boolean; diagnostic: PluginDiagnostic | null;
         enabled: boolean; state: string; error: string; has_config_schema: boolean; supports_hot_unload: boolean;
       }> }>(resolveInvoke(), "plugins.list", {});
       return payload.plugins.map((item) => ({
         id: item.id,
+        candidateId: item.candidate_id,
+        source: item.source,
+        directory: item.directory,
         name: item.name,
         version: item.version,
         description: item.description,
         enabled: item.enabled,
+        canToggle: item.can_toggle,
         state: item.state,
         error: item.error,
+        diagnostic: item.diagnostic,
         hasConfigSchema: item.has_config_schema,
         supportsHotUnload: item.supports_hot_unload,
       }));

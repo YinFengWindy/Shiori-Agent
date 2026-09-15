@@ -239,17 +239,18 @@ def test_untrusted_path_identity_is_not_used_to_migrate_files(tmp_path, monkeypa
     assert not (workspace / "plugin-data").exists()
 
 
-def test_overlapping_workspace_and_package_roots_are_one_owner(tmp_path, monkeypatch):
-    path, _, packages, sources = _environment(tmp_path, monkeypatch)
+def test_repeated_builtin_root_does_not_create_a_migration_conflict(
+    tmp_path, monkeypatch
+):
+    path, workspace, packages, sources = _environment(tmp_path, monkeypatch)
+    monkeypatch.setattr(migration, "plugin_roots", lambda: [packages, packages])
     _write(sources[2], {"value": "kept"})
-    assert load_config(path, workspace=packages.parent).plugins == {
-        "demo": {"value": "kept"}
-    }
+    assert load_config(path, workspace=workspace).plugins == {"demo": {"value": "kept"}}
     assert not sources[2].exists()
 
 
 @pytest.mark.parametrize("duplicate_location", ["later-root", "old-workspace"])
-def test_same_directory_shadowing_does_not_hide_installed_owner(
+def test_same_id_conflict_never_imports_or_deletes_either_source(
     tmp_path, monkeypatch, duplicate_location
 ):
     path, workspace, packages, sources = _environment(tmp_path, monkeypatch)
@@ -268,10 +269,13 @@ def test_same_directory_shadowing_does_not_hide_installed_owner(
             migration, "plugin_roots", lambda: [packages, duplicate_root]
         )
     _write(sources[2], {"value": "installed"})
-    assert load_config(path, workspace=workspace).plugins == {
-        "demo": {"value": "installed"}
-    }
-    assert not sources[2].exists()
+    other_source = duplicate / "plugin_config.json"
+    _write(other_source, {"value": "other"})
+    assert load_config(path, workspace=workspace).plugins == {}
+    assert sources[2].is_file()
+    assert other_source.is_file()
+    assert not sources[0].exists()
+    assert path.read_bytes() == b""
 
 
 def test_workspace_only_package_is_not_an_installed_migration_owner(
@@ -286,3 +290,99 @@ def test_workspace_only_package_is_not_an_installed_migration_owner(
     assert load_config(path, workspace=workspace).plugins == {}
     assert sources[1].is_file()
     assert not sources[0].exists()
+
+
+@pytest.mark.parametrize("external", [False, True])
+def test_same_directory_different_ids_never_share_package_json(
+    tmp_path, monkeypatch, external
+):
+    path, workspace, packages, sources = _environment(tmp_path, monkeypatch)
+    other_root = workspace / "plugins" if external else tmp_path / "other-builtin"
+    other = other_root / "demo"
+    other.mkdir(parents=True)
+    (other / "manifest.yaml").write_text(
+        "api: 2\nid: other\ncapabilities: []\n", encoding="utf-8"
+    )
+    if not external:
+        monkeypatch.setattr(migration, "plugin_roots", lambda: [packages, other_root])
+    _write(sources[2], {"value": "builtin"})
+    other_source = other / "plugin_config.json"
+    _write(other_source, {"value": "other"})
+    expected = {"demo": {"value": "builtin"}}
+    if not external:
+        expected["other"] = {"value": "other"}
+    assert load_config(path, workspace=workspace).plugins == expected
+    assert other_source.exists() is external
+    assert not sources[2].exists()
+    if external:
+        assert not (workspace / "plugin-data/other").exists()
+
+
+@pytest.mark.parametrize("admission", ["UNTRUSTED", "BLOCKED", "CONFLICT"])
+def test_discovery_admission_defers_import_and_receipt_recovery(
+    tmp_path, monkeypatch, admission
+):
+    path, workspace, packages, sources = _environment(tmp_path, monkeypatch)
+    external = workspace / "plugins/demo"
+    (packages / "demo/manifest.yaml").unlink()
+    (external / "backend").mkdir(parents=True)
+    (external / "backend/plugin.py").write_text(
+        "raise AssertionError('must not execute')\nasync def setup(ctx):\n    pass\n",
+        encoding="utf-8",
+    )
+    (external / "manifest.yaml").write_text(
+        "api: 2\npackage_contract: 1\nid: demo\nversion: 1.0.0\n"
+        "runtime_api: '>=2.0.0 <3.0.0'\nentry: backend/plugin.py\ncapabilities: []\n",
+        encoding="utf-8",
+    )
+    if admission == "BLOCKED":
+        (external / "backend/plugin.py").unlink()
+    if admission == "CONFLICT":
+        (packages / "demo/manifest.yaml").write_text(
+            "api: 2\nid: demo\ncapabilities: []\n", encoding="utf-8"
+        )
+    from agent.plugin_host.discovery import discover_plugins
+
+    records = discover_plugins(
+        [packages, external.parent],
+        external_roots=[external.parent],
+        namespace="test",
+        strict=False,
+        host=None,
+    )
+    assert records[-1].admission.state == admission
+    _write(sources[1], {"value": "source"})
+    _write(sources[0], {"value": "archive"})
+    assert load_config(path, workspace=workspace).plugins == {}
+    assert sources[1].is_file()
+    assert path.read_bytes() == b""
+    # A crash receipt may exist from an earlier admitted installation. Changed
+    # admission must not finalize markers or delete any source on this startup.
+    path.write_text(
+        '[plugins.demo]\nvalue = "committed"\n[_migrations]\nplugin_config_json = ["demo"]\n',
+        encoding="utf-8",
+    )
+    before = path.read_bytes()
+    assert load_config(path, workspace=workspace).plugins["demo"] == {
+        "value": "committed"
+    }
+    assert path.read_bytes() == before
+    assert sources[1].is_file()
+    assert not (workspace / "plugin-data/demo/plugin_config.migrated.json").exists()
+
+
+def test_ambiguous_manifest_free_directory_alias_is_preserved(tmp_path, monkeypatch):
+    path, workspace, packages, sources = _environment(tmp_path, monkeypatch)
+    (packages / "demo/manifest.yaml").write_text(
+        "api: 2\nid: first\ncapabilities: []\n", encoding="utf-8"
+    )
+    other = tmp_path / "other-builtin/demo"
+    other.mkdir(parents=True)
+    (other / "manifest.yaml").write_text(
+        "api: 2\nid: second\ncapabilities: []\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(migration, "plugin_roots", lambda: [packages, other.parent])
+    _write(sources[1], {"value": "ambiguous"})
+    assert load_config(path, workspace=workspace).plugins == {}
+    assert sources[1].is_file()
+    assert not (workspace / "plugin-data").exists()

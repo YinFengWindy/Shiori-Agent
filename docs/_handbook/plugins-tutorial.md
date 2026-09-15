@@ -19,7 +19,11 @@ plugins/example/
   README.md
 ```
 
-后端扫描 `bootstrap.paths.plugin_roots()` 返回的插件根目录。开发态和桌面 bundle 使用顶层 `plugins/`；安装态使用已安装插件包。只有显式 `api: 2` 的 manifest 会成为插件，默认入口是 `backend/plugin.py`。入口作为包导入，内部可使用相对 import；同目录名先发现者优先，重复 manifest ID 会报错。
+后端扫描 `bootstrap.paths.plugin_roots()` 返回的内置插件根目录，以及工作区的 `plugins/`。开发态和桌面 bundle 的内置包位于安装资源的顶层 `plugins/`；wheel 安装态使用已安装插件包。内置包保留显式 `api: 2` 协议，默认入口为 `backend/plugin.py`，入口作为包导入，内部可使用相对 import。
+
+工作区 `plugins/<目录>/manifest.yaml` 声明的外部包必须通过 [Package Contract v1](plugin-runtime-contract.md) 静态检查；合法包显示为 `UNTRUSTED`，当前版本不提供授信操作，也不导入它的后端或 renderer。配置 `enabled = true` 不代表信任。无效 manifest、入口和依赖显示为 `BLOCKED`；只有旧 `kv.json`、没有 manifest 的目录被忽略，数据不会因此删除。
+
+按 manifest ID 检测全部候选：同 ID 的所有包均为 `CONFLICT`，不选择内置或工作区优先者；同目录名但不同 ID 的包分别显示。插件管理保留各候选的版本、来源、实际目录和结构化诊断，拒绝切换未通过准入的候选。目录级代码新增、替换、删除后重启应用；配置保存或启停插件产生的新运行代沿用本次应用启动的候选、manifest 和准入快照，应用重启后才重新扫描。各运行代的导入命名空间、句柄和 effect 仍独立。
 
 ```yaml
 api: 2
@@ -82,7 +86,7 @@ async def setup(ctx):
 | `channels` / `bot_commands` | 贡献渠道及机器人命令 |
 | `rpc` | 注册 `plugin.<id>.<method>`，发送同命名空间事件 |
 | `background` | `ctx.background.spawn(coro, name=...)`；卸载取消并等待任务 |
-| `kv` | 工作区 `plugins/<id>/kv.json` 中的私有状态 |
+| `kv` | 工作区 `plugin-data/<id>/kv.json` 中的私有状态 |
 | `config` | 本代插件配置快照 |
 | `dependencies` | 读取已声明提供方的本代公开 API |
 | `runtime` | 本代是否重载、前代是否活动，以及收尾任务登记 |
@@ -178,7 +182,7 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 旧停用标记仅由配置启动升级读取：按当前 manifest 身份写入缺失的 `[plugins.<id>].enabled = false`，显式配置优先。持久化失败保留原配置与标记，重试不会覆盖已保存选择；无法确认当前插件身份时保留标记，等待包可用。内核日常启停不读取标记。已归核心的主动/场景偏好保持各自升级逻辑。
 
-通用 KV 位于 `agent/plugin_host/kv.py`，旧 `.kv.json` 的现存可恢复数据仍由 `plugin_data` 原子迁入工作区。旧 `workspace/plugins/<id>/kv.json` 优先于包内 `.kv.json`，统一原子迁入 `workspace/plugin-data/<id>/`。历史 `plugin_config.json` 从旧 workspace、当前包或旧 `apps/backend/plugins/<id>` 归档到该数据目录，并在持久化启动时一次性升级为主配置的 `[plugins.<id>]`；已有 v2 配置整表优先，仅含旧宿主 `enabled` 的表保留开关并导入参数。成功标记独立保存在数据目录，之后编辑、删键或删除整表都不会重新读取旧 JSON。旧源只在落盘成功后删除，未选中的候选保留；写入失败保留旧源并中止启动。default_memory / Akasha 的 `config.local.toml` 同样迁入各自数据目录，加载和初始化共用路径解析，默认值来自代码，运行时不向安装包写入。升级前已被安装器删除的数据无法恢复。
+通用 KV 位于 `agent/plugin_host/kv.py`，旧 `.kv.json` 的现存可恢复数据仍由 `plugin_data` 原子迁入工作区。旧 `workspace/plugins/<id>/kv.json` 优先于包内 `.kv.json`，统一原子迁入 `workspace/plugin-data/<id>/`。历史 `plugin_config.json` 迁移复用宿主静态 discovery，只为通过准入的内置 owner 处理数据；`CONFLICT`、`UNTRUSTED`、`BLOCKED` 保留来源且不导入。旧 workspace 中已有 manifest 的包不能作为其它 ID 的配置来源；没有 manifest 的旧数据目录继续支持迁移。同名目录的身份有歧义时保留旧别名数据。有效来源从旧 workspace、当前包或旧 `apps/backend/plugins/<id>` 归档到该数据目录，并在持久化启动时一次性升级为主配置的 `[plugins.<id>]`；已有 v2 配置整表优先，仅含旧宿主 `enabled` 的表保留开关并导入参数。成功标记独立保存在数据目录，之后编辑、删键或删除整表都不会重新读取旧 JSON。旧源只在落盘成功后删除，未选中的候选保留；写入失败保留旧源并中止启动。default_memory / Akasha 的 `config.local.toml` 同样迁入各自数据目录，加载和初始化共用路径解析，默认值来自代码，运行时不向安装包写入。升级前已被安装器删除的数据无法恢复。
 
 External package authors: see [External Plugin Runtime Contract v1](plugin-runtime-contract.md)
 for the versioned distribution layout, compatibility gate, ESM/CSS requirements

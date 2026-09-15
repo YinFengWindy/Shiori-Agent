@@ -98,7 +98,7 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
     kernel = make_kernel([tmp_path], event_bus=bus, strict=strict)
     loading = asyncio.create_task(kernel.load_all())
     await asyncio.sleep(0)
-    waiting = kernel._handles["waiting"]
+    waiting = kernel._handles[str((tmp_path / "waiting").absolute())]
     state = waiting.instance
     active_state = kernel._dependency_api("active")
     assert waiting.state is PluginState.LOADING
@@ -171,7 +171,7 @@ async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_pa
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     loading = asyncio.create_task(kernel.load_all())
     await asyncio.sleep(0)
-    handle = kernel._handles["waiting"]
+    handle = kernel._handles[str((tmp_path / "waiting").absolute())]
     state = handle.instance
     loading.cancel()
     try:
@@ -453,7 +453,7 @@ async def test_config_enabled_defaults_to_true_when_absent(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_plugin_name_first_wins(tmp_path: Path):
+async def test_repeated_discovery_root_is_scanned_once(tmp_path: Path):
     _ = stage_plugin_package(PLUGIN_FIXTURES / "hello", tmp_path / "hello")
     _ = stage_plugin_package(PLUGIN_FIXTURES / "weather", tmp_path / "weather")
     kernel = make_kernel([tmp_path, tmp_path], event_bus=EventBus())
@@ -956,7 +956,7 @@ async def test_runtime_contract_error_still_rolls_back_failed_setup(contract_pac
     kernel = make_kernel([contract_package.parent], event_bus=EventBus())
     await kernel.load_all()
     assert kernel.states()[0]["state"] == "FAILED"
-    assert kernel._handles["external_demo"].effects.labels == []
+    assert kernel._handles[str(contract_package.absolute())].effects.labels == []
     assert kernel.states()[0]["diagnostic"] is None
 
 
@@ -1031,3 +1031,166 @@ async def test_plugin_dependency_rejection_keeps_contract_diagnostic(
         assert state["diagnostic"]["reason"] == state["error"]
     else:
         assert state["diagnostic"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [True, False])
+async def test_external_package_never_executes_even_with_config_enablement(
+    contract_package, enabled
+):
+    from agent.plugin_host import HostServices, PluginKernel
+
+    marker = contract_package / "executed.txt"
+    (contract_package / "backend/plugin.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('imported', encoding='utf-8')\n"
+        "async def setup(ctx): raise AssertionError('must not execute')\n",
+        encoding="utf-8",
+    )
+    kernel = PluginKernel(
+        [contract_package.parent],
+        external_plugin_dirs=[contract_package.parent],
+        strict=True,
+        services=HostServices(
+            event_bus=EventBus(), plugin_configs={"external_demo": {"enabled": enabled}}
+        ),
+    )
+    await kernel.load_all()
+    first = kernel.states()
+    await kernel.load_all()
+    assert not await kernel.load("external_demo")
+    assert kernel.states() == first
+    assert first[0]["state"] == "UNTRUSTED"
+    assert first[0]["diagnostic"]["code"] == "trust_required"
+    assert kernel.loaded_count == 0
+    assert not marker.exists()
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("conflict", [True, False])
+async def test_rejected_provider_and_dependents_never_execute(tmp_path, conflict):
+    from agent.plugin_host import HostServices, PluginKernel
+
+    builtin, external = tmp_path / "builtin", tmp_path / "workspace"
+    packages = [
+        (builtin / "consumer", "consumer", "dependencies: [provider]\n"),
+        (external / "external-copy", "provider", ""),
+    ]
+    if conflict:
+        packages.append((builtin / "provider", "provider", ""))
+    marker = tmp_path / "executed.txt"
+    for package, plugin_id, extra in packages:
+        (package / "backend").mkdir(parents=True)
+        (package / "manifest.yaml").write_text(
+            f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
+            "version: 1.0.0\nruntime_api: '>=2.0.0 <3.0.0'\n"
+            "entry: backend/plugin.py\n" + extra,
+            encoding="utf-8",
+        )
+        (package / "backend/plugin.py").write_text(
+            "from pathlib import Path\n"
+            f"Path({str(marker)!r}).write_text('imported', encoding='utf-8')\n"
+            "async def setup(ctx): pass\n",
+            encoding="utf-8",
+        )
+    kernel = PluginKernel(
+        [builtin, external],
+        external_plugin_dirs=[external],
+        services=HostServices(event_bus=EventBus()),
+        strict=True,
+    )
+    await kernel.load_all()
+    await kernel.load_all()
+    states = kernel.states()
+    providers = [row for row in states if row["id"] == "provider"]
+    assert len(providers) == (2 if conflict else 1)
+    assert {row["state"] for row in providers} == {
+        "CONFLICT" if conflict else "UNTRUSTED"
+    }
+    assert next(row for row in states if row["id"] == "consumer")["state"] == "BLOCKED"
+    assert not marker.exists()
+    assert kernel.loaded_count == 0
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_identical_directory_names_keep_independent_runtime_handles(tmp_path):
+    from agent.plugin_host import HostServices, PluginKernel
+    from agent.plugin_host.manifest import ManifestError
+
+    roots = [tmp_path / "a", tmp_path / "b"]
+    for index, root in enumerate(roots):
+        package = root / "same"
+        (package / "backend").mkdir(parents=True)
+        (package / "manifest.yaml").write_text(
+            f"api: 2\nid: plugin_{index}\ncapabilities: []\n", encoding="utf-8"
+        )
+        (package / "backend/plugin.py").write_text(
+            "async def setup(ctx): pass\n", encoding="utf-8"
+        )
+    kernel = PluginKernel(roots, services=HostServices(event_bus=EventBus()))
+    await kernel.load_all()
+    assert kernel.loaded_count == 2
+    with pytest.raises(ManifestError, match="不唯一"):
+        await kernel.unload("same")
+    await kernel.unload("plugin_0")
+    assert kernel.loaded_count == 1
+    assert kernel.states()[0]["id"] == "plugin_1"
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_discovery_snapshot_preserves_admission_without_sharing_runtime_state(
+    tmp_path,
+):
+    import sys
+
+    from agent.plugin_host import HostServices, PluginKernel
+
+    stage_plugin_package(PLUGIN_FIXTURES / "hello", tmp_path / "hello")
+    first_bus, next_bus = EventBus(), EventBus()
+    first = make_kernel([tmp_path], event_bus=first_bus)
+    await first.load_all()
+    successor = PluginKernel(
+        [tmp_path],
+        services=HostServices(event_bus=next_bus),
+        discovery_snapshot=first.discover(),
+    )
+    first_record, next_record = first.discover()[0], successor.discover()[0]
+    assert first_record is not next_record
+    assert first_record.manifest is not next_record.manifest
+    assert first_record.import_path != next_record.import_path
+    # The manifest metadata contains nested lists; shallow descriptor copying
+    # would let one generation silently modify another generation's snapshot.
+    next_record.manifest.metadata["capabilities"].append("kv")
+    assert first_record.manifest.metadata["capabilities"] == ["events"]
+    await successor.load_all()
+    assert first_record.import_path in sys.modules
+    assert next_record.import_path in sys.modules
+    try:
+        await first.terminate_all(force=True)
+        assert first_record.import_path not in sys.modules
+        assert next_record.import_path in sys.modules
+        result = await next_bus.emit(before_turn_ctx())
+        assert result.extra_metadata["hello_touched"] is True
+        assert successor.loaded_count == 1
+    finally:
+        await successor.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_empty_startup_snapshot_does_not_rescan_new_packages(tmp_path):
+    from agent.plugin_host import HostServices, PluginKernel
+
+    first = make_kernel([tmp_path], event_bus=EventBus())
+    assert first.discover() == []
+    stage_plugin_package(PLUGIN_FIXTURES / "hello", tmp_path / "hello")
+    successor = PluginKernel(
+        [tmp_path],
+        services=HostServices(event_bus=EventBus()),
+        discovery_snapshot=first.discover(),
+    )
+    await successor.load_all()
+    assert successor.discover() == []
+    assert successor.loaded_count == 0

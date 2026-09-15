@@ -50,23 +50,42 @@ class RuntimePluginManagement:
         kernel = self._plugin_kernel()
         if kernel is None:
             return {"plugins": []}
-        states = {entry["id"]: entry for entry in kernel.states()}
+        states = {entry["candidate_id"]: entry for entry in kernel.states()}
         plugins: list[dict[str, Any]] = []
         for record in kernel.discover():
             plugin_id = record.manifest.id
-            state = states.get(plugin_id)
+            state = states.get(record.candidate_id)
+            admission = record.admission
+            runtime_state = (
+                state["state"]
+                if state
+                else (admission.state if admission else "DISCOVERED")
+            )
             plugins.append(
                 {
                     "id": plugin_id,
+                    "candidate_id": record.candidate_id,
+                    "source": record.source,
+                    "directory": str(record.plugin_dir),
                     "name": record.name,
                     "version": record.manifest.version or "",
                     "description": record.manifest.desc or "",
                     "enabled": self._enabled(plugin_id),
+                    "can_toggle": runtime_state
+                    not in {"CONFLICT", "UNTRUSTED", "BLOCKED"},
                     "supports_hot_unload": record.manifest.supports_hot_unload,
                     "dependencies": list(record.manifest.dependencies),
-                    "state": state["state"] if state else "DISCOVERED",
-                    "error": state["error"] if state else "",
-                    "diagnostic": state.get("diagnostic") if state else None,
+                    "state": runtime_state,
+                    "error": (
+                        state["error"]
+                        if state
+                        else (admission.reason if admission else "")
+                    ),
+                    "diagnostic": (
+                        state.get("diagnostic")
+                        if state
+                        else (admission.to_dict() if admission else None)
+                    ),
                     # __contains__ 已随 #177 的死代码清理移除，改用 schema_for 判定
                     "has_config_schema": kernel.config_schemas.schema_for(plugin_id)
                     is not None,
@@ -91,12 +110,14 @@ class RuntimePluginManagement:
             raise RuntimeApplyError("runtime_invalid_request", "enabled 必须是布尔值")
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise RuntimeApplyError("runtime_invalid_request", "操作 ID 不能为空")
-        kernel = self._plugin_kernel()
-        known_ids = (
-            {record.manifest.id for record in kernel.discover()} if kernel else set()
-        )
-        if plugin_id not in known_ids:
+        candidates = [row for row in self.list({})["plugins"] if row["id"] == plugin_id]
+        if not candidates:
             raise RuntimeApplyError("plugin_not_found", f"插件 {plugin_id} 不存在")
+        if len(candidates) != 1 or not candidates[0]["can_toggle"]:
+            raise RuntimeApplyError(
+                "plugin_not_admitted",
+                candidates[0]["error"] or f"插件 {plugin_id} 未通过准入检查",
+            )
 
         # 只翻一个开关、其余字段沿用当前已提交的配置，所以基准表必须在事务锁内
         # 读取：在锁外读会把并发落地的 runtime.apply 或 plugin.config.set 整份覆盖。
