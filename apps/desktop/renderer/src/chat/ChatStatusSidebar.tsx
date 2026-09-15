@@ -23,23 +23,24 @@ export function ChatStatusSidebar({
   const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   return (
-    <div className={cx(chatSidebarPanelClass, "chat-status-sidebar grid-rows-[minmax(72px,1fr)_auto_auto_auto_auto] gap-3")}>
-      {/* Absolute sizing binds the illustration to its shrinking grid row, not its intrinsic image height. */}
-      <div className="relative min-h-0 rounded-md">
+    <div className={cx(chatSidebarPanelClass, "chat-status-sidebar grid-rows-[minmax(0,1fr)_auto_auto_auto_auto] gap-3")}>
+      {/* The illustration may shrink to zero; only its own pixels are clipped so text and controls take priority. */}
+      <div className="chat-status-illustration-frame relative min-h-0 overflow-hidden rounded-md">
         {shouldRenderIllustration ? (
           <img
-            className="absolute inset-0 m-auto h-full max-h-52 w-full object-contain"
+            className="chat-status-illustration-content absolute inset-0 m-auto h-full max-h-52 w-full object-contain"
             src={moodIllustrationUrl}
             alt={currentMood ? `${currentMood} status illustration` : "status illustration"}
             decoding="async"
           />
         ) : (
-          <div className="absolute inset-0 m-auto grid h-full max-h-52 w-full place-items-center rounded-md bg-accent-softer text-caption text-ink-muted">
+          <div className="chat-status-illustration-content absolute inset-0 m-auto grid h-full max-h-52 w-full place-items-center rounded-md bg-accent-softer text-caption text-ink-muted">
             {visualsActive ? "当前状态图还没生成" : "窗口隐藏时已暂停图片渲染"}
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between gap-3">
+      {/* Leave room for the sidebar toggle when the illustration row collapses completely. */}
+      <div className="flex items-center justify-between gap-3 pr-8">
         <div className="text-body font-semibold text-ink-muted">当前状态</div>
         <div className="text-body font-semibold text-accent-text">
           {currentMood || "未生成"}

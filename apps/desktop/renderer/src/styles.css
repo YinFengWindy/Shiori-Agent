@@ -7,6 +7,17 @@
   .chat-sidebar-narrow .chat-status-sidebar {
     padding-inline: 0.5rem;
   }
+
+  .chat-status-illustration-frame {
+    container: status-illustration / size;
+  }
+
+  /* Hide only artwork/placeholders when the remaining row cannot show a useful portrait. */
+  @container status-illustration (max-height: 80px) {
+    .chat-status-illustration-content {
+      visibility: hidden;
+    }
+  }
 }
 
 @layer base {
