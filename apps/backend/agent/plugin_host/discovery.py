@@ -12,6 +12,8 @@ from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import ManifestError, PluginManifest, load_manifest
 from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.package_paths import contained_file
+from agent.plugin_host.package_fingerprint import inspect_package_content
+from agent.plugin_host.trust_store import PluginTrustStore
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +25,12 @@ def discover_plugins(
     namespace: str,
     strict: bool,
     host: HostRuntimeContract | None,
+    trust: PluginTrustStore | None = None,
 ) -> list[PluginRecord]:
     """Keep every candidate, then reject every participant in an ID conflict.
 
-    Trust comes only from the owning host's explicit root classification. A
-    directory name, manifest flag or configured enable flag cannot grant it.
+    Host-owned roots are admitted by classification. Workspace packages additionally
+    require persisted approval of their exact content; IDs and enable flags cannot grant it.
     """
     external = {root.absolute() for root in external_roots}
     records: list[PluginRecord] = []
@@ -41,7 +44,9 @@ def discover_plugins(
         for child in sorted(root.iterdir()):
             if not child.is_dir():
                 continue
-            record = _read_candidate(child, root, source, namespace, strict, host)
+            record = _read_candidate(
+                child, root, source, namespace, strict, host, trust
+            )
             if record is None:
                 continue
             records.append(record)
@@ -95,8 +100,12 @@ def _read_candidate(
     namespace: str,
     strict: bool,
     host: HostRuntimeContract | None,
+    trust: PluginTrustStore | None,
 ) -> PluginRecord | None:
     diagnostic: PluginDiagnostic | None = None
+    fingerprint: str | None = None
+    trust_directory = ""
+    content_hashes: dict[str, str] = {}
     try:
         # Reject links before reading even the manifest: its contents and
         # identity are untrusted until both directory boundaries are checked.
@@ -146,14 +155,29 @@ def _read_candidate(
         except PackageContractError as exc:
             diagnostic = exc.diagnostic
     if diagnostic is None and source == "workspace":
-        diagnostic = PluginDiagnostic(
-            "trust_required",
-            "trust",
-            "source",
-            "外部插件尚未获得信任；当前版本不提供授信操作",
-            str(child),
-            "UNTRUSTED",
-        )
+        try:
+            content = inspect_package_content(child)
+            fingerprint = content.fingerprint
+            trust_directory = content.directory
+            content_hashes = content.hashes
+        except PackageContractError as exc:
+            diagnostic = exc.diagnostic
+        if (
+            diagnostic is None
+            and fingerprint is not None
+            and (
+                trust is None
+                or not trust.is_trusted(child, fingerprint, activation=True)
+            )
+        ):
+            diagnostic = PluginDiagnostic(
+                "trust_required",
+                "trust",
+                "source",
+                "外部插件尚未获得信任",
+                str(child),
+                "UNTRUSTED",
+            )
     return PluginRecord(
         name=child.name,
         plugin_dir=child,
@@ -162,4 +186,7 @@ def _read_candidate(
         manifest=manifest,
         source=source,
         admission=diagnostic,
+        fingerprint=fingerprint,
+        trust_directory=trust_directory,
+        content_hashes=content_hashes,
     )

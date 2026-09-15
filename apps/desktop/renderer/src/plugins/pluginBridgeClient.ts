@@ -1,5 +1,6 @@
 import { BridgeError, invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 import type { JsonSchema } from "./jsonSchemaForm";
+import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 
 /** Stable error exposed by the plugin bridge client. */
 export class PluginBridgeError extends BridgeError {
@@ -35,10 +36,19 @@ export type PluginSummary = {
   canToggle: boolean;
   state: string;
   error: string;
+  /** Renderer-stage failure; backend activation status remains independently visible. */
+  rendererError?: string;
+  /** Main-process granted URLs; never inferred from a renderer-supplied directory. */
+  rendererUi?: RuntimePluginUi;
   diagnostic: PluginDiagnostic | null;
   hasConfigSchema: boolean;
   /** Whether an active plugin can be replaced without restarting the process. */
   supportsHotUnload: boolean;
+  /** Manual trust is bound to the displayed candidate and complete content fingerprint. */
+  canTrust?: boolean;
+  trustFingerprint?: string | null;
+  trustDirectory?: string;
+  trustPendingRestart?: boolean;
 };
 
 /** Structured static admission or runtime dependency rejection. */
@@ -63,6 +73,7 @@ function invokePluginPayload<T>(invoke: DesktopInvoke, method: string, payload: 
 
 /** Calls the `plugin.config.*` and `plugins.*` management bridge contracts. */
 export interface PluginBridgeClient {
+  trustPlugin(candidateId: string, fingerprint: string): Promise<void>;
   getConfig(pluginId: string): Promise<PluginConfigSnapshot>;
   setConfig(
     pluginId: string,
@@ -86,6 +97,9 @@ export interface PluginBridgeClient {
 export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeClient {
   const resolveInvoke = () => invoke ?? window.miraDesktop.invoke;
   return {
+    async trustPlugin(candidateId, fingerprint) {
+      await invokePluginPayload(resolveInvoke(), "plugins.trust", { candidate_id: candidateId, fingerprint });
+    },
     async getConfig(pluginId) {
       const payload = await invokePluginPayload<{ plugin_id: string; schema: JsonSchema | null; values: Record<string, unknown> }>(
         resolveInvoke(), "plugin.config.get", { plugin_id: pluginId },
@@ -103,6 +117,8 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         id: string; name: string; version: string; description: string;
         candidate_id: string; source: "builtin" | "workspace"; directory: string;
         can_toggle: boolean; diagnostic: PluginDiagnostic | null;
+        renderer_ui?: RuntimePluginUi;
+        can_trust?: boolean; trust_fingerprint?: string | null; trust_directory?: string; trust_pending_restart?: boolean;
         enabled: boolean; state: string; error: string; has_config_schema: boolean; supports_hot_unload: boolean;
       }> }>(resolveInvoke(), "plugins.list", {});
       return payload.plugins.map((item) => ({
@@ -118,6 +134,11 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         state: item.state,
         error: item.error,
         diagnostic: item.diagnostic,
+        rendererUi: item.renderer_ui,
+        canTrust: item.can_trust,
+        trustFingerprint: item.trust_fingerprint,
+        trustDirectory: item.trust_directory,
+        trustPendingRestart: item.trust_pending_restart,
         hasConfigSchema: item.has_config_schema,
         supportsHotUnload: item.supports_hot_unload,
       }));

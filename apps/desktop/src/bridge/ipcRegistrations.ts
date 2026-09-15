@@ -8,6 +8,7 @@ import type {
 } from "electron";
 import type { logDesktopDiagnostic } from "../diagnostics.js";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
+import type { PluginUiResources } from "../plugins/uiResources.js";
 import { importLocalAssets } from "../assets/localAssetImport.js";
 import type { LocalAssetRegistry } from "../assets/localAssetRegistry.js";
 import { pickNativeFiles } from "./nativeFilePicker.js";
@@ -53,6 +54,8 @@ export type DesktopIpcHost = {
 
 export type RegisterDesktopIpcOptions = {
   bridge: DesktopBridgeClient;
+  /** Main-process grants attached to the same authoritative plugins.list response. */
+  pluginUiResources?: PluginUiResources;
   localAssets: LocalAssetRegistry;
   localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
@@ -93,6 +96,7 @@ export function registerDesktopIpcHandlers(
   host: DesktopIpcHost,
   {
     bridge,
+    pluginUiResources,
     localAssets,
     localAssetImportsRoot,
     openLocalAttachment,
@@ -106,13 +110,29 @@ export function registerDesktopIpcHandlers(
   }: RegisterDesktopIpcOptions,
 ): void {
   const applicationSessionId = randomUUID();
+  let pluginListTail = Promise.resolve();
   host.handle("desktop:application-session-id", () => applicationSessionId);
   host.handle("desktop:invoke", async (_event, request: { method: string; payload: Record<string, unknown> }) => {
     if (request.method.startsWith("observation.")) {
       throw new Error("observation bridge methods are restricted to the main process");
     }
-    const response = await bridge.invoke(request);
-    return assetTransport(response, localAssets.grantTrustedPayload(response.payload));
+    const invoke = async () => {
+      const response = await bridge.invoke(request);
+      if (request.method === "plugins.list" && !response.error && pluginUiResources) {
+        const entries = await pluginUiResources.admit(response.payload.plugins);
+        if (Array.isArray(response.payload.plugins)) {
+          response.payload.plugins = response.payload.plugins.map((plugin) => ({
+            ...plugin, renderer_ui: entries.find((entry) => entry.pluginId === plugin.id),
+          }));
+        }
+      }
+      return assetTransport(response, localAssets.grantTrustedPayload(response.payload));
+    };
+    if (request.method !== "plugins.list") return invoke();
+    // All renderer windows share grants; serialize roster reads together with admission.
+    const pending = pluginListTail.then(invoke);
+    pluginListTail = pending.then(() => undefined, () => undefined);
+    return pending;
   });
   host.on("desktop:start-attachment-drag", (event, request?: { path?: unknown }) => {
     const filePath = String(request?.path ?? "").trim();

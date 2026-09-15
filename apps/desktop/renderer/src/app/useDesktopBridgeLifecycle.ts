@@ -1,4 +1,5 @@
 import { startTransition, useCallback, useEffect } from "react";
+import { refreshPluginEnabledState } from "../plugins/pluginEnabledStateStore";
 import {
   applyChatStreamDelta,
   applyChatToolCompleted,
@@ -108,6 +109,7 @@ export function useDesktopBridgeLifecycle({
       return;
     }
     setHealth("online");
+    void refreshPluginEnabledState().catch((error) => setError(String(error)));
     const nextRoles = await callbacksRef.current.loadRolesFromBridge();
     if (!nextRoles) {
       return;
@@ -189,6 +191,7 @@ export function useDesktopBridgeLifecycle({
         }
 
         if (event.method === "runtime.applied") {
+          void refreshPluginEnabledState().catch((error) => setError(String(error)));
           void callbacks.loadRolesFromBridge().catch((error: unknown) => {
             setError(error instanceof Error ? error.message : String(error));
           });

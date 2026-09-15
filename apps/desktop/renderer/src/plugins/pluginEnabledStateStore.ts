@@ -1,5 +1,6 @@
 import { createPluginBridgeClient, type PluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
 import { activePluginIds } from "./activePluginIds";
+import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 
 type Listener = () => void;
 
@@ -17,6 +18,26 @@ export type PluginEnabledPredicate = (pluginId: string) => boolean;
 let cache: Map<string, boolean> | null = null;
 let inflight: Promise<void> | null = null;
 const listeners = new Set<Listener>();
+let synchronizeUi: ((entries: RuntimePluginUi[]) => Promise<Map<string, string>>) | undefined;
+let refreshTail = Promise.resolve();
+
+/** Installs the main-window runtime UI owner before the first roster refresh. */
+export function registerPluginUiSynchronization(synchronize: (entries: RuntimePluginUi[]) => Promise<Map<string, string>>) {
+  synchronizeUi = synchronize;
+}
+
+/** Refreshes renderer contributions before publishing one consistent enabled snapshot. */
+export function refreshPluginEnabledState(client: Pick<PluginBridgeClient, "listPlugins"> = createPluginBridgeClient()) {
+  const refresh = refreshTail.then(async () => {
+    const plugins = await client.listPlugins();
+    const failures = await synchronizeUi?.(plugins.flatMap((plugin) => plugin.rendererUi ? [plugin.rendererUi] : []));
+    const snapshot = plugins.map((plugin) => ({ ...plugin, rendererError: failures?.get(plugin.id) }));
+    setPluginEnabledSnapshot(snapshot);
+    return snapshot;
+  });
+  refreshTail = refresh.then(() => undefined, () => undefined);
+  return refresh;
+}
 
 /**
  * Builds the predicate function exposed for the current cache state. A
@@ -69,8 +90,8 @@ export async function ensurePluginEnabledStateLoaded(
 ): Promise<void> {
   if (cache) return;
   if (!inflight) {
-    inflight = client.listPlugins()
-      .then((plugins) => setPluginEnabledSnapshot(plugins))
+    inflight = refreshPluginEnabledState(client)
+      .then(() => undefined)
       .finally(() => { inflight = null; });
   }
   await inflight;
@@ -86,4 +107,6 @@ export function resetPluginEnabledStateForTests(): void {
   cache = null;
   inflight = null;
   predicate = createPredicate();
+  synchronizeUi = undefined;
+  refreshTail = Promise.resolve();
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { BrowserWindow, WebContents } from "electron";
+import { PluginUiResources } from "../plugins/uiResources.js";
 import {
   registerDesktopIpcHandlers,
   type DesktopIpcHost,
@@ -26,6 +27,7 @@ function setup(overrides: {
   petWindowLabel?: string;
   invoke?: RegisterDesktopIpcOptions["bridge"]["invoke"];
   showOpenDialog?: DesktopIpcHost["showOpenDialog"];
+  pluginUiResources?: PluginUiResources;
 } = {}) {
   const windowCalls: WindowCall[] = [];
   const petCalls: Array<{ method: string; args: unknown[] }> = [];
@@ -68,6 +70,7 @@ function setup(overrides: {
   };
 
   registerDesktopIpcHandlers(host, {
+    pluginUiResources: overrides.pluginUiResources,
     bridge: {
       invoke: overrides.invoke ?? (async () => ({ payload: {} })),
       isRunning: () => true,
@@ -150,6 +153,40 @@ describe("desktop ipc window boundaries", () => {
 
     assert.deepEqual(state, { isMaximized: false, isVisible: false });
   });
+});
+
+it("attaches granted UI URLs to the same roster and serializes admission across windows", async () => {
+  const events: string[] = [];
+  let unblock!: () => void;
+  const gate = new Promise<void>((resolve) => { unblock = resolve; });
+  let started!: () => void;
+  const admitting = new Promise<void>((resolve) => { started = resolve; });
+  let reads = 0;
+  const entry = { pluginId: "demo", entry: "shiori-plugin://plugin/token/ui/index.mjs", css: [] };
+  class GatedResources extends PluginUiResources {
+    override async admit(rows: unknown) {
+      events.push(`admit ${reads}`);
+      assert.deepEqual(rows, [{ id: "demo", revision: reads }]);
+      if (reads === 1) { started(); await gate; }
+      return [entry];
+    }
+  }
+  const ipc = setup({
+    pluginUiResources: new GatedResources("unused"),
+    invoke: async ({ method }) => {
+      reads += 1;
+      events.push(`read ${reads}`);
+      return { id: "request", type: "response", method, error: null, payload: { plugins: [{ id: "demo", revision: reads }] } };
+    },
+  });
+  const first = ipc.invokeHandler("desktop:invoke", ipc.windows.main.webContents, { method: "plugins.list", payload: {} });
+  await admitting;
+  const second = ipc.invokeHandler("desktop:invoke", ipc.windows.other.webContents, { method: "plugins.list", payload: {} });
+  assert.equal(reads, 1);
+  unblock();
+  const [result] = await Promise.all([first, second]);
+  assert.deepEqual(events, ["read 1", "admit 1", "read 2", "admit 2"]);
+  assert.deepEqual(result, { assets: [], value: { id: "request", type: "response", method: "plugins.list", error: null, payload: { plugins: [{ id: "demo", revision: 1, renderer_ui: entry }] } } });
 });
 
 describe("desktop ipc permission boundaries", () => {
