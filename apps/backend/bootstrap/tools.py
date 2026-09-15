@@ -603,6 +603,7 @@ def build_core_runtime(
     )
     plugin_manager = PluginKernel(
         plugin_dirs=_resolve_plugin_dirs(workspace),
+        external_plugin_dirs=[workspace / "plugins"],
         services=HostServices(
             event_bus=event_bus,
             tool_registry=tools,
@@ -677,7 +678,7 @@ def build_core_runtime(
 
 def _resolve_plugin_dirs(workspace: Path) -> list[Path]:
     """Resolves the top-level `plugins/` directory for dev and frozen runs."""
-    return plugin_roots()
+    return [*plugin_roots(), workspace / "plugins"]
 
 
 def _legacy_plugin_root() -> Path | None:

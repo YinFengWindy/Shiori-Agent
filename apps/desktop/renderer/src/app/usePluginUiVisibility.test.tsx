@@ -40,7 +40,7 @@ describe("usePluginUiVisibility", () => {
     resetPluginEnabledStateForTests();
     const pluginId = "demo-visibility-a";
     registerDemoPlugin(pluginId);
-    setPluginEnabledSnapshot([{ id: pluginId, enabled: true }]);
+    setPluginEnabledSnapshot([{ id: pluginId, enabled: true, state: "ACTIVE" }]);
 
     const { view, renders } = await mountHarness();
     try {
@@ -50,7 +50,7 @@ describe("usePluginUiVisibility", () => {
       assert.equal(enabled.isSectionVisible(pluginId), true);
       assert.equal(enabled.resolveVisibleNavPage(pluginId)?.id, pluginId);
 
-      await act(async () => { setPluginEnabledSnapshot([{ id: pluginId, enabled: false }]); });
+      await act(async () => { setPluginEnabledSnapshot([{ id: pluginId, enabled: false, state: "DISABLED" }]); });
 
       const disabled = renders.at(-1)!;
       assert.ok(!disabled.pluginNavPages.some((entry) => entry.id === pluginId));
@@ -68,7 +68,7 @@ describe("usePluginUiVisibility", () => {
     resetPluginEnabledStateForTests();
     const pluginId = "demo-visibility-b";
     registerDemoPlugin(pluginId);
-    setPluginEnabledSnapshot([{ id: pluginId, enabled: true }]);
+    setPluginEnabledSnapshot([{ id: pluginId, enabled: true, state: "ACTIVE" }]);
 
     const { view, renders, rerender } = await mountHarness();
     try {
@@ -84,7 +84,7 @@ describe("usePluginUiVisibility", () => {
       // But once the underlying plugin-enabled state actually changes, every
       // derived value gets a fresh identity — this is what lets a consumer
       // safely depend on these references instead of reading stale results.
-      await act(async () => { setPluginEnabledSnapshot([{ id: pluginId, enabled: false }]); });
+      await act(async () => { setPluginEnabledSnapshot([{ id: pluginId, enabled: false, state: "DISABLED" }]); });
       const third = renders.at(-1)!;
       assert.notEqual(third.isSectionVisible, first.isSectionVisible);
     } finally {

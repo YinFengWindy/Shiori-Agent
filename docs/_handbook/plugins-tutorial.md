@@ -19,7 +19,11 @@ plugins/example/
   README.md
 ```
 
-后端扫描 `bootstrap.paths.plugin_roots()` 返回的插件根目录。开发态和桌面 bundle 使用顶层 `plugins/`；安装态使用已安装插件包。只有显式 `api: 2` 的 manifest 会成为插件，默认入口是 `backend/plugin.py`。入口作为包导入，内部可使用相对 import；同目录名先发现者优先，重复 manifest ID 会报错。
+后端扫描 `bootstrap.paths.plugin_roots()` 返回的内置插件根目录，以及工作区的 `plugins/`。开发态和桌面 bundle 的内置包位于安装资源的顶层 `plugins/`；wheel 安装态使用已安装插件包。内置包保留显式 `api: 2` 协议，默认入口为 `backend/plugin.py`，入口作为包导入，内部可使用相对 import。
+
+工作区 `plugins/<目录>/manifest.yaml` 声明的外部包必须通过 [Package Contract v1](plugin-runtime-contract.md) 静态检查；合法包显示为 `UNTRUSTED`，当前版本不提供授信操作，也不导入它的后端或 renderer。配置 `enabled = true` 不代表信任。无效 manifest、入口和依赖显示为 `BLOCKED`；只有旧 `kv.json`、没有 manifest 的目录被忽略，数据不会因此删除。
+
+按 manifest ID 检测全部候选：同 ID 的所有包均为 `CONFLICT`，不选择内置或工作区优先者；同目录名但不同 ID 的包分别显示。插件管理保留各候选的版本、来源、实际目录和结构化诊断，拒绝切换未通过准入的候选。目录级代码新增、替换、删除后重启应用；当前运行代保留自己的发现快照。
 
 ```yaml
 api: 2
@@ -82,7 +86,7 @@ async def setup(ctx):
 | `channels` / `bot_commands` | 贡献渠道及机器人命令 |
 | `rpc` | 注册 `plugin.<id>.<method>`，发送同命名空间事件 |
 | `background` | `ctx.background.spawn(coro, name=...)`；卸载取消并等待任务 |
-| `kv` | 工作区 `plugins/<id>/kv.json` 中的私有状态 |
+| `kv` | 工作区 `plugin-data/<id>/kv.json` 中的私有状态 |
 | `config` | 本代插件配置快照 |
 | `dependencies` | 读取已声明提供方的本代公开 API |
 | `runtime` | 本代是否重载、前代是否活动，以及收尾任务登记 |

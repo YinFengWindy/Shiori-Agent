@@ -521,3 +521,81 @@ async def test_list_preserves_external_contract_rejection(
     finally:
         await service.aclose()
         await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_workspace_candidates_are_visible_unsafe_and_reload_safe(
+    tmp_path, monkeypatch
+):
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    builtin = tmp_path / "plugin_dirs"
+    external = tmp_path / "plugins"
+    marker = tmp_path / "untrusted-imported"
+    for name, plugin_id in [("hello-copy", "hello"), ("manual", "manual")]:
+        package = external / name
+        (package / "backend").mkdir(parents=True)
+        (package / "manifest.yaml").write_text(
+            f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
+            "version: 1.0.0\nruntime_api: '>=2.0.0 <3.0.0'\nentry: backend/plugin.py\n",
+            encoding="utf-8",
+        )
+        (package / "backend/plugin.py").write_text(
+            "from pathlib import Path\n"
+            f"Path({str(marker)!r}).write_text('imported', encoding='utf-8')\n"
+            "async def setup(ctx): pass\n",
+            encoding="utf-8",
+        )
+    bad = external / "bad"
+    bad.mkdir()
+    (bad / "manifest.yaml").write_text("api: 2\ncapabilities: [", encoding="utf-8")
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda _: [builtin, external]
+    )
+    service, path, app = await _start_service(tmp_path)
+    try:
+        response = await _request(service, "plugins.list")
+        rows = response.payload["plugins"]
+        assert len(rows) == 5
+        assert len({row["candidate_id"] for row in rows}) == 5
+        conflicts = [row for row in rows if row["id"] == "hello"]
+        assert len(conflicts) == 2
+        assert {row["source"] for row in conflicts} == {"builtin", "workspace"}
+        assert {row["state"] for row in conflicts} == {"CONFLICT"}
+        assert all(row["directory"] and row["version"] for row in conflicts)
+        assert all(row["diagnostic"]["code"] == "duplicate_id" for row in conflicts)
+        manual = next(row for row in rows if row["id"] == "manual")
+        assert manual["state"] == "UNTRUSTED"
+        assert manual["enabled"] is True
+        assert not manual["can_toggle"]
+        assert next(row for row in rows if row["id"] == "bad")["state"] == "BLOCKED"
+        before = path.read_text(encoding="utf-8")
+        for plugin_id in ("hello", "manual", "bad"):
+            rejected = await _request(
+                service,
+                "plugins.setEnabled",
+                {
+                    "plugin_id": plugin_id,
+                    "enabled": True,
+                    "operation_id": plugin_id,
+                },
+            )
+            assert rejected.error.code == "plugin_not_admitted"
+            assert path.read_text(encoding="utf-8") == before
+        # A valid builtin toggle prepares a strict generation. Bad external
+        # packages must remain diagnostics rather than aborting unrelated apply.
+        changed = await _request(
+            service,
+            "plugins.setEnabled",
+            {
+                "plugin_id": "qqbot",
+                "enabled": False,
+                "operation_id": "disable-builtin",
+            },
+        )
+        assert changed.error is None
+        again = await _request(service, "plugins.list")
+        assert len(again.payload["plugins"]) == 5
+        assert not marker.exists()
+    finally:
+        await service.aclose()
+        await app.shutdown()

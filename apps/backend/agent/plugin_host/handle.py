@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 from agent.plugin_host.capabilities import PluginContributions
 from agent.plugin_host.effects import EffectScope
 from agent.plugin_host.manifest import PluginManifest
-from agent.plugin_host.diagnostics import PackageContractError
+from agent.plugin_host.diagnostics import PackageContractError, PluginDiagnostic
 from agent.plugin_host.dependencies import PluginDependencyError
 
 
@@ -40,6 +40,13 @@ class PluginRecord:
     entry_file: Path
     import_path: str
     manifest: PluginManifest
+    source: str = "builtin"
+    admission: PluginDiagnostic | None = None
+
+    @property
+    def candidate_id(self) -> str:
+        """Identify one directory candidate without collapsing duplicate manifest IDs."""
+        return str(self.plugin_dir.absolute())
 
 
 @dataclass
@@ -62,16 +69,22 @@ class PluginHandle:
         """Returns a diagnostic snapshot used by logs and inspection."""
         return {
             "id": self.plugin_id,
+            "candidate_id": self.record.candidate_id,
+            "source": self.record.source,
             "state": self.state.name,
             "dir": str(self.record.plugin_dir),
             "error": str(self.error) if self.error else "",
             "diagnostic": (
-                self.error.diagnostic.to_dict()
-                if self.state is PluginState.BLOCKED
-                and isinstance(
-                    self.error, (PackageContractError, PluginDependencyError)
+                self.record.admission.to_dict()
+                if self.record.admission is not None
+                else (
+                    self.error.diagnostic.to_dict()
+                    if self.state is PluginState.BLOCKED
+                    and isinstance(
+                        self.error, (PackageContractError, PluginDependencyError)
+                    )
+                    and self.error.diagnostic is not None
+                    else None
                 )
-                and self.error.diagnostic is not None
-                else None
             ),
         }

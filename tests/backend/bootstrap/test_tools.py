@@ -45,7 +45,7 @@ def test_memory_lifecycle_binds_the_session_owner_commit_operation(tmp_path: Pat
 def test_resolve_plugin_dirs_uses_repository_root_in_dev(tmp_path: Path) -> None:
     dirs = _resolve_plugin_dirs(tmp_path)
 
-    assert dirs == [_REPO_ROOT / "plugins"]
+    assert dirs == [_REPO_ROOT / "plugins", tmp_path / "plugins"]
     assert dirs[0].is_dir()
 
 
@@ -58,7 +58,7 @@ def test_resolve_plugin_dirs_uses_meipass_when_frozen(
 
     dirs = _resolve_plugin_dirs(tmp_path)
 
-    assert dirs == [tmp_path / "plugins"]
+    assert dirs == [tmp_path / "plugins", tmp_path / "plugins"]
 
 
 def test_role_target_validation_uses_canonical_chat_id_comparison(
@@ -373,7 +373,7 @@ async def test_core_stop_preflights_before_teardown_and_force_continues_after_fa
     from agent.plugin_host import PluginRestartRequired
     from bootstrap.app import AppRuntime, RuntimeFeatures
 
-    root = tmp_path / "plugins"
+    root = tmp_path / "host_plugins"
     stage_plugin_package(
         _REPO_ROOT / "tests/fixtures/plugins/restart_required",
         root / "restart_required",
