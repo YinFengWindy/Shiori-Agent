@@ -319,7 +319,7 @@ def test_same_directory_different_ids_never_share_package_json(
 
 
 @pytest.mark.parametrize("admission", ["UNTRUSTED", "BLOCKED", "CONFLICT"])
-def test_discovery_admission_defers_import_and_receipt_recovery(
+def test_discovery_admission_defers_import_but_finishes_committed_receipt(
     tmp_path, monkeypatch, admission
 ):
     path, workspace, packages, sources = _environment(tmp_path, monkeypatch)
@@ -357,18 +357,21 @@ def test_discovery_admission_defers_import_and_receipt_recovery(
     assert sources[1].is_file()
     assert path.read_bytes() == b""
     # A crash receipt may exist from an earlier admitted installation. Changed
-    # admission must not finalize markers or delete any source on this startup.
+    # admission only blocks importing settings and deleting legacy sources.
     path.write_text(
         '[plugins.demo]\nvalue = "committed"\n[_migrations]\nplugin_config_json = ["demo"]\n',
         encoding="utf-8",
     )
     before = path.read_bytes()
+    sources[0].write_text(
+        "invalid archive must not be read during recovery", encoding="utf-8"
+    )
     assert load_config(path, workspace=workspace).plugins["demo"] == {
         "value": "committed"
     }
     assert path.read_bytes() == before
     assert sources[1].is_file()
-    assert not (workspace / "plugin-data/demo/plugin_config.migrated.json").exists()
+    assert (workspace / "plugin-data/demo/plugin_config.migrated.json").is_file()
 
 
 def test_ambiguous_manifest_free_directory_alias_is_preserved(tmp_path, monkeypatch):
@@ -386,3 +389,90 @@ def test_ambiguous_manifest_free_directory_alias_is_preserved(tmp_path, monkeypa
     assert load_config(path, workspace=workspace).plugins == {}
     assert sources[1].is_file()
     assert not (workspace / "plugin-data").exists()
+
+
+@pytest.mark.parametrize(
+    "location, expected_id",
+    [("workspace", "beta"), ("old-root", "gamma"), ("old-backend", "gamma")],
+)
+def test_canonical_id_and_package_alias_have_separate_legacy_namespaces(
+    tmp_path, monkeypatch, location, expected_id
+):
+    path, workspace, packages, _ = _environment(tmp_path, monkeypatch)
+    (packages / "demo/manifest.yaml").unlink()
+    for directory, plugin_id in (("alpha", "beta"), ("beta", "gamma")):
+        package = packages / directory
+        package.mkdir()
+        (package / "manifest.yaml").write_text(
+            f"api: 2\nid: {plugin_id}\ncapabilities: []\n", encoding="utf-8"
+        )
+    root = (
+        workspace / "plugins"
+        if location == "workspace"
+        else packages.parent / "apps/backend/plugins"
+    )
+    source = (
+        root
+        / "beta"
+        / (
+            "backend/plugin_config.json"
+            if location == "old-backend"
+            else "plugin_config.json"
+        )
+    )
+    _write(source, {"secret": "one-owner"})
+    assert load_config(path, workspace=workspace).plugins == {
+        expected_id: {"secret": "one-owner"}
+    }
+    other_id = "gamma" if expected_id == "beta" else "beta"
+    assert not (workspace / "plugin-data" / other_id).exists()
+    assert not source.exists()
+
+
+def test_committed_receipt_survives_conflict_settings_save_and_table_deletion(
+    tmp_path, monkeypatch
+):
+    from desktop_bridge.runtime.settings_form import settings_form_write
+
+    path, workspace, packages, sources = _environment(tmp_path, monkeypatch)
+    _write(sources[2], {"secret": "old"})
+    original = sources[2].read_bytes()
+
+    def fail_marker(*args, **kwargs):
+        raise OSError("marker failed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "atomic_save_json", fail_marker)
+        with pytest.raises(OSError, match="marker failed"):
+            load_config(path, workspace=workspace)
+    assert tomllib.loads(path.read_text(encoding="utf-8"))["plugins"]["demo"] == {
+        "secret": "old"
+    }
+    conflicting = workspace / "plugins/demo/manifest.yaml"
+    conflicting.parent.mkdir(parents=True)
+    conflicting.write_text("api: 2\nid: demo\ncapabilities: []\n", encoding="utf-8")
+    unlink = Path.unlink
+
+    def readonly(file, *args, **kwargs):
+        if file == sources[2]:
+            raise AssertionError(
+                "receipt recovery must not delete the read-only source"
+            )
+        return unlink(file, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", readonly)
+    load_config(path, workspace=workspace)
+    derive = settings_form_write(
+        {"config_toml": "max_tokens = 100\n", "preserve_plugins": True}
+    )
+    assert derive is not None
+    path.write_text(
+        derive.build_config_toml(path.read_text(encoding="utf-8")), encoding="utf-8"
+    )
+    assert "_migrations" not in tomllib.loads(path.read_text(encoding="utf-8"))
+    # A subsequent raw settings edit intentionally removes the entire table.
+    path.write_text("max_tokens = 200\n", encoding="utf-8")
+    conflicting.unlink()
+    assert load_config(path, workspace=workspace).plugins == {}
+    assert sources[2].read_bytes() == original
+    assert (workspace / "plugin-data/demo/plugin_config.migrated.json").is_file()

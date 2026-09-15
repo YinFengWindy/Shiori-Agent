@@ -31,6 +31,7 @@ def _legacy_sources(workspace: Path) -> dict[str, list[Path]]:
         host=None,
     )
     package_directories = {record.plugin_dir.absolute() for record in records}
+    canonical_ids = {record.manifest.id for record in records}
     directory_identities: dict[str, set[str]] = {}
     for record in records:
         directory_identities.setdefault(record.name, set()).add(record.manifest.id)
@@ -45,7 +46,8 @@ def _legacy_sources(workspace: Path) -> dict[str, list[Path]]:
             continue
         package = record.plugin_dir
         legacy_names = [plugin_id]
-        if directory_identities[record.name] == {plugin_id}:
+        unique_directory = directory_identities[record.name] == {plugin_id}
+        if unique_directory and record.name not in canonical_ids - {plugin_id}:
             legacy_names.append(record.name)
         legacy_names = list(dict.fromkeys(legacy_names))
         # A discovered workspace package owns its own JSON, regardless of its
@@ -55,15 +57,17 @@ def _legacy_sources(workspace: Path) -> dict[str, list[Path]]:
             for name in legacy_names
             if (external_root / name).absolute() not in package_directories
         ]
-        old_root = REPOSITORY_ROOT / "apps/backend/plugins"
+        # The old backend root contained code directories, not ID-keyed data.
+        # Resolve only an unambiguous historical package name in that namespace.
+        old_package = REPOSITORY_ROOT / "apps/backend/plugins" / record.name
         sources[plugin_id] = [
             *workspace_files,
             package / _FILENAME,
             package / "backend" / _FILENAME,
             *(
-                old_root / name / subpath
-                for name in legacy_names
+                old_package / subpath
                 for subpath in (_FILENAME, f"backend/{_FILENAME}")
+                if unique_directory
             ),
         ]
     return sources
@@ -93,27 +97,32 @@ def migrate_plugin_config(
         raise ValueError("_migrations.plugin_config_json 必须是插件 ID 数组")
     receipts = list(raw_receipts)
     pending: list[tuple[str, Path | None, list[Path]]] = []
-    for plugin_id in sorted(sources):
+    for plugin_id in sorted(set(sources) | set(receipts)):
         target = plugin_data_dir(workspace, plugin_id) / _FILENAME
         marker = target.with_name(_MARKER)
         if marker.exists():
             continue
+        if plugin_id in receipts:
+            # Settings already committed. Finish only our workspace receipt,
+            # even if this owner is now missing, conflicting or untrusted.
+            # Never reopen archived JSON or delete a source during recovery.
+            atomic_save_json(marker, {"version": 1})
+            continue
         candidates = sources.get(plugin_id, [])
         source = next((file for file in candidates if file.is_file()), None)
-        if plugin_id not in receipts:
-            selected = target if target.exists() else source
-            if selected is None:
-                continue
-            values = json.loads(selected.read_text(encoding="utf-8"))
-            if not isinstance(values, dict):
-                raise ValueError(f"插件 {plugin_id} 的旧配置必须是 JSON 对象")
-            plugins = migrated.setdefault("plugins", {})
-            existing = plugins.get(plugin_id)
-            # Old host toggles wrote only enabled before JSON settings moved.
-            # Explicit empty tables and tables with actual v2 settings are final.
-            if existing is None or set(existing) == {"enabled"}:
-                plugins[plugin_id] = {**values, **(existing or {})}
-            receipts.append(plugin_id)
+        selected = target if target.exists() else source
+        if selected is None:
+            continue
+        values = json.loads(selected.read_text(encoding="utf-8"))
+        if not isinstance(values, dict):
+            raise ValueError(f"插件 {plugin_id} 的旧配置必须是 JSON 对象")
+        plugins = migrated.setdefault("plugins", {})
+        existing = plugins.get(plugin_id)
+        # Old host toggles wrote only enabled before JSON settings moved.
+        # Explicit empty tables and tables with actual v2 settings are final.
+        if existing is None or set(existing) == {"enabled"}:
+            plugins[plugin_id] = {**values, **(existing or {})}
+        receipts.append(plugin_id)
         pending.append((plugin_id, source if not target.exists() else None, candidates))
     if not pending:
         return data
