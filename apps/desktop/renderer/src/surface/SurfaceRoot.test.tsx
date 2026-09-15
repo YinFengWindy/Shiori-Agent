@@ -1,107 +1,70 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
+import { useEffect } from "react";
+import { mountTestComponent } from "../shared/testing/domTestHarness";
 import { SurfaceRoot } from "./SurfaceRoot";
-import {
-  PluginSurfaceRegistry,
-  type PluginSurfaceComponentProps,
-  type SurfaceHandle,
-} from "./pluginSurfaceRegistry";
+import { PluginSurfaceRegistry, type PluginSurfaceComponentProps, type SurfaceHandle } from "./pluginSurfaceRegistry";
 
-/**
- * A function component is just a function and JSX compiles to a plain
- * `createElement` call, so invoking it and inspecting the returned element is
- * enough — no DOM needed. Same approach as `pluginUiModuleContract.test.ts`.
- */
 const noopSurface: SurfaceHandle = {
-  beginDrag() {},
-  endDrag() {},
-  setExtension() {},
-  setClickThrough() {},
-  onPlacement() { return () => {}; },
-  onMessage() { return () => {}; },
-  onState() { return () => {}; },
-  ready() {},
-  async showContextMenu() { return null; },
-  activateMainWindow() {},
+  beginDrag() {}, endDrag() {}, setExtension() {}, setClickThrough() {},
+  onPlacement() { return () => {}; }, onMessage() { return () => {}; },
+  onState() { return () => {}; }, ready() {},
+  async showContextMenu() { return null; }, activateMainWindow() {},
 };
-
 let errors: unknown[][] = [];
 const realError = console.error;
-
-beforeEach(() => {
-  errors = [];
-  console.error = (...args: unknown[]) => { errors.push(args); };
-});
-
+beforeEach(() => { errors = []; console.error = (...args: unknown[]) => { errors.push(args); }; });
 afterEach(() => { console.error = realError; });
 
-/**
- * Invokes function components down to the first host element, so a test can
- * assert on what actually reaches the DOM rather than on the intermediate
- * component that produced it.
- */
-function renderToHostElement(element: unknown): { type: unknown; props: Record<string, unknown> } {
-  let current = element as { type: unknown; props: Record<string, unknown> };
-  while (typeof current.type === "function") {
-    current = (current.type as (props: unknown) => typeof current)(current.props);
-  }
-  return current;
-}
-
-function registryWith(pluginId: string, Component: (props: PluginSurfaceComponentProps) => null) {
+function registryWith(Component: (props: PluginSurfaceComponentProps) => React.ReactNode) {
   const registry = new PluginSurfaceRegistry();
-  registry.register({ slot: "desktop.surface", pluginId, Component });
+  registry.register({ slot: "desktop.surface", pluginId: "demo", Component });
   return registry;
 }
 
-test("mounts the plugin named in the window URL, with its own scoped client", () => {
+test("mounts only the URL's plugin with its surface and scoped client", async () => {
   const seen: PluginSurfaceComponentProps[] = [];
-  const registry = registryWith("demo", (props) => { seen.push(props); return null; });
-
-  const element = SurfaceRoot({
-    search: "?plugin=demo&surface=main",
-    surface: noopSurface,
-    registry,
-  }) as { type: unknown; props: PluginSurfaceComponentProps };
-
-  assert.equal(typeof element.type, "function");
-  // Invoke the element the root produced to observe the props it passed down.
-  (element.type as (props: PluginSurfaceComponentProps) => null)(element.props);
-  assert.equal(seen.length, 1);
-  assert.equal(seen[0].surfaceId, "main");
-  assert.equal(seen[0].surface, noopSurface);
-  assert.equal(typeof seen[0].client.call, "function");
-  assert.deepEqual(errors, []);
+  const registry = registryWith((props) => { seen.push(props); return <div>surface content</div>; });
+  const view = await mountTestComponent(<SurfaceRoot search="?plugin=demo&surface=main" surface={noopSurface} registry={registry} />);
+  try {
+    assert.equal(view.container.textContent, "surface content");
+    assert.equal(seen[0].surfaceId, "main");
+    assert.equal(seen[0].surface, noopSurface);
+    assert.equal(typeof seen[0].client.call, "function");
+    assert.deepEqual(errors, []);
+  } finally { await view.cleanup(); }
 });
 
-test("a window opened without its query string fails visibly instead of blank", () => {
-  const registry = registryWith("demo", () => null);
-  // A transparent always-on-top window rendering null is an invisible, unclickable
-  // rectangle over the desktop — the failure has to be on screen, not just logged.
-  const host = renderToHostElement(SurfaceRoot({ search: "", surface: noopSurface, registry }));
-  assert.equal(host.type, "div");
-  assert.equal(host.props.role, "alert");
-  assert.equal(errors.length, 1);
-});
+for (const [search, detail] of [["", "窗口参数缺失"], ["?plugin=other&surface=main", "插件 other 未提供桌面窗口"]]) {
+  test(`fails visibly and reports ready after committing: ${detail}`, async () => {
+    let painted = false;
+    let mountedOther = false;
+    const surface = { ...noopSurface, ready() { painted = Boolean(document.querySelector('[role="alert"]')?.textContent?.includes(detail)); } };
+    const registry = registryWith(() => { mountedOther = true; return null; });
+    const view = await mountTestComponent(<SurfaceRoot search={search} surface={surface} registry={registry} />);
+    try {
+      assert.match(view.container.textContent ?? "", /桌面窗口加载失败/);
+      assert.equal(painted, true);
+      assert.equal(mountedOther, false);
+      assert.equal(errors.length, 1);
+    } finally { await view.cleanup(); }
+  });
+}
 
-test("a plugin with no registered surface fails visibly and names itself", () => {
-  const registry = new PluginSurfaceRegistry();
-  const host = renderToHostElement(SurfaceRoot({
-    search: "?plugin=missing&surface=main",
-    surface: noopSurface,
-    registry,
-  }));
-  assert.equal(host.props.role, "alert");
-  assert.equal(errors.length, 1);
-  assert.match(String(errors[0][0]), /missing/);
-});
-
-test("one plugin's window never mounts another plugin's surface", () => {
-  const registry = registryWith("demo", () => null);
-  const host = renderToHostElement(SurfaceRoot({
-    search: "?plugin=other&surface=main",
-    surface: noopSurface,
-    registry,
-  }));
-  assert.equal(host.props.role, "alert");
-});
+for (const phase of ["render", "effect"]) {
+  test(`contains a plugin ${phase} failure and reports ready with a readable card`, async () => {
+    let ready = 0;
+    const surface = { ...noopSurface, ready() { ready++; assert.ok(document.querySelector('[role="alert"]')); } };
+    function Broken() {
+      useEffect(() => { if (phase === "effect") throw new Error("mount exploded"); }, []);
+      if (phase === "render") throw new Error("render exploded");
+      return <div>partial mount</div>;
+    }
+    const view = await mountTestComponent(<SurfaceRoot search="?plugin=demo&surface=main" surface={surface} registry={registryWith(Broken)} />);
+    try {
+      assert.match(view.container.textContent ?? "", /插件组件挂载失败/);
+      assert.equal(ready, 1);
+      assert.ok(errors.some((args) => String(args[0]).includes("插件组件挂载失败")));
+    } finally { await view.cleanup(); }
+  });
+}

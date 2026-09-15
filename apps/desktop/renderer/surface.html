@@ -1,12 +1,14 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="surface-window">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Shiori Plugin Surface</title>
     <style>
-      /* A surface window is transparent by default; the plugin paints everything. */
-      html, body, #root { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+      /* Keep the host's app background out even when shared styles load later. */
+      html.surface-window, .surface-window body, .surface-window #root {
+        margin: 0; height: 100%; background: transparent; overflow: hidden;
+      }
     </style>
   </head>
   <body>

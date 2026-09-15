@@ -31,7 +31,15 @@ export function createDesktopSurfaceWindow(
   spec: SurfaceSpec,
   options: { openLocalAttachment: (url: string) => Promise<unknown> | unknown },
 ): SurfaceWindowHandle {
-  const window = new BrowserWindow(desktopSurfaceWindowOptions(spec, preloadScript));
+  const windowOptions = desktopSurfaceWindowOptions(spec, preloadScript);
+  const window = new BrowserWindow(windowOptions);
+  if (process.platform === "win32" && windowOptions.alwaysOnTop) {
+    // Electron's default floating level places the window behind the taskbar.
+    // A fullscreen app can make that taskbar non-topmost and demote the surface.
+    // `true` retains topmost status; `normal` avoids following the taskbar's z-order.
+    window.setAlwaysOnTop(true, "normal");
+  }
+  const handle = adaptSurfaceWindow(window);
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   attachDesktopWindowSecurity(window.webContents, {
     rendererEntryUrl: resolveRendererEntryUrl(rendererSurfaceDist, rendererDevServerUrl),
@@ -46,19 +54,30 @@ export function createDesktopSurfaceWindow(
   } else {
     void window.loadFile(rendererSurfaceDist, { search: query });
   }
-  return adaptSurfaceWindow(window);
+  return handle;
 }
 
 /** Wraps a `BrowserWindow` in the narrow handle `DesktopSurfaceHost` depends on. */
 export function adaptSurfaceWindow(window: BrowserWindow): SurfaceWindowHandle {
+  let painted = false;
+  let visible = false;
+  // ready-to-show is only a paint signal, not permission to reveal a surface.
+  // hide() must also cancel a show requested before that signal arrives.
+  window.once("ready-to-show", () => {
+    painted = true;
+    if (visible && !window.isDestroyed()) window.showInactive();
+  });
   return {
     id: window.id,
     setBounds: (bounds) => window.setBounds(bounds),
     getBounds: () => window.getBounds(),
     isDestroyed: () => window.isDestroyed(),
     destroy: () => window.destroy(),
-    showInactive: () => window.showInactive(),
-    hide: () => window.hide(),
+    showInactive: () => {
+      visible = true;
+      if (painted) window.showInactive();
+    },
+    hide: () => { visible = false; window.hide(); },
     setIgnoreMouseEvents: (ignore, ignoreOptions) => window.setIgnoreMouseEvents(ignore, ignoreOptions),
     send: (channel, payload) => {
       if (!window.isDestroyed()) window.webContents.send(channel, payload);
