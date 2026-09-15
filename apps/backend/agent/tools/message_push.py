@@ -220,13 +220,24 @@ class MessagePushTool(Tool):
         if senders is None:
             return f"渠道 {channel!r} 未注册，可用渠道：{list(self._senders) or ['（无）']}"
 
+        # Reject unsupported payloads together, before sending any supported part.
+        # Otherwise partial success could commit text or media that was never sent.
+        unsupported = [
+            f"渠道 {channel!r} 不支持发送{label}"
+            for payload, label, capabilities in (
+                (message, "文本", ("text_with_metadata", "stream_text", "text")),
+                (file, "文件", ("file",)),
+                (image, "图片", ("image_with_metadata", "image")),
+            )
+            if payload and not any(name in senders for name in capabilities)
+        ]
+        if unsupported:
+            return "发送失败：" + "；".join(unsupported)
+
         results: list[str] = []
         image_sent = False
         try:
-            if message and any(
-                name in senders
-                for name in ("text_with_metadata", "stream_text", "text")
-            ):
+            if message:
                 if "text_with_metadata" in senders:
                     await senders["text_with_metadata"](
                         chat_id,
@@ -241,31 +252,23 @@ class MessagePushTool(Tool):
                 results.append("文本已发送")
 
             if file:
-                if "file" not in senders:
-                    results.append(f"渠道 {channel!r} 不支持发送文件")
-                else:
-                    import os
+                import os
 
-                    name = os.path.basename(file)
-                    await senders["file"](chat_id, file, name)
-                    logger.info(f"[message_push] {channel}:{chat_id} ← file: {file!r}")
-                    results.append(f"文件 {name!r} 已发送")
+                name = os.path.basename(file)
+                await senders["file"](chat_id, file, name)
+                logger.info(f"[message_push] {channel}:{chat_id} ← file: {file!r}")
+                results.append(f"文件 {name!r} 已发送")
 
             if image:
-                if "image" not in senders and "image_with_metadata" not in senders:
-                    results.append(f"渠道 {channel!r} 不支持发送图片")
-                else:
-                    if "image_with_metadata" in senders:
-                        await senders["image_with_metadata"](
-                            chat_id, image, delivery_metadata
-                        )
-                    else:
-                        await senders["image"](chat_id, image)
-                    logger.info(
-                        f"[message_push] {channel}:{chat_id} ← image: {image!r}"
+                if "image_with_metadata" in senders:
+                    await senders["image_with_metadata"](
+                        chat_id, image, delivery_metadata
                     )
-                    results.append("图片已发送")
-                    image_sent = True
+                else:
+                    await senders["image"](chat_id, image)
+                logger.info(f"[message_push] {channel}:{chat_id} ← image: {image!r}")
+                results.append("图片已发送")
+                image_sent = True
 
         except Exception as e:
             logger.error(f"[message_push] 发送失败 {channel}:{chat_id}: {e}")

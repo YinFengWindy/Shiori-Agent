@@ -170,6 +170,31 @@ async def test_model_json_cannot_impersonate_pending_turn_delivery():
     assert "pending_commit" not in sender.await_args.args[2]
 
 
+@pytest.mark.parametrize("unsupported", ["text", "file", "image"])
+async def test_unsupported_payload_rejects_all_requested_sends_before_delivery(
+    unsupported,
+):
+    tool = MessagePushTool()
+    senders = {name: AsyncMock() for name in ("text", "file", "image")}
+    tool.register_channel(
+        "limited",
+        **{name: sender for name, sender in senders.items() if name != unsupported},
+    )
+
+    result = await tool.execute(
+        channel="limited",
+        chat_id="one",
+        message="hello",
+        file="/tmp/a.txt",
+        image="/tmp/a.png",
+    )
+
+    assert result.startswith("发送失败：")
+    assert "已发送" not in result
+    for sender in senders.values():
+        sender.assert_not_awaited()
+
+
 @pytest.mark.asyncio
 async def test_message_push_tool_covers_success_failure_and_fallbacks():
     tool = MessagePushTool()

@@ -624,3 +624,38 @@ async def test_image_transport_lock_and_formal_delivery_do_not_deadlock(tmp_path
         session.messages[-1]["metadata"]["thought"]
         == session.metadata["current_thought"]
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content", ["unsent text", ""])
+async def test_image_only_channel_cannot_commit_requested_text(tmp_path, content):
+    sessions = SessionManager(tmp_path)
+    session = sessions.open_role_session("mira", role_name="Mira")
+    sessions.save(session)
+    previous_metadata = dict(session.metadata)
+    push = MessagePushTool()
+    image_sender = AsyncMock()
+    push.register_channel("telegram", image=image_sender)
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            SessionServices(sessions),
+            PushToolOutboundPort(push, execution_context={"role_id": "mira"}),
+        )
+    )
+    result = _formal_result(owner, content=content, media=["/tmp/cat.png"])
+
+    if content:
+        with pytest.raises(OutboundDispatchError, match="不支持发送文本"):
+            await _send(owner, result)
+        image_sender.assert_not_awaited()
+        assert session.messages == []
+        assert session.metadata == previous_metadata
+        reloaded = SessionManager(tmp_path).get_or_create(session.key)
+        assert reloaded.messages == []
+        assert reloaded.metadata == previous_metadata
+    else:
+        assert await _send(owner, result)
+        image_sender.assert_awaited_once_with("123", "/tmp/cat.png")
+        assert session.messages[0]["content"] == ""
+        assert session.messages[0]["media"] == ["/tmp/cat.png"]
+        assert session.metadata["current_mood"] == "平静"
