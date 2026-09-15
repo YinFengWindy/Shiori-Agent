@@ -12,6 +12,7 @@ from core.common.diagnostic_log import diagnostic_line
 from proactive_v2.context import AgentTickContext
 from proactive_v2.gateway import GatewayResult
 from proactive_v2.tools import TOOL_SCHEMAS, dispatch
+from proactive_v2.reply_output import correct_push_call, reply_schemas
 
 logger = logging.getLogger(__name__)
 
@@ -224,12 +225,20 @@ async def run_tool_step(
 ) -> bool:
     """调用模型并执行工具；同场景模式可纠正一次纯文本响应。"""
 
-    active_schemas = schemas or TOOL_SCHEMAS
+    active_schemas = reply_schemas(schemas or TOOL_SCHEMAS, ctx)
     llm_fn = pipeline._llm_fn
     if llm_fn is None:
         return False
     tool_call = await llm_fn(messages, active_schemas, tool_choice)
     if tool_call is None and retry_on_no_tool_call:
+        if (
+            ctx.reply_format_corrections
+            or ctx.steps_taken + 1 >= pipeline._cfg.agent_tick_max_steps
+        ):
+            ctx.skip_reason = "tool_protocol_error"
+            return False
+        ctx.reply_format_corrections += 1
+        ctx.steps_taken += 1
         logger.warning(
             "[proactive_v2] %s: missing required tool call, retrying once",
             loop_tag,
@@ -261,6 +270,14 @@ async def run_tool_step(
             ctx.steps_taken,
         )
         return False
+    tool_call = await correct_push_call(
+        tool_call,
+        ctx=ctx,
+        messages=messages,
+        schemas=active_schemas,
+        llm_fn=llm_fn,
+        remaining_steps=pipeline._cfg.agent_tick_max_steps - ctx.steps_taken - 1,
+    )
     tool_name = tool_call.get("name", "")
     tool_args = tool_call.get("input", {})
     arg_summary = json.dumps(tool_args, ensure_ascii=False)[:200]

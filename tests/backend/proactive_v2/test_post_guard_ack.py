@@ -7,6 +7,8 @@ TDD — Phase 6: ProactiveTurnPipeline — Post-guard + ACK
 """
 
 from __future__ import annotations
+
+from core.roles.reply_state import RoleReplyContext
 from typing import Any, cast
 
 import json
@@ -41,7 +43,9 @@ from tests.backend.proactive_v2.conftest import (
 
 
 def _make_ctx(cited: list[str] = cast(Any, ()), message: str = "") -> AgentTickContext:
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.cited_item_ids = list(cited)
     ctx.final_message = message
     return ctx
@@ -136,7 +140,9 @@ def test_delivery_key_falls_back_to_source_and_title_when_url_missing():
 
 @pytest.mark.asyncio
 async def test_ack_discarded_720h():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.discarded_item_ids = {"feed-mcp:1", "feed-mcp:2"}
     sink = FakeAckSink()
     await ack_discarded(ctx, sink)
@@ -146,7 +152,9 @@ async def test_ack_discarded_720h():
 
 @pytest.mark.asyncio
 async def test_ack_discarded_does_not_touch_cited():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.discarded_item_ids = {"feed-mcp:1"}
     ctx.cited_item_ids = ["feed-mcp:2"]
     sink = FakeAckSink()
@@ -156,7 +164,9 @@ async def test_ack_discarded_does_not_touch_cited():
 
 @pytest.mark.asyncio
 async def test_ack_discarded_empty_set_no_calls():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     sink = FakeAckSink()
     await ack_discarded(ctx, sink)
     assert sink.calls == []
@@ -164,7 +174,9 @@ async def test_ack_discarded_empty_set_no_calls():
 
 @pytest.mark.asyncio
 async def test_ack_discarded_none_ack_fn_no_error():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.discarded_item_ids = {"feed-mcp:1"}
     await ack_discarded(ctx, None)  # should not raise
 
@@ -174,7 +186,9 @@ async def test_ack_discarded_none_ack_fn_no_error():
 
 @pytest.mark.asyncio
 async def test_ack_post_guard_fail_cited_24h():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.cited_item_ids = ["feed-mcp:1"]
     ctx.interesting_item_ids = {"feed-mcp:1"}
     sink = FakeAckSink()
@@ -184,7 +198,9 @@ async def test_ack_post_guard_fail_cited_24h():
 
 @pytest.mark.asyncio
 async def test_ack_post_guard_fail_uncited_interesting_24h():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.cited_item_ids = ["feed-mcp:1"]
     ctx.interesting_item_ids = {"feed-mcp:1", "feed-mcp:2"}  # feed-mcp:2 uncited
     sink = FakeAckSink()
@@ -194,7 +210,9 @@ async def test_ack_post_guard_fail_uncited_interesting_24h():
 
 @pytest.mark.asyncio
 async def test_ack_post_guard_fail_discarded_720h():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.cited_item_ids = []
     ctx.discarded_item_ids = {"feed-mcp:3"}
     sink = FakeAckSink()
@@ -204,7 +222,9 @@ async def test_ack_post_guard_fail_discarded_720h():
 
 @pytest.mark.asyncio
 async def test_ack_post_guard_fail_all_three_buckets():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.cited_item_ids = ["feed-mcp:1"]
     ctx.interesting_item_ids = {"feed-mcp:1", "feed-mcp:2"}
     ctx.discarded_item_ids = {"feed-mcp:3"}
@@ -220,7 +240,9 @@ async def test_ack_post_guard_fail_all_three_buckets():
 
 @pytest.mark.asyncio
 async def test_ack_on_success_content_cited_168h():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_contents = [{"id": "c1", "ack_server": "feed-mcp"}]
     ctx.fetched_alerts = []
     ctx.cited_item_ids = ["feed-mcp:c1"]
@@ -232,7 +254,9 @@ async def test_ack_on_success_content_cited_168h():
 
 @pytest.mark.asyncio
 async def test_ack_on_success_alert_cited_168h():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_alerts = [{"id": "a1", "ack_server": "alert-mcp"}]
     ctx.fetched_contents = []
     ctx.cited_item_ids = ["alert-mcp:a1"]
@@ -244,7 +268,9 @@ async def test_ack_on_success_alert_cited_168h():
 
 @pytest.mark.asyncio
 async def test_ack_on_success_uncited_interesting_24h():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_contents = [
         {"id": "c1", "ack_server": "feed-mcp"},
         {"id": "c2", "ack_server": "feed-mcp"},
@@ -260,7 +286,9 @@ async def test_ack_on_success_uncited_interesting_24h():
 
 @pytest.mark.asyncio
 async def test_ack_on_success_discarded_720h():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_contents = [{"id": "c1", "ack_server": "feed-mcp"}]
     ctx.fetched_alerts = []
     ctx.cited_item_ids = ["feed-mcp:c1"]
@@ -274,7 +302,9 @@ async def test_ack_on_success_discarded_720h():
 @pytest.mark.asyncio
 async def test_ack_on_success_split_alert_content_by_compound_key():
     """alert-mcp:42 和 feed-mcp:42 即使 id 相同，复合键不碰撞，都被正确 ACK"""
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_alerts = [{"id": "42", "ack_server": "alert-mcp"}]
     ctx.fetched_contents = [{"id": "42", "ack_server": "feed-mcp"}]
     ctx.cited_item_ids = ["alert-mcp:42", "feed-mcp:42"]
@@ -288,7 +318,9 @@ async def test_ack_on_success_split_alert_content_by_compound_key():
 @pytest.mark.asyncio
 async def test_ack_on_success_cited_not_in_fetched_not_acked():
     """cited 但不在 fetched_alerts/contents 中的 key 不 ACK（外部来源）"""
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_alerts = []
     ctx.fetched_contents = []
     ctx.cited_item_ids = ["unknown-mcp:x"]
@@ -366,7 +398,15 @@ async def test_delivery_dedupe_hit_prevents_send():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hello", "evidence": ["feed-mcp:1"]}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hello",
+                    "evidence": ["feed-mcp:1"],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -384,7 +424,15 @@ async def test_delivery_dedupe_hit_acks_cited_24h():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hello", "evidence": ["feed-mcp:1"]}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hello",
+                    "evidence": ["feed-mcp:1"],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -403,7 +451,15 @@ async def test_delivery_dedupe_hit_no_mark_delivery():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hi", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -425,7 +481,15 @@ async def test_message_dedupe_hit_prevents_send():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hello", "evidence": ["feed-mcp:1"]}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hello",
+                    "evidence": ["feed-mcp:1"],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -443,7 +507,15 @@ async def test_message_dedupe_hit_acks_cited_24h():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hello", "evidence": ["feed-mcp:1"]}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hello",
+                    "evidence": ["feed-mcp:1"],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -466,7 +538,15 @@ async def test_message_dedupe_disabled_skips_check():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hi", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -489,7 +569,15 @@ async def test_message_dedupe_called_with_correct_message():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "the message", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "the message",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -510,7 +598,15 @@ async def test_send_success_calls_sender():
     sender.send.return_value = True
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hi", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -524,7 +620,15 @@ async def test_send_success_marks_delivery():
     state = FakeStateStore()
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hi", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -539,7 +643,15 @@ async def test_send_success_acks_content_168h():
     llm = FakeLLM(
         [
             ("get_content_events", {}),
-            ("message_push", {"message": "hi", "evidence": ["feed-mcp:c1"]}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": ["feed-mcp:c1"],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -555,7 +667,15 @@ async def test_send_success_acks_discarded_720h():
     llm = FakeLLM(
         [
             ("mark_not_interesting", {"item_ids": ["feed-mcp:1"]}),
-            ("message_push", {"message": "hi", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -575,7 +695,15 @@ async def test_send_failure_no_mark_delivery():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hi", "evidence": ["feed-mcp:1"]}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": ["feed-mcp:1"],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -592,7 +720,15 @@ async def test_send_failure_no_ack_cited():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hi", "evidence": ["feed-mcp:1"]}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": ["feed-mcp:1"],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -610,7 +746,15 @@ async def test_send_failure_acks_discarded_720h():
     llm = FakeLLM(
         [
             ("mark_not_interesting", {"item_ids": ["feed-mcp:1"]}),
-            ("message_push", {"message": "hi", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -670,7 +814,12 @@ async def test_cited_wins_over_discarded_gets_168h_not_720h():
             ("mark_not_interesting", {"item_ids": ["feed-mcp:c1"]}),  # discarded
             (
                 "message_push",
-                {"message": "actually good", "evidence": ["feed-mcp:c1"]},
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "actually good",
+                    "evidence": ["feed-mcp:c1"],
+                },
             ),  # cited wins
             ("finish_turn", {"decision": "reply"}),
         ]
@@ -691,7 +840,9 @@ async def test_cited_wins_over_discarded_gets_168h_not_720h():
 @pytest.mark.asyncio
 async def test_ack_post_guard_fail_alert_cited_uses_alert_ack_fn():
     """post-guard 失败时，alert cited key → alert_ack_fn（独立通道，无 TTL），不走普通 ack_fn。"""
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_alerts = [{"id": "a1", "ack_server": "alert-mcp"}]
     ctx.cited_item_ids = ["alert-mcp:a1"]
     ctx.interesting_item_ids = {"alert-mcp:a1"}
@@ -705,7 +856,9 @@ async def test_ack_post_guard_fail_alert_cited_uses_alert_ack_fn():
 @pytest.mark.asyncio
 async def test_ack_post_guard_fail_alert_cited_fallback_to_ack_fn_when_no_alert_ack_fn():
     """post-guard 失败，无 alert_ack_fn 时，alert cited → ack_fn 24h（回退）。"""
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_alerts = [{"id": "a1", "ack_server": "alert-mcp"}]
     ctx.cited_item_ids = ["alert-mcp:a1"]
     ctx.interesting_item_ids = {"alert-mcp:a1"}
@@ -717,7 +870,9 @@ async def test_ack_post_guard_fail_alert_cited_fallback_to_ack_fn_when_no_alert_
 @pytest.mark.asyncio
 async def test_ack_post_guard_fail_content_cited_and_alert_cited_separate_channels():
     """post-guard 失败：content cited → ack_fn 24h；alert cited → alert_ack_fn。"""
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_alerts = [{"id": "a1", "ack_server": "alert-mcp"}]
     ctx.fetched_contents = [{"id": "c1", "ack_server": "feed-mcp"}]
     ctx.cited_item_ids = ["alert-mcp:a1", "feed-mcp:c1"]
@@ -734,7 +889,9 @@ async def test_ack_post_guard_fail_content_cited_and_alert_cited_separate_channe
 async def test_ack_post_guard_fail_uncited_fetched_alert_also_acked():
     """post-guard 失败：uncited fetched alert 也应被 ACK，一次性清空本批 alert，
     防止逐条 tick 循环（每 tick 换一条 alert 反复被 dedupe 拦截）。"""
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_alerts = [
         {"id": "a1", "ack_server": "alert-mcp"},
         {"id": "a2", "ack_server": "alert-mcp"},
@@ -766,7 +923,15 @@ async def test_message_dedupe_receives_recent_proactive_list():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "new message", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "new message",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -817,7 +982,15 @@ async def test_message_dedupe_empty_list_when_no_fn():
 
     llm = FakeLLM(
         [
-            ("message_push", {"message": "msg", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "msg",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -839,7 +1012,15 @@ async def test_discarded_content_not_in_interesting():
         [
             ("get_content_events", {}),
             ("mark_not_interesting", {"item_ids": ["feed-mcp:c1"]}),
-            ("message_push", {"message": "hi", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -859,7 +1040,9 @@ async def test_ack_on_success_alert_cited_calls_alert_ack_fn():
     """发送成功：cited alert 调用 alert_ack_fn（独立通道），不调用普通 ack_fn"""
     from agent.core.proactive_turn import ack_on_success
 
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_alerts = [{"id": "a1", "ack_server": "alert-mcp"}]
     ctx.fetched_contents = []
     ctx.cited_item_ids = ["alert-mcp:a1"]
@@ -879,7 +1062,9 @@ async def test_ack_on_success_alert_ack_fn_none_falls_back_to_regular():
     """alert_ack_fn=None 时，cited alert 回退到普通 ack_fn（168h）"""
     from agent.core.proactive_turn import ack_on_success
 
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_alerts = [{"id": "a1", "ack_server": "alert-mcp"}]
     ctx.fetched_contents = []
     ctx.cited_item_ids = ["alert-mcp:a1"]
@@ -897,7 +1082,9 @@ async def test_ack_on_success_content_unaffected_by_alert_ack_fn():
     """alert_ack_fn 独立时，content cited 仍走普通 ack_fn（168h）"""
     from agent.core.proactive_turn import ack_on_success
 
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_alerts = []
     ctx.fetched_contents = [{"id": "c1", "ack_server": "feed-mcp"}]
     ctx.cited_item_ids = ["feed-mcp:c1"]
@@ -1027,7 +1214,15 @@ async def test_mark_interesting_uncited_acks_24h_on_success():
         [
             ("get_content_events", {}),
             ("mark_interesting", {"item_ids": ["feed-mcp:c1"]}),  # 显式标记感兴趣
-            ("message_push", {"message": "hi", "evidence": []}),  # 未引用
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hi",
+                    "evidence": [],
+                },
+            ),  # 未引用
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -1063,7 +1258,15 @@ async def test_fetched_but_unclassified_not_acked_on_send():
         [
             ("get_content_events", {}),
             # 未调用 mark_interesting，也未调用 mark_not_interesting
-            ("message_push", {"message": "other topic", "evidence": []}),  # c1 未 cite
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "other topic",
+                    "evidence": [],
+                },
+            ),  # c1 未 cite
             ("finish_turn", {"decision": "reply"}),
         ]
     )

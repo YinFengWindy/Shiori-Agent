@@ -20,6 +20,14 @@ class RoleReply:
     thought: str
 
 
+@dataclass(frozen=True)
+class RoleReplyContext:
+    """Allowed moods and the successful-state stamp captured before generation."""
+
+    moods: tuple[str, ...]
+    previous_updated_at: str
+
+
 def role_mood_catalog(runtime_config: object) -> tuple[str, ...]:
     """Resolve allowed moods independently of whether illustration assets exist."""
     if not isinstance(runtime_config, dict):
@@ -49,7 +57,9 @@ def role_reply_prompt(moods: tuple[str, ...]) -> str:
     )
 
 
-def parse_role_reply(raw: str, moods: tuple[str, ...]) -> RoleReply:
+def parse_role_reply(
+    raw: str, moods: tuple[str, ...], *, allow_empty_content: bool = False
+) -> RoleReply:
     """Validate only formal JSON; never repair truncation or inspect reasoning text."""
 
     def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -66,7 +76,19 @@ def parse_role_reply(raw: str, moods: tuple[str, ...]) -> RoleReply:
         raise InvalidRoleReply("角色回复必须是完整 JSON 对象") from exc
     if not isinstance(payload, dict):
         raise InvalidRoleReply("角色回复必须是 JSON 对象")
+    return validate_role_reply(payload, moods, allow_empty_content=allow_empty_content)
+
+
+def validate_role_reply(
+    payload: dict[str, Any],
+    moods: tuple[str, ...],
+    *,
+    allow_empty_content: bool = False,
+) -> RoleReply:
+    """Validate structured output with the same rules for JSON and tool replies."""
     for key in ("content", "mood", "thought"):
+        if key == "content" and allow_empty_content and payload.get(key) == "":
+            continue
         if not isinstance(payload.get(key), str) or not payload[key].strip():
             raise InvalidRoleReply(f"角色回复缺少有效 {key}")
     mood, thought = payload["mood"].strip(), payload["thought"].strip()

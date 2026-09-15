@@ -10,6 +10,8 @@ TDD — ProactiveTurnPipeline pre-gate
 
 from __future__ import annotations
 
+from core.roles.reply_state import RoleReply, RoleReplyContext
+
 import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
@@ -101,10 +103,13 @@ async def test_multi_channel_delivery_retries_transports_without_recommitting():
     tick._turn_orchestrator = orchestrator
 
     result = TurnResult(
+        role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
+        reply_context=RoleReplyContext(("平静",), ""),
         decision="reply",
         outbound=TurnOutbound(session_key="test_session", content="hello"),
     )
     ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
         session_key="test_session",
         target_transports=[
             ("desktop", "role:mira"),
@@ -156,10 +161,13 @@ async def test_multi_channel_delivery_stops_when_user_replies():
     tick._turn_orchestrator = orchestrator
 
     result = TurnResult(
+        role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
+        reply_context=RoleReplyContext(("平静",), ""),
         decision="reply",
         outbound=TurnOutbound(session_key="test_session", content="hello"),
     )
     ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
         session_key="test_session",
         target_transports=[("desktop", "role:mira"), ("telegram", "42")],
     )
@@ -187,10 +195,13 @@ async def test_multi_channel_delivery_returns_before_retry_wait_finishes():
     tick._turn_orchestrator = orchestrator
 
     result = TurnResult(
+        role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
+        reply_context=RoleReplyContext(("平静",), ""),
         decision="reply",
         outbound=TurnOutbound(session_key="test_session", content="hello"),
     )
     ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
         session_key="test_session",
         target_transports=[("desktop", "role:mira"), ("qq", "gqq:7")],
     )
@@ -221,10 +232,13 @@ async def test_multi_channel_delivery_cancels_retry_when_user_replies():
     tick._turn_orchestrator = orchestrator
 
     result = TurnResult(
+        role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
+        reply_context=RoleReplyContext(("平静",), ""),
         decision="reply",
         outbound=TurnOutbound(session_key="test_session", content="hello"),
     )
     ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
         session_key="test_session",
         target_transports=[("desktop", "role:mira"), ("qq", "gqq:7")],
     )
@@ -313,7 +327,15 @@ async def test_successful_scene_followup_advances_only_after_delivery():
     llm = FakeLLM(
         [
             ("get_recent_chat", {"n": 20}),
-            ("message_push", {"message": "还不理我吗？", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "还不理我吗？",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -352,7 +374,15 @@ async def test_scene_gate_does_not_advance_when_external_content_is_delivered():
     tick = make_proactive_pipeline(
         llm_fn=FakeLLM(
             [
-                ("message_push", {"message": "有一条新内容", "evidence": []}),
+                (
+                    "message_push",
+                    {
+                        "mood": "平静",
+                        "thought": "我想和你聊聊。",
+                        "message": "有一条新内容",
+                        "evidence": [],
+                    },
+                ),
                 ("finish_turn", {"decision": "reply"}),
             ]
         ),

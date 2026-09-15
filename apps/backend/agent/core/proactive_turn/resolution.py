@@ -446,6 +446,8 @@ async def resolve_decide(
         action="send",
         result=TurnResult(
             decision="reply",
+            role_reply=ctx.role_reply,
+            reply_context=ctx.reply_context,
             outbound=TurnOutbound(
                 session_key=pipeline._session_key,
                 content=ctx.final_message,

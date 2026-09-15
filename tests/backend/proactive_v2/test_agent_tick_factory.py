@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from core.roles.reply_state import RoleReplyContext
 from typing import Any, cast
 
 from types import SimpleNamespace
@@ -106,7 +108,11 @@ def test_agent_tick_factory_binds_drift_step_recorder_to_tick_store(tmp_path):
     assert tick._drift_pipeline is not None
     assert tick._drift_pipeline.step_recorder is not None
 
-    ctx = AgentTickContext(tick_id="tick1", session_key="telegram:1")
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        tick_id="tick1",
+        session_key="telegram:1",
+    )
     ctx.steps_taken = 3
     tick._drift_pipeline.step_recorder(
         ctx,

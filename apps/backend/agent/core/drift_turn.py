@@ -37,6 +37,7 @@ from proactive_v2.drift_tools import (
     DriftToolDeps,
     build_drift_tool_registry,
 )
+from proactive_v2.reply_output import correct_push_call, reply_schemas
 
 if TYPE_CHECKING:
     from core.memory.markdown import MemoryProfileApi
@@ -187,7 +188,7 @@ class DriftTurnPipeline:
         """LLM 工具调用循环：调模型 → 执行工具 → 追加 messages → 重复。"""
 
         shared = self._tool_deps.shared_tools
-        base_schemas = tools.get_schemas()
+        base_schemas = reply_schemas(tools.get_schemas(), ctx)
         steps = 0
 
         while steps < self._max_steps and not ctx.drift_finished:
@@ -223,6 +224,17 @@ class DriftTurnPipeline:
             if tool_call is None:
                 logger.warning("[drift] llm returned no tool call at step=%d", steps)
                 break
+
+            corrections_before = ctx.reply_format_corrections
+            tool_call = await correct_push_call(
+                tool_call,
+                ctx=ctx,
+                messages=messages,
+                schemas=schemas,
+                llm_fn=llm_fn,
+                remaining_steps=self._max_steps - steps - 1,
+            )
+            steps += ctx.reply_format_corrections - corrections_before
 
             tool_name = tool_call.get("name", "")
             tool_args = tool_call.get("input", {})

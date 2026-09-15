@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, cast
 from core.memory.engine import MemoryQuery, MemoryScope
 from agent.prompting import is_context_frame
 from proactive_v2.context import AgentTickContext
+from proactive_v2.reply_output import parse_push_reply, reply_properties
 from proactive_v2.outbound_text import normalize_outbound_text
 from proactive_v2.time import format_beijing_timestamp
 
@@ -177,13 +178,14 @@ TOOL_SCHEMAS: list[dict] = [
                     "type": "string",
                     "description": "要发送给用户的消息内容，必须非空",
                 },
+                **reply_properties(()),
                 "evidence": {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": '引用的内容复合键列表，格式 "{ack_server}:{event_id}"',
                 },
             },
-            "required": ["message"],
+            "required": ["message", "mood", "thought"],
         },
     ),
     _schema(
@@ -592,11 +594,13 @@ def _message_push(ctx: AgentTickContext, args: dict) -> str:
         raise ValueError(
             "message_push already called this turn; cannot overwrite draft"
         )
-    message = normalize_outbound_text(str(args.get("message", "") or ""))
+    reply = parse_push_reply(args, ctx)
+    message = reply.content
     if not message.strip():
         raise ValueError("message_push requires non-empty message")
     evidence = _parse_evidence(ctx, args.get("evidence", []))
     ctx.draft_message = message
+    ctx.role_reply = reply
     ctx.draft_evidence = evidence
     return json.dumps({"ok": True}, ensure_ascii=False)
 

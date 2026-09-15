@@ -14,6 +14,8 @@ TDD — Phase 3: proactive_v2/tools.py
 
 from __future__ import annotations
 
+from core.roles.reply_state import RoleReplyContext
+
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -94,9 +96,19 @@ def test_finish_turn_schema_reason_is_supported():
 
 
 def test_message_push_requires_non_empty_message():
-    ctx = AgentTickContext()
-    with pytest.raises(ValueError, match="requires non-empty message"):
-        _message_push(ctx, {"message": "   ", "evidence": []})
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
+    with pytest.raises(ValueError, match="content"):
+        _message_push(
+            ctx,
+            {
+                "mood": "平静",
+                "thought": "我想和你聊聊。",
+                "message": "   ",
+                "evidence": [],
+            },
+        )
 
 
 def test_mark_not_interesting_schema_item_ids_is_array():
@@ -138,7 +150,9 @@ async def test_web_fetch_truncates_to_max_chars():
     )
     result = json.loads(
         await _web_fetch(
-            ctx=AgentTickContext(session_key="role:mira"),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             args={"url": "https://example.com"},
             web_fetch_tool=fake_tool,
             max_chars=8_000,
@@ -160,7 +174,9 @@ async def test_web_fetch_short_text_not_truncated():
     )
     result = json.loads(
         await _web_fetch(
-            ctx=AgentTickContext(session_key="role:mira"),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             args={"url": "https://example.com"},
             web_fetch_tool=fake_tool,
             max_chars=8_000,
@@ -182,7 +198,9 @@ async def test_web_fetch_exact_max_chars_not_truncated():
     )
     result = json.loads(
         await _web_fetch(
-            ctx=AgentTickContext(session_key="role:mira"),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             args={"url": "https://example.com"},
             web_fetch_tool=fake_tool,
             max_chars=8_000,
@@ -199,7 +217,9 @@ async def test_web_fetch_error_passthrough():
     fake_tool.execute.return_value = error_payload
     result = json.loads(
         await _web_fetch(
-            ctx=AgentTickContext(session_key="role:mira"),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             args={"url": "https://example.com"},
             web_fetch_tool=fake_tool,
             max_chars=8_000,
@@ -222,7 +242,9 @@ async def test_web_fetch_preserves_upstream_truncated_true():
     )
     result = json.loads(
         await _web_fetch(
-            ctx=AgentTickContext(),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""),
+            ),
             args={"url": "https://example.com"},
             web_fetch_tool=fake_tool,
             max_chars=8_000,
@@ -238,7 +260,9 @@ async def test_web_fetch_calls_execute_with_text_format():
         {"url": "x", "text": "ok", "truncated": False}
     )
     await _web_fetch(
-        ctx=AgentTickContext(),
+        ctx=AgentTickContext(
+            reply_context=RoleReplyContext(("平静",), ""),
+        ),
         args={"url": "https://example.com"},
         web_fetch_tool=fake_tool,
         max_chars=8_000,
@@ -252,7 +276,9 @@ async def test_web_search_passthrough():
     fake_tool.execute.return_value = json.dumps({"query": "furia cs2", "result": "..."})
     result = json.loads(
         await _web_search(
-            ctx=AgentTickContext(),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""),
+            ),
             args={"query": "furia cs2", "num_results": 3},
             web_search_tool=fake_tool,
         )
@@ -265,7 +291,9 @@ async def test_web_search_passthrough():
 async def test_web_search_without_tool_returns_error():
     result = json.loads(
         await _web_search(
-            ctx=AgentTickContext(),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""),
+            ),
             args={"query": "hf speed-bench"},
             web_search_tool=None,
         )
@@ -282,7 +310,9 @@ async def test_recall_memory_empty_hits():
     fake_memory.query = AsyncMock(return_value=SimpleNamespace(records=[]))
     result = json.loads(
         await _recall_memory(
-            ctx=AgentTickContext(session_key="role:mira"),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             args={"query": "game news"},
             memory=fake_memory,
         )
@@ -303,7 +333,9 @@ async def test_recall_memory_joins_texts():
     )
     result = json.loads(
         await _recall_memory(
-            ctx=AgentTickContext(session_key="role:mira"),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             args={"query": "game"},
             memory=fake_memory,
         )
@@ -326,7 +358,9 @@ async def test_recall_memory_skips_empty_text():
     )
     result = json.loads(
         await _recall_memory(
-            ctx=AgentTickContext(session_key="role:mira"),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             args={"query": "test"},
             memory=fake_memory,
         )
@@ -342,6 +376,7 @@ async def test_recall_memory_passes_query_to_facade_interest_request():
     now = datetime(2026, 4, 4, 14, 0, 0, tzinfo=timezone.utc)
     await _recall_memory(
         ctx=AgentTickContext(
+            reply_context=RoleReplyContext(("平静",), ""),
             now_utc=now,
             session_key="role:mira",
             target_channel="telegram",
@@ -376,7 +411,9 @@ async def test_recall_memory_prefers_facade_interest_block():
 
     result = json.loads(
         await _recall_memory(
-            ctx=AgentTickContext(session_key="role:mira"),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             args={"query": "q"},
             memory=fake_memory,
         )
@@ -400,7 +437,9 @@ async def test_recall_memory_separator_between_hits():
     )
     result = json.loads(
         await _recall_memory(
-            ctx=AgentTickContext(session_key="role:mira"),
+            ctx=AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             args={"query": "q"},
             memory=fake_memory,
         )
@@ -412,10 +451,20 @@ async def test_recall_memory_separator_between_hits():
 
 
 def test_message_push_writes_draft_not_final():
-    ctx = AgentTickContext(session_key="role:mira")
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+    )
     ctx.fetched_contents = [{"ack_server": "feed-mcp", "event_id": "1"}]
     result = json.loads(
-        _message_push(ctx, {"message": "hello", "evidence": ["feed-mcp:1"]})
+        _message_push(
+            ctx,
+            {
+                "mood": "平静",
+                "thought": "我想和你聊聊。",
+                "message": "hello",
+                "evidence": ["feed-mcp:1"],
+            },
+        )
     )
     assert result["ok"] is True
     assert ctx.draft_message == "hello"
@@ -425,51 +474,109 @@ def test_message_push_writes_draft_not_final():
 
 
 def test_message_push_decodes_escaped_newlines_for_outbound_text():
-    ctx = AgentTickContext(session_key="role:mira")
-    result = json.loads(_message_push(ctx, {"message": "第一段\\n\\n第二段\\n第三段"}))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+    )
+    result = json.loads(
+        _message_push(
+            ctx,
+            {
+                "mood": "平静",
+                "thought": "我想和你聊聊。",
+                "message": "第一段\\n\\n第二段\\n第三段",
+            },
+        )
+    )
     assert result["ok"] is True
     assert ctx.draft_message == "第一段\n\n第二段\n第三段"
 
 
 def test_message_push_keeps_single_literal_escape_text():
-    ctx = AgentTickContext()
-    _message_push(ctx, {"message": "Python 里换行符写作 \\n"})
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
+    _message_push(
+        ctx,
+        {
+            "mood": "平静",
+            "thought": "我想和你聊聊。",
+            "message": "Python 里换行符写作 \\n",
+        },
+    )
     assert ctx.draft_message == "Python 里换行符写作 \\n"
 
 
 def test_message_push_second_call_raises():
-    ctx = AgentTickContext()
-    _message_push(ctx, {"message": "first"})
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
+    _message_push(
+        ctx, {"mood": "平静", "thought": "我想和你聊聊。", "message": "first"}
+    )
     with pytest.raises(ValueError, match="already called this turn"):
-        _message_push(ctx, {"message": "second"})
+        _message_push(
+            ctx, {"mood": "平静", "thought": "我想和你聊聊。", "message": "second"}
+        )
 
 
 def test_message_push_invalid_evidence_raises():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     with pytest.raises(ValueError, match="invalid evidence ids"):
-        _message_push(ctx, {"message": "hello", "evidence": ["fitbit:v2_x"]})
+        _message_push(
+            ctx,
+            {
+                "mood": "平静",
+                "thought": "我想和你聊聊。",
+                "message": "hello",
+                "evidence": ["fitbit:v2_x"],
+            },
+        )
 
 
 def test_message_push_rejects_prefixed_evidence_when_no_valid_ids():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     with pytest.raises(ValueError, match="invalid evidence ids"):
-        _message_push(ctx, {"message": "hello", "evidence": ["feed-mcp:made-up"]})
+        _message_push(
+            ctx,
+            {
+                "mood": "平静",
+                "thought": "我想和你聊聊。",
+                "message": "hello",
+                "evidence": ["feed-mcp:made-up"],
+            },
+        )
 
 
 def test_finish_turn_reply_without_message_push_raises():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     with pytest.raises(ValueError, match="requires prior message_push call"):
         _finish_turn(ctx, {"decision": "reply"})
 
 
 def test_finish_turn_reply_promotes_draft_and_clears_it():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_contents = [
         {"ack_server": "feed-mcp", "event_id": "1"},
         {"ack_server": "feed-mcp", "event_id": "99"},
     ]
     ctx.discarded_item_ids = {"feed-mcp:99"}
-    _message_push(ctx, {"message": "msg", "evidence": ["feed-mcp:1", "feed-mcp:99"]})
+    _message_push(
+        ctx,
+        {
+            "mood": "平静",
+            "thought": "我想和你聊聊。",
+            "message": "msg",
+            "evidence": ["feed-mcp:1", "feed-mcp:99"],
+        },
+    )
     result = json.loads(_finish_turn(ctx, {"decision": "reply"}))
     assert result["ok"] is True
     assert ctx.terminal_action == "reply"
@@ -483,7 +590,9 @@ def test_finish_turn_reply_promotes_draft_and_clears_it():
 
 
 def test_finish_turn_skip_sets_reason_and_note():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     result = json.loads(
         _finish_turn(ctx, {"decision": "skip", "reason": "other", "note": "debug info"})
     )
@@ -494,8 +603,12 @@ def test_finish_turn_skip_sets_reason_and_note():
 
 
 def test_finish_turn_skip_after_message_push_raises():
-    ctx = AgentTickContext()
-    _message_push(ctx, {"message": "draft"})
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
+    _message_push(
+        ctx, {"mood": "平静", "thought": "我想和你聊聊。", "message": "draft"}
+    )
     with pytest.raises(ValueError, match="must not follow message_push"):
         _finish_turn(ctx, {"decision": "skip", "reason": "no_content"})
 
@@ -505,19 +618,25 @@ def test_finish_turn_skip_after_message_push_raises():
     ["no_content", "user_busy", "already_sent_similar", "scene_changed", "other"],
 )
 def test_finish_turn_skip_valid_reasons(reason):
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     _finish_turn(ctx, {"decision": "skip", "reason": reason})
     assert ctx.skip_reason == reason
 
 
 def test_finish_turn_skip_invalid_reason_raises():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     with pytest.raises(ValueError):
         _finish_turn(ctx, {"decision": "skip", "reason": "invalid_reason"})
 
 
 def test_finish_turn_skip_requires_reason():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     with pytest.raises(ValueError, match="requires non-empty reason"):
         _finish_turn(ctx, {"decision": "skip"})
 
@@ -526,7 +645,9 @@ def test_finish_turn_skip_requires_reason():
 
 
 def test_mark_not_interesting_adds_to_discarded():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     result = json.loads(
         _mark_not_interesting(ctx, {"item_ids": ["feed-mcp:1", "feed-mcp:2"]})
     )
@@ -536,20 +657,26 @@ def test_mark_not_interesting_adds_to_discarded():
 
 
 def test_mark_not_interesting_single_item():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     _mark_not_interesting(ctx, {"item_ids": ["alert-mcp:99"]})
     assert "alert-mcp:99" in ctx.discarded_item_ids
 
 
 def test_mark_not_interesting_empty_list():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     result = json.loads(_mark_not_interesting(ctx, {"item_ids": []}))
     assert ctx.discarded_item_ids == set()
     assert result["ok"] is True
 
 
 def test_mark_not_interesting_accumulates():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     _mark_not_interesting(ctx, {"item_ids": ["feed-mcp:1"]})
     _mark_not_interesting(ctx, {"item_ids": ["feed-mcp:2"]})
     assert "feed-mcp:1" in ctx.discarded_item_ids
@@ -571,7 +698,9 @@ async def test_get_alert_events_caches_on_second_call():
             "triggered_at": "2026-01-01T00:00:00Z",
         }
     ]
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.mark_alerts_prefetched(events)
     await _get_alert_events(ctx, {})
     await _get_alert_events(ctx, {})
@@ -588,7 +717,9 @@ async def test_get_alert_events_stores_in_ctx():
         "severity": "low",
         "triggered_at": "2026-01-01T00:00:00Z",
     }
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.mark_alerts_prefetched([event])
     await _get_alert_events(ctx, {})
     assert ctx.fetched_alerts == [event]
@@ -597,7 +728,9 @@ async def test_get_alert_events_stores_in_ctx():
 
 @pytest.mark.asyncio
 async def test_get_alert_events_returns_json_list():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     raw = await _get_alert_events(ctx, {})
     parsed = json.loads(raw)
     assert isinstance(parsed, list)
@@ -618,7 +751,9 @@ async def test_get_content_events_caches_on_second_call():
             "published_at": "2026-01-01T00:00:00Z",
         }
     ]
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.mark_contents_prefetched(events, {})
     await _get_content_events(ctx, {})
     await _get_content_events(ctx, {})
@@ -635,7 +770,9 @@ async def test_get_content_events_stores_in_ctx():
         "source_name": "S",
         "published_at": "2026-01-01T00:00:00Z",
     }
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.mark_contents_prefetched([event], {})
     await _get_content_events(ctx, {})
     assert ctx.fetched_contents == [event]
@@ -644,14 +781,18 @@ async def test_get_content_events_stores_in_ctx():
 
 @pytest.mark.asyncio
 async def test_get_content_events_passes_limit():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     await _get_content_events(ctx, {})
     assert ctx.contents_fetched is True
 
 
 @pytest.mark.asyncio
 async def test_get_content_events_returns_json_list():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     raw = await _get_content_events(ctx, {})
     assert isinstance(json.loads(raw), list)
 
@@ -662,7 +803,9 @@ async def test_get_content_events_returns_json_list():
 @pytest.mark.asyncio
 async def test_get_context_data_max_one_call():
     rows = [{"title": "Steam", "body": "playing"}]
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.mark_context_prefetched(rows)
     await _get_context_data(ctx, {})
     await _get_context_data(ctx, {})
@@ -672,7 +815,9 @@ async def test_get_context_data_max_one_call():
 @pytest.mark.asyncio
 async def test_get_context_data_stores_in_ctx():
     item = {"title": "Steam", "body": "playing"}
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.mark_context_prefetched([item])
     await _get_context_data(ctx, {})
     assert ctx.fetched_context == [item]
@@ -681,7 +826,9 @@ async def test_get_context_data_stores_in_ctx():
 
 @pytest.mark.asyncio
 async def test_get_context_data_returns_json():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     raw = await _get_context_data(ctx, {})
     assert isinstance(json.loads(raw), list)
 
@@ -692,7 +839,9 @@ async def test_get_context_data_returns_json():
 @pytest.mark.asyncio
 async def test_get_recent_chat_calls_fn_with_n():
     fake_chat_fn = AsyncMock(return_value=[{"role": "user", "content": "hi"}])
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     await _get_recent_chat(ctx, {"n": 10}, recent_chat_fn=fake_chat_fn)
     fake_chat_fn.assert_called_once_with(n=10)
 
@@ -700,7 +849,9 @@ async def test_get_recent_chat_calls_fn_with_n():
 @pytest.mark.asyncio
 async def test_get_recent_chat_default_n_20():
     fake_chat_fn = AsyncMock(return_value=[])
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     await _get_recent_chat(ctx, {}, recent_chat_fn=fake_chat_fn)
     fake_chat_fn.assert_called_once_with(n=20)
 
@@ -709,7 +860,9 @@ async def test_get_recent_chat_default_n_20():
 async def test_get_recent_chat_returns_json():
     msgs = [{"role": "user", "content": "hi"}]
     fake_chat_fn = AsyncMock(return_value=msgs)
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     raw = await _get_recent_chat(ctx, {}, recent_chat_fn=fake_chat_fn)
     assert json.loads(raw) == msgs
 
@@ -719,7 +872,9 @@ async def test_get_recent_chat_returns_json():
 
 @pytest.mark.asyncio
 async def test_execute_increments_steps_taken():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     deps = ToolDeps()
     await execute("get_alert_events", {}, ctx, deps)
     assert ctx.steps_taken == 1
@@ -727,7 +882,9 @@ async def test_execute_increments_steps_taken():
 
 @pytest.mark.asyncio
 async def test_execute_increments_each_call():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     deps = ToolDeps()
     await execute("get_alert_events", {}, ctx, deps)
     await execute("get_content_events", {}, ctx, deps)
@@ -736,27 +893,46 @@ async def test_execute_increments_each_call():
 
 @pytest.mark.asyncio
 async def test_execute_dispatches_message_push():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     ctx.fetched_contents = [{"ack_server": "feed-mcp", "event_id": "1"}]
     deps = ToolDeps()
     await execute(
-        "message_push", {"message": "hi", "evidence": ["feed-mcp:1"]}, ctx, deps
+        "message_push",
+        {
+            "mood": "平静",
+            "thought": "我想和你聊聊。",
+            "message": "hi",
+            "evidence": ["feed-mcp:1"],
+        },
+        ctx,
+        deps,
     )
     assert ctx.draft_message == "hi"
 
 
 @pytest.mark.asyncio
 async def test_execute_dispatches_finish_turn_reply():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     deps = ToolDeps()
-    await execute("message_push", {"message": "hi", "evidence": []}, ctx, deps)
+    await execute(
+        "message_push",
+        {"mood": "平静", "thought": "我想和你聊聊。", "message": "hi", "evidence": []},
+        ctx,
+        deps,
+    )
     await execute("finish_turn", {"decision": "reply"}, ctx, deps)
     assert ctx.terminal_action == "reply"
 
 
 @pytest.mark.asyncio
 async def test_execute_dispatches_finish_turn_skip():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     deps = ToolDeps()
     await execute(
         "finish_turn", {"decision": "skip", "reason": "no_content"}, ctx, deps
@@ -766,7 +942,9 @@ async def test_execute_dispatches_finish_turn_skip():
 
 @pytest.mark.asyncio
 async def test_execute_dispatches_mark_not_interesting():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     deps = ToolDeps()
     await execute("mark_not_interesting", {"item_ids": ["feed-mcp:1"]}, ctx, deps)
     assert "feed-mcp:1" in ctx.discarded_item_ids
@@ -774,7 +952,9 @@ async def test_execute_dispatches_mark_not_interesting():
 
 @pytest.mark.asyncio
 async def test_execute_unknown_tool_raises():
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     deps = ToolDeps()
     with pytest.raises(ValueError, match="unknown tool"):
         await execute("nonexistent_tool", {}, ctx, deps)
@@ -786,7 +966,9 @@ async def test_execute_web_fetch_uses_max_chars_from_deps():
     fake_tool.execute.return_value = json.dumps(
         {"url": "x", "text": "z" * 5_000, "truncated": False}
     )
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     deps = ToolDeps(web_fetch_tool=fake_tool, max_chars=2_000)
     raw = await execute("web_fetch", {"url": "https://x.com"}, ctx, deps)
     result = json.loads(raw)
@@ -799,7 +981,9 @@ async def test_execute_web_search_uses_tool_from_deps():
     fake_tool.execute.return_value = json.dumps(
         {"query": "aurora furia", "result": "..."}
     )
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
     deps = ToolDeps(web_search_tool=fake_tool)
     raw = await execute(
         "web_search", {"query": "aurora furia", "type": "fast"}, ctx, deps
@@ -817,7 +1001,9 @@ async def test_execute_recall_memory_uses_memory_from_deps():
             records=[SimpleNamespace(id="m1", summary="pref", score=0.9)]
         )
     )
-    ctx = AgentTickContext(session_key="role:mira")
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+    )
     deps = ToolDeps(memory=fake_memory)
     raw = await execute("recall_memory", {"query": "test"}, ctx, deps)
     result = json.loads(raw)

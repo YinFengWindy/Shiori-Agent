@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
+from core.roles.reply_state import RoleReply, RoleReplyContext
+
 if TYPE_CHECKING:
     from agent.core.proactive_turn.gates import (
         ProactiveGateActivation,
@@ -54,9 +56,13 @@ class AgentTickContext:
     final_message: str = ""
     cited_item_ids: list[str] = field(default_factory=list)  # 复合键列表
     steps_taken: int = 0
+    reply_context: RoleReplyContext | None = None
+    reply_format_corrections: int = 0
+    role_reply: RoleReply | None = None
     drift_entered: bool = False
     drift_finished: bool = False
     drift_message_sent: bool = False
+    drift_message_attempted: bool = False
 
     def mark_alerts_prefetched(self, alerts: list[dict]) -> None:
         self.fetched_alerts = alerts

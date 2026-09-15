@@ -16,6 +16,8 @@ TDD — Phase 5: proactive_v2/ProactiveTurnPipeline — Agent Loop
 
 from __future__ import annotations
 
+from core.roles.reply_state import RoleReplyContext
+
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -47,6 +49,7 @@ def _test_alert() -> dict[str, str]:
 def test_runtime_context_includes_current_beijing_time_anchor():
     tick = make_proactive_pipeline(llm_fn=None)
     ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
         now_utc=datetime(2026, 7, 15, 1, 47, tzinfo=timezone.utc),
     )
 
@@ -174,7 +177,15 @@ async def test_loop_with_no_llm_fn_executes_nothing():
 async def test_send_message_stops_loop_immediately():
     llm = FakeLLM(
         [
-            ("message_push", {"message": "Hello!", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "Hello!",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
             ("get_recent_chat", {}),  # 不应执行
         ]
@@ -217,7 +228,15 @@ async def test_only_first_terminal_counts():
     """send_message 之后即使 LLM 想再 skip，也不会被执行"""
     llm = FakeLLM(
         [
-            ("message_push", {"message": "Hi", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "Hi",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
             ("finish_turn", {"decision": "skip", "reason": "no_content"}),
         ]
@@ -235,7 +254,15 @@ async def test_only_first_terminal_counts():
 async def test_send_message_writes_final_message():
     llm = FakeLLM(
         [
-            ("message_push", {"message": "Hello world!", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "Hello world!",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -248,7 +275,15 @@ async def test_send_message_writes_final_message():
 async def test_tool_chain_step_logs_capture_args_and_results():
     llm = FakeLLM(
         [
-            ("message_push", {"message": "Hello world!", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "Hello world!",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -272,7 +307,12 @@ async def test_send_message_writes_cited_ids():
         [
             (
                 "message_push",
-                {"message": "msg", "evidence": ["feed-mcp:1", "alert-mcp:2"]},
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "msg",
+                    "evidence": ["feed-mcp:1", "alert-mcp:2"],
+                },
             ),
             ("finish_turn", {"decision": "reply"}),
         ]
@@ -298,7 +338,15 @@ async def test_send_message_writes_cited_ids():
 async def test_send_message_cited_added_to_interesting():
     llm = FakeLLM(
         [
-            ("message_push", {"message": "msg", "evidence": ["feed-mcp:1"]}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "msg",
+                    "evidence": ["feed-mcp:1"],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -353,7 +401,12 @@ async def test_alert_path_send_sets_terminal():
             ("get_alert_events", {}),
             (
                 "message_push",
-                {"message": "告警：CPU 95%", "evidence": ["alert-mcp:a1"]},
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "告警：CPU 95%",
+                    "evidence": ["alert-mcp:a1"],
+                },
             ),
             ("finish_turn", {"decision": "reply"}),
         ]
@@ -484,7 +537,15 @@ async def test_content_path_send_interesting_tracked():
         [
             ("get_alert_events", {}),
             ("get_content_events", {}),
-            ("message_push", {"message": "Great article", "evidence": ["feed-mcp:c1"]}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "Great article",
+                    "evidence": ["feed-mcp:c1"],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -579,7 +640,15 @@ async def test_recall_memory_in_loop():
     llm = FakeLLM(
         [
             ("recall_memory", {"query": "RPG games"}),
-            ("message_push", {"message": "RPG 推荐", "evidence": []}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "RPG 推荐",
+                    "evidence": [],
+                },
+            ),
             ("finish_turn", {"decision": "reply"}),
         ]
     )
@@ -740,6 +809,8 @@ async def test_alert_present_llm_called_with_auto_tool_choice():
             (
                 "message_push",
                 {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
                     "message": "最近恢复指标有点下滑，今天早点睡？",
                     "evidence": ["health:recovery_001"],
                 },

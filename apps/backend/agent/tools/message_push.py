@@ -14,6 +14,9 @@ from core.common.runtime_scope import current_runtime_lease
 
 logger = logging.getLogger(__name__)
 
+# Identity is supplied by the host outbound owner, never by model JSON arguments.
+PENDING_TURN_DELIVERY = object()
+
 
 class MessagePushTool(Tool):
     name = "message_push"
@@ -108,6 +111,9 @@ class MessagePushTool(Tool):
         text_with_metadata: (
             Callable[[str, str, dict[str, object]], Awaitable[None]] | None
         ) = None,
+        image_with_metadata: (
+            Callable[[str, str, dict[str, object]], Awaitable[None]] | None
+        ) = None,
     ) -> None:
         """注册渠道的各类 sender。
         - text(chat_id, message)
@@ -125,6 +131,8 @@ class MessagePushTool(Tool):
             self._senders[channel]["stream_text"] = stream_text
         if text_with_metadata:
             self._senders[channel]["text_with_metadata"] = text_with_metadata
+        if image_with_metadata:
+            self._senders[channel]["image_with_metadata"] = image_with_metadata
         if file:
             self._senders[channel]["file"] = file
         if image:
@@ -171,6 +179,14 @@ class MessagePushTool(Tool):
         image = _nonblank_payload(kwargs.get("image"))
         role_id = str(kwargs.get("role_id") or "").strip()
         session_key = str(kwargs.get("session_key") or "").strip()
+        pending_commit = kwargs.get("_pending_turn_delivery") is PENDING_TURN_DELIVERY
+        delivery_metadata = {
+            "delivery_key": str(kwargs.get("push_delivery_key") or "").strip(),
+            "already_persisted": _is_truthy(
+                kwargs.get("push_message_already_persisted")
+            ),
+            **({"pending_commit": True} if pending_commit else {}),
+        }
 
         if not message and not file and not image:
             return "错误：message、file、image 至少提供一个"
@@ -215,14 +231,7 @@ class MessagePushTool(Tool):
                     await senders["text_with_metadata"](
                         chat_id,
                         message,
-                        {
-                            "delivery_key": str(
-                                kwargs.get("push_delivery_key") or ""
-                            ).strip(),
-                            "already_persisted": _is_truthy(
-                                kwargs.get("push_message_already_persisted")
-                            ),
-                        },
+                        delivery_metadata,
                     )
                 else:
                     sender_name = "stream_text" if "stream_text" in senders else "text"
@@ -243,10 +252,15 @@ class MessagePushTool(Tool):
                     results.append(f"文件 {name!r} 已发送")
 
             if image:
-                if "image" not in senders:
+                if "image" not in senders and "image_with_metadata" not in senders:
                     results.append(f"渠道 {channel!r} 不支持发送图片")
                 else:
-                    await senders["image"](chat_id, image)
+                    if "image_with_metadata" in senders:
+                        await senders["image_with_metadata"](
+                            chat_id, image, delivery_metadata
+                        )
+                    else:
+                        await senders["image"](chat_id, image)
                     logger.info(
                         f"[message_push] {channel}:{chat_id} ← image: {image!r}"
                     )
@@ -264,6 +278,7 @@ class MessagePushTool(Tool):
             and role_id
             and session_key
             and self._event_bus is not None
+            and not pending_commit
         ):
             _ = await self._event_bus.emit(
                 ExternalImagePushed(

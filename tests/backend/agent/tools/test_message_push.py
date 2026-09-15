@@ -136,6 +136,7 @@ async def test_metadata_sender_uses_push_identity_not_shared_turn_identity():
             "already_persisted": False,
         },
     )
+
     sender.reset_mock()
     await tool.execute(
         channel="desktop",
@@ -153,6 +154,20 @@ async def test_metadata_sender_uses_push_identity_not_shared_turn_identity():
             "already_persisted": True,
         },
     )
+
+
+async def test_model_json_cannot_impersonate_pending_turn_delivery():
+    tool = MessagePushTool()
+    sender = AsyncMock()
+    tool.register_channel("desktop", text_with_metadata=sender)
+    await tool.execute(
+        channel="desktop",
+        chat_id="one",
+        message="hello",
+        _pending_turn_delivery=True,
+        pending_commit=True,
+    )
+    assert "pending_commit" not in sender.await_args.args[2]
 
 
 @pytest.mark.asyncio

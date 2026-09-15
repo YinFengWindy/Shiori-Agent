@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+
+from core.roles.reply_state import RoleReply, RoleReplyContext
+
 from typing import Any, cast
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -10,8 +14,14 @@ from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import OutboundDispatch, OutboundDispatchError
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
+from session.manager import SessionManager
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
+from agent.tools.message_push import MessagePushTool
+from agent.turns.outbound import PushToolOutboundPort
+from conversation.push_sync import ExternalImageSyncService
+from session.manager.models import build_session_message
+from core.roles.reply_state import reply_state_metadata
 
 
 class _DummySession:
@@ -33,7 +43,7 @@ class _DummySession:
 
 
 @pytest.mark.asyncio
-async def test_proactive_media_commit_notifies_shared_session() -> None:
+async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
     session = SimpleNamespace(
         key="role:mira",
         metadata={"role_id": "mira"},
@@ -51,10 +61,10 @@ async def test_proactive_media_commit_notifies_shared_session() -> None:
         )
 
     session.add_message = add_message
-    session_manager = SimpleNamespace(
-        get_or_create=lambda _key: session,
-        append_messages=AsyncMock(return_value=None),
-    )
+    initial_metadata = dict(session.metadata)
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.get_or_create(session.key)
+    session.metadata.update(initial_metadata)
 
     dispatched: list[OutboundDispatch] = []
 
@@ -81,6 +91,8 @@ async def test_proactive_media_commit_notifies_shared_session() -> None:
     )
 
     result = TurnResult(
+        role_reply=RoleReply("给你看张图", "平静", "我想和你聊聊。"),
+        reply_context=RoleReplyContext(("平静",), ""),
         decision="reply",
         outbound=TurnOutbound(
             session_key="role:mira",
@@ -108,6 +120,7 @@ async def test_proactive_media_commit_notifies_shared_session() -> None:
         )
     ]
 
+    result.reply_context = orchestrator.capture_reply_context("role:mira")
     outbound.result = False
     committed.clear()
     sent = await orchestrator.handle_proactive_turn(
@@ -153,6 +166,8 @@ async def test_proactive_retry_dispatches_without_recommitting_shared_session() 
         )
     )
     result = TurnResult(
+        role_reply=RoleReply("跨渠道提醒", "平静", "我想和你聊聊。"),
+        reply_context=RoleReplyContext(("平静",), ""),
         decision="reply",
         outbound=TurnOutbound(
             session_key="role:mira",
@@ -177,7 +192,7 @@ async def test_proactive_retry_dispatches_without_recommitting_shared_session() 
 
 
 @pytest.mark.asyncio
-async def test_proactive_dispatch_error_is_not_converted_to_false() -> None:
+async def test_proactive_dispatch_error_is_not_converted_to_false(tmp_path) -> None:
     session = SimpleNamespace(
         key="role:mira",
         metadata={"role_id": "mira"},
@@ -188,10 +203,10 @@ async def test_proactive_dispatch_error_is_not_converted_to_false() -> None:
         session.messages.append({"role": role, "content": content, **kwargs})
 
     session.add_message = add_message
-    session_manager = SimpleNamespace(
-        get_or_create=lambda _key: session,
-        append_messages=AsyncMock(return_value=None),
-    )
+    initial_metadata = dict(session.metadata)
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.get_or_create(session.key)
+    session.metadata.update(initial_metadata)
 
     class _Outbound:
         async def dispatch(self, outbound: OutboundDispatch) -> bool:
@@ -215,6 +230,8 @@ async def test_proactive_dispatch_error_is_not_converted_to_false() -> None:
     with pytest.raises(OutboundDispatchError, match="network unavailable"):
         await orchestrator.handle_proactive_turn(
             result=TurnResult(
+                role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
+                reply_context=RoleReplyContext(("平静",), ""),
                 decision="reply",
                 outbound=TurnOutbound(session_key="role:mira", content="hello"),
                 failure_side_effects=[failure_effect],
@@ -272,7 +289,9 @@ async def test_orchestrator_skip_runs_side_effects_without_dispatch():
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success_effects():
+async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success_effects(
+    tmp_path,
+):
     order: list[str] = []
     session = _DummySession("telegram:123")
 
@@ -292,12 +311,10 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
     presence = SimpleNamespace(
         record_proactive_sent=lambda _key: order.append("presence")
     )
-    session_manager = SimpleNamespace(
-        get_or_create=lambda _key: session,
-        append_messages=AsyncMock(
-            side_effect=lambda *_args, **_kwargs: order.append("persist")
-        ),
-    )
+    initial_metadata = dict(session.metadata)
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.get_or_create(session.key)
+    session.metadata.update(initial_metadata)
     orchestrator = TurnOrchestrator(
         TurnOrchestratorDeps(
             session=SessionServices(
@@ -310,6 +327,8 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
 
     sent = await orchestrator.handle_proactive_turn(
         result=TurnResult(
+            role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
+            reply_context=RoleReplyContext(("平静",), ""),
             decision="reply",
             outbound=TurnOutbound(session_key="telegram:123", content="hello"),
             evidence=["feed:1"],
@@ -333,11 +352,13 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
     assert sent is True
     assert session.messages[0]["proactive"] is True
     assert session.messages[0]["content"] == "hello"
-    assert order == ["persist", "side_effect", "dispatch", "presence", "success_effect"]
+    assert order == ["side_effect", "dispatch", "presence", "success_effect"]
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_proactive_reply_records_presence_by_role_when_available():
+async def test_orchestrator_proactive_reply_records_presence_by_role_when_available(
+    tmp_path,
+):
     session = _DummySession("role:mira")
     session.metadata["role_id"] = "mira"
     calls: list[tuple[str, str]] = []
@@ -350,10 +371,10 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
         record_proactive_sent=lambda _key: calls.append(("session", _key)),
         record_proactive_sent_by_role=lambda role_id: calls.append(("role", role_id)),
     )
-    session_manager = SimpleNamespace(
-        get_or_create=lambda _key: session,
-        append_messages=AsyncMock(return_value=None),
-    )
+    initial_metadata = dict(session.metadata)
+    session_manager = SessionManager(tmp_path)
+    session = session_manager.get_or_create(session.key)
+    session.metadata.update(initial_metadata)
     orchestrator = TurnOrchestrator(
         TurnOrchestratorDeps(
             session=SessionServices(
@@ -366,6 +387,8 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
 
     sent = await orchestrator.handle_proactive_turn(
         result=TurnResult(
+            role_reply=RoleReply("hello", "平静", "我想和你聊聊。"),
+            reply_context=RoleReplyContext(("平静",), ""),
             decision="reply",
             outbound=TurnOutbound(session_key="role:mira", content="hello"),
         ),
@@ -376,3 +399,228 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
 
     assert sent is True
     assert calls == [("role", "mira")]
+
+
+def _formal_result(owner, content="hello", media=None):
+    return TurnResult(
+        decision="reply",
+        outbound=TurnOutbound("role:mira", content, media or []),
+        role_reply=RoleReply(content, "平静", "我想和你聊聊。"),
+        reply_context=owner.capture_reply_context("role:mira"),
+    )
+
+
+async def _send(owner, result):
+    return await owner.handle_proactive_turn(
+        result=result, session_key="role:mira", channel="telegram", chat_id="123"
+    )
+
+
+@pytest.mark.asyncio
+async def test_successive_proactive_commits_and_transport_retry_keep_one_state_per_reply(
+    tmp_path,
+):
+    sessions = SessionManager(tmp_path)
+    sessions.open_role_session(
+        "mira", role_name="Mira", role_runtime_config={"mood_catalog": ["平静", "开心"]}
+    )
+    outbound = SimpleNamespace(dispatch=AsyncMock(return_value=True))
+    owner = TurnOrchestrator(TurnOrchestratorDeps(SessionServices(sessions), outbound))
+    first = _formal_result(owner)
+    assert await _send(owner, first)
+    session = sessions.get_or_create("role:mira")
+    first_stamp = session.metadata["current_mood_updated_at"]
+    second = _formal_result(owner, "next")
+    second.role_reply = RoleReply("next", "开心", "我很开心又见到你。")
+    assert await _send(owner, second)
+    metadata = dict(session.metadata)
+    assert metadata["current_mood_updated_at"] != first_stamp
+    await owner.dispatch_proactive_retry(
+        result=first, session_key=session.key, channel="qq", chat_id="group"
+    )
+    assert len(session.messages) == 2
+    assert session.metadata == metadata
+    assert metadata["current_mood"] == "开心"
+    assert metadata["current_thought"] == "我很开心又见到你。"
+    for message, expected in zip(
+        session.messages, [first.role_reply, second.role_reply], strict=True
+    ):
+        assert expected is not None
+        assert message["metadata"]["mood"] == expected.mood
+        assert message["metadata"]["thought"] == expected.thought
+        assert "thought" not in message
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
+    assert reloaded.metadata == metadata
+    assert len(reloaded.messages) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["false", "exception", "cancel", "projection"])
+async def test_failed_proactive_delivery_does_not_publish_messages_or_state(
+    tmp_path, monkeypatch, failure
+):
+    sessions = SessionManager(tmp_path)
+    session = sessions.open_role_session("mira", role_name="Mira")
+    sessions.save(session)
+    previous = dict(session.metadata)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def dispatch(_outbound):
+        entered.set()
+        assert session.messages == []
+        assert session.metadata == previous
+        if failure == "cancel":
+            await release.wait()
+        if failure == "exception":
+            raise OutboundDispatchError(
+                channel="telegram", chat_id="123", detail="network"
+            )
+        return failure != "false"
+
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            SessionServices(sessions), SimpleNamespace(dispatch=dispatch)
+        )
+    )
+    if failure == "projection":
+
+        def fail_projection(_session):
+            raise RuntimeError("projection failed")
+
+        monkeypatch.setattr(sessions, "_project_session_threads", fail_projection)
+    failure_effect = AsyncMock()
+    result = _formal_result(owner)
+    result.failure_side_effects = [SimpleNamespace(run=failure_effect)]
+    task = asyncio.create_task(_send(owner, result))
+    await entered.wait()
+    if failure == "cancel":
+        # A queued save cannot see private drafts while delivery is outstanding.
+        await sessions.save_async(session)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    elif failure == "false":
+        assert await task is False
+    else:
+        with pytest.raises(RuntimeError):
+            await task
+    assert session.metadata == previous
+    assert session.messages == []
+    fresh = SessionManager(tmp_path).get_or_create(session.key)
+    assert fresh.metadata == previous
+    assert fresh.messages == []
+    assert failure_effect.await_count == (0 if failure == "cancel" else 1)
+
+
+@pytest.mark.asyncio
+async def test_passive_commit_waits_for_delivery_and_stale_generation_cannot_overwrite(
+    tmp_path,
+):
+    sessions = SessionManager(tmp_path)
+    session = sessions.open_role_session("mira", role_name="Mira")
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def dispatch(_outbound):
+        entered.set()
+        await release.wait()
+        return True
+
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            SessionServices(sessions), SimpleNamespace(dispatch=dispatch)
+        )
+    )
+    result = _formal_result(owner)
+    proactive = asyncio.create_task(_send(owner, result))
+    await entered.wait()
+    passive = asyncio.create_task(
+        sessions.append_messages(
+            session,
+            [build_session_message("assistant", "old passive")],
+            pending_messages=True,
+            expected_mood_updated_at="",
+            metadata_updates=reply_state_metadata(
+                RoleReply("old passive", "平静", "我也想聊聊。"), updated_at="old"
+            ),
+        )
+    )
+    await asyncio.sleep(0)
+    assert not passive.done()
+    release.set()
+    assert await proactive
+    with pytest.raises(ValueError, match="过时"):
+        await passive
+    assert [m["content"] for m in session.messages] == ["hello"]
+    with pytest.raises(ValueError, match="过时"):
+        await _send(owner, result)
+    assert len(session.messages) == 1
+    current_stamp = str(session.metadata["current_mood_updated_at"])
+    await sessions.append_messages(
+        session,
+        [build_session_message("assistant", "new passive")],
+        pending_messages=True,
+        expected_mood_updated_at=current_stamp,
+        metadata_updates=reply_state_metadata(
+            RoleReply("new passive", "平静", "我已经收到你的回应。"), updated_at="new"
+        ),
+    )
+    assert session.metadata["current_thought"] == "我已经收到你的回应。"
+    assert [m["content"] for m in session.messages] == ["hello", "new passive"]
+
+
+@pytest.mark.asyncio
+async def test_image_transport_lock_and_formal_delivery_do_not_deadlock(tmp_path):
+    sessions = SessionManager(tmp_path)
+    session = sessions.open_role_session("mira", role_name="Mira")
+    bus = EventBus()
+    ExternalImageSyncService(session_manager=sessions, event_bus=bus)
+    push = MessagePushTool(event_bus=bus)
+    push.set_transport_lock(asyncio.Lock())
+    image_started, release_image, formal_started = (
+        asyncio.Event(),
+        asyncio.Event(),
+        asyncio.Event(),
+    )
+
+    async def image_sender(_chat_id, _image):
+        image_started.set()
+        await release_image.wait()
+
+    push.register_channel("telegram", text=AsyncMock(), image=image_sender)
+    port = PushToolOutboundPort(push, execution_context={"role_id": "mira"})
+
+    async def formal_dispatch(outbound):
+        formal_started.set()
+        return await port.dispatch(outbound)
+
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            SessionServices(sessions), SimpleNamespace(dispatch=formal_dispatch)
+        )
+    )
+    external = asyncio.create_task(
+        push.execute(
+            channel="telegram",
+            chat_id="123",
+            image="/tmp/old.png",
+            role_id="mira",
+            session_key=session.key,
+        )
+    )
+    await image_started.wait()
+    formal = asyncio.create_task(
+        _send(owner, _formal_result(owner, media=["/tmp/new.png"]))
+    )
+    await formal_started.wait()
+    release_image.set()
+    results = await asyncio.wait_for(asyncio.gather(external, formal), timeout=2)
+    assert results[1] is True
+    assert [m["media"] for m in session.messages] == [
+        ["/tmp/old.png"],
+        ["/tmp/new.png"],
+    ]
+    assert (
+        session.messages[-1]["metadata"]["thought"]
+        == session.metadata["current_thought"]
+    )

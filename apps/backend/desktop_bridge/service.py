@@ -251,10 +251,10 @@ class DesktopBridgeService:
         self,
         event: ProactiveMessageCommitted,
     ) -> None:
-        """Broadcasts proactive messages delivered through external channels."""
+        """Broadcasts successful proactive commits for desktop and external channels."""
 
         role_id = str(event.role_id or "").strip()
-        if not role_id or event.channel == "desktop":
+        if not role_id:
             return
         session_key = self.role_service.sessions.derive_session_key(role_id)
         if event.session_key != session_key:
@@ -351,6 +351,10 @@ class DesktopBridgeService:
             media: list[str] | None = None,
             metadata: dict[str, object] | None = None,
         ) -> None:
+            if (metadata or {}).get("pending_commit") is True:
+                # The turn owner will publish the complete message and state together.
+                self.app_service.validate_desktop_push_target(chat_id)
+                return
             session = await self.app_service.apply_desktop_push(
                 chat_id,
                 message=message,
@@ -372,6 +376,9 @@ class DesktopBridgeService:
             ),
             image=lambda chat_id, image_path: _emit_session_for_chat(
                 chat_id, media=[image_path]
+            ),
+            image_with_metadata=lambda chat_id, image_path, metadata: _emit_session_for_chat(
+                chat_id, media=[image_path], metadata=metadata
             ),
         )
 

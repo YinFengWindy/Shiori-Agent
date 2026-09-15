@@ -22,6 +22,7 @@ from proactive_v2.drift_state import DriftStateStore
 from proactive_v2.drift_tools import DriftToolDeps
 from proactive_v2.gateway import GatewayDeps
 from proactive_v2.tools import ToolDeps
+from core.roles.reply_state import RoleReply, RoleReplyContext
 
 logger = logging.getLogger(__name__)
 
@@ -295,13 +296,20 @@ class AgentTickFactory:
             async def run(self) -> None:
                 self.callback()
 
-        async def send_message(content: str, media: list[str] | None = None) -> bool:
+        async def send_message(
+            reply: RoleReply,
+            media: list[str] | None,
+            reply_context: RoleReplyContext,
+        ) -> bool:
+            content = reply.content
             media_paths = list(media or [])
             delivery_key = sha1(
                 (content[:500] + "|".join(media_paths[:5])).encode()
             ).hexdigest()[:16]
             result = TurnResult(
                 decision="reply",
+                role_reply=reply,
+                reply_context=reply_context,
                 outbound=TurnOutbound(
                     session_key=session_key, content=content, media=media_paths
                 ),
