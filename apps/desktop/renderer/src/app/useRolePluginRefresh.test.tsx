@@ -20,7 +20,7 @@ test("plugin asset refresh clears stale enabled drafts while retaining unsaved r
   pluginRoleSettingsRegistry.register({ pluginId: "sample", storage: "plugin", Component: () => null,
     read: (state) => ({ enabled: state.enabled === true }),
   });
-  setPluginEnabledSnapshot([{ id: "sample", enabled: true }]);
+  setPluginEnabledSnapshot([{ id: "sample", enabled: true, state: "ACTIVE" }]);
   let persisted = { ...role, plugin_state: { sample: { enabled: true, available: true } } };
   let draft: RoleFormState = { ...createEmptyRoleForm(), name: "Unsaved name", pluginSettings: { sample: { enabled: true } } };
   let refresh = async () => {};
@@ -49,7 +49,7 @@ test("enabling a plugin reloads its projection for a role cached while disabled"
   pluginRoleSettingsRegistry.register({ pluginId: "sample", storage: "plugin", Component: () => null,
     read: (state) => ({ enabled: state.enabled === true }),
   });
-  setPluginEnabledSnapshot([{ id: "sample", enabled: false }]);
+  setPluginEnabledSnapshot([{ id: "sample", enabled: false, state: "DISABLED" }]);
   let persisted = role;
   let draft = createEmptyRoleForm();
   let calls = 0;
@@ -68,11 +68,11 @@ test("enabling a plugin reloads its projection for a role cached while disabled"
   try {
     assert.equal(draft.pluginSettings.sample, undefined);
     persisted = { ...role, plugin_state: { sample: { enabled: true, available: true } } };
-    await act(async () => { setPluginEnabledSnapshot([{ id: "sample", enabled: true }]); });
+    await act(async () => { setPluginEnabledSnapshot([{ id: "sample", enabled: true, state: "ACTIVE" }]); });
     assert.equal(calls, 2);
     assert.deepEqual(draft.pluginSettings.sample, { enabled: true });
     await act(async () => { edit(); });
-    await act(async () => { setPluginEnabledSnapshot([{ id: "sample", enabled: true }]); });
+    await act(async () => { setPluginEnabledSnapshot([{ id: "sample", enabled: true, state: "ACTIVE" }]); });
     assert.deepEqual(draft.pluginSettings.sample, { enabled: false });
     assert.equal(calls, 2, "an identical roster must not refetch or reset drafts");
   } finally {
@@ -85,7 +85,7 @@ test("an in-flight refresh does not overwrite an edit made after the request beg
   pluginRoleSettingsRegistry.register({ pluginId: "sample", storage: "plugin", Component: () => null,
     read: (state) => ({ enabled: state.enabled === true }),
   });
-  setPluginEnabledSnapshot([{ id: "sample", enabled: true }]);
+  setPluginEnabledSnapshot([{ id: "sample", enabled: true, state: "ACTIVE" }]);
   const persisted = { ...role, plugin_state: { sample: { enabled: false, available: true } } };
   let resolve: (roles: RoleRecord[]) => void = () => {};
   const pending = new Promise<RoleRecord[]>((done) => { resolve = done; });

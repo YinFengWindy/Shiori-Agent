@@ -25,7 +25,7 @@ describe("PluginManagementSection", () => {
               id: "1", type: "response", method, error: null,
               payload: {
                 plugins: [
-                  { id: "hello", name: "hello", version: "0.1", description: "示例插件", enabled: helloEnabled, state: helloEnabled ? "ACTIVE" : "DISABLED", error: "", has_config_schema: false },
+                  { id: "hello", candidate_id: "builtin/hello", directory: "builtin/hello", source: "builtin", can_toggle: true, diagnostic: null, name: "hello", version: "0.1", description: "示例插件", enabled: helloEnabled, state: helloEnabled ? "ACTIVE" : "DISABLED", error: "", has_config_schema: false },
                 ],
               },
             };
@@ -82,7 +82,7 @@ it("keeps the active switch and shows restart guidance after a refused hot toggl
     value: { invoke: async ({ method }: { method: string }) => {
       calls.push(method);
       if (method === "plugins.list") return { id: "1", type: "response", method, error: null, payload: { plugins: [
-        { id: "unsafe", name: "unsafe", version: "0.1", description: "", enabled: true, state: "ACTIVE", error: "", has_config_schema: false, supports_hot_unload: false },
+        { id: "unsafe", candidate_id: "builtin/unsafe", directory: "builtin/unsafe", source: "builtin", can_toggle: true, diagnostic: null, name: "unsafe", version: "0.1", description: "", enabled: true, state: "ACTIVE", error: "", has_config_schema: false, supports_hot_unload: false },
       ] } };
       return { id: "2", type: "response", method, payload: {}, error: { code: "plugin_restart_required", message: "本次更改未保存；请退出应用后修改配置，再重新启动。", details: { plugin_ids: ["unsafe"], restart_required: true } } };
     } },
@@ -96,6 +96,41 @@ it("keeps the active switch and shows restart guidance after a refused hot toggl
     assert.equal(toggle.getAttribute("aria-checked"), "true");
     assert.equal(toggle.disabled, false);
     assert.equal(calls.filter((method) => method === "plugins.list").length, 1);
+  } finally {
+    await view.cleanup();
+  }
+});
+
+it("renders each conflicting directory and disables every unsafe candidate", async () => {
+  const view = await mountTestComponent(null);
+  const calls: string[] = [];
+  const rows = ["CONFLICT", "CONFLICT", "UNTRUSTED", "BLOCKED"].map((state, index) => ({
+    id: index < 2 ? "duplicate" : `plugin-${index}`, name: "same-name", version: "1.0.0",
+    candidate_id: `candidate-${index}`, source: index === 0 ? "builtin" : "workspace",
+    directory: `C:/plugins/root-${index}`, description: "", enabled: true, can_toggle: false,
+    state, error: `diagnostic-${index}`, has_config_schema: false, supports_hot_unload: true,
+    diagnostic: { code: state.toLowerCase(), stage: "discovery", field: "id", reason: `diagnostic-${index}`, path: "", state },
+  }));
+  Object.defineProperty(window, "miraDesktop", {
+    configurable: true,
+    value: { invoke: async ({ method }: { method: string }) => {
+      calls.push(method);
+      return { id: "1", type: "response", method, error: null, payload: { plugins: rows } };
+    } },
+  });
+  try {
+    await view.render(<PluginManagementSection />);
+    const toggles = view.container.querySelectorAll<HTMLButtonElement>('button[role="switch"]');
+    assert.equal(toggles.length, 4);
+    for (const [index, toggle] of Array.from(toggles).entries()) {
+      assert.equal(toggle.disabled, true);
+      assert.equal(toggle.getAttribute("aria-checked"), "false");
+      assert.ok(view.container.textContent?.includes(`C:/plugins/root-${index}`));
+      assert.ok(view.container.textContent?.includes(`diagnostic-${index}`));
+    }
+    assert.ok(view.container.textContent?.includes("内置"));
+    assert.ok(view.container.textContent?.includes("工作区"));
+    assert.deepEqual(calls, ["plugins.list"]);
   } finally {
     await view.cleanup();
   }

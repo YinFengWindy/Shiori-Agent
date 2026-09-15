@@ -66,6 +66,10 @@ const args = [
   backendRoot,
   "--paths",
   stagingRoot,
+  // External package admission reads the host distribution's direct runtime
+  // requirements without importing them. Preserve that inventory in frozen runs.
+  "--recursive-copy-metadata",
+  "shiori-agent",
   "--add-data",
   `${stagedPluginsDir}${dataSeparator}plugins`,
   "--add-data",

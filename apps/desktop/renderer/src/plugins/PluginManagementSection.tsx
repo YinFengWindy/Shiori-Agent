@@ -15,19 +15,32 @@ function PluginRow({
   pending: boolean;
   onToggle: (enabled: boolean) => void;
 }) {
-  const hint = [plugin.version && `v${plugin.version}`, plugin.description].filter(Boolean).join(" · ");
+  const hint = [plugin.id, plugin.version && `v${plugin.version}`, plugin.source === "workspace" ? "工作区" : "内置", plugin.description].filter(Boolean).join(" · ");
   return (
     <SettingsField label={plugin.name} hint={hint || undefined}>
-      <div className="flex items-center justify-end gap-3">
-        <span className={cx("text-caption", plugin.error ? "text-danger-text" : "text-ink-muted")}>
-          {plugin.error || (plugin.supportsHotUnload === false ? "更改需重启" : plugin.state)}
-        </span>
-        <SettingsToggleCard
-          checked={plugin.enabled}
-          disabled={pending}
-          ariaLabel={`启用 ${plugin.name}`}
-          onChange={onToggle}
-        />
+      <div className="grid gap-2">
+        <div className="flex items-center justify-end gap-3">
+          <span className="text-caption text-ink-muted">{plugin.state}</span>
+          {plugin.canToggle && plugin.supportsHotUnload === false ? <span className="text-caption text-ink-muted">更改需重启</span> : null}
+          <SettingsToggleCard
+            checked={plugin.canToggle && plugin.enabled}
+            disabled={pending || !plugin.canToggle}
+            ariaLabel={`启用 ${plugin.name}`}
+            onChange={onToggle}
+          />
+        </div>
+        {plugin.error ? <span className="line-clamp-2 break-words text-body text-danger-text">{plugin.error}</span> : null}
+        <details className="text-caption text-ink-muted">
+          <summary className="cursor-pointer">详情</summary>
+          <div className="mt-2 grid gap-1 break-all">
+            <span>{plugin.directory}</span>
+            {plugin.diagnostic ? <>
+              <span>{plugin.diagnostic.code} · {plugin.diagnostic.stage} · {plugin.diagnostic.field}</span>
+              <span>{plugin.diagnostic.reason}</span>
+              {plugin.diagnostic.path ? <span>{plugin.diagnostic.path}</span> : null}
+            </> : null}
+          </div>
+        </details>
       </div>
     </SettingsField>
   );
@@ -53,7 +66,7 @@ export function PluginManagementSection() {
       {error ? <div role="alert" className="text-sm text-danger-text">{error}</div> : null}
       {plugins.map((plugin) => (
         <PluginRow
-          key={plugin.id}
+          key={plugin.candidateId}
           plugin={plugin}
           pending={pendingIds.has(plugin.id)}
           onToggle={(enabled) => void setEnabled(plugin.id, enabled)}

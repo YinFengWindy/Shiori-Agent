@@ -12,7 +12,8 @@ import itertools
 import logging
 import sys
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from copy import deepcopy
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -35,13 +36,11 @@ from agent.plugin_host.dependencies import PluginDependencies, PluginDependencyE
 from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
-from agent.plugin_host.diagnostics import PackageContractError, PluginDiagnostic
+from agent.plugin_host.diagnostics import PluginDiagnostic
 from agent.plugin_host.host_contract import HostRuntimeContract
-from agent.plugin_host.package_contract import validate_package
+from agent.plugin_host.discovery import discover_plugins
 from agent.plugin_host.manifest import (
     ManifestError,
-    PluginManifest,
-    load_manifest,
 )
 from agent.plugin_host.plugin_data import (
     open_plugin_kv,
@@ -107,10 +106,27 @@ class PluginKernel:
         services: HostServices,
         namespace: str = "",
         strict: bool = False,
+        external_plugin_dirs: list[Path] | None = None,
+        discovery_snapshot: list[PluginRecord] | None = None,
     ) -> None:
         self._dirs = plugin_dirs
+        self._external_dirs = external_plugin_dirs or []
         self._services = services
         self._namespace = namespace or f"g{next(_KERNEL_NAMESPACE_COUNTER)}"
+        # Settings generations retain the application's startup admission, but
+        # own independent descriptors and import namespaces. Only a fresh app
+        # without a supplied snapshot scans added/updated/deleted directories.
+        self._records = (
+            [
+                replace(
+                    record,
+                    import_path=f"akasic_plugin_{self._namespace}_{record.manifest.id}",
+                )
+                for record in deepcopy(discovery_snapshot)
+            ]
+            if discovery_snapshot is not None
+            else None
+        )
         self._strict = strict
         self._handles: dict[str, PluginHandle] = {}
         self._active_order: list[str] = []
@@ -121,67 +137,32 @@ class PluginKernel:
     # ── 发现 ──────────────────────────────────────────────────────────────
 
     def discover(self) -> list[PluginRecord]:
-        """扫描显式声明 v2 manifest 的插件目录；同名 first-wins。"""
-        records: list[PluginRecord] = []
-        seen_names: set[str] = set()
-        for d in self._dirs:
-            if not d.is_dir():
-                continue
-            source = d.name
-            for child in sorted(d.iterdir()):
-                if not child.is_dir():
-                    continue
-                if child.name in seen_names:
-                    logger.warning("插件名重复，跳过: %s (%s)", child.name, child)
-                    continue
-                record = self._build_record(child, source)
-                if record is None:
-                    continue
-                seen_names.add(child.name)
-                records.append(record)
-        return records
-
-    def _build_record(self, child: Path, source: str) -> PluginRecord | None:
-        try:
-            manifest = load_manifest(child)
-        except ManifestError as e:
-            logger.warning("插件 manifest 无效，跳过: %s (%s)", child.name, e)
-            if self._strict:
-                raise
-            if e.metadata is None or "package_contract" not in e.metadata:
-                return None
-            # Keep invalid contract candidates visible. Static validation reports
-            # the original manifest failure before the fallback record can load.
-            manifest = PluginManifest(
-                id=str(e.metadata.get("id") or child.name), metadata=e.metadata
+        """Return the startup candidates, isolated for this runtime generation."""
+        if self._records is None:
+            self._records = discover_plugins(
+                self._dirs,
+                external_roots=self._external_dirs,
+                namespace=self._namespace,
+                strict=self._strict,
+                host=self._services.plugin_runtime_contract,
             )
-        if manifest is None:
-            return None
-        entry_file = child / manifest.entry
-        # The manifest ID is the stable identity; discovery-root names are
-        # intentionally excluded so a copied package keeps the same shape.
-        return PluginRecord(
-            name=child.name,
-            plugin_dir=child,
-            entry_file=entry_file,
-            import_path=f"akasic_plugin_{self._namespace}_{manifest.id}",
-            manifest=manifest,
-        )
+        return list(self._records)
 
     # ── 加载 ──────────────────────────────────────────────────────────────
 
     async def load_all(self) -> None:
         records = self._records_by_id()
-        for record in records.values():
+        for record in self.discover():
             await self._load_dependencies(record, records, ())
 
     def _records_by_id(self) -> dict[str, PluginRecord]:
-        records: dict[str, PluginRecord] = {}
-        for record in self.discover():
-            if record.manifest.id in records:
-                raise ManifestError(f"插件 ID 重复: {record.manifest.id}")
-            records[record.manifest.id] = record
-        return records
+        # Conflicts remain visible as separate handles, but cannot be resolved
+        # as dependencies or loaded by choosing a preferred directory.
+        return {
+            record.manifest.id: record
+            for record in self.discover()
+            if record.admission is None or record.admission.state != "CONFLICT"
+        }
 
     async def _load_dependencies(
         self,
@@ -189,12 +170,21 @@ class PluginKernel:
         records: dict[str, PluginRecord],
         trail: tuple[str, ...],
     ) -> None:
-        existing = self._handles.get(record.name)
+        existing = self._handles.get(record.candidate_id)
         if existing is not None and existing.state in {
             PluginState.ACTIVE,
             PluginState.DISABLED,
             PluginState.BLOCKED,
+            PluginState.CONFLICT,
+            PluginState.UNTRUSTED,
         }:
+            return
+        if record.admission is not None:
+            self._handles[record.candidate_id] = PluginHandle(
+                record=record,
+                state=PluginState[record.admission.state],
+                error=RuntimeError(record.admission.reason),
+            )
             return
         plugin_id = record.manifest.id
         if plugin_id in trail:
@@ -211,7 +201,7 @@ class PluginKernel:
                             f"插件 {plugin_id} 缺少依赖 {dependency}"
                         )
                     await self._load_dependencies(target, records, (*trail, plugin_id))
-                    loaded = self._handles.get(target.name)
+                    loaded = self._handles.get(target.candidate_id)
                     if loaded is None or loaded.state is not PluginState.ACTIVE:
                         raise PluginDependencyError(
                             f"插件 {plugin_id} 的依赖 {dependency} 未启用或加载失败"
@@ -228,45 +218,42 @@ class PluginKernel:
                             field=f"dependencies[{index}]",
                             reason=str(exc),
                         )
-                    self._handles[record.name] = PluginHandle(
+                    self._handles[record.candidate_id] = PluginHandle(
                         record=record, state=PluginState.BLOCKED, error=exc
                     )
                     return
         await self._load_one(record)
 
+    def _find_record(self, name: str) -> PluginRecord | None:
+        exact = [record for record in self.discover() if record.candidate_id == name]
+        matches = exact or [
+            record
+            for record in self.discover()
+            if record.name == name or record.manifest.id == name
+        ]
+        if len(matches) > 1:
+            raise ManifestError(f"插件名称不唯一，请使用候选目录标识: {name}")
+        return matches[0] if matches else None
+
     async def load(self, name: str) -> bool:
-        """按目录名加载单个已发现插件；已激活时幂等返回 True。"""
-        records = self._records_by_id()
-        for record in records.values():
-            if record.name == name:
-                await self._load_dependencies(record, records, ())
-                handle = self._handles.get(name)
-                return handle is not None and handle.state is PluginState.ACTIVE
-        return False
+        """Load one unique name/ID or exact candidate ID; admission is never bypassed."""
+        record = self._find_record(name)
+        if record is None:
+            return False
+        await self._load_dependencies(record, self._records_by_id(), ())
+        handle = self._handles.get(record.candidate_id)
+        return handle is not None and handle.state is PluginState.ACTIVE
 
     async def _load_one(self, record: PluginRecord) -> None:
-        existing = self._handles.get(record.name)
+        existing = self._handles.get(record.candidate_id)
         if existing is not None and existing.state is PluginState.ACTIVE:
             return
         handle = PluginHandle(record=record, effects=EffectScope(record.manifest.id))
-        self._handles[record.name] = handle
+        self._handles[record.candidate_id] = handle
         if not self._config_enabled(record.manifest.id):
             handle.state = PluginState.DISABLED
             logger.info("插件已禁用（配置状态）: %s", record.name)
             return
-        # Check every required contribution before importing any plugin code.
-        # Keep this catch outside setup: runtime exceptions must roll back effects.
-        if "package_contract" in record.manifest.metadata:
-            try:
-                _ = validate_package(
-                    record.plugin_dir, host=self._services.plugin_runtime_contract
-                )
-            except PackageContractError as exc:
-                handle.state = PluginState.BLOCKED
-                handle.error = exc
-                if self._strict:
-                    raise
-                return
         handle.state = PluginState.LOADING
         try:
             self._import_entry(handle)
@@ -282,7 +269,7 @@ class PluginKernel:
                 raise
             return
         handle.state = PluginState.ACTIVE
-        self._active_order.append(record.name)
+        self._active_order.append(record.candidate_id)
         logger.info("插件已加载: %s", record.name)
 
     def _config_enabled(self, plugin_id: str) -> bool:
@@ -425,7 +412,8 @@ class PluginKernel:
             raise PluginRestartRequired(unsafe)
 
     def _unload_closure(self, name: str) -> list[PluginHandle]:
-        handle = self._handles.get(name)
+        record = self._find_record(name)
+        handle = self._handles.get(record.candidate_id) if record else None
         if handle is None or handle.state is not PluginState.ACTIVE:
             return []
         closure: list[PluginHandle] = []
@@ -461,9 +449,9 @@ class PluginKernel:
         handle.instance = None
         handle.drainers.clear()
         handle.state = PluginState.DISPOSED
-        if handle.record.name in self._active_order:
-            self._active_order.remove(handle.record.name)
-        self._handles.pop(handle.record.name, None)
+        if handle.record.candidate_id in self._active_order:
+            self._active_order.remove(handle.record.candidate_id)
+        self._handles.pop(handle.record.candidate_id, None)
         return errors
 
     async def terminate_all(self, *, force: bool = False) -> None:

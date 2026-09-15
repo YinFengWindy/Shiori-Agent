@@ -109,7 +109,9 @@ normalized distribution names (for example `PyYAML`, not its `yaml` import name)
 The default host inventory reads installed direct production dependencies from
 `shiori-agent` distribution metadata, without importing them; development-only,
 bundled plugin and incidental transitive packages are not public dependency APIs.
-Frozen hosts without that metadata must supply their build inventory explicitly.
+The desktop build preserves the host's distribution metadata and dependency
+versions with PyInstaller's `--recursive-copy-metadata shiori-agent`. Other frozen
+hosts without that metadata must supply their build inventory explicitly.
 An unavailable declared dependency is `BLOCKED`. This validator does not install
 anything or attempt to discover arbitrary dynamic imports. Authors must declare
 the complete external dependency set; capability/dependency declarations are API
@@ -138,9 +140,11 @@ Host state vocabulary extends the existing lifecycle enum:
 | `RESTART_REQUIRED` | an accepted code-directory change awaits application restart |
 | `DISCOVERED`, `DISABLED`, `LOADING`, `ACTIVE`, `UNLOADING`, `DISPOSED` | existing runtime lifecycle |
 
-`UNTRUSTED`, `CONFLICT` and `RESTART_REQUIRED` are defined here for downstream
-hosts; this ticket does not implement trust storage, source conflict resolution
-or installation UI. Enabled/disabled preferences remain separate from code
+Workspace discovery (#211) reports `UNTRUSTED` after validation and marks every
+candidate with a duplicate manifest ID `CONFLICT`. Both states prevent execution
+and enable actions. Trust storage and installation UI remain future work (#216);
+`RESTART_REQUIRED` remains the code-change boundary for downstream hosts.
+Enabled/disabled preferences remain separate from code
 version/restart state. Updates must not silently re-enable disabled plugins.
 
 Static rejection raises `PackageContractError` with `diagnostic.to_dict()`:

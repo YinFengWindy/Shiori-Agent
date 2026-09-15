@@ -75,7 +75,7 @@ async def test_initial_partial_core_failure_forces_unsafe_plugin_cleanup(
     from shiori_plugin_testkit.packages import stage_plugin_package
     from bootstrap.tools import CoreRuntime
 
-    packages = tmp_path / "plugins"
+    packages = tmp_path / "host_plugins"
     stage_plugin_package(
         Path(__file__).resolve().parents[3] / "tests/fixtures/plugins/restart_required",
         packages / "restart_required",
@@ -122,7 +122,7 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
     import asyncio
     from bootstrap.app import RuntimeFeatures
 
-    package = tmp_path / "plugins/waiting"
+    package = tmp_path / "host_plugins/waiting"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
         "api: 2\nid: waiting\ncapabilities: [events]\nsupports_hot_unload: false\n",
@@ -159,7 +159,7 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
     async def wait_for_setup():
         while True:
             if app.core is not None:
-                handle = app.core.plugin_manager._handles.get("waiting")
+                handle = app.core.plugin_manager._handles.get(str(package.absolute()))
                 if handle is not None and handle.instance is not None:
                     return handle.instance
             if starting.done():
