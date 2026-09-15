@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+from importlib.abc import Loader
 import itertools
 import logging
 import sys
@@ -36,7 +37,7 @@ from agent.plugin_host.dependencies import PluginDependencies, PluginDependencyE
 from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
 from agent.plugin_host.events import ScopedEventBus
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
-from agent.plugin_host.diagnostics import PluginDiagnostic
+from agent.plugin_host.diagnostics import PackageContractError, PluginDiagnostic
 from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.discovery import discover_plugins
 from agent.plugin_host.manifest import (
@@ -48,6 +49,12 @@ from agent.plugin_host.plugin_data import (
 from agent.plugin_host.rpc import PluginRpcRegistry
 from agent.plugin_host.runtime_context import PluginRuntimeContext
 from agent.plugin_host.unload import PluginRestartRequired
+from agent.plugin_host.package_fingerprint import (
+    PackageContent,
+    inspect_package_content,
+)
+from agent.plugin_host.trust_store import PluginTrustStore
+from agent.plugin_host.trusted_imports import TrustedPluginImports
 from bus.event_bus import EventBus
 from core.scene.demand import SceneObservationDemand
 from agent.plugin_host.scene_observations import SceneObservationsCapability
@@ -139,14 +146,23 @@ class PluginKernel:
     def discover(self) -> list[PluginRecord]:
         """Return the startup candidates, isolated for this runtime generation."""
         if self._records is None:
-            self._records = discover_plugins(
-                self._dirs,
-                external_roots=self._external_dirs,
-                namespace=self._namespace,
-                strict=self._strict,
-                host=self._services.plugin_runtime_contract,
-            )
+            self._records = self.inspect_candidates()
         return list(self._records)
+
+    def inspect_candidates(self) -> list[PluginRecord]:
+        """Inspect current packages for manual trust without changing startup admission."""
+        return discover_plugins(
+            self._dirs,
+            external_roots=self._external_dirs,
+            namespace=self._namespace,
+            strict=self._strict,
+            host=self._services.plugin_runtime_contract,
+            trust=(
+                PluginTrustStore(self._services.workspace)
+                if self._services.workspace is not None
+                else None
+            ),
+        )
 
     # ── 加载 ──────────────────────────────────────────────────────────────
 
@@ -254,9 +270,29 @@ class PluginKernel:
             handle.state = PluginState.DISABLED
             logger.info("插件已禁用（配置状态）: %s", record.name)
             return
+        content = None
+        if record.source == "workspace":
+            try:
+                content = inspect_package_content(record.plugin_dir)
+                if content.fingerprint != record.fingerprint:
+                    raise PackageContractError(
+                        "trust_changed", "trust", "插件内容已变化，请重启并重新确认信任"
+                    )
+            except PackageContractError as exc:
+                record.admission = PluginDiagnostic(
+                    "trust_changed",
+                    "trust",
+                    "content",
+                    str(exc),
+                    str(record.plugin_dir),
+                    "UNTRUSTED",
+                )
+                handle.state = PluginState.UNTRUSTED
+                handle.error = exc
+                return
         handle.state = PluginState.LOADING
         try:
-            self._import_entry(handle)
+            self._import_entry(handle, content)
             self._register_config_schema(handle)
             await self._setup_v2(handle)
         except asyncio.CancelledError as e:
@@ -277,11 +313,23 @@ class PluginKernel:
         stored = self._services.plugin_configs.get(plugin_id, {})
         return bool(stored.get(PLUGIN_ENABLED_CONFIG_KEY, True))
 
-    def _import_entry(self, handle: PluginHandle) -> None:
+    def _import_entry(
+        self, handle: PluginHandle, content: PackageContent | None = None
+    ) -> None:
         record = handle.record
         # 先登记命名空间清理（最后处置），代际热重载时不残留 sys.modules 条目。
         # 入口及其相对导入的子模块都挂在这个动态包下，必须整体清理。
-        _import_module(record.import_path, record.entry_file)
+        if content is None:
+            _import_module(record.import_path, record.entry_file)
+        else:
+            imports = TrustedPluginImports(record.import_path, content.sources)
+            imports.install()
+            handle.effects.add("trusted-source-imports", imports.remove)
+            _import_module(
+                record.import_path,
+                record.entry_file,
+                imports.loader(record.import_path, record.entry_file),
+            )
 
     def _register_config_schema(self, handle: PluginHandle) -> None:
         """Registers the manifest configuration model with scoped rollback."""
@@ -566,11 +614,12 @@ class PluginKernel:
         ]
 
 
-def _import_module(module_name: str, path: Path) -> None:
+def _import_module(module_name: str, path: Path, loader: Loader | None = None) -> None:
     # 把入口文件当成包加载，允许插件内部相对 import；先入 sys.modules 再执行
     spec = importlib.util.spec_from_file_location(
         module_name,
         path,
+        loader=loader,
         submodule_search_locations=[str(path.parent)],
     )
     if spec is None or spec.loader is None:

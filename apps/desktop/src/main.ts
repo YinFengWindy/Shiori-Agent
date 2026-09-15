@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { app, BrowserWindow, powerMonitor, protocol, session, shell } from "electron";
 import { PluginUiResources } from "./plugins/uiResources.js";
@@ -75,6 +76,8 @@ const runtimePaths = resolveDesktopRuntimePaths({
   homePath: app.getPath("home"),
 });
 const bridge = new DesktopBridgeClient(runtimePaths.bridge);
+// Backend reconnects inherit the same app session; new trust waits for a new app launch.
+process.env.SHIORI_DESKTOP_APPLICATION_SESSION_ID = randomUUID();
 const localAssets = new LocalAssetRegistry();
 const trayLifecycleEnabled = process.platform === "win32";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();

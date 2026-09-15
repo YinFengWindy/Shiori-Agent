@@ -28,6 +28,7 @@ from typing import Any
 
 from agent.plugin_host.kernel import PLUGIN_ENABLED_CONFIG_KEY, PluginKernel
 from bootstrap.app import AppRuntime
+from desktop_bridge.runtime.plugin_trust import RuntimePluginTrust
 from desktop_bridge.plugin_config_text import merge_plugin_table
 from desktop_bridge.runtime.apply import (
     DerivedWrite,
@@ -44,6 +45,7 @@ class RuntimePluginManagement:
     def __init__(self, app: AppRuntime, settings: RuntimeSettingsApplication) -> None:
         self._app = app
         self._settings = settings
+        self.trust = RuntimePluginTrust(app)
 
     def list(self, _payload: dict[str, Any]) -> dict[str, Any]:
         """Returns every discovered plugin with its enabled flag and runtime state."""
@@ -64,6 +66,7 @@ class RuntimePluginManagement:
             plugins.append(
                 {
                     "id": plugin_id,
+                    **self.trust.describe(record),
                     "candidate_id": record.candidate_id,
                     "source": record.source,
                     "directory": str(record.plugin_dir),
@@ -73,6 +76,10 @@ class RuntimePluginManagement:
                     # Static declarations are data only; Electron grants resources
                     # exclusively for unique ACTIVE workspace candidates.
                     "renderer": record.manifest.metadata.get("renderer", {}),
+                    # Main-process resources must use the approved startup bytes,
+                    # never establish a newer baseline during their first request.
+                    "content_fingerprint": record.fingerprint,
+                    "content_hashes": record.content_hashes,
                     "enabled": self._enabled(plugin_id),
                     "can_toggle": runtime_state
                     not in {"CONFLICT", "UNTRUSTED", "BLOCKED"},

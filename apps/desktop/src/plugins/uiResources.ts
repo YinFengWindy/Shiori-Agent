@@ -37,12 +37,13 @@ export class PluginUiResources {
         const workspace = await realpath(this.workspacePlugins);
         const canonical = await realpath(row.directory);
         if (!within(workspace, canonical)) throw new Error("Plugin directory escapes workspace plugins");
-        const identity = JSON.stringify([row.directory, canonical, workspace, row.version ?? "", ui.entry, ui.css]);
+        const identity = JSON.stringify([row.directory, canonical, workspace, row.version ?? "", row.content_fingerprint, ui.entry, ui.css]);
         const old = this.packages.get(row.id);
         if (old && old.identity !== identity) throw new Error("Plugin package changed; restart the application to load its new code");
-        const grant = old?.grant ?? { token: randomUUID(), requested: row.directory, canonical, workspace, code: await snapshotPluginUiCode(canonical) };
+        const grant = old?.grant ?? { token: randomUUID(), requested: row.directory, canonical, workspace, code: await snapshotPluginUiCode(canonical, row.content_hashes) };
         const url = (path: string) => {
           if (!within(canonical, resolve(canonical, path)) || path.includes("\\") || path.split("/").some((part) => !part || part === "." || part === "..")) throw new Error("Plugin resource escapes package");
+          if (!grant.code.has(resolve(canonical, path))) throw new Error("Plugin entry is not part of its approved content snapshot");
           return `${pluginUiScheme}://plugin/${grant.token}/${path.split("/").map(encodeURIComponent).join("/")}`;
         };
         result.push({ pluginId: row.id, entry: url(ui.entry), css: ui.css.map(url) });
@@ -75,7 +76,7 @@ export class PluginUiResources {
       const mime = mimeTypes[extname(current)];
       if (!mime || !(await stat(current)).isFile()) return new Response("Unsupported plugin resource", { status: 403 });
       const bytes = await readFile(current);
-      if (mime === "text/javascript" && !matchesPluginUiCode(grant.code, current, bytes)) return new Response("Plugin code changed; restart the application to load it", { status: 409, statusText: "Plugin code changed; restart required" });
+      if (!matchesPluginUiCode(grant.code, current, bytes)) return new Response("Plugin content changed; restart the application and confirm trust again", { status: 409, statusText: "Plugin content changed; restart required" });
       return new Response(bytes, { headers: { ...headers, "Content-Type": mime } });
     } catch {
       return new Response("Plugin resource is unavailable", { status: 404 });

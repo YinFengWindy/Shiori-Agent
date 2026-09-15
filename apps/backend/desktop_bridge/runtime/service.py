@@ -163,6 +163,8 @@ class ReloadableDesktopService:
             async def compute_plugin_management_result():
                 if method == "plugins.list":
                     return self.plugin_management.list(payload)
+                if method == "plugins.trust":
+                    return self.plugin_management.trust.confirm(payload)
                 result = await self.plugin_management.set_enabled(
                     payload,
                     prepare_service=self._prepare,
