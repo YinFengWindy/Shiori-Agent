@@ -8,7 +8,8 @@ import { _electron } from "playwright";
 // Run from the repository root after pnpm build. Vite only supplies renderer
 // modules; all window creation, paint events, focus and ready IPC are Electron.
 const builtRenderer = process.env.SHIORI_QA_BUILT === "1";
-const output = resolve(".test-tmp-root/surface-qa", builtRenderer ? "built-renderer" : ".");
+const fullscreenWitness = process.env.SHIORI_QA_FULLSCREEN === "1";
+const output = resolve(".test-tmp-root/surface-qa", builtRenderer ? "built-renderer" : ".", fullscreenWitness ? "fullscreen" : ".");
 await mkdir(output, { recursive: true });
 const isolated = await mkdtemp(resolve(output, "run-"));
 const desktopRequire = createRequire(resolve("apps/desktop/package.json"));
@@ -56,14 +57,18 @@ async function restart() {
 }
 
 // Bootstrap globals are deliberately test-only and never exported by app code.
-const qa = async (method: string, ...args: unknown[]) => app.evaluate((_electron, { method, args }) => {
+const qa = async (method: string, ...args: unknown[]) => app.evaluate(async (_electron, { method, args }) => {
+  await (globalThis as any).surfaceQaReady;
   return (globalThis as any).surfaceQa[method](...args);
 }, { method, args });
 
 try {
   await app.firstWindow();
-  results.environment = await app.evaluate(() => ({ platform: process.platform, electron: process.versions.electron }));
-  await app.evaluate(() => { if (!(globalThis as any).surfaceQa) throw new Error("surface harness did not start"); });
+  results.environment = await app.evaluate(() => ({ platform: process.platform, electron: process.versions.electron, fullscreenWitness: process.env.SHIORI_QA_FULLSCREEN === "1" }));
+  await app.evaluate(async () => {
+    await (globalThis as any).surfaceQaReady;
+    if (!(globalThis as any).surfaceQa) throw new Error("surface harness did not start");
+  });
   results.paintGate = await qa("nativePaintGate", false);
   assert.deepEqual(results.paintGate, { beforePaint: false, afterPaint: true });
   results.cancelBeforePaint = await qa("nativePaintGate", true);
@@ -77,6 +82,7 @@ try {
   const sprite = `data:image/svg+xml;base64,${Buffer.from(atlas).toString("base64")}`;
   for (const [name, pluginId, detail] of [
     ["pet", "desktop_pet", ""],
+    ["not-topmost", "not_topmost", "未提供桌面窗口"],
     ["missing", "", "窗口参数缺失"],
     ["unregistered", "not_registered", "未提供桌面窗口"],
     ["module", "qa_module", "插件模块加载失败"],
@@ -86,12 +92,15 @@ try {
     scenario = name;
     entryBlocked = new Promise<void>((done) => { releaseEntry = done; });
     const pageReady = app.waitForEvent("window");
-    const id = await qa("create", pluginId, name === "pet" ? sprite : undefined);
+    const alwaysOnTop = name !== "not-topmost";
+    const id = await qa("create", pluginId, name === "pet" ? sprite : undefined, alwaysOnTop);
     const page = await pageReady;
     const before = await qa("snapshot", id);
     assert.equal(before.initiallyVisible, false, `${name}: construction hidden`);
     assert.equal(before.visible, false, `${name}: early show hidden`);
     assert.equal(before.readyCount, 0);
+    assert.equal(before.witnessFullScreen, fullscreenWitness);
+    if (before.alwaysOnTop !== alwaysOnTop) topmostFailures.push(`${name}: construction`);
     releaseEntry();
     if (detail) await page.getByRole("alert").filter({ hasText: detail }).waitFor();
     else await page.locator(".pet-surface").waitFor();
@@ -107,7 +116,7 @@ try {
     // The user may switch apps during QA; a surface must never receive focus,
     // regardless of which external window is currently in the foreground.
     assert.equal(after.events.includes("focus"), false, `${name}: no transient focus stealing`);
-    if (!after.alwaysOnTop) topmostFailures.push(name);
+    if (after.alwaysOnTop !== alwaysOnTop) topmostFailures.push(name);
     assert.ok(after.events.indexOf("ready") < after.events.indexOf("show"));
     // The adapter's ready-to-show listener runs before the diagnostic listener,
     // so show can be recorded immediately before paint when ready arrived first.
@@ -134,12 +143,19 @@ try {
     }
     assert.ok(reloaded.readyCount > after.readyCount, "reload really reported ready again");
     assert.equal(reloaded.visible, false, `${name}: reload preserves hidden intent`);
-    results[name] = { before, after, reloaded, backgrounds };
+    if (reloaded.alwaysOnTop !== alwaysOnTop) topmostFailures.push(`${name}: hidden reload`);
+    await qa("show", id);
+    const reshown = await qa("snapshot", id);
+    assert.equal(reshown.visible, true, `${name}: explicit show after reload`);
+    assert.equal(reshown.focused, false, `${name}: reshow does not steal focus`);
+    assert.equal(reshown.events.includes("focus"), false, `${name}: no transient focus on reshow`);
+    if (reshown.alwaysOnTop !== alwaysOnTop) topmostFailures.push(`${name}: reshow`);
+    results[name] = { before, after, reloaded, reshown, backgrounds };
     await qa("destroy", id);
     if (name !== (builtRenderer ? "unregistered" : "mount")) await restart();
   }
   results.topmostFailures = topmostFailures;
-  console.log(`PASS core (${builtRenderer ? "built file:// renderer" : "Vite renderer"}): real Electron paint gate, early show, no focus stealing, retained pet state, ${builtRenderer ? "two" : "four"} failure paths, transparent backgrounds, hidden reload`);
+  console.log(`PASS core (${builtRenderer ? "built file:// renderer" : "Vite renderer"}, ${fullscreenWitness ? "fullscreen" : "normal"} witness): real Electron paint gate, early show, no focus stealing, retained pet state, ${builtRenderer ? "two" : "four"} failure paths, topmost opt-out, transparent backgrounds, hidden reload`);
   // Preserve the native platform failure while still recording every core case.
   assert.deepEqual(topmostFailures, [], "native always-on-top state must be preserved");
 } finally {

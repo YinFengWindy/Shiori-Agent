@@ -31,7 +31,14 @@ export function createDesktopSurfaceWindow(
   spec: SurfaceSpec,
   options: { openLocalAttachment: (url: string) => Promise<unknown> | unknown },
 ): SurfaceWindowHandle {
-  const window = new BrowserWindow(desktopSurfaceWindowOptions(spec, preloadScript));
+  const windowOptions = desktopSurfaceWindowOptions(spec, preloadScript);
+  const window = new BrowserWindow(windowOptions);
+  if (process.platform === "win32" && windowOptions.alwaysOnTop) {
+    // Electron's default floating level places the window behind the taskbar.
+    // A fullscreen app can make that taskbar non-topmost and demote the surface.
+    // `true` retains topmost status; `normal` avoids following the taskbar's z-order.
+    window.setAlwaysOnTop(true, "normal");
+  }
   const handle = adaptSurfaceWindow(window);
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   attachDesktopWindowSecurity(window.webContents, {

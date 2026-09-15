@@ -9,11 +9,18 @@ import { desktopSurfaceWindowOptions } from "../../dist/surface/contract.js";
 import { preloadScript } from "../../dist/paths.js";
 
 app.setPath("userData", process.env.SHIORI_QA_USER_DATA);
-void app.whenReady().then(async () => {
+globalThis.surfaceQaReady = app.whenReady().then(async () => {
 const focusWindow = new BrowserWindow({ width: 400, height: 240 });
 await focusWindow.loadURL("data:text/html,<title>Surface focus witness</title><p>Focus witness</p>");
 focusWindow.show();
 focusWindow.focus();
+if (process.env.SHIORI_QA_FULLSCREEN === "1") {
+  const enteredFullScreen = once(focusWindow, "enter-full-screen");
+  focusWindow.setFullScreen(true);
+  await enteredFullScreen;
+  // Explorer updates the taskbar's native z-order after the fullscreen event.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+}
 const records = new Map();
 const host = new DesktopSurfaceHost({
   createWindow(key, spec) {
@@ -41,9 +48,9 @@ registerSurfaceIpc({
 }, { surfaces: host, onError: (channel, error) => { console.error(channel, error); } });
 
 globalThis.surfaceQa = {
-  create(pluginId, spritesheetUrl) {
+  create(pluginId, spritesheetUrl, alwaysOnTop = true) {
     const key = { pluginId, surfaceId: "main" };
-    host.create(key, { body: { width: 320, height: 240 } }, { x: 100, y: 100 });
+    host.create(key, { body: { width: 320, height: 240 }, alwaysOnTop }, { x: 100, y: 100 });
     if (spritesheetUrl) host.setState(key, { load: { package: { spritesheetUrl }, state: "idle" } });
     const record = [...records.values()].find((record) => record.key.pluginId === pluginId);
     host.show(key); // The caller's eager show must not bypass renderer readiness.
@@ -57,6 +64,7 @@ globalThis.surfaceQa = {
       visible: record.window.isVisible(),
       focused: record.window.isFocused(),
       focusWitness: focusWindow.isFocused(),
+      witnessFullScreen: focusWindow.isFullScreen(),
       readyCount: record.readyCount,
       events: [...record.events],
       nativeBackgroundColor: record.window.getBackgroundColor(),
@@ -64,6 +72,7 @@ globalThis.surfaceQa = {
     };
   },
   hide(id) { host.hide(records.get(id).key); },
+  show(id) { host.show(records.get(id).key); },
   destroy(id) { host.destroy(records.get(id).key); records.delete(id); },
   async nativePaintGate(cancel) {
     const window = new BrowserWindow(desktopSurfaceWindowOptions({ body: { width: 80, height: 80 } }, preloadScript));
