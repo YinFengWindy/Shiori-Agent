@@ -66,8 +66,12 @@ def _build_server(tmp_path: Path, stub_core_runtime) -> DesktopBridgeServer:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("redirected_stdout", [False, True])
 async def test_serve_stdio_forces_utf8_for_all_bridge_streams(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_core_runtime
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stub_core_runtime,
+    redirected_stdout: bool,
 ) -> None:
     server = _build_server(tmp_path, stub_core_runtime)
     streams = {
@@ -82,10 +86,12 @@ async def test_serve_stdio_forces_utf8_for_all_bridge_streams(
 
     monkeypatch.setattr(server, "serve_streams", _serve_streams)
     monkeypatch.setattr(sys, "stdin", streams["stdin"])
-    monkeypatch.setattr(sys, "stdout", streams["stdout"])
+    monkeypatch.setattr(
+        sys, "stdout", streams["stderr"] if redirected_stdout else streams["stdout"]
+    )
     monkeypatch.setattr(sys, "stderr", streams["stderr"])
 
-    await server.serve_stdio()
+    await server.serve_stdio(output=streams["stdout"] if redirected_stdout else None)
 
     assert all(stream.encoding == "utf-8" for stream in streams.values())
     assert all(
@@ -95,10 +101,14 @@ async def test_serve_stdio_forces_utf8_for_all_bridge_streams(
     write_payload = cast(
         Callable[[dict[str, object]], Awaitable[None]], captured["write_payload"]
     )
+    unrelated_output = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", unrelated_output)
     await write_payload({"message": "你好"})
     assert json.loads(streams["stdout"].buffer.getvalue().decode("utf-8")) == {
         "message": "你好"
     }
+    assert streams["stderr"].buffer.getvalue() == b""
+    assert unrelated_output.getvalue() == ""
 
 
 def test_desktop_server_reuses_core_screen_observation_service(

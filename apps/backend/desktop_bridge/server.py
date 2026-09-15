@@ -5,7 +5,7 @@ import json
 import logging
 import sys
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any, TextIO, cast
 from pathlib import Path
 
 from bootstrap.app import AppRuntime
@@ -169,13 +169,14 @@ class DesktopBridgeServer:
         )
         event.dispatched = True
 
-    async def serve_stdio(self) -> None:
-        """Runs the bridge against process stdin and stdout."""
+    async def serve_stdio(self, *, output: TextIO | None = None) -> None:
+        """Run against stdin and a captured protocol stream, defaulting to stdout."""
 
+        protocol_output = sys.stdout if output is None else output
         # The Electron side always sends and decodes UTF-8 JSON lines.  Windows
         # otherwise gives these streams the active console code page (usually
         # CP936), which corrupts Chinese payloads when global UTF-8 is disabled.
-        for stream in (sys.stdin, sys.stdout, sys.stderr):
+        for stream in (sys.stdin, protocol_output, sys.stderr):
             stream.reconfigure(encoding="utf-8", errors="strict")
 
         async def _read_line() -> str | None:
@@ -186,8 +187,8 @@ class DesktopBridgeServer:
 
         async def _write_payload(payload: dict[str, Any]) -> None:
             text = json.dumps(payload, ensure_ascii=False) + "\n"
-            _ = await asyncio.to_thread(sys.stdout.write, text)
-            _ = await asyncio.to_thread(sys.stdout.flush)
+            _ = await asyncio.to_thread(protocol_output.write, text)
+            _ = await asyncio.to_thread(protocol_output.flush)
 
         await self.serve_streams(
             read_line=_read_line,
