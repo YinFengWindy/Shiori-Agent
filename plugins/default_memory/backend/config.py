@@ -3,6 +3,8 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from agent.plugin_host.local_config import resolve_local_config
 from typing import Any
 
 
@@ -46,26 +48,13 @@ def load_default_memory_config(
     plugin_dir: Path | None = None,
     workspace: Path | None = None,
 ) -> DefaultMemoryConfig:
-    root = plugin_dir or Path(__file__).resolve().parent
-    if workspace is not None:
-        from agent.plugin_host.plugin_data import migrate_plugin_file, plugin_data_dir
-
-        data_root = plugin_data_dir(workspace, "default_memory")
-        migrate_plugin_file(
-            workspace=workspace,
-            plugin_id="default_memory",
-            filename="config.local.toml",
-            sources=[workspace / "plugins" / "default_memory" / "config.local.toml"],
-        )
-        migrate_plugin_file(
-            workspace=workspace,
-            plugin_id="default_memory",
-            filename="plugin_config.json",
-            sources=[workspace / "plugins" / "default_memory" / "plugin_config.json"],
-        )
-        if (data_root / "config.local.toml").exists():
-            root = data_root
-    payload = _read_toml(root / "config.local.toml")
+    """Loads workspace overrides, migrating legacy files before parsing."""
+    path = resolve_local_config(
+        plugin_id="default_memory",
+        plugin_dir=plugin_dir or Path(__file__).resolve().parent,
+        workspace=workspace,
+    )
+    payload = _read_toml(path)
     return _build_config(payload)
 
 
@@ -100,28 +89,17 @@ def render_default_memory_config(config: DefaultMemoryConfig | None = None) -> s
 
 
 def ensure_default_memory_config_file(
-    *, plugin_dir: Path | None = None, workspace: Path | None = None
+    *,
+    plugin_dir: Path | None = None,
+    workspace: Path | None = None,
 ) -> Path:
-    root = plugin_dir or Path(__file__).resolve().parent
-    if workspace is not None:
-        from agent.plugin_host.plugin_data import migrate_plugin_file, plugin_data_dir
-
-        migrate_plugin_file(
-            workspace=workspace,
-            plugin_id="default_memory",
-            filename="config.local.toml",
-            sources=[workspace / "plugins" / "default_memory" / "config.local.toml"],
-        )
-        data_root = plugin_data_dir(workspace, "default_memory")
-        if (data_root / "config.local.toml").exists():
-            root = data_root
-    path = root / "config.local.toml"
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        from infra.persistence.text_store import atomic_save_text
-
-        atomic_save_text(path, render_default_memory_config())
-    return path
+    """Ensures editable configuration exists only under workspace/plugin-data."""
+    return resolve_local_config(
+        plugin_id="default_memory",
+        plugin_dir=plugin_dir or Path(__file__).resolve().parent,
+        workspace=workspace,
+        default_text=render_default_memory_config(),
+    )
 
 
 def resolve_memory_db_path(

@@ -14,6 +14,66 @@ from agent.plugin_host.plugin_data import (
 )
 
 
+@pytest.mark.parametrize("existing", ["old-only", "new-only", "both"])
+def test_workspace_kv_survives_upgrade_restart_and_package_replacement(
+    tmp_path, existing
+):
+    workspace = tmp_path / "workspace"
+    package = tmp_path / "install/demo"
+    old = workspace / "plugins/demo/kv.json"
+    target = plugin_data_dir(workspace, "demo") / "kv.json"
+    for file, value in ((old, "old"), (target, "new")):
+        if existing == "both" or existing.startswith(value):
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text(json.dumps({"value": value}), encoding="utf-8")
+    package.mkdir(parents=True)
+    stale = package / ".kv.json"
+    stale.write_text('{"value":"package"}', encoding="utf-8")
+    store = open_plugin_kv(workspace=workspace, plugin_id="demo", plugin_dir=package)
+    assert store.get("value") == ("old" if existing == "old-only" else "new")
+    assert old.exists() is (existing == "both")
+    assert stale.is_file()
+    store.set("value", "updated")
+    stale.write_text('{"value":"replacement"}', encoding="utf-8")
+    assert (
+        open_plugin_kv(workspace=workspace, plugin_id="demo", plugin_dir=package).get(
+            "value"
+        )
+        == "updated"
+    )
+
+
+def test_workspace_kv_atomic_replace_failure_preserves_original_and_retries(
+    tmp_path, monkeypatch
+):
+    workspace = tmp_path / "workspace"
+    old = workspace / "plugins/demo/kv.json"
+    old.parent.mkdir(parents=True)
+    old.write_text('{"value":"old"}', encoding="utf-8")
+    target = plugin_data_dir(workspace, "demo") / "kv.json"
+    replace = Path.replace
+
+    def fail(source, destination):
+        if destination == target:
+            raise OSError("disk full")
+        return replace(source, destination)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "replace", fail)
+        with pytest.raises(OSError, match="disk full"):
+            open_plugin_kv(
+                workspace=workspace, plugin_id="demo", plugin_dir=tmp_path / "install"
+            )
+    assert old.read_text(encoding="utf-8") == '{"value":"old"}'
+    assert not target.exists()
+    assert (
+        open_plugin_kv(
+            workspace=workspace, plugin_id="demo", plugin_dir=tmp_path / "install"
+        ).get("value")
+        == "old"
+    )
+
+
 def test_kv_lands_under_the_workspace_not_the_plugin_directory(tmp_path: Path):
     """插件目录在打包形态下属于只读的应用安装目录，写进去的数据升级即丢。"""
     workspace = tmp_path / "workspace"
@@ -173,3 +233,12 @@ def test_migration_failure_leaves_source_intact_and_no_partial_target(
     assert not (
         plugin_data_dir(workspace, "demo") / "kv.json"
     ).exists(), "写入失败不能留下半截 target"
+
+
+@pytest.mark.parametrize(
+    "plugin_id",
+    ["", ".", "..", "../outside", "folder/child", "folder\\child", "D:outside"],
+)
+def test_plugin_data_paths_reject_nonportable_directory_traversal(tmp_path, plugin_id):
+    with pytest.raises(ValueError, match="ID"):
+        plugin_data_dir(tmp_path, plugin_id)

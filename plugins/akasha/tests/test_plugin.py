@@ -1427,8 +1427,19 @@ def test_akashalast_command_only_registers_for_akasha_engine(tmp_path: Path) -> 
     assert default_modules == []
 
 
-def test_akashalast_renders_latest_query_log(tmp_path: Path) -> None:
-    store = AkashaStore(tmp_path / "memory" / "akasha.db")
+@pytest.mark.parametrize("location", ["default", "legacy", "migrated"])
+def test_akashalast_renders_latest_query_log(tmp_path: Path, location: str) -> None:
+    db_path = tmp_path / "memory/akasha.db"
+    if location != "default":
+        db_path = tmp_path / "custom/akasha.db"
+        config_path = (
+            tmp_path
+            / ("plugins" if location == "legacy" else "plugin-data")
+            / "akasha/config.local.toml"
+        )
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text('db_path = "custom/akasha.db"\n', encoding="utf-8")
+    store = AkashaStore(db_path)
     try:
         activation_items = json.dumps(
             [
@@ -1494,6 +1505,11 @@ def test_akashalast_renders_latest_query_log(tmp_path: Path) -> None:
         store.close()
 
     reply = render_last_query(tmp_path, "s")
+
+    if location != "default":
+        assert not (tmp_path / "memory/akasha.db").exists()
+        assert (tmp_path / "plugin-data/akasha/config.local.toml").is_file()
+        assert render_last_query(tmp_path, "s") == reply
 
     assert "🧠 Akasha 记忆检索诊断" in reply
     assert "📍 会话: `s` | seq `2`" in reply

@@ -3,6 +3,8 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+from agent.plugin_host.local_config import resolve_local_config
 from typing import cast
 
 
@@ -29,22 +31,13 @@ def load_akasha_config(
     plugin_dir: Path | None = None,
     workspace: Path | None = None,
 ) -> AkashaConfig:
-    # 1. 读取插件目录下的本地配置。
-    root = plugin_dir or Path(__file__).resolve().parent
-    if workspace is not None:
-        from agent.plugin_host.plugin_data import migrate_plugin_file, plugin_data_dir
-
-        migrate_plugin_file(
-            workspace=workspace,
-            plugin_id="akasha",
-            filename="config.local.toml",
-            sources=[
-                root / "config.local.toml",
-                workspace / "plugins" / "akasha" / "config.local.toml",
-            ],
-        )
-        root = plugin_data_dir(workspace, "akasha")
-    payload = _read_toml(root / "config.local.toml")
+    """Loads workspace overrides, migrating legacy files before parsing."""
+    path = resolve_local_config(
+        plugin_id="akasha",
+        plugin_dir=plugin_dir or Path(__file__).resolve().parent,
+        workspace=workspace,
+    )
+    payload = _read_toml(path)
 
     # 2. 把 TOML 字段收敛成强类型配置。
     return AkashaConfig(
@@ -93,13 +86,18 @@ def render_akasha_config(config: AkashaConfig | None = None) -> str:
 
 
 # 确保 Akasha 本地配置文件存在。
-def ensure_akasha_config_file(*, plugin_dir: Path | None = None) -> Path:
-    # 1. 缺省时只写入默认配置，不覆盖用户已有配置。
-    root = plugin_dir or Path(__file__).resolve().parent
-    path = root / "config.local.toml"
-    if not path.exists():
-        _ = path.write_text(render_akasha_config(), encoding="utf-8")
-    return path
+def ensure_akasha_config_file(
+    *,
+    plugin_dir: Path | None = None,
+    workspace: Path | None = None,
+) -> Path:
+    """Ensures editable configuration exists only under workspace/plugin-data."""
+    return resolve_local_config(
+        plugin_id="akasha",
+        plugin_dir=plugin_dir or Path(__file__).resolve().parent,
+        workspace=workspace,
+        default_text=render_akasha_config(),
+    )
 
 
 # 解析 Akasha sidecar 数据库路径。

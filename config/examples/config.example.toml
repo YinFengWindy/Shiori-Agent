@@ -95,7 +95,7 @@ websocket_open_timeout_seconds = 5.0
 
 # =============================================================================
 # 语义记忆
-# default memory 的检索阈值在 plugins/default_memory/config.local.toml。
+# default memory 的检索阈值在 workspace/plugin-data/default_memory/config.local.toml。
 # =============================================================================
 
 [memory]

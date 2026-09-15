@@ -24,7 +24,7 @@ class MemoryPlugin:
     ) -> list[tuple[Path, bool]]:
         # 1. 确保插件配置存在，并按配置解析数据库路径。
         _ = config
-        _ = ensure_akasha_config_file()
+        _ = ensure_akasha_config_file(workspace=workspace)
         akasha_config = load_akasha_config(workspace=workspace)
         db_path = resolve_akasha_db_path(
             workspace=workspace,

@@ -31,7 +31,8 @@ def validate_memory_transition(
     from memory2.store import VEC_DIM
 
     path = resolve_memory_db_path(
-        workspace=workspace, default_config=load_default_memory_config()
+        workspace=workspace,
+        default_config=load_default_memory_config(workspace=workspace),
     )
     if not path.exists():
         return

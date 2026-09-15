@@ -66,7 +66,7 @@ def render_last_query(workspace: Path | None, session_key: str) -> str:
         resolve_akasha_db_path(
             workspace=workspace,
             akasha_config=load_akasha_config(
-                plugin_dir=Path(__file__).resolve().parent
+                plugin_dir=Path(__file__).resolve().parent, workspace=workspace
             ),
         )
     )

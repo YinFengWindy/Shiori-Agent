@@ -93,9 +93,10 @@ def _parse_args() -> argparse.Namespace:
 def _load_script_config(
     *,
     db_path: str,
+    workspace: Path,
 ) -> AkashaConfig:
-    # 1. 插件配置仍从 plugins/akasha/backend/config.local.toml 读取。
-    config = load_akasha_config()
+    # 1. 与运行时共用 workspace 配置及旧位置迁移。
+    config = load_akasha_config(workspace=workspace)
     if db_path.strip():
         return replace(config, db_path=db_path)
     return config
@@ -225,7 +226,9 @@ def _run() -> MigrationStats:
         if args.sessions_db
         else workspace / "sessions.db"
     )
-    akasha_config = _load_script_config(db_path=str(args.db_path or ""))
+    akasha_config = _load_script_config(
+        db_path=str(args.db_path or ""), workspace=workspace
+    )
     db_path = resolve_akasha_db_path(workspace=workspace, akasha_config=akasha_config)
     if not sessions_db.exists():
         raise FileNotFoundError(f"sessions.db 不存在: {sessions_db}")
@@ -236,7 +239,7 @@ def _run() -> MigrationStats:
     if str(args.embedding_model).strip():
         embedding_model = str(args.embedding_model).strip()  # 离线重建：免读 config
     else:
-        config = Config.load(str(args.config))
+        config = Config.load(str(args.config), workspace=workspace)
         embedding_model = config.memory.embedding.model
     run_id = store.start_migration_run(
         source_db_path=sessions_db,
