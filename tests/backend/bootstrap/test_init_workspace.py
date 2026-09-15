@@ -11,6 +11,29 @@ from bootstrap import init_workspace as workspace_init
 from bootstrap.paths import REPOSITORY_ROOT
 
 
+def test_init_upgrades_plugin_json_from_explicit_workspace(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    package = tmp_path / "packages/demo"
+    package.mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: demo\ncapabilities: []\n", encoding="utf-8"
+    )
+    legacy = workspace / "plugins/demo/plugin_config.json"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text('{"value":"kept"}', encoding="utf-8")
+    path = tmp_path / "config.toml"
+    path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "agent.plugin_config_migration.plugin_roots", lambda: [package.parent]
+    )
+    monkeypatch.setattr("agent.plugin_config_migration.REPOSITORY_ROOT", tmp_path)
+    workspace_init.init_workspace(config_path=path, workspace=workspace)
+    assert tomllib.loads(path.read_text(encoding="utf-8"))["plugins"]["demo"] == {
+        "value": "kept"
+    }
+    assert not legacy.exists()
+
+
 def test_init_workspace_creates_expected_assets(tmp_path):
     config_path = tmp_path / "config.toml"
     workspace = tmp_path / "workspace"

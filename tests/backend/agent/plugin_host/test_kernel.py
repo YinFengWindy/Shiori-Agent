@@ -22,6 +22,54 @@ from tests.backend.agent.plugin_host.conftest import (
 
 
 @pytest.mark.asyncio
+async def test_replaced_plugin_consumes_migrated_config_and_kv(tmp_path, monkeypatch):
+    """A replacement code package receives preserved data through real host services."""
+    import shutil
+    from agent.config import load_config
+    from agent.plugin_host import HostServices, PluginKernel
+
+    packages = tmp_path / "packages"
+    package = packages / "folder"
+    workspace = tmp_path / "workspace"
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "agent.plugin_config_migration.plugin_roots", lambda: [packages]
+    )
+    monkeypatch.setattr("agent.plugin_config_migration.REPOSITORY_ROOT", tmp_path)
+    old = workspace / "plugins/stable-id"
+    old.mkdir(parents=True)
+    (old / "plugin_config.json").write_text('{"secret":"preserved"}', encoding="utf-8")
+    (old / "kv.json").write_text('{"count":42}', encoding="utf-8")
+
+    for version in (1, 2):
+        if package.exists():
+            shutil.rmtree(package)
+        (package / "backend").mkdir(parents=True)
+        (package / "manifest.yaml").write_text(
+            "api: 2\nid: stable-id\ncapabilities: [config, kv]\n", encoding="utf-8"
+        )
+        (package / "backend/plugin.py").write_text(
+            "async def setup(ctx):\n"
+            f"    ctx.expose(({version}, ctx.config.get('secret'), ctx.kv.get('count')))\n",
+            encoding="utf-8",
+        )
+        config = load_config(config_path, workspace=workspace)
+        kernel = PluginKernel(
+            [packages],
+            services=HostServices(
+                event_bus=EventBus(), workspace=workspace, plugin_configs=config.plugins
+            ),
+        )
+        try:
+            await kernel.load_all()
+            assert kernel.loaded_count == 1
+            assert kernel._dependency_api("stable-id") == (version, "preserved", 42)
+        finally:
+            await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [False, True])
 async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, strict):
     for name in ("active", "waiting"):

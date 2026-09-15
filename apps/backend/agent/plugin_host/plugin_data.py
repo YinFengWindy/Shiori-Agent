@@ -13,7 +13,7 @@
 
 issue #209 的前提就是「NSIS 升级会整体重装 ``resources/``」。也就是说，打包
 形态下旧 kv／配置本来就已经被安装器删掉了——新版本首次启动时，下面这些
-``legacy_plugin_root`` / 插件目录里的迁移候选压根不存在，``_migrate_legacy_json``
+``legacy_plugin_root`` / 插件目录里的迁移候选压根不存在，``migrate_plugin_file``
 只是静默地什么都不做。**这里的一次性迁移实际只覆盖开发者（``git pull`` 到本地
 未被 gitignore 清理的旧文件）与便携形态，不要理解成"已经挽回了打包用户的历史
 数据"——那部分数据在安装器那一步就已经丢了，这份迁移救不回来。**
@@ -23,7 +23,8 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
+import tomllib
 
 from agent.plugin_host.kv import PluginKVStore
 from infra.persistence.json_store import atomic_save_json
@@ -38,7 +39,15 @@ _LEGACY_KV_FILENAME = ".kv.json"
 
 def plugin_data_dir(workspace: Path, plugin_id: str) -> Path:
     """Returns the writable per-plugin data directory under the workspace."""
-
+    if (
+        not plugin_id
+        or plugin_id in {".", ".."}
+        or any(
+            parser(plugin_id).name != plugin_id or parser(plugin_id).is_absolute()
+            for parser in (PurePosixPath, PureWindowsPath)
+        )
+    ):
+        raise ValueError(f"插件 ID 不能包含路径: {plugin_id!r}")
     return workspace / PLUGIN_DATA_DIRNAME / plugin_id
 
 
@@ -63,14 +72,42 @@ def migrate_plugin_file(
     else:
         from infra.persistence.text_store import atomic_save_text
 
-        atomic_save_text(target, source.read_text(encoding="utf-8"))
+        text = source.read_text(encoding="utf-8")
+        if filename.endswith(".toml"):
+            tomllib.loads(text)
+        atomic_save_text(target, text)
     if not remove_source:
         return target
+    remove_migrated_source(source, plugin_id=plugin_id)
+    return target
+
+
+def remove_migrated_source(source: Path, *, plugin_id: str) -> None:
+    """Removes only a successfully copied source; read-only installs may retain it."""
     try:
         source.unlink()
     except OSError:
         logger.warning("插件 %s 的旧文件删除失败，已忽略: %s", plugin_id, source)
-    return target
+
+
+def legacy_plugin_files(
+    *,
+    workspace: Path,
+    plugin_id: str,
+    plugin_dir: Path,
+    filename: str,
+    legacy_plugin_root: Path | None = None,
+) -> list[Path]:
+    """Orders old workspace overrides before package and pre-move package files."""
+    candidates = [workspace / "plugins" / plugin_id / filename, plugin_dir / filename]
+    if legacy_plugin_root is not None:
+        candidates.extend(
+            [
+                legacy_plugin_root / plugin_id / "backend" / filename,
+                legacy_plugin_root / plugin_id / filename,
+            ]
+        )
+    return list(dict.fromkeys(candidates))
 
 
 def open_plugin_kv(
@@ -95,47 +132,16 @@ def open_plugin_kv(
             f"插件 {plugin_id} 需要 kv 存储，但宿主未提供 workspace；"
             "插件数据不能写入插件目录（见 issue #209）"
         )
-    target = plugin_data_dir(workspace, plugin_id) / _KV_FILENAME
-    candidates = [plugin_dir / _LEGACY_KV_FILENAME]
+    candidates = [
+        workspace / "plugins" / plugin_id / _KV_FILENAME,
+        plugin_dir / _LEGACY_KV_FILENAME,
+    ]
     if legacy_plugin_root is not None:
         candidates.append(legacy_plugin_root / plugin_id / _LEGACY_KV_FILENAME)
-    _migrate_legacy_json(candidates, target, plugin_id=plugin_id, description="kv 数据")
+    target = migrate_plugin_file(
+        workspace=workspace,
+        plugin_id=plugin_id,
+        filename=_KV_FILENAME,
+        sources=candidates,
+    )
     return PluginKVStore(target)
-
-
-def _migrate_legacy_json(
-    candidates: list[Path], target: Path, *, plugin_id: str, description: str
-) -> None:
-    """一次性、原子地把 ``candidates`` 中第一个存在的 JSON 文件迁移到 ``target``。
-
-    不搬的话，已在使用 kv 的插件（例如 novelai 的自动 CG 冷却与场景去重）
-    会在升级到本版本时状态归零——对 novelai
-    而言意味着去重失效、同一场景被重复生图。
-
-    按 ``candidates`` 顺序取第一个存在的来源。**只删除真正被迁移的那一个
-    source**，其余候选原样保留：迁移成功后 ``target.exists()`` 会让函数直接
-    早退，其余候选之后永远不会再被读取，删除它们没有任何收益，只会把用户的
-    另一份数据静默销毁。
-
-    写入经临时文件 + 原子替换（复用 ``json_store.atomic_save_json``）：写到一半
-    失败不会留下半截 ``target``；source 的删除在写入成功之后才发生，因此写入
-    失败时 source 依然完整保留，不会出现"目标已存在但是损坏、旧数据也已经不
-    在"的永久损坏态。
-    """
-
-    if target.exists():
-        return
-    source = next((path for path in candidates if path.exists()), None)
-    if source is None:
-        return
-    data = json.loads(source.read_text(encoding="utf-8"))
-    atomic_save_json(target, data)
-    logger.info("插件 %s 的%s已从 %s 迁移到 %s", plugin_id, description, source, target)
-    try:
-        source.unlink()
-    except OSError as error:
-        # 打包形态下插件目录可能只读。数据已经落到新位置，旧文件残留无害且
-        # 不再被读取，不值得为删不掉它而让插件加载失败。
-        logger.warning(
-            "插件 %s 的旧%s文件删除失败，已忽略: %s", plugin_id, description, error
-        )

@@ -47,7 +47,9 @@ def _validated_timezone(tz_name: str, *, enabled: bool) -> str:
         )
 
 
-def load_config(path: str | Path = "config.toml") -> Config:
+def load_config(
+    path: str | Path = "config.toml", *, workspace: Path | None = None
+) -> Config:
     """Loads and validates the persisted TOML configuration.
 
     Runs the one-time ``[integrations.novelai]`` -> ``[plugins.novelai]``
@@ -63,6 +65,10 @@ def load_config(path: str | Path = "config.toml") -> Config:
 
     data = migrate_proactive_preferences(resolved_path, data)
     data = migrate_scene_preferences(resolved_path, data)
+    if workspace is not None:
+        from agent.plugin_config_migration import migrate_plugin_config
+
+        data = migrate_plugin_config(resolved_path, data, workspace=workspace)
     from agent.plugin_preferences import migrate_plugin_preferences
 
     data = migrate_plugin_preferences(resolved_path, data)
