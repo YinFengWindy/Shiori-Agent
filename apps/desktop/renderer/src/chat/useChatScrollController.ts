@@ -51,12 +51,15 @@ export function useChatScrollController({
     stopAnimation(false);
   }, [stopAnimation]);
 
-  const rememberSessionScroll = useCallback((targetSessionKey = sessionKeyRef.current) => {
+  /** Releases an interrupted navigation and cancels its remaining animation frames. */
+  const cancelScroll = useCallback(() => stopAnimation(true), [stopAnimation]);
+
+  const rememberSessionScroll = useCallback(() => {
     const container = conversationListRef.current;
     if (!container) return;
     rememberChatSessionScrollState(
       sessionScrollStatesRef.current,
-      targetSessionKey,
+      sessionKeyRef.current,
       container.scrollTop,
       container.scrollHeight,
       container.clientHeight,
@@ -65,10 +68,12 @@ export function useChatScrollController({
 
   useLayoutEffect(() => {
     if (sessionKeyRef.current !== sessionKey) {
-      rememberSessionScroll(sessionKeyRef.current);
+      // Row refs have already measured the destination by this point. Preserve
+      // the outgoing session snapshot recorded by its actual scroll events.
+      cancelAnimation();
     }
     sessionKeyRef.current = sessionKey;
-  }, [rememberSessionScroll, sessionKey]);
+  }, [cancelAnimation, sessionKey]);
 
   const restoreSessionScroll = useCallback((targetSessionKey: string) => {
     const state = sessionScrollStatesRef.current.get(targetSessionKey);
@@ -217,5 +222,5 @@ export function useChatScrollController({
     };
   }, [conversationListRef, rememberSessionScroll, stopAnimation]);
 
-  return { isAutoScrollingRef, restoreSessionScroll, scrollToBottom, scrollToMessage };
+  return { isAutoScrollingRef, restoreSessionScroll, scrollToBottom, scrollToMessage, cancelScroll };
 }

@@ -1,10 +1,10 @@
+/** Follows changed messages only while the viewer has chosen to stay at the bottom. */
 export function shouldAutoScrollOnNewMessage({
   currentMessageCount,
   previousMessageCount,
   lastMessageContent,
   previousLastMessageContent,
   highlightedMessageKey,
-  sending,
   wasAtBottom,
 }: {
   currentMessageCount: number;
@@ -25,7 +25,7 @@ export function shouldAutoScrollOnNewMessage({
   if (!appendedMessage && !expandedLastMessage) {
     return false;
   }
-  return sending || wasAtBottom;
+  return wasAtBottom;
 }
 
 /** Keeps a following chat pinned while virtualization settles measured row heights. */

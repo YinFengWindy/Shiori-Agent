@@ -8,6 +8,17 @@ import {
 } from "./chatAutoScroll";
 
 describe("shouldAutoScrollOnNewMessage", () => {
+  it("respects scrolling away during an active reply", () => {
+    assert.equal(shouldAutoScrollOnNewMessage({
+      currentMessageCount: 2,
+      previousMessageCount: 2,
+      lastMessageContent: "A longer reply",
+      previousLastMessageContent: "A reply",
+      highlightedMessageKey: "",
+      sending: true,
+      wasAtBottom: false,
+    }), false);
+  });
   it("does not return to the bottom while historical message navigation is highlighted", () => {
     assert.equal(
       shouldAutoScrollOnNewMessage({
