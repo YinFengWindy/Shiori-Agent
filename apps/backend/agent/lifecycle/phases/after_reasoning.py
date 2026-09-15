@@ -4,8 +4,11 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
-from agent.core.passive_support import update_session_runtime_metadata
-from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
+from agent.core.passive_support import (
+    build_session_runtime_metadata,
+    update_session_runtime_metadata,
+)
+from session.manager.models import INTERRUPTED_TURN_METADATA_KEY, build_session_message
 from agent.core.response_parser import parse_response, ParsedResponse, ResponseMetadata
 from core.roles.reply_state import (
     parse_role_reply,
@@ -226,13 +229,23 @@ class _PersistUserMessageModule:
             if isinstance(persisted_user_content, str)
             else msg.content
         )
-        session.add_message(
-            "user",
-            user_content,
-            media=msg.media if msg.media else None,
-            **user_kwargs,
-        )
-        frame.slots["reply:messages"].append(session.messages[-1])
+        if "reply:state" in frame.slots:
+            frame.slots["reply:messages"].append(
+                build_session_message(
+                    "user",
+                    user_content,
+                    media=msg.media if msg.media else None,
+                    **user_kwargs,
+                )
+            )
+        else:
+            session.add_message(
+                "user",
+                user_content,
+                media=msg.media if msg.media else None,
+                **user_kwargs,
+            )
+            frame.slots["reply:messages"].append(session.messages[-1])
         return frame
 
 
@@ -271,8 +284,13 @@ class _PersistAssistantMessageModule:
                 session=session,
             )
         )
-        session.add_message("assistant", ctx.reply, **assistant_kwargs)
-        frame.slots["reply:messages"].append(session.messages[-1])
+        if "reply:state" in frame.slots:
+            frame.slots["reply:messages"].append(
+                build_session_message("assistant", ctx.reply, **assistant_kwargs)
+            )
+        else:
+            session.add_message("assistant", ctx.reply, **assistant_kwargs)
+            frame.slots["reply:messages"].append(session.messages[-1])
         return frame
 
 
@@ -289,6 +307,12 @@ class _UpdateSessionMetadataModule:
         if raw_session is None:
             raise RuntimeError("AfterReasoning requires TurnState.session")
         session = cast("Session", raw_session)
+        if "reply:state" in frame.slots:
+            frame.slots["reply:metadata_updates"] = build_session_runtime_metadata(
+                tools_used=list(ctx.tools_used),
+                tool_chain=list(ctx.tool_chain),
+            )
+            return frame
         # A normally committed assistant reply closes any older interrupted snapshot.
         _ = session.metadata.pop(INTERRUPTED_TURN_METADATA_KEY, None)
         update_session_runtime_metadata(
@@ -322,9 +346,23 @@ class _AppendMessagesModule:
         reply = frame.slots.get("reply:state")
         state_kwargs = {}
         if reply is not None:
+            pending_metadata = frame.slots["reply:metadata_updates"]
+            relationship_runtime = getattr(
+                self._session_services, "relationship_runtime", None
+            )
             state_kwargs = {
-                "metadata_updates": reply_state_metadata(
-                    reply, updated_at=session.metadata["last_turn_ts"]
+                "metadata_updates": {
+                    **pending_metadata,
+                    **reply_state_metadata(
+                        reply, updated_at=str(pending_metadata["last_turn_ts"])
+                    ),
+                },
+                "pending_messages": True,
+                "removed_metadata_keys": (INTERRUPTED_TURN_METADATA_KEY,),
+                "metadata_enricher": (
+                    relationship_runtime.enrich_session_metadata
+                    if relationship_runtime is not None
+                    else None
                 ),
                 "expected_mood_updated_at": str(
                     frame.input.turn_result.context_retry.get(
@@ -341,7 +379,14 @@ class _AppendMessagesModule:
                 owned_messages,
                 **state_kwargs,
             )
+            if reply is not None:
+                state.session = self._session_services.session_manager.get_or_create(
+                    session.key
+                )
         except BaseException:
+            if reply is not None:
+                # Drafts were private; cancellation before lock acquisition publishes nothing.
+                raise
             # Only remove this turn's objects; unrelated concurrent messages remain.
             session.messages[:] = [
                 message

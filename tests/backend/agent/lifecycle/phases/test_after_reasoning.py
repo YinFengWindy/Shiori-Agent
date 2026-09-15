@@ -18,7 +18,7 @@ from agent.lifecycle.types import AfterReasoningInput, TurnState
 from bus.event_bus import EventBus
 from bus.events import InboundMessage
 from core.roles.reply_state import InvalidRoleReply
-from session.manager import SessionManager
+from session.manager import SessionManager, ConsolidationCommitRequest
 
 
 def phase(manager):
@@ -203,3 +203,84 @@ async def test_stale_formal_result_does_not_overwrite_later_committed_state(tmp_
     reloaded = SessionManager(tmp_path).get_or_create(session.key)
     assert reloaded.messages == []
     assert reloaded.metadata["current_thought"] == "我在等你。"
+
+
+@pytest.mark.parametrize("cancel_after_queued_save", [True, False])
+async def test_queued_save_cannot_persist_private_formal_turn_during_consolidation(
+    tmp_path, monkeypatch, cancel_after_queued_save
+):
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    session.add_message("user", "上一轮用户消息")
+    session.add_message("assistant", "上一轮回复")
+    manager.save(session)
+    old_ids = tuple(message["id"] for message in session.messages)
+    old_turn_ts = session.metadata.get("last_turn_ts")
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    append_entered = asyncio.Event()
+    saved_messages = []
+    original_append = manager.append_messages
+    original_save = manager.save
+
+    async def write_memory():
+        entered.set()
+        await release.wait()
+        session.metadata["independent_consolidation_field"] = "new snapshot"
+
+    async def append(*args, **kwargs):
+        append_entered.set()
+        await original_append(*args, **kwargs)
+
+    def save(target):
+        original_save(target)
+        saved_messages.extend(manager._store.fetch_session_messages(target.key))
+        if cancel_after_queued_save:
+            formal.cancel()
+
+    consolidation = asyncio.create_task(
+        manager.commit_consolidation(
+            ConsolidationCommitRequest(session.key, old_ids, 0, len(old_ids)),
+            write_memory,
+        )
+    )
+    await entered.wait()
+    monkeypatch.setattr(manager, "append_messages", append)
+    monkeypatch.setattr(manager, "save", save)
+    queued_save = asyncio.create_task(manager.save_async(session))
+    # The unrelated save queues before the formal commit, as channel/settings saves do.
+    await asyncio.sleep(0)
+    formal = asyncio.create_task(phase(manager).run(turn(session)))
+    await append_entered.wait()
+    assert tuple(message["id"] for message in session.messages) == old_ids
+    assert session.metadata.get("last_turn_ts") == old_turn_ts
+    assert session.metadata["current_mood"] == "害羞"
+    release.set()
+    await consolidation
+    await queued_save
+    if cancel_after_queued_save:
+        with pytest.raises(asyncio.CancelledError):
+            await formal
+    else:
+        await formal
+    # The earlier save must never see pending messages, with or without cancellation.
+    assert tuple(message["id"] for message in saved_messages) == old_ids
+    reloaded = SessionManager(tmp_path).get_or_create(session.key)
+    assert [
+        (message["id"], message["role"], message["content"], message.get("metadata"))
+        for message in reloaded.messages
+    ] == [
+        (message["id"], message["role"], message["content"], message.get("metadata"))
+        for message in session.messages
+    ]
+    assert reloaded.metadata == session.metadata
+    assert reloaded.metadata["independent_consolidation_field"] == "new snapshot"
+    assert reloaded.last_consolidated == len(old_ids)
+    if cancel_after_queued_save:
+        assert tuple(message["id"] for message in reloaded.messages) == old_ids
+        assert reloaded.metadata["current_mood"] == "害羞"
+        assert reloaded.metadata.get("last_turn_ts") == old_turn_ts
+    else:
+        assert len(reloaded.messages) == len(old_ids) + 2
+        assert reloaded.messages[-1]["metadata"]["mood"] == "平静"
+        assert reloaded.metadata["current_mood"] == "平静"

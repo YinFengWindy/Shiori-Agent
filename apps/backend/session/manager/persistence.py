@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -268,36 +270,57 @@ class _PersistenceMixin:
         *,
         metadata_updates: dict[str, Any] | None = None,
         expected_mood_updated_at: str | None = None,
+        pending_messages: bool = False,
+        removed_metadata_keys: tuple[str, ...] = (),
+        metadata_enricher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
-        """Commit messages and optional formal role state atomically, rejecting stale turns."""
-        session.updated_at = datetime.now()
+        """Commit message facts and state together; optionally publish private drafts.
+
+        Existing callers may pass messages already added to their session. Formal
+        turns pass private drafts with pending_messages=True, so queued saves and
+        cancellations cannot observe their uncommitted messages or metadata.
+        """
         msgs_copy = list(messages)
         async with self._lock(session.key):
+            if pending_messages:
+                session = self._cache.get(session.key, session)
             if (
                 expected_mood_updated_at is not None
                 and str(session.metadata.get("current_mood_updated_at", ""))
                 != expected_mood_updated_at
             ):
                 raise ValueError("角色已有更新的正式回复，已丢弃过时回合状态")
-            previous_metadata = dict(session.metadata)
-            session.metadata.update(metadata_updates or {})
-            # Messages and their current role state are one durable transaction.
+            metadata = {**session.metadata, **(metadata_updates or {})}
+            for key in removed_metadata_keys:
+                metadata.pop(key, None)
+            if metadata_enricher is not None:
+                metadata = metadata_enricher(metadata)
+            staged = replace(
+                session,
+                metadata=metadata,
+                messages=(
+                    [*session.messages, *msgs_copy]
+                    if pending_messages
+                    else list(session.messages)
+                ),
+                updated_at=datetime.now(),
+            )
             previous_messages = [dict(message) for message in msgs_copy]
             try:
                 with self._store.transaction():
-                    self._ensure_session_meta(session, commit=False)
-                    self._persist_messages(session, msgs_copy, commit=False)
-                    self._project_session_threads(session)
+                    self._ensure_session_meta(staged, commit=False)
+                    self._persist_messages(staged, msgs_copy, commit=False)
+                    self._project_session_threads(staged)
             except BaseException:
-                for key in metadata_updates or {}:
-                    if key in previous_metadata:
-                        session.metadata[key] = previous_metadata[key]
-                    else:
-                        session.metadata.pop(key, None)
                 for message, previous in zip(msgs_copy, previous_messages, strict=True):
                     message.clear()
                     message.update(previous)
                 raise
+            # There are no awaits between the SQL commit and cache publication.
+            if pending_messages:
+                session.messages.extend(msgs_copy)
+            session.metadata = staged.metadata
+            session.updated_at = staged.updated_at
             self._cache[session.key] = session
 
     def get_message_media(

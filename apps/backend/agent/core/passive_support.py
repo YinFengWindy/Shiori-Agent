@@ -181,6 +181,26 @@ def estimate_history_budget(history: list[dict]) -> dict[str, int]:
     }
 
 
+def build_session_runtime_metadata(
+    *,
+    tools_used: list[str],
+    tool_chain: list[dict],
+    mood: str | None = None,
+) -> dict[str, object]:
+    """Prepare owned turn metadata without publishing it on a shared session."""
+    call_count = sum(
+        len(group.get("calls") or []) for group in tool_chain if isinstance(group, dict)
+    )
+    now = datetime.now().astimezone().isoformat()
+    metadata: dict[str, object] = {
+        "last_turn_tool_calls_count": call_count,
+        "last_turn_ts": now,
+    }
+    if mood:
+        metadata.update(current_mood=mood, current_mood_updated_at=now)
+    return metadata
+
+
 def update_session_runtime_metadata(
     session: object,
     *,
@@ -188,16 +208,13 @@ def update_session_runtime_metadata(
     tool_chain: list[dict],
     mood: str | None = None,
 ) -> None:
+    """Update metadata for existing callers that already own the shared session."""
     md = session.metadata if isinstance(session.metadata, dict) else {}  # type: ignore[union-attr]
-    call_count = sum(
-        len(group.get("calls") or []) for group in tool_chain if isinstance(group, dict)
+    md.update(
+        build_session_runtime_metadata(
+            tools_used=tools_used, tool_chain=tool_chain, mood=mood
+        )
     )
-
-    md["last_turn_tool_calls_count"] = call_count
-    md["last_turn_ts"] = datetime.now().astimezone().isoformat()
-    if mood:
-        md["current_mood"] = mood
-        md["current_mood_updated_at"] = datetime.now().astimezone().isoformat()
     session.metadata = md  # type: ignore[union-attr]
 
 
