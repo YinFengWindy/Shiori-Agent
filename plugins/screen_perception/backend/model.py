@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, Any, cast
 from agent.llm_json import load_json_object_loose
 from agent.provider import LLMProvider
 from core.roles import RoleRepository
-from agent.screen_observation.contract import (
+from .contract import (
     normalize_observation_result,
     parse_observation_frame,
 )
-from agent.screen_observation.safety import safe_observation_text
+from .safety import safe_observation_text
 
 if TYPE_CHECKING:
     from core.roles.role_runtime import RoleRuntimeRegistry

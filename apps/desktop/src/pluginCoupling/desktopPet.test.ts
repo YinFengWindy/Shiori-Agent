@@ -51,8 +51,7 @@ test("only the pet's own surface window is attributed to the pet", () => {
   const surfaces = { keyForWindowId: (id: number | null | undefined) => keys.get(id ?? -1) ?? null };
 
   assert.equal(isDesktopPetWindow(surfaces, { id: 1 }), true);
-  // Another plugin naming its surface "pet" must not inherit the pet's voice
-  // and observation channels.
+  // Another plugin naming its surface "pet" must not inherit voice channels.
   assert.equal(isDesktopPetWindow(surfaces, { id: 2 }), false);
   assert.equal(isDesktopPetWindow(surfaces, { id: 3 }), false);
   assert.equal(isDesktopPetWindow(surfaces, { id: 4 }), false);
@@ -61,9 +60,7 @@ test("only the pet's own surface window is attributed to the pet", () => {
 
 test("a remembered position is not a presence change, so it triggers nothing", () => {
   // The plugin writes its settings on every drag, glide and role-requested
-  // move. The host's reaction to a write republishes observation state, which
-  // clears the reply bubble — so treating a position write as a change means a
-  // user who drags the pet mid-sentence loses what it was saying.
+  // move. These writes must not interrupt the current voice turn.
   const before = readDesktopPetPresence({ visible: true, roleId: "mira", packageId: "pet-1", positions: {} });
   const afterDrag = readDesktopPetPresence({
     visible: true,

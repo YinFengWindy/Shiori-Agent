@@ -15,7 +15,6 @@ import { pickNativeFiles } from "./nativeFilePicker.js";
 import { stagePickedFiles } from "../assets/pickedFileStaging.js";
 import { maxLocalAssetBytes } from "../assets/localAssetContract.js";
 import { applyRuntimeSettings, readRuntimeSettings } from "../settingsRuntime.js";
-import type { DesktopObservationController } from "../observation/controller.js";
 import type { DesktopPetCommand } from "../pluginCoupling/desktopPet.js";
 import type { BrowserVoiceRecorder } from "../voice/recorder.js";
 import type { DesktopVoiceController } from "../voice/controller.js";
@@ -63,7 +62,6 @@ export type RegisterDesktopIpcOptions = {
   requestDesktopPetCommand: (command: DesktopPetCommand) => void;
   /** Whether a sending window is the pet's surface, supplied by `main.ts`. */
   isPetWindow: (window: { readonly id: number } | null) => boolean;
-  desktopObservation: DesktopObservationController;
   voiceRecorder: BrowserVoiceRecorder;
   voiceController: DesktopVoiceController;
   voicePlayback: BrowserVoicePlayback;
@@ -102,7 +100,6 @@ export function registerDesktopIpcHandlers(
     openLocalAttachment,
     requestDesktopPetCommand,
     isPetWindow,
-    desktopObservation,
     voiceRecorder,
     voiceController,
     voicePlayback,
@@ -113,9 +110,6 @@ export function registerDesktopIpcHandlers(
   let pluginListTail = Promise.resolve();
   host.handle("desktop:application-session-id", () => applicationSessionId);
   host.handle("desktop:invoke", async (_event, request: { method: string; payload: Record<string, unknown> }) => {
-    if (request.method.startsWith("observation.")) {
-      throw new Error("observation bridge methods are restricted to the main process");
-    }
     const invoke = async () => {
       const response = await bridge.invoke(request);
       if (request.method === "plugins.list" && !response.error && pluginUiResources) {
@@ -264,11 +258,6 @@ export function registerDesktopIpcHandlers(
       kind: "sync",
       forceVisible: typeof forceVisible === "boolean" ? forceVisible : undefined,
     });
-  });
-  host.handle("desktop:pet-observation-dismiss", (event) => {
-    const petWindow = host.windowFromWebContents(event.sender);
-    if (!isPetWindow(petWindow)) return;
-    desktopObservation.dismissBubble();
   });
   // The pet's ready / bubble-height / drag / open / context-menu channels are
   // gone. Since #181-B the pet is a plugin surface, so those requests arrive on

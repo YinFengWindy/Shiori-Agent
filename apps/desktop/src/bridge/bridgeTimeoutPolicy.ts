@@ -4,7 +4,6 @@ export const bridgeTimeoutPolicy = Object.freeze({
   startup: 60_000,
   defaultRequest: 30_000,
   voiceRequest: 30_000,
-  observation: 2 * 60_000,
   gracefulStop: 5_000,
   forcedStop: 2_000,
 });
@@ -19,7 +18,6 @@ export function bridgeRequestTimeoutMs(method: string, requestedTimeoutMs?: numb
     return requestedTimeoutMs;
   }
   if (method === "health") return bridgeTimeoutPolicy.health;
-  if (method === "observation.analyze") return bridgeTimeoutPolicy.observation;
   if (method.startsWith("voice.")) return bridgeTimeoutPolicy.voiceRequest;
   return bridgeTimeoutPolicy.defaultRequest;
 }

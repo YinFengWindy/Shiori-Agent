@@ -39,7 +39,6 @@ import { registerDesktopContentSecurityPolicy } from "./windowSecurity.js";
 import { PluginDataStore } from "./plugins/dataStore.js";
 import {
   desktopPetCommandMethod,
-  desktopPetObservationMethod,
   desktopPetPluginId,
   desktopPetPresenceChanged,
   desktopPetSurfaceKey,
@@ -49,8 +48,6 @@ import {
   type DesktopPetCommand,
   type DesktopPetPresence,
 } from "./pluginCoupling/desktopPet.js";
-import { DesktopObservationController } from "./observation/controller.js";
-import { wireRoleReplyBubbles } from "./observation/roleBubble.js";
 import { createVoiceCaptureWindow } from "./voice/window.js";
 import { BrowserVoiceRecorder } from "./voice/recorder.js";
 import { DesktopVoiceController } from "./voice/controller.js";
@@ -96,7 +93,6 @@ const pluginTray = new PluginTrayRegistry();
 let desktopSurfaces: DesktopSurfaceHost | null = null;
 /** The pet's state as the host sees it; refreshed whenever the plugin writes. */
 let desktopPetPresence: DesktopPetPresence = noDesktopPetPresence;
-let desktopObservation: DesktopObservationController | null = null;
 let voiceRecorder: BrowserVoiceRecorder | null = null;
 let voiceController: DesktopVoiceController | null = null;
 let voicePlayback: BrowserVoicePlayback | null = null;
@@ -201,7 +197,7 @@ function legacyPluginDataPath(pluginId: string): string | null {
  * Publishes a host-originated event into the same stream backend events use.
  *
  * This is how the host still reaches the pet's background code (the tray entry,
- * `desktop:pet-sync`, observation) now that no pet object exists in this
+ * `desktop:pet-sync`) now that no pet object exists in this
  * process. Deliberately the *same* envelope `wireBridgeEvents` sends, so a
  * plugin receives it on the ordinary `ctx.events.on` with no second mechanism
  * to learn. See `pluginCoupling/desktopPet.ts` for what removes each caller.
@@ -269,14 +265,8 @@ function reloadVoiceSettings(): void {
  * correct by the time anything here reads it. It also covers changes the host
  * never asked for, which the old `await pet.hide()` path did not.
  *
- * The early return is load-bearing, not an optimization. The plugin writes its
- * settings on *every* remembered position too — once per drag, per release
- * glide, per role-requested move — and `DesktopObservationController.restore()`
- * republishes observation state with an empty bubble. Without this guard,
- * dragging the pet while a reply bubble was up would wipe the bubble, and every
- * settle would re-evaluate voice admission. `DesktopPetPresence` is exactly the
- * part of the blob the host reacts to, so comparing it is the same question as
- * "is there anything to do here".
+ * Position writes also pass through here. Only actual presence changes should
+ * re-evaluate voice admission; reply state is owned entirely by the plugin.
  *
  * The tray is no longer one of those consumers and is not protected by this
  * guard: since #181-D it follows `PluginTrayRegistry`, which the pet drives
@@ -293,9 +283,6 @@ function handleDesktopPetSettingsChanged(stored: unknown): void {
   // follows the plugin rather than this mirror. What is left is voice, which
   // still rides on the pet until #221.
   syncVoiceAvailability();
-  void desktopObservation?.restore().catch((error) => {
-    logDesktopDiagnostic({ scope: "main", event: "desktop-observation.restore.failed", payload: { error } });
-  });
 }
 
 function shouldHideDesktopWindowOnClose(): boolean {
@@ -355,7 +342,7 @@ void app.whenReady().then(async () => {
   registerDesktopTrayIpc(pluginTray);
   // Read first, subscribe second. A first-run migration writes through `read`,
   // which would otherwise fire `handleDesktopPetSettingsChanged` before the
-  // tray, the hotkey controller and observation exist. They are all null-safe
+  // tray, the hotkey controller exist. They are all null-safe
   // today, so it is harmless today — and it only happens on the one launch
   // where a user upgrades, which is the worst possible place for a latent trap.
   desktopPetPresence = readDesktopPetPresence(await activePluginData.read(desktopPetPluginId));
@@ -442,13 +429,6 @@ void app.whenReady().then(async () => {
       syncVoiceAvailability();
     },
   });
-  desktopObservation = new DesktopObservationController({
-    pet: {
-      get isRunning() { return isDesktopPetRunning(); },
-      publishObservation: (payload) => publishDesktopEvent(desktopPetObservationMethod, { ...payload }),
-    },
-    getRoleId: () => desktopPetPresence.roleId,
-  });
   const activeVoiceController = new DesktopVoiceController({
     recorder: activeVoiceRecorder,
     bridge,
@@ -501,17 +481,9 @@ void app.whenReady().then(async () => {
   wireBridgeEvents(bridge, localAssets, (event) => {
     if (handleVoiceBridgeEvent(event, activeVoiceController, activeVoicePlayback)) return;
   });
-  wireRoleReplyBubbles(bridge, desktopObservation);
-  powerMonitor.on("lock-screen", () => {
-    void desktopObservation?.suspend("Windows 已锁定，屏幕观察已暂停").catch((error) => {
-      logDesktopDiagnostic({ scope: "main", event: "desktop-observation.suspend.failed", payload: { error } });
-    });
-  });
-  powerMonitor.on("unlock-screen", () => {
-    void desktopObservation?.resume().catch((error) => {
-      logDesktopDiagnostic({ scope: "main", event: "desktop-observation.resume.failed", payload: { error } });
-    });
-  });
+  // The host reports OS availability; plugins own their presentation and behavior.
+  powerMonitor.on("lock-screen", () => publishDesktopEvent("system.lock-state", { locked: true }));
+  powerMonitor.on("unlock-screen", () => publishDesktopEvent("system.lock-state", { locked: false }));
   registerDesktopIpc({
     bridge,
     pluginUiResources,
@@ -520,7 +492,6 @@ void app.whenReady().then(async () => {
     openLocalAttachment,
     requestDesktopPetCommand,
     isPetWindow: (window) => isDesktopPetWindow(activeDesktopSurfaces, window),
-    desktopObservation,
     voiceRecorder: activeVoiceRecorder,
     voiceController: activeVoiceController,
     voicePlayback: activeVoicePlayback,
@@ -599,14 +570,8 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   bridgeShutdownStarted = true;
   void (async () => {
-    try {
-      await desktopObservation?.shutdown();
-    } catch (error) {
-      logDesktopDiagnostic({ scope: "main", event: "desktop-observation.shutdown.failed", payload: { error } });
-    } finally {
-      await bridge.stop();
-      app.quit();
-    }
+    await bridge.stop();
+    app.quit();
   })();
 });
 

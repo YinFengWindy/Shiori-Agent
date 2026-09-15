@@ -151,6 +151,21 @@ test("ctx.events.on filters by method and ignores everything else", () => {
   assert.deepEqual(received, [{ n: 1 }]);
 });
 
+test("ctx.events preserves the complete producer envelope for proactive consumers", async () => {
+  const source = fakeEventSource();
+  const scope = new BackgroundEffectScope();
+  const ctx = makeCtx({ onEvent: source.onEvent, scope });
+  const received: BridgeEvent[] = [];
+  ctx.events.on("session.updated", (_payload, event) => received.push(event));
+  const event: BridgeEvent = { id: "proactive", type: "event", method: "session.updated", payload: { role_id: "mira" } };
+  source.emit(event);
+  assert.deepEqual(received, [event]);
+  await scope.disposeAll();
+  source.emit(event);
+  assert.equal(received.length, 1);
+  assert.equal(source.listenerCount(), 0);
+});
+
 test("ctx.events.on registers its unsubscribe as an event-phase effect, released on disposeAll", async () => {
   const source = fakeEventSource();
   const scope = new BackgroundEffectScope();

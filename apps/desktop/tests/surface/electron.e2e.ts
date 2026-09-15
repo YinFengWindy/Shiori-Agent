@@ -131,6 +131,7 @@ try {
       assert.notEqual(card.background, "rgba(0, 0, 0, 0)");
       assert.notEqual(card.color, card.background);
     }
+    if (name === "pet") assert.equal(await page.locator(".pet-bubble span").textContent(), "角色回复保持可见");
     await page.screenshot({ path: resolve(output, `${name}.png`) });
     await qa("hide", id);
     await page.reload();
@@ -143,6 +144,7 @@ try {
     }
     assert.ok(reloaded.readyCount > after.readyCount, "reload really reported ready again");
     assert.equal(reloaded.visible, false, `${name}: reload preserves hidden intent`);
+    if (name === "pet") assert.equal(await page.locator(".pet-bubble span").textContent(), "角色回复保持可见");
     if (reloaded.alwaysOnTop !== alwaysOnTop) topmostFailures.push(`${name}: hidden reload`);
     await qa("show", id);
     const reshown = await qa("snapshot", id);

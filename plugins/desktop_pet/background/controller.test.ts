@@ -122,7 +122,7 @@ type Harness = {
  * Builds a controller wired to a real surface host with an injected clock, so
  * the release glide and the eased agent move run deterministically.
  */
-function harness(initialSettings?: Partial<DesktopPetSettings>, actions?: Record<string, "waving">): Harness {
+function harness(initialSettings?: Partial<DesktopPetSettings>, actions?: Record<string, "waving">, createGate?: Promise<void>): Harness {
   let settings: DesktopPetSettings = {
     visible: false,
     roleId: null,
@@ -173,7 +173,8 @@ function harness(initialSettings?: Partial<DesktopPetSettings>, actions?: Record
   const petSurfaces: DesktopPetSurfaces = {
     create: (surfaceId, spec, anchor) => {
       const applied = surfaces.create({ ...surfaceKey, surfaceId }, spec, anchor);
-      return Promise.resolve({ ...applied, displayId: surfaces.displayId({ ...surfaceKey, surfaceId }) });
+      const result = { ...applied, displayId: surfaces.displayId({ ...surfaceKey, surfaceId }) };
+      return createGate ? createGate.then(() => result) : Promise.resolve(result);
     },
     destroy: (surfaceId) => {
       surfaces.destroy({ ...surfaceKey, surfaceId });
@@ -264,46 +265,69 @@ test("the pet creates its surface and retains the package for a renderer that is
       package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "shiori-asset://local/pet-1" },
       state: "idle",
     },
-    observation: null,
+    reply: { text: "", paused: false, persistent: false },
   }]);
+});
+
+test("a reply arriving during surface creation survives readiness and restore", async () => {
+  let release!: () => void;
+  const pet = harness(undefined, undefined, new Promise<void>((resolve) => { release = resolve; }));
+  const showing = pet.controller.show();
+  await pet.flush();
+  assert.equal(pet.windows.length, 1);
+  pet.controller.replies.handleEvent({ id: "reply", type: "event", method: "chat.done", payload: { role_id: "role-1", reply: "正在启动时的回复" } });
+  release();
+  await showing;
+  await pet.controller.restore();
+  pet.surfaces.markReady(surfaceKey);
+  const retained = pet.window().payloads(surfaceStateChannel).at(-1) as { reply: { text: string } };
+  assert.equal(retained.reply.text, "正在启动时的回复");
+  await pet.controller.terminate();
+});
+
+test("disable during surface creation discards replies and never saves visible state", async () => {
+  let release!: () => void;
+  const pet = harness(undefined, undefined, new Promise<void>((resolve) => { release = resolve; }));
+  const showing = pet.controller.show();
+  await pet.flush();
+  const stopping = pet.controller.terminate();
+  release();
+  await Promise.all([showing, stopping]);
+  assert.equal(pet.controller.isRunning, false);
+  assert.equal(pet.saveCount(), 0);
+  assert.equal(pet.window().isDestroyed(), true);
+  assert.equal(pet.window().payloads(surfaceStateChannel).length, 0);
 });
 
 test("the host replays retained state and reveals the surface when the renderer reports ready", async () => {
   const pet = harness();
-  pet.controller.publishObservation({
-    status: "paused",
-    enabled: true,
-    bubble: "屏幕观察已暂停",
-    persistent: true,
-  });
-
   await pet.controller.show();
+  pet.controller.replies.setLocked(true);
   assert.equal(pet.window().showCount, 0, "an empty transparent window must not be shown");
 
   pet.surfaces.markReady(surfaceKey);
 
   assert.equal(pet.window().showCount, 1);
-  const replayed = pet.window().payloads(surfaceStateChannel).at(-1) as { observation?: unknown };
-  assert.deepEqual(replayed.observation, {
-    status: "paused",
-    enabled: true,
-    bubble: "屏幕观察已暂停",
+  const replayed = pet.window().payloads(surfaceStateChannel).at(-1) as { reply?: unknown };
+  assert.deepEqual(replayed.reply, {
+    paused: true,
+    text: "Windows 已锁定",
     persistent: true,
   });
 });
 
-test("an observation update resends the package alongside it in one retained payload", async () => {
+test("a reply update resends the package alongside it in one retained payload", async () => {
   const pet = harness();
   await pet.controller.show();
 
-  pet.controller.publishObservation({ status: "observing", enabled: true, bubble: "继续写吧", persistent: false });
+  pet.controller.replies.handleEvent({ id: "chat", type: "event", method: "chat.done", payload: { role_id: "role-1", reply: "继续写吧" } });
 
   assert.deepEqual(pet.window().payloads(surfaceStateChannel).at(-1), {
     load: {
       package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "shiori-asset://local/pet-1" },
       state: "idle",
     },
-    observation: { status: "observing", enabled: true, bubble: "继续写吧", persistent: false },
+    reply: { paused: false, text: "继续写吧", persistent: false },
   });
 });
 

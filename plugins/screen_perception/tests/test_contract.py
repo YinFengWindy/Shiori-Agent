@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent.screen_observation.contract import (
+from plugins.screen_perception.backend.contract import (
     normalize_observation_result,
     parse_observation_frame,
 )

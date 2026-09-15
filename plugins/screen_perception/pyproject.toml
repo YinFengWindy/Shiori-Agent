@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shiori-plugin-screen-perception"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["shiori-agent==0.1.0"]
+
+[project.optional-dependencies]
+test = ["shiori-plugin-testkit==0.1.0", "shiori-plugin-desktop-pet==0.1.0"]
+
+[tool.setuptools]
+include-package-data = false
+packages = ["plugins.screen_perception", "plugins.screen_perception.backend"]
+package-dir = {"plugins.screen_perception" = "."}
+
+[tool.setuptools.package-data]
+"plugins.screen_perception" = ["manifest.yaml", "TESTING.md", "backend/**/*.json", "backend/**/*.yaml", "backend/**/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-W error --import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+required_plugins = ["pytest-asyncio", "shiori-plugin-testkit"]

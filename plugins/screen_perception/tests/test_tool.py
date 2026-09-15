@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from agent.tools.observe_screen import ObserveScreenTool
+from plugins.screen_perception.backend.tool import ObserveScreenTool
 from agent.tools.registry import ToolRegistry
 
 

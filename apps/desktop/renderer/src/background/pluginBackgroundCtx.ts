@@ -188,7 +188,7 @@ export function createBackgroundCtx(options: {
     events: {
       on(method, handler) {
         const unsubscribe = onEvent((event) => {
-          if (event.method === method) handler(event.payload);
+          if (event.method === method) handler(event.payload, event);
         });
         scope.addEventEffect(`event:${method}`, unsubscribe);
       },

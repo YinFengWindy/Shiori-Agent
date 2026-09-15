@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from agent.screen_observation.service import ScreenObservationService
 
 from .chat_requests import DesktopChatRequestHandler
 from .plugin_requests import DesktopPluginRequestHandler
@@ -24,14 +23,12 @@ class DesktopBridgeRequestRouter:
         sessions_and_tasks: DesktopSessionTaskRequestHandler,
         chat: DesktopChatRequestHandler,
         voice: DesktopVoiceHandler,
-        observation: ScreenObservationService | None,
         plugins: DesktopPluginRequestHandler,
     ) -> None:
         self._roles = roles
         self._sessions_and_tasks = sessions_and_tasks
         self._chat = chat
         self._voice = voice
-        self._observation = observation
         self._plugins = plugins
 
     async def dispatch(
@@ -42,12 +39,6 @@ class DesktopBridgeRequestRouter:
         request_id: str,
         emit_event: EventEmitter,
     ) -> dict[str, Any] | None:
-        if method in {"observation.analyze", "observation.remember"}:
-            if self._observation is None:
-                raise RuntimeError("desktop observation service unavailable")
-            if method == "observation.analyze":
-                return await self._observation.analyze(payload)
-            return await self._observation.remember(payload)
         if method == "health":
             return {"ok": True}
         plugin_result = await self._plugins.handle(method, payload)

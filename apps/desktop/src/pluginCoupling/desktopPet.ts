@@ -12,9 +12,9 @@ import type { SurfaceKey } from "../surface/host.js";
  *
  * | What the host needs | Who needs it | Removed by |
  * | --- | --- | --- |
- * | the pet's surface key | voice IPC, observation dismiss | #221 / #220 |
+ * | the pet's surface key | voice IPC | #221 |
  * | relaying `desktop:pet-sync` | the pet's role settings and package panel | #218 |
- * | whether the pet is showing, and whose | voice admission, observation | #221 / #220 |
+ * | whether the pet is showing, and whose | voice admission | #221 |
  *
  * #181-D took two rows off this table: the tray entry is the pet's own now
  * (`ctx.tray`), and the main window's close policy asks "does any plugin still
@@ -59,7 +59,6 @@ export const desktopPetSurfaceKey: SurfaceKey = { pluginId: desktopPetPluginId, 
  * main-process tsc program, which cannot reach renderer code at all.
  */
 export const desktopPetCommandMethod = "desktop.pet.command";
-export const desktopPetObservationMethod = "desktop.pet.observation";
 
 /**
  * One host-issued pet lifecycle command.
@@ -78,7 +77,7 @@ export type DesktopPetCommand = { kind: "sync"; forceVisible?: boolean };
  *
  * Two facts, both for features that are not plugins yet: `visible` gates voice
  * admission (`voice/availability.ts`) and `roleId` says whose turn a voice
- * press or an observation reply belongs to. `available` used to be here too,
+ * press belongs to. `available` used to be here too,
  * for the tray item's enabled state — that left with #181-D.
  */
 export type DesktopPetPresence = {
@@ -120,12 +119,7 @@ export function readDesktopPetPresence(stored: unknown): DesktopPetPresence {
 /**
  * Whether two presences differ in anything the host reacts to.
  *
- * Extracted so it can be tested: the plugin writes its settings on *every*
- * remembered position — once per drag, per release glide, per role-requested
- * move — and the host's reaction to a write includes republishing observation
- * state, which clears any reply bubble currently on screen. Reacting only to a
- * real change is what keeps dragging the pet from wiping the bubble it is
- * talking through.
+ * Position writes do not change voice admission; only the visible role matters.
  */
 export function desktopPetPresenceChanged(
   before: DesktopPetPresence,

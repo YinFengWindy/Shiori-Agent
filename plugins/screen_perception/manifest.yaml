@@ -1,0 +1,9 @@
+api: 2
+id: screen_perception
+display_name: 24h视奸插件
+version: "0.1.0"
+desc: 按需读取主屏幕，供当前角色进行只读分析
+capabilities:
+  - tools
+  - role_store
+  - role_runtime_registry

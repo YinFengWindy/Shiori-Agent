@@ -29,7 +29,6 @@ def build_desktop_service(
         scheduler=runtime.scheduler,
         subagent_manager=getattr(spawn, "manager", None),
         memory_optimizer=runtime.memory_optimizer,
-        observation_service=runtime.screen_observation,
         role_runtime_registry=registry,
         memory_engine=runtime.memory_runtime.engine,
         plugin_rpc_registry=plugin_manager.rpc if plugin_manager is not None else None,

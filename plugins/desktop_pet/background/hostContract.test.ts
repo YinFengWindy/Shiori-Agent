@@ -2,14 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   desktopPetCommandMethod,
-  desktopPetObservationMethod,
   desktopPetPluginId,
   desktopPetSurfaceKey,
   readDesktopPetPresence,
 } from "../../../apps/desktop/src/pluginCoupling/desktopPet";
 import petBackground, {
   desktopPetCommandMethod as pluginCommandMethod,
-  desktopPetObservationMethod as pluginObservationMethod,
 } from "./index";
 import { desktopPetSurfaceId } from "./controller";
 import { desktopPetBindingPatch, normalizeDesktopPetSettings } from "./settings";
@@ -20,7 +18,7 @@ import { desktopPetBindingPatch, normalizeDesktopPetSettings } from "./settings"
  * The two sides declare these strings separately on purpose — sharing them
  * would mean the host importing from a plugin — which leaves exactly one
  * failure mode: renaming one copy and not the other. Nothing would break at
- * build time; the tray entry and observation bubbles would simply stop working
+ * build time; the role-settings sync command would simply stop working
  * at runtime, with no error anywhere. A test is the only thing that catches it,
  * and a test may import across a boundary that a dependency must not.
  *
@@ -33,7 +31,6 @@ test("the host and the plugin agree on the pet's identity and event names", () =
   assert.equal(desktopPetPluginId, petBackground.pluginId);
   assert.equal(desktopPetSurfaceKey.surfaceId, desktopPetSurfaceId);
   assert.equal(desktopPetCommandMethod, pluginCommandMethod);
-  assert.equal(desktopPetObservationMethod, pluginObservationMethod);
 });
 
 test("the host reads the pet's presence out of what the plugin actually writes", () => {

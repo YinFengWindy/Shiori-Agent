@@ -29,14 +29,9 @@ from agent.looping.ports import (
 )
 from agent.mcp.registry import McpServerRegistry
 from agent.provider import LLMProvider
-from agent.screen_observation import (
-    ScreenObservationService,
-    build_screen_observation_service,
-)
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline
 from agent.scheduler import SchedulerService
 from agent.tools.message_push import MessagePushTool
-from agent.tools.observe_screen import ObserveScreenTool
 from agent.tools.registry import ToolRegistry
 from core.scene.controller import SceneAwarenessController
 from core.scene.demand import SceneObservationDemand
@@ -77,7 +72,6 @@ from core.roles import (
 from core.roles.model_runtime import RoleModelRuntime
 from core.roles.self_initializer import RoleSelfInitializer
 from core.roles.self_seed import LlmRoleSelfSeedGenerator
-from infra.screen_capture import PrimaryScreenCapture
 from conversation.push_sync import ExternalImageSyncService
 from proactive_v2.presence import PresenceStore
 from session.manager import SessionManager
@@ -108,7 +102,6 @@ class CoreRuntime:
     agent_provider: LLMProvider | None = None
     plugin_manager: "PluginKernel | None" = None
     memory_optimizer: Any | None = None
-    screen_observation: ScreenObservationService | None = None
     additional_providers: list[LLMProvider] = field(default_factory=list)
     proactive_motives: list[ProactiveGate] = field(default_factory=list)
     scene_followup_subscription: SceneFollowupSubscription | None = None
@@ -217,7 +210,6 @@ def build_registered_tools(
     tools: ToolRegistry | None = None,
     event_publisher: EventBus | None = None,
     agent_loop_provider: Callable[[], Any] | None = None,
-    role_repository: RoleRepository | None = None,
     role_runtime_registry: RoleRuntimeRegistry | None = None,
     shared_push_tool: MessagePushTool | None = None,
     shared_scheduler: SchedulerService | None = None,
@@ -227,7 +219,6 @@ def build_registered_tools(
     SchedulerService,
     McpServerRegistry,
     MemoryRuntime,
-    ScreenObservationService,
 ]:
     from session.store import SessionStore
 
@@ -251,20 +242,6 @@ def build_registered_tools(
         ),
     )
     memory_runtime = memory_result.extras["memory_runtime"]
-    screen_observation = build_screen_observation_service(
-        roles=role_repository or RoleRepository(RoleStore(workspace)),
-        memory=memory_runtime.engine,
-        role_runtime_registry=role_runtime_registry,
-    )
-    tools.register(
-        ObserveScreenTool(
-            capture=PrimaryScreenCapture(),
-            analyzer=screen_observation,
-        ),
-        always_on=True,
-        risk="read-only",
-        search_hint="屏幕 桌面 当前窗口 观察主屏",
-    )
     scheduler = shared_scheduler or build_scheduler(
         workspace,
         push_tool,
@@ -313,7 +290,6 @@ def build_registered_tools(
         scheduler,
         mcp_registry,
         memory_runtime,
-        screen_observation,
     )
 
 
@@ -467,26 +443,23 @@ def build_core_runtime(
         self_initializer=RoleSelfInitializer(role_store, LlmRoleSelfSeedGenerator()),
     )
     loop_ref: dict[str, AgentLoop] = {}
-    tools, push_tool, scheduler, mcp_registry, memory_runtime, screen_observation = (
-        build_registered_tools(
-            config,
-            workspace,
-            http_resources,
-            bus=bus,
-            provider=provider,
-            light_provider=light_provider,
-            session_store=session_manager._store,
-            event_publisher=event_bus,
-            role_runtime_registry=role_runtime_registry,
-            agent_loop_provider=agent_loop_provider or (lambda: loop_ref.get("loop")),
-            role_repository=role_repository,
-            shared_push_tool=(
-                shared.push_tool
-                if shared
-                else MessagePushTool(event_bus=event_outlet or event_bus)
-            ),
-            shared_scheduler=shared.scheduler if shared else None,
-        )
+    tools, push_tool, scheduler, mcp_registry, memory_runtime = build_registered_tools(
+        config,
+        workspace,
+        http_resources,
+        bus=bus,
+        provider=provider,
+        light_provider=light_provider,
+        session_store=session_manager._store,
+        event_publisher=event_bus,
+        role_runtime_registry=role_runtime_registry,
+        agent_loop_provider=agent_loop_provider or (lambda: loop_ref.get("loop")),
+        shared_push_tool=(
+            shared.push_tool
+            if shared
+            else MessagePushTool(event_bus=event_outlet or event_bus)
+        ),
+        shared_scheduler=shared.scheduler if shared else None,
     )
     presence = (
         shared.presence if shared is not None else PresenceStore(session_manager._store)
@@ -660,7 +633,6 @@ def build_core_runtime(
         role_runtime_registry=role_runtime_registry,
         plugin_manager=plugin_manager,
         scene_service=scene_service,
-        screen_observation=screen_observation,
         proactive_motives=[
             *(
                 [SceneFollowupStrategy(relationship_runtime)]

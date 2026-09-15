@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from .rpc import DesktopPetRpcHandlers
 from .tool import DesktopPetActionTool
+from .bubbles import register_bubble_rpc
 
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
@@ -43,6 +44,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         search_hint="桌宠 移动 位置 动作 挥手 跳跃",
     )
     handlers = DesktopPetRpcHandlers(role_store=role_store)
+    register_bubble_rpc(ctx.rpc)
     ctx.rpc.register(
         "binding.get", handlers.binding_get, concurrency=Concurrency.READ_ONLY
     )

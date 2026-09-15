@@ -31,7 +31,6 @@ function setup(overrides: {
 } = {}) {
   const windowCalls: WindowCall[] = [];
   const petCalls: Array<{ method: string; args: unknown[] }> = [];
-  const observationCalls: string[] = [];
   const externalOpened: string[] = [];
   const handlers = new Map<string, (event: never, ...args: never[]) => unknown>();
   const listeners = new Map<string, (event: never, ...args: never[]) => void>();
@@ -86,10 +85,6 @@ function setup(overrides: {
     openLocalAttachment: async () => ({ ok: true }),
     isPetWindow,
     requestDesktopPetCommand,
-    desktopObservation: {
-      restore: async () => { observationCalls.push("restore"); },
-      dismissBubble: () => { observationCalls.push("dismissBubble"); },
-    },
     voiceRecorder: {},
     voiceController: {},
     voicePlayback: {},
@@ -99,7 +94,6 @@ function setup(overrides: {
     windows: { main, other, pet },
     windowCalls,
     petCalls,
-    observationCalls,
     externalOpened,
     channels: { handled: [...handlers.keys()], listened: [...listeners.keys()] },
     async invokeHandler(channel: string, sender: WebContents, ...args: unknown[]) {
@@ -190,47 +184,10 @@ it("attaches granted UI URLs to the same roster and serializes admission across 
 });
 
 describe("desktop ipc permission boundaries", () => {
-  it("refuses observation methods over the generic renderer bridge", async () => {
-    const forwarded: string[] = [];
-    const ipc = setup({
-      invoke: (async (request: { method: string }) => {
-        forwarded.push(request.method);
-        return { payload: {} };
-      }) as unknown as RegisterDesktopIpcOptions["bridge"]["invoke"],
-    });
-
-    await assert.rejects(
-      () => ipc.invokeHandler("desktop:invoke", ipc.windows.main.webContents, {
-        method: "observation.start",
-        payload: {},
-      }),
-      /observation bridge methods are restricted to the main process/,
-    );
-    assert.deepEqual(forwarded, [], "the rejected request must never reach the python bridge");
-
-    await ipc.invokeHandler("desktop:invoke", ipc.windows.main.webContents, {
-      method: "roles.list",
-      payload: {},
-    });
-    assert.deepEqual(forwarded, ["roles.list"]);
-  });
-
-  it("exposes bubble dismissal as the only pet observation channel", () => {
+  it("exposes no observation-specific bubble channel", () => {
     const ipc = setup();
-    const observationChannels = [...ipc.channels.handled, ...ipc.channels.listened]
-      .filter((channel) => channel.includes("observation"));
-
-    assert.deepEqual(observationChannels, ["desktop:pet-observation-dismiss"]);
-  });
-
-  it("ignores observation dismissal from a window that is not the pet", async () => {
-    const ipc = setup();
-
-    await ipc.invokeHandler("desktop:pet-observation-dismiss", ipc.windows.main.webContents);
-    assert.deepEqual(ipc.observationCalls, []);
-
-    await ipc.invokeHandler("desktop:pet-observation-dismiss", ipc.windows.pet.webContents);
-    assert.deepEqual(ipc.observationCalls, ["dismissBubble"]);
+    assert.deepEqual([...ipc.channels.handled, ...ipc.channels.listened]
+      .filter((channel) => channel.includes("observation")), []);
   });
 
   it("turns a pet sync request into a command for the plugin that owns the pet", async () => {
@@ -241,14 +198,12 @@ describe("desktop ipc permission boundaries", () => {
     await ipc.invokeHandler("desktop:pet-sync", ipc.windows.main.webContents, "not a boolean");
 
     // Since #181-C the controller lives in the plugin host renderer, so this
-    // cannot await the sync — and must not refresh observation on its own
-    // either; that happens when the plugin writes its settings back.
+    // forwards the command and the plugin owns the resulting state changes.
     assert.deepEqual(ipc.petCalls, [
       { method: "command", args: [{ kind: "sync", forceVisible: false }] },
       { method: "command", args: [{ kind: "sync", forceVisible: undefined }] },
       { method: "command", args: [{ kind: "sync", forceVisible: undefined }] },
     ]);
-    assert.deepEqual(ipc.observationCalls, []);
   });
 
   it("keeps no pet-specific window channels of its own", () => {
@@ -261,7 +216,6 @@ describe("desktop ipc permission boundaries", () => {
     // DesktopSurface channels and are attributed there by window identity.
     // What is left here is the pet's *domain* plumbing, not its window.
     assert.deepEqual(petChannels.sort(), [
-      "desktop:pet-observation-dismiss",
       "desktop:pet-sync",
     ]);
   });

@@ -131,6 +131,27 @@ async def test_list_reports_every_discovered_plugin_enabled_by_default(
 
 
 @pytest.mark.asyncio
+async def test_list_shows_manifest_title_without_changing_the_toggle_id(
+    tmp_path, monkeypatch
+):
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    manifest = tmp_path / "plugin_dirs" / "hello" / "manifest.yaml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8") + "\ndisplay_name: 24h视奸插件\n",
+        encoding="utf-8",
+    )
+    service, _, app = await _start_service(tmp_path)
+    try:
+        response = await _request(service, "plugins.list")
+        by_id = {item["id"]: item for item in response.payload["plugins"]}
+        assert by_id["hello"]["name"] == "24h视奸插件"
+        assert by_id["qqbot"]["name"] == "qqbot"
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_list_preserves_renderer_declarations_as_data(tmp_path, monkeypatch):
     _stage_plugin_dirs(tmp_path, monkeypatch)
     manifest = tmp_path / "plugin_dirs" / "hello" / "manifest.yaml"

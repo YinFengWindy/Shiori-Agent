@@ -70,7 +70,7 @@ class RuntimePluginManagement:
                     "candidate_id": record.candidate_id,
                     "source": record.source,
                     "directory": str(record.plugin_dir),
-                    "name": record.name,
+                    "name": record.manifest.display_name or record.name,
                     "version": record.manifest.version or "",
                     "description": record.manifest.desc or "",
                     # Static declarations are data only; Electron grants resources

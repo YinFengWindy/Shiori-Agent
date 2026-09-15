@@ -8,22 +8,22 @@ import {
 
 const load = { package: { spritesheetUrl: "mira-asset://pet" }, state: "idle" };
 
-test("a retained payload carries the package, the sprite state and the observation", () => {
+test("a retained payload carries the package, the sprite state and the reply", () => {
   assert.deepEqual(
     readPetSurfaceState({
       load,
-      observation: { status: "observing", enabled: true, bubble: "继续写吧", persistent: false },
+      reply: { paused: false, text: "继续写吧", persistent: false },
     }),
     {
       load: { package: { spritesheetUrl: "mira-asset://pet" }, state: "idle" },
-      observation: { status: "observing", enabled: true, bubble: "继续写吧", persistent: false },
+      reply: { paused: false, text: "继续写吧", persistent: false },
     },
   );
 });
 
-test("a payload without an observation is still usable", () => {
+test("a payload without a reply is still usable", () => {
   const parsed = readPetSurfaceState({ load });
-  assert.equal(parsed?.observation, null);
+  assert.equal(parsed?.reply, null);
   assert.equal(parsed?.load.state, "idle");
 });
 
@@ -35,23 +35,15 @@ test("a payload with no recognizable sprite state is rejected outright", () => {
   assert.equal(readPetSurfaceState("idle"), null);
 });
 
-test("a malformed observation degrades to none rather than rejecting the package", () => {
-  const parsed = readPetSurfaceState({ load, observation: { status: "nonsense", enabled: true } });
-  assert.equal(parsed?.observation, null);
+test("a malformed reply degrades to none rather than rejecting the package", () => {
+  const parsed = readPetSurfaceState({ load, reply: { status: "nonsense", enabled: true } });
+  assert.equal(parsed?.reply, null);
   assert.equal(parsed?.load.package.spritesheetUrl, "mira-asset://pet");
 });
 
-test("a bubble that is not a string becomes empty instead of rendering as an object", () => {
-  const parsed = readPetSurfaceState({
-    load,
-    observation: { status: "failed", enabled: true, bubble: { toString: 1 }, persistent: "yes" },
-  });
-  assert.deepEqual(parsed?.observation, {
-    status: "failed",
-    enabled: true,
-    bubble: "",
-    persistent: false,
-  });
+test("a bubble that is not a string is rejected", () => {
+  const parsed = readPetSurfaceState({ load, reply: { paused: false, text: { toString: 1 } } });
+  assert.equal(parsed?.reply, null);
 });
 
 test("a transient play request is distinguished from a base state change", () => {

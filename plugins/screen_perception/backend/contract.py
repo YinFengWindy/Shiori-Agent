@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from agent.screen_observation.safety import safe_observation_text
+from .safety import safe_observation_text
 
 MAX_IMAGE_BASE64_CHARS = 12 * 1024 * 1024
 
