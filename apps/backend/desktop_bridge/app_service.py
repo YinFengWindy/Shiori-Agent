@@ -97,6 +97,11 @@ class DesktopAppService:
             raise
         return await self._finish_desktop_push(session, role_id=role_id)
 
+    def validate_desktop_push_target(self, chat_id: str) -> None:
+        """Accept a turn-owned desktop delivery without exposing pending messages."""
+        session_key = self.normalize_desktop_session_key(chat_id)
+        self.role_id_from_desktop_session_key(session_key)
+
     async def _finish_desktop_push(self, session: Session, *, role_id: str) -> Session:
         self.sync_desktop_session_thread(session, role_id=role_id)
         return await self._apply_post_persist_runtime_effects(

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from bus.events import OutboundMessage
+from agent.tools.message_push import PENDING_TURN_DELIVERY
 
 _INTERNAL_CITATION_RE = re.compile(r"\s*§cited:\[[^\]]*\]§\s*")
 
@@ -86,7 +87,14 @@ class PushToolOutboundPort:
             "session_key": str(
                 outbound.metadata.get("session_key_override") or ""
             ).strip(),
-            "push_message_already_persisted": "true",
+            "push_message_already_persisted": (
+                "false" if outbound.metadata.get("pending_commit") else "true"
+            ),
+            **(
+                {"_pending_turn_delivery": PENDING_TURN_DELIVERY}
+                if outbound.metadata.get("pending_commit")
+                else {}
+            ),
         }
         try:
             if message or media:
@@ -97,6 +105,7 @@ class PushToolOutboundPort:
                     image=media[0] if media else None,
                     **execution_context,
                 )
+                self._validate_delivery_result(result, channel=channel, chat_id=chat_id)
             for image in media[1:]:
                 result = await self._push.execute(
                     channel=channel,
@@ -104,6 +113,7 @@ class PushToolOutboundPort:
                     image=image,
                     **execution_context,
                 )
+                self._validate_delivery_result(result, channel=channel, chat_id=chat_id)
         except PermissionError:
             return False
         except OutboundDispatchError:
@@ -115,17 +125,21 @@ class PushToolOutboundPort:
                 detail=exc,
             ) from exc
 
+        return True
+
+    @staticmethod
+    def _validate_delivery_result(
+        result: object, *, channel: str, chat_id: str
+    ) -> None:
+        """Every requested payload must succeed before a delivery can be committed."""
         result_text = str(result)
-        if "未注册" in result_text or result_text.startswith("发送失败："):
+        if (
+            "已发送" not in result_text
+            or "不支持" in result_text
+            or "发送失败" in result_text
+        ):
             raise OutboundDispatchError(
                 channel=channel,
                 chat_id=chat_id,
                 detail=result_text,
             )
-        if "没有可用的 sender" in result_text:
-            raise OutboundDispatchError(
-                channel=channel,
-                chat_id=chat_id,
-                detail=result_text,
-            )
-        return "已发送" in result_text

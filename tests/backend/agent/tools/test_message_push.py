@@ -136,6 +136,7 @@ async def test_metadata_sender_uses_push_identity_not_shared_turn_identity():
             "already_persisted": False,
         },
     )
+
     sender.reset_mock()
     await tool.execute(
         channel="desktop",
@@ -153,6 +154,45 @@ async def test_metadata_sender_uses_push_identity_not_shared_turn_identity():
             "already_persisted": True,
         },
     )
+
+
+async def test_model_json_cannot_impersonate_pending_turn_delivery():
+    tool = MessagePushTool()
+    sender = AsyncMock()
+    tool.register_channel("desktop", text_with_metadata=sender)
+    await tool.execute(
+        channel="desktop",
+        chat_id="one",
+        message="hello",
+        _pending_turn_delivery=True,
+        pending_commit=True,
+    )
+    assert "pending_commit" not in sender.await_args.args[2]
+
+
+@pytest.mark.parametrize("unsupported", ["text", "file", "image"])
+async def test_unsupported_payload_rejects_all_requested_sends_before_delivery(
+    unsupported,
+):
+    tool = MessagePushTool()
+    senders = {name: AsyncMock() for name in ("text", "file", "image")}
+    tool.register_channel(
+        "limited",
+        **{name: sender for name, sender in senders.items() if name != unsupported},
+    )
+
+    result = await tool.execute(
+        channel="limited",
+        chat_id="one",
+        message="hello",
+        file="/tmp/a.txt",
+        image="/tmp/a.png",
+    )
+
+    assert result.startswith("发送失败：")
+    assert "已发送" not in result
+    for sender in senders.values():
+        sender.assert_not_awaited()
 
 
 @pytest.mark.asyncio

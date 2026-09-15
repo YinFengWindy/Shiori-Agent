@@ -8,6 +8,11 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from agent.tools.message_push import MessagePushTool
+from agent.looping.ports import SessionServices
+from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
+from agent.turns.outbound import PushToolOutboundPort
+from agent.turns.result import TurnResult, TurnOutbound
+from core.roles.reply_state import RoleReply
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted, RoleDeleted, TurnCommitted
 from conversation.push_sync import ExternalImageSyncService
@@ -606,7 +611,73 @@ async def test_external_proactive_media_commit_broadcasts_role_session(
             role_id="mira",
         )
     )
+    assert len(emitted) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content", ["主动正文", ""])
+async def test_pending_desktop_text_and_images_publish_once_after_formal_commit(
+    tmp_path, content
+):
+    roles = RoleStore(tmp_path)
+    roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    sessions = SessionManager(tmp_path)
+    session = sessions.open_role_session("mira", role_name="Mira")
+    bus = EventBus()
+    push = MessagePushTool(event_bus=bus)
+    service = DesktopBridgeService(
+        workspace=tmp_path,
+        role_store=roles,
+        session_manager=sessions,
+        agent_loop=SimpleNamespace(),
+        event_bus=bus,
+        push_tool=push,
+    )
+    emitted = []
+    service.add_event_listener(emitted.append)
+    port = PushToolOutboundPort(push, execution_context={"role_id": "mira"})
+
+    async def dispatch(outbound):
+        assert await port.dispatch(outbound)
+        # The real registered desktop text and image consumers accepted the payload,
+        # but neither has saved or announced an uncommitted message.
+        assert session.messages == []
+        assert sessions._store.fetch_session_messages(session.key) == []
+        assert emitted == []
+        return True
+
+    owner = TurnOrchestrator(
+        TurnOrchestratorDeps(
+            SessionServices(sessions),
+            SimpleNamespace(dispatch=dispatch),
+            bus,
+        )
+    )
+    result = TurnResult(
+        decision="reply",
+        outbound=TurnOutbound(session.key, content, ["/tmp/one.png", "/tmp/two.png"]),
+        role_reply=RoleReply(content, "平静", "我想给你看看。"),
+        reply_context=owner.capture_reply_context(session.key),
+    )
+    assert await owner.handle_proactive_turn(
+        result=result, session_key=session.key, channel="desktop", chat_id=session.key
+    )
+    assert len(session.messages) == 1
+    assert session.messages[0]["content"] == content
+    assert session.messages[0]["media"] == ["/tmp/one.png", "/tmp/two.png"]
+    assert (
+        session.messages[0]["metadata"]["thought"]
+        == session.metadata["current_thought"]
+    )
     assert len(emitted) == 1
+    assert emitted[0]["method"] == "session.updated"
+    assert emitted[0]["payload"]["message"]["content"] == content
+    assert emitted[0]["payload"]["session"]["metadata"]["current_mood"] == "平静"
+    assert (
+        emitted[0]["payload"]["session"]["metadata"]["current_thought"]
+        == "我想给你看看。"
+    )
+    await service.aclose()
 
 
 @pytest.mark.asyncio

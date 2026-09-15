@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import datetime
 from typing import Any
@@ -264,6 +264,56 @@ class _PersistenceMixin:
             self.save(session)
 
     async def append_messages(
+        self,
+        session: Session,
+        messages: list[dict],
+        *,
+        metadata_updates: dict[str, Any] | None = None,
+        expected_mood_updated_at: str | None = None,
+        pending_messages: bool = False,
+        removed_metadata_keys: tuple[str, ...] = (),
+        metadata_enricher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        before_commit: Callable[[], Awaitable[bool]] | None = None,
+    ) -> bool:
+        """Serialize formal replies and commit private messages only after delivery.
+
+        The reply lock orders passive and proactive state owners. Transports never
+        run under the save lock: image synchronization may itself need that lock.
+        The callback must not recursively submit another formal reply.
+        """
+
+        async def commit() -> bool:
+            if before_commit is not None:
+                if not pending_messages or expected_mood_updated_at is None:
+                    raise ValueError(
+                        "delivered replies require private drafts and a state stamp"
+                    )
+                async with self._lock(session.key):
+                    current = self._cache.get(session.key, session)
+                    if (
+                        str(current.metadata.get("current_mood_updated_at", ""))
+                        != expected_mood_updated_at
+                    ):
+                        raise ValueError("角色已有更新的正式回复，已丢弃过时回合状态")
+                if not await before_commit():
+                    return False
+            await self._append_messages(
+                session,
+                messages,
+                metadata_updates=metadata_updates,
+                expected_mood_updated_at=expected_mood_updated_at,
+                pending_messages=pending_messages,
+                removed_metadata_keys=removed_metadata_keys,
+                metadata_enricher=metadata_enricher,
+            )
+            return True
+
+        if expected_mood_updated_at is not None:
+            async with self._reply_lock(session.key):
+                return await commit()
+        return await commit()
+
+    async def _append_messages(
         self,
         session: Session,
         messages: list[dict],

@@ -14,6 +14,9 @@ from core.common.runtime_scope import current_runtime_lease
 
 logger = logging.getLogger(__name__)
 
+# Identity is supplied by the host outbound owner, never by model JSON arguments.
+PENDING_TURN_DELIVERY = object()
+
 
 class MessagePushTool(Tool):
     name = "message_push"
@@ -108,6 +111,9 @@ class MessagePushTool(Tool):
         text_with_metadata: (
             Callable[[str, str, dict[str, object]], Awaitable[None]] | None
         ) = None,
+        image_with_metadata: (
+            Callable[[str, str, dict[str, object]], Awaitable[None]] | None
+        ) = None,
     ) -> None:
         """注册渠道的各类 sender。
         - text(chat_id, message)
@@ -125,6 +131,8 @@ class MessagePushTool(Tool):
             self._senders[channel]["stream_text"] = stream_text
         if text_with_metadata:
             self._senders[channel]["text_with_metadata"] = text_with_metadata
+        if image_with_metadata:
+            self._senders[channel]["image_with_metadata"] = image_with_metadata
         if file:
             self._senders[channel]["file"] = file
         if image:
@@ -171,6 +179,14 @@ class MessagePushTool(Tool):
         image = _nonblank_payload(kwargs.get("image"))
         role_id = str(kwargs.get("role_id") or "").strip()
         session_key = str(kwargs.get("session_key") or "").strip()
+        pending_commit = kwargs.get("_pending_turn_delivery") is PENDING_TURN_DELIVERY
+        delivery_metadata = {
+            "delivery_key": str(kwargs.get("push_delivery_key") or "").strip(),
+            "already_persisted": _is_truthy(
+                kwargs.get("push_message_already_persisted")
+            ),
+            **({"pending_commit": True} if pending_commit else {}),
+        }
 
         if not message and not file and not image:
             return "错误：message、file、image 至少提供一个"
@@ -204,25 +220,29 @@ class MessagePushTool(Tool):
         if senders is None:
             return f"渠道 {channel!r} 未注册，可用渠道：{list(self._senders) or ['（无）']}"
 
+        # Reject unsupported payloads together, before sending any supported part.
+        # Otherwise partial success could commit text or media that was never sent.
+        unsupported = [
+            f"渠道 {channel!r} 不支持发送{label}"
+            for payload, label, capabilities in (
+                (message, "文本", ("text_with_metadata", "stream_text", "text")),
+                (file, "文件", ("file",)),
+                (image, "图片", ("image_with_metadata", "image")),
+            )
+            if payload and not any(name in senders for name in capabilities)
+        ]
+        if unsupported:
+            return "发送失败：" + "；".join(unsupported)
+
         results: list[str] = []
         image_sent = False
         try:
-            if message and any(
-                name in senders
-                for name in ("text_with_metadata", "stream_text", "text")
-            ):
+            if message:
                 if "text_with_metadata" in senders:
                     await senders["text_with_metadata"](
                         chat_id,
                         message,
-                        {
-                            "delivery_key": str(
-                                kwargs.get("push_delivery_key") or ""
-                            ).strip(),
-                            "already_persisted": _is_truthy(
-                                kwargs.get("push_message_already_persisted")
-                            ),
-                        },
+                        delivery_metadata,
                     )
                 else:
                     sender_name = "stream_text" if "stream_text" in senders else "text"
@@ -232,26 +252,23 @@ class MessagePushTool(Tool):
                 results.append("文本已发送")
 
             if file:
-                if "file" not in senders:
-                    results.append(f"渠道 {channel!r} 不支持发送文件")
-                else:
-                    import os
+                import os
 
-                    name = os.path.basename(file)
-                    await senders["file"](chat_id, file, name)
-                    logger.info(f"[message_push] {channel}:{chat_id} ← file: {file!r}")
-                    results.append(f"文件 {name!r} 已发送")
+                name = os.path.basename(file)
+                await senders["file"](chat_id, file, name)
+                logger.info(f"[message_push] {channel}:{chat_id} ← file: {file!r}")
+                results.append(f"文件 {name!r} 已发送")
 
             if image:
-                if "image" not in senders:
-                    results.append(f"渠道 {channel!r} 不支持发送图片")
+                if "image_with_metadata" in senders:
+                    await senders["image_with_metadata"](
+                        chat_id, image, delivery_metadata
+                    )
                 else:
                     await senders["image"](chat_id, image)
-                    logger.info(
-                        f"[message_push] {channel}:{chat_id} ← image: {image!r}"
-                    )
-                    results.append("图片已发送")
-                    image_sent = True
+                logger.info(f"[message_push] {channel}:{chat_id} ← image: {image!r}")
+                results.append("图片已发送")
+                image_sent = True
 
         except Exception as e:
             logger.error(f"[message_push] 发送失败 {channel}:{chat_id}: {e}")
@@ -264,6 +281,7 @@ class MessagePushTool(Tool):
             and role_id
             and session_key
             and self._event_bus is not None
+            and not pending_commit
         ):
             _ = await self._event_bus.emit(
                 ExternalImagePushed(

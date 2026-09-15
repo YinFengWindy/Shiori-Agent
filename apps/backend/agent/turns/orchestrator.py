@@ -3,13 +3,21 @@ from __future__ import annotations
 import inspect
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from agent.turns.outbound import OutboundDispatch, OutboundDispatchError, OutboundPort
+from agent.turns.outbound import OutboundDispatch, OutboundPort
 from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ProactiveMessageCommitted
 from conversation.service import LegacySessionDescriptor
+from core.roles.reply_state import (
+    RoleReplyContext,
+    role_mood_catalog,
+    reply_state_metadata,
+    validate_role_reply,
+)
+from session.manager.models import build_session_message
 
 if TYPE_CHECKING:
     from agent.core.runtime_support import SessionLike
@@ -31,6 +39,16 @@ class TurnOrchestrator:
         self._outbound = deps.outbound
         self._event_bus = deps.event_bus
 
+    def capture_reply_context(self, session_key: str) -> RoleReplyContext:
+        """Capture role output constraints and the successful-state stamp per tick."""
+        session = self._session.session_manager.get_or_create(session_key)
+        return RoleReplyContext(
+            moods=role_mood_catalog(session.metadata.get("role_runtime_config", {})),
+            previous_updated_at=str(
+                session.metadata.get("current_mood_updated_at", "")
+            ),
+        )
+
     async def handle_proactive_turn(
         self,
         *,
@@ -46,9 +64,24 @@ class TurnOrchestrator:
 
         if result.outbound is None:
             raise ValueError("proactive reply result requires outbound")
+        if result.role_reply is None or result.reply_context is None:
+            raise ValueError(
+                "proactive reply requires validated role state and generation stamp"
+            )
 
         content = result.outbound.content
         media = list(result.outbound.media or [])
+        reply = validate_role_reply(
+            {
+                "content": content,
+                "mood": result.role_reply.mood,
+                "thought": result.role_reply.thought,
+            },
+            result.reply_context.moods,
+            allow_empty_content=bool(media),
+        )
+        if reply != result.role_reply:
+            raise ValueError("proactive outbound differs from the validated role reply")
         session = self._session.session_manager.get_or_create(session_key)
         source_metadata = self._build_source_metadata(
             session=session,
@@ -56,34 +89,44 @@ class TurnOrchestrator:
             channel=channel,
             chat_id=chat_id,
         )
-        # 2. reply 路径只写 proactive session；后处理只归 passive commit 管。
-        self._persist_proactive_session(
-            session=session,
+        # The transport receives only user content; all pending state stays private.
+        message = self._build_proactive_message(
             content=content,
             media=media,
             result=result,
             metadata=source_metadata,
         )
-        await self._session.session_manager.append_messages(
-            session, session.messages[-1:]
-        )
-
-        # 3. 先执行发送前 side_effects，再真正 dispatch 到 outbound。
+        message["metadata"] = {
+            **message["metadata"],
+            "mood": reply.mood,
+            "thought": reply.thought,
+        }
         await self._run_effects(result.side_effects)
         try:
-            sent = await self._dispatch_outbound(
-                channel=channel,
-                chat_id=chat_id,
-                content=content,
-                media=media,
-                metadata=source_metadata,
+            sent = await self._session.session_manager.append_messages(
+                session,
+                [message],
+                pending_messages=True,
+                expected_mood_updated_at=result.reply_context.previous_updated_at,
+                metadata_updates=reply_state_metadata(
+                    reply,
+                    updated_at=datetime.now(timezone.utc).isoformat(),
+                ),
+                before_commit=lambda: self._dispatch_outbound(
+                    channel=channel,
+                    chat_id=chat_id,
+                    content=content,
+                    media=media,
+                    metadata={**source_metadata, "pending_commit": True},
+                ),
             )
-        except OutboundDispatchError:
+        except Exception:
             await self._run_effects(result.failure_side_effects)
             raise
 
         # 4. 根据是否真正发送成功，分别执行 success / failure side_effects。
         if sent:
+            session = self._session.session_manager.get_or_create(session_key)
             if self._session.presence:
                 role_id = str(
                     getattr(session, "metadata", {}).get("role_id") or ""
@@ -133,6 +176,7 @@ class TurnOrchestrator:
             metadata={
                 "source": "proactive_retry",
                 "session_key_override": session_key,
+                "pending_commit": True,
             },
         )
 
@@ -167,15 +211,14 @@ class TurnOrchestrator:
             )
         )
 
-    def _persist_proactive_session(
+    def _build_proactive_message(
         self,
         *,
-        session: SessionLike,
         content: str,
         media: list[str],
         result: TurnResult,
         metadata: dict[str, str],
-    ) -> None:
+    ) -> dict[str, Any]:
         source_refs = []
         state_summary_tag = "none"
         if result.trace is not None and isinstance(result.trace.extra, dict):
@@ -183,7 +226,7 @@ class TurnOrchestrator:
             if isinstance(raw_refs, list):
                 source_refs = [ref for ref in raw_refs if isinstance(ref, dict)]
             state_summary_tag = str(result.trace.extra.get("state_summary_tag", "none"))
-        session.add_message(
+        return build_session_message(
             "assistant",
             content,
             media=media if media else None,

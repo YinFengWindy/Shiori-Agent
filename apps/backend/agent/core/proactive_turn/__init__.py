@@ -136,6 +136,10 @@ class ProactiveTurnPipeline:
             session_key=self._session_key,
             now_utc=datetime.now(timezone.utc),
         )
+        if self._turn_orchestrator is not None:
+            ctx.reply_context = self._turn_orchestrator.capture_reply_context(
+                self._session_key
+            )
         with diagnostic_context(
             session=self._session_key,
             flow="proactive",

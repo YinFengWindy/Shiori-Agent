@@ -31,6 +31,13 @@ class _ManagerCoreMixin:
         )
         self._cache: dict[str, Session] = {}
         self._write_locks: dict[str, asyncio.Lock] = {}
+        self._reply_locks: dict[str, asyncio.Lock] = {}
+
+    def _reply_lock(self, key: str) -> asyncio.Lock:
+        """Serialize formal state owners without holding a save lock during sends."""
+        if key not in self._reply_locks:
+            self._reply_locks[key] = asyncio.Lock()
+        return self._reply_locks[key]
 
     def _lock(self, key: str) -> asyncio.Lock:
         if key not in self._write_locks:

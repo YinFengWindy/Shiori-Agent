@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+from core.roles.reply_state import RoleReply, RoleReplyContext
+from core.roles.reply_state import InvalidRoleReply
 from typing import Any, cast
 
 import json
@@ -19,6 +22,7 @@ from agent.looping.ports import SessionServices
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import OutboundDispatch
 from agent.turns.result import TurnOutbound, TurnResult, TurnTrace
+from session.manager import SessionManager
 from proactive_v2.context import AgentTickContext
 from agent.core.drift_turn import DriftTurnPipeline, DriftTurnPipelineDeps
 from proactive_v2.drift_state import DriftStateStore
@@ -49,6 +53,73 @@ def _write_skill(root: Path, name: str = "explore-curiosity") -> Path:
         encoding="utf-8",
     )
     return skill_dir
+
+
+@pytest.mark.asyncio
+async def test_drift_inherits_tick_correction_budget_without_sending(tmp_path):
+    _write_skill(tmp_path)
+    store = DriftStateStore(tmp_path)
+    sender = AsyncMock(return_value=True)
+    pipeline = _make_drift_pipeline(
+        store=store,
+        tool_deps=DriftToolDeps(
+            drift_dir=tmp_path, store=store, send_message_fn=sender
+        ),
+    )
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""), reply_format_corrections=1
+    )
+    llm = AsyncMock(return_value={"name": "message_push", "input": {"message": "hi"}})
+    with pytest.raises(InvalidRoleReply):
+        await pipeline.run(ctx, llm)
+    assert llm.await_count == 1
+    sender.assert_not_awaited()
+    assert not ctx.drift_message_sent
+
+
+@pytest.mark.asyncio
+async def test_drift_corrects_image_only_state_without_adding_caption(tmp_path):
+    _write_skill(tmp_path)
+    store = DriftStateStore(tmp_path)
+    sender = AsyncMock(return_value=True)
+    pipeline = _make_drift_pipeline(
+        store=store,
+        tool_deps=DriftToolDeps(
+            drift_dir=tmp_path, store=store, send_message_fn=sender
+        ),
+        max_steps=4,
+    )
+    ctx = AgentTickContext(reply_context=RoleReplyContext(("平静",), ""))
+    llm = AsyncMock(
+        side_effect=[
+            {"name": "message_push", "input": {"image": "/tmp/cat.png"}},
+            {
+                "name": "message_push",
+                "input": {
+                    "image": "/tmp/cat.png",
+                    "mood": "平静",
+                    "thought": "我想给你看看。",
+                },
+            },
+            {
+                "name": "finish_drift",
+                "input": {
+                    "skill_used": "explore-curiosity",
+                    "one_line": "sent",
+                    "next": "later",
+                    "message_result": "sent",
+                },
+            },
+        ]
+    )
+    await pipeline.run(ctx, llm)
+    sender.assert_awaited_once_with(
+        RoleReply("", "平静", "我想给你看看。"), ["/tmp/cat.png"], ctx.reply_context
+    )
+    assert ctx.drift_message_sent
+    assert ctx.drift_finished
+    assert ctx.steps_taken == 3
+    assert llm.await_count == 3
 
 
 class _DummyTool(Tool):
@@ -146,7 +217,10 @@ def _make_drift_pipeline(
 
 
 def test_drift_tool_schemas_include_reused_tools(tmp_path: Path):
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     names = {
         schema["function"]["name"]
         for schema in build_drift_tool_registry(
@@ -169,7 +243,10 @@ def test_drift_tool_schemas_include_reused_tools(tmp_path: Path):
 
 
 def test_drift_message_push_schema_supports_media(tmp_path: Path):
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     schemas = build_drift_tool_registry(
         ctx=ctx,
         deps=DriftToolDeps(
@@ -191,13 +268,18 @@ def test_drift_message_push_schema_supports_media(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_drift_message_push_sends_media(tmp_path: Path):
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     send_message = AsyncMock(return_value=True)
     raw = await _exec_drift_tool(
         tmp_path,
         ctx,
         "message_push",
         {
+            "mood": "平静",
+            "thought": "我想和你聊聊。",
             "message": "新表情来啦",
             "image": "/tmp/one.png",
             "media": ["/tmp/two.png"],
@@ -206,7 +288,9 @@ async def test_drift_message_push_sends_media(tmp_path: Path):
     )
     assert json.loads(cast(Any, raw))["ok"] is True
     send_message.assert_awaited_once_with(
-        "新表情来啦", ["/tmp/one.png", "/tmp/two.png"]
+        RoleReply("新表情来啦", "平静", "我想和你聊聊。"),
+        ["/tmp/one.png", "/tmp/two.png"],
+        ctx.reply_context,
     )
 
 
@@ -295,7 +379,9 @@ def test_drift_runtime_context_binds_role_memory_from_ctx(tmp_path: Path):
 
     content = str(
         pipeline._build_runtime_context_message(
-            AgentTickContext(session_key="role:mira"),
+            AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             store.scan_skills(),
         )["content"]
     )
@@ -345,14 +431,19 @@ def test_drift_stops_when_role_memory_read_fails(
 
     with pytest.raises(RuntimeError, match="memory unavailable"):
         pipeline._build_runtime_context_message(
-            AgentTickContext(session_key="role:mira"),
+            AgentTickContext(
+                reply_context=RoleReplyContext(("平静",), ""), session_key="role:mira"
+            ),
             [],
         )
 
 
 @pytest.mark.asyncio
 async def test_drift_web_fetch_keeps_drift_level_truncation(tmp_path: Path):
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     shared = ToolRegistry()
     shared.register(_DummyTool("recall_memory"))
     shared.register(_FakeWebFetchTool())
@@ -375,7 +466,10 @@ async def test_drift_web_fetch_keeps_drift_level_truncation(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_drift_readfile_accepts_outside_path(tmp_path: Path):
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     outside = tmp_path.parent / "outside-read.txt"
     outside.write_text("outside ok\n", encoding="utf-8")
     raw = await _exec_drift_tool(tmp_path, ctx, "read_file", {"path": str(outside)})
@@ -385,7 +479,10 @@ async def test_drift_readfile_accepts_outside_path(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_drift_readfile_accepts_skill_shorthand_path(tmp_path: Path):
     _write_skill(tmp_path)
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     raw = await _exec_drift_tool(
         tmp_path, ctx, "read_file", {"path": "skills/explore-curiosity/SKILL.md"}
     )
@@ -395,7 +492,10 @@ async def test_drift_readfile_accepts_skill_shorthand_path(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_drift_readfile_accepts_absolute_path_inside_drift_dir(tmp_path: Path):
     skill_dir = _write_skill(tmp_path)
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     raw = await _exec_drift_tool(
         tmp_path, ctx, "read_file", {"path": str(skill_dir / "SKILL.md")}
     )
@@ -405,7 +505,10 @@ async def test_drift_readfile_accepts_absolute_path_inside_drift_dir(tmp_path: P
 @pytest.mark.asyncio
 async def test_finish_drift_rejects_unknown_skill(tmp_path: Path):
     store = DriftStateStore(tmp_path)
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     raw = await _exec_drift_tool(
         tmp_path,
         ctx,
@@ -427,7 +530,10 @@ async def test_finish_drift_requires_message_result_to_match_actual_send(
 ):
     _write_skill(tmp_path)
     store = DriftStateStore(tmp_path)
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     raw = await _exec_drift_tool(
         tmp_path,
         ctx,
@@ -451,7 +557,10 @@ async def test_finish_drift_requires_message_result_to_match_actual_send(
 async def test_finish_drift_rejects_missing_message_result(tmp_path: Path):
     _write_skill(tmp_path)
     store = DriftStateStore(tmp_path)
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     raw = await _exec_drift_tool(
         tmp_path,
         ctx,
@@ -468,7 +577,10 @@ async def test_finish_drift_rejects_missing_message_result(tmp_path: Path):
 async def test_finish_drift_rejects_silent_after_message_sent(tmp_path: Path):
     _write_skill(tmp_path)
     store = DriftStateStore(tmp_path)
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     ctx.drift_message_sent = True
     raw = await _exec_drift_tool(
         tmp_path,
@@ -494,7 +606,10 @@ async def test_finish_drift_rejects_silent_after_message_sent(tmp_path: Path):
 async def test_finish_drift_saves_silent_message_result(tmp_path: Path):
     _write_skill(tmp_path)
     store = DriftStateStore(tmp_path)
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     raw = await _exec_drift_tool(
         tmp_path,
         ctx,
@@ -514,7 +629,10 @@ async def test_finish_drift_saves_silent_message_result(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_drift_writefile_returns_json_error_on_directory_target(tmp_path: Path):
     _write_skill(tmp_path)
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     raw = await _exec_drift_tool(
         tmp_path,
         ctx,
@@ -550,7 +668,11 @@ async def test_drift_pipeline_runs_and_finishes(tmp_path: Path):
             ),
         ]
     )
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc), session_key="s")
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+        session_key="s",
+    )
     pipeline = _make_drift_pipeline(
         store=store,
         tool_deps=DriftToolDeps(
@@ -576,7 +698,14 @@ async def test_drift_pipeline_restricts_tools_after_send_message(tmp_path: Path)
     send_message = AsyncMock(return_value=True)
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hello\\n\\nfrom drift"}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hello\\n\\nfrom drift",
+                },
+            ),
             (
                 "finish_drift",
                 {
@@ -598,14 +727,22 @@ async def test_drift_pipeline_restricts_tools_after_send_message(tmp_path: Path)
         ),
         max_steps=5,
     )
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc), session_key="s")
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+        session_key="s",
+    )
     await pipeline.run(ctx, cast(Any, llm))
     assert llm.calls
     # 第二次 llm 调用的 schemas 只能由 DriftTurnPipeline 约束为 write_file/edit_file/finish_drift；
     # FakeLLM 不记录 schemas，这里用行为结果兜底：send 后仍正常 finish。
     assert ctx.drift_finished is True
     assert store.load_drift()["recent_runs"][-1]["message_result"] == "sent"
-    send_message.assert_awaited_once_with("hello\n\nfrom drift", [])
+    send_message.assert_awaited_once_with(
+        RoleReply("hello\n\nfrom drift", "平静", "我想和你聊聊。"),
+        [],
+        ctx.reply_context,
+    )
 
 
 @pytest.mark.asyncio
@@ -648,7 +785,11 @@ async def test_drift_pipeline_does_not_force_finish_at_step_limit(tmp_path: Path
         ),
         max_steps=3,
     )
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc), session_key="s")
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+        session_key="s",
+    )
     await pipeline.run(ctx, cast(Any, llm))
     assert "finish_drift" in captured[2][0]
     assert "read_file" in captured[2][0]
@@ -711,23 +852,7 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
     _write_skill(tmp_path)
     sender = AsyncMock(return_value=True)
 
-    class _Session:
-        def __init__(self) -> None:
-            self.messages: list[dict] = []
-            self.metadata: dict[str, object] = {}
-            self.last_consolidated = 0
-            self.presence = None
-
-        def add_message(self, role: str, content: str, media=None, **kwargs) -> None:
-            msg = {"role": role, "content": content}
-            msg.update(kwargs)
-            self.messages.append(msg)
-
-    session = _Session()
-    session_manager = SimpleNamespace(
-        get_or_create=lambda _key: session,
-        append_messages=AsyncMock(return_value=None),
-    )
+    session_manager = SessionManager(tmp_path)
 
     class _Outbound:
         async def dispatch(self, outbound: OutboundDispatch) -> bool:
@@ -745,9 +870,14 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
         )
     )
 
-    async def send_message(content: str, media: list[str] | None = None) -> bool:
+    async def send_message(
+        reply: RoleReply, media: list[str], reply_context: RoleReplyContext
+    ) -> bool:
+        content = reply.content
         return await orchestrator.handle_proactive_turn(
             result=TurnResult(
+                role_reply=RoleReply(content, "平静", "我想和你聊聊。"),
+                reply_context=RoleReplyContext(("平静",), ""),
                 decision="reply",
                 outbound=TurnOutbound(
                     session_key="test_session", content=content, media=list(media or [])
@@ -763,7 +893,14 @@ async def test_agent_tick_drift_send_message_skips_normal_post_loop(tmp_path: Pa
     gate.should_act.return_value = (True, {})
     llm = FakeLLM(
         [
-            ("message_push", {"message": "hello from drift"}),
+            (
+                "message_push",
+                {
+                    "mood": "平静",
+                    "thought": "我想和你聊聊。",
+                    "message": "hello from drift",
+                },
+            ),
             (
                 "finish_drift",
                 {
@@ -921,7 +1058,10 @@ def test_drift_state_store_includes_builtin_skills_when_enabled(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_drift_readfile_accepts_builtin_skill_shorthand_path(tmp_path: Path):
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     store = DriftStateStore(
         tmp_path,
         builtin_skills_dir=BUILTIN_SKILLS_DIR,
@@ -953,7 +1093,11 @@ async def test_drift_pipeline_filters_skills_by_mcp(tmp_path: Path):
         ),
         max_steps=5,
     )
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc), session_key="s")
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+        session_key="s",
+    )
     entered = await pipeline.run(ctx, cast(Any, FakeLLM([])))
     assert entered is False  # all skills filtered, drift should skip
 
@@ -983,7 +1127,11 @@ async def test_drift_pipeline_keeps_skills_when_mcp_available(tmp_path: Path):
         tool_deps=DriftToolDeps(drift_dir=tmp_path, store=store, shared_tools=shared),
         max_steps=5,
     )
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc), session_key="s")
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+        session_key="s",
+    )
     entered = await pipeline.run(ctx, cast(Any, llm))
     assert entered is True
     assert ctx.drift_finished is True
@@ -996,7 +1144,10 @@ async def test_mount_server_adds_tools_and_schemas(tmp_path: Path):
     store = DriftStateStore(tmp_path)
     shared = _build_shared_tools_with_mcp("calendar")
     mounted: set[str] = set()
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     reg = build_drift_tool_registry(
         ctx=ctx,
         deps=DriftToolDeps(drift_dir=tmp_path, store=store, shared_tools=shared),
@@ -1018,7 +1169,10 @@ async def test_mount_server_idempotent(tmp_path: Path):
     """Mounting same server twice should report no new tools."""
     shared = _build_shared_tools_with_mcp("calendar")
     mounted: set[str] = set()
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     reg = build_drift_tool_registry(
         ctx=ctx,
         deps=DriftToolDeps(
@@ -1037,7 +1191,10 @@ async def test_mount_server_idempotent(tmp_path: Path):
 async def test_mount_server_rejects_unknown_server(tmp_path: Path):
     shared = _build_shared_tools()  # no MCP
     mounted: set[str] = set()
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     reg = build_drift_tool_registry(
         ctx=ctx,
         deps=DriftToolDeps(
@@ -1053,7 +1210,10 @@ async def test_mount_server_rejects_unknown_server(tmp_path: Path):
 async def test_mount_server_not_registered_without_mcp(tmp_path: Path):
     """When no MCP servers connected, mount_server tool should not appear."""
     shared = _build_shared_tools()
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc))
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+    )
     reg = build_drift_tool_registry(
         ctx=ctx,
         deps=DriftToolDeps(
@@ -1095,7 +1255,11 @@ async def test_drift_pipeline_executes_mounted_mcp_tool(tmp_path: Path):
         tool_deps=DriftToolDeps(drift_dir=tmp_path, store=store, shared_tools=shared),
         max_steps=10,
     )
-    ctx = AgentTickContext(now_utc=datetime.now(timezone.utc), session_key="s")
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+        now_utc=datetime.now(timezone.utc),
+        session_key="s",
+    )
     await pipeline.run(ctx, cast(Any, llm))
     assert ctx.drift_finished is True
     # After mount (step 1), step 2 should see MCP tools in schemas
@@ -1172,16 +1336,7 @@ def _build_factory(tmp_path: Path, *, sender_ok: bool, state_store):
     sender = AsyncMock()
     sender.send.return_value = sender_ok
 
-    session = SimpleNamespace(
-        messages=[],
-        add_message=lambda *args, **kwargs: session.messages.append(
-            {"args": args, "kwargs": kwargs}
-        ),
-    )
-    session_manager = SimpleNamespace(
-        get_or_create=lambda _key: session,
-        append_messages=AsyncMock(return_value=None),
-    )
+    session_manager = SessionManager(tmp_path)
 
     class _Outbound:
         async def dispatch(self, outbound) -> bool:
@@ -1242,7 +1397,11 @@ async def test_factory_drift_send_message_returns_false_when_send_fails(tmp_path
     factory, sender = _build_factory(tmp_path, sender_ok=False, state_store=state)
     send_message = factory._build_drift_send_message_fn()
     assert send_message is not None
-    ok = await send_message("hello")
+    ok = await send_message(
+        RoleReply("hello", "平静", "我想和你聊聊。"),
+        [],
+        RoleReplyContext(("平静",), ""),
+    )
     assert ok is False
     state.mark_delivery.assert_not_called()
     sender.send.assert_called_once_with("hello")
@@ -1256,7 +1415,11 @@ async def test_factory_drift_send_message_marks_delivery_on_success(tmp_path: Pa
     factory, sender = _build_factory(tmp_path, sender_ok=True, state_store=state)
     send_message = factory._build_drift_send_message_fn()
     assert send_message is not None
-    ok = await send_message("hello")
+    ok = await send_message(
+        RoleReply("hello", "平静", "我想和你聊聊。"),
+        [],
+        RoleReplyContext(("平静",), ""),
+    )
     assert ok is True
     state.mark_delivery.assert_called_once()
     sender.send.assert_called_once_with("hello")
@@ -1286,7 +1449,11 @@ async def test_factory_drift_send_message_uses_bound_transport_from_role(
     send_message = factory._build_drift_send_message_fn()
     assert send_message is not None
 
-    ok = await send_message("hello")
+    ok = await send_message(
+        RoleReply("hello", "平静", "我想和你聊聊。"),
+        [],
+        RoleReplyContext(("平静",), ""),
+    )
 
     assert ok is True
     assert captured["channel"] == "qq"

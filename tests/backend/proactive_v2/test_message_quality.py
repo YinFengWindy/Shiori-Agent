@@ -8,6 +8,8 @@ tests/proactive_v2/test_message_quality.py
 
 from __future__ import annotations
 
+from core.roles.reply_state import RoleReplyContext
+
 import json
 from unittest.mock import AsyncMock
 
@@ -30,7 +32,9 @@ async def test_get_recent_chat_filters_out_proactive_pushes():
         {"role": "assistant", "content": "心率 130 偏高", "proactive": True},
     ]
     fake_chat_fn = AsyncMock(return_value=mixed)
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
 
     raw = await _get_recent_chat(ctx, {"n": 20}, recent_chat_fn=fake_chat_fn)
     result = json.loads(raw)
@@ -55,7 +59,9 @@ async def test_get_recent_chat_keeps_passive_assistant_replies():
         {"role": "assistant", "content": "CS2 比赛结果", "proactive": True},  # 主动推送
     ]
     fake_chat_fn = AsyncMock(return_value=mixed)
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
 
     raw = await _get_recent_chat(ctx, {}, recent_chat_fn=fake_chat_fn)
     result = json.loads(raw)
@@ -75,7 +81,9 @@ async def test_get_recent_chat_filters_context_frames():
         {"role": "user", "content": "真实用户消息"},
     ]
     fake_chat_fn = AsyncMock(return_value=mixed)
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
 
     raw = await _get_recent_chat(ctx, {}, recent_chat_fn=fake_chat_fn)
     result = json.loads(raw)
@@ -91,7 +99,9 @@ async def test_get_recent_chat_empty_after_filtering_all_proactive():
         {"role": "assistant", "content": "push 2", "proactive": True},
     ]
     fake_chat_fn = AsyncMock(return_value=all_proactive)
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
 
     raw = await _get_recent_chat(ctx, {}, recent_chat_fn=fake_chat_fn)
     result = json.loads(raw)
@@ -107,7 +117,9 @@ async def test_get_recent_chat_all_user_messages_pass_through():
         {"role": "user", "content": "ok"},
     ]
     fake_chat_fn = AsyncMock(return_value=user_only)
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
 
     raw = await _get_recent_chat(ctx, {}, recent_chat_fn=fake_chat_fn)
     result = json.loads(raw)
@@ -126,7 +138,9 @@ async def test_get_recent_chat_adds_beijing_timestamp_for_prompt_context():
             }
         ]
     )
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
 
     raw = await _get_recent_chat(ctx, {}, recent_chat_fn=fake_chat_fn)
     result = json.loads(raw)
@@ -149,7 +163,9 @@ async def test_get_recent_chat_mixed_passive_and_proactive():
         {"role": "user", "content": "看到了"},
     ]
     fake_chat_fn = AsyncMock(return_value=mixed)
-    ctx = AgentTickContext()
+    ctx = AgentTickContext(
+        reply_context=RoleReplyContext(("平静",), ""),
+    )
 
     raw = await _get_recent_chat(ctx, {}, recent_chat_fn=fake_chat_fn)
     result = json.loads(raw)

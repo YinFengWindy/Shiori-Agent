@@ -328,9 +328,18 @@ def make_proactive_pipeline(
         proactive_gates = relationship_gate_chain()
 
     session = _FakeSession(session_key)
+
+    async def append_messages(session, messages, **kwargs):
+        before_commit = kwargs.get("before_commit")
+        if before_commit is not None and not await before_commit():
+            return False
+        session.messages.extend(messages)
+        session.metadata.update(kwargs.get("metadata_updates") or {})
+        return True
+
     session_manager = SimpleNamespace(
         get_or_create=lambda _key: session,
-        append_messages=AsyncMock(return_value=None),
+        append_messages=AsyncMock(side_effect=append_messages),
     )
     session_svc = SessionServices(
         session_manager=cast(Any, session_manager),

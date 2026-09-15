@@ -12,6 +12,7 @@ from agent.tools.registry import ToolRegistry
 from proactive_v2.context import AgentTickContext
 from proactive_v2.drift_state import DriftStateStore
 from proactive_v2.outbound_text import normalize_outbound_text
+from proactive_v2.reply_output import parse_push_reply, reply_properties
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,9 @@ class SendMessageTool(Tool):
             "type": "object",
             "properties": {
                 "message": {"type": "string", "description": "要发送的消息内容"},
+                **reply_properties(
+                    self._ctx.reply_context.moods if self._ctx.reply_context else ()
+                ),
                 "image": {
                     "type": "string",
                     "description": "要发送的一张图片本地路径或 URL",
@@ -67,7 +71,7 @@ class SendMessageTool(Tool):
                     "description": "目标会话 ID（Drift 上下文可省略，已由配置预设）",
                 },
             },
-            "required": [],
+            "required": ["mood", "thought"],
         }
 
     async def execute(
@@ -76,6 +80,8 @@ class SendMessageTool(Tool):
         content: str = "",
         image: str = "",
         media: list[str] | str | None = None,
+        mood: str = "",
+        thought: str = "",
         **_: Any,
     ) -> str:
         text = normalize_outbound_text(message or content or "").strip()
@@ -85,7 +91,7 @@ class SendMessageTool(Tool):
             return json.dumps(
                 {"error": "message_push not configured"}, ensure_ascii=False
             )
-        if self._ctx.drift_message_sent:
+        if self._ctx.drift_message_attempted:
             logger.info("[drift_tools] message_push rejected: already used")
             return json.dumps(
                 {"error": "message_push already used in this drift run"},
@@ -96,11 +102,17 @@ class SendMessageTool(Tool):
             return json.dumps(
                 {"error": "message or media is required"}, ensure_ascii=False
             )
-        ok = await self._send_message_fn(text, media_paths)
+        reply = parse_push_reply(
+            {"message": text, "media": media_paths, "mood": mood, "thought": thought},
+            self._ctx,
+        )
+        self._ctx.drift_message_attempted = True
+        ok = await self._send_message_fn(reply, media_paths, self._ctx.reply_context)
         if not ok:
             logger.warning("[drift_tools] message_push failed")
             return json.dumps({"error": "message_push failed"}, ensure_ascii=False)
         self._ctx.drift_message_sent = True
+        self._ctx.role_reply = reply
         logger.info("[drift_tools] message_push ok")
         return json.dumps({"ok": True}, ensure_ascii=False)
 
