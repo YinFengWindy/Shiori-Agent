@@ -141,7 +141,12 @@ controlled scheme and the exact import-map hash; production adds neither
 Initial roster loading, bridge reconnection, `runtime.applied`, and plugin toggles
 share one serialized refresh path. Disable/removal cleans this window's registry
 entries and CSS. JavaScript module evaluation follows browser caching; replace a
-plugin package and restart the application to load its new code. A failed import,
+plugin package and restart the application to load its new code.
+Package identity and module URLs survive disable/re-enable for the app session;
+changing its directory, version, or renderer declarations requires a restart.
+Initial JavaScript file hashes also cover chunks not yet imported. New or changed
+scripts are refused with a restart-required response instead of mixing versions.
+A failed import,
 stylesheet, or export validation removes that plugin's partial UI and preserves
 the original error as `UI FAILED` in plugin management and a renderer diagnostic.
 Other plugins continue loading. The backend state stays separately visible;

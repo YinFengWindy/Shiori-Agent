@@ -12,13 +12,25 @@ test("admission retains relative resources, stable URLs and revokes removed or u
     await mkdir(join(directory, "ui", "dist"), { recursive: true });
     await writeFile(join(directory, "ui", "dist", "index.mjs"), "export default {}", "utf8");
     await writeFile(join(directory, "ui", "dist", "chunk.js"), "export const answer = 42", "utf8");
+    await writeFile(join(directory, "ui", "dist", "lazy.mjs"), "export const version = 1", "utf8");
     await writeFile(join(directory, "secret.py"), "private", "utf8");
-    const row = { id: "demo", source: "workspace", enabled: true, state: "ACTIVE", directory, renderer: { ui: { entry: "ui/dist/index.mjs", css: [] } } };
+    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, renderer: { ui: { entry: "ui/dist/index.mjs", css: [] } } };
     const resources = new PluginUiResources(join(root, "plugins"));
     const [entry] = await resources.admit([row]);
     assert.equal((await resources.load(entry.entry)).status, 200);
+    // The first request for a lazy chunk must not load a newer on-disk version.
+    await writeFile(join(directory, "ui", "dist", "lazy.mjs"), "export const version = 2", "utf8");
+    const changedChunk = await resources.load(new URL("lazy.mjs", entry.entry).href);
+    assert.equal(changedChunk.status, 409);
+    assert.match(await changedChunk.text(), /restart/);
+    await writeFile(join(directory, "ui", "dist", "new.mjs"), "export const added = true", "utf8");
+    assert.equal((await resources.load(new URL("new.mjs", entry.entry).href)).status, 409);
     assert.equal(await (await resources.load(new URL("chunk.js", entry.entry).href)).text(), "export const answer = 42");
     assert.deepEqual(await resources.admit([row]), [entry]);
+    assert.deepEqual(await resources.admit([{ ...row, enabled: false, state: "DISABLED" }]), []);
+    assert.equal((await resources.load(entry.entry)).status, 403);
+    assert.deepEqual(await resources.admit([row]), [entry]);
+    assert.equal((await resources.load(entry.entry)).status, 200);
     assert.equal((await resources.load(new URL("../../secret.py", entry.entry).href)).status, 403);
     assert.equal((await resources.load(entry.entry.replace("index.mjs", "%2e%2e%2fsecret.py"))).status, 403);
     const outside = join(root, "outside");
@@ -31,5 +43,30 @@ test("admission retains relative resources, stable URLs and revokes removed or u
     assert.deepEqual(await resources.admit([row, row]), []);
     await resources.admit([row]);
     assert.deepEqual(await resources.admit([]), []);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("a changed package version or directory requires a new application session", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shiori-ui-version-"));
+  try {
+    const directory = join(root, "demo");
+    const moved = join(root, "moved");
+    await mkdir(directory);
+    await mkdir(moved);
+    await writeFile(join(directory, "index.mjs"), "export default {}", "utf8");
+    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, renderer: { ui: { entry: "index.mjs", css: [] } } };
+    const resources = new PluginUiResources(root);
+    const [entry] = await resources.admit([row]);
+    await resources.admit([{ ...row, enabled: false, state: "DISABLED" }]);
+    for (const changed of [{ ...row, version: "2.0.0" }, { ...row, directory: moved }]) {
+      const [rejected] = await resources.admit([changed]);
+      assert.match(rejected.error ?? "", /restart the application/);
+      assert.equal(rejected.entry, "");
+      assert.equal((await resources.load(entry.entry)).status, 403);
+    }
+    assert.deepEqual(await resources.admit([row]), [entry]);
+    const [restarted] = await new PluginUiResources(root).admit([{ ...row, version: "2.0.0" }]);
+    assert.equal(restarted.error, undefined);
+    assert.notEqual(restarted.entry, entry.entry);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

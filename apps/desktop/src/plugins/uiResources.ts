@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { pluginUiPeerExports, pluginUiScheme, type RuntimePluginUi } from "./uiContract.js";
+import { matchesPluginUiCode, snapshotPluginUiCode } from "./uiCodeSnapshot.js";
 
-type Grant = { token: string; requested: string; canonical: string; workspace: string };
+type Grant = { token: string; requested: string; canonical: string; workspace: string; code: ReadonlyMap<string, string> };
 const mimeTypes: Record<string, string> = {
   ".mjs": "text/javascript", ".js": "text/javascript", ".css": "text/css",
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
@@ -18,6 +19,8 @@ function within(root: string, path: string) {
 /** Stable package grants preserve relative chunks and CSS assets without granting file access. */
 export class PluginUiResources {
   private grants = new Map<string, Grant>();
+  // Code identity lives for the app session, independently of current authorization.
+  private readonly packages = new Map<string, { identity: string; grant: Grant }>();
   constructor(private readonly workspacePlugins: string) {}
 
   /** Reconciles grants with the current authoritative backend roster. */
@@ -34,13 +37,16 @@ export class PluginUiResources {
         const workspace = await realpath(this.workspacePlugins);
         const canonical = await realpath(row.directory);
         if (!within(workspace, canonical)) throw new Error("Plugin directory escapes workspace plugins");
-        const old = this.grants.get(row.directory);
-        const grant = old?.canonical === canonical ? old : { token: randomUUID(), requested: row.directory, canonical, workspace };
+        const identity = JSON.stringify([row.directory, canonical, workspace, row.version ?? "", ui.entry, ui.css]);
+        const old = this.packages.get(row.id);
+        if (old && old.identity !== identity) throw new Error("Plugin package changed; restart the application to load its new code");
+        const grant = old?.grant ?? { token: randomUUID(), requested: row.directory, canonical, workspace, code: await snapshotPluginUiCode(canonical) };
         const url = (path: string) => {
           if (!within(canonical, resolve(canonical, path)) || path.includes("\\") || path.split("/").some((part) => !part || part === "." || part === "..")) throw new Error("Plugin resource escapes package");
           return `${pluginUiScheme}://plugin/${grant.token}/${path.split("/").map(encodeURIComponent).join("/")}`;
         };
         result.push({ pluginId: row.id, entry: url(ui.entry), css: ui.css.map(url) });
+        this.packages.set(row.id, { identity, grant });
         next.set(row.directory, grant);
       } catch (error) {
         result.push({ pluginId: String(row.id), entry: "", css: [], error: error instanceof Error ? error.message : String(error) });
@@ -68,7 +74,9 @@ export class PluginUiResources {
       if (await realpath(grant.requested) !== grant.canonical || await realpath(this.workspacePlugins) !== grant.workspace || !within(grant.canonical, current)) return new Response("Plugin resource authorization is stale", { status: 403 });
       const mime = mimeTypes[extname(current)];
       if (!mime || !(await stat(current)).isFile()) return new Response("Unsupported plugin resource", { status: 403 });
-      return new Response(await readFile(current), { headers: { ...headers, "Content-Type": mime } });
+      const bytes = await readFile(current);
+      if (mime === "text/javascript" && !matchesPluginUiCode(grant.code, current, bytes)) return new Response("Plugin code changed; restart the application to load it", { status: 409, statusText: "Plugin code changed; restart required" });
+      return new Response(bytes, { headers: { ...headers, "Content-Type": mime } });
     } catch {
       return new Response("Plugin resource is unavailable", { status: 404 });
     }
