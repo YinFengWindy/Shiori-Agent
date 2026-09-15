@@ -1,5 +1,6 @@
 import { BridgeError, invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 import type { JsonSchema } from "./jsonSchemaForm";
+import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 
 /** Stable error exposed by the plugin bridge client. */
 export class PluginBridgeError extends BridgeError {
@@ -35,6 +36,10 @@ export type PluginSummary = {
   canToggle: boolean;
   state: string;
   error: string;
+  /** Renderer-stage failure; backend activation status remains independently visible. */
+  rendererError?: string;
+  /** Main-process granted URLs; never inferred from a renderer-supplied directory. */
+  rendererUi?: RuntimePluginUi;
   diagnostic: PluginDiagnostic | null;
   hasConfigSchema: boolean;
   /** Whether an active plugin can be replaced without restarting the process. */
@@ -103,6 +108,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         id: string; name: string; version: string; description: string;
         candidate_id: string; source: "builtin" | "workspace"; directory: string;
         can_toggle: boolean; diagnostic: PluginDiagnostic | null;
+        renderer_ui?: RuntimePluginUi;
         enabled: boolean; state: string; error: string; has_config_schema: boolean; supports_hot_unload: boolean;
       }> }>(resolveInvoke(), "plugins.list", {});
       return payload.plugins.map((item) => ({
@@ -118,6 +124,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         state: item.state,
         error: item.error,
         diagnostic: item.diagnostic,
+        rendererUi: item.renderer_ui,
         hasConfigSchema: item.has_config_schema,
         supportsHotUnload: item.supports_hot_unload,
       }));

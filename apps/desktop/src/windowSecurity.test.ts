@@ -31,6 +31,9 @@ describe("desktop CSP", () => {
 
     assert.match(policy, /img-src[^;]*shiori-asset:/);
     assert.doesNotMatch(policy, /script-src[^;]*'unsafe-inline'/);
+    assert.match(policy, /script-src[^;]*shiori-plugin:/);
+    assert.match(policy, /script-src[^;]*'sha256-/);
+    assert.doesNotMatch(policy, /script-src[^;]*(unsafe-eval|file:|https:|data:|blob:)/);
     assert.match(policy, /connect-src 'self'/);
     assert.doesNotMatch(policy, /connect-src[^;]*shiori-asset:/);
     assert.match(policy, /object-src 'none'/);
@@ -38,7 +41,7 @@ describe("desktop CSP", () => {
 
   it("allows the Vite preamble and exact websocket origin only in development", () => {
     const policy = buildDesktopContentSecurityPolicy("http://127.0.0.1:5178/");
-    assert.match(policy, /script-src 'self' 'unsafe-inline'/);
+    assert.match(policy, /script-src[^;]*'unsafe-inline'/);
     assert.match(policy, /connect-src 'self' ws:\/\/127\.0\.0\.1:5178/);
   });
 

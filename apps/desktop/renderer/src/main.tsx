@@ -37,6 +37,7 @@ import { registerRendererGlobalDiagnostics } from "./diagnostics/rendererGlobalD
 // Registers every plugin's compiled-in settings.section/nav.page contributions
 // into pluginUiRegistry before any component (nav rail, settings sidebar) reads it.
 import "./plugins/pluginUiModules";
+import { initializeRuntimePluginUi } from "./plugins/runtimePluginUiBootstrap";
 import { createRoleFormFromRole } from "./roles/roleFormState";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { useRoleFormAdapters } from "./roles/useRoleFormAdapters";
@@ -697,6 +698,7 @@ function App(): React.ReactElement {
 
 registerRendererGlobalDiagnostics();
 
+initializeRuntimePluginUi();
 createRoot(document.getElementById("root") as HTMLElement).render(
   <DesktopErrorBoundary>
     <App />

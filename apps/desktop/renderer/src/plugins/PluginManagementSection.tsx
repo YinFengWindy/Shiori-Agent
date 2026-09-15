@@ -30,6 +30,7 @@ function PluginRow({
           />
         </div>
         {plugin.error ? <span className="line-clamp-2 break-words text-body text-danger-text">{plugin.error}</span> : null}
+        {plugin.rendererError ? <span className="break-words text-body text-danger-text">UI FAILED · {plugin.rendererError}</span> : null}
         <details className="text-caption text-ink-muted">
           <summary className="cursor-pointer">详情</summary>
           <div className="mt-2 grid gap-1 break-all">

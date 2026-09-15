@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
-import { setPluginEnabledSnapshot } from "./pluginEnabledStateStore";
+import { refreshPluginEnabledState } from "./pluginEnabledStateStore";
 
 /**
  * Loads the plugin roster and lets the caller hot toggle one plugin at a
@@ -16,9 +16,8 @@ export function usePluginManagementController() {
 
   const reload = useCallback(async () => {
     try {
-      const list = await client.listPlugins();
+      const list = await refreshPluginEnabledState(client);
       setPlugins(list);
-      setPluginEnabledSnapshot(list);
       setError("");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));

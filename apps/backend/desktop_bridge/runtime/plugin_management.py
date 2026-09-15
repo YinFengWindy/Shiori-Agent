@@ -70,6 +70,9 @@ class RuntimePluginManagement:
                     "name": record.name,
                     "version": record.manifest.version or "",
                     "description": record.manifest.desc or "",
+                    # Static declarations are data only; Electron grants resources
+                    # exclusively for unique ACTIVE workspace candidates.
+                    "renderer": record.manifest.metadata.get("renderer", {}),
                     "enabled": self._enabled(plugin_id),
                     "can_toggle": runtime_state
                     not in {"CONFLICT", "UNTRUSTED", "BLOCKED"},
