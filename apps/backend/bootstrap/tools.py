@@ -604,6 +604,11 @@ def build_core_runtime(
     plugin_manager = PluginKernel(
         plugin_dirs=_resolve_plugin_dirs(workspace),
         external_plugin_dirs=[workspace / "plugins"],
+        discovery_snapshot=(
+            shared.plugin_manager.discover()
+            if shared is not None and shared.plugin_manager is not None
+            else None
+        ),
         services=HostServices(
             event_bus=event_bus,
             tool_registry=tools,

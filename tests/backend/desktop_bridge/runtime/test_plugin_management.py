@@ -599,3 +599,82 @@ async def test_workspace_candidates_are_visible_unsafe_and_reload_safe(
     finally:
         await service.aclose()
         await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_workspace_directory_changes_wait_for_application_restart(
+    tmp_path, monkeypatch
+):
+    _stage_plugin_dirs(tmp_path, monkeypatch, with_rpc_demo=True)
+    builtin, external = tmp_path / "plugin_dirs", tmp_path / "plugins"
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda _: [builtin, external]
+    )
+
+    def stage_external(name, plugin_id, *, version="1.0.0", runtime=">=2.0.0 <3.0.0"):
+        package = external / name
+        (package / "backend").mkdir(parents=True, exist_ok=True)
+        (package / "manifest.yaml").write_text(
+            f"api: 2\nid: {plugin_id}\ncapabilities: []\npackage_contract: 1\n"
+            f"version: {version}\nruntime_api: '{runtime}'\nentry: backend/plugin.py\n",
+            encoding="utf-8",
+        )
+        (package / "backend/plugin.py").write_text(
+            "async def setup(ctx): pass\n", encoding="utf-8"
+        )
+        return package
+
+    stage_external("manual", "manual")
+    removed = stage_external("removed", "removed")
+    service, _, app = await _start_service(tmp_path)
+    try:
+        before = (await _request(service, "plugins.list")).payload["plugins"]
+        before_by_id = {row["id"]: row for row in before}
+        assert before_by_id["rpc_demo"]["state"] == "ACTIVE"
+        assert before_by_id["manual"]["state"] == "UNTRUSTED"
+        stage_external("new-copy", "rpc_demo")
+        stage_external("manual", "manual", version="2.0.0", runtime=">=3.0.0 <4.0.0")
+        shutil.rmtree(removed)
+
+        for index, enabled in enumerate((False, True)):
+            changed = await _request(
+                service,
+                "plugins.setEnabled",
+                {
+                    "plugin_id": "qqbot",
+                    "enabled": enabled,
+                    "operation_id": f"toggle-{index}",
+                },
+            )
+            assert changed.error is None
+            assert changed.payload["generation"] == index + 2
+            rows = (await _request(service, "plugins.list")).payload["plugins"]
+            assert {row["candidate_id"] for row in rows} == {
+                row["candidate_id"] for row in before
+            }
+            by_id = {row["id"]: row for row in rows}
+            for plugin_id in ("rpc_demo", "hello", "manual", "removed"):
+                assert by_id[plugin_id] == before_by_id[plugin_id]
+            ping = await _request(service, "plugin.rpc_demo.ping", {"value": index})
+            assert ping.error is None
+            assert ping.payload == {"pong": index}
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+    restarted, _, restarted_app = await _start_service(tmp_path)
+    try:
+        rows = (await _request(restarted, "plugins.list")).payload["plugins"]
+        conflict = [row for row in rows if row["id"] == "rpc_demo"]
+        assert len(conflict) == 2
+        assert {row["state"] for row in conflict} == {"CONFLICT"}
+        assert not any(row["id"] == "removed" for row in rows)
+        manual = next(row for row in rows if row["id"] == "manual")
+        assert manual["version"] == "2.0.0"
+        assert manual["state"] == "BLOCKED"
+        assert manual["diagnostic"]["code"] == "incompatible_runtime"
+        ping = await _request(restarted, "plugin.rpc_demo.ping")
+        assert ping.error.code == "unknown_method"
+    finally:
+        await restarted.aclose()
+        await restarted_app.shutdown()

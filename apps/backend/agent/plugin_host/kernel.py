@@ -12,7 +12,8 @@ import itertools
 import logging
 import sys
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from copy import deepcopy
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -106,12 +107,26 @@ class PluginKernel:
         namespace: str = "",
         strict: bool = False,
         external_plugin_dirs: list[Path] | None = None,
+        discovery_snapshot: list[PluginRecord] | None = None,
     ) -> None:
         self._dirs = plugin_dirs
         self._external_dirs = external_plugin_dirs or []
-        self._records: list[PluginRecord] | None = None
         self._services = services
         self._namespace = namespace or f"g{next(_KERNEL_NAMESPACE_COUNTER)}"
+        # Settings generations retain the application's startup admission, but
+        # own independent descriptors and import namespaces. Only a fresh app
+        # without a supplied snapshot scans added/updated/deleted directories.
+        self._records = (
+            [
+                replace(
+                    record,
+                    import_path=f"akasic_plugin_{self._namespace}_{record.manifest.id}",
+                )
+                for record in deepcopy(discovery_snapshot)
+            ]
+            if discovery_snapshot is not None
+            else None
+        )
         self._strict = strict
         self._handles: dict[str, PluginHandle] = {}
         self._active_order: list[str] = []
@@ -122,7 +137,7 @@ class PluginKernel:
     # ── 发现 ──────────────────────────────────────────────────────────────
 
     def discover(self) -> list[PluginRecord]:
-        """Return this generation's statically admitted directory candidates."""
+        """Return the startup candidates, isolated for this runtime generation."""
         if self._records is None:
             self._records = discover_plugins(
                 self._dirs,

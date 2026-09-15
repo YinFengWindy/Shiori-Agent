@@ -23,7 +23,7 @@ plugins/example/
 
 工作区 `plugins/<目录>/manifest.yaml` 声明的外部包必须通过 [Package Contract v1](plugin-runtime-contract.md) 静态检查；合法包显示为 `UNTRUSTED`，当前版本不提供授信操作，也不导入它的后端或 renderer。配置 `enabled = true` 不代表信任。无效 manifest、入口和依赖显示为 `BLOCKED`；只有旧 `kv.json`、没有 manifest 的目录被忽略，数据不会因此删除。
 
-按 manifest ID 检测全部候选：同 ID 的所有包均为 `CONFLICT`，不选择内置或工作区优先者；同目录名但不同 ID 的包分别显示。插件管理保留各候选的版本、来源、实际目录和结构化诊断，拒绝切换未通过准入的候选。目录级代码新增、替换、删除后重启应用；当前运行代保留自己的发现快照。
+按 manifest ID 检测全部候选：同 ID 的所有包均为 `CONFLICT`，不选择内置或工作区优先者；同目录名但不同 ID 的包分别显示。插件管理保留各候选的版本、来源、实际目录和结构化诊断，拒绝切换未通过准入的候选。目录级代码新增、替换、删除后重启应用；配置保存或启停插件产生的新运行代沿用本次应用启动的候选、manifest 和准入快照，应用重启后才重新扫描。各运行代的导入命名空间、句柄和 effect 仍独立。
 
 ```yaml
 api: 2

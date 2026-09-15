@@ -1090,3 +1090,59 @@ async def test_identical_directory_names_keep_independent_runtime_handles(tmp_pa
     assert kernel.loaded_count == 1
     assert kernel.states()[0]["id"] == "plugin_1"
     await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_discovery_snapshot_preserves_admission_without_sharing_runtime_state(
+    tmp_path,
+):
+    import sys
+
+    from agent.plugin_host import HostServices, PluginKernel
+
+    stage_plugin_package(PLUGIN_FIXTURES / "hello", tmp_path / "hello")
+    first_bus, next_bus = EventBus(), EventBus()
+    first = make_kernel([tmp_path], event_bus=first_bus)
+    await first.load_all()
+    successor = PluginKernel(
+        [tmp_path],
+        services=HostServices(event_bus=next_bus),
+        discovery_snapshot=first.discover(),
+    )
+    first_record, next_record = first.discover()[0], successor.discover()[0]
+    assert first_record is not next_record
+    assert first_record.manifest is not next_record.manifest
+    assert first_record.import_path != next_record.import_path
+    # The manifest metadata contains nested lists; shallow descriptor copying
+    # would let one generation silently modify another generation's snapshot.
+    next_record.manifest.metadata["capabilities"].append("kv")
+    assert first_record.manifest.metadata["capabilities"] == ["events"]
+    await successor.load_all()
+    assert first_record.import_path in sys.modules
+    assert next_record.import_path in sys.modules
+    try:
+        await first.terminate_all(force=True)
+        assert first_record.import_path not in sys.modules
+        assert next_record.import_path in sys.modules
+        result = await next_bus.emit(before_turn_ctx())
+        assert result.extra_metadata["hello_touched"] is True
+        assert successor.loaded_count == 1
+    finally:
+        await successor.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_empty_startup_snapshot_does_not_rescan_new_packages(tmp_path):
+    from agent.plugin_host import HostServices, PluginKernel
+
+    first = make_kernel([tmp_path], event_bus=EventBus())
+    assert first.discover() == []
+    stage_plugin_package(PLUGIN_FIXTURES / "hello", tmp_path / "hello")
+    successor = PluginKernel(
+        [tmp_path],
+        services=HostServices(event_bus=EventBus()),
+        discovery_snapshot=first.discover(),
+    )
+    await successor.load_all()
+    assert successor.discover() == []
+    assert successor.loaded_count == 0
