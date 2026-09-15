@@ -23,7 +23,7 @@ export function ChatStatusSidebar({
   const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   return (
-    <div className={cx(chatSidebarPanelClass, "chat-status-sidebar grid-rows-[minmax(72px,1fr)_auto_minmax(0,auto)_auto_auto] gap-2")}>
+    <div className={cx(chatSidebarPanelClass, "chat-status-sidebar grid-rows-[minmax(72px,1fr)_auto_auto_auto_auto] gap-3")}>
       {/* Absolute sizing binds the illustration to its shrinking grid row, not its intrinsic image height. */}
       <div className="relative min-h-0 rounded-md">
         {shouldRenderIllustration ? (
@@ -39,16 +39,16 @@ export function ChatStatusSidebar({
           </div>
         )}
       </div>
-      <div className="text-center">
-        <div className="text-caption text-ink-muted">当前状态</div>
-        <div className="mt-0.5 text-body font-semibold text-accent-text">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-body font-semibold text-ink-muted">当前状态</div>
+        <div className="text-body font-semibold text-accent-text">
           {currentMood || "未生成"}
         </div>
       </div>
-      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1 text-left">
-        <div className="text-caption text-ink-muted">当下想法</div>
-        {/* Exceptionally long thoughts scroll independently, preserving the illustration and status controls. */}
-        <div className="min-h-0 overflow-y-auto break-words text-body leading-5 text-ink-secondary" tabIndex={0} role="region" aria-label="当下想法">
+      <div className="grid gap-1 text-left">
+        <div className="text-body font-semibold text-ink-muted">当下想法</div>
+        {/* This sidebar intentionally uses the compact 13px body scale; its full text owns its row height. */}
+        <div className="whitespace-pre-wrap break-words text-body-sm font-normal text-ink-secondary" role="region" aria-label="当下想法">
           {roleSelfView || "我还在慢慢整理自己现在对你的想法。"}
         </div>
       </div>
@@ -57,7 +57,7 @@ export function ChatStatusSidebar({
           {relationshipTags.map((tag) => (
             <span
               key={tag}
-              className="rounded-full bg-accent-soft px-2 py-0.5 text-caption text-accent-text"
+              className="rounded-full bg-accent-soft px-1.5 py-0.5 text-caption text-accent-text"
             >
               {tag}
             </span>
@@ -68,7 +68,7 @@ export function ChatStatusSidebar({
       )}
       <div>
         <div className="flex items-center justify-between gap-3">
-          <div className="text-caption text-ink-muted">寂寞值</div>
+          <div className="text-body font-semibold text-ink-muted">寂寞值</div>
           <div className="text-body font-semibold tabular-nums text-ink">{Math.round(normalizedLoneliness)}</div>
         </div>
         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-accent-soft">

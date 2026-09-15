@@ -2,24 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Narrow chat sidebars use a denser type scale while retaining full-size controls. */
+/* Narrow status panels reclaim horizontal space without reducing their type scale or vertical spacing. */
 @layer components {
   .chat-sidebar-narrow .chat-status-sidebar {
-    gap: 0.375rem;
-    padding: 0.375rem;
-  }
-
-  .chat-sidebar-narrow .chat-status-sidebar .text-body {
-    font-size: 0.8125rem;
-    line-height: 1.35rem;
-  }
-
-  .chat-sidebar-narrow .chat-status-sidebar .text-caption {
-    font-size: 0.6875rem;
-  }
-
-  .chat-sidebar-narrow .chat-status-sidebar .text-body.font-semibold {
-    font-size: 0.8125rem;
+    padding-inline: 0.5rem;
   }
 }
 
