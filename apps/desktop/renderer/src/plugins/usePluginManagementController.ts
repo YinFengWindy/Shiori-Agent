@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
-import { setPluginEnabledSnapshot } from "./pluginEnabledStateStore";
+import { refreshPluginEnabledState } from "./pluginEnabledStateStore";
 
 /**
  * Loads the plugin roster and lets the caller hot toggle one plugin at a
@@ -12,28 +12,31 @@ export function usePluginManagementController() {
   const [plugins, setPlugins] = useState<PluginSummary[] | null>(null);
   const [error, setError] = useState("");
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [trustCandidate, setTrustCandidate] = useState<PluginSummary | null>(null);
   const client = useMemo(() => createPluginBridgeClient(), []);
 
   const reload = useCallback(async () => {
     try {
-      const list = await client.listPlugins();
+      const list = await refreshPluginEnabledState(client);
       setPlugins(list);
-      setPluginEnabledSnapshot(list);
       setError("");
+      return true;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
+      return false;
     }
   }, [client]);
 
   useEffect(() => { void reload(); }, [reload]);
 
-  const setEnabled = useCallback(async (pluginId: string, enabled: boolean) => {
+  const runMutation = useCallback(async (pluginId: string, action: () => Promise<unknown>) => {
     setPendingIds((current) => new Set(current).add(pluginId));
     try {
-      await client.setEnabled(pluginId, enabled, { operationId: crypto.randomUUID() });
-      await reload();
+      await action();
+      return await reload();
     } catch (toggleError) {
       setError(toggleError instanceof Error ? toggleError.message : String(toggleError));
+      return false;
     } finally {
       setPendingIds((current) => {
         const next = new Set(current);
@@ -41,7 +44,20 @@ export function usePluginManagementController() {
         return next;
       });
     }
-  }, [client, reload]);
+  }, [reload]);
 
-  return { plugins, error, pendingIds, setEnabled, reload };
+  const setEnabled = useCallback((pluginId: string, enabled: boolean) => runMutation(pluginId, () => client.setEnabled(pluginId, enabled, { operationId: crypto.randomUUID() })), [client, runMutation]);
+
+  const confirmTrust = useCallback(async () => {
+    if (!trustCandidate?.trustFingerprint) return;
+    const candidate = trustCandidate;
+    if (await runMutation(candidate.id, () => client.trustPlugin(candidate.candidateId, candidate.trustFingerprint!))) setTrustCandidate(null);
+  }, [client, runMutation, trustCandidate]);
+
+  const requestTrust = useCallback((candidate: PluginSummary) => {
+    setError("");
+    setTrustCandidate(candidate);
+  }, []);
+
+  return { plugins, error, pendingIds, setEnabled, reload, trustCandidate, requestTrust, confirmTrust, closeTrust: () => setTrustCandidate(null) };
 }

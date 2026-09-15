@@ -8,9 +8,14 @@ from pathlib import Path
 import pytest
 
 from agent.plugin_host import PluginState
+from agent.plugin_host import HostServices, PluginKernel
+from agent.plugin_host.package_fingerprint import inspect_package_content
+from agent.plugin_host.trust_store import PluginTrustStore
+from agent.plugin_host.trusted_imports import TrustedPluginImports
 from agent.plugin_host.plugin_data import plugin_data_dir
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
+import sys
 
 from tests.backend.agent.plugin_host.conftest import (
     REPOSITORY_ROOT,
@@ -19,6 +24,30 @@ from tests.backend.agent.plugin_host.conftest import (
     stage_plugin_package,
     PLUGIN_FIXTURES,
 )
+
+
+@pytest.mark.asyncio
+async def test_external_source_import_boundary_is_reclaimed_with_plugin_effects(
+    contract_package, tmp_path
+):
+    approved = inspect_package_content(contract_package)
+    PluginTrustStore(tmp_path).approve(contract_package, approved.fingerprint)
+    kernel = PluginKernel(
+        [tmp_path],
+        external_plugin_dirs=[tmp_path],
+        services=HostServices(event_bus=EventBus(), workspace=tmp_path),
+    )
+    before = set(sys.meta_path)
+    try:
+        await kernel.load_all()
+        assert kernel.loaded_count == 1
+        assert any(
+            isinstance(finder, TrustedPluginImports) and finder not in before
+            for finder in sys.meta_path
+        )
+    finally:
+        await kernel.terminate_all(force=True)
+    assert set(sys.meta_path) == before
 
 
 @pytest.mark.asyncio

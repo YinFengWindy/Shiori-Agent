@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { resetPluginEnabledStateForTests } from "./pluginEnabledStateStore";
 
 let PluginManagementSection: typeof import("./PluginManagementSection").PluginManagementSection;
 before(async () => {
@@ -134,4 +135,42 @@ it("renders each conflicting directory and disables every unsafe candidate", asy
   } finally {
     await view.cleanup();
   }
+});
+
+it("requires explicit trust confirmation and then shows pending restart without stale trust errors", async () => {
+  resetPluginEnabledStateForTests();
+  const view = await mountTestComponent(null);
+  const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
+  let trusted = false;
+  Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
+    invoke: async (request: { method: string; payload: Record<string, unknown> }) => {
+      requests.push(request);
+      if (request.method === "plugins.trust") trusted = true;
+      return { id: "1", type: "response", method: request.method, error: null, payload: { plugins: [{
+        id: "manual", name: "Manual", version: "1.0.0", candidate_id: "C:/workspace/plugins/manual", directory: "C:/workspace/plugins/manual", source: "workspace", description: "",
+        state: "UNTRUSTED", enabled: true, can_toggle: false, can_trust: !trusted, trust_fingerprint: "fingerprint", trust_directory: "C:/workspace/plugins/manual", trust_pending_restart: trusted,
+        error: "外部插件尚未获得信任", diagnostic: { code: "trust_required", stage: "trust", field: "source", reason: "外部插件尚未获得信任", path: "", state: "UNTRUSTED" }, has_config_schema: false, supports_hot_unload: true,
+      }] } };
+    },
+  } });
+  const button = (text: string) => {
+    const found = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((element) => element.textContent === text);
+    assert.ok(found, `missing button ${text}`);
+    return found;
+  };
+  try {
+    await view.render(<PluginManagementSection />);
+    assert.equal(view.container.querySelector<HTMLButtonElement>('[role="switch"]')?.disabled, true);
+    await act(async () => button("信任…").click());
+    assert.ok(document.querySelector('[role="dialog"]')?.textContent?.includes("可读写文件、访问网络并执行代码"));
+    await act(async () => button("取消").click());
+    assert.equal(requests.filter((request) => request.method === "plugins.trust").length, 0);
+    await act(async () => button("信任…").click());
+    await act(async () => button("确认信任").click());
+    assert.deepEqual(requests.find((request) => request.method === "plugins.trust")?.payload, { candidate_id: "C:/workspace/plugins/manual", fingerprint: "fingerprint" });
+    assert.ok(view.container.textContent?.includes("待重启"));
+    assert.ok(view.container.textContent?.includes("重启 Shiori 后加载"));
+    assert.equal(view.container.textContent?.includes("尚未获得信任"), false);
+    assert.equal(view.container.querySelector<HTMLButtonElement>('[role="switch"]')?.disabled, true);
+  } finally { await view.cleanup(); resetPluginEnabledStateForTests(); }
 });

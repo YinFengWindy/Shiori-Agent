@@ -124,6 +124,30 @@ async def test_list_reports_every_discovered_plugin_enabled_by_default(
         assert by_id["qqbot"]["state"] == PluginState.ACTIVE.name
         assert by_id["qqbot"]["has_config_schema"] is True
         assert by_id["hello"]["has_config_schema"] is False
+        assert by_id["hello"]["renderer"] == {}
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_list_preserves_renderer_declarations_as_data(tmp_path, monkeypatch):
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    manifest = tmp_path / "plugin_dirs" / "hello" / "manifest.yaml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8")
+        + "\nrenderer:\n  ui:\n    entry: ui/dist/index.mjs\n"
+        + "    css: [ui/dist/style.css]\n",
+        encoding="utf-8",
+    )
+    service, _, app = await _start_service(tmp_path)
+    try:
+        response = await _request(service, "plugins.list")
+        assert response.error is None
+        hello = next(row for row in response.payload["plugins"] if row["id"] == "hello")
+        assert hello["renderer"] == {
+            "ui": {"entry": "ui/dist/index.mjs", "css": ["ui/dist/style.css"]}
+        }
     finally:
         await service.aclose()
         await app.shutdown()

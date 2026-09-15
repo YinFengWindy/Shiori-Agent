@@ -42,6 +42,10 @@ class PluginRecord:
     manifest: PluginManifest
     source: str = "builtin"
     admission: PluginDiagnostic | None = None
+    # Captured before execution and retained across settings generations.
+    fingerprint: str | None = None
+    trust_directory: str = ""
+    content_hashes: dict[str, str] = field(default_factory=dict)
 
     @property
     def candidate_id(self) -> str:

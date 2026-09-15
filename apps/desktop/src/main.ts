@@ -1,6 +1,9 @@
 import { mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { app, BrowserWindow, powerMonitor, protocol, session, shell } from "electron";
+import { PluginUiResources } from "./plugins/uiResources.js";
+import { pluginUiScheme } from "./plugins/uiContract.js";
 import { localAssetSchemePrivileges, registerLocalAssetProtocol } from "./assets/assetProtocol.js";
 import { DesktopBridgeClient } from "./bridge/bridgeClient.js";
 import { startBridge, wireBridgeEvents } from "./bridge/bridgeLifecycle.js";
@@ -73,6 +76,8 @@ const runtimePaths = resolveDesktopRuntimePaths({
   homePath: app.getPath("home"),
 });
 const bridge = new DesktopBridgeClient(runtimePaths.bridge);
+// Backend reconnects inherit the same app session; new trust waits for a new app launch.
+process.env.SHIORI_DESKTOP_APPLICATION_SESSION_ID = randomUUID();
 const localAssets = new LocalAssetRegistry();
 const trayLifecycleEnabled = process.platform === "win32";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -105,6 +110,7 @@ if (!hasSingleInstanceLock) {
 }
 
 protocol.registerSchemesAsPrivileged([
+  { scheme: pluginUiScheme, privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true } },
   {
     scheme: localAssetScheme,
     privileges: localAssetSchemePrivileges,
@@ -366,6 +372,8 @@ void app.whenReady().then(async () => {
     process.env.SHIORI_RENDERER_DEV_SERVER_URL,
   );
   registerLocalAssetProtocol(protocol, localAssets);
+  const pluginUiResources = new PluginUiResources(resolve(privateWorkspaceRoot, "plugins"));
+  protocol.handle(pluginUiScheme, (request) => pluginUiResources.load(request.url));
   void startBridge(bridge);
   const currentVersion = !app.isPackaged && process.env.SHIORI_DEV_VERSION || app.getVersion();
   registerDesktopUpdates(app.isPackaged, currentVersion, (error) => {
@@ -506,6 +514,7 @@ void app.whenReady().then(async () => {
   });
   registerDesktopIpc({
     bridge,
+    pluginUiResources,
     localAssets,
     localAssetImportsRoot,
     openLocalAttachment,

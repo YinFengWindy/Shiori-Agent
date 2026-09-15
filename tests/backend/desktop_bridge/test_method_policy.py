@@ -34,6 +34,8 @@ def test_admission_exempt_generation_methods_are_read_only_or_cancellations():
 
 
 def test_dedicated_handlers_cover_exactly_the_settings_and_role_task_methods():
+    assert method_policy("plugins.trust").handler is Handler.PLUGIN_MANAGEMENT
+    assert method_policy("plugins.trust").concurrency is Concurrency.MUTATION
     settings = {
         name
         for name, policy in METHOD_POLICIES.items()

@@ -117,6 +117,95 @@ anything or attempt to discover arbitrary dynamic imports. Authors must declare
 the complete external dependency set; capability/dependency declarations are API
 cooperation, not isolation of malicious code.
 
+## Main-window UI loader (#213)
+
+The desktop main window can consume `renderer.ui` as precompiled ESM and CSS at
+runtime. For example, declare `entry: ui/dist/index.mjs` and
+`css: [ui/dist/style.css]`; the directory name is not fixed. The plugin author
+runs the build. The application carries no plugin compiler and does not invoke
+the user's Node/npm installation. Externalize `react`, `react/jsx-runtime`,
+`react-dom`, and `react-dom/client` in that build; bundle other browser libraries.
+An import map resolves these peers to the same instances used by the host.
+
+Only a unique, enabled `ACTIVE` workspace candidate receives a resource grant.
+Main-process `plugins.list` responses contain the granted entry/CSS URLs alongside
+the same authoritative state snapshot. Grants use `shiori-plugin:` URLs, retain
+package-relative module chunks and CSS resources, and survive repeated list
+requests. The resource handler rechecks package and resource realpaths, rejects
+ungranted tokens and escapes, and serves only `.mjs`, `.js`, `.css`, `.png`, `.jpg`,
+`.jpeg`, `.webp`, `.svg`, `.gif`, `.woff`, and `.woff2` files. Source files and
+arbitrary filesystem URLs are not exposed through this protocol. CSP admits this
+controlled scheme and the exact import-map hash; production adds neither
+`unsafe-inline` scripts nor `unsafe-eval`.
+
+Initial roster loading, bridge reconnection, `runtime.applied`, and plugin toggles
+share one serialized refresh path. Disable/removal cleans this window's registry
+entries and CSS. JavaScript module evaluation follows browser caching; replace a
+plugin package and restart the application to load its new code.
+Package identity and module URLs survive disable/re-enable for the app session;
+changing its directory, version, or renderer declarations requires a restart.
+The backend retains the approved startup file hashes, including chunks not yet
+imported, and attaches them to the authoritative plugin roster. Main-process grants
+first verify disk contents against those hashes; they never trust a newer local
+baseline. Every resource response verifies the same hashes again. New or changed
+scripts, CSS and assets are refused instead of mixing approved and unapproved content.
+A failed import,
+stylesheet, or export validation removes that plugin's partial UI and preserves
+the original error as `UI FAILED` in plugin management and a renderer diagnostic.
+Other plugins continue loading. The backend state stays separately visible;
+this is not the cross-host activation transaction planned in #262.
+
+Workspace packages start `UNTRUSTED`. Settings → Plugins offers **信任…** only for
+valid, non-conflicting packages. The dialog shows the package name, version and
+actual path, and explicitly warns that plugin code receives the same permissions
+as Shiori. Cancel writes nothing. Confirm persists approval and displays **待重启**;
+only the next application launch can activate it. Restarting the bridge within
+the same desktop session does not activate a newly approved package.
+
+The host atomically stores approval in `private_runtime/plugin-trust.json`, outside
+plugin directories. Approval binds the candidate path and a SHA-256 identity of
+the real package directory, all published filenames and bytes. Confirmation
+rechecks static validation, ID conflicts and content against the displayed
+fingerprint; changed or replaced candidates must be reviewed again after restart.
+Any published source, manifest, JavaScript, CSS or asset change invalidates trust.
+Trust does not modify the separately persisted enabled/disabled preference.
+
+Trust snapshots reject package-content symlinks/junctions, including contained
+links, rather than expanding the approved tree through aliases. Only regular
+`.pyc` and `.pyo` bytecode files are excluded; other content inside `__pycache__`
+or directories with cache-like names remains fingerprinted. To keep bytecode from being
+an unapproved execution path, external Python namespaces use a source-only loader:
+entry and lazy relative imports compile only verified snapshot bytes. New modules,
+bytecode-only modules and native extensions cannot bypass that namespace boundary.
+Every settings generation rechecks the original approved fingerprint before
+re-importing an external backend. Finder lifetime follows the plugin effect scope.
+
+Manual trust is implemented here; zip install, update and uninstall workflows
+remain in #216. Bundled source UI, external background entries, and external
+surface entries retain their existing paths in this slice.
+
+Focused Electron verification builds a separate test renderer, uses a fixture
+`ACTIVE` roster, and checks actual `file://` ESM loading, shared React hooks,
+relative chunks, CSS, failure isolation, disable/re-enable cleanup, protocol
+rejection and CSP rejection. It does not prove workspace trust. Run after the
+desktop main/preload build:
+
+```powershell
+pnpm exec tsx --tsconfig apps/desktop/renderer/tsconfig.json apps/desktop/tests/plugin-ui/electron.e2e.ts
+```
+
+The real workspace flow uses the production main process, preload and backend in
+an isolated QA home. It verifies cancel, confirmation, pending status across bridge
+reconnection, app restart activation, React hooks and RPC, content-change approval,
+and removal without residual UI, CSS or plugin errors. Screenshots are retained in
+`.test-tmp-root/plugin-trust-real-*`. This uses the repository `.venv` by default;
+set `SHIORI_QA_RUNTIME_EXE` to an existing frozen runtime executable to verify that
+runtime with the same test bootstrap without changing production interpreter selection.
+
+```powershell
+pnpm exec tsx --tsconfig apps/desktop/renderer/tsconfig.json apps/desktop/tests/plugin-ui/trust.e2e.ts
+```
+
 ## Paths, archive limits and lifecycle
 
 Paths use canonical relative `/` segments. Absolute paths, drive/UNC paths,
@@ -140,10 +229,11 @@ Host state vocabulary extends the existing lifecycle enum:
 | `RESTART_REQUIRED` | an accepted code-directory change awaits application restart |
 | `DISCOVERED`, `DISABLED`, `LOADING`, `ACTIVE`, `UNLOADING`, `DISPOSED` | existing runtime lifecycle |
 
-Workspace discovery (#211) reports `UNTRUSTED` after validation and marks every
-candidate with a duplicate manifest ID `CONFLICT`. Both states prevent execution
-and enable actions. Trust storage and installation UI remain future work (#216);
-`RESTART_REQUIRED` remains the code-change boundary for downstream hosts.
+Workspace discovery (#211) reports `UNTRUSTED` until the exact content has a valid
+approval from a previous app session, and marks every candidate with a duplicate
+manifest ID `CONFLICT`. Both states prevent execution and enable actions.
+`RESTART_REQUIRED` remains the code-change boundary for downstream hosts; manual
+approval exposes a separate pending-restart flag while backend state stays untrusted.
 Enabled/disabled preferences remain separate from code
 version/restart state. Updates must not silently re-enable disabled plugins.
 

@@ -96,6 +96,11 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
         admission_exempt=True,
         handler=Handler.PLUGIN_MANAGEMENT,
     ),
+    "plugins.trust": MethodPolicy(
+        concurrency=Concurrency.MUTATION,
+        admission_exempt=True,
+        handler=Handler.PLUGIN_MANAGEMENT,
+    ),
     "roles.tasks.list": MethodPolicy(
         concurrency=Concurrency.READ_ONLY,
         admission_exempt=True,

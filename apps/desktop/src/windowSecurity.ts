@@ -1,4 +1,6 @@
 import { pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
+import { pluginUiImportMap, pluginUiScheme } from "./plugins/uiContract.js";
 import { localAssetScheme } from "./assets/localAssetContract.js";
 
 type NavigationEvent = {
@@ -62,7 +64,8 @@ export function resolveRendererEntryUrl(
 /** Builds the CSP applied to the privileged renderer main frame. */
 export function buildDesktopContentSecurityPolicy(devServerUrl: string | undefined): string {
   const trustedDevUrl = validateRendererDevServerUrl(devServerUrl);
-  const scriptSources = ["'self'"];
+  const mapHash = createHash("sha256").update(pluginUiImportMap).digest("base64");
+  const scriptSources = ["'self'", `${pluginUiScheme}:`, `'sha256-${mapHash}'`];
   const connectSources = ["'self'"];
   if (trustedDevUrl) {
     const url = new URL(trustedDevUrl);
@@ -72,10 +75,10 @@ export function buildDesktopContentSecurityPolicy(devServerUrl: string | undefin
   return [
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
-    "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: ${localAssetScheme}:`,
+    `style-src 'self' 'unsafe-inline' ${pluginUiScheme}:`,
+    `img-src 'self' data: blob: ${localAssetScheme}: ${pluginUiScheme}:`,
     `connect-src ${connectSources.join(" ")}`,
-    "font-src 'self' data:",
+    `font-src 'self' data: ${pluginUiScheme}:`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
