@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from agent.config import Config
@@ -109,28 +110,39 @@ async def serve_bridge(
     config_path: str = "config.toml",
     workspace: Path | None = None,
 ) -> None:
-    configure_logging_stream(sys.stderr)
-    from desktop_bridge.config_transaction import ConfigTransaction
+    """Run the bridge with stdout reserved for JSON throughout the runtime lifecycle."""
+    protocol_output = sys.stdout
+    # Startup diagnostics precede serve_stdio's stream setup; encode them as UTF-8
+    # too. In-memory capture streams already store Unicode and need no reconfigure.
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="strict")
+    # Process-wide redirection also covers ordinary print calls in channel threads.
+    # Keep it active through shutdown and restore stdout even when startup fails.
+    with redirect_stdout(sys.stderr):
+        configure_logging_stream(sys.stderr)
+        from desktop_bridge.config_transaction import ConfigTransaction
 
-    ConfigTransaction(
-        Path(config_path), workspace or resolve_default_workspace()
-    ).recover()
-    runtime = build_app_runtime(
-        Config.load(config_path, workspace=workspace or resolve_default_workspace()),
-        workspace=workspace or resolve_default_workspace(),
-        features=DESKTOP_RUNTIME_FEATURES,
-    )
-    try:
-        await runtime.start()
-        core_runtime = runtime.core
-        if core_runtime is None:
-            raise RuntimeError("desktop bridge runtime 未正确初始化 core")
-        server = DesktopBridgeServer(
-            core_runtime, app=runtime, config_path=Path(config_path)
+        ConfigTransaction(
+            Path(config_path), workspace or resolve_default_workspace()
+        ).recover()
+        runtime = build_app_runtime(
+            Config.load(
+                config_path, workspace=workspace or resolve_default_workspace()
+            ),
+            workspace=workspace or resolve_default_workspace(),
+            features=DESKTOP_RUNTIME_FEATURES,
         )
-        await server.serve_stdio()
-    finally:
-        await runtime.shutdown()
+        try:
+            await runtime.start()
+            core_runtime = runtime.core
+            if core_runtime is None:
+                raise RuntimeError("desktop bridge runtime 未正确初始化 core")
+            server = DesktopBridgeServer(
+                core_runtime, app=runtime, config_path=Path(config_path)
+            )
+            await server.serve_stdio(output=protocol_output)
+        finally:
+            await runtime.shutdown()
 
 
 def main(argv: list[str] | None = None) -> int:
