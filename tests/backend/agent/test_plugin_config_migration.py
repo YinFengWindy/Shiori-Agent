@@ -246,3 +246,43 @@ def test_overlapping_workspace_and_package_roots_are_one_owner(tmp_path, monkeyp
         "demo": {"value": "kept"}
     }
     assert not sources[2].exists()
+
+
+@pytest.mark.parametrize("duplicate_location", ["later-root", "old-workspace"])
+def test_same_directory_shadowing_does_not_hide_installed_owner(
+    tmp_path, monkeypatch, duplicate_location
+):
+    path, workspace, packages, sources = _environment(tmp_path, monkeypatch)
+    duplicate_root = (
+        tmp_path / "later-packages"
+        if duplicate_location == "later-root"
+        else workspace / "plugins"
+    )
+    duplicate = duplicate_root / "demo"
+    duplicate.mkdir(parents=True)
+    (duplicate / "manifest.yaml").write_text(
+        "api: 2\nid: demo\ncapabilities: []\n", encoding="utf-8"
+    )
+    if duplicate_location == "later-root":
+        monkeypatch.setattr(
+            migration, "plugin_roots", lambda: [packages, duplicate_root]
+        )
+    _write(sources[2], {"value": "installed"})
+    assert load_config(path, workspace=workspace).plugins == {
+        "demo": {"value": "installed"}
+    }
+    assert not sources[2].exists()
+
+
+def test_workspace_only_package_is_not_an_installed_migration_owner(
+    tmp_path, monkeypatch
+):
+    path, workspace, packages, sources = _environment(tmp_path, monkeypatch)
+    (packages / "demo/manifest.yaml").unlink()
+    _write(sources[1], {"value": "legacy"})
+    (sources[1].parent / "manifest.yaml").write_text(
+        "api: 2\nid: demo\ncapabilities: []\n", encoding="utf-8"
+    )
+    assert load_config(path, workspace=workspace).plugins == {}
+    assert sources[1].is_file()
+    assert not sources[0].exists()

@@ -23,12 +23,13 @@ _MARKER = "plugin_config.migrated.json"
 def _legacy_sources(workspace: Path) -> dict[str, list[Path]]:
     """Uses installed manifests for identity without executing any plugin code."""
     packages: dict[str, list[Path]] = {}
-    roots = dict.fromkeys(
-        root.resolve() for root in [*plugin_roots(), workspace / "plugins"]
-    )
+    roots = dict.fromkeys(root.resolve() for root in plugin_roots())
+    seen_names: set[str] = set()
     for root in roots:
         for manifest_file in sorted(root.glob("*/manifest.yaml")):
             package = manifest_file.parent
+            if package.name in seen_names:
+                continue
             try:
                 manifest = load_manifest(package)
             except ManifestError:
@@ -38,6 +39,9 @@ def _legacy_sources(workspace: Path) -> dict[str, list[Path]]:
                     plugin_data_dir(workspace, manifest.id)
                 except ValueError:
                     continue
+                # Match current host discovery: the first valid package with a
+                # directory name owns it. Old workspace packages are data only.
+                seen_names.add(package.name)
                 packages.setdefault(manifest.id, []).append(package)
     sources: dict[str, list[Path]] = {}
     for plugin_id, locations in packages.items():

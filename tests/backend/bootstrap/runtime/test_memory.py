@@ -102,3 +102,41 @@ def test_non_default_transition_does_not_load_default_package(
     )
 
     validate_memory_transition(previous, candidate, tmp_path)
+
+
+@pytest.mark.parametrize("location", ["legacy", "migrated"])
+@pytest.mark.parametrize(
+    "change", [{"model": "different-embedding"}, {"output_dimensionality": 128}]
+)
+def test_custom_database_blocks_incompatible_vectors_before_and_after_config_migration(
+    tmp_path, location, change
+):
+    from memory2.store import MemoryStore2
+
+    workspace = tmp_path / "workspace"
+    db_path = workspace / "custom/vectors.db"
+    db_path.parent.mkdir(parents=True)
+    store = MemoryStore2(db_path)
+    store.close()
+    config_path = (
+        workspace
+        / ("plugins" if location == "legacy" else "plugin-data")
+        / "default_memory/config.local.toml"
+    )
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text('db_path = "custom/vectors.db"\n', encoding="utf-8")
+    previous = Config(provider="", model="", api_key="", model_registrations=[])
+    previous.memory.enabled = True
+    candidate = replace(
+        previous,
+        memory=replace(
+            previous.memory, embedding=replace(previous.memory.embedding, **change)
+        ),
+    )
+    assert not (workspace / "memory/memory2.db").exists()
+    with pytest.raises(MemoryStorageIncompatibleError):
+        validate_memory_transition(previous, candidate, workspace)
+    target = workspace / "plugin-data/default_memory/config.local.toml"
+    assert target.is_file()
+    with pytest.raises(MemoryStorageIncompatibleError):
+        validate_memory_transition(previous, candidate, workspace)
