@@ -23,53 +23,55 @@ export function ChatStatusSidebar({
   const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   return (
-    <div className={cx(chatSidebarPanelClass, "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto] gap-3 overflow-y-auto")}>
-      <div className="grid min-h-0 place-items-center overflow-hidden rounded-md p-3">
+    <div className={cx(chatSidebarPanelClass, "chat-status-sidebar grid-rows-[minmax(72px,1fr)_auto_minmax(0,auto)_auto_auto] gap-2")}>
+      {/* Absolute sizing binds the illustration to its shrinking grid row, not its intrinsic image height. */}
+      <div className="relative min-h-0 rounded-md">
         {shouldRenderIllustration ? (
           <img
-            className="max-h-full max-w-full object-contain"
+            className="absolute inset-0 m-auto h-full max-h-52 w-full object-contain"
             src={moodIllustrationUrl}
             alt={currentMood ? `${currentMood} status illustration` : "status illustration"}
             decoding="async"
           />
         ) : (
-          <div className="grid h-full w-full place-items-center rounded-md bg-accent-softer text-[12px] text-ink-faint">
+          <div className="absolute inset-0 m-auto grid h-full max-h-52 w-full place-items-center rounded-md bg-accent-softer text-caption text-ink-muted">
             {visualsActive ? "当前状态图还没生成" : "窗口隐藏时已暂停图片渲染"}
           </div>
         )}
       </div>
       <div className="text-center">
-        <div className="text-[11px] uppercase tracking-[0.16em] text-ink-faint">当前状态</div>
-        <div className="mt-1 text-sm font-semibold text-accent-text">
+        <div className="text-caption text-ink-muted">当前状态</div>
+        <div className="mt-0.5 text-body font-semibold text-accent-text">
           {currentMood || "未生成"}
         </div>
       </div>
-      <div className="rounded-md px-3 py-3 text-left">
-        <div className="text-[11px] uppercase tracking-[0.16em] text-ink-faint">当下想法</div>
-        <div className="mt-2 text-[13px] leading-6 text-ink-secondary">
+      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1 text-left">
+        <div className="text-caption text-ink-muted">当下想法</div>
+        {/* Exceptionally long thoughts scroll independently, preserving the illustration and status controls. */}
+        <div className="min-h-0 overflow-y-auto break-words text-body leading-5 text-ink-secondary" tabIndex={0} role="region" aria-label="当下想法">
           {roleSelfView || "我还在慢慢整理自己现在对你的想法。"}
         </div>
       </div>
       {relationshipTags.length ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1">
           {relationshipTags.map((tag) => (
             <span
               key={tag}
-              className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] leading-none text-accent-text"
+              className="rounded-full bg-accent-soft px-2 py-0.5 text-caption text-accent-text"
             >
               {tag}
             </span>
           ))}
         </div>
       ) : (
-        <div className="text-[11px] text-ink-faint">关系标签还在生成中</div>
+        <div className="text-caption text-ink-muted">关系标签还在生成中</div>
       )}
-      <div className="rounded-md px-3 py-3">
+      <div>
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-ink-faint">寂寞值</div>
-          <div className="text-sm font-semibold tabular-nums text-ink">{Math.round(normalizedLoneliness)}</div>
+          <div className="text-caption text-ink-muted">寂寞值</div>
+          <div className="text-body font-semibold tabular-nums text-ink">{Math.round(normalizedLoneliness)}</div>
         </div>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-accent-soft">
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-accent-soft">
           <div
             className="h-full rounded-full bg-gradient-accent-medium transition-[width] duration-300"
             style={{ width: `${normalizedLoneliness}%` }}
