@@ -23,7 +23,7 @@ export function ChatStatusSidebar({
   const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   return (
-    <div className={cx(chatSidebarPanelClass, "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto] gap-3")}>
+    <div className={cx(chatSidebarPanelClass, "grid-rows-[minmax(0,1fr)_auto_auto_auto_auto] gap-3 overflow-y-auto")}>
       <div className="grid min-h-0 place-items-center overflow-hidden rounded-md p-3">
         {shouldRenderIllustration ? (
           <img
