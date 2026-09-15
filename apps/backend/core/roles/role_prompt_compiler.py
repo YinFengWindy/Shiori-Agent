@@ -7,6 +7,7 @@ from .models import RoleRecord
 from .knowledge_matcher import RoleKnowledgeMatcher
 from .profile_models import RoleKnowledgeEntry, RoleProfile
 from .role_macros import expand_role_macros
+from .reply_state import role_mood_catalog, role_reply_prompt
 
 
 @dataclass(frozen=True)
@@ -73,17 +74,4 @@ class RolePromptCompiler:
 
 
 def _build_mood_contract(runtime_config: dict[str, Any]) -> str:
-    raw_catalog = runtime_config.get("mood_catalog")
-    if not isinstance(raw_catalog, list):
-        return ""
-    catalog = [str(item).strip() for item in raw_catalog if str(item).strip()]
-    if not catalog:
-        return ""
-    default = str(runtime_config.get("default_mood") or "").strip() or catalog[0]
-    return (
-        "## Mood Output Contract\n"
-        "你每次回复都必须输出一个 JSON 对象，不要输出 JSON 之外的解释、markdown 或代码块。\n"
-        'JSON 结构固定为：{"content":"<角色回复正文>","mood":"<当前心情>"}\n'
-        f"`mood` 只能从以下列表中选择一个：{'、'.join(catalog)}。\n"
-        f"如果难以判断，请使用默认心情：{default}。"
-    )
+    return role_reply_prompt(role_mood_catalog(runtime_config))

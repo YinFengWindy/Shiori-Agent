@@ -215,7 +215,7 @@ describe("desktopSelectors", () => {
       current_mood: "开心",
     };
     const viewModel = buildDesktopViewModel({
-      roles: [createRole()],
+      roles: [createRole({ runtime_config: { mood_illustration_bindings: { 开心: "D:\\roles\\mira\\happy.png" } } })],
       activeRoleId: "mira",
       mainView: { kind: "chat" },
       roleForm: createRoleForm({
@@ -244,6 +244,7 @@ describe("desktopSelectors", () => {
     };
     const viewModel = buildDesktopViewModel({
       roles: [createRole({
+        runtime_config: { mood_illustration_bindings: { 开心: "assets/roles/mira/happy.png" } },
         illustrations: ["assets/roles/mira/happy.png"],
         illustrations_abs: ["D:\\roles\\mira\\happy.png"],
       })],

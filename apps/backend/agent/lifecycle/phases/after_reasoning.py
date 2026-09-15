@@ -4,10 +4,14 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
-from agent.core.mood_resolver import resolve_role_mood
 from agent.core.passive_support import update_session_runtime_metadata
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY
-from agent.core.response_parser import parse_response
+from agent.core.response_parser import parse_response, ParsedResponse, ResponseMetadata
+from core.roles.reply_state import (
+    parse_role_reply,
+    role_mood_catalog,
+    reply_state_metadata,
+)
 from agent.lifecycle.phase import (
     PhaseFrame,
     PhaseModule,
@@ -106,7 +110,24 @@ class _BuildAfterReasoningCtxModule:
         if raw_reply is None:
             raw_reply = "I've completed processing but have no response to give."
         tool_chain = cast(list[dict[str, object]], turn_result.tool_chain)
-        parsed = parse_response(raw_reply, tool_chain=tool_chain)
+        session = input.state.session
+        if session is not None and turn_result.context_retry.get("formal_role_reply"):
+            reply = parse_role_reply(
+                raw_reply,
+                role_mood_catalog(session.metadata.get("role_runtime_config") or {}),
+            )
+            parsed = ParsedResponse(
+                clean_text=reply.content,
+                metadata=ResponseMetadata(
+                    raw_text=raw_reply, mood=reply.mood, thought=reply.thought
+                ),
+            )
+            frame.slots["reply:state"] = reply
+        else:
+            parsed = parse_response(raw_reply, tool_chain=tool_chain)
+        if session is not None:
+            frame.slots["reply:previous_metadata"] = dict(session.metadata)
+            frame.slots["reply:messages"] = []
         raw_turn_metrics = turn_result.context_retry.get("turn_metrics")
         turn_metrics = (
             {
@@ -152,55 +173,6 @@ class _EmitAfterReasoningCtxModule:
     async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
         ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
         frame.slots[_CTX_SLOT] = await self._bus.emit(ctx)
-        return frame
-
-
-class _ResolveMoodModule:
-    slot = "after_reasoning.resolve_mood"
-    requires = ("after_reasoning.emit", _CTX_SLOT)
-
-    def __init__(
-        self, llm: "LLMServices | None", llm_config: "LLMConfig | None"
-    ) -> None:
-        self._llm = llm
-        self._llm_config = llm_config
-
-    async def run(self, frame: AfterReasoningFrame) -> AfterReasoningFrame:
-        ctx = cast(AfterReasoningCtx, frame.slots[_CTX_SLOT])
-        if ctx.response_metadata.mood:
-            return frame
-        if self._llm is None or self._llm_config is None:
-            return frame
-        raw_session = frame.input.state.session
-        if raw_session is None:
-            return frame
-        session = cast("Session", raw_session)
-        runtime_config = session.metadata.get("role_runtime_config")
-        if not isinstance(runtime_config, dict):
-            return frame
-        raw_bindings = runtime_config.get("mood_illustration_bindings")
-        if not isinstance(raw_bindings, dict):
-            return frame
-        available_moods = [
-            str(mood).strip()
-            for mood, path in raw_bindings.items()
-            if str(mood).strip() and str(path or "").strip()
-        ]
-        if not available_moods:
-            return frame
-        default_mood = (
-            str(runtime_config.get("default_mood") or "").strip() or available_moods[0]
-        )
-        resolved_mood = await resolve_role_mood(
-            self._llm.provider,
-            model=self._llm_config.model,
-            max_tokens=self._llm_config.max_tokens,
-            reply_text=ctx.reply,
-            available_moods=available_moods,
-            default_mood=default_mood,
-        )
-        if resolved_mood:
-            ctx.response_metadata.mood = resolved_mood
         return frame
 
 
@@ -260,6 +232,7 @@ class _PersistUserMessageModule:
             media=msg.media if msg.media else None,
             **user_kwargs,
         )
+        frame.slots["reply:messages"].append(session.messages[-1])
         return frame
 
 
@@ -284,6 +257,8 @@ class _PersistAssistantMessageModule:
         }
         if ctx.response_metadata.mood:
             assistant_kwargs["metadata"]["mood"] = ctx.response_metadata.mood
+        if ctx.response_metadata.thought:
+            assistant_kwargs["metadata"]["thought"] = ctx.response_metadata.thought
         if ctx.thinking is not None:
             assistant_kwargs["reasoning_content"] = ctx.thinking
         persisted_media = list(dict.fromkeys([*ctx.media, *ctx.persisted_media]))
@@ -297,6 +272,7 @@ class _PersistAssistantMessageModule:
             )
         )
         session.add_message("assistant", ctx.reply, **assistant_kwargs)
+        frame.slots["reply:messages"].append(session.messages[-1])
         return frame
 
 
@@ -319,12 +295,13 @@ class _UpdateSessionMetadataModule:
             session,
             tools_used=list(ctx.tools_used),
             tool_chain=list(ctx.tool_chain),
-            mood=ctx.response_metadata.mood,
+            mood=None,
         )
         if self._relationship_runtime is not None:
             session.metadata = self._relationship_runtime.enrich_session_metadata(
                 cast(dict[str, Any], session.metadata),
             )
+        frame.slots["reply:attempted_metadata"] = dict(session.metadata)
         return frame
 
 
@@ -341,13 +318,49 @@ class _AppendMessagesModule:
         if raw_session is None:
             raise RuntimeError("AfterReasoning requires TurnState.session")
         session = cast("Session", raw_session)
-        persist_count = (
-            1 if bool((state.msg.metadata or {}).get("omit_user_turn")) else 2
-        )
-        await self._session_services.session_manager.append_messages(
-            session,
-            cast(list[dict[str, Any]], session.messages[-persist_count:]),
-        )
+        owned_messages = frame.slots["reply:messages"]
+        reply = frame.slots.get("reply:state")
+        state_kwargs = {}
+        if reply is not None:
+            state_kwargs = {
+                "metadata_updates": reply_state_metadata(
+                    reply, updated_at=session.metadata["last_turn_ts"]
+                ),
+                "expected_mood_updated_at": str(
+                    frame.input.turn_result.context_retry.get(
+                        "role_reply_previous_updated_at",
+                        frame.slots["reply:previous_metadata"].get(
+                            "current_mood_updated_at", ""
+                        ),
+                    )
+                ),
+            }
+        try:
+            await self._session_services.session_manager.append_messages(
+                session,
+                owned_messages,
+                **state_kwargs,
+            )
+        except BaseException:
+            # Only remove this turn's objects; unrelated concurrent messages remain.
+            session.messages[:] = [
+                message
+                for message in session.messages
+                if not any(message is owned for owned in owned_messages)
+            ]
+            previous = frame.slots["reply:previous_metadata"]
+            attempted = frame.slots["reply:attempted_metadata"]
+            if session.metadata.get("last_turn_ts") == attempted.get("last_turn_ts"):
+                for key in (
+                    "last_turn_tool_calls_count",
+                    "last_turn_ts",
+                    INTERRUPTED_TURN_METADATA_KEY,
+                ):
+                    if key in previous:
+                        session.metadata[key] = previous[key]
+                    else:
+                        session.metadata.pop(key, None)
+            raise
         return frame
 
 
@@ -394,13 +407,10 @@ def default_after_reasoning_modules(
     llm_config: "LLMConfig | None" = None,
     plugin_modules: AfterReasoningModules | None = None,
 ) -> AfterReasoningModules:
-    resolved_llm = llm or cast(Any, None)
-    resolved_llm_config = llm_config or cast(Any, None)
     relationship_runtime = getattr(session_services, "relationship_runtime", None)
     builtins: AfterReasoningModules = [
         _BuildAfterReasoningCtxModule(),
         _EmitAfterReasoningCtxModule(bus),
-        _ResolveMoodModule(resolved_llm, resolved_llm_config),
         _PersistUserMessageModule(session_services),
         _PersistAssistantMessageModule(),
         _UpdateSessionMetadataModule(relationship_runtime),

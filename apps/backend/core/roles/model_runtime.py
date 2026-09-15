@@ -174,6 +174,7 @@ class RoleAwareProvider(LLMProvider):
         disable_thinking: bool = False,
         payload_snapshot_enabled: bool | None = None,
         on_content_delta: Callable[[StreamDelta], Awaitable[None]] | None = None,
+        response_format: dict[str, str] | None = None,
     ) -> LLMResponse:
         snapshot = _current_snapshot.get()
         provider = snapshot.provider if snapshot is not None else self._fallback
@@ -188,4 +189,5 @@ class RoleAwareProvider(LLMProvider):
             disable_thinking=False if snapshot is not None else disable_thinking,
             payload_snapshot_enabled=payload_snapshot_enabled,
             on_content_delta=on_content_delta,
+            **({"response_format": response_format} if response_format else {}),
         )

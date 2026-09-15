@@ -7,7 +7,7 @@ import {
   resolveChatImageSelectionKey,
 } from "../chat/chatImageHistory";
 import { resolveChatHeaderTitle, resolveVisibleChatSessionKey } from "../chat/chatHeaderState";
-import { resolveCurrentMood, resolveMoodIllustration } from "../roles/roleMoodSelectors";
+import { resolveCurrentMood, resolveCurrentThought, resolveMoodIllustration, roleSession } from "../roles/roleMoodSelectors";
 import { isRoleFormDirty } from "../roles/roleFormState";
 import { toFileUrl } from "../shared/format";
 import type {
@@ -50,6 +50,7 @@ export function buildDesktopViewModel({
   const activeRole = roles.find((role) => role.id === activeRoleId) ?? null;
   const detailRoleId = mainView.kind === "role-detail" ? mainView.roleId : activeRoleId;
   const detailRole = roles.find((role) => role.id === detailRoleId) ?? null;
+  const currentRoleSession = roleSession(activeSession, activeRoleId);
   const bridgeReady = health === "online";
   const roleFormDirty = isRoleFormDirty(roleForm, detailRole);
 
@@ -63,11 +64,13 @@ export function buildDesktopViewModel({
     activeSession,
     detailRole,
     roleForm,
+    useRoleForm: mainView.kind === "role-detail",
   });
   const moodIllustration = resolveMoodIllustration({
     activeSession,
     detailRole,
     roleForm,
+    useRoleForm: mainView.kind === "role-detail",
   });
   const moodIllustrationUrl = moodIllustration ? toFileUrl(moodIllustration) : "";
   const roleChatBackground = detailRole?.chat_background_abs ?? "";
@@ -93,18 +96,16 @@ export function buildDesktopViewModel({
   const latestChatGeneratedImageKey = chatImageHistory[chatImageHistory.length - 1]?.historyKey ?? "";
   const selectedChatImagePosition = selectedChatImageIndex >= 0 ? selectedChatImageIndex + 1 : 0;
   const relationshipSnapshot = (
-    (activeSession?.metadata.relationship_snapshot as RelationshipSnapshot | null | undefined)
+    (currentRoleSession?.metadata.relationship_snapshot as RelationshipSnapshot | null | undefined)
     ?? activeRole?.relationship_snapshot
     ?? null
   );
   const lonelinessRuntime = (
-    (activeSession?.metadata.loneliness_runtime as LonelinessRuntime | null | undefined)
+    (currentRoleSession?.metadata.loneliness_runtime as LonelinessRuntime | null | undefined)
     ?? activeRole?.loneliness_runtime
     ?? null
   );
-  const roleSelfView = typeof relationshipSnapshot?.role_self_view === "string"
-    ? relationshipSnapshot.role_self_view.trim()
-    : "";
+  const roleSelfView = resolveCurrentThought(currentRoleSession, activeRole);
   const relationshipTags = Array.isArray(relationshipSnapshot?.relation_tags)
     ? relationshipSnapshot.relation_tags
       .filter((tag): tag is string => typeof tag === "string")

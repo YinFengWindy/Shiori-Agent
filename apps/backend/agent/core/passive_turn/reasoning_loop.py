@@ -8,6 +8,9 @@ from typing import Any, Awaitable, Callable
 
 import agent.core.passive_support as support
 from agent.core.types import ReasonerResult
+from agent.core.reply_completion import complete_role_reply
+from agent.core.reply_stream import RoleReplyStream
+from core.roles.reply_state import InvalidRoleReply
 from agent.lifecycle.types import (
     AfterStepCtx,
     AfterToolResultCtx,
@@ -60,6 +63,7 @@ class _PassiveReasoningLoopMixin:
         tool_event_chat_id: str = "",
         tool_execution_context: dict[str, Any] | None = None,
         disabled_tools: set[str] | None = None,
+        reply_moods: tuple[str, ...] | None = None,
     ) -> ReasonerResult:
         # 1. 初始化消息上下文、本轮工具轨迹。
         messages = initial_messages
@@ -81,6 +85,7 @@ class _PassiveReasoningLoopMixin:
         react_cache_seen = False
         react_total_tokens = 0
         react_total_tokens_seen = False
+        reply_stream = RoleReplyStream(on_content_delta) if reply_moods else None
 
         async def _summarize(
             *,
@@ -93,6 +98,7 @@ class _PassiveReasoningLoopMixin:
                 reason=reason,
                 iteration=summary_iteration,
                 tools_used=tools_used,
+                **({"reply_moods": reply_moods} if reply_moods else {}),
             )
             if summary_tokens is not None:
                 react_total_tokens_seen = True
@@ -142,7 +148,9 @@ class _PassiveReasoningLoopMixin:
                     summary_iteration=iteration + 1,
                 )
                 return self._build_result(
-                    reply=step_ctx.early_stop_reply or summary,
+                    reply=(
+                        summary if reply_moods else step_ctx.early_stop_reply or summary
+                    ),
                     tools_used=tools_used,
                     tool_chain=tool_chain,
                     visible_names=visible_names,
@@ -184,13 +192,18 @@ class _PassiveReasoningLoopMixin:
                 raise ContextLengthError(
                     "推理过程中追加工具结果后输入超过预算，已停止继续调用模型。"
                 )
+            if reply_stream is not None:
+                reply_stream.begin_attempt()
             response = await self._llm.provider.chat(
                 messages=messages,
                 tools=schemas,
                 model=self._llm_config.model,
                 max_tokens=self._llm_config.max_tokens,
                 tool_choice="auto",
-                on_content_delta=on_content_delta,
+                on_content_delta=(
+                    reply_stream.push if reply_stream else on_content_delta
+                ),
+                **({"response_format": {"type": "json_object"}} if reply_moods else {}),
             )
             if on_content_delta is not None and response.content:
                 streamed = True
@@ -204,6 +217,14 @@ class _PassiveReasoningLoopMixin:
 
             # 5. 模型返回 tool_calls 时，进入工具执行分支。
             if response.tool_calls:
+                if reply_stream is not None and reply_stream.emitted:
+                    # A provider cannot turn already spoken final content into a tool call.
+                    raise InvalidRoleReply(
+                        "模型同时输出正式正文和工具调用，已停止当前回合"
+                    )
+                if reply_stream is not None:
+                    # Tool output is not final dialogue, even when it contains JSON text.
+                    response.content = ""
                 logger.info(
                     "[LLM决策→工具] 第%d轮，调用: %s",
                     iteration + 1,
@@ -642,7 +663,32 @@ class _PassiveReasoningLoopMixin:
 
             # 8. 没有 tool_calls 时，说明本轮得到最终回复。
             # 8a. 若 content 为空（模型只输出了 thinking），retry 一次。
-            if not response.content and response.thinking:
+            if reply_stream is not None and reply_moods is not None:
+                response, correction = await complete_role_reply(
+                    response,
+                    provider=self._llm.provider,
+                    model=self._llm_config.model,
+                    max_tokens=self._llm_config.max_tokens,
+                    messages=messages,
+                    moods=reply_moods,
+                    stream=reply_stream,
+                    input_token_threshold=int(
+                        getattr(self, "_memory_input_token_threshold", 0)
+                    ),
+                )
+                streamed = bool(reply_stream.emitted)
+                if correction is not None:
+                    react_input_samples.append(
+                        self._request_tokens_with_tools(messages, [])
+                    )
+                    if correction.cache_prompt_tokens is not None:
+                        react_cache_seen = True
+                        react_cache_prompt_tokens += correction.cache_prompt_tokens
+                        react_cache_hit_tokens += correction.cache_hit_tokens or 0
+                    if correction.total_tokens is not None:
+                        react_total_tokens_seen = True
+                        react_total_tokens += correction.total_tokens
+            elif not response.content and response.thinking:
                 logger.warning(
                     "[空回复重试] 第%d轮，content为空但thinking非空，触发一次重试",
                     iteration + 1,

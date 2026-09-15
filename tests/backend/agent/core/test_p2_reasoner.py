@@ -158,7 +158,10 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot():
     provider = _Provider(
         [
             LLMResponse(content="", tool_calls=[ToolCall("c1", "context_probe", {})]),
-            LLMResponse(content="final", tool_calls=[]),
+            LLMResponse(
+                content='{"content":"final","mood":"平静","thought":"我放心了。"}',
+                tool_calls=[],
+            ),
         ]
     )
     tools = ToolRegistry()
@@ -213,7 +216,7 @@ def test_default_reasoner_run_turn_uses_tool_context_snapshot():
 
     result = asyncio.run(reasoner.run_turn(msg=msg, session=cast(Any, session)))
 
-    assert result.reply == "final"
+    assert json.loads(result.reply)["content"] == "final"
     assert probe.calls == [
         {
             "session_key": "telegram:123",

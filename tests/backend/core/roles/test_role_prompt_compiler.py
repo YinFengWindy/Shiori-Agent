@@ -82,7 +82,9 @@ def test_sparse_named_role_has_runtime_identity_and_identity_updates(tmp_path):
         name="Mira", role_id="mira", system_prompt="旧兼容字段", profile={}
     )
 
-    assert RolePromptCompiler().compile(role).content == "[role_identity]\nMira"
+    assert (
+        RolePromptCompiler().compile(role).content.startswith("[role_identity]\nMira\n")
+    )
     renamed = store.update_role(
         "mira",
         name="Shiori",

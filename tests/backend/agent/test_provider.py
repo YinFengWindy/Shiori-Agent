@@ -112,6 +112,39 @@ async def _collect_delta(bucket: list, chunk) -> None:
 
 
 @pytest.mark.asyncio
+async def test_role_json_mode_is_explicit_and_background_calls_stay_unconstrained(
+    monkeypatch,
+):
+    fake = _FakeClient(
+        [
+            _Response(
+                content='{"content":"你好","mood":"平静","thought":"我放心了。"}'
+            ),
+            _Response(content="background"),
+        ]
+    )
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(
+        api_key="k", provider_name="deepseek", base_url="https://api.deepseek.com"
+    )
+    await provider.chat(
+        messages=[{"role": "user", "content": "输出 JSON"}],
+        tools=[],
+        model="deepseek-chat",
+        max_tokens=1000,
+        response_format={"type": "json_object"},
+    )
+    await provider.chat(
+        messages=[{"role": "user", "content": "summarize"}],
+        tools=[],
+        model="deepseek-chat",
+        max_tokens=1000,
+    )
+    assert fake.calls[0]["response_format"] == {"type": "json_object"}
+    assert "response_format" not in fake.calls[1]
+
+
+@pytest.mark.asyncio
 async def test_provider_chat_and_retry_paths(monkeypatch: pytest.MonkeyPatch):
     fake = _FakeClient(
         [

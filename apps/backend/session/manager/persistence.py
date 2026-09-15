@@ -37,13 +37,14 @@ class _PersistenceMixin:
             last_consolidated=last_consolidated,
         )
 
-    def _ensure_session_meta(self, session: Session) -> None:
+    def _ensure_session_meta(self, session: Session, *, commit: bool = True) -> None:
         self._store.upsert_session(
             session.key,
             created_at=session.created_at.isoformat(),
             updated_at=session.updated_at.isoformat(),
             last_consolidated=session.last_consolidated,
             metadata=session.metadata,
+            commit=commit,
         )
 
     def _extract_extra(self, msg: dict[str, Any]) -> dict[str, Any]:
@@ -203,7 +204,7 @@ class _PersistenceMixin:
         )
 
     def _persist_messages(
-        self, session: Session, messages: list[dict[str, Any]]
+        self, session: Session, messages: list[dict[str, Any]], *, commit: bool = True
     ) -> int:
         next_seq = self._store.next_seq(session.key)
         inserted = 0
@@ -225,6 +226,7 @@ class _PersistenceMixin:
                 tool_chain=msg.get("tool_chain"),
                 extra=self._extract_extra(msg),
                 **self._conversation_fields(msg),
+                commit=commit,
             )
             msg.update(row)
             next_seq += 1
@@ -259,23 +261,43 @@ class _PersistenceMixin:
         async with self._lock(session.key):
             self.save(session)
 
-    async def append_messages(self, session: Session, messages: list[dict]) -> None:
+    async def append_messages(
+        self,
+        session: Session,
+        messages: list[dict],
+        *,
+        metadata_updates: dict[str, Any] | None = None,
+        expected_mood_updated_at: str | None = None,
+    ) -> None:
+        """Commit messages and optional formal role state atomically, rejecting stale turns."""
         session.updated_at = datetime.now()
         msgs_copy = list(messages)
         async with self._lock(session.key):
-            # 1. 确保 session 元数据存在并刷新 updated_at。
-            self._ensure_session_meta(session)
-            # 2. 追加写入本次新增消息，并补齐稳定 id。
-            self._persist_messages(session, msgs_copy)
-            # 3. 回写 session 元数据（含 last_consolidated / metadata）。
-            self._store.upsert_session(
-                session.key,
-                created_at=session.created_at.isoformat(),
-                updated_at=session.updated_at.isoformat(),
-                last_consolidated=session.last_consolidated,
-                metadata=session.metadata,
-            )
-            self._project_session_threads(session)
+            if (
+                expected_mood_updated_at is not None
+                and str(session.metadata.get("current_mood_updated_at", ""))
+                != expected_mood_updated_at
+            ):
+                raise ValueError("角色已有更新的正式回复，已丢弃过时回合状态")
+            previous_metadata = dict(session.metadata)
+            session.metadata.update(metadata_updates or {})
+            # Messages and their current role state are one durable transaction.
+            previous_messages = [dict(message) for message in msgs_copy]
+            try:
+                with self._store.transaction():
+                    self._ensure_session_meta(session, commit=False)
+                    self._persist_messages(session, msgs_copy, commit=False)
+                    self._project_session_threads(session)
+            except BaseException:
+                for key in metadata_updates or {}:
+                    if key in previous_metadata:
+                        session.metadata[key] = previous_metadata[key]
+                    else:
+                        session.metadata.pop(key, None)
+                for message, previous in zip(msgs_copy, previous_messages, strict=True):
+                    message.clear()
+                    message.update(previous)
+                raise
             self._cache[session.key] = session
 
     def get_message_media(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.roles.reply_state import role_mood_catalog
+
 import asyncio
 import logging
 import time
@@ -334,6 +336,8 @@ class DefaultReasoner(
         disabled_tools = _disabled_tools_from_msg(msg)
         tool_execution_context = self._tools.get_context()
         budget_repaired = False
+        role_metadata = get_session_metadata(session)
+        previous_mood_updated_at = str(role_metadata.get("current_mood_updated_at", ""))
 
         # 2. 再按 trim plan + history window 顺序逐轮尝试。
         attempts = self._build_attempt_plans(total_history)
@@ -460,6 +464,13 @@ class DefaultReasoner(
                     tool_event_chat_id=msg.chat_id,
                     tool_execution_context=tool_execution_context,
                     disabled_tools=disabled_tools,
+                    reply_moods=(
+                        role_mood_catalog(
+                            role_metadata.get("role_runtime_config") or {}
+                        )
+                        if role_metadata.get("role_id")
+                        else None
+                    ),
                 )
                 tools_used = list(result.metadata.get("tools_used") or [])
                 tools_unlocked = list(result.metadata.get("tools_unlocked") or [])
@@ -498,6 +509,11 @@ class DefaultReasoner(
                 if isinstance(total_tokens, int) and total_tokens >= 0:
                     turn_metrics["total_tokens"] = total_tokens
                 retry_trace["turn_metrics"] = turn_metrics
+                if role_metadata.get("role_id"):
+                    retry_trace["formal_role_reply"] = True
+                    retry_trace["role_reply_previous_updated_at"] = (
+                        previous_mood_updated_at
+                    )
                 return TurnRunResult(
                     reply=result.reply,
                     tools_used=tools_used,
