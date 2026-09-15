@@ -8,8 +8,11 @@ from typing import Any
 
 @dataclass
 class ResponseMetadata:
+    """Formal reply fields retained separately from the displayed content."""
+
     raw_text: str
     mood: str | None = None
+    thought: str | None = None
 
 
 @dataclass

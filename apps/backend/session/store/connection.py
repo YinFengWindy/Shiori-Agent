@@ -4,12 +4,25 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 from conversation.store import ensure_conversation_schema
 
 
 class _SessionConnection:
+    @contextmanager
+    def transaction(self):
+        """Commit a synchronous message/metadata batch or roll it back together."""
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+                self._conn.commit()
+            except BaseException:
+                self._conn.rollback()
+                raise
+
     def __init__(self, db_path: str | Path):
         self.db_path = str(db_path)
         self._workspace = Path(db_path).expanduser().resolve().parent

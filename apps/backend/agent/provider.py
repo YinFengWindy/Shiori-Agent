@@ -250,6 +250,8 @@ class LLMProvider:
         disable_thinking: bool = False,
         payload_snapshot_enabled: bool | None = None,
         on_content_delta: Callable[[StreamDelta], Awaitable[None]] | None = None,
+        # Opt-in final role output constraint; background calls remain unconstrained.
+        response_format: dict[str, str] | None = None,
     ) -> LLMResponse:
         strategy = _select_provider_strategy(
             provider_name=self._provider_name,
@@ -259,6 +261,8 @@ class LLMProvider:
         full_messages = _merge_leading_system_messages(messages)
         full_messages = strategy.normalize_messages(full_messages)
         kwargs: dict = dict(model=model, max_tokens=max_tokens, messages=full_messages)
+        if response_format is not None:
+            kwargs["response_format"] = response_format
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = tool_choice

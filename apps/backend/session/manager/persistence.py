@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -37,13 +39,14 @@ class _PersistenceMixin:
             last_consolidated=last_consolidated,
         )
 
-    def _ensure_session_meta(self, session: Session) -> None:
+    def _ensure_session_meta(self, session: Session, *, commit: bool = True) -> None:
         self._store.upsert_session(
             session.key,
             created_at=session.created_at.isoformat(),
             updated_at=session.updated_at.isoformat(),
             last_consolidated=session.last_consolidated,
             metadata=session.metadata,
+            commit=commit,
         )
 
     def _extract_extra(self, msg: dict[str, Any]) -> dict[str, Any]:
@@ -203,7 +206,7 @@ class _PersistenceMixin:
         )
 
     def _persist_messages(
-        self, session: Session, messages: list[dict[str, Any]]
+        self, session: Session, messages: list[dict[str, Any]], *, commit: bool = True
     ) -> int:
         next_seq = self._store.next_seq(session.key)
         inserted = 0
@@ -225,6 +228,7 @@ class _PersistenceMixin:
                 tool_chain=msg.get("tool_chain"),
                 extra=self._extract_extra(msg),
                 **self._conversation_fields(msg),
+                commit=commit,
             )
             msg.update(row)
             next_seq += 1
@@ -259,23 +263,64 @@ class _PersistenceMixin:
         async with self._lock(session.key):
             self.save(session)
 
-    async def append_messages(self, session: Session, messages: list[dict]) -> None:
-        session.updated_at = datetime.now()
+    async def append_messages(
+        self,
+        session: Session,
+        messages: list[dict],
+        *,
+        metadata_updates: dict[str, Any] | None = None,
+        expected_mood_updated_at: str | None = None,
+        pending_messages: bool = False,
+        removed_metadata_keys: tuple[str, ...] = (),
+        metadata_enricher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    ) -> None:
+        """Commit message facts and state together; optionally publish private drafts.
+
+        Existing callers may pass messages already added to their session. Formal
+        turns pass private drafts with pending_messages=True, so queued saves and
+        cancellations cannot observe their uncommitted messages or metadata.
+        """
         msgs_copy = list(messages)
         async with self._lock(session.key):
-            # 1. 确保 session 元数据存在并刷新 updated_at。
-            self._ensure_session_meta(session)
-            # 2. 追加写入本次新增消息，并补齐稳定 id。
-            self._persist_messages(session, msgs_copy)
-            # 3. 回写 session 元数据（含 last_consolidated / metadata）。
-            self._store.upsert_session(
-                session.key,
-                created_at=session.created_at.isoformat(),
-                updated_at=session.updated_at.isoformat(),
-                last_consolidated=session.last_consolidated,
-                metadata=session.metadata,
+            if pending_messages:
+                session = self._cache.get(session.key, session)
+            if (
+                expected_mood_updated_at is not None
+                and str(session.metadata.get("current_mood_updated_at", ""))
+                != expected_mood_updated_at
+            ):
+                raise ValueError("角色已有更新的正式回复，已丢弃过时回合状态")
+            metadata = {**session.metadata, **(metadata_updates or {})}
+            for key in removed_metadata_keys:
+                metadata.pop(key, None)
+            if metadata_enricher is not None:
+                metadata = metadata_enricher(metadata)
+            staged = replace(
+                session,
+                metadata=metadata,
+                messages=(
+                    [*session.messages, *msgs_copy]
+                    if pending_messages
+                    else list(session.messages)
+                ),
+                updated_at=datetime.now(),
             )
-            self._project_session_threads(session)
+            previous_messages = [dict(message) for message in msgs_copy]
+            try:
+                with self._store.transaction():
+                    self._ensure_session_meta(staged, commit=False)
+                    self._persist_messages(staged, msgs_copy, commit=False)
+                    self._project_session_threads(staged)
+            except BaseException:
+                for message, previous in zip(msgs_copy, previous_messages, strict=True):
+                    message.clear()
+                    message.update(previous)
+                raise
+            # There are no awaits between the SQL commit and cache publication.
+            if pending_messages:
+                session.messages.extend(msgs_copy)
+            session.metadata = staged.metadata
+            session.updated_at = staged.updated_at
             self._cache[session.key] = session
 
     def get_message_media(

@@ -184,6 +184,9 @@ export type SessionPayload = {
   updated_at: string;
   last_consolidated: number;
   metadata: Record<string, unknown> & {
+    /** Formal state committed with the latest successful role reply. */
+    current_mood?: string;
+    current_thought?: string;
     relationship_snapshot?: RelationshipSnapshot | null;
     loneliness_runtime?: LonelinessRuntime | null;
   };

@@ -7,6 +7,9 @@ from typing import Any
 
 import agent.core.passive_support as support
 from agent.core.types import LLMToolCall, ReasonerResult
+from agent.core.reply_completion import complete_role_reply
+from agent.core.reply_stream import RoleReplyStream
+from core.roles.reply_state import role_reply_prompt
 from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
 
 logger = logging.getLogger("agent.core.passive_turn")
@@ -89,6 +92,7 @@ class _PassiveReasoningResultMixin:
         reason: str,
         iteration: int,
         tools_used: list[str],
+        reply_moods: tuple[str, ...] | None = None,
     ) -> tuple[str, int | None]:
         # 1. 先构造收尾总结 prompt。
         summary_prompt = (
@@ -97,6 +101,45 @@ class _PassiveReasoningResultMixin:
             f"[已调用工具] {', '.join(tools_used[-8:]) if tools_used else '无'}\n\n"
             + _INCOMPLETE_SUMMARY_PROMPT
         )
+
+        if reply_moods:
+            summary_prompt = summary_prompt.replace("不要输出 JSON。", "")
+            summary_messages = messages + [
+                support.build_context_hint_message(
+                    "summary_request",
+                    summary_prompt + "\n" + role_reply_prompt(reply_moods),
+                )
+            ]
+            threshold = int(getattr(self, "_memory_input_token_threshold", 0))
+            from core.roles.reply_state import InvalidRoleReply
+
+            if (
+                threshold > 0
+                and support.estimate_messages_tokens(summary_messages) >= threshold
+            ):
+                raise InvalidRoleReply("角色阶段性回复超出当前回合输入预算")
+            response = await self._llm.provider.chat(
+                messages=summary_messages,
+                tools=[],
+                model=self._llm_config.model,
+                max_tokens=self._llm_config.max_tokens,
+                response_format={"type": "json_object"},
+            )
+            original_tokens = response.total_tokens
+            response, correction = await complete_role_reply(
+                response,
+                provider=self._llm.provider,
+                model=self._llm_config.model,
+                max_tokens=self._llm_config.max_tokens,
+                messages=summary_messages,
+                moods=reply_moods,
+                stream=RoleReplyStream(None),
+                input_token_threshold=threshold,
+            )
+            total = (original_tokens or 0) + (
+                correction.total_tokens or 0 if correction else 0
+            )
+            return response.content or "", total or None
 
         # 2. 先尝试让模型给一段中文收尾总结。
         try:

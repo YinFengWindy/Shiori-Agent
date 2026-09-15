@@ -18,6 +18,24 @@ from .helpers import (
 INTERRUPTED_TURN_METADATA_KEY = "interrupted_turn"
 
 
+def build_session_message(
+    role: str,
+    content: str,
+    media: list[str] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Build a private message draft without changing any session state."""
+    message = {
+        "role": role,
+        "content": content,
+        "timestamp": datetime.now().astimezone().isoformat(),
+        **kwargs,
+    }
+    if media:
+        message["media"] = list(media)
+    return message
+
+
 @dataclass
 class Session:
     """单次对话中的 session。"""
@@ -34,15 +52,7 @@ class Session:
         self, role: str, content: str, media: list[str] | None = None, **kwargs: Any
     ) -> None:
         """Add a message to session."""
-        msg = {
-            "role": role,
-            "content": content,
-            "timestamp": datetime.now().astimezone().isoformat(),
-            **kwargs,
-        }
-        if media:
-            msg["media"] = list(media)
-        self.messages.append(msg)
+        self.messages.append(build_session_message(role, content, media, **kwargs))
         self.updated_at = datetime.now()
 
     def get_history(

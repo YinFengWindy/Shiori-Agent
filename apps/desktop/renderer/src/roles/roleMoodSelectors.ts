@@ -4,12 +4,14 @@ type ResolveCurrentMoodArgs = {
   activeSession: SessionPayload | null;
   detailRole: RoleRecord | null;
   roleForm: Pick<RoleFormState, "defaultMood">;
+  useRoleForm?: boolean;
 };
 
 type ResolveMoodIllustrationArgs = {
   activeSession: SessionPayload | null;
   detailRole: RoleRecord | null;
   roleForm: Pick<RoleFormState, "defaultMood" | "moodIllustrationBindings">;
+  useRoleForm?: boolean;
 };
 
 /** Reads the current chat mood from session metadata with role-form fallback. */
@@ -17,12 +19,13 @@ export function resolveCurrentMood({
   activeSession,
   detailRole,
   roleForm,
+  useRoleForm = true,
 }: ResolveCurrentMoodArgs): string {
-  const sessionMood = String(activeSession?.metadata.current_mood ?? "").trim();
+  const sessionMood = String(roleSession(activeSession, detailRole?.id)?.metadata.current_mood ?? "").trim();
   if (sessionMood) {
     return sessionMood;
   }
-  const formDefaultMood = String(roleForm.defaultMood ?? "").trim();
+  const formDefaultMood = useRoleForm ? String(roleForm.defaultMood ?? "").trim() : "";
   if (formDefaultMood) {
     return formDefaultMood;
   }
@@ -30,21 +33,41 @@ export function resolveCurrentMood({
   return String(runtimeConfig.default_mood ?? "").trim();
 }
 
+/** Ignores a previously selected role's session while a new session is loading. */
+export function roleSession(session: SessionPayload | null, roleId: string | undefined) {
+  if (!session || !roleId) return null;
+  const sessionRole = session.metadata.role_id;
+  return (sessionRole ? sessionRole === roleId : session.key === `role:${roleId}`) ? session : null;
+}
+
+/** Uses legacy relationship text only until the role has a formal turn thought. */
+export function resolveCurrentThought(session: SessionPayload | null, role: RoleRecord | null) {
+  const loadedSession = roleSession(session, role?.id);
+  // Wait for the role's session before deciding whether an upgrade fallback is needed.
+  if (!loadedSession) return "";
+  const metadata = loadedSession.metadata;
+  if (typeof metadata.current_thought === "string") return metadata.current_thought.trim();
+  const legacy = metadata.relationship_snapshot ?? role?.relationship_snapshot;
+  return typeof legacy?.role_self_view === "string" ? legacy.role_self_view.trim() : "";
+}
+
 /** Resolves which illustration should represent the current mood in the chat sidebar. */
 export function resolveMoodIllustration({
   activeSession,
   detailRole,
   roleForm,
+  useRoleForm = true,
 }: ResolveMoodIllustrationArgs): string {
   const runtimeConfig = detailRole?.runtime_config ?? {};
   const currentMood = resolveCurrentMood({
     activeSession,
     detailRole,
     roleForm,
+    useRoleForm,
   });
   const bindings = normalizeMoodBindings({
     ...(runtimeConfig.mood_illustration_bindings as Record<string, unknown> | undefined),
-    ...roleForm.moodIllustrationBindings,
+    ...(useRoleForm ? roleForm.moodIllustrationBindings : {}),
   });
   const selectedBinding = bindings[currentMood] || "";
   if (!selectedBinding) {

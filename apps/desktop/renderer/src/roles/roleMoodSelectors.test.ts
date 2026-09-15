@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { RoleFormState, RoleRecord, SessionPayload } from "../shared/types";
-import { resolveCurrentMood, resolveMoodIllustration } from "./roleMoodSelectors";
+import { resolveCurrentMood, resolveCurrentThought, resolveMoodIllustration } from "./roleMoodSelectors";
 
 function createRole(overrides: Partial<RoleRecord> = {}): RoleRecord {
   return {
@@ -61,6 +61,28 @@ function createSession(metadata: Record<string, unknown>): SessionPayload {
 }
 
 describe("roleMoodSelectors", () => {
+  it("keeps formal thought independent of later relationship snapshots", () => {
+    const session = createSession({ current_thought: "我终于放心了。" });
+    session.metadata.relationship_snapshot = {
+      role_id: "mira", role_self_view: "我来自旧快照。", relation_tags: [],
+      internal_profile: { relation_state: {}, behavior_profile: {} }, source_summary: {},
+      generated_at: "", last_attempted_at: "", last_error: "",
+    };
+    assert.equal(resolveCurrentThought(session, createRole()), "我终于放心了。");
+    session.metadata.relationship_snapshot.role_self_view = "我来自刚生成的长期快照。";
+    assert.equal(resolveCurrentThought(session, createRole()), "我终于放心了。");
+    delete session.metadata.current_thought;
+    assert.equal(resolveCurrentThought(session, createRole()), "我来自刚生成的长期快照。");
+  });
+
+  it("ignores stale role session and form data during a chat role switch", () => {
+    const session = createSession({ role_id: "mira", current_mood: "开心", current_thought: "我属于Mira。" });
+    const role = createRole({ id: "yin", runtime_config: { default_mood: "平静", mood_illustration_bindings: { 平静: "D:/yin/calm.png" } } });
+    const roleForm = createRoleForm({ defaultMood: "开心", moodIllustrationBindings: { 平静: "D:/mira/calm.png", 开心: "D:/mira/happy.png" } });
+    assert.equal(resolveCurrentThought(session, role), "");
+    assert.equal(resolveCurrentMood({ activeSession: session, detailRole: role, roleForm, useRoleForm: false }), "平静");
+    assert.equal(resolveMoodIllustration({ activeSession: session, detailRole: role, roleForm, useRoleForm: false }), "D:/yin/calm.png");
+  });
   it("prefers current session mood over default mood", () => {
     assert.equal(
       resolveCurrentMood({

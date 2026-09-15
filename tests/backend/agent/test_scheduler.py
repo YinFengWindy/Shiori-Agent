@@ -66,7 +66,10 @@ async def test_recurring_desktop_delivery_persists_once_per_occurrence(tmp_path,
     event_bus = EventBus()
     provider = MagicMock()
     provider.chat = AsyncMock(
-        return_value=LLMResponse(content="scheduled reply", tool_calls=[])
+        return_value=LLMResponse(
+            content='{"content":"scheduled reply","mood":"平静","thought":"我想按约定提醒你。"}',
+            tool_calls=[],
+        )
     )
     memory = MagicMock()
     memory.read_self.return_value = ""

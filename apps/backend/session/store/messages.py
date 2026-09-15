@@ -49,6 +49,7 @@ class _MessageMixin:
         media: list[str] | None = None,
         external_message_id: str | None = None,
         delivery_status: str | None = None,
+        commit: bool = True,
     ) -> dict[str, Any]:
         message_id = f"{session_key}:{seq}"
         tool_chain_payload = (
@@ -91,7 +92,8 @@ class _MessageMixin:
                 """,
                 (int(seq) + 1, int(seq) + 1, session_key),
             )
-            self._conn.commit()
+            if commit:
+                self._conn.commit()
         row = {
             "id": message_id,
             "session_key": session_key,

@@ -23,6 +23,7 @@ class _SessionMixin:
         updated_at: str,
         last_consolidated: int,
         metadata: dict[str, Any],
+        commit: bool = True,
     ) -> None:
         payload = json.dumps(metadata or {}, ensure_ascii=False)
         with self._lock:
@@ -37,7 +38,8 @@ class _SessionMixin:
                 """,
                 (key, created_at, updated_at, int(last_consolidated), payload),
             )
-            self._conn.commit()
+            if commit:
+                self._conn.commit()
 
     def update_last_consolidated(self, key: str, last_consolidated: int) -> None:
         now = datetime.now().astimezone().isoformat()
