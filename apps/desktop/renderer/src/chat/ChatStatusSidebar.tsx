@@ -23,7 +23,7 @@ export function ChatStatusSidebar({
   const normalizedLoneliness = Math.max(0, Math.min(100, Number.isFinite(lonelinessValue) ? lonelinessValue : 0));
   const shouldRenderIllustration = Boolean(moodIllustrationUrl) && visualsActive;
   return (
-    <div className={cx(chatSidebarPanelClass, "grid-rows-[minmax(72px,1fr)_auto_minmax(0,auto)_auto_auto] gap-2")}>
+    <div className={cx(chatSidebarPanelClass, "chat-status-sidebar grid-rows-[minmax(72px,1fr)_auto_minmax(0,auto)_auto_auto] gap-2")}>
       {/* Absolute sizing binds the illustration to its shrinking grid row, not its intrinsic image height. */}
       <div className="relative min-h-0 rounded-md">
         {shouldRenderIllustration ? (

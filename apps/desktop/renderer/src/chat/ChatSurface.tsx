@@ -512,7 +512,8 @@ export function ChatSurface({
         {chatLatestImageSidebarMounted ? (
           <div
             className={cx(
-              "h-full min-h-0 py-2 transition-[opacity,transform] duration-200",
+              "chat-sidebar-density h-full min-h-0 py-2 transition-[opacity,transform] duration-200",
+              chatLatestImageSidebarWidth <= 200 && "chat-sidebar-narrow",
               chatLatestImageSidebarCollapsed ? "pointer-events-none translate-x-8 pl-0 pr-0 opacity-0" : "translate-x-0 pl-2 pr-2 opacity-100",
             )}
           >
