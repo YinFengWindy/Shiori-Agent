@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ChatStatusSidebar } from "./ChatStatusSidebar";
 
 describe("ChatStatusSidebar", () => {
-  it("keeps status content scrollable when the sidebar is too small", () => {
+  it("keeps the complete thought accessible alongside mood, relationship tags, and loneliness", () => {
     const markup = renderToStaticMarkup(
       <ChatStatusSidebar
         currentMood="开心"
@@ -18,6 +18,10 @@ describe("ChatStatusSidebar", () => {
       />,
     );
 
-    assert.match(markup, /overflow-y-auto/);
+    assert.match(markup, /role="region" aria-label="当下想法"/);
+    assert.match(markup, /一段足够长的角色想法，用来验证窄窗口下内容不会把侧栏底部控件推出容器。/);
+    assert.match(markup, />开心</);
+    assert.match(markup, />亲近</);
+    assert.match(markup, />72</);
   });
 });
