@@ -10,7 +10,7 @@ import agent.core.passive_support as support
 from agent.core.types import ReasonerResult
 from agent.core.reply_completion import complete_role_reply
 from agent.core.reply_stream import RoleReplyStream
-from core.roles.reply_state import InvalidRoleReply
+from core.roles.reply_state import InvalidRoleReply, parse_role_reply
 from agent.lifecycle.types import (
     AfterStepCtx,
     AfterToolResultCtx,
@@ -738,6 +738,11 @@ class _PassiveReasoningLoopMixin:
             )
             messages.append({"role": "assistant", "content": response.content})
             # 8b. AfterStep 模块链（最终回复分支）：通知观察者本轮推理结束。
+            final_content = (
+                parse_role_reply(response.content or "", reply_moods).content
+                if reply_moods is not None
+                else response.content or ""
+            )
             _ = await self._after_step.run(
                 AfterStepCtx(
                     session_key=tool_event_session_key,
@@ -746,7 +751,7 @@ class _PassiveReasoningLoopMixin:
                     iteration=iteration,
                     context_tokens_estimate=support.estimate_messages_tokens(messages),
                     tools_called=(),
-                    partial_reply=response.content or "",
+                    partial_reply=final_content,
                     tools_used_so_far=tuple(tools_used),
                     tool_chain_partial=tuple(tool_chain),
                     partial_thinking=response.thinking,

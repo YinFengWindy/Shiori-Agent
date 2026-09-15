@@ -82,9 +82,7 @@ def test_sparse_named_role_has_runtime_identity_and_identity_updates(tmp_path):
         name="Mira", role_id="mira", system_prompt="旧兼容字段", profile={}
     )
 
-    assert (
-        RolePromptCompiler().compile(role).content.startswith("[role_identity]\nMira\n")
-    )
+    assert RolePromptCompiler().compile(role).content == "[role_identity]\nMira"
     renamed = store.update_role(
         "mira",
         name="Shiori",
@@ -94,3 +92,12 @@ def test_sparse_named_role_has_runtime_identity_and_identity_updates(tmp_path):
     assert content.startswith("[role_identity]\nShiori\n\n[role_profile]")
     assert "小栞的资料" in content
     assert "Mira" not in content
+
+
+def test_formal_reply_contract_requires_explicit_runtime_context():
+    profile = RoleProfile(character=RoleCharacterDefinition(profile="角色资料"))
+    assert "Mood Output Contract" not in RolePromptCompiler().compile(profile).content
+    content = RolePromptCompiler().compile(profile, runtime_context={}).content
+    assert "Mood Output Contract" in content
+    assert '"thought"' in content
+    assert "平静" in content

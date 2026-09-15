@@ -67,7 +67,11 @@ class RolePromptCompiler:
                 for part in (f"[role_identity]\n{role_name.strip()}", content)
                 if part
             )
-        mood_contract = _build_mood_contract(runtime_context or {})
+        # Background identity/SELF compilation omits runtime_context entirely.
+        # Explicit {} still enables formal replies for roles without illustrations.
+        mood_contract = (
+            _build_mood_contract(runtime_context) if runtime_context is not None else ""
+        )
         if mood_contract:
             content = "\n\n".join(part for part in (content, mood_contract) if part)
         return CompiledRolePrompt(content=content, matched_knowledge_entries=entries)

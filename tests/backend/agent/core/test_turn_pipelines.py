@@ -46,7 +46,12 @@ class _NoopTool(Tool):
 
 class _Provider:
     async def chat(self, **kwargs):
-        return LLMResponse(content="ok", tool_calls=[])
+        content = (
+            '{"content":"ok","mood":"平静","thought":"我放心了。"}'
+            if kwargs.get("response_format")
+            else "ok"
+        )
+        return LLMResponse(content=content, tool_calls=[])
 
 
 class _PendingTask:
@@ -300,7 +305,11 @@ def test_agent_loop_uses_custom_retrieval_pipeline(tmp_path: Path):
     session.get_history = MagicMock(
         return_value=[{"role": "user", "content": f"m{i}"} for i in range(200)]
     )
-    session.add_message = MagicMock()
+    session.add_message = MagicMock(
+        side_effect=lambda role, content, **kwargs: session.messages.append(
+            {"role": role, "content": content, **kwargs}
+        )
+    )
     loop.session_manager.get_or_create.return_value = session
     loop.session_manager.append_messages = AsyncMock(return_value=None)
     loop._reasoner.run_turn = AsyncMock(return_value=TurnRunResult(reply="ok"))

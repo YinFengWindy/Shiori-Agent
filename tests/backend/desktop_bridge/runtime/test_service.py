@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -86,7 +87,13 @@ async def test_empty_boot_register_bind_and_chat_preserves_existing_turn(
         if hold and model == "first":
             entered.set()
             await finish.wait()
-        return LLMResponse(content=f"reply from {model}")
+        content = f"reply from {model}"
+        if kwargs.get("response_format"):
+            content = json.dumps(
+                {"content": content, "mood": "平静", "thought": "我记得我们的约定。"},
+                ensure_ascii=False,
+            )
+        return LLMResponse(content=content)
 
     monkeypatch.setattr(LLMProvider, "chat", fake_chat)
     path = tmp_path / "config.toml"
@@ -252,7 +259,10 @@ async def test_first_chat_seed_failure_reports_error_and_next_chat_retries(
                 raise RuntimeError("seed provider unavailable")
             return LLMResponse(content="# 我是谁\n\n我是本地测试角色。")
         replies.append(kwargs["model"])
-        return LLMResponse(content="你好。")
+        assert kwargs.get("response_format") == {"type": "json_object"}
+        return LLMResponse(
+            content='{"content":"你好。","mood":"平静","thought":"我终于能和你说话了。"}'
+        )
 
     monkeypatch.setattr(LLMProvider, "chat", fake_chat)
     path = tmp_path / "config.toml"
