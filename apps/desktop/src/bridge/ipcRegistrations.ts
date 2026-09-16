@@ -109,7 +109,7 @@ export function registerDesktopIpcHandlers(
   host.handle("desktop:application-session-id", () => applicationSessionId);
   host.handle("desktop:invoke", async (_event, request: { method: string; payload: Record<string, unknown> }) => {
     const invoke = async () => {
-      const response = await bridge.invoke(attributePluginCommunication(_event.sender, request));
+      const response = await bridge.invoke(await attributePluginCommunication(_event.sender, request));
       if (request.method === "plugins.list" && !response.error && pluginUiResources) {
         const entries = await pluginUiResources.admit(response.payload.plugins);
         if (Array.isArray(response.payload.plugins)) {

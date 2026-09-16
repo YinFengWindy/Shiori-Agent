@@ -304,10 +304,32 @@ async def test_set_enabled_publishes_runtime_applied(tmp_path, monkeypatch):
         assert (
             len(applied) == 1
         ), f"expected exactly one runtime.applied, got {published}"
-        # The published payload is the exact response payload (plugin_id,
-        # enabled, generation, changed) — the same object `set_enabled`
-        # returned to the caller, not a re-derived subset of it.
+        # A real publication announces the resulting generation once.
         assert applied[0]["payload"] == response.payload
+        retry = await _request(
+            service,
+            "plugins.setEnabled",
+            {"plugin_id": "hello", "enabled": False, "operation_id": "op-disable"},
+        )
+        assert retry.error is None, retry.error
+        assert retry.payload == response.payload
+        assert published[-1]["payload"] == {**response.payload, "changed": False}
+        reenabled = await _request(
+            service,
+            "plugins.setEnabled",
+            {"plugin_id": "hello", "enabled": True, "operation_id": "op-enable"},
+        )
+        assert reenabled.error is None, reenabled.error
+        assert published[-1]["payload"] == reenabled.payload
+        count = len(published)
+        stale = await _request(
+            service,
+            "plugins.setEnabled",
+            {"plugin_id": "hello", "enabled": False, "operation_id": "op-disable"},
+        )
+        assert stale.error is None, stale.error
+        assert stale.payload == response.payload
+        assert len(published) == count
     finally:
         await service.aclose()
         await app.shutdown()

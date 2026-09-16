@@ -131,6 +131,33 @@ async def test_renderer_disconnect_reclaims_only_its_registered_contexts():
     }
 
 
+@pytest.mark.asyncio
+async def test_delayed_departed_document_disconnect_preserves_successor_routing():
+    comm, bus, _ = communication()
+    caller = await context(comm)
+    old = {"plugin_id": "provider", "owner": "old", "renderer": "document-1"}
+    old.update(await comm.handle("open", old))
+    await comm.handle("register", {**old, "name": "sync"})
+    await comm.handle("disconnect", {"renderer": "document-1"})
+    new = {"plugin_id": "provider", "owner": "new", "renderer": "document-2"}
+    new.update(await comm.handle("open", new))
+    await comm.handle("register", {**new, "name": "sync"})
+    await comm.handle("disconnect", {"renderer": "document-1"})
+
+    async def reply(event):
+        event.dispatched = True
+        assert event.payload["owner"] == "new"
+        await comm.handle(
+            "reply",
+            {**new, "request_id": event.payload["request_id"], "result": {"ok": True}},
+        )
+
+    bus.on(PluginBridgeEvent, reply)
+    assert await comm.handle(
+        "call", {**caller, "target": "provider", "name": "sync"}
+    ) == {"result": {"ok": True}}
+
+
 @pytest.mark.parametrize("name", ["plugin.provider.sync", "", "../sync", "sync..now"])
 def test_local_names_cannot_escape_the_injected_namespace(name):
     with pytest.raises(PluginRpcError):

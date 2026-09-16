@@ -18,19 +18,72 @@ _REGISTRATION = "00000000-0000-4000-a000-000000000001"
 
 
 @pytest.mark.asyncio
-async def test_plugin_config_publication_notifies_renderer_contexts():
+@pytest.mark.parametrize(
+    "method", ["runtime.apply", "plugin.config.set", "plugins.setEnabled"]
+)
+async def test_apply_notifications_distinguish_publication_from_replays(method):
     service = object.__new__(ReloadableDesktopService)
     result = {"plugin_id": "demo", "generation": 2, "changed": True}
+    service.settings = SimpleNamespace(apply=AsyncMock(return_value=result))
     service.plugin_config = SimpleNamespace(set=AsyncMock(return_value=result))
-    service.publish_event = AsyncMock()
-    response = await service.handle(
-        {"id": "save", "method": "plugin.config.set", "payload": {}},
-        emit_event=lambda event: None,
+    service.plugin_management = SimpleNamespace(
+        set_enabled=AsyncMock(return_value=result)
     )
+    transport = SimpleNamespace(publish_event=AsyncMock())
+    service._current = _ServiceGeneration(
+        transport, SimpleNamespace(generation=2), publication_pending=True
+    )
+
+    async def request():
+        return await service.handle(
+            {"id": "save", "method": method, "payload": {}},
+            emit_event=lambda event: None,
+        )
+
+    response = await request()
     assert response.error is None
-    service.publish_event.assert_awaited_once_with(
+    transport.publish_event.assert_awaited_once_with(
         {"id": "save", "type": "event", "method": "runtime.applied", "payload": result}
     )
+    replay = await request()
+    assert replay.payload == response.payload == result
+    assert replay.payload["changed"] is True
+    assert transport.publish_event.await_args.args[0]["payload"] == {
+        **result,
+        "changed": False,
+    }
+    # A historical response remains idempotent after a later generation, without
+    # falsely announcing the retired generation to current renderer contexts.
+    service._current.lease.generation = 3
+    assert (await request()).payload == result
+    assert transport.publish_event.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_notifications_claim_publication_before_transport_await():
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    published = []
+
+    async def publish(event):
+        published.append(event)
+        entered.set()
+        await release.wait()
+
+    service = object.__new__(ReloadableDesktopService)
+    service._current = _ServiceGeneration(
+        SimpleNamespace(publish_event=publish),
+        SimpleNamespace(generation=2),
+        publication_pending=True,
+    )
+    result = {"generation": 2, "changed": True}
+    first = asyncio.create_task(service._notify_applied("first", result))
+    await entered.wait()
+    second = asyncio.create_task(service._notify_applied("replay", result))
+    release.set()
+    await asyncio.gather(first, second)
+    assert [event["payload"]["changed"] for event in published] == [True, False]
+    assert result["changed"] is True
 
 
 @pytest.mark.asyncio
@@ -82,6 +135,52 @@ def _config(model=""):
         registration
         + '\n[agent.maintenance]\nmemory_optimizer_enabled = false\n[proactive]\nenabled = false\nprofile = "quiet"\n'
     )
+
+
+@pytest.mark.asyncio
+async def test_runtime_apply_retries_and_noops_preserve_generation_notifications(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda workspace: [])
+    path = tmp_path / "config.toml"
+    path.write_text(_config(), encoding="utf-8")
+    app = AppRuntime(
+        load_config_text(_config()),
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+    )
+    await app.start()
+    service = ReloadableDesktopService(app, path, RoleStore(tmp_path))
+    events = []
+    service.add_event_listener(events.append)
+
+    async def apply(payload):
+        response = await service.handle(
+            {"method": "runtime.apply", "payload": payload},
+            emit_event=lambda event: None,
+        )
+        assert response.error is None, response.error
+        return response.payload
+
+    try:
+        payload = {"config_toml": _config("first"), "operation_id": "first"}
+        first, replay = await asyncio.gather(apply(payload), apply(payload))
+        assert first == replay == {"generation": 2, "changed": True}
+        assert [event["payload"]["changed"] for event in events] == [True, False]
+        noop = await apply({**payload, "operation_id": "noop"})
+        assert noop == {"generation": 2, "changed": False}
+        assert events[-1]["payload"] == noop
+        second = await apply(
+            {"config_toml": _config("second"), "operation_id": "second"}
+        )
+        assert second == {"generation": 3, "changed": True}
+        assert events[-1]["payload"] == second
+        count = len(events)
+        assert await apply(payload) == first
+        assert len(events) == count
+    finally:
+        await service.aclose()
+        await app.shutdown()
 
 
 @pytest.mark.asyncio
@@ -437,6 +536,8 @@ async def test_restart_required_refuses_all_hot_write_routes_before_candidate_or
     roles = RoleStore(tmp_path)
     role = roles.create_role(name="Role", system_prompt="Role", role_id="role")
     service = ReloadableDesktopService(app, path, roles)
+    published = []
+    service.add_event_listener(published.append)
     state = app.core.plugin_manager._dependency_api("restart_required")
     build = AsyncMock(side_effect=AssertionError("candidate must not start"))
     monkeypatch.setattr("bootstrap.runtime.reload.prepare_core_runtime", build)
@@ -453,6 +554,7 @@ async def test_restart_required_refuses_all_hot_write_routes_before_candidate_or
             "runtime.apply", {"config_toml": text, "operation_id": "noop"}
         )
         assert no_op.error is None
+        assert published[-1]["payload"]["changed"] is False
         role_only = await request(
             "runtime.apply",
             {
@@ -469,6 +571,8 @@ async def test_restart_required_refuses_all_hot_write_routes_before_candidate_or
             },
         )
         assert role_only.error is None, role_only.error
+        assert role_only.payload["changed"] is True
+        assert published[-1]["payload"] == {"generation": 1, "changed": False}
         assert (
             roles.get_role(role.id).runtime_config["dialogue_model_registration_id"]
             == _REGISTRATION

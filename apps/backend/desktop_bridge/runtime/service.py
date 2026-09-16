@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 class _ServiceGeneration:
     service: DesktopBridgeService
     lease: RuntimeLease
+    publication_pending: bool = False
     requests: int = 0
     idle: asyncio.Event = field(default_factory=asyncio.Event)
 
@@ -129,14 +130,7 @@ class ReloadableDesktopService:
                     )
                 )
                 if method == "runtime.apply":
-                    await self.publish_event(
-                        {
-                            "id": request_id,
-                            "type": "event",
-                            "method": "runtime.applied",
-                            "payload": result,
-                        }
-                    )
+                    await self._notify_applied(request_id, result)
                 return result
 
             return await self._respond_or_apply_error(
@@ -156,14 +150,7 @@ class ReloadableDesktopService:
                 )
 
                 if method == "plugin.config.set":
-                    await self.publish_event(
-                        {
-                            "id": request_id,
-                            "type": "event",
-                            "method": "runtime.applied",
-                            "payload": result,
-                        }
-                    )
+                    await self._notify_applied(request_id, result)
                 return result
 
             return await self._respond_or_apply_error(
@@ -181,32 +168,7 @@ class ReloadableDesktopService:
                     prepare_service=self._prepare,
                     publish_service=self._publish,
                 )
-                # `plugins.setEnabled` performs a real settings apply (same
-                # `RuntimeSettingsApplication.apply` as `runtime.apply`, same
-                # `{generation, changed}` result shape) but is dispatched
-                # through this PLUGIN_MANAGEMENT branch rather than SETTINGS,
-                # so it never reached the `method == "runtime.apply"` publish
-                # below. Without this, no window other than the one that
-                # issued the toggle ever learns a plugin's enabled state
-                # changed — in particular the plugin-host window (#226),
-                # which has no `pluginEnabledStateStore` of its own and relies
-                # entirely on `runtime.applied` to know when to re-fetch
-                # `plugins.list`. A disabled plugin's background contribution
-                # would otherwise keep running until an unrelated settings
-                # save happened to fire `runtime.apply`, or the app restarted
-                # — exactly the leak #181's "停用插件后...订阅全部回收"
-                # acceptance criterion exists to rule out. `useDesktopBridgeLifecycle`
-                # and `useOnboardingSnapshot` already treat `runtime.applied`
-                # as "something changed, refetch"; an extra one from a plugin
-                # toggle is a harmless idempotent refresh for both.
-                await self.publish_event(
-                    {
-                        "id": request_id,
-                        "type": "event",
-                        "method": "runtime.applied",
-                        "payload": result,
-                    }
-                )
+                await self._notify_applied(request_id, result)
                 return result
 
             return await self._respond_or_apply_error(
@@ -266,6 +228,25 @@ class ReloadableDesktopService:
             entry.requests -= 1
             if not entry.requests:
                 entry.idle.set()
+
+    async def _notify_applied(self, request_id, result):
+        """Announces actual publication once, while preserving refresh-only events."""
+        entry = self._current
+        if result["generation"] != entry.lease.generation:
+            # An idempotent retry can return a result from a retired generation.
+            return
+        changed = entry.publication_pending
+        # Claim publication before yielding so simultaneous saves/retries cannot
+        # invalidate renderer contexts twice for the same committed generation.
+        entry.publication_pending = False
+        await entry.service.publish_event(
+            {
+                "id": request_id,
+                "type": "event",
+                "method": "runtime.applied",
+                "payload": {**result, "changed": changed},
+            }
+        )
 
     async def _respond_or_apply_error(self, request_id: str, method: str, compute):
         """Runs one SETTINGS/PLUGIN_CONFIG/PLUGIN_MANAGEMENT handler.
@@ -333,7 +314,9 @@ class ReloadableDesktopService:
         previous = self._current
         if previous.service.plugin_rpc_registry is not None:
             previous.service.plugin_rpc_registry.communication.retire()
-        self._current = _ServiceGeneration(service, self.app.pin())
+        self._current = _ServiceGeneration(
+            service, self.app.pin(), publication_pending=True
+        )
         service.register_desktop_push_channel(self.app.core.push_tool)
         self._entries.append(self._current)
         for listener in self._listeners:

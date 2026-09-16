@@ -80,8 +80,14 @@ awaitable methods with `ctx.rpc.handle`; `ctx.events` is plugin-local and
 
 Components must renew subscription effects when their injected `client` changes.
 The host replaces contexts on a real runtime publication or bridge restart,
-reclaims methods/listeners/pending requests on teardown and renderer failure, and
-leaves no-op configuration notifications alone. Background request waits are
+reclaims methods/listeners/pending requests on teardown, renderer failure, and
+main-frame document reload/navigation. Document ownership tokens prevent delayed
+cleanup from touching successor registrations; in-page/subframe navigation leaves
+contexts intact. `runtime.applied.changed` means a new runtime generation was
+published, independently of the idempotent RPC response's historical `changed`
+value. Same-generation retries, no-op saves, and role-only writes emit refresh
+events with `changed: false`; retries from retired generations emit no event.
+These refreshes leave communication contexts intact. Background request waits are
 bounded and do not occupy backend RPC scheduling capacity. Method policies on
 backend calls are unchanged. See [the plugin tutorial](plugins-tutorial.md#桌面-rpc事件与-ui)
 for examples and delivery/error semantics. Packages using these additions must
