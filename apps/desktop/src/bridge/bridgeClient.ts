@@ -229,6 +229,7 @@ export class DesktopBridgeClient extends EventEmitter {
       }
       const response = await this.invoke({ method: "health", payload: {} }, true);
       if (!response.error && response.payload?.ok === true) {
+        this.emit("event", { id: "bridge-ready", type: "event", method: "bridge.ready", payload: {} });
         return;
       }
       lastError = response.error?.message || lastError;

@@ -1,14 +1,10 @@
-import { BridgeError, invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
+import { createPluginCommunicationClient, type PluginCommunicationClient } from "./pluginCommunicationClient";
+import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 import type { JsonSchema } from "./jsonSchemaForm";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 
-/** Stable error exposed by the plugin bridge client. */
-export class PluginBridgeError extends BridgeError {
-  constructor(message: string, code: string, details?: Record<string, unknown>) {
-    super(message, code, details);
-    this.name = "PluginBridgeError";
-  }
-}
+import { PluginBridgeError } from "./pluginBridgeError";
+export { PluginBridgeError } from "./pluginBridgeError";
 
 export type PluginConfigSnapshot = {
   pluginId: string;
@@ -152,28 +148,10 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
   };
 }
 
-/**
- * Restricted handle injected into plugin-authored UI components (see
- * `pluginUiModuleContract.tsx`). `call` can only reach methods under that
- * plugin's own `plugin.<id>.*` namespace — the namespace prefix is baked in
- * by `createPluginRpcClient`, not supplied by the caller, so a plugin
- * component cannot address another plugin's methods even by mistake.
- */
-export type PluginRpcClient = {
-  call<T>(method: string, payload?: Record<string, unknown>, options?: { timeoutMs?: number }): Promise<T>;
-};
+/** Namespace-bound calls, events, declared peers and background requests. */
+export type PluginRpcClient = PluginCommunicationClient;
 
-/**
- * Creates a client scoped to one plugin's own `plugin.<id>.*` RPC namespace.
- * `invoke` resolves lazily (only inside `call`, not eagerly at creation
- * time) so building this client — e.g. once per plugin at UI registration —
- * never requires `window.miraDesktop` to already exist, and pure unit tests
- * that never actually invoke a method don't need a DOM/bridge stub either.
- */
+/** Creates a lazy, disposable plugin communication context. */
 export function createPluginRpcClient(pluginId: string, invoke?: DesktopInvoke): PluginRpcClient {
-  return {
-    async call<T>(method: string, payload: Record<string, unknown> = {}, options?: { timeoutMs?: number }): Promise<T> {
-      return invokePluginPayload<T>(invoke ?? window.miraDesktop.invoke, `plugin.${pluginId}.${method}`, payload, options);
-    },
-  };
+  return createPluginCommunicationClient(pluginId, { invoke });
 }

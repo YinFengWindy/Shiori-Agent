@@ -30,7 +30,6 @@ function setup(overrides: {
   pluginUiResources?: PluginUiResources;
 } = {}) {
   const windowCalls: WindowCall[] = [];
-  const petCalls: Array<{ method: string; args: unknown[] }> = [];
   const externalOpened: string[] = [];
   const handlers = new Map<string, (event: never, ...args: never[]) => unknown>();
   const listeners = new Map<string, (event: never, ...args: never[]) => void>();
@@ -64,9 +63,7 @@ function setup(overrides: {
   // window predicate and a command sink, both supplied by `main.ts`.
   const isPetWindow = (window: BrowserWindow | null) =>
     Boolean(window) && (window as unknown as FakeWindow).label === petWindowLabel;
-  const requestDesktopPetCommand = (command: unknown) => {
-    petCalls.push({ method: "command", args: [command] });
-  };
+
 
   registerDesktopIpcHandlers(host, {
     pluginUiResources: overrides.pluginUiResources,
@@ -84,7 +81,6 @@ function setup(overrides: {
     localAssetImportsRoot: "imports",
     openLocalAttachment: async () => ({ ok: true }),
     isPetWindow,
-    requestDesktopPetCommand,
     voiceRecorder: {},
     voiceController: {},
     voicePlayback: {},
@@ -93,7 +89,6 @@ function setup(overrides: {
   return {
     windows: { main, other, pet },
     windowCalls,
-    petCalls,
     externalOpened,
     channels: { handled: [...handlers.keys()], listened: [...listeners.keys()] },
     async invokeHandler(channel: string, sender: WebContents, ...args: unknown[]) {
@@ -190,22 +185,6 @@ describe("desktop ipc permission boundaries", () => {
       .filter((channel) => channel.includes("observation")), []);
   });
 
-  it("turns a pet sync request into a command for the plugin that owns the pet", async () => {
-    const ipc = setup();
-
-    await ipc.invokeHandler("desktop:pet-sync", ipc.windows.main.webContents, false);
-    await ipc.invokeHandler("desktop:pet-sync", ipc.windows.main.webContents);
-    await ipc.invokeHandler("desktop:pet-sync", ipc.windows.main.webContents, "not a boolean");
-
-    // Since #181-C the controller lives in the plugin host renderer, so this
-    // forwards the command and the plugin owns the resulting state changes.
-    assert.deepEqual(ipc.petCalls, [
-      { method: "command", args: [{ kind: "sync", forceVisible: false }] },
-      { method: "command", args: [{ kind: "sync", forceVisible: undefined }] },
-      { method: "command", args: [{ kind: "sync", forceVisible: undefined }] },
-    ]);
-  });
-
   it("keeps no pet-specific window channels of its own", () => {
     const ipc = setup();
     const petChannels = [...ipc.channels.handled, ...ipc.channels.listened]
@@ -215,9 +194,7 @@ describe("desktop ipc permission boundaries", () => {
     // bubble sizing, drag, double click and context menu arrive on the generic
     // DesktopSurface channels and are attributed there by window identity.
     // What is left here is the pet's *domain* plumbing, not its window.
-    assert.deepEqual(petChannels.sort(), [
-      "desktop:pet-sync",
-    ]);
+    assert.deepEqual(petChannels.sort(), []);
   });
 
   it("routes external links through the shared policy before reaching the shell", async () => {

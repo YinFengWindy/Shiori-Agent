@@ -1,10 +1,11 @@
+import { usePluginRpcClient } from "./usePluginRpcClient";
 import { PluginHostServicesProvider } from "./PluginHostServicesProvider";
 import { desktopPluginHostServices, type PluginHostServices } from "./pluginHostServices";
 import type React from "react";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry, type PluginChatImageActionProps, type PluginRoleSettingsContribution } from "./pluginFeatureRegistry";
 import type { SettingsSubsection, StandaloneSettingsSectionProps } from "../settings/settingsPageTypes";
 import { createPluginSchemaSettingsSection } from "./PluginSchemaSettingsSection";
-import { createPluginRpcClient, type PluginRpcClient } from "./pluginBridgeClient";
+import { type PluginRpcClient } from "./pluginBridgeClient";
 import {
   pluginUiRegistry,
   type PluginNavPageProps,
@@ -87,18 +88,15 @@ function isPluginUiModule(value: unknown): value is PluginUiModule {
 }
 
 /**
- * Wraps a plugin-authored component so it always receives a `client` bound
- * to that plugin's own `plugin.<id>.*` RPC namespace. The plugin never
- * constructs its own client or needs to know its own id — per the issue
- * #174 spec, plugin-authored UI only uses an injected, typed client and
- * never reaches Electron/IPC/global state directly.
+ * Injects mount-scoped clients and host services into contributed components.
+ * Namespace binding expresses cooperation; it is not a same-realm sandbox.
  */
 function bindPluginClient<TBaseProps extends object>(
   pluginId: string,
   Component: React.ComponentType<TBaseProps & { client: PluginRpcClient }>,
 ): React.ComponentType<TBaseProps> {
-  const client = createPluginRpcClient(pluginId);
   return function PluginClientBoundComponent(props: TBaseProps) {
+    const client = usePluginRpcClient(pluginId);
     return <PluginHostServicesProvider services={desktopPluginHostServices}>
       <Component {...props} client={client} />
     </PluginHostServicesProvider>;
@@ -124,7 +122,7 @@ export function applyPluginUiModules(
     const { pluginId, settingsSection, navPage, roleAssets } = uiModule;
     if (uiModule.roleSettings) pluginRoleSettingsRegistry.register({ pluginId, ...uiModule.roleSettings });
     if (uiModule.chatImageActions) pluginChatImageActionsRegistry.register({
-      pluginId, client: createPluginRpcClient(pluginId), Component: uiModule.chatImageActions,
+      pluginId, Component: uiModule.chatImageActions,
     });
     if (settingsSection) {
       const id = pluginId;

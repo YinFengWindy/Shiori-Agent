@@ -116,6 +116,8 @@ export type BridgeResponse = {
 };
 
 export type BridgeEvent = {
+  /** Owning plugin runtime generation; host events omit this field. */
+  pluginGeneration?: string;
   id: string;
   type: "event";
   method: string;
@@ -359,7 +361,6 @@ export type DesktopApi = {
   /** Returns the current custom window state used by the frameless title bar. */
   windowState(): Promise<WindowState>;
   /** Synchronizes the desktop-pet window with the role saved by the detail form. */
-  syncPet(forceVisible?: boolean): Promise<void>;
   /**
    * The DesktopSurface capability (#181): plugin-owned desktop windows.
    *

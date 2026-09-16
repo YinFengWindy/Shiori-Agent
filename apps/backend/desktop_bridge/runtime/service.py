@@ -145,7 +145,7 @@ class ReloadableDesktopService:
         if policy.handler is Handler.PLUGIN_CONFIG:
 
             async def compute_plugin_config_result():
-                return (
+                result = (
                     self.plugin_config.get(payload)
                     if method == "plugin.config.get"
                     else await self.plugin_config.set(
@@ -154,6 +154,17 @@ class ReloadableDesktopService:
                         publish_service=self._publish,
                     )
                 )
+
+                if method == "plugin.config.set":
+                    await self.publish_event(
+                        {
+                            "id": request_id,
+                            "type": "event",
+                            "method": "runtime.applied",
+                            "payload": result,
+                        }
+                    )
+                return result
 
             return await self._respond_or_apply_error(
                 request_id, method, compute_plugin_config_result
@@ -320,6 +331,8 @@ class ReloadableDesktopService:
 
     def _publish(self, service):
         previous = self._current
+        if previous.service.plugin_rpc_registry is not None:
+            previous.service.plugin_rpc_registry.communication.retire()
         self._current = _ServiceGeneration(service, self.app.pin())
         service.register_desktop_push_channel(self.app.core.push_tool)
         self._entries.append(self._current)

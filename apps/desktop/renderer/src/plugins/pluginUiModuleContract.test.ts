@@ -1,4 +1,5 @@
-import { isValidElement, type ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createElement, isValidElement, type ReactElement } from "react";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { applyPluginUiModules, type PluginUiModule } from "./pluginUiModuleContract.js";
@@ -15,8 +16,12 @@ function renderElement<TProps>(
   Component: (props: TProps) => { type: unknown; props: Record<string, unknown> },
   props: TProps,
 ): { type: unknown; props: Record<string, unknown> } {
-  const wrapped = Component(props);
-  const child = wrapped.props.children;
+  let child: unknown;
+  function Capture() {
+    child = Component(props).props.children;
+    return null;
+  }
+  renderToStaticMarkup(createElement(Capture));
   assert.ok(isValidElement(child), "plugin subtree must receive host services");
   return child as ReactElement<Record<string, unknown>>;
 }
@@ -108,9 +113,10 @@ describe("applyPluginUiModules", () => {
     const originalWindow = (globalThis as { window?: unknown }).window;
     (globalThis as { window?: unknown }).window = {
       miraDesktop: {
+        onEvent: () => () => {},
         invoke: async ({ method }: { method: string }) => {
           calls.push(method);
-          return { id: "1", type: "response", method, error: null, payload: {} };
+          return { id: "1", type: "response", method, error: null, payload: { generation: "g1" } };
         },
       },
     };
@@ -124,7 +130,7 @@ describe("applyPluginUiModules", () => {
     // Every call the plugin makes — from either slot — is confined to
     // "plugin.demo.*"; the plugin never supplies (and cannot override) that
     // prefix itself.
-    assert.deepEqual(calls, ["plugin.demo.readSomething", "plugin.demo.doSomething"]);
+    assert.deepEqual(calls, ["plugins.communication.open", "plugin.demo.readSomething", "plugins.communication.open", "plugin.demo.doSomething"]);
   });
 
   it("registers a nav.page's optional Sidebar bound with a client, and passes selectBlockedReason through untouched", () => {

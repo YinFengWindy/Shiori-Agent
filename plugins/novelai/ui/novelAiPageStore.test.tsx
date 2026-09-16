@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import {
   __getSnapshotForTests,
   backToStudio,
@@ -142,7 +142,7 @@ describe("novelAiPageStore (issue #226 gap A's 'real complication')", () => {
 
   it("setActiveRoleId clears error/latestResult only when the role actually changes", async () => {
     resetNovelAiPageStoreForTests();
-    const failingClient: PluginRpcClient = { call: async () => { throw new Error("boom"); } };
+    const failingClient: PluginRpcClient = { ...createPluginRpcClient("fixture"), call: async () => { throw new Error("boom"); } };
     await loadHistory(failingClient, "role-1");
     assert.notEqual(__getSnapshotForTests().error, "");
 
@@ -180,7 +180,7 @@ describe("novelAiPageStore (issue #226 gap A's 'real complication')", () => {
 
   it("submitGenerate publishes submitting/latestResult/history so both mount points see the same result", async () => {
     resetNovelAiPageStoreForTests();
-    const client: PluginRpcClient = {
+    const client: PluginRpcClient = { ...createPluginRpcClient("fixture"),
       call: async <T,>(method: string): Promise<T> => {
         if (method === "generate") {
           return { result: { record_id: "rec-1", created_at: "", mode: "txt2img", model: "m", seed: null, width: 1, height: 1, output_paths: [], request_path: "", meta_path: "", wrote_back_to_role: false, role_asset_paths: [] } } as T;
@@ -231,7 +231,7 @@ describe("novelAiPageStore selectors and error clearing", () => {
     clearError();
     assert.equal(__getSnapshotForTests(), before, "clearError on a clean store must not produce a new snapshot");
 
-    const failingClient: PluginRpcClient = { call: async () => { throw new Error("boom"); } };
+    const failingClient: PluginRpcClient = { ...createPluginRpcClient("fixture"), call: async () => { throw new Error("boom"); } };
     await loadHistory(failingClient, "role-1");
     assert.notEqual(__getSnapshotForTests().error, "");
 

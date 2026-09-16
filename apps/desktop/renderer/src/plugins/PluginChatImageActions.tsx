@@ -1,3 +1,5 @@
+import { usePluginRpcClient } from "./usePluginRpcClient";
+import type { ComponentType } from "react";
 import { pluginChatImageActionsRegistry, type PluginChatImageActionProps } from "./pluginFeatureRegistry";
 import { usePluginEnabledState } from "./usePluginEnabledState";
 
@@ -5,6 +7,11 @@ import { usePluginEnabledState } from "./usePluginEnabledState";
 export function PluginChatImageActions(props: Omit<PluginChatImageActionProps, "client">) {
   const enabled = usePluginEnabledState();
   return pluginChatImageActionsRegistry.list().filter((entry) => enabled(entry.pluginId)).map((entry) => (
-    <entry.Component {...props} key={entry.pluginId} client={entry.client} />
+    <PluginImageAction {...props} key={entry.pluginId} pluginId={entry.pluginId} Component={entry.Component} />
   ));
+}
+
+function PluginImageAction({ pluginId, Component, ...props }: Omit<PluginChatImageActionProps, "client"> & { pluginId: string; Component: ComponentType<PluginChatImageActionProps> }) {
+  const client = usePluginRpcClient(pluginId);
+  return <Component {...props} client={client} />;
 }

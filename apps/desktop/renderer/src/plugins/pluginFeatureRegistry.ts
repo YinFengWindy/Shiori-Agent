@@ -21,7 +21,7 @@ export type PluginRoleSettingsContribution = {
   read: (source: Record<string, unknown>) => PluginRoleValues;
   Component: ComponentType<PluginRoleSettingsProps>;
   /** Runs only after a successful save changed this contribution's values. */
-  afterSave?: (values: PluginRoleValues) => Promise<void>;
+  afterSave?: (values: PluginRoleValues, client: PluginRpcClient) => Promise<void>;
 } & (
   | { storage?: "runtime"; write: (runtimeConfig: Record<string, unknown>, values: PluginRoleValues) => Record<string, unknown> }
   | { storage: "plugin" }
@@ -47,6 +47,5 @@ export const pluginRoleSettingsRegistry = new PluginContributionRegistry<
 /** UI extension only: every operation, label and availability rule belongs to its plugin. */
 export const pluginChatImageActionsRegistry = new PluginContributionRegistry<{
   pluginId: string;
-  client: PluginRpcClient;
   Component: ComponentType<PluginChatImageActionProps>;
 }>("pluginChatImageActions", "chat.image.actions");

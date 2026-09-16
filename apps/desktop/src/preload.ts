@@ -181,9 +181,6 @@ const api: DesktopApi = {
   windowState() {
     return ipcRenderer.invoke("desktop:window-state") as Promise<WindowState>;
   },
-  syncPet(forceVisible) {
-    return ipcRenderer.invoke("desktop:pet-sync", forceVisible) as Promise<void>;
-  },
   // The pet's own drag, sprite, bubble and menu channels are gone: since #181-B
   // the pet is a plugin surface and uses the generic `surface` API below.
   surfaces: {

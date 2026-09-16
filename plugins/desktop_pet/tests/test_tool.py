@@ -8,7 +8,10 @@ import pytest
 
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
-from bus.events_lifecycle import DesktopPetActionRequested
+from agent.plugin_host.bridge_events import PluginBridgeEvent
+from agent.plugin_host.capabilities import RpcCapability
+from agent.plugin_host.effects import EffectScope
+from agent.plugin_host.rpc import PluginRpcRegistry
 from core.roles.store import RoleStore
 from plugins.desktop_pet.backend.models import RolePetPackage
 from plugins.desktop_pet.backend.pet_state import RolePetStateStore
@@ -38,15 +41,17 @@ def _build_tool(
     RolePetStateStore(store).set_enabled(role.id, True)
     event_bus = EventBus()
 
-    async def dispatch(event: DesktopPetActionRequested) -> DesktopPetActionRequested:
+    async def dispatch(event: PluginBridgeEvent) -> PluginBridgeEvent:
         event.dispatched = True
         return event
 
-    event_bus.on(DesktopPetActionRequested, dispatch)
+    event_bus.on(PluginBridgeEvent, dispatch)
     registry = ToolRegistry()
     tool = DesktopPetActionTool(
         role_store=store,
-        event_bus=event_bus,
+        rpc=RpcCapability(
+            PluginRpcRegistry(), EffectScope("desktop_pet"), "desktop_pet", event_bus
+        ),
         tool_registry=registry,
         clock=lambda: clock_value[0],
     )
@@ -175,15 +180,17 @@ async def test_pet_action_serializes_concurrent_calls_for_one_role(
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def dispatch(event: DesktopPetActionRequested) -> DesktopPetActionRequested:
+    async def dispatch(event: PluginBridgeEvent) -> PluginBridgeEvent:
         started.set()
         await release.wait()
         event.dispatched = True
         return event
 
     event_bus = EventBus()
-    event_bus.on(DesktopPetActionRequested, dispatch)
-    tool._event_bus = event_bus
+    event_bus.on(PluginBridgeEvent, dispatch)
+    tool._rpc = RpcCapability(
+        PluginRpcRegistry(), EffectScope("desktop_pet"), "desktop_pet", event_bus
+    )
 
     first = asyncio.create_task(
         _execute(tool, registry, channel="desktop", action="move", target="center")
@@ -200,3 +207,28 @@ async def test_pet_action_serializes_concurrent_calls_for_one_role(
 
     assert first_result["accepted"] is True
     assert second_result == {"accepted": False, "reason": "rate_limited"}
+
+
+@pytest.mark.asyncio
+async def test_no_connected_transport_does_not_consume_cooldown_or_turn(tmp_path: Path):
+    tool, registry = _build_tool(tmp_path, clock_value=[0.0])
+    bus = EventBus()
+    tool._rpc = RpcCapability(
+        PluginRpcRegistry(), EffectScope("desktop_pet"), "desktop_pet", bus
+    )
+    failed = await _execute(
+        tool, registry, channel="desktop", action="play", name="greeting"
+    )
+    assert failed["accepted"] is False
+    assert failed["reason"] == "desktop_bridge_unavailable"
+
+    def dispatch(event):
+        assert event.method == "plugin.desktop_pet.action"
+        assert event.payload["state"] == "waving"
+        event.dispatched = True
+
+    bus.on(PluginBridgeEvent, dispatch)
+    retried = await _execute(
+        tool, registry, channel="desktop", action="play", name="greeting"
+    )
+    assert retried["accepted"] is True

@@ -1,4 +1,5 @@
-import { createPluginRpcClient } from "../plugins/pluginBridgeClient";
+import type { ComponentType } from "react";
+import { usePluginRpcClient } from "../plugins/usePluginRpcClient";
 import { SurfaceFailure } from "./SurfaceFailure";
 import { SurfaceErrorBoundary } from "./SurfaceErrorBoundary";
 // The main process builds this query string; sharing the parser keeps the two
@@ -9,6 +10,7 @@ import {
   pluginSurfaceRegistry,
   type PluginSurfaceRegistry,
   type SurfaceHandle,
+  type PluginSurfaceComponentProps,
 } from "./pluginSurfaceRegistry";
 
 /**
@@ -36,11 +38,17 @@ export function SurfaceRoot(props: {
   const Component = entry.Component;
   return (
     <SurfaceErrorBoundary key={`${key.pluginId}/${key.surfaceId}`} surface={props.surface}>
-      <Component
+      <BoundSurface
+        Component={Component}
+        pluginId={key.pluginId}
         surfaceId={key.surfaceId}
         surface={props.surface}
-        client={createPluginRpcClient(key.pluginId)}
       />
     </SurfaceErrorBoundary>
   );
+}
+
+function BoundSurface({ pluginId, Component, ...props }: Omit<PluginSurfaceComponentProps, "client"> & { pluginId: string; Component: ComponentType<PluginSurfaceComponentProps> }) {
+  const client = usePluginRpcClient(pluginId);
+  return <Component {...props} client={client} />;
 }

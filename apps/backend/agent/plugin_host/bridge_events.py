@@ -4,13 +4,14 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass(frozen=True)
+@dataclass
 class PluginBridgeEvent:
     """One plugin-owned event, forwarded without domain-specific host routing."""
 
     method: str
     payload: dict[str, Any]
     registry: object
+    dispatched: bool = False
 
 
 class PluginRpcError(RuntimeError):

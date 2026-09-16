@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { act } from "react";
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import { NovelAiChatImageActions, isNovelAiOutput } from "./ChatImageActions";
 
 test("NovelAI regeneration keeps its target and deadline when the selected image changes", async () => {
   const calls: unknown[] = [];
   const updates: string[] = [];
   let finish: (value: unknown) => void = () => { throw new Error("request not started"); };
-  const client: PluginRpcClient = { call: async <T,>(method: string, payload?: Record<string, unknown>, options?: { timeoutMs?: number }) => {
+  const client: PluginRpcClient = { ...createPluginRpcClient("fixture"), call: async <T,>(method: string, payload?: Record<string, unknown>, options?: { timeoutMs?: number }) => {
     calls.push({ method, payload, options });
     return await new Promise<T>((resolve) => { finish = (value) => resolve(value as T); });
   } };

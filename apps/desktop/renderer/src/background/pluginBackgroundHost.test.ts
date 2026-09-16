@@ -9,7 +9,8 @@ function fakeCtx(pluginId: string, scope: BackgroundEffectScope, log: string[]):
   return {
     surfaces: {} as BackgroundCtx["surfaces"],
     rpc: {} as BackgroundCtx["rpc"],
-    events: { on: () => {} },
+    events: { on: async () => () => {} },
+    hostEvents: { on: () => {} },
     store: { read: () => Promise.resolve(null), write: () => Promise.resolve() },
     assets: { url: () => null },
     tray: { setEntry: () => {}, removeEntry: () => {} },
@@ -69,7 +70,7 @@ test("starts only registered plugins that are enabled", async () => {
   assert.deepEqual(host.runningPluginIds(), ["a"]);
 });
 
-test("disabling a plugin disposes its scope; a sibling keeps running", async () => {
+test("generation publication disposes disabled plugins and replaces enabled sibling scopes", async () => {
   const log: string[] = [];
   const roster = fakeRoster(["a", "b"]);
   const registry = { list: () => [entry("a", log), entry("b", log)] };
@@ -82,8 +83,8 @@ test("disabling a plugin disposes its scope; a sibling keeps running", async () 
   // reconcile() runs asynchronously off the roster-changed callback.
   await flushMicrotasks();
 
-  assert.deepEqual(log, ["a:dispose:noop"]);
-  assert.deepEqual(host.runningPluginIds(), ["b"], "the still-enabled sibling must not be touched");
+  assert.deepEqual(log, ["a:dispose:noop", "b:dispose:noop", "b:setup"]);
+  assert.deepEqual(host.runningPluginIds(), ["b"], "the still-enabled sibling must receive a new generation scope");
 });
 
 test("a plugin enabled after startup gets setup called on the next reconcile", async () => {
@@ -206,4 +207,25 @@ test("a roster fetch that throws is reported rather than escaping as an unhandle
 
   assert.deepEqual(errors, [["", "roster"]]);
   assert.deepEqual(host.runningPluginIds(), [], "nothing starts when the roster is unknown");
+});
+
+test("bridge exit disposes contexts without querying or implicitly restarting the unavailable bridge", async () => {
+  const log: string[] = [];
+  let reads = 0;
+  let signal: (available?: boolean) => void = () => {};
+  const host = new PluginBackgroundHost(makeDeps({
+    registry: { list: () => [entry("demo", log)] },
+    listEnabledPluginIds: async () => { reads += 1; return new Set(["demo"]); },
+    subscribeRosterChanged: (listener) => { signal = listener; return () => {}; },
+  }, log));
+  await host.start();
+  signal(false);
+  await flushMicrotasks();
+  assert.equal(reads, 1);
+  assert.deepEqual(host.runningPluginIds(), []);
+  signal(true);
+  await flushMicrotasks();
+  assert.equal(reads, 2);
+  assert.deepEqual(host.runningPluginIds(), ["demo"]);
+  await host.stop();
 });

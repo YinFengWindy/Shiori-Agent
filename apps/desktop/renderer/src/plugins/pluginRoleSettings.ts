@@ -1,3 +1,4 @@
+import { createPluginRpcClient } from "./pluginBridgeClient";
 import { pluginRoleSettingsRegistry, type PluginRoleValues } from "./pluginFeatureRegistry";
 import { isPluginEnabled } from "./pluginEnabledStateStore";
 
@@ -33,7 +34,12 @@ export async function notifyPluginRoleSaved(drafts: PluginRoleSettingsDraft, pre
   await Promise.all(pluginRoleSettingsRegistry.list().filter((entry) => isPluginEnabled(entry.pluginId)
     && drafts[entry.pluginId] !== undefined
     && JSON.stringify(drafts[entry.pluginId]) !== JSON.stringify(previous[entry.pluginId]))
-    .map((entry) => entry.afterSave?.(drafts[entry.pluginId])));
+    .map(async (entry) => {
+      if (!entry.afterSave) return;
+      const client = createPluginRpcClient(entry.pluginId);
+      try { await entry.afterSave(drafts[entry.pluginId], client); }
+      finally { await client.dispose(); }
+    }));
 }
 
 /** Compares drafts with their actual owner, excluding inactive independent state. */

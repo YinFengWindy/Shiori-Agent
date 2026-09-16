@@ -18,6 +18,22 @@ _REGISTRATION = "00000000-0000-4000-a000-000000000001"
 
 
 @pytest.mark.asyncio
+async def test_plugin_config_publication_notifies_renderer_contexts():
+    service = object.__new__(ReloadableDesktopService)
+    result = {"plugin_id": "demo", "generation": 2, "changed": True}
+    service.plugin_config = SimpleNamespace(set=AsyncMock(return_value=result))
+    service.publish_event = AsyncMock()
+    response = await service.handle(
+        {"id": "save", "method": "plugin.config.set", "payload": {}},
+        emit_event=lambda event: None,
+    )
+    assert response.error is None
+    service.publish_event.assert_awaited_once_with(
+        {"id": "save", "type": "event", "method": "runtime.applied", "payload": result}
+    )
+
+
+@pytest.mark.asyncio
 async def test_reloading_rejects_new_work_without_queuing_a_late_chat():
     service = object.__new__(ReloadableDesktopService)
     service.app = SimpleNamespace(accepting_work=False)

@@ -15,7 +15,6 @@ from desktop_bridge.models import BridgeError, BridgeResponse
 from desktop_bridge.request_dispatcher import BridgeRequestDispatcher
 from desktop_bridge.runtime.factory import build_desktop_service
 from desktop_bridge.stream_writer import BridgeStreamWriter
-from bus.events_lifecycle import DesktopPetActionRequested
 
 logger = logging.getLogger("desktop.bridge")
 
@@ -50,8 +49,6 @@ class DesktopBridgeServer:
             self.service = ReloadableDesktopService(app, config_path, self.role_store)
         else:
             self.service = build_desktop_service(runtime, self.role_store)
-        self._pet_action_handler = self._handle_pet_action
-        self._event_bus.on(DesktopPetActionRequested, self._pet_action_handler)
 
     async def serve_streams(
         self,
@@ -131,43 +128,10 @@ class DesktopBridgeServer:
                         continue
                 await writer.write(response.to_dict())
         finally:
-            self._event_bus.off(
-                DesktopPetActionRequested,
-                self._pet_action_handler,
-            )
             self.service.remove_event_listener(_emit_event)
             await dispatcher.aclose(cancel=True)
             await self.service.aclose()
             await writer.aclose()
-
-    async def _handle_pet_action(self, event: DesktopPetActionRequested) -> None:
-        """Forwards one validated desktop-only action to the Electron host."""
-
-        if event.channel != "desktop":
-            event.error = "unsupported_channel"
-            return
-        if not self.service.has_event_listeners:
-            event.error = "desktop_bridge_unavailable"
-            return
-        await self.service.publish_event(
-            {
-                "id": event.action_id,
-                "type": "event",
-                "method": "desktop.pet.action",
-                "payload": {
-                    "action_id": event.action_id,
-                    "role_id": event.role_id,
-                    "session_key": event.session_key,
-                    "channel": event.channel,
-                    "kind": event.kind,
-                    "name": event.name,
-                    "target": event.target,
-                    "animation": event.animation,
-                    "state": event.state,
-                },
-            }
-        )
-        event.dispatched = True
 
     async def serve_stdio(self, *, output: TextIO | None = None) -> None:
         """Run against stdin and a captured protocol stream, defaulting to stdout."""

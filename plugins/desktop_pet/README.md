@@ -19,5 +19,5 @@
 
 ## 仍待后续交付
 
-- #218：`desktop:pet-sync` 与桌宠动作事件桥保持现状。
+- 动作通过 `ctx.rpc.emit("action", ...)` 下发；UI/surface 通过注入 client 的 `background.call("sync", ...)` 通知后台，宿主不持有桌宠通信特例。
 - #220 / #221：观察与语音对桌宠表面的兼容耦合不在本次范围内。

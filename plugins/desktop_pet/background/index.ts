@@ -4,11 +4,6 @@ import { readDesktopPetBinding } from "./binding";
 import { DesktopPetController, desktopPetSurfaceId } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
 
-/** Remaining role-settings sync command, published by the desktop host. */
-export const desktopPetCommandMethod = "desktop.pet.command";
-/** The backend event carrying one already-authorized `pet_action` tool call. */
-export const desktopPetActionMethod = "desktop.pet.action";
-
 /** Identifies the pet's own item in the host tray menu. */
 export const desktopPetTrayEntryId = "toggle";
 
@@ -73,23 +68,18 @@ export default {
 
     ctx.effect("desktop_pet_controller", () => controller.terminate());
     ctx.surfaces.onSettled(desktopPetSurfaceId, (settled) => controller.handleSettled(settled));
-    ctx.events.on(desktopPetActionMethod, (payload) => controller.handleAgentAction(payload));
-    ctx.events.on(desktopPetCommandMethod, (payload) => {
-      // `sync` is the only kind the host sends. The tray used to send show and
-      // hide; it now calls this controller directly (see `refreshTrayEntry`),
-      // so those branches went with their producer rather than sitting here as
-      // an unreachable API nobody could exercise.
-      if (payload.kind !== "sync") return;
+    await ctx.events.on("action", (payload) => controller.handleAgentAction(payload));
+    await ctx.rpc.handle("sync", async (payload) => {
       const forceVisible = typeof payload.forceVisible === "boolean" ? payload.forceVisible : undefined;
-      void controller.sync(forceVisible).catch((error) => reportError("sync", error));
+      await controller.sync(forceVisible);
     });
     for (const method of ["chat.done", "session.updated"]) {
-      ctx.events.on(method, (_payload, event) => controller.replies.handleEvent(event));
+      ctx.hostEvents.on(method, (_payload, event) => controller.replies.handleEvent(event));
     }
-    ctx.events.on("system.lock-state", (payload) => {
+    ctx.hostEvents.on("system.lock-state", (payload) => {
       if (typeof payload.locked === "boolean") controller.replies.setLocked(payload.locked);
     });
-    ctx.events.on("plugin.desktop_pet.bubble.dismissed", () => controller.replies.dismiss());
+    await ctx.events.on("bubble.dismissed", () => controller.replies.dismiss());
 
     // Reported rather than rethrown: a failed restore (the bridge answering
     // late, say) must not fail `setup`, because a thrown `setup` tears the

@@ -3,12 +3,13 @@ import { X } from "@phosphor-icons/react";
 import { spriteActionDurationMs, spriteCell, spriteFramePosition, spritePlaybackFrameAt, type SpriteState } from "./spriteContract";
 import { useCodexPetInteraction } from "./useCodexPetInteraction";
 import { noPetBubble, type PetBubblePlacement } from "./bubbleExtension";
-import { openPetContextMenu } from "./petMenu";
 import type { SurfaceHandle } from "../../../apps/desktop/renderer/src/surface/pluginSurfaceRegistry";
 import type { PetReplyBubble } from "../shared/replyBubble";
 import type { VoiceStatePayload } from "../../../apps/desktop/src/bridge/shared";
 
 type CodexSpritePetRendererProps = {
+  /** Opens the owning plugin menu through its injected communication client. */
+  onContextMenu?: () => void;
   spritesheetUrl: string;
   state: SpriteState;
   transientState?: SpriteState | null;
@@ -26,7 +27,7 @@ type CodexSpritePetRendererProps = {
 };
 
 /** Renders the fixed Codex sprite atlas with its documented state rows and cadence. */
-export function CodexSpritePetRenderer({ spritesheetUrl, state, transientState = null, onTransientFinished = noop, reply, onDismissBubble = noop, bubbleLayout = noPetBubble, voice = { status: "idle" }, surface = null, onBubbleHeight = noop }: CodexSpritePetRendererProps) {
+export function CodexSpritePetRenderer({ onContextMenu = noop, spritesheetUrl, state, transientState = null, onTransientFinished = noop, reply, onDismissBubble = noop, bubbleLayout = noPetBubble, voice = { status: "idle" }, surface = null, onBubbleHeight = noop }: CodexSpritePetRendererProps) {
   const [frame, setFrame] = useState(0);
   const { interactionState, isDragging, pointerHandlers } = useCodexPetInteraction(
     surface,
@@ -91,7 +92,7 @@ export function CodexSpritePetRenderer({ spritesheetUrl, state, transientState =
         onLostPointerCapture={pointerHandlers.onPointerCancel}
         onContextMenu={(event) => {
           event.preventDefault();
-          if (surface) void openPetContextMenu(surface, window.miraDesktop);
+          onContextMenu();
         }}
         style={{
           width: spriteCell.width,

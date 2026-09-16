@@ -101,26 +101,7 @@ export type PluginBackgroundAssets = {
   url(path: string): string | null;
 };
 
-/**
- * Backend event subscriptions for a background module.
- *
- * `on` filters the shared `desktop:event` stream (broadcast to every renderer
- * window, see `wireBridgeEvents`) down to one `method` name and auto-registers
- * its unsubscribe as an event-phase effect — see `BackgroundEffectScope` for
- * why that phase exists and what it prevents (#227).
- *
- * **This is not scoped to the calling plugin.** `BridgeEvent` carries no
- * per-plugin envelope today, so `method` is a flat, global string matched by
- * exact equality against every event on the bus — the same way the existing
- * `desktop.pet.action` event is named. Every background plugin's `events.on`
- * sees every plugin's events; nothing here restricts a handler to events its
- * own plugin caused. Do not assume `ctx.events` is namespaced the way
- * `ctx.rpc`/`ctx.surfaces` are (both are pre-bound to the calling plugin's
- * id) — it is reasonable to expect that from the shape of `ctx`, but it is
- * not true here. A plugin author must pick a method name namespaced to its
- * own id (e.g. `"<pluginId>.thing.happened"`) to avoid colliding with, or
- * accidentally reacting to, another plugin's events.
- */
+/** Host event subscriptions are explicit and exclude plugin namespaces. */
 export type PluginBackgroundEvents = {
   /** The envelope preserves producer identity for consumers of incremental events. */
   on(method: string, handler: (payload: Record<string, unknown>, event: BridgeEvent) => void): void;
@@ -141,7 +122,8 @@ export type PluginBackgroundEvents = {
 export type BackgroundCtx = {
   surfaces: PluginBackgroundSurfaces;
   rpc: PluginRpcClient;
-  events: PluginBackgroundEvents;
+  events: PluginRpcClient["events"];
+  hostEvents: PluginBackgroundEvents;
   store: PluginBackgroundStore;
   assets: PluginBackgroundAssets;
   tray: PluginBackgroundTray;

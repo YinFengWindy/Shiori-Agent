@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { openPetContextMenu } from "./petMenu";
 import { CodexSpritePetRenderer } from "./CodexSpritePetRenderer";
 import {
   isSamePetBubbleExtension,
@@ -151,6 +152,7 @@ export function DesktopPetSurface({ surface, client }: PluginSurfaceComponentPro
       bubbleLayout={bubbleLayout}
       voice={voice}
       surface={surface}
+      onContextMenu={() => { void openPetContextMenu(surface, client).catch((error: unknown) => console.error("[desktop_pet] 菜单操作失败", error)); }}
       onBubbleHeight={onBubbleHeight}
     />
   );

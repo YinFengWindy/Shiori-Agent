@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -17,6 +18,7 @@ from desktop_bridge.method_policy import Handler, MethodPolicy
 from desktop_bridge.plugin_requests import DesktopPluginRequestHandler
 from desktop_bridge.request_router import DesktopBridgeRequestRouter
 from desktop_bridge.service import DesktopBridgeService
+from desktop_bridge.request_dispatcher import BridgeRequestDispatcher
 from session.manager import SessionManager
 
 
@@ -188,3 +190,114 @@ async def test_router_falls_through_for_unregistered_plugin_methods():
     )
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_background_callback_can_call_backend_at_dispatcher_capacity_one(
+    tmp_path,
+):
+    registry = PluginRpcRegistry()
+    service = _service(tmp_path, registry)
+    registry.communication.configure(
+        lambda plugin_id: () if plugin_id == "demo" else None, service.event_bus
+    )
+    dispatcher = BridgeRequestDispatcher(
+        max_concurrency=1, policy_resolver=service.resolve_method_policy
+    )
+
+    async def echo(payload):
+        return {"heard": payload["text"]}
+
+    registry.register("plugin.demo.echo", "demo", echo, _policy())
+    token = registry.communication.generation
+    provider = {"plugin_id": "demo", "owner": "background", "generation": token}
+    await registry.communication.handle("open", provider)
+    await registry.communication.handle("register", {**provider, "name": "sync"})
+
+    async def request(method, payload):
+        result = asyncio.get_running_loop().create_future()
+
+        async def run():
+            response = await service.handle(
+                {"id": "test", "method": method, "payload": payload},
+                emit_event=lambda event: None,
+            )
+            result.set_result(response)
+
+        dispatcher.submit({"method": method}, run)
+        return await result
+
+    tasks = []
+
+    async def callback(event):
+        response = await request("plugin.demo.echo", {"text": "round trip"})
+        assert response.error is None
+        await request(
+            "plugins.communication.reply",
+            {
+                **provider,
+                "request_id": event["payload"]["request_id"],
+                "result": response.payload,
+            },
+        )
+
+    def emit(event):
+        tasks.append(asyncio.create_task(callback(event)))
+
+    service.add_event_listener(emit)
+    try:
+        # More pending rendezvous than the semaphore limit proves neither
+        # callback backend work nor replies are starved by waiting callers.
+        responses = await asyncio.wait_for(
+            asyncio.gather(
+                *[
+                    request(
+                        "plugins.communication.call",
+                        {
+                            "plugin_id": "demo",
+                            "owner": f"ui-{index}",
+                            "generation": token,
+                            "name": "sync",
+                        },
+                    )
+                    for index in range(12)
+                ]
+            ),
+            timeout=3,
+        )
+        assert all(response.error is None for response in responses)
+        assert all(
+            response.payload == {"result": {"heard": "round trip"}}
+            for response in responses
+        )
+        await asyncio.gather(*tasks)
+    finally:
+        await dispatcher.aclose(cancel=True)
+        await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_disabled_peer_returns_unavailable_before_method_lookup(tmp_path):
+    registry = PluginRpcRegistry()
+    registry.communication.configure(
+        lambda plugin_id: ("missing",) if plugin_id == "demo" else None, EventBus()
+    )
+    service = _service(tmp_path, registry)
+    try:
+        response = await service.handle(
+            {
+                "id": "missing",
+                "method": "plugin.missing.echo",
+                "payload": {
+                    "__plugin_context": {
+                        "plugin_id": "demo",
+                        "generation": registry.communication.generation,
+                    },
+                },
+            },
+            emit_event=lambda event: None,
+        )
+        assert response.error is not None
+        assert response.error.code == "plugin_unavailable"
+    finally:
+        await service.aclose()

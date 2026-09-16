@@ -307,6 +307,26 @@ def test_rpc_capability_defaults_to_conservative_mutation_policy():
     assert policy.admission_exempt is False
 
 
+@pytest.mark.asyncio
+async def test_rpc_events_report_delivery_and_reject_disposed_producers():
+    from agent.plugin_host.bridge_events import PluginBridgeEvent
+    from bus.event_bus import EventBus
+
+    bus = EventBus()
+    scope = EffectScope("demo")
+    capability = RpcCapability(PluginRpcRegistry(), scope, "demo", bus)
+    assert await capability.emit("changed", {}) is False
+
+    def delivered(event):
+        event.dispatched = True
+
+    bus.on(PluginBridgeEvent, delivered)
+    assert await capability.emit("changed", {}) is True
+    await scope.dispose_all()
+    with pytest.raises(RuntimeError, match="已处置"):
+        await capability.emit("changed", {})
+
+
 # ── BackgroundCapability ──────────────────────────────────────────────────
 
 

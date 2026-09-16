@@ -1,4 +1,4 @@
-import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import { createPluginCommunicationClient } from "../../../apps/desktop/renderer/src/plugins/pluginCommunicationClient";
 import type { DesktopInvoke } from "../../../apps/desktop/renderer/src/shared/bridgeInvoke";
 /// <reference types="node" />
 
@@ -169,4 +169,7 @@ describe("createStoryBridgeClient", () => {
   });
 });
 
-function createStoryBridgeClient(invoke: DesktopInvoke) { return makeStoryClient(createPluginRpcClient("story", invoke)); }
+function createStoryBridgeClient(invoke: DesktopInvoke) { return makeStoryClient(createPluginCommunicationClient("story", { onEvent: () => () => {}, invoke: async (request) => {
+    if (request.method === "plugins.communication.open") return { id: "open", type: "response", method: request.method, error: null, payload: { generation: "g1" } };
+    return invoke({ ...request, payload: Object.fromEntries(Object.entries(request.payload).filter(([key]) => key !== "__plugin_context")) });
+  } })); }
