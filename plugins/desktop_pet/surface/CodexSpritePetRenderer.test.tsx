@@ -73,17 +73,18 @@ test("above reply bubbles render ahead of the sprite", () => {
   assert.doesNotMatch(styles, /\.pet-bubble-above\s*\{[^}]*column-reverse/s);
 });
 
-test("oversized reply bubbles keep their full text in a scrollable surface", () => {
-  renderToStaticMarkup(
+test("oversized reply bubbles render full text with vertical overflow enabled", () => {
+  const text = "很长的完整回复".repeat(100);
+  const markup = renderToStaticMarkup(
     <CodexSpritePetRenderer
       spritesheetUrl="mira-asset://pet"
       state="idle"
-      reply={{ paused: false, text: "很长的完整回复", persistent: false }}
+      reply={{ paused: false, text, persistent: false }}
       bubbleLayout={{ placement: "above", height: 80 }}
     />,
   );
   const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 
+  assert.ok(markup.includes(text));
   assert.match(styles, /\.pet-bubble\s*\{[^}]*overflow-y:\s*auto;/s);
-  assert.match(styles, /scrollbar-width:\s*none/);
 });

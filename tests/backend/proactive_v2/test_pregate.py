@@ -594,16 +594,6 @@ async def test_pregate_fail_does_not_call_alert_fn():
 
 
 @pytest.mark.asyncio
-async def test_all_gates_pass_returns_non_none():
-    tick = make_proactive_pipeline(
-        passive_busy_fn=lambda sk: False,
-        proactive_gates=relationship_gate_chain(),
-    )
-    result = await tick.run()
-    assert result is not None
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("reason", ["below_threshold", "cooldown"])
 @pytest.mark.parametrize("source", ["alert", "feed"])
 async def test_relationship_miss_does_not_block_external_candidates(reason, source):

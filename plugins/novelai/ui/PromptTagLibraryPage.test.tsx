@@ -8,7 +8,7 @@ import { PromptTagLibraryPage } from "./PromptTagLibraryPage";
 const noopClient: PluginRpcClient = { ...createPluginRpcClient("fixture"), call: async <T,>() => ({} as T) };
 
 describe("PromptTagLibraryPage", () => {
-  it("renders as a dedicated page with a return action", () => {
+  it("renders the tag library inside its dedicated page", () => {
     const markup = renderToStaticMarkup(
       <PromptTagLibraryPage
         client={noopClient}

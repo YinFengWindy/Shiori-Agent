@@ -1,11 +1,40 @@
 import { readdir, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, "..");
 const repoRoot = resolve(desktopRoot, "..", "..");
+
+const { values: options } = parseArgs({
+  options: {
+    file: { type: "string", multiple: true },
+    "test-name-pattern": { type: "string" },
+    list: { type: "boolean" },
+    help: { type: "boolean" },
+  },
+});
+
+if (options.help) {
+  console.log(`Usage: pnpm test [--file <path-fragment>] [--test-name-pattern <regex>] [--list]
+
+--file may be repeated; matches normalized repository-relative paths (OR).
+--test-name-pattern is Node's test-name regex, applied within selected files.
+--list prints selected file paths without running tests.
+Without filters, all host and plugin unit tests run.`);
+  process.exit(0);
+}
+
+const fileFilters = (options.file ?? []).map((value) => value.replaceAll("\\", "/"));
+if (fileFilters.some((value) => !value.trim())) {
+  throw new Error("--file requires a non-empty path fragment");
+}
+if (options["test-name-pattern"] !== undefined) {
+  // Validate before loading tests so a malformed selector fails immediately.
+  new RegExp(options["test-name-pattern"]);
+}
 
 /**
  * Renderer code owned by plugins rather than by the host.
@@ -59,16 +88,25 @@ async function findTestFiles(directory) {
   return files.flat();
 }
 
-const testFiles = (await Promise.all(testRoots.map(findTestFiles))).flat().sort();
+const testFiles = (await Promise.all(testRoots.map(findTestFiles))).flat().sort()
+  .filter((path) => !fileFilters.length || fileFilters.some((filter) =>
+    relative(repoRoot, path).replaceAll("\\", "/").includes(filter)));
 if (!testFiles.length) {
-  throw new Error("no desktop unit tests found");
+  throw new Error(`no desktop unit tests found for: ${fileFilters.join(", ")}`);
+}
+if (options.list) {
+  console.log(testFiles.map((path) => relative(repoRoot, path).replaceAll("\\", "/")).join("\n"));
+  process.exit(0);
 }
 
 const tsxCli = resolve(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
 const rendererTsconfig = resolve(desktopRoot, "renderer", "tsconfig.json");
 const child = spawn(
   process.execPath,
-  [tsxCli, "--tsconfig", rendererTsconfig, "--test", ...testFiles],
+  [tsxCli, "--tsconfig", rendererTsconfig, "--test",
+    ...(options["test-name-pattern"] !== undefined
+      ? [`--test-name-pattern=${options["test-name-pattern"]}`] : []),
+    ...testFiles],
   { cwd: repoRoot, stdio: "inherit" },
 );
 

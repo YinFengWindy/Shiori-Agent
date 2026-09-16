@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from memory2.sufficiency_checker import SufficiencyChecker, SufficiencyResult
+from memory2.sufficiency_checker import SufficiencyChecker
 
 
 def _make_checker(llm_response: str) -> SufficiencyChecker:
@@ -18,29 +18,6 @@ def _item(memory_type: str, score: float, summary: str) -> dict:
         "score": score,
         "summary": summary,
     }
-
-
-def test_sufficiency_result_fields():
-    r = SufficiencyResult(
-        is_sufficient=False,
-        reason="irrelevant",
-        refined_query="用户与仁王游戏相关的讨论记录",
-        latency_ms=55,
-    )
-    assert r.is_sufficient is False
-    assert r.reason == "irrelevant"
-    assert r.refined_query == "用户与仁王游戏相关的讨论记录"
-
-
-def test_sufficiency_result_sufficient_has_no_refined_query():
-    """sufficient 时 refined_query 应为 None，不需要重查。"""
-    r = SufficiencyResult(
-        is_sufficient=True,
-        reason="sufficient",
-        refined_query=None,
-        latency_ms=30,
-    )
-    assert r.refined_query is None
 
 
 def test_should_check_when_no_items():

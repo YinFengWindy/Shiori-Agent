@@ -119,6 +119,14 @@ pnpm build
 .venv\Scripts\pytest.exe -q tests\
 ```
 
+局部桌面验证可以按仓库相对路径片段筛选文件，再按测试名称正则筛选用例。重复 `--file` 会合并匹配文件；不传参数仍运行宿主与插件全部单测。`--list` 只列出匹配文件，不执行测试。
+
+```powershell
+pnpm test --file RoleDetailPage.test.tsx
+pnpm test --file plugins/desktop_pet/surface/ --test-name-pattern "reply bubbles"
+pnpm test --file roles/ --file plugins/story/ui/ --list
+```
+
 运行结构：
 
 ```text

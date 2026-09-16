@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 from shiori_plugin_testkit.packages import stage_plugin_package
 
@@ -97,8 +98,19 @@ class _StrictProvider(_FakeProvider):
 
 
 @pytest.fixture(autouse=True)
-def _shared_http_resources():
-    resources = SharedHttpResources()
+def _shared_http_resources(monkeypatch):
+    def reject_network(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"unexpected HTTP request: {request.method} {request.url}")
+
+    client_type = httpx.AsyncClient
+
+    def offline_client(**kwargs):
+        return client_type(transport=httpx.MockTransport(reject_network), **kwargs)
+
+    # Keep real requesters/resources while avoiding TLS setup for offline loop tests.
+    with monkeypatch.context() as patch:
+        patch.setattr("core.net.http.httpx.AsyncClient", offline_client)
+        resources = SharedHttpResources()
     configure_default_shared_http_resources(resources)
     try:
         yield

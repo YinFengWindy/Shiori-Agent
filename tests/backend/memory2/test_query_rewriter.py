@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from memory2.query_rewriter import GateDecision, QueryRewriter
+from memory2.query_rewriter import QueryRewriter
 
 
 def _make_rewriter(llm_response: str) -> QueryRewriter:
@@ -10,19 +10,6 @@ def _make_rewriter(llm_response: str) -> QueryRewriter:
     client = MagicMock()
     client.chat = AsyncMock(return_value=llm_response)
     return QueryRewriter(llm_client=client)
-
-
-def test_gate_decision_is_dataclass_with_required_fields():
-    d = GateDecision(
-        needs_episodic=True,
-        episodic_query="用户关于B站下载的历史偏好",
-        latency_ms=42,
-        procedure_query="B站视频下载 SOP",
-    )
-    assert d.needs_episodic is True
-    assert d.episodic_query == "用户关于B站下载的历史偏好"
-    assert d.latency_ms == 42
-    assert d.procedure_query == "B站视频下载 SOP"
 
 
 @pytest.mark.asyncio
@@ -37,7 +24,7 @@ async def test_decide_retrieve_when_llm_says_retrieve():
 
 
 @pytest.mark.asyncio
-async def test_decide_no_retrieve_for_greeting():
+async def test_decide_parses_no_retrieve():
     rewriter = _make_rewriter("""
 <decision>NO_RETRIEVE</decision>
 <history_query>你好</history_query>
@@ -157,3 +144,15 @@ async def test_latency_ms_is_non_negative_int():
     result = await rewriter.decide(user_msg="test", recent_history="")
     assert isinstance(result.latency_ms, int)
     assert result.latency_ms >= 0
+
+
+@pytest.mark.asyncio
+async def test_decide_excludes_thinking_from_history_query():
+    rewriter = _make_rewriter("""
+<thinking>这里是内部推理，不应污染最终字段。</thinking>
+<decision>RETRIEVE</decision>
+<history_query>用户最近购买了什么</history_query>
+""")
+    result = await rewriter.decide(user_msg="查询最近购买记录", recent_history="")
+    assert result.needs_episodic is True
+    assert result.episodic_query == "用户最近购买了什么"
