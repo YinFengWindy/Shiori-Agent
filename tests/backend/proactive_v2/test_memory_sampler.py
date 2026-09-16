@@ -31,37 +31,17 @@ MEMORY_MD = """\
 # ── split_memory_chunks ───────────────────────────────────────────
 
 
-def test_split_returns_nonempty_list():
-    chunks = split_memory_chunks(MEMORY_MD)
-    assert len(chunks) > 0
-
-
 def test_split_empty_string_returns_empty():
     assert split_memory_chunks("") == []
     assert split_memory_chunks("   \n  ") == []
 
 
-def test_split_chunks_are_nonempty_strings():
-    for chunk in split_memory_chunks(MEMORY_MD):
-        assert isinstance(chunk, str)
-        assert chunk.strip()
-
-
-def test_split_separates_sections():
-    """## 标题 应成为独立块或与紧跟内容合并，不能把两个 section 混在一块。"""
-    chunks = split_memory_chunks(MEMORY_MD)
-    # 不应有超过 400 字符的块（说明没有合并过多内容）
-    for chunk in chunks:
-        assert len(chunk) <= 400, f"chunk too long: {chunk[:80]!r}"
-
-
-def test_split_preserves_content():
-    """所有原始内容应能在合并后的 chunks 里找到。"""
-    chunks = split_memory_chunks(MEMORY_MD)
-    merged = "\n".join(chunks)
-    assert "魂类游戏" in merged
-    assert "Elden Ring" in merged
-    assert "Python" in merged
+def test_split_separates_sections_and_preserves_content():
+    assert split_memory_chunks(MEMORY_MD) == [
+        "## 用户偏好\n\n- 喜欢单机 RPG，尤其是魂类游戏\n- 不喜欢电竞和 MOBA\n- 关注 AI 前沿进展",
+        "## 工作习惯\n\n- 通常早上 10 点开始工作\n- 用 Python 和 TypeScript\n- 不喜欢被打断",
+        "## 最近聊过的话题\n\n上周聊了 Elden Ring DLC 的剧情，很感兴趣。\n讨论过 Claude 3.5 的上下文窗口限制。",
+    ]
 
 
 def test_split_single_line_memory():
@@ -123,14 +103,13 @@ def test_sample_chunks_are_original_content():
         assert chunk in all_chunks
 
 
-def test_split_and_sample_memory_chunks_over_long_text():
-    import random
-
-    text = "## A\n\n第一段\n\n- 一\n- 二\n\n## B\n\n很长内容 " + ("句子。" * 80)
-
+def test_split_long_sections_uses_paragraph_and_bullet_boundaries():
+    bullet_a = "- " + "一" * 20
+    bullet_b = "- " + "二" * 20
+    long_line = "句子。" * 80
+    text = f"## A\n\n第一段\n\n{bullet_a}\n{bullet_b}\n\n## B\n\n{long_line}"
     chunks = split_memory_chunks(text, max_chunk_chars=30)
-    sampled = sample_memory_chunks(text, 2, rng=random.Random(1))
-
-    assert chunks
-    assert len(sampled) == 2
-    assert sample_memory_chunks("", 2) == []
+    assert chunks == ["## A", "第一段", bullet_a, bullet_b, "## B", long_line]
+    assert all(len(chunk) <= 30 for chunk in chunks[:-1])
+    # max_chunk_chars triggers semantic splitting, not truncation of an indivisible line.
+    assert chunks[-1] == long_line

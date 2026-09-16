@@ -13,10 +13,8 @@ describe("StorySettings", () => {
     assert.match(markup, /data-testid="story-settings"/);
     assert.match(markup, /data-testid="story-settings-backdrop"/);
     assert.match(markup, /data-testid="story-settings-panel"/);
-    assert.match(markup, /min-h-full w-full/);
     assert.ok(markup.includes(`url(${STORY_MENU_BACKGROUND_URL})`));
     assert.match(markup, />设置</);
-    assert.doesNotMatch(markup, /bg-\[#FFF8FC\]\/55/);
     assert.doesNotMatch(markup, />Settings</);
     assert.doesNotMatch(markup, /已保存/);
     assert.match(markup, /aria-label="文字速度"/);
@@ -28,8 +26,6 @@ describe("StorySettings", () => {
     assert.match(markup, /type="range"/);
     assert.match(markup, /语音/);
     assert.match(markup, /环境音/);
-    assert.doesNotMatch(markup, /max-w-4xl/);
-    assert.doesNotMatch(markup, /pt-\[clamp\(76px,10vh,104px\)\]/);
     assert.doesNotMatch(markup, /<select|type="checkbox"/);
     assert.doesNotMatch(markup, /自动播放|快进|World|world/);
   });

@@ -885,52 +885,6 @@ async def test_desktop_bridge_push_does_not_treat_subset_media_as_duplicate(
 
 
 @pytest.mark.asyncio
-async def test_desktop_bridge_server_streams_requests_and_responses(
-    tmp_path: Path, stub_core_runtime
-):
-    _ = RoleStore(tmp_path)
-    session_manager = SessionManager(tmp_path)
-    event_bus = EventBus()
-    runtime = stub_core_runtime(
-        session_manager=SimpleNamespace(
-            workspace=tmp_path, open_role_session=session_manager.open_role_session
-        ),
-        loop=SimpleNamespace(process_direct=AsyncMock(return_value="ok")),
-        event_bus=event_bus,
-    )
-    server = DesktopBridgeServer(runtime)
-
-    lines = iter(
-        [
-            json.dumps({"id": "1", "method": "health", "payload": {}}),
-            "",
-        ]
-    )
-    writes: list[dict] = []
-
-    async def _read_line():
-        try:
-            return next(lines)
-        except StopIteration:
-            return None
-
-    async def _write_payload(payload: dict):
-        writes.append(payload)
-
-    await server.serve_streams(read_line=_read_line, write_payload=_write_payload)
-
-    assert writes == [
-        {
-            "id": "1",
-            "type": "response",
-            "method": "health",
-            "payload": {"ok": True},
-            "error": None,
-        }
-    ]
-
-
-@pytest.mark.asyncio
 async def test_desktop_bridge_server_returns_invalid_request_and_keeps_stream_open(
     tmp_path: Path, stub_core_runtime
 ):
@@ -968,8 +922,15 @@ async def test_desktop_bridge_server_returns_invalid_request_and_keeps_stream_op
 
     assert writes[0]["error"]["code"] == "invalid_request"
     assert writes[0]["method"] == "invalid_request"
-    assert writes[1]["method"] == "health"
-    assert writes[1]["payload"] == {"ok": True}
+    assert writes[1:] == [
+        {
+            "id": "1",
+            "type": "response",
+            "method": "health",
+            "payload": {"ok": True},
+            "error": None,
+        }
+    ]
 
 
 @pytest.mark.asyncio

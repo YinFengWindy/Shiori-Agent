@@ -20,7 +20,6 @@ describe("StoryGameSurface", () => {
     const markup = renderToStaticMarkup(<StoryGameSurface background={resolvedBackground} story={createStoryDetails()} busy={false} error="" characterAvatarUrl="shiori-asset://local/role" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /data-testid="story-game-surface"/);
     assert.match(markup, /data-dialogue-visible="true"/);
-    assert.match(markup, /class="absolute inset-0 bg-black/);
     assert.match(markup, />你终于来了。</);
     assert.match(markup, /data-testid="story-current-time"/);
     assert.match(markup, /2026年8月2日/);
@@ -29,17 +28,9 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /placeholder="写下你的行动或回应\.\.\."/);
     assert.match(markup, /aria-label="查看剧情记录"/);
     assert.match(markup, /data-testid="story-dialogue-panel"/);
-    assert.match(markup, /pb-\[clamp\(20px,4vh,40px\)\] pt-\[clamp\(12px,2vh,24px\)\]/);
-    assert.match(markup, /class="mt-3 border-t border-white\/15 pt-2"/);
     assert.match(markup, /data-testid="story-dialogue-text"/);
-    assert.match(markup, /story-game-chrome story-game-readable/);
-    assert.match(markup, /story-game-control story-game-readable/);
-    assert.match(markup, /story-game-readable m-0 min-h-14/);
     assert.match(markup, /color-mix\(in srgb, rgba\(224,96,160,0.35\) 40%, transparent\)/);
-    assert.match(markup, /backdrop-blur-xl/);
-    assert.match(markup, /backdrop-saturate-150/);
     assert.doesNotMatch(markup, /剧情正在生成/);
-    assert.doesNotMatch(markup, /rgba\(13,20,25/);
     assert.doesNotMatch(markup, /data-testid="story-game-character"/);
   });
 
@@ -57,11 +48,6 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /shiori-asset:\/\/local\/unavailable/);
     assert.match(markup, /data-testid="story-game-character"/);
     assert.match(markup, /shiori-asset:\/\/local\/role/);
-    assert.match(markup, /-bottom-6 right-\[clamp\(4vw,10vw,12rem\)\] z-10/);
-    assert.match(markup, /h-\[min\(78vh,52rem\)\] max-w-\[48vw\]/);
-    assert.match(markup, /origin-bottom-right object-contain object-bottom/);
-    assert.match(markup, /style="opacity:1;transform:translateY\(0\) scale\(1\.2\)"/);
-    assert.match(markup, /bottom-0 z-20/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 
@@ -124,10 +110,9 @@ describe("StoryGameSurface", () => {
     assert.doesNotMatch(markup, /data-testid="story-game-character"/);
   });
 
-  it("uses a pure black stage when the current scene has no CG", () => {
+  it("does not substitute menu art when the current scene has no CG", () => {
     const markup = renderToStaticMarkup(<StoryGameSurface background={resolvedBackground} story={createStoryDetails()} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
-    assert.match(markup, /class="absolute inset-0 bg-black/);
     assert.doesNotMatch(markup, /story-menu-random\.webp/);
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });

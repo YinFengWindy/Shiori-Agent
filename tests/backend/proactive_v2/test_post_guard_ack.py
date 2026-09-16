@@ -1099,36 +1099,6 @@ async def test_ack_on_success_content_unaffected_by_alert_ack_fn():
     assert alert_sink.keys == []  # alert_ack_fn 未被调用
 
 
-# ── Fix 1: TOOL_SCHEMAS 应使用 OpenAI 格式 ────────────────────────────────
-
-
-def test_tool_schemas_have_openai_format():
-    """每个 schema 必须是 {"type":"function","function":{name,description,parameters}} 格式"""
-    from proactive_v2.tools import TOOL_SCHEMAS
-
-    for schema in TOOL_SCHEMAS:
-        assert (
-            schema.get("type") == "function"
-        ), f"missing type=function: {schema.get('name', schema)}"
-        fn = schema.get("function", {})
-        assert "name" in fn, f"function missing name: {schema}"
-        assert "description" in fn, f"function missing description: {schema}"
-        assert "parameters" in fn, f"function missing parameters: {schema}"
-
-
-def test_tool_schemas_no_input_schema_key():
-    """不应有 Anthropic 风格的 input_schema 顶层 key"""
-    from proactive_v2.tools import TOOL_SCHEMAS
-
-    for schema in TOOL_SCHEMAS:
-        assert (
-            "input_schema" not in schema
-        ), f"Anthropic-style input_schema found: {schema}"
-        assert (
-            "name" not in schema or schema.get("type") == "function"
-        ), f"bare name at top level (Anthropic style): {schema}"
-
-
 # ── Fix 1: _run_loop 应追加 OpenAI 格式消息 ───────────────────────────────
 
 
@@ -1194,16 +1164,6 @@ async def test_run_loop_appends_openai_format_tool_messages():
 
 
 # ── Fix 2: mark_interesting 工具（§10 显式分类）─────────────────────────
-
-
-def test_mark_interesting_tool_in_schema():
-    """TOOL_SCHEMAS 必须包含 mark_interesting 工具"""
-    from proactive_v2.tools import TOOL_SCHEMAS
-
-    names = {s["function"]["name"] for s in TOOL_SCHEMAS if s.get("type") == "function"}
-    assert (
-        "mark_interesting" in names
-    ), "mark_interesting tool missing from TOOL_SCHEMAS"
 
 
 @pytest.mark.asyncio

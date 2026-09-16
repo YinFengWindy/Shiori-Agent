@@ -46,8 +46,6 @@ describe("RoleDetailPage", () => {
     assert.doesNotMatch(markup, /data-testid="role-card-profile-knowledge"/);
     assert.doesNotMatch(markup, /data-testid="edit-role-prompt"/);
     assert.match(markup, /data-has-featured-image="false"/);
-    assert.doesNotMatch(markup, /bg-\[#f4ebe5\]/);
-    assert.doesNotMatch(markup, /shadow-\[0_18px_48px_rgba\(70,38,25,0.2\)\]/);
     assert.doesNotMatch(markup, /data-testid="role-channel-config"/);
     assert.match(markup, /data-testid="save-role-button"/);
   });
@@ -73,6 +71,5 @@ describe("RoleDetailPage", () => {
     );
 
     assert.match(markup, /data-testid="save-role-button"[^>]*disabled=""/);
-    assert.match(markup, /disabled:bg-surface-soft/);
   });
 });

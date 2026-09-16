@@ -1,130 +1,44 @@
-"""
-TDD — Phase 2: proactive/config.py v2 新字段
-
-测试覆盖：
-  - 新增 v2 字段的默认值
-  - v2-only 语义（不再存在 use_agent_tick）
-  - 复用 v1 已有字段（不重复定义）
-  - 字段类型正确
-"""
+"""ProactiveConfig defaults, removed fields and explicit overrides."""
 
 from proactive_v2.config import ProactiveConfig
 
-# ── v2-only ───────────────────────────────────────────────────────────────
+
+def test_loop_and_web_defaults():
+    cfg = ProactiveConfig()
+    assert cfg.agent_tick_max_steps == 35
+    assert isinstance(cfg.agent_tick_max_steps, int)
+    assert cfg.agent_tick_content_limit == 5
+    assert isinstance(cfg.agent_tick_content_limit, int)
+    assert cfg.agent_tick_web_fetch_max_chars == 8_000
+    assert isinstance(cfg.agent_tick_web_fetch_max_chars, int)
 
 
-def test_use_agent_tick_removed():
-    assert not hasattr(ProactiveConfig(), "use_agent_tick")
+def test_drift_and_runtime_defaults():
+    cfg = ProactiveConfig()
+    assert cfg.drift_enabled is False
+    assert cfg.drift_max_steps == 20
+    assert cfg.drift_min_interval_hours == 3
+    assert cfg.enabled is False
+    assert cfg.delivery_dedupe_hours == 24
+    assert cfg.message_dedupe_enabled is True
+    assert cfg.message_dedupe_recent_n == 5
 
 
-# ── agent loop ───────────────────────────────────────────────────────────
+def test_obsolete_fields_are_absent():
+    cfg = ProactiveConfig()
+    for name in (
+        "use_agent_tick",
+        "agent_tick_model",
+        "agent_tick_context_prob",
+        "agent_tick_delivery_cooldown_hours",
+        "drift_dir",
+        "context_only_daily_max",
+        "context_only_min_interval_hours",
+    ):
+        assert not hasattr(cfg, name), name
 
 
-def test_agent_tick_max_steps_default():
-    assert ProactiveConfig().agent_tick_max_steps == 35
-
-
-def test_agent_tick_max_steps_is_int():
-    assert isinstance(ProactiveConfig().agent_tick_max_steps, int)
-
-
-def test_agent_tick_model_removed():
-    assert not hasattr(ProactiveConfig(), "agent_tick_model")
-
-
-def test_agent_tick_content_limit_default():
-    assert ProactiveConfig().agent_tick_content_limit == 5
-
-
-def test_agent_tick_content_limit_is_int():
-    assert isinstance(ProactiveConfig().agent_tick_content_limit, int)
-
-
-# ── web_fetch 截断 ────────────────────────────────────────────────────────
-
-
-def test_agent_tick_web_fetch_max_chars_default():
-    assert ProactiveConfig().agent_tick_web_fetch_max_chars == 8_000
-
-
-def test_agent_tick_web_fetch_max_chars_is_int():
-    assert isinstance(ProactiveConfig().agent_tick_web_fetch_max_chars, int)
-
-
-def test_web_fetch_max_chars_less_than_50000():
-    """必须远小于 WebFetchTool 上限 50000，否则 token 预算失效"""
-    assert ProactiveConfig().agent_tick_web_fetch_max_chars < 50_000
-
-
-# ── removed proactive gates ────────────────────────────────────────────────
-
-
-def test_agent_tick_context_prob_removed():
-    assert not hasattr(ProactiveConfig(), "agent_tick_context_prob")
-
-
-def test_agent_tick_delivery_cooldown_hours_removed():
-    assert not hasattr(ProactiveConfig(), "agent_tick_delivery_cooldown_hours")
-
-
-def test_drift_enabled_default_false():
-    assert ProactiveConfig().drift_enabled is False
-
-
-def test_drift_max_steps_default():
-    assert ProactiveConfig().drift_max_steps == 20
-
-
-def test_drift_dir_removed():
-    assert not hasattr(ProactiveConfig(), "drift_dir")
-
-
-def test_drift_min_interval_hours_default():
-    assert ProactiveConfig().drift_min_interval_hours == 3
-
-
-# ── 复用 v1 已有字段（不重复定义） ────────────────────────────────────────
-
-
-def test_delivery_dedupe_hours_exists():
-    assert hasattr(ProactiveConfig(), "delivery_dedupe_hours")
-
-
-def test_message_dedupe_enabled_exists():
-    assert hasattr(ProactiveConfig(), "message_dedupe_enabled")
-
-
-def test_message_dedupe_recent_n_exists():
-    assert hasattr(ProactiveConfig(), "message_dedupe_recent_n")
-
-
-# ── 字段可被覆盖（dataclass override） ────────────────────────────────────
-
-
-def test_max_steps_can_be_overridden():
-    cfg = ProactiveConfig(agent_tick_max_steps=10)
+def test_explicit_loop_and_web_overrides():
+    cfg = ProactiveConfig(agent_tick_max_steps=10, agent_tick_web_fetch_max_chars=4_000)
     assert cfg.agent_tick_max_steps == 10
-
-
-def test_web_fetch_max_chars_can_be_overridden():
-    cfg = ProactiveConfig(agent_tick_web_fetch_max_chars=4_000)
     assert cfg.agent_tick_web_fetch_max_chars == 4_000
-
-
-# ── v2 字段不影响 v1 字段默认值 ──────────────────────────────────────────
-
-
-def test_v1_enabled_still_false_by_default():
-    assert ProactiveConfig().enabled is False
-
-
-def test_v1_delivery_dedupe_hours_unchanged():
-    assert ProactiveConfig().delivery_dedupe_hours == 24
-
-
-def test_context_only_daily_max_removed():
-    assert not hasattr(ProactiveConfig(), "context_only_daily_max")
-
-
-def test_context_only_min_interval_hours_removed():
-    assert not hasattr(ProactiveConfig(), "context_only_min_interval_hours")

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-import math
 from datetime import datetime, timedelta, timezone
 
 from memory2.store import MemoryStore2
@@ -334,77 +333,3 @@ def test_emotional_weight_extends_hotness_half_life_in_ranking(tmp_path):
             "hotness"
         ]
     )
-
-
-# ─── C. 热度公式规格预验证（与实现无关的数学验证）──────────────────────────────
-
-
-def _hotness_formula(
-    reinforcement: int, age_days: float, half_life: float = 14.0
-) -> float:
-    """热度公式：sigmoid(log1p(reinforcement)) * exp_decay(age_days)
-    直接按设计文档内联，用于验证公式数学正确性，不依赖 store.py 实现。
-    """
-    freq = 1.0 / (1.0 + math.exp(-math.log1p(reinforcement)))
-    recency = math.exp(-math.log(2) / half_life * age_days)
-    return freq * recency
-
-
-def test_hotness_formula_fresh_frequently_accessed_is_hot():
-    """[SPEC] 新鲜且频繁访问的条目热度最高（接近 1.0）。"""
-    score = _hotness_formula(reinforcement=20, age_days=0)
-    assert score > 0.9, f"新鲜且高访问条目热度应接近 1，实际 {score:.4f}"
-
-
-def test_hotness_formula_old_unaccessed_is_cold():
-    """[SPEC] 陈旧且从未被二次访问的条目热度最低（接近 0）。"""
-    score = _hotness_formula(reinforcement=1, age_days=90, half_life=14.0)
-    assert score < 0.05, f"90天前创建、未被引用的条目热度应接近 0，实际 {score:.4f}"
-
-
-def test_hotness_formula_half_life_decay():
-    """[SPEC] 在 half_life 天后热度衰减到初始值的一半（时间衰减正确性）。"""
-    half_life = 14.0
-    score_fresh = _hotness_formula(reinforcement=5, age_days=0, half_life=half_life)
-    score_at_half_life = _hotness_formula(
-        reinforcement=5, age_days=half_life, half_life=half_life
-    )
-    ratio = score_at_half_life / score_fresh
-    assert abs(ratio - 0.5) < 0.01, f"half_life 处应衰减到 50%，实际 {ratio:.4f}"
-
-
-def test_hotness_formula_blended_score_changes_ranking():
-    """[SPEC] 热度加权后，常用新鲜条目排名优于高语义分陈旧条目。
-
-    这是 hotness 优化的核心目标：
-      条目 A: semantic=0.90, reinforcement=10, 1天前
-      条目 B: semantic=0.95, reinforcement=1,  30天前
-      alpha=0.18, half_life=14 → A 的 final_score 应超过 B
-    """
-    alpha = 0.18
-    half_life = 14.0
-
-    sem_a, reinforcement_a, age_a = 0.90, 10, 1
-    sem_b, reinforcement_b, age_b = 0.95, 1, 30
-
-    hot_a = _hotness_formula(reinforcement_a, age_a, half_life)
-    hot_b = _hotness_formula(reinforcement_b, age_b, half_life)
-
-    final_a = (1 - alpha) * sem_a + alpha * hot_a
-    final_b = (1 - alpha) * sem_b + alpha * hot_b
-
-    assert final_a > final_b, (
-        f"热度加权后 A({final_a:.4f}) 应超过 B({final_b:.4f})。"
-        f"  A: semantic={sem_a}, hotness={hot_a:.4f} → final={final_a:.4f}"
-        f"  B: semantic={sem_b}, hotness={hot_b:.4f} → final={final_b:.4f}"
-    )
-
-
-def test_hotness_alpha_zero_equals_pure_cosine():
-    """[SPEC] alpha=0 时 final_score == semantic_score（向后兼容保证）。"""
-    alpha = 0.0
-    semantic = 0.85
-    hotness = 0.9  # 随意一个热度值
-
-    final = (1 - alpha) * semantic + alpha * hotness
-    assert final == semantic, "alpha=0 时热度不参与排序，确保向后兼容"

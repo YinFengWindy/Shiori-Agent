@@ -769,7 +769,7 @@ async def test_shell_auto_promotes_to_background_after_fg_threshold(monkeypatch)
     import agent.tools.shell as shell_mod
 
     # 把 FG_THRESHOLD 设为 0，让任何命令都立即触发自动转后台
-    monkeypatch.setattr(shell_mod, "_FG_THRESHOLD", 0)
+    monkeypatch.setattr("agent.tools.shell.tools._FG_THRESHOLD", 0)
 
     async def _fake_create_subprocess_shell(command, **kwargs):
         # 这个进程永远不会退出（wait 永远 pending）
@@ -811,7 +811,7 @@ async def test_shell_auto_promotes_to_background_after_fg_threshold(monkeypatch)
 async def test_shell_auto_promote_preserves_explicit_timeout(monkeypatch):
     import agent.tools.shell as shell_mod
 
-    monkeypatch.setattr(shell_mod, "_FG_THRESHOLD", 0)
+    monkeypatch.setattr("agent.tools.shell.tools._FG_THRESHOLD", 0)
 
     async def _fake_create_subprocess_shell(command, **kwargs):
         proc = _FakeProc(stdout="", stderr="", returncode=None)
@@ -847,9 +847,8 @@ async def test_shell_auto_promote_preserves_explicit_timeout(monkeypatch):
 @pytest.mark.asyncio
 async def test_shell_auto_promote_false_waits_for_foreground_completion(monkeypatch):
     """auto_promote=False 时，即使超过前台阈值也应同步等待完整结果。"""
-    import agent.tools.shell as shell_mod
 
-    monkeypatch.setattr(shell_mod, "_FG_THRESHOLD", 0)
+    monkeypatch.setattr("agent.tools.shell.tools._FG_THRESHOLD", 0)
 
     async def _fake_create_subprocess_shell(command, **kwargs):
         proc = _FakeProc(stdout="done", stderr="", returncode=0)
@@ -939,7 +938,6 @@ async def test_shell_foreground_completes_normally_within_threshold(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_shell_foreground_timeout_kills_instead_of_auto_promote(monkeypatch):
-    import agent.tools.shell as shell_mod
 
     proc = _FakeProc(stdout="", stderr="", returncode=None)
 
@@ -961,7 +959,7 @@ async def test_shell_foreground_timeout_kills_instead_of_auto_promote(monkeypatc
         _fake_create_subprocess_shell,
     )
     monkeypatch.setattr("agent.tools.shell._kill_process_tree", _fake_kill_process_tree)
-    monkeypatch.setattr(shell_mod, "_FG_THRESHOLD", 15)
+    monkeypatch.setattr("agent.tools.shell.tools._FG_THRESHOLD", 15)
 
     tool = ShellTool()
     result = json.loads(

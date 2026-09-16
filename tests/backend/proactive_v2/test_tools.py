@@ -74,6 +74,7 @@ def test_each_schema_has_openai_format():
     """每条 schema 必须是 OpenAI function tool 格式。"""
     for s in TOOL_SCHEMAS:
         assert s.get("type") == "function", f"missing type=function: {s}"
+        assert "input_schema" not in s, f"Anthropic input_schema found: {s}"
         fn = s.get("function", {})
         assert "name" in fn, f"function missing name: {s}"
         assert "description" in fn, f"function missing description: {s}"
@@ -683,154 +684,56 @@ def test_mark_not_interesting_accumulates():
     assert "feed-mcp:2" in ctx.discarded_item_ids
 
 
-# ── _get_alert_events (缓存) ──────────────────────────────────────────────
-
-
+@pytest.mark.parametrize(
+    "rows",
+    [[], [{"id": "a1", "ack_server": "alert-mcp", "title": "CPU", "severity": "high"}]],
+    ids=["empty", "populated"],
+)
 @pytest.mark.asyncio
-async def test_get_alert_events_caches_on_second_call():
-    events = [
-        {
-            "id": "a1",
-            "ack_server": "alert-mcp",
-            "title": "CPU",
-            "body": "",
-            "severity": "high",
-            "triggered_at": "2026-01-01T00:00:00Z",
-        }
-    ]
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    ctx.mark_alerts_prefetched(events)
-    await _get_alert_events(ctx, {})
-    await _get_alert_events(ctx, {})
-    assert ctx.fetched_alerts == events
-
-
-@pytest.mark.asyncio
-async def test_get_alert_events_stores_in_ctx():
-    event = {
-        "id": "a1",
-        "ack_server": "alert-mcp",
-        "title": "T",
-        "body": "",
-        "severity": "low",
-        "triggered_at": "2026-01-01T00:00:00Z",
-    }
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    ctx.mark_alerts_prefetched([event])
-    await _get_alert_events(ctx, {})
-    assert ctx.fetched_alerts == [event]
+async def test_get_alerts_returns_rows_and_marks_fetched(rows):
+    ctx = AgentTickContext(reply_context=RoleReplyContext(("平静",), ""))
+    # Prefill only the data; the reader must set its own fetched flag.
+    ctx.fetched_alerts = rows
+    assert ctx.alerts_fetched is False
+    assert json.loads(await _get_alert_events(ctx, {})) == rows
     assert ctx.alerts_fetched is True
+    assert json.loads(await _get_alert_events(ctx, {})) == rows
+    assert ctx.fetched_alerts == rows
 
 
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [],
+        [{"id": "c1", "ack_server": "feed-mcp", "url": "https://x.com", "title": "T"}],
+    ],
+    ids=["empty", "populated"],
+)
 @pytest.mark.asyncio
-async def test_get_alert_events_returns_json_list():
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    raw = await _get_alert_events(ctx, {})
-    parsed = json.loads(raw)
-    assert isinstance(parsed, list)
-
-
-# ── _get_content_events (缓存) ────────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_get_content_events_caches_on_second_call():
-    events = [
-        {
-            "id": "c1",
-            "ack_server": "feed-mcp",
-            "url": "https://x.com",
-            "title": "T",
-            "source_name": "S",
-            "published_at": "2026-01-01T00:00:00Z",
-        }
-    ]
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    ctx.mark_contents_prefetched(events, {})
-    await _get_content_events(ctx, {})
-    await _get_content_events(ctx, {})
-    assert ctx.fetched_contents == events
-
-
-@pytest.mark.asyncio
-async def test_get_content_events_stores_in_ctx():
-    event = {
-        "id": "c1",
-        "ack_server": "feed-mcp",
-        "url": "https://x.com",
-        "title": "T",
-        "source_name": "S",
-        "published_at": "2026-01-01T00:00:00Z",
-    }
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    ctx.mark_contents_prefetched([event], {})
-    await _get_content_events(ctx, {})
-    assert ctx.fetched_contents == [event]
+async def test_get_contents_returns_rows_and_marks_fetched(rows):
+    ctx = AgentTickContext(reply_context=RoleReplyContext(("平静",), ""))
+    # Prefill only the data; the reader must set its own fetched flag.
+    ctx.fetched_contents = rows
+    assert ctx.contents_fetched is False
+    assert json.loads(await _get_content_events(ctx, {})) == rows
     assert ctx.contents_fetched is True
+    assert json.loads(await _get_content_events(ctx, {})) == rows
+    assert ctx.fetched_contents == rows
 
 
+@pytest.mark.parametrize(
+    "rows", [[], [{"title": "Steam", "body": "playing"}]], ids=["empty", "populated"]
+)
 @pytest.mark.asyncio
-async def test_get_content_events_passes_limit():
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    await _get_content_events(ctx, {})
-    assert ctx.contents_fetched is True
-
-
-@pytest.mark.asyncio
-async def test_get_content_events_returns_json_list():
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    raw = await _get_content_events(ctx, {})
-    assert isinstance(json.loads(raw), list)
-
-
-# ── _get_context_data (最多调用一次) ─────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_get_context_data_max_one_call():
-    rows = [{"title": "Steam", "body": "playing"}]
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    ctx.mark_context_prefetched(rows)
-    await _get_context_data(ctx, {})
-    await _get_context_data(ctx, {})
-    assert ctx.fetched_context == rows
-
-
-@pytest.mark.asyncio
-async def test_get_context_data_stores_in_ctx():
-    item = {"title": "Steam", "body": "playing"}
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    ctx.mark_context_prefetched([item])
-    await _get_context_data(ctx, {})
-    assert ctx.fetched_context == [item]
+async def test_get_context_returns_rows_and_marks_fetched(rows):
+    ctx = AgentTickContext(reply_context=RoleReplyContext(("平静",), ""))
+    # Prefill only the data; the reader must set its own fetched flag.
+    ctx.fetched_context = rows
+    assert ctx.context_fetched is False
+    assert json.loads(await _get_context_data(ctx, {})) == rows
     assert ctx.context_fetched is True
-
-
-@pytest.mark.asyncio
-async def test_get_context_data_returns_json():
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-    )
-    raw = await _get_context_data(ctx, {})
-    assert isinstance(json.loads(raw), list)
+    assert json.loads(await _get_context_data(ctx, {})) == rows
+    assert ctx.fetched_context == rows
 
 
 # ── _get_recent_chat ──────────────────────────────────────────────────────

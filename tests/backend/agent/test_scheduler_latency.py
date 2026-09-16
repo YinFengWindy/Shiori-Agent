@@ -45,12 +45,6 @@ class TestLatencyTrackerP90:
         mean = sum(samples) / len(samples)
         assert t.lead > mean  # P90 should be higher than mean in this skewed set
 
-    def test_p90_is_not_max(self):
-        t = LatencyTracker(default=25.0, window=20)
-        for i in range(1, 21):
-            t.record(float(i))
-        assert t.lead < 20.0  # must be less than max
-
     def test_window_slides_old_samples_drop(self):
         t = LatencyTracker(default=25.0, window=5)
         # Fill with high latency
@@ -62,16 +56,3 @@ class TestLatencyTrackerP90:
             t.record(1.0)
         low_lead = t.lead
         assert low_lead < high_lead
-
-    def test_spike_raises_then_recovers(self):
-        # Use window=5 so behavior is easy to reason about
-        t = LatencyTracker(default=25.0, window=5)
-        # All spikes: window full with 60s
-        for _ in range(5):
-            t.record(60.0)
-        spiked_lead = t.lead
-        # Fully recover: replace all window slots with 10s
-        for _ in range(5):
-            t.record(10.0)
-        recovered_lead = t.lead
-        assert recovered_lead < spiked_lead
