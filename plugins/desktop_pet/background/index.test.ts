@@ -1,3 +1,4 @@
+import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
@@ -5,8 +6,6 @@ import type {
   PluginBackgroundSettled,
 } from "../../../apps/desktop/renderer/src/background/pluginBackgroundRegistry";
 import petBackground, {
-  desktopPetActionMethod,
-  desktopPetCommandMethod,
   desktopPetTrayEntryId,
 } from "./index";
 import { desktopPetSurfaceId } from "./controller";
@@ -87,12 +86,15 @@ function recorder(overrides: Partial<RecorderState> = {}): Recorder {
         onSettled: (surfaceId, handler) => { settled.set(surfaceId, handler); },
       },
       rpc: {
+        ...createPluginRpcClient("desktop_pet"),
+        handle: async (name, handler) => { events.set(name, handler); },
         call: <T,>(method: string) => {
           rpcCalls.push(method);
           return Promise.resolve(state.bindingAnswer() as T);
         },
       },
-      events: { on: (method, handler) => { events.set(method, (payload) => handler(payload, { id: "test", type: "event", method, payload })); } },
+      events: { on: async (method, handler) => { events.set(method, (payload) => handler(payload, { id: "test", type: "event", method, payload })); return () => { events.delete(method); }; } },
+      hostEvents: { on: (method, handler) => { events.set(method, (payload) => handler(payload, { id: "test", type: "event", method, payload })); } },
       store: {
         read: () => Promise.resolve(state.stored),
         write: (value) => { state.stored = value; return Promise.resolve(); },
@@ -124,9 +126,8 @@ test("setup registers every subscription the pet needs, and one reclaiming effec
   // #181's "停用桌宠插件后 surface 全部回收" quietly stops being true.
   assert.deepEqual(fake.effects, ["desktop_pet_controller"]);
   assert.deepEqual([...fake.events.keys()].sort(), [
-    desktopPetActionMethod,
-    desktopPetCommandMethod,
-    "chat.done", "session.updated", "system.lock-state", "plugin.desktop_pet.bubble.dismissed",
+        "action", "sync",
+    "chat.done", "session.updated", "system.lock-state", "bubble.dismissed",
   ].sort());
   assert.deepEqual([...fake.settled.keys()], [desktopPetSurfaceId]);
 });
@@ -167,7 +168,7 @@ test("a sync command carries forceVisible through, and only when it is a boolean
   const fake = recorder({ stored: { visible: true, roleId: "mira", packageId: "pet-1", positions: {} } });
   await petBackground.setup(fake.ctx);
   await flush();
-  const command = fake.events.get(desktopPetCommandMethod);
+  const command = fake.events.get("sync");
   assert.ok(command);
 
   // This is the surface's right-click "隐藏桌宠": `false` must reach
@@ -187,28 +188,11 @@ test("a sync command carries forceVisible through, and only when it is a boolean
   assert.equal((fake.state.stored as { visible: boolean }).visible, false);
 });
 
-test("a command kind the host does not send is ignored rather than guessed at", async () => {
-  const fake = recorder();
-  await petBackground.setup(fake.ctx);
-  await flush();
-  const before = fake.surfaceCalls.length;
-
-  // `show` and `hide` used to be real kinds; the tray was their only producer
-  // and it now calls the controller directly, so they are gone with it. An
-  // unknown kind must not be guessed into one of the surviving ones.
-  for (const kind of ["explode", "show", "hide", undefined]) {
-    fake.events.get(desktopPetCommandMethod)?.({ kind });
-  }
-  await flush();
-
-  assert.equal(fake.surfaceCalls.length, before);
-});
-
 test("a role reply reaches the surface as retained state", async () => {
   const fake = recorder();
   await petBackground.setup(fake.ctx);
   await flush();
-  fake.events.get(desktopPetCommandMethod)?.({ kind: "show" });
+  fake.events.get("sync")?.({ kind: "show" });
   await flush();
   const before = fake.surfaceCalls.filter(([call]) => call === "setState").length;
 
@@ -221,7 +205,7 @@ test("a settle for the pet's surface reaches the controller", async () => {
   const fake = recorder();
   await petBackground.setup(fake.ctx);
   await flush();
-  fake.events.get(desktopPetCommandMethod)?.({ kind: "show" });
+  fake.events.get("sync")?.({ kind: "show" });
   await flush();
 
   fake.settled.get(desktopPetSurfaceId)?.({

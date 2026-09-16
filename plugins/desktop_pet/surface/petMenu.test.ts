@@ -1,3 +1,4 @@
+import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -24,9 +25,11 @@ function fakeSurface(choice: string | null) {
 
 function fakeHost(calls: string[]) {
   return {
-    syncPet: async (forceVisible?: boolean) => {
-      calls.push(`syncPet:${String(forceVisible)}`);
-    },
+    ...createPluginRpcClient("desktop_pet"),
+    background: { call: async <T,>(_name: string, payload?: Record<string, unknown>) => {
+      calls.push(`sync:${String(payload?.forceVisible)}`);
+      return undefined as T;
+    } },
   };
 }
 
@@ -55,7 +58,7 @@ test("choosing the hide entry hides the pet through the host", async () => {
   await openPetContextMenu(surface.surface, fakeHost(hostCalls));
 
   assert.deepEqual(surface.calls, ["showContextMenu"]);
-  assert.deepEqual(hostCalls, ["syncPet:false"]);
+  assert.deepEqual(hostCalls, ["sync:false"]);
 });
 
 test("dismissing the menu without choosing does nothing and still settles", async () => {

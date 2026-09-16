@@ -25,6 +25,5 @@ export const desktopPetRoleSettings: PluginRoleSettingsContribution = {
   storage: "plugin",
   read: (state) => ({ enabled: state.enabled === true }),
   Component: DesktopPetRoleSettings,
-  // The existing pet-sync bridge remains pending #218; no new event bridge here.
-  afterSave: (values) => window.miraDesktop.syncPet(values.enabled === true),
+  afterSave: (values, client) => client.background.call("sync", { forceVisible: values.enabled === true }),
 };

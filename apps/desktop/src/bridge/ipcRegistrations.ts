@@ -1,3 +1,4 @@
+import { createPluginCommunicationLifecycle } from "../plugins/communicationLifecycle.js";
 import { randomUUID } from "node:crypto";
 import type {
   BrowserWindow,
@@ -15,7 +16,6 @@ import { pickNativeFiles } from "./nativeFilePicker.js";
 import { stagePickedFiles } from "../assets/pickedFileStaging.js";
 import { maxLocalAssetBytes } from "../assets/localAssetContract.js";
 import { applyRuntimeSettings, readRuntimeSettings } from "../settingsRuntime.js";
-import type { DesktopPetCommand } from "../pluginCoupling/desktopPet.js";
 import type { BrowserVoiceRecorder } from "../voice/recorder.js";
 import type { DesktopVoiceController } from "../voice/controller.js";
 import type { BrowserVoicePlayback } from "../voice/playback.js";
@@ -58,8 +58,6 @@ export type RegisterDesktopIpcOptions = {
   localAssets: LocalAssetRegistry;
   localAssetImportsRoot: string;
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
-  /** Issues one pet lifecycle command to the plugin that owns the pet. See `pluginCoupling/desktopPet.ts`. */
-  requestDesktopPetCommand: (command: DesktopPetCommand) => void;
   /** Whether a sending window is the pet's surface, supplied by `main.ts`. */
   isPetWindow: (window: { readonly id: number } | null) => boolean;
   voiceRecorder: BrowserVoiceRecorder;
@@ -98,7 +96,6 @@ export function registerDesktopIpcHandlers(
     localAssets,
     localAssetImportsRoot,
     openLocalAttachment,
-    requestDesktopPetCommand,
     isPetWindow,
     voiceRecorder,
     voiceController,
@@ -107,11 +104,12 @@ export function registerDesktopIpcHandlers(
   }: RegisterDesktopIpcOptions,
 ): void {
   const applicationSessionId = randomUUID();
+  const attributePluginCommunication = createPluginCommunicationLifecycle(bridge);
   let pluginListTail = Promise.resolve();
   host.handle("desktop:application-session-id", () => applicationSessionId);
   host.handle("desktop:invoke", async (_event, request: { method: string; payload: Record<string, unknown> }) => {
     const invoke = async () => {
-      const response = await bridge.invoke(request);
+      const response = await bridge.invoke(await attributePluginCommunication(_event.sender, request));
       if (request.method === "plugins.list" && !response.error && pluginUiResources) {
         const entries = await pluginUiResources.admit(response.payload.plugins);
         if (Array.isArray(response.payload.plugins)) {
@@ -247,17 +245,6 @@ export function registerDesktopIpcHandlers(
       return reference;
     });
     return assetTransport(stagedPaths, assets);
-  });
-  // Fire-and-forget since #181-C: the pet's controller lives in the plugin
-  // host renderer, so this can no longer await the sync and then refresh the
-  // tray. The refresh happens instead when the plugin writes its settings back
-  // — see `main.ts`'s `pluginData.onChanged`, which is also what makes the
-  // tray correct after a change the pet made on its own.
-  host.handle("desktop:pet-sync", (_event, forceVisible?: unknown) => {
-    requestDesktopPetCommand({
-      kind: "sync",
-      forceVisible: typeof forceVisible === "boolean" ? forceVisible : undefined,
-    });
   });
   // The pet's ready / bubble-height / drag / open / context-menu channels are
   // gone. Since #181-B the pet is a plugin surface, so those requests arrive on

@@ -36,7 +36,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     ctx.tools.register(
         DesktopPetActionTool(
             role_store=role_store,
-            event_bus=ctx.events,
+            rpc=ctx.rpc,
             tool_registry=ctx.tools,
         ),
         risk="external-side-effect",

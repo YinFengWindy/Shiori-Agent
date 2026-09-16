@@ -311,6 +311,8 @@ class DesktopBridgeService:
         self.role_service.remove_role_deleted_listener(self._role_deleted_listener)
         self.event_bus.off(PluginBridgeEvent, self._plugin_event_listener)
         self._event_listeners.clear()
+        if self.plugin_rpc_registry is not None:
+            self.plugin_rpc_registry.communication.retire()
         steps = [
             ("desktop.chat.close", self.chat_service.aclose),
             ("desktop.voice.close", self.voice_handler.aclose),
@@ -321,16 +323,25 @@ class DesktopBridgeService:
 
     async def _on_plugin_event(self, event: PluginBridgeEvent) -> None:
         # Retiring and current generations can share a bus; only the owning transport forwards it.
-        if event.registry is not self._plugin_event_registry:
+        if (
+            event.registry is not self._plugin_event_registry
+            or not self._event_listeners
+        ):
             return
         await self._broadcast_event(
             {
                 "id": event.method,
+                "pluginGeneration": (
+                    self.plugin_rpc_registry.communication.generation
+                    if self.plugin_rpc_registry
+                    else ""
+                ),
                 "type": "event",
                 "method": event.method,
                 "payload": event.payload,
             }
         )
+        event.dispatched = True
 
     def start_background_tasks(self) -> None:
         """Starts bridge-owned background maintenance after an event loop exists."""

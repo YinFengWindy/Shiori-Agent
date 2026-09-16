@@ -25,7 +25,7 @@ function registryWith(Component: (props: PluginSurfaceComponentProps) => React.R
 test("mounts only the URL's plugin with its surface and scoped client", async () => {
   const seen: PluginSurfaceComponentProps[] = [];
   const registry = registryWith((props) => { seen.push(props); return <div>surface content</div>; });
-  const view = await mountTestComponent(<SurfaceRoot search="?plugin=demo&surface=main" surface={noopSurface} registry={registry} />);
+  const view = await mountTestComponent(<SurfaceRoot search="?plugin=demo&surface=main" surface={noopSurface} registry={registry} />, { windowGlobals: { miraDesktop: { onEvent: () => () => {} } } });
   try {
     assert.equal(view.container.textContent, "surface content");
     assert.equal(seen[0].surfaceId, "main");
@@ -41,7 +41,7 @@ for (const [search, detail] of [["", "窗口参数缺失"], ["?plugin=other&surf
     let mountedOther = false;
     const surface = { ...noopSurface, ready() { painted = Boolean(document.querySelector('[role="alert"]')?.textContent?.includes(detail)); } };
     const registry = registryWith(() => { mountedOther = true; return null; });
-    const view = await mountTestComponent(<SurfaceRoot search={search} surface={surface} registry={registry} />);
+    const view = await mountTestComponent(<SurfaceRoot search={search} surface={surface} registry={registry} />, { windowGlobals: { miraDesktop: { onEvent: () => () => {} } } });
     try {
       assert.match(view.container.textContent ?? "", /桌面窗口加载失败/);
       assert.equal(painted, true);
@@ -60,7 +60,7 @@ for (const phase of ["render", "effect"]) {
       if (phase === "render") throw new Error("render exploded");
       return <div>partial mount</div>;
     }
-    const view = await mountTestComponent(<SurfaceRoot search="?plugin=demo&surface=main" surface={surface} registry={registryWith(Broken)} />);
+    const view = await mountTestComponent(<SurfaceRoot search="?plugin=demo&surface=main" surface={surface} registry={registryWith(Broken)} />, { windowGlobals: { miraDesktop: { onEvent: () => () => {} } } });
     try {
       assert.match(view.container.textContent ?? "", /插件组件挂载失败/);
       assert.equal(ready, 1);

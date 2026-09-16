@@ -6,7 +6,7 @@ import { pluginChatImageActionsRegistry } from "./pluginFeatureRegistry";
 import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "./pluginEnabledStateStore";
 
 test("plugin action slots disappear for disabled or dependency-blocked plugins", () => {
-  pluginChatImageActionsRegistry.register({ pluginId: "sample", client: { call: async <T,>() => ({} as T) },
+  pluginChatImageActionsRegistry.register({ pluginId: "sample",
     Component: () => <button>Sample action</button>,
   });
   const render = () => renderToStaticMarkup(<PluginChatImageActions

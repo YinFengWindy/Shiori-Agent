@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import { PromptTagLibraryPage } from "./PromptTagLibraryPage";
 
-const noopClient: PluginRpcClient = { call: async <T,>() => ({} as T) };
+const noopClient: PluginRpcClient = { ...createPluginRpcClient("fixture"), call: async <T,>() => ({} as T) };
 
 describe("PromptTagLibraryPage", () => {
   it("renders as a dedicated page with a return action", () => {

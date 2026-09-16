@@ -9,7 +9,7 @@ export type PluginBackgroundHostDeps = {
   /** Fetches the current enabled-plugin roster; called at startup and on every reconcile. */
   listEnabledPluginIds(): Promise<Set<string>>;
   /** Subscribes to whatever signals "the enabled roster may have changed"; returns an unsubscribe. */
-  subscribeRosterChanged(listener: () => void): () => void;
+  subscribeRosterChanged(listener: (available?: boolean) => void): () => void;
   createCtx(pluginId: string, scope: BackgroundEffectScope): BackgroundCtx;
   /** Reports a failure. `pluginId` is empty for `"roster"`, which is not attributable to one plugin. */
   onError?(pluginId: string, phase: "setup" | "dispose" | "roster", error: unknown): void;
@@ -50,8 +50,8 @@ export class PluginBackgroundHost {
   /** Runs the first reconcile and starts listening for roster changes. */
   async start(): Promise<void> {
     await this.reconcile();
-    this.unsubscribeRosterChanged = this.deps.subscribeRosterChanged(() => {
-      this.enqueue(() => this.reconcile());
+    this.unsubscribeRosterChanged = this.deps.subscribeRosterChanged((available = true) => {
+      this.enqueue(() => available ? this.reconcile(true) : this.teardownAll());
     });
   }
 
@@ -59,9 +59,7 @@ export class PluginBackgroundHost {
   async stop(): Promise<void> {
     this.unsubscribeRosterChanged?.();
     this.unsubscribeRosterChanged = null;
-    await this.enqueue(async () => {
-      await Promise.all([...this.running.keys()].map((pluginId) => this.teardown(pluginId)));
-    });
+    await this.enqueue(() => this.teardownAll());
   }
 
   /** Plugin ids with a currently running background scope; test/diagnostic use. */
@@ -81,7 +79,7 @@ export class PluginBackgroundHost {
     return next;
   }
 
-  private async reconcile(): Promise<void> {
+  private async reconcile(replaceGeneration = false): Promise<void> {
     // Reported rather than allowed to escape: `subscribeRosterChanged`'s
     // listener cannot await this, so a roster fetch that throws would
     // otherwise fail silently and leave the running set stale.
@@ -92,6 +90,9 @@ export class PluginBackgroundHost {
       this.deps.onError?.("", "roster", error);
       return;
     }
+    if (replaceGeneration) {
+      for (const pluginId of this.running.keys()) await this.teardown(pluginId);
+    }
     for (const entry of this.deps.registry.list()) {
       const shouldRun = enabled.has(entry.pluginId);
       const isRunning = this.running.has(entry.pluginId);
@@ -101,6 +102,10 @@ export class PluginBackgroundHost {
         await this.teardown(entry.pluginId);
       }
     }
+  }
+
+  private async teardownAll(): Promise<void> {
+    await Promise.all([...this.running.keys()].map((pluginId) => this.teardown(pluginId)));
   }
 
   private async setup(entry: PluginBackgroundEntry): Promise<void> {

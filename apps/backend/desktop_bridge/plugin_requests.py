@@ -23,10 +23,32 @@ class DesktopPluginRequestHandler:
         self, method: str, payload: dict[str, Any]
     ) -> dict[str, Any] | None:
         """Returns the plugin's result, or None when unresolved (falls through)."""
-        if self._registry is None or not method.startswith("plugin."):
+        if self._registry is None:
+            return None
+        if method.startswith("plugins.communication."):
+            return await self._registry.communication.handle(
+                method.removeprefix("plugins.communication."), payload
+            )
+        if not method.startswith("plugin."):
             return None
         if method.startswith("plugin.config."):
             return None
+        context = payload.get("__plugin_context")
+        target = method.split(".", 2)[1]
+        if isinstance(context, dict):
+            from agent.plugin_host.bridge_events import PluginRpcError
+
+            if not self._registry.communication.authorize(
+                str(context.get("plugin_id") or ""),
+                target,
+                str(context.get("generation") or ""),
+            ):
+                raise PluginRpcError("plugin_unavailable", f"插件 {target} 不可用")
+            payload = {
+                key: value
+                for key, value in payload.items()
+                if key != "__plugin_context"
+            }
         resolved = self._registry.resolve(method)
         if resolved is None:
             return None

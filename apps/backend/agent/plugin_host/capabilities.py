@@ -274,17 +274,21 @@ class RpcCapability:
         self._plugin_id = plugin_id
         self._event_bus = event_bus
 
-    async def emit(self, name: str, payload: dict[str, Any]) -> None:
-        """Publishes one namespaced event through the host's transport boundary."""
+    async def emit(self, name: str, payload: dict[str, Any]) -> bool:
+        """Reports transport delivery, not individual renderer consumption."""
         from agent.plugin_host.bridge_events import PluginBridgeEvent
 
+        from agent.plugin_host.communication import communication_name
+
+        self._effects.ensure_active(f"event:{name}")
+        communication_name(name)
         if self._event_bus is None:
             raise RuntimeError("插件事件传输不可用")
-        await self._event_bus.emit(
-            PluginBridgeEvent(
-                f"plugin.{self._plugin_id}.{name}", payload, self._registry
-            )
+        event = PluginBridgeEvent(
+            f"plugin.{self._plugin_id}.{name}", payload, self._registry
         )
+        await self._event_bus.emit(event)
+        return event.dispatched
 
     def register(
         self,

@@ -65,7 +65,7 @@ class BridgeRequestDispatcher:
 
     async def _run(self, method: str, operation: RequestOperation) -> None:
         lane = self._policy_resolver(method).concurrency
-        if lane is Concurrency.SETTINGS_APPLY:
+        if lane in (Concurrency.SETTINGS_APPLY, Concurrency.PLUGIN_TRANSPORT):
             # The runtime transaction owns its serial lock. Waiting for old work
             # must leave transport capacity for health, cancellation and rejection.
             await operation()

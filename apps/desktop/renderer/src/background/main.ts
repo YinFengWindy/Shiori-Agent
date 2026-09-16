@@ -1,3 +1,4 @@
+import { pluginRuntimeChanged } from "../plugins/pluginRuntimeChanged";
 // Registers every plugin's `background/index.ts` before the host reads the registry.
 import "./pluginBackgroundModules";
 import { createPluginBridgeClient } from "../plugins/pluginBridgeClient";
@@ -39,7 +40,7 @@ const host = new PluginBackgroundHost({
     // the only thing making disable-means-disable true here, and
     // `test_set_enabled_publishes_runtime_applied` pins it.
     return onEvent((event) => {
-      if (event.method === "runtime.applied") listener();
+      if (pluginRuntimeChanged(event)) listener(event.method !== "bridge.exit");
     });
   },
   createCtx(pluginId, scope) {

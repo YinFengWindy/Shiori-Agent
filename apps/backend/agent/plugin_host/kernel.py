@@ -139,7 +139,22 @@ class PluginKernel:
         self._active_order: list[str] = []
         # 每个内核（= 每个 runtime generation）独立一份 RPC/配置 schema 注册表
         self.rpc = PluginRpcRegistry()
+        self.rpc.communication.configure(
+            self._communication_dependencies, services.event_bus
+        )
         self.config_schemas = PluginConfigSchemaRegistry()
+
+    def _communication_dependencies(self, plugin_id: str) -> tuple[str, ...] | None:
+        """Reads active dependency declarations from the existing lifecycle owner."""
+        for handle in self._handles.values():
+            if (
+                handle.plugin_id == plugin_id
+                and handle.state is PluginState.ACTIVE
+                and handle.effects.active
+            ):
+                manifest = handle.record.manifest
+                return (*manifest.dependencies, *manifest.optional_dependencies)
+        return None
 
     # ── 发现 ──────────────────────────────────────────────────────────────
 
@@ -290,6 +305,10 @@ class PluginKernel:
                 handle.state = PluginState.UNTRUSTED
                 handle.error = exc
                 return
+        handle.effects.add_subscription(
+            "renderer-communication",
+            lambda: self.rpc.communication.remove_plugin(handle.plugin_id),
+        )
         handle.state = PluginState.LOADING
         try:
             self._import_entry(handle, content)

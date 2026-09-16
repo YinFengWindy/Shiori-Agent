@@ -39,7 +39,7 @@ and renderer declaration keys are rejected. This table defines the v1 fields:
 | `api` | yes | integer `2` |
 | `id` | yes | `[a-z][a-z0-9_-]{0,63}` |
 | `version` | yes | full SemVer 2.0 string, including optional prerelease/build |
-| `runtime_api` | yes | compatibility range; host currently advertises `2.0.0` |
+| `runtime_api` | yes | compatibility range; host currently advertises `2.1.0` |
 | `entry` | yes | explicit package-relative `.py` backend entry |
 | `capabilities` | yes | existing v2 capability-name list, including `[]` |
 | `renderer` | no | object with optional `ui`, `background`, `surface` keys |
@@ -66,6 +66,34 @@ Ranges use whitespace-separated comparators with AND semantics: `=`, `>`, `>=`,
 wildcard, comma, OR and hyphen ranges are deliberately unsupported and rejected.
 Build metadata does not affect precedence. Prerelease hosts require a comparator
 mentioning a prerelease of that same major/minor/patch tuple.
+
+## Runtime API 2.1 communication
+
+API 2.1 adds injected renderer `client.events.on(localName, handler)`,
+`client.dependency(pluginId)` and `client.background.call(localName, payload)`
+alongside the existing `client.call`. Dependency IDs use the manifest's existing
+strong/optional lists. Missing or inactive optional peers return `null`; retained
+peers and calls from retired contexts fail with `plugin_unavailable`. The same
+local names are used for self and declared peers. Background setup registers
+awaitable methods with `ctx.rpc.handle`; `ctx.events` is plugin-local and
+`ctx.hostEvents` explicitly subscribes to host events.
+
+Components must renew subscription effects when their injected `client` changes.
+The host replaces contexts on a real runtime publication or bridge restart,
+reclaims methods/listeners/pending requests on teardown, renderer failure, and
+main-frame document reload/navigation. Document ownership tokens prevent delayed
+cleanup from touching successor registrations; in-page/subframe navigation leaves
+contexts intact. `runtime.applied.changed` means a new runtime generation was
+published, independently of the idempotent RPC response's historical `changed`
+value. Same-generation retries, no-op saves, and role-only writes emit refresh
+events with `changed: false`; retries from retired generations emit no event.
+These refreshes leave communication contexts intact. Background request waits are
+bounded and do not occupy backend RPC scheduling capacity. Method policies on
+backend calls are unchanged. See [the plugin tutorial](plugins-tutorial.md#桌面-rpc事件与-ui)
+for examples and delivery/error semantics. Packages using these additions must
+require `runtime_api: ">=2.1.0 <3.0.0"`; the existing `client.call` signature and
+Python exported dependency API remain compatible. This is cooperation under the
+existing trust model, not a sandbox; the CSP and resource grants are unchanged.
 
 ## Renderer artifacts and dependencies
 

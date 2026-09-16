@@ -31,6 +31,8 @@ class Concurrency(Enum):
     # The settings transaction owns its serial lock; scheduling it through a
     # shared lane would starve health checks and cancellation while it drains.
     SETTINGS_APPLY = "settings_apply"
+    # Renderer rendezvous must leave capacity for callback RPCs and their replies.
+    PLUGIN_TRANSPORT = "plugin_transport"
 
 
 class Handler(Enum):
@@ -137,6 +139,11 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
 
 def method_policy(method: str) -> MethodPolicy:
     """Returns the declared policy, or the conservative default for new methods."""
+    if method.startswith("plugins.communication."):
+        return MethodPolicy(
+            concurrency=Concurrency.PLUGIN_TRANSPORT,
+            admission_exempt=method.endswith((".close", ".reply", ".disconnect")),
+        )
     return METHOD_POLICIES.get(method, _DEFAULT_POLICY)
 
 

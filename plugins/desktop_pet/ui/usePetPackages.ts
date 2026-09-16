@@ -60,8 +60,7 @@ export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: 
   const mutate = useCallback(async (method: "pets.import" | "pets.remove" | "pets.select", payload: Record<string, unknown>) => {
     setState(parse(await client.call<unknown>(method, { role_id: roleId, ...payload })));
     onRoleDataChanged();
-    // This existing main-window/background bridge remains assigned to #218.
-    if (method !== "pets.import") await window.miraDesktop.syncPet();
+    if (method !== "pets.import") await client.background.call("sync");
   }, [client, onRoleDataChanged, parse, roleId]);
 
   const onImport = useCallback(() => void run(async () => {

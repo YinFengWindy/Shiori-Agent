@@ -6,7 +6,7 @@ import { desktopPluginHostServices, type PluginHostServices } from "../../../app
 import { RolePetPackagesPanel as PetPackagesPanel } from "./RolePetPackagesPanel";
 import type { PluginRoleAssetsComponentProps } from "../../../apps/desktop/renderer/src/plugins/pluginUiModuleContract";
 import { mountTestComponent } from "../../../apps/desktop/renderer/src/shared/testing/domTestHarness";
-import type { PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
+import { createPluginRpcClient, type PluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 
 function RolePetPackagesPanel({ pickFiles = async () => [], ...props }: PluginRoleAssetsComponentProps & { pickFiles?: PluginHostServices["pickFiles"] }) {
   return <PluginHostServicesProvider services={{ ...desktopPluginHostServices, pickFiles }}>
@@ -37,6 +37,8 @@ const listPayload = {
 
 function fakeClient(answers: Record<string, unknown>, calls: Call[]): PluginRpcClient {
   return {
+    ...createPluginRpcClient("fixture"),
+    background: { call: async <T,>() => { calls.push({ method: "background.sync", payload: undefined }); return undefined as T; } },
     call: <T,>(method: string, payload?: Record<string, unknown>) => {
       calls.push({ method, payload });
       const answer = answers[method];
@@ -58,7 +60,6 @@ function stubDesktopApi(overrides: Partial<Record<string, unknown>> = {}) {
   const miraDesktop = {
     localAssetUrl: (path: string) => `shiori-asset://local/${path}`,
 
-    syncPet: () => Promise.resolve(),
     ...overrides,
   };
   if (!host.window) throw new Error("stubDesktopApi must run after mountTestComponent");
@@ -108,11 +109,10 @@ it("asks for the open role's packages, and for no role asks for nothing", async 
 });
 
 it("selecting a package tells the host to re-read the role and the pet to re-resolve", async () => {
-  let synced = 0;
   const calls: Call[] = [];
   let roleDataChanged = 0;
   const view = await mountTestComponent(null);
-  stubDesktopApi({ syncPet: () => { synced += 1; return Promise.resolve(); } });
+  stubDesktopApi();
   try {
     await view.render(<RolePetPackagesPanel
       roleId="mira" disabled={false}
@@ -126,7 +126,7 @@ it("selecting a package tells the host to re-read the role and the pet to re-res
     await act(async () => { card.click(); });
     await act(async () => { await Promise.resolve(); });
 
-    assert.deepEqual(calls.at(-1), {
+    assert.deepEqual(calls.at(-2), {
       method: "pets.select",
       payload: { role_id: "mira", package_id: "mira-pet" },
     });
@@ -134,7 +134,7 @@ it("selecting a package tells the host to re-read the role and the pet to re-res
     // stays greyed out after a successful select; without the second the pet on
     // screen keeps rendering the old package.
     assert.equal(roleDataChanged, 1);
-    assert.equal(synced, 1);
+    assert.equal(calls.at(-1)?.method, "background.sync");
   } finally { await view.cleanup(); }
 });
 
@@ -165,11 +165,10 @@ it("a failed refresh shows the reason and keeps the rows it already had", async 
 
 
 it("removing a package also tells the host to re-read the role", async () => {
-  let synced = 0;
   const calls: Call[] = [];
   let roleDataChanged = 0;
   const view = await mountTestComponent(null);
-  stubDesktopApi({ syncPet: () => { synced += 1; return Promise.resolve(); } });
+  stubDesktopApi();
   try {
     await view.render(<RolePetPackagesPanel
       roleId="mira" disabled={false}
@@ -183,7 +182,7 @@ it("removing a package also tells the host to re-read the role", async () => {
     await act(async () => { remove.click(); });
     await act(async () => { await Promise.resolve(); });
 
-    assert.deepEqual(calls.at(-1), {
+    assert.deepEqual(calls.at(-2), {
       method: "pets.remove",
       payload: { role_id: "mira", package_id: "mira-pet" },
     });
@@ -191,7 +190,7 @@ it("removing a package also tells the host to re-read the role", async () => {
     // `desktop_pet_enabled` too. Without this the role form keeps a stale
     // `true` and the *next* `roles.update` is refused outright.
     assert.equal(roleDataChanged, 1);
-    assert.equal(synced, 1);
+    assert.equal(calls.at(-1)?.method, "background.sync");
   } finally { await view.cleanup(); }
 });
 
@@ -199,7 +198,7 @@ it("a response for the previous role is discarded rather than shown under the ne
   const view = await mountTestComponent(null);
   stubDesktopApi();
   let releaseFirst: (() => void) | null = null;
-  const slowClient: PluginRpcClient = {
+  const slowClient: PluginRpcClient = { ...createPluginRpcClient("fixture"),
     call: <T,>() => new Promise<T>((resolve) => {
       releaseFirst = () => resolve({
         selected_package_id: "old-pet",

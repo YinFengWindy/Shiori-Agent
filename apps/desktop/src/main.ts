@@ -38,14 +38,12 @@ import {
 import { registerDesktopContentSecurityPolicy } from "./windowSecurity.js";
 import { PluginDataStore } from "./plugins/dataStore.js";
 import {
-  desktopPetCommandMethod,
   desktopPetPluginId,
   desktopPetPresenceChanged,
   desktopPetSurfaceKey,
   isDesktopPetWindow,
   noDesktopPetPresence,
   readDesktopPetPresence,
-  type DesktopPetCommand,
   type DesktopPetPresence,
 } from "./pluginCoupling/desktopPet.js";
 import { createVoiceCaptureWindow } from "./voice/window.js";
@@ -193,15 +191,7 @@ function legacyPluginDataPath(pluginId: string): string | null {
   return resolve(app.getPath("userData"), "desktop-pet.json");
 }
 
-/**
- * Publishes a host-originated event into the same stream backend events use.
- *
- * This is how the host still reaches the pet's background code (the tray entry,
- * `desktop:pet-sync`) now that no pet object exists in this
- * process. Deliberately the *same* envelope `wireBridgeEvents` sends, so a
- * plugin receives it on the ordinary `ctx.events.on` with no second mechanism
- * to learn. See `pluginCoupling/desktopPet.ts` for what removes each caller.
- */
+/** Publishes host events, such as lock state, for explicit ctx.hostEvents subscriptions. */
 function publishDesktopEvent(method: string, payload: Record<string, unknown>): void {
   const transport: LocalAssetTransport<BridgeEvent> = {
     value: { id: `host-${method}-${Date.now()}`, type: "event", method, payload },
@@ -210,10 +200,6 @@ function publishDesktopEvent(method: string, payload: Record<string, unknown>): 
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send("desktop:event", transport);
   }
-}
-
-function requestDesktopPetCommand(command: DesktopPetCommand): void {
-  publishDesktopEvent(desktopPetCommandMethod, { ...command });
 }
 
 /** Whether the pet's surface window currently exists, asked of the capability that owns it. */
@@ -475,9 +461,6 @@ void app.whenReady().then(async () => {
     });
     voiceHotkey.setHotkey(voiceSettings.hotkey);
   }
-  // `desktop.pet.action` is no longer intercepted here: since #181-C the pet
-  // subscribes to it itself through `ctx.events.on`, and `wireBridgeEvents`
-  // already broadcasts every backend event to the plugin-host window.
   wireBridgeEvents(bridge, localAssets, (event) => {
     if (handleVoiceBridgeEvent(event, activeVoiceController, activeVoicePlayback)) return;
   });
@@ -490,7 +473,6 @@ void app.whenReady().then(async () => {
     localAssets,
     localAssetImportsRoot,
     openLocalAttachment,
-    requestDesktopPetCommand,
     isPetWindow: (window) => isDesktopPetWindow(activeDesktopSurfaces, window),
     voiceRecorder: activeVoiceRecorder,
     voiceController: activeVoiceController,

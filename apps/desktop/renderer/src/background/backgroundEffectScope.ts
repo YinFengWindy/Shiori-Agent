@@ -37,18 +37,19 @@ export class BackgroundEffectScope {
 
   /** Registers an event-subscription cleanup; always disposed before `addEffect` entries. */
   addEventEffect(label: string, dispose: BackgroundEffectDispose): void {
-    this.assertNotDisposed(label);
+    this.ensureActive(label);
     this.eventEffects.push({ label, dispose });
   }
 
   /** Registers a general side effect; disposed after every `addEventEffect` entry. */
   addEffect(label: string, dispose: BackgroundEffectDispose): void {
-    this.assertNotDisposed(label);
+    this.ensureActive(label);
     this.effects.push({ label, dispose });
   }
 
   /** Disposes every registered effect (event subscriptions first), returning collected errors. */
   async disposeAll(): Promise<Error[]> {
+    this.disposed = true;
     const errors: Error[] = [];
     await drain(this.eventEffects, errors);
     await drain(this.effects, errors);
@@ -56,7 +57,8 @@ export class BackgroundEffectScope {
     return errors;
   }
 
-  private assertNotDisposed(label: string): void {
+  /** Rejects admission before a capability acquires listeners or other resources. */
+  ensureActive(label: string): void {
     if (this.disposed) {
       throw new Error(`BackgroundEffectScope 已处置，拒绝登记: ${label}`);
     }

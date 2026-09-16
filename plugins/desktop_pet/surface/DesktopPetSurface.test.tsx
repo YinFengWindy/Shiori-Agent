@@ -1,3 +1,4 @@
+import { createPluginRpcClient } from "../../../apps/desktop/renderer/src/plugins/pluginBridgeClient";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act } from "react";
@@ -84,7 +85,6 @@ function fakeMiraDesktop() {
         eventListeners.push(listener);
         return () => { eventListeners.splice(eventListeners.indexOf(listener), 1); };
       },
-      syncPet: async () => {},
     },
     counts: () => ({ voice: voiceListeners.length, event: eventListeners.length }),
   };
@@ -97,7 +97,7 @@ async function mountSurface() {
   const props = {
     surfaceId: "pet",
     surface: host.surface,
-    client: { call: async <T,>(method: string) => { rpcCalls.push(method); return { ok: true } as T; } },
+    client: { ...createPluginRpcClient("desktop_pet"), call: async <T,>(method: string) => { rpcCalls.push(method); return { ok: true } as T; } },
   };
   const view = await mountTestComponent(<DesktopPetSurface {...props} />, {
     windowGlobals: { miraDesktop: desktop.bridge },

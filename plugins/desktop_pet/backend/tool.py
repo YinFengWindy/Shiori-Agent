@@ -9,7 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from agent.tools.base import Tool
-from bus.events_lifecycle import DesktopPetActionRequested
+from agent.plugin_host.capabilities import RpcCapability
 from core.roles.store import RoleStore
 
 from .pet_state import RolePetStateStore
@@ -66,13 +66,13 @@ class DesktopPetActionTool(Tool):
         self,
         *,
         role_store: RoleStore,
-        event_bus: Any,
+        rpc: RpcCapability,
         tool_registry: Any,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._role_store = role_store
         self._state = RolePetStateStore(role_store)
-        self._event_bus = event_bus
+        self._rpc = rpc
         self._tool_registry = tool_registry
         self._clock = clock
         self._last_action_at: dict[str, float] = {}
@@ -139,23 +139,22 @@ class DesktopPetActionTool(Tool):
                 return _rejected("turn_action_limit")
 
             action_id = f"pet-action-{uuid4().hex}"
-            request = await self._event_bus.emit(
-                DesktopPetActionRequested(
-                    action_id=action_id,
-                    role_id=role_id,
-                    session_key=session_key,
-                    channel=channel,
-                    kind=clean_action,
-                    name=clean_name,
-                    target=clean_target,
-                    animation=clean_animation,
-                    state=package.actions.get(clean_name, ""),
-                )
+            dispatched = await self._rpc.emit(
+                "action",
+                {
+                    "action_id": action_id,
+                    "role_id": role_id,
+                    "session_key": session_key,
+                    "channel": channel,
+                    "kind": clean_action,
+                    "name": clean_name,
+                    "target": clean_target,
+                    "animation": clean_animation,
+                    "state": package.actions.get(clean_name, ""),
+                },
             )
-            if request.error or not request.dispatched:
-                return _rejected(
-                    request.error or "desktop_bridge_unavailable", action_id=action_id
-                )
+            if not dispatched:
+                return _rejected("desktop_bridge_unavailable", action_id=action_id)
             self._last_action_at[role_id] = now
             self._last_turn_key[role_id] = turn_key
             return json.dumps(

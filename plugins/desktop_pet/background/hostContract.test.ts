@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  desktopPetCommandMethod,
   desktopPetPluginId,
   desktopPetSurfaceKey,
   readDesktopPetPresence,
 } from "../../../apps/desktop/src/pluginCoupling/desktopPet";
-import petBackground, {
-  desktopPetCommandMethod as pluginCommandMethod,
-} from "./index";
+import petBackground from "./index";
 import { desktopPetSurfaceId } from "./controller";
 import { desktopPetBindingPatch, normalizeDesktopPetSettings } from "./settings";
 
@@ -30,7 +27,6 @@ import { desktopPetBindingPatch, normalizeDesktopPetSettings } from "./settings"
 test("the host and the plugin agree on the pet's identity and event names", () => {
   assert.equal(desktopPetPluginId, petBackground.pluginId);
   assert.equal(desktopPetSurfaceKey.surfaceId, desktopPetSurfaceId);
-  assert.equal(desktopPetCommandMethod, pluginCommandMethod);
 });
 
 test("the host reads the pet's presence out of what the plugin actually writes", () => {

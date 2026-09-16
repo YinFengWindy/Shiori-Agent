@@ -6,7 +6,7 @@ import type {
 } from "../../../src/bridge/shared";
 import { unavailableLocalAssetUrl } from "../../../src/assets/localAssetContract";
 import type { DesktopInvoke } from "../shared/bridgeInvoke";
-import { createPluginRpcClient } from "../plugins/pluginBridgeClient";
+import { createPluginCommunicationClient } from "../plugins/pluginCommunicationClient";
 import type { BackgroundEffectScope } from "./backgroundEffectScope";
 import type {
   BackgroundCtx,
@@ -47,6 +47,7 @@ function createPluginBackgroundSurfaces(
     post: (surfaceId, message) => api.post(pluginId, surfaceId, message),
     setState: (surfaceId, state) => api.setState(pluginId, surfaceId, state),
     onSettled(surfaceId, handler) {
+      scope.ensureActive(`surface-settled:${surfaceId}`);
       const unsubscribe = onSurfaceSettled((settled) => {
         if (settled.pluginId !== pluginId || settled.surfaceId !== surfaceId) return;
         handler({
@@ -112,6 +113,7 @@ function createPluginBackgroundTray(
 
   const register = () => {
     if (registered) return;
+    scope.ensureActive("tray:clicks");
     registered = true;
     const unsubscribe = onTrayEntryClicked((payload) => {
       if (payload.pluginId !== pluginId) return;
@@ -154,17 +156,9 @@ function createPluginBackgroundTray(
 }
 
 /**
- * Builds the `ctx` handed to one plugin's `background/index.ts` `setup(ctx)`.
- *
- * `onEvent` is the raw, unfiltered `desktop:event` stream (see
- * `apps/desktop/src/bridge/bridgeLifecycle.ts::wireBridgeEvents`, which
- * broadcasts to every open renderer window, including this hidden one).
- * `ctx.events.on` filters it to one `method` and — this is the part that
- * matters for #227 — registers its own unsubscribe into `scope`'s
- * event phase rather than handing the caller an unsubscribe function to
- * manage itself, so a plugin cannot forget to release it, and it is always
- * released before `ctx.effect` entries regardless of call order.
- * `ctx.surfaces.onSettled` follows the same rule for the same reason.
+ * Injects one namespace-bound communication client and explicit host capabilities.
+ * Plugin and host subscriptions are reclaimed before resource effects; the
+ * client also cancels pending background requests and registrations on disposal.
  */
 export function createBackgroundCtx(options: {
   pluginId: string;
@@ -182,11 +176,16 @@ export function createBackgroundCtx(options: {
     pluginId, surfaces, invoke, onEvent, onSurfaceSettled,
     pluginData, tray, onTrayEntryClicked, localAssetUrl, scope,
   } = options;
+  const rpc = createPluginCommunicationClient(pluginId, { invoke, onEvent, background: true });
+  scope.addEventEffect("plugin-communication", () => rpc.dispose());
   return {
     surfaces: createPluginBackgroundSurfaces(pluginId, surfaces, onSurfaceSettled, scope),
-    rpc: createPluginRpcClient(pluginId, invoke),
-    events: {
+    rpc,
+    events: rpc.events,
+    hostEvents: {
       on(method, handler) {
+        scope.ensureActive(`event:${method}`);
+        if (method.startsWith("plugin.")) throw new Error("插件事件请使用 ctx.events 或依赖 client.events");
         const unsubscribe = onEvent((event) => {
           if (event.method === method) handler(event.payload, event);
         });
