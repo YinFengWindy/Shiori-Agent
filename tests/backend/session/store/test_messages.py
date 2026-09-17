@@ -30,6 +30,110 @@ def test_delete_rejects_partial_foreign_or_duplicate_ids_without_cursor_change(
         store.close()
 
 
+def test_update_message_delivery_writes_only_the_named_row(tmp_path: Path):
+    store = SessionStore(tmp_path / "sessions.db")
+    try:
+        store.create_session(key="session", metadata={})
+        store.insert_message(
+            "session",
+            role="assistant",
+            content="older",
+            ts="2026-09-17",
+            seq=0,
+            thread_id="thread-1",
+        )
+        store.insert_message(
+            "session",
+            role="assistant",
+            content="target",
+            ts="2026-09-17",
+            seq=1,
+            thread_id="thread-1",
+        )
+
+        updated = store.update_message_delivery(
+            "session:1",
+            session_key="session",
+            thread_id="thread-1",
+            delivery_status="sent",
+            external_message_id="ext-1",
+        )
+
+        assert updated is not None
+        assert updated["id"] == "session:1"
+        assert updated["delivery_status"] == "sent"
+        assert updated["external_message_id"] == "ext-1"
+        older = store.get_message("session:0")
+        assert older is not None
+        assert older.get("delivery_status") is None
+        assert older.get("external_message_id") is None
+    finally:
+        store.close()
+
+
+def test_update_message_delivery_refuses_when_message_missing(tmp_path: Path):
+    store = SessionStore(tmp_path / "sessions.db")
+    try:
+        store.create_session(key="session", metadata={})
+        assert (
+            store.update_message_delivery(
+                "",
+                session_key="session",
+                delivery_status="sent",
+            )
+            is None
+        )
+        assert (
+            store.update_message_delivery(
+                "session:missing",
+                session_key="session",
+                delivery_status="sent",
+            )
+            is None
+        )
+    finally:
+        store.close()
+
+
+def test_update_message_delivery_refuses_cross_thread_and_cross_session_writes(
+    tmp_path: Path,
+):
+    store = SessionStore(tmp_path / "sessions.db")
+    try:
+        store.create_session(key="session", metadata={})
+        store.insert_message(
+            "session",
+            role="assistant",
+            content="reply",
+            ts="2026-09-17",
+            seq=0,
+            thread_id="thread-1",
+        )
+
+        assert (
+            store.update_message_delivery(
+                "session:0",
+                session_key="session",
+                thread_id="thread-other",
+                delivery_status="sent",
+            )
+            is None
+        )
+        assert (
+            store.update_message_delivery(
+                "session:0",
+                session_key="other-session",
+                delivery_status="sent",
+            )
+            is None
+        )
+        untouched = store.get_message("session:0")
+        assert untouched is not None
+        assert untouched.get("delivery_status") is None
+    finally:
+        store.close()
+
+
 def test_delete_rolls_back_when_database_skips_one_selected_row(tmp_path: Path):
     store = SessionStore(tmp_path / "sessions.db")
     try:

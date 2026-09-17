@@ -59,6 +59,10 @@ class OutboundMessage:
     reply_to: str | None = None
     media: list[str] = field(default_factory=_empty_media)
     metadata: dict[str, Any] = field(default_factory=_empty_metadata)
+    # 这条出站消息对应的已提交会话消息 id；仅在真的有落库记录时才应赋值。
+    # 兜底/降级通知等未落库的出站消息必须留空，投递标记据此判断能否落到具体消息上，
+    # 不得回退成"猜最新一条"。
+    committed_message_id: str | None = None
 
 
 @dataclass

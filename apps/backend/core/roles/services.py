@@ -155,18 +155,20 @@ class RoleSessionService:
             valid_illustrations=list(role.illustrations),
         )
 
-    def mark_latest_assistant_delivery(
+    def mark_message_delivery(
         self,
         session_key: str,
         *,
+        message_id: str,
         thread_id: str,
         delivery_status: str,
         external_message_id: str = "",
     ) -> dict[str, Any] | None:
-        """Updates the latest assistant delivery through the owning session service."""
+        """Updates delivery bookkeeping on the exact committed message it belongs to."""
 
-        return self._session_manager.mark_latest_assistant_delivery(
+        return self._session_manager.mark_message_delivery(
             session_key,
+            message_id=message_id,
             thread_id=thread_id,
             delivery_status=delivery_status,
             external_message_id=external_message_id,

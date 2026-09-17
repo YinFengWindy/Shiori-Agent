@@ -429,6 +429,13 @@ class _BuildOutboundMessageModule:
         _append_media(
             media, collect_prefixed_slots(frame.slots, _OUTBOUND_MEDIA_PREFIX)
         )
+        # after_reasoning.append_messages already committed the assistant reply;
+        # its dict was mutated in place with the store-assigned id. Carrying that
+        # id lets delivery bookkeeping target this exact row later on.
+        owned_messages = frame.slots.get("reply:messages") or []
+        committed_message_id = (
+            str(owned_messages[-1].get("id") or "").strip() if owned_messages else ""
+        )
         frame.slots[_OUTBOUND_SLOT] = OutboundMessage(
             channel=ctx.channel,
             chat_id=ctx.chat_id,
@@ -436,6 +443,7 @@ class _BuildOutboundMessageModule:
             thinking=ctx.thinking,
             media=media,
             metadata=metadata,
+            committed_message_id=committed_message_id or None,
         )
         return frame
 

@@ -25,6 +25,10 @@ class OutboundDispatch:
     thinking: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     media: list[str] = field(default_factory=list)
+    # Carries the already-committed session message id (if any) through to the
+    # published OutboundMessage, so delivery bookkeeping can target that exact
+    # row instead of guessing the thread's latest assistant message.
+    committed_message_id: str | None = None
 
 
 class OutboundDispatchError(RuntimeError):
@@ -57,6 +61,7 @@ class BusOutboundPort:
                 thinking=outbound.thinking,
                 metadata=dict(outbound.metadata or {}),
                 media=list(outbound.media or []),
+                committed_message_id=outbound.committed_message_id,
             )
         )
         if inspect.isawaitable(maybe):
