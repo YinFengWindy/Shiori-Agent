@@ -42,6 +42,7 @@ import { createRoleFormFromRole } from "./roles/roleFormState";
 import { type RoleWorkspaceSectionId } from "./roles/RoleWorkspaceSidebar";
 import { useRoleFormAdapters } from "./roles/useRoleFormAdapters";
 import { type SettingsSectionId } from "./settings/SettingsSidebar";
+import { useSettingsSubsectionMemory } from "./settings/useSettingsSubsectionMemory";
 import { useLatestRef } from "./shared/useLatestRef";
 import { useLeftSidebarState } from "./shared/useLeftSidebarState";
 import { useRightSidebarState } from "./shared/useRightSidebarState";
@@ -97,10 +98,12 @@ function App(): React.ReactElement {
   const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
   // The last active subtab per settings section id (issue #230 AC 4), lifted
-  // here alongside `settingsSection` — see useNavigationHistory's
-  // `activeSettingsSubsections` doc comment for why this can't live as
-  // SettingsPage-local state anymore.
-  const [activeSettingsSubsections, setActiveSettingsSubsections] = useState<Record<string, string>>({});
+  // here alongside `settingsSection` so it survives a section swap that
+  // would otherwise unmount SettingsPage's own internal state; owned by
+  // useSettingsSubsectionMemory (see its doc comment), not raw state here,
+  // so navigation history and SettingsPage share one resolve/remember
+  // implementation instead of each reaching into the record separately.
+  const settingsSubsectionMemory = useSettingsSubsectionMemory();
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const chatLatestImageSidebar = useRightSidebarState({
     minWidth: chatLatestImageSidebarMinWidth,
@@ -229,12 +232,11 @@ function App(): React.ReactElement {
   } = useNavigationHistory({
     mainView,
     settingsSection,
-    activeSettingsSubsections,
+    settingsSubsectionMemory,
     activeRoleIdRef,
     lastNonSettingsViewRef,
     roles,
     setSettingsSection,
-    setActiveSettingsSubsections,
     setSidebarAnimating: leftSidebar.setAnimating,
     setSidebarCollapsed: leftSidebar.setCollapsed,
     setSidebarWidth: leftSidebar.setWidth,
@@ -564,7 +566,7 @@ function App(): React.ReactElement {
       }}
       mainView={mainView}
       settingsSection={settingsSection}
-      activeSettingsSubsections={activeSettingsSubsections}
+      activeSettingsSubsections={settingsSubsectionMemory.activeSubsections}
       onChangeSettingsSubsection={updateSettingsSubsection}
       onBackToChat={() => openChatView()}
       onOpenSettingsSection={(section) => openSettingsWorkspace(section)}

@@ -10,7 +10,7 @@ import {
 import type { RoleRecord, SessionPayload } from "../shared/types";
 import type { AppMainView } from "../shared/types";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
-import { getSettingsSubsections } from "../settings/settingsSectionMetadata";
+import type { SettingsSubsectionMemory } from "../settings/useSettingsSubsectionMemory";
 
 type RoleWorkspaceView = Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" | "role-assets" }>;
 
@@ -22,13 +22,16 @@ type UseNavigationHistoryArgs = {
    * lifted to the app shell alongside `settingsSection` so it (a) survives
    * a section swap that unmounts the settings page's own internal state,
    * and (b) can be snapshotted into each `NavigationEntry` for back/forward.
+   * Owned by `useSettingsSubsectionMemory`, not by this hook: this hook only
+   * reads/writes through it (`resolve`/`remember`), it does not know how
+   * settings subtabs are resolved — that stays this hook's own domain
+   * boundary (navigation, not settings metadata).
    */
-  activeSettingsSubsections: Record<string, string>;
+  settingsSubsectionMemory: SettingsSubsectionMemory;
   activeRoleIdRef: React.MutableRefObject<string>;
   lastNonSettingsViewRef: React.MutableRefObject<AppMainView>;
   roles: RoleRecord[];
   setSettingsSection: React.Dispatch<React.SetStateAction<SettingsSectionId>>;
-  setActiveSettingsSubsections: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setSidebarAnimating: React.Dispatch<React.SetStateAction<boolean>>;
   setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   setSidebarWidth: React.Dispatch<React.SetStateAction<number>>;
@@ -40,12 +43,11 @@ type UseNavigationHistoryArgs = {
 export function useNavigationHistory({
   mainView,
   settingsSection,
-  activeSettingsSubsections,
+  settingsSubsectionMemory,
   activeRoleIdRef,
   lastNonSettingsViewRef,
   roles,
   setSettingsSection,
-  setActiveSettingsSubsections,
   setSidebarAnimating,
   setSidebarCollapsed,
   setSidebarWidth,
@@ -61,7 +63,7 @@ export function useNavigationHistory({
     view: AppMainView,
     roleId = activeRoleIdRef.current,
     section = settingsSection,
-    subsectionId = activeSettingsSubsections[section] ?? getSettingsSubsections(section)[0]?.id ?? "",
+    subsectionId = settingsSubsectionMemory.resolve(section) ?? "",
   ): NavigationEntry {
     const resolvedRoleId = view.kind === "role-detail" || view.kind === "role-assets" ? view.roleId : roleId;
     return {
@@ -81,9 +83,7 @@ export function useNavigationHistory({
    * whatever was active when this settings visit was first pushed.
    */
   function updateSettingsSubsection(sectionId: string, subsectionId: string): void {
-    setActiveSettingsSubsections((current) => (
-      current[sectionId] === subsectionId ? current : { ...current, [sectionId]: subsectionId }
-    ));
+    settingsSubsectionMemory.remember(sectionId, subsectionId);
     if (mainView.kind === "settings" && settingsSection === sectionId) {
       replaceNavigationEntry(buildNavigationEntry(mainView, activeRoleIdRef.current, sectionId, subsectionId));
     }
@@ -191,11 +191,7 @@ export function useNavigationHistory({
     syncNavigationState();
 
     setSettingsSection(nextEntry.settingsSection);
-    setActiveSettingsSubsections((current) => (
-      current[nextEntry.settingsSection] === nextEntry.settingsSubsection
-        ? current
-        : { ...current, [nextEntry.settingsSection]: nextEntry.settingsSubsection }
-    ));
+    settingsSubsectionMemory.remember(nextEntry.settingsSection, nextEntry.settingsSubsection);
     if (nextEntry.view.kind === "settings") {
       openSettingsView(nextEntry.settingsSection);
       return;

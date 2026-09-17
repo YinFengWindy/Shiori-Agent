@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { pluginUiRegistry, type EditorSettingsSectionEntry } from "../plugins/pluginUiRegistry";
 import { SettingsSaveFeedback } from "./SettingsSaveFeedback";
 import { SettingsPageLayout, settingsPageSurfaceClass } from "./SettingsPageLayout";
@@ -13,17 +14,19 @@ type SettingsPageProps = {
   bridgeReady: boolean;
   section: SettingsSectionId;
   /** Hides a plugin's section immediately once its plugin is disabled (issue #174 AC 3). */
-  isSectionVisible?: (sectionId: SettingsSectionId) => boolean;
+  isSectionVisible: (sectionId: SettingsSectionId) => boolean;
   /** Filters a plugin-owned subtab the same way (issue #230 AC 3). */
-  isPluginEnabled?: (pluginId: string) => boolean;
+  isPluginEnabled: (pluginId: string) => boolean;
   /**
    * The last active subtab per section id, lifted to the app shell (issue
    * #230 AC 4) so it survives switching between sections — including
    * between an "editor" section and a "standalone" one like 「插件」, which
-   * unmounts this component's own internal state on every switch.
+   * unmounts this component's own internal state on every switch. Owned by
+   * `useSettingsSubsectionMemory`; this component only reads it and calls
+   * `onChangeSubsection` to write through it.
    */
-  activeSubsections?: Record<string, string>;
-  onChangeSubsection?: (sectionId: string, subsectionId: string) => void;
+  activeSubsections: Record<string, string>;
+  onChangeSubsection: (sectionId: string, subsectionId: string) => void;
 };
 
 /**
@@ -39,14 +42,30 @@ type SettingsPageProps = {
 export function SettingsPage({
   bridgeReady,
   section,
-  isSectionVisible = () => true,
-  isPluginEnabled = () => true,
-  activeSubsections = {},
-  onChangeSubsection = () => undefined,
+  isSectionVisible,
+  isPluginEnabled,
+  activeSubsections,
+  onChangeSubsection,
 }: SettingsPageProps) {
   const entry = isSectionVisible(section) ? pluginUiRegistry.getSettingsSection(section) : undefined;
   const visibleSubsections = entry ? getSettingsSubsections(entry.id, isPluginEnabled) : [];
   const currentSubsectionId = entry ? resolveSettingsSubsectionId(entry.id, activeSubsections, isPluginEnabled) : null;
+
+  // Issue #230 AC 3's fallback commit: `resolveSettingsSubsectionId` above
+  // already substitutes a visible subtab when the remembered one belongs to
+  // a plugin that just got disabled, but that alone only fixes what is
+  // *displayed* this render — without writing the fallback back into the
+  // record, the record keeps the disabled plugin's id, and re-enabling that
+  // plugin later in the same session would make the stale id valid again
+  // and silently snap the page back to it out from under the user. Guarded
+  // by the same equality check `onChangeSubsection`/`remember` already do,
+  // so this only ever fires when the resolved answer actually changed.
+  useEffect(() => {
+    if (!entry || !currentSubsectionId) return;
+    if (activeSubsections[entry.id] !== currentSubsectionId) {
+      onChangeSubsection(entry.id, currentSubsectionId);
+    }
+  }, [entry, currentSubsectionId, activeSubsections, onChangeSubsection]);
 
   if (entry?.kind === "standalone") {
     // A subtab nested under this section (a plugin's own settings, issue

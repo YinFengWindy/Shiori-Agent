@@ -13,6 +13,7 @@ afterEach(() => {
   pluginUiRegistry.unregisterSettingsSubsection("plugins", "auto-b");
   pluginUiRegistry.unregisterSettingsSubsection("plugins", "handwritten");
   pluginUiRegistry.unregisterSettingsSubsection("plugins", "novelai");
+  pluginUiRegistry.unregisterSettingsSubsection("plugins", "qqbot");
 });
 
 describe("synchronizePluginSettingsAutoRegistration (issue #230 AC 5/6)", () => {
@@ -111,6 +112,22 @@ describe("synchronizePluginSettingsAutoRegistration (issue #230 AC 5/6)", () => 
     synchronizePluginSettingsAutoRegistration([{ id: "auto-a", name: "", hasConfigSchema: true }]);
 
     assert.equal(pluginUiRegistry.getSettingsSubsection("plugins", "auto-a")?.label, "auto-a");
+  });
+
+  it("pins qqbot's real subtab label to its manifest display_name, not its lowercase directory id", () => {
+    // Regression coverage for issue #230 AC 7: qqbot's manifest.yaml has no
+    // `display_name`, so `plugin_management.py`'s `display_name or record.name`
+    // fallback previously emitted the plugin's directory name verbatim
+    // ("qqbot") once `plugins/qqbot/ui/index.tsx`'s hardcoded `label: "QQBot"`
+    // was deleted — silently lowercasing a user-visible tab. The fixture
+    // below is the roster shape the backend emits now that
+    // `plugins/qqbot/manifest.yaml` declares `display_name: QQBot`; if a
+    // future edit drops that field, the backend goes back to emitting
+    // "qqbot" and this test fails loudly instead of the tab quietly
+    // regressing again.
+    synchronizePluginSettingsAutoRegistration([{ id: "qqbot", name: "QQBot", hasConfigSchema: true }]);
+
+    assert.equal(pluginUiRegistry.getSettingsSubsection("plugins", "qqbot")?.label, "QQBot");
   });
 
   it("NovelAI (hand-written schema settingsSection + navPage) ends up with exactly one settings subtab, not two", () => {

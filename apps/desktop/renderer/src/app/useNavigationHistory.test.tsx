@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { act, useRef, useState } from "react";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
+import { useSettingsSubsectionMemory } from "../settings/useSettingsSubsectionMemory";
 import { useNavigationHistory } from "./useNavigationHistory";
 import type { AppMainView } from "../shared/types";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
@@ -15,19 +16,18 @@ type HarnessApi = ReturnType<typeof useNavigationHistory> & {
 function Harness({ capture }: { capture: (api: HarnessApi) => void }) {
   const [mainView, setMainView] = useState<AppMainView>({ kind: "chat" });
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
-  const [activeSettingsSubsections, setActiveSettingsSubsections] = useState<Record<string, string>>({});
+  const settingsSubsectionMemory = useSettingsSubsectionMemory();
   const activeRoleIdRef = useRef("");
   const lastNonSettingsViewRef = useRef<AppMainView>({ kind: "chat" });
 
   const api = useNavigationHistory({
     mainView,
     settingsSection,
-    activeSettingsSubsections,
+    settingsSubsectionMemory,
     activeRoleIdRef,
     lastNonSettingsViewRef,
     roles: [],
     setSettingsSection,
-    setActiveSettingsSubsections,
     setSidebarAnimating: () => undefined,
     setSidebarCollapsed: () => undefined,
     setSidebarWidth: () => undefined,
@@ -35,7 +35,7 @@ function Harness({ capture }: { capture: (api: HarnessApi) => void }) {
     applyRoleSnapshot: () => undefined,
   });
 
-  capture({ ...api, mainView, settingsSection, activeSettingsSubsections });
+  capture({ ...api, mainView, settingsSection, activeSettingsSubsections: settingsSubsectionMemory.activeSubsections });
   return null;
 }
 

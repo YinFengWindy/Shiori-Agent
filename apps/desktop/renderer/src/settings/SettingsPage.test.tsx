@@ -4,6 +4,11 @@ import { act } from "react";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry";
 import { SettingsPage } from "./SettingsPage";
+import { useSettingsSubsectionMemory } from "./useSettingsSubsectionMemory";
+
+/** No-op visibility/memory props for tests that don't exercise those concerns. */
+const alwaysVisible = () => true;
+const noopChangeSubsection = () => undefined;
 
 const oneInstalledPlugin = [
   { id: "installed-demo", name: "Installed Demo", version: "0.1.0", description: "", enabled: true, state: "ACTIVE", error: "", has_config_schema: false },
@@ -35,7 +40,16 @@ test("the about route stays available while the backend is offline", async () =>
     },
   });
   try {
-    await view.render(<SettingsPage bridgeReady={false} section="about" />);
+    await view.render(
+      <SettingsPage
+        bridgeReady={false}
+        section="about"
+        isSectionVisible={alwaysVisible}
+        isPluginEnabled={alwaysVisible}
+        activeSubsections={{}}
+        onChangeSubsection={noopChangeSubsection}
+      />,
+    );
     assert.match(view.container.textContent ?? "", /当前版本 v0.2.0/);
     assert.doesNotMatch(view.container.textContent ?? "", /开发模式/);
     assert.equal(view.container.querySelector("button")?.disabled, true);
@@ -44,6 +58,11 @@ test("the about route stays available while the backend is offline", async () =>
     assert.ok(about?.closest('[data-testid="settings-page"]'));
     assert.equal(view.container.querySelectorAll(".settings-page").length, 1);
     assert.equal(view.container.querySelectorAll(".overflow-y-auto").length, 1);
+    // Exactly one heading — proves SettingsPage's own wiring doesn't double
+    // up with AboutSettingsPage; the heading's own spacing/markup rules are
+    // AboutSettingsPage's and SettingsSubsectionNav's respective concerns,
+    // tested in their own test files.
+    assert.equal(Array.from(view.container.querySelectorAll("h2")).filter((h2) => h2.textContent === "关于").length, 1);
   } finally { await view.cleanup(); }
 });
 
@@ -71,7 +90,16 @@ test("the plugin route places every discovered row inside the settings scroll ar
     },
   });
   try {
-    await view.render(<SettingsPage bridgeReady={false} section="plugins" />);
+    await view.render(
+      <SettingsPage
+        bridgeReady={false}
+        section="plugins"
+        isSectionVisible={alwaysVisible}
+        isPluginEnabled={alwaysVisible}
+        activeSubsections={{}}
+        onChangeSubsection={noopChangeSubsection}
+      />,
+    );
     const page = view.container.querySelector('[data-testid="settings-page"]');
     assert.ok(page, "standalone routes need the host's bounded settings layout");
     const scrollArea = page.querySelector(".overflow-y-auto");
@@ -99,6 +127,8 @@ test("issue #230 AC 2: 「插件」 shows 已安装 plus one subtab per nested p
       <SettingsPage
         bridgeReady={false}
         section="plugins"
+        isSectionVisible={alwaysVisible}
+        isPluginEnabled={alwaysVisible}
         activeSubsections={activeSubsections}
         onChangeSubsection={(sectionId, subsectionId) => { selected = [sectionId, subsectionId]; }}
       />,
@@ -138,9 +168,10 @@ test("issue #230 AC 3: disabling the active plugin's subtab hides it and falls b
       <SettingsPage
         bridgeReady={false}
         section="plugins"
+        isSectionVisible={alwaysVisible}
         activeSubsections={{ plugins: "demo" }}
         isPluginEnabled={() => false}
-        onChangeSubsection={() => undefined}
+        onChangeSubsection={noopChangeSubsection}
       />,
     );
     const nav = view.container.querySelector('nav[aria-label="设置子区"]');
@@ -155,34 +186,52 @@ test("issue #230 AC 3: disabling the active plugin's subtab hides it and falls b
   }
 });
 
-test("the about route still renders exactly one heading through the shared subtab-nav header", async () => {
-  const view = await mountTestComponent(null);
-  Object.defineProperty(window, "miraDesktop", {
-    configurable: true,
-    value: {
-      updates: {
-        getState: async () => ({ revision: 0, currentVersion: "0.2.0", phase: "unsupported", latestVersion: null, progress: 0, error: null }),
-        onState: () => () => undefined,
-      },
-    },
+test("issue #230 AC 3 round trip: disabling then re-enabling the active plugin does not snap the page back to it", async () => {
+  pluginUiRegistry.registerSettingsSubsection({
+    slot: "settings.subsection", parentId: "plugins", id: "demo", label: "Demo",
+    pluginId: "demo", Component: () => <div data-testid="demo-settings">Demo 配置</div>,
   });
-  try {
-    await view.render(<SettingsPage bridgeReady={false} section="about" />);
-    const headings = Array.from(view.container.querySelectorAll("h2")).filter((h2) => h2.textContent === "关于");
-    assert.equal(headings.length, 1);
+  const view = await mountTestComponent(null);
+  stubPluginsListBridge();
 
-    // The header (`SettingsSubsectionNav`) already supplies mb-6 under the
-    // heading; the about page's own content must not stack an extra
-    // margin-top on top of that (regression: it briefly did, giving 关于
-    // more space under its title than every other section — issue #230
-    // review). AboutSettingsPage's outer `data-testid="about-settings"`
-    // wrapper carries no classes of its own, so the first real content
-    // block is its first child.
-    const header = headings[0]!.closest("header")!;
-    const aboutRoot = header.nextElementSibling as HTMLElement;
-    assert.equal(aboutRoot?.getAttribute("data-testid"), "about-settings");
-    const content = aboutRoot.firstElementChild as HTMLElement;
-    assert.ok(content, "expected the about page to render content after its header");
-    assert.equal(content.className.includes("mt-8"), false, "about content must not add its own top margin");
-  } finally { await view.cleanup(); }
+  // Uses the real memory hook (not a hand-fed prop object) so the
+  // fallback-commit write-back under test actually runs: without it, the
+  // record would keep remembering "demo" forever, and re-enabling the
+  // plugin would silently jump the page back to its config tab.
+  function Harness({ pluginEnabled }: { pluginEnabled: boolean }) {
+    const memory = useSettingsSubsectionMemory();
+    return (
+      <SettingsPage
+        bridgeReady={false}
+        section="plugins"
+        isSectionVisible={alwaysVisible}
+        isPluginEnabled={() => pluginEnabled}
+        activeSubsections={memory.activeSubsections}
+        onChangeSubsection={memory.remember}
+      />
+    );
+  }
+
+  try {
+    await view.render(<Harness pluginEnabled />);
+    const demoTab = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent === "Demo")!;
+    await act(async () => demoTab.click());
+    assert.ok(view.container.querySelector('[data-testid="demo-settings"]'), "expected to land on the demo subtab after selecting it");
+
+    // Disable: display falls back to 已安装, and the fix under test commits
+    // that fallback into the record instead of leaving "demo" remembered.
+    await view.render(<Harness pluginEnabled={false} />);
+    assert.equal(view.container.querySelector('[data-testid="demo-settings"]'), null);
+    assert.ok(view.container.querySelector('[role="switch"]'), "expected 已安装 to show while demo is disabled");
+
+    // Re-enable: must stay on 已安装 — a stale remembered "demo" would jump
+    // the page back to it with no click, out from under the user.
+    await view.render(<Harness pluginEnabled />);
+    assert.equal(view.container.querySelector('[data-testid="demo-settings"]'), null, "must not silently jump back to demo's tab");
+    assert.ok(view.container.querySelector('[role="switch"]'), "expected to still be on 已安装 after re-enabling");
+  } finally {
+    await view.cleanup();
+    pluginUiRegistry.unregisterSettingsSubsection("plugins", "demo");
+  }
 });
+

@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { pluginUiRegistry } from "../plugins/pluginUiRegistry.js";
 import {
-  createInitialSettingsSubsectionState,
   getSettingsSubsections,
   resolveSettingsSubsectionId,
 } from "./settingsSectionMetadata.js";
@@ -21,10 +20,7 @@ describe("settingsSectionMetadata", () => {
   });
 
   it("falls back to the first subsection when persisted selection is invalid", () => {
-    const active = createInitialSettingsSubsectionState();
-    active.models = "removed-model-section";
-
-    assert.equal(resolveSettingsSubsectionId("models", active), "catalog");
+    assert.equal(resolveSettingsSubsectionId("models", { models: "removed-model-section" }), "catalog");
   });
 
   it("issue #230: appends a settings.subsection nested under a parent to that parent's subtab list", () => {
