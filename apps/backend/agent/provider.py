@@ -133,8 +133,20 @@ def _warn_if_truncated(
     look at `finish_reason` at all. This one line, emitted once per
     truncated response regardless of caller, is the AC1 "provider layer
     itself marks truncation" requirement: every consumer gets at least this
-    even if it never checks `response.finish_reason` itself. Truncation is
-    expected to be rare, so this does not risk flooding logs.
+    even if it never checks `response.finish_reason` itself.
+
+    This deliberately stays at WARNING even though it can be noisy. Truncation
+    is *not* safely rare here: several auxiliary call sites cap output at
+    512-1024 tokens (passive-turn and subagent summaries, recent-context and
+    consolidation) while a role session forces thinking back on regardless of
+    what the call passes (see #310), and a reasoning chain alone routinely
+    runs longer than those caps. If this line turns out to fire constantly on
+    one of those paths, that is the signal working - it means that path has
+    been silently truncating all along - not a reason to lower the level.
+
+    Call sites that already label truncation with their own semantics still
+    do so; the resulting second line is intentional redundancy, because this
+    one records the raw provider fact and theirs records the consequence.
     """
     if not is_truncated_finish_reason(finish_reason):
         return

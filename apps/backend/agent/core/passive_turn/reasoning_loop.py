@@ -708,8 +708,9 @@ class _PassiveReasoningLoopMixin:
                     retry_exhausted_empty = True
                     retry_label = _empty_reply_label(retry_response.finish_reason)
                     logger.warning(
-                        "[空回复重试] 重试仍为空，使用fallback（%s，finish_reason=%s）"
-                        "model=%s",
+                        "[空回复重试] 第%d轮重试仍为空，使用fallback"
+                        "（%s，finish_reason=%s） model=%s",
+                        iteration + 1,
                         retry_label,
                         retry_response.finish_reason,
                         self._llm_config.model,
