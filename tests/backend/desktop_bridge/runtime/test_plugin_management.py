@@ -145,7 +145,30 @@ async def test_list_shows_manifest_title_without_changing_the_toggle_id(
         response = await _request(service, "plugins.list")
         by_id = {item["id"]: item for item in response.payload["plugins"]}
         assert by_id["hello"]["name"] == "24h视奸插件"
-        assert by_id["qqbot"]["name"] == "qqbot"
+        assert by_id["hello"]["id"] == "hello"
+        # qqbot 的 manifest 自 #230 起声明了 display_name：真实插件同样只改展示名。
+        assert by_id["qqbot"]["name"] == "QQBot"
+        assert by_id["qqbot"]["id"] == "qqbot"
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_list_falls_back_to_the_plugin_directory_name_without_display_name(
+    tmp_path, monkeypatch
+):
+    """没有声明 display_name 的插件，展示名回退到插件目录名。
+
+    这一半此前由 qqbot 承担；#230 给 qqbot 补了 display_name 之后需要一个仍然
+    没有声明它的样本，否则回退链只剩下无人证明的一段。
+    """
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, _, app = await _start_service(tmp_path)
+    try:
+        response = await _request(service, "plugins.list")
+        by_id = {item["id"]: item for item in response.payload["plugins"]}
+        assert by_id["hello"]["name"] == "hello"
     finally:
         await service.aclose()
         await app.shutdown()
