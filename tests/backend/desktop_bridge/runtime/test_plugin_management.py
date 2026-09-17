@@ -197,6 +197,136 @@ async def test_list_preserves_renderer_declarations_as_data(tmp_path, monkeypatc
         await app.shutdown()
 
 
+def _declare_renderer_ui(tmp_path: Path, kinds: tuple[str, ...] = ("ui",)) -> None:
+    """Appends a ``renderer:`` block declaring the given kinds to hello's manifest."""
+    manifest = tmp_path / "plugin_dirs" / "hello" / "manifest.yaml"
+    lines = "\n".join(
+        f"  {kind}:\n    entry: {kind}/index.mjs\n    css: []" for kind in kinds
+    )
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8") + f"\nrenderer:\n{lines}\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.asyncio
+async def test_activation_report_confirms_ready_and_clears_pending_kinds(
+    tmp_path, monkeypatch
+):
+    """issue #262 AC1: hello stays displayed as ACTIVE with pending kinds until
+    every declared renderer entry confirms, then the gate clears."""
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    _declare_renderer_ui(tmp_path, ("ui", "background"))
+    service, _, app = await _start_service(tmp_path)
+    try:
+        before = await _request(service, "plugins.list")
+        hello = next(row for row in before.payload["plugins"] if row["id"] == "hello")
+        assert hello["state"] == PluginState.ACTIVE.name
+        assert sorted(hello["pending_renderer_kinds"]) == ["background", "ui"]
+
+        confirmed = await _request(
+            service,
+            "plugins.activation.report",
+            {"plugin_id": "hello", "kind": "ui", "ok": True},
+        )
+        assert confirmed.error is None, confirmed.error
+        assert confirmed.payload == {
+            "plugin_id": "hello",
+            "kind": "ui",
+            "changed": True,
+        }
+
+        confirmed_again = await _request(
+            service,
+            "plugins.activation.report",
+            {"plugin_id": "hello", "kind": "background", "ok": True},
+        )
+        assert confirmed_again.payload["changed"] is True
+
+        after = await _request(service, "plugins.list")
+        hello_after = next(
+            row for row in after.payload["plugins"] if row["id"] == "hello"
+        )
+        assert hello_after["state"] == PluginState.ACTIVE.name
+        assert hello_after["pending_renderer_kinds"] == []
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_activation_report_failure_rolls_back_and_republishes_roster(
+    tmp_path, monkeypatch
+):
+    """issue #262 AC2/AC3/AC4: a renderer-reported failure rolls the plugin
+    back to FAILED with a `ui`-stage diagnostic, republishes the roster so
+    every window's next `plugins.list()` sees it, and never touches qqbot."""
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    _declare_renderer_ui(tmp_path, ("ui",))
+    service, _, app = await _start_service(tmp_path)
+    events = []
+    service.add_event_listener(events.append)
+    try:
+        failed = await _request(
+            service,
+            "plugins.activation.report",
+            {"plugin_id": "hello", "kind": "ui", "ok": False, "reason": "module threw"},
+        )
+        assert failed.error is None, failed.error
+        assert failed.payload == {"plugin_id": "hello", "kind": "ui", "changed": True}
+        assert any(event["method"] == "runtime.applied" for event in events)
+
+        after = await _request(service, "plugins.list")
+        by_id = {row["id"]: row for row in after.payload["plugins"]}
+        assert by_id["hello"]["state"] == PluginState.FAILED.name
+        assert by_id["hello"]["diagnostic"] == {
+            "code": "renderer_ui_failed",
+            "stage": "ui",
+            "field": "renderer.ui.entry",
+            "reason": "module threw",
+            "path": "",
+            "state": "FAILED",
+        }
+        # Other plugins keep running untouched (AC3).
+        assert by_id["qqbot"]["state"] == PluginState.ACTIVE.name
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_activation_report_ignores_a_stale_or_unknown_plugin(
+    tmp_path, monkeypatch
+):
+    """A report naming a plugin the current generation is not tracking as
+    ACTIVE (never declared it, already disabled, or a superseded generation)
+    is accepted and inert rather than raising (AC5 — no retry loop)."""
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, _, app = await _start_service(tmp_path)
+    events = []
+    service.add_event_listener(events.append)
+    try:
+        response = await _request(
+            service,
+            "plugins.activation.report",
+            {"plugin_id": "does-not-exist", "kind": "ui", "ok": False, "reason": "n/a"},
+        )
+        assert response.error is None, response.error
+        assert response.payload == {
+            "plugin_id": "does-not-exist",
+            "kind": "ui",
+            "changed": False,
+        }
+        assert not any(event["method"] == "runtime.applied" for event in events)
+
+        after = await _request(service, "plugins.list")
+        hello = next(row for row in after.payload["plugins"] if row["id"] == "hello")
+        assert hello["state"] == PluginState.ACTIVE.name
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
 @pytest.mark.asyncio
 async def test_set_enabled_false_disables_immediately_and_survives_a_restart(
     tmp_path, monkeypatch

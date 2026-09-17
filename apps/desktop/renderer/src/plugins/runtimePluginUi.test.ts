@@ -20,6 +20,19 @@ test("ESM or CSS failure cleans only its plugin and preserves the original diagn
   assert.deepEqual(events.slice(-2), ["unregister good", "remove good.css"]);
 });
 
+test("reports a plugin id through succeeded once it registers (#262)", async () => {
+  const succeeded: string[] = [];
+  await loadRuntimePluginUi([{ pluginId: "demo", entry: "demo", css: [] }], {
+    importModule: async () => ({ default: { pluginId: "demo" } }),
+    loadCss: async () => () => undefined,
+    register: () => undefined,
+    unregister: () => undefined,
+    succeeded: (pluginId) => succeeded.push(pluginId),
+    failed: () => assert.fail("unexpected failure"),
+  });
+  assert.deepEqual(succeeded, ["demo"]);
+});
+
 test("stylesheet failure removes earlier styles and never evaluates the plugin", async () => {
   const removed: string[] = [];
   const failure = new Error("missing stylesheet");

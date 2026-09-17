@@ -14,6 +14,13 @@ export type RuntimePluginModuleLoadHost<TModule> = {
   validate: (value: unknown, pluginId: string) => asserts value is TModule;
   register: (module: TModule) => void;
   unregister: (pluginId: string) => void;
+  /**
+   * Called once, immediately after a contribution registers successfully.
+   * Optional and additive — existing hosts that only care about failure
+   * (logging/diagnostics) are unaffected. The backend activation report
+   * (#262) is the only current consumer.
+   */
+  succeeded?: (pluginId: string) => void;
   failed: (pluginId: string, error: unknown) => void;
 };
 
@@ -42,6 +49,7 @@ export async function loadRuntimePluginModules<TModule>(
       const { default: module } = await host.importModule(entry.entry);
       host.validate(module, entry.pluginId);
       host.register(module);
+      host.succeeded?.(entry.pluginId);
       dispose.push(() => { host.unregister(entry.pluginId); for (const remove of styles) remove(); });
     } catch (error) {
       host.unregister(entry.pluginId);

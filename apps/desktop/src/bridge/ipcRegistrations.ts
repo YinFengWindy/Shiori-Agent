@@ -10,6 +10,7 @@ import type {
 import type { logDesktopDiagnostic } from "../diagnostics.js";
 import type { DesktopBridgeClient } from "./bridgeClient.js";
 import type { PluginUiResources } from "../plugins/uiResources.js";
+import { activePluginIds } from "../plugins/activePluginIds.js";
 import { importLocalAssets } from "../assets/localAssetImport.js";
 import type { LocalAssetRegistry } from "../assets/localAssetRegistry.js";
 import { pickNativeFiles } from "./nativeFilePicker.js";
@@ -60,6 +61,16 @@ export type RegisterDesktopIpcOptions = {
   openLocalAttachment: (value: string) => Promise<LocalAssetOpenResult>;
   /** Whether a sending window is the pet's surface, supplied by `main.ts`. */
   isPetWindow: (window: { readonly id: number } | null) => boolean;
+  /**
+   * Notified once per plugin id that just left the admitted-active set
+   * between two `plugins.list` responses — disabled, failed, or rolled back
+   * by an activation-report rollback (#262). `main.ts` wires this to
+   * `DesktopSurfaceHost.destroyAllForPlugin`: nothing else in the main
+   * process is told a plugin stopped, so a surface it opened would otherwise
+   * outlive it (see `host.ts`'s `destroyAllForPlugin` docstring — previously
+   * only unit-tested, never actually called in production).
+   */
+  onPluginDeactivated?: (pluginId: string) => void;
   voiceRecorder: BrowserVoiceRecorder;
   voiceController: DesktopVoiceController;
   voicePlayback: BrowserVoicePlayback;
@@ -101,35 +112,55 @@ export function registerDesktopIpcHandlers(
     voiceController,
     voicePlayback,
     onVoiceSettingsChanged,
+    onPluginDeactivated,
   }: RegisterDesktopIpcOptions,
 ): void {
   const applicationSessionId = randomUUID();
   const attributePluginCommunication = createPluginCommunicationLifecycle(bridge);
   let pluginListTail = Promise.resolve();
+  // Previous `plugins.list` snapshot's admitted-active ids, so a roster that
+  // just dropped one plugin (disabled, failed, or rolled back — #262) can
+  // notify `onPluginDeactivated` for exactly the ids that left, not the ones
+  // that were already inactive last time.
+  let previouslyActivePluginIds = new Set<string>();
   host.handle("desktop:application-session-id", () => applicationSessionId);
   host.handle("desktop:invoke", async (_event, request: { method: string; payload: Record<string, unknown> }) => {
     const invoke = async () => {
       const response = await bridge.invoke(await attributePluginCommunication(_event.sender, request));
-      if (request.method === "plugins.list" && !response.error && pluginUiResources) {
-        // One admit() pass grants (or refuses) `ui`, `background` and `surface`
-        // together, tagged by kind; each sibling field below picks its own kind
-        // back out and drops the tag, so every consumer keeps the plain
-        // `RuntimePluginUi` shape it already expects.
-        const entries = await pluginUiResources.admit(response.payload.plugins);
-        const grantFor = (pluginId: unknown, kind: "ui" | "background" | "surface") => {
-          const entry = entries.find((candidate) => candidate.pluginId === pluginId && candidate.kind === kind);
-          if (!entry) return undefined;
-          return entry.error === undefined
-            ? { pluginId: entry.pluginId, entry: entry.entry, css: entry.css }
-            : { pluginId: entry.pluginId, entry: entry.entry, css: entry.css, error: entry.error };
-        };
-        if (Array.isArray(response.payload.plugins)) {
+      if (request.method === "plugins.list" && !response.error) {
+        if (pluginUiResources && Array.isArray(response.payload.plugins)) {
+          // One admit() pass grants (or refuses) `ui`, `background` and `surface`
+          // together, tagged by kind; each sibling field below picks its own kind
+          // back out and drops the tag, so every consumer keeps the plain
+          // `RuntimePluginUi` shape it already expects.
+          const entries = await pluginUiResources.admit(response.payload.plugins);
+          const grantFor = (pluginId: unknown, kind: "ui" | "background" | "surface") => {
+            const entry = entries.find((candidate) => candidate.pluginId === pluginId && candidate.kind === kind);
+            if (!entry) return undefined;
+            return entry.error === undefined
+              ? { pluginId: entry.pluginId, entry: entry.entry, css: entry.css }
+              : { pluginId: entry.pluginId, entry: entry.entry, css: entry.css, error: entry.error };
+          };
           response.payload.plugins = response.payload.plugins.map((plugin) => ({
             ...plugin,
             renderer_ui: grantFor(plugin.id, "ui"),
             renderer_background: grantFor(plugin.id, "background"),
             renderer_surface: grantFor(plugin.id, "surface"),
           }));
+        }
+        if (Array.isArray(response.payload.plugins)) {
+          // Every renderer window independently refetches `plugins.list` and
+          // tears down its own now-stale UI/background contribution when a
+          // plugin drops out (see `runtimePluginUiSynchronization.ts`,
+          // `PluginBackgroundHost.reconcile`). A surface window is different:
+          // it is a main-process `BrowserWindow` nothing else owns (built-in
+          // or external plugin alike), so this is the one place that ever
+          // sees consecutive rosters to diff (#262).
+          const nowActive = activePluginIds(response.payload.plugins as { id: string; enabled: boolean; state: string }[]);
+          for (const pluginId of previouslyActivePluginIds) {
+            if (!nowActive.has(pluginId)) onPluginDeactivated?.(pluginId);
+          }
+          previouslyActivePluginIds = nowActive;
         }
       }
       return assetTransport(response, localAssets.grantTrustedPayload(response.payload));

@@ -82,7 +82,7 @@ class RuntimePluginManagement:
                     "content_hashes": record.content_hashes,
                     "enabled": self._enabled(plugin_id),
                     "can_toggle": runtime_state
-                    not in {"CONFLICT", "UNTRUSTED", "BLOCKED"},
+                    not in {"CONFLICT", "UNTRUSTED", "BLOCKED", "RESTART_REQUIRED"},
                     "supports_hot_unload": record.manifest.supports_hot_unload,
                     "dependencies": list(record.manifest.dependencies),
                     "state": runtime_state,
@@ -95,6 +95,12 @@ class RuntimePluginManagement:
                         state.get("diagnostic")
                         if state
                         else (admission.to_dict() if admission else None)
+                    ),
+                    # Required renderer entries (ui/background) not yet
+                    # confirmed ready by their owning window; non-empty only
+                    # while ``state == "ACTIVE"`` (#262 AC1).
+                    "pending_renderer_kinds": (
+                        state.get("pending_renderer_kinds", []) if state else []
                     ),
                     # __contains__ 已随 #177 的死代码清理移除，改用 schema_for 判定
                     "has_config_schema": kernel.config_schemas.schema_for(plugin_id)
@@ -155,6 +161,39 @@ class RuntimePluginManagement:
             ),
         )
         return {"plugin_id": plugin_id, "enabled": enabled, **result}
+
+    async def report_activation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Applies one renderer's ui/background/surface activation outcome (#262).
+
+        Called by a renderer window (main window, plugin-host background
+        window, or a surface window) once it has loaded — or failed to load —
+        a `renderer.<kind>` entry the backend already admitted for an ACTIVE
+        plugin. Idempotent and safe against stale/duplicate reports: a report
+        naming a plugin/kind the current generation's kernel is not tracking
+        as ACTIVE is silently ignored (``changed: False``) rather than
+        raising, since a renderer process cannot synchronously know the
+        backend's current view — see ``PluginKernel._find_active_handle``.
+        """
+        plugin_id = str(payload.get("plugin_id") or "").strip()
+        kind = str(payload.get("kind") or "").strip()
+        ok = payload.get("ok")
+        if not plugin_id or kind not in {"ui", "background", "surface"}:
+            raise RuntimeApplyError(
+                "runtime_invalid_request", "plugin_id 和 kind 不能为空或非法"
+            )
+        if not isinstance(ok, bool):
+            raise RuntimeApplyError("runtime_invalid_request", "ok 必须是布尔值")
+        kernel = self._plugin_kernel()
+        changed = False
+        if kernel is not None:
+            if ok:
+                changed = await kernel.confirm_renderer_entry(plugin_id, kind)
+            else:
+                reason = str(payload.get("reason") or "renderer 报告激活失败").strip()
+                changed = await kernel.fail_renderer_entry(
+                    plugin_id, kind, reason or "renderer 报告激活失败"
+                )
+        return {"plugin_id": plugin_id, "kind": kind, "changed": changed}
 
     def _enabled(self, plugin_id: str) -> bool:
         stored = self._app.config.plugins.get(plugin_id, {})

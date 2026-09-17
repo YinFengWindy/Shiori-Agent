@@ -9,6 +9,7 @@ import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pl
 import { createRuntimePluginUiSynchronization } from "./runtimePluginUiSynchronization";
 import { registerPluginUiSynchronization } from "./pluginEnabledStateStore";
 import { importRuntimePluginModule, loadRuntimePluginCss } from "./runtimePluginDomLoader";
+import { createPluginBridgeClient } from "./pluginBridgeClient";
 
 /** Installs shared React peers before evaluating any workspace plugin module. */
 export function initializeRuntimePluginUi() {
@@ -19,6 +20,7 @@ export function initializeRuntimePluginUi() {
   map.type = "importmap";
   map.textContent = pluginUiImportMap;
   document.head.append(map);
+  const pluginBridge = createPluginBridgeClient();
   registerPluginUiSynchronization(createRuntimePluginUiSynchronization({
     importModule: importRuntimePluginModule,
     loadCss: loadRuntimePluginCss,
@@ -28,9 +30,17 @@ export function initializeRuntimePluginUi() {
       pluginRoleSettingsRegistry.unregister(pluginId);
       pluginChatImageActionsRegistry.unregister(pluginId);
     },
+    // Tells the backend this window's `ui` entry is ready, clearing it from
+    // `pendingRendererKinds` (#262 AC1). A rejected report (stale/duplicate)
+    // is intentionally not surfaced here — see `reportActivation`'s contract.
+    succeeded: (pluginId) => { void pluginBridge.reportActivation(pluginId, "ui", { ok: true }).catch(() => undefined); },
     failed: (pluginId, error) => {
       console.error(`[plugin-ui] ${pluginId}`, error);
-      window.miraDesktop.reportRendererDiagnostic({ kind: "error", message: error instanceof Error ? error.message : String(error), details: { pluginId, event: "plugin-ui.load.failed", state: "FAILED", stage: "renderer" } });
+      const message = error instanceof Error ? error.message : String(error);
+      window.miraDesktop.reportRendererDiagnostic({ kind: "error", message, details: { pluginId, event: "plugin-ui.load.failed", state: "FAILED", stage: "renderer" } });
+      // Rolls the whole plugin back on the backend so tools/RPC/background/
+      // surface contributions do not outlive a UI that failed to load (#262 AC2).
+      void pluginBridge.reportActivation(pluginId, "ui", { ok: false, reason: message }).catch(() => undefined);
     },
   }));
 }

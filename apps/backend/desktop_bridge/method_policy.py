@@ -103,6 +103,14 @@ METHOD_POLICIES: dict[str, MethodPolicy] = {
         admission_exempt=True,
         handler=Handler.PLUGIN_MANAGEMENT,
     ),
+    "plugins.activation.report": MethodPolicy(
+        # A renderer's own load-outcome report; never gated by the settings
+        # transaction lock and never blocked by a reload in progress, since
+        # it targets whatever generation is current when it arrives (#262).
+        concurrency=Concurrency.MUTATION,
+        admission_exempt=True,
+        handler=Handler.PLUGIN_MANAGEMENT,
+    ),
     "roles.tasks.list": MethodPolicy(
         concurrency=Concurrency.READ_ONLY,
         admission_exempt=True,

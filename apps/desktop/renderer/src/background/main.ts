@@ -33,8 +33,18 @@ const pluginBridge = createPluginBridgeClient(invoke);
 const loadRuntimeBackground = createRuntimePluginBackgroundLoader({
   importModule: importRuntimePluginModule,
   loadCss: loadRuntimePluginCss,
+  // Tells the backend this window's `background` entry is ready, clearing
+  // it from `pendingRendererKinds` (#262 AC1).
+  succeeded(pluginId) {
+    void pluginBridge.reportActivation(pluginId, "background", { ok: true }).catch(() => undefined);
+  },
   failed(pluginId, error) {
     reportBackgroundFailure(`${pluginId} 的运行时 background 模块加载`, error);
+    // Rolls the whole plugin back on the backend so tools/RPC/UI/surface
+    // contributions do not outlive a background module that failed to load
+    // (#262 AC2).
+    const reason = error instanceof Error ? error.message : String(error);
+    void pluginBridge.reportActivation(pluginId, "background", { ok: false, reason }).catch(() => undefined);
   },
 });
 

@@ -20,6 +20,21 @@ test("registers a well-formed external background entry into the shared registry
   assert.deepEqual(registry.get("demo"), { slot: "app.background", pluginId: "demo", setup });
 });
 
+test("reports a plugin id through succeeded once its background entry registers (#262)", async () => {
+  const registry = new PluginBackgroundRegistry();
+  const succeeded: string[] = [];
+  const load = createRuntimePluginBackgroundLoader({
+    importModule: async () => ({ default: { pluginId: "demo", setup: () => {} } }),
+    loadCss: async () => () => {},
+    succeeded: (pluginId) => succeeded.push(pluginId),
+    failed: () => assert.fail("unexpected failure"),
+  }, registry);
+
+  await load([{ pluginId: "demo", entry: "demo.mjs", css: [] }]);
+
+  assert.deepEqual(succeeded, ["demo"]);
+});
+
 test("a malformed module removes its loaded CSS and is reported, not registered", async () => {
   const registry = new PluginBackgroundRegistry();
   const removed: string[] = [];

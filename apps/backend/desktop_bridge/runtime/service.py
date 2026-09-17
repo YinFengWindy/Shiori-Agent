@@ -163,6 +163,27 @@ class ReloadableDesktopService:
                     return self.plugin_management.list(payload)
                 if method == "plugins.trust":
                     return self.plugin_management.trust.confirm(payload)
+                if method == "plugins.activation.report":
+                    result = await self.plugin_management.report_activation(payload)
+                    if result["changed"]:
+                        # Reuses the existing roster-changed broadcast every
+                        # window already listens for (see
+                        # `pluginRuntimeChanged`) rather than inventing a
+                        # second signal: no generation swap happened, but the
+                        # authoritative plugin state did change and every
+                        # window's next `plugins.list()` must see it.
+                        await self.publish_event(
+                            {
+                                "id": request_id,
+                                "type": "event",
+                                "method": "runtime.applied",
+                                "payload": {
+                                    "generation": self.app.generation,
+                                    "changed": True,
+                                },
+                            }
+                        )
+                    return result
                 result = await self.plugin_management.set_enabled(
                     payload,
                     prepare_service=self._prepare,

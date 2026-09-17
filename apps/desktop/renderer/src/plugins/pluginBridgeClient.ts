@@ -44,6 +44,13 @@ export type PluginSummary = {
   hasConfigSchema: boolean;
   /** Whether an active plugin can be replaced without restarting the process. */
   supportsHotUnload: boolean;
+  /**
+   * Required `ui`/`background` renderer entries not yet confirmed ready by
+   * their owning window. Non-empty only while `state === "ACTIVE"`; a
+   * plugin should be presented as still activating, not fully ACTIVE, while
+   * this is non-empty (#262 AC1).
+   */
+  pendingRendererKinds: string[];
   /** Manual trust is bound to the displayed candidate and complete content fingerprint. */
   canTrust?: boolean;
   trustFingerprint?: string | null;
@@ -67,6 +74,9 @@ export type PluginSetEnabledResult = {
   generation: number;
 };
 
+/** Outcome a renderer reports for one admitted `renderer.<kind>` entry (#262). */
+export type PluginActivationOutcome = { ok: true } | { ok: false; reason: string };
+
 function invokePluginPayload<T>(invoke: DesktopInvoke, method: string, payload: Record<string, unknown>, options?: { timeoutMs?: number }): Promise<T> {
   return invokeBridgePayload<T>(invoke, method, payload, PluginBridgeError, options);
 }
@@ -86,6 +96,19 @@ export interface PluginBridgeClient {
     enabled: boolean,
     options: { operationId: string },
   ): Promise<PluginSetEnabledResult>;
+  /**
+   * Reports whether this window's admitted `renderer.<kind>` entry for
+   * `pluginId` loaded successfully. A failure rolls the whole plugin back on
+   * the backend and republishes the roster (#262); a success only clears it
+   * from `pendingRendererKinds`. Never throws on its own — a stale or
+   * duplicate report for a plugin/kind the backend is not tracking is
+   * accepted and simply reported back as `changed: false`.
+   */
+  reportActivation(
+    pluginId: string,
+    kind: "ui" | "background" | "surface",
+    outcome: PluginActivationOutcome,
+  ): Promise<void>;
 }
 
 /**
@@ -122,6 +145,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         renderer_surface?: RuntimePluginUi;
         can_trust?: boolean; trust_fingerprint?: string | null; trust_directory?: string; trust_pending_restart?: boolean;
         enabled: boolean; state: string; error: string; has_config_schema: boolean; supports_hot_unload: boolean;
+        pending_renderer_kinds?: string[];
       }> }>(resolveInvoke(), "plugins.list", {});
       return payload.plugins.map((item) => ({
         id: item.id,
@@ -145,6 +169,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         trustPendingRestart: item.trust_pending_restart,
         hasConfigSchema: item.has_config_schema,
         supportsHotUnload: item.supports_hot_unload,
+        pendingRendererKinds: item.pending_renderer_kinds ?? [],
       }));
     },
     async setEnabled(pluginId, enabled, options) {
@@ -152,6 +177,14 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         resolveInvoke(), "plugins.setEnabled", { plugin_id: pluginId, enabled, operation_id: options.operationId },
       );
       return { pluginId: payload.plugin_id, enabled: payload.enabled, generation: payload.generation };
+    },
+    async reportActivation(pluginId, kind, outcome) {
+      await invokePluginPayload(resolveInvoke(), "plugins.activation.report", {
+        plugin_id: pluginId,
+        kind,
+        ok: outcome.ok,
+        ...(outcome.ok ? {} : { reason: outcome.reason }),
+      });
     },
   };
 }

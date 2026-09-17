@@ -27,3 +27,20 @@ class PackageContractError(Exception):
     def __init__(self, code: str, field: str, reason: str, *, path: str = ""):
         self.diagnostic = PluginDiagnostic(code, "validation", field, reason, path)
         super().__init__(f"{field}: {reason}")
+
+
+class RendererActivationError(Exception):
+    """A required ``renderer.<kind>`` entry failed after backend setup succeeded.
+
+    Raised internally by ``PluginKernel.fail_renderer_entry`` (#262) when a
+    renderer process (main window UI, plugin-host background, or a surface
+    window) reports that its admitted ``ui``/``background``/``surface`` entry
+    could not load. ``diagnostic.stage`` is the failing kind itself
+    (``"ui"``, ``"background"`` or ``"surface"``) — a new, valid value for
+    ``PluginDiagnostic.stage`` alongside the existing
+    ``"validation"``/``"discovery"``/``"trust"``/``"dependency"`` stages.
+    """
+
+    def __init__(self, diagnostic: PluginDiagnostic):
+        self.diagnostic = diagnostic
+        super().__init__(diagnostic.reason)

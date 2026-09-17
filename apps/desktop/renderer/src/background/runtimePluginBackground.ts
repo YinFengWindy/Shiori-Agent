@@ -7,6 +7,7 @@ import { pluginBackgroundRegistry, type PluginBackgroundRegistry } from "./plugi
 export type RuntimePluginBackgroundHost = {
   importModule: (url: string) => Promise<{ default: unknown }>;
   loadCss: (url: string) => Promise<() => void>;
+  succeeded?: (pluginId: string) => void;
   failed: (pluginId: string, error: unknown) => void;
 };
 
@@ -55,6 +56,7 @@ export function createRuntimePluginBackgroundLoader(
       register: (module) => registry.register({ slot: "app.background", pluginId: module.pluginId, setup: module.setup }),
       // A background module, once registered, is never unregistered here — see above.
       unregister: () => undefined,
+      succeeded: (pluginId) => host.succeeded?.(pluginId),
       failed: (pluginId, error) => { reported.add(pluginId); host.failed(pluginId, error); },
     });
     return pending.map((entry) => entry.pluginId);
