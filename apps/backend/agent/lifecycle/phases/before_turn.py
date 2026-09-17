@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import TYPE_CHECKING, Awaitable, Callable, Protocol, TypeAlias, cast
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Protocol, TypeAlias, cast
 
 from bus.event_bus import EventBus
 from agent.core.runtime_support import SessionLike
@@ -19,6 +19,7 @@ from agent.core.passive_support import estimate_messages_tokens
 
 if TYPE_CHECKING:
     from agent.core.passive_turn import ContextStore
+    from agent.looping.ports import SessionServices
     from session.manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,55 @@ class _AcquireSessionModule:
         return frame
 
 
+_PERSISTED_USER_MESSAGE_SLOT = "session:persisted_user_message"
+
+
+class _PersistPendingUserMessageModule:
+    """在拿到 session 之后立刻落库用户消息（issue #306）。
+
+    一处覆盖所有失败路径：本模块之后任何一步失败——包括
+    _MemoryContextGuardModule 自己的记忆整理门禁（粘滞失败、token 超限，
+    也包括 consolidator=None 时不抛异常、只产出 abort 的路径）、
+    before_reasoning 窗口内的取消（含记忆检索、prompt warmup，这段窗口内的
+    CancelledError 是 BaseException，任何 except Exception 都接不住）、
+    reasoning/AfterReasoning 失败——用户这句话都已经落库；助手侧仍然只在
+    成功提交时落库。见 persist_pending_user_message() 的完整说明。
+
+    诚实记录一个行为差异（不是缺陷，是本工单修复数据丢失的固有代价）：
+    在这个改动之前，失败的回合什么都不落库，pending 计数不会因为失败回合
+    增长；现在失败回合也会落库用户消息，pending 会照常增长。对于反复失败
+    的会话（例如 provider 持续报错），_MemoryContextGuardModule 和背后的
+    记忆整理会比修复前更早触发——这是正确的行为（这些消息本来就该被算进
+    历史），但触发时机确实会变。本模块只保证"同样的历史规模下触发判断不变"
+    （_historical_messages() 显式排除当轮刚落库的消息，见下方），不保证
+    "同样多轮失败对话下触发时机不变"。
+    """
+
+    slot = "before_turn.persist_user"
+    requires = ("before_turn.acquire_session", _SESSION_SLOT)
+    produces = (_PERSISTED_USER_MESSAGE_SLOT,)
+
+    def __init__(self, session_services: "SessionServices") -> None:
+        self._session_services = session_services
+
+    async def run(self, frame: BeforeTurnFrame) -> BeforeTurnFrame:
+        # 延迟导入：after_reasoning.py 所在的 agent.lifecycle.phases 包
+        # __init__.py 会先加载 after_reasoning，其导入链经
+        # agent.core.passive_support -> agent.core.passive_turn.pipeline ->
+        # reasoner 再回到本文件；如果在模块顶层导入
+        # persist_pending_user_message，会在这条链的中途形成循环导入。函数体
+        # 内导入把它推迟到真正调用时（届时两个模块都已加载完毕），不改变任何
+        # 运行时行为。
+        from agent.lifecycle.phases.after_reasoning import persist_pending_user_message
+
+        state = frame.input
+        state.persisted_user_message = await persist_pending_user_message(
+            state, self._session_services
+        )
+        frame.slots[_PERSISTED_USER_MESSAGE_SLOT] = state.persisted_user_message
+        return frame
+
+
 class _PrepareContextModule:
     slot = "before_turn.prepare_context"
     requires = ("before_turn.acquire_session", _SESSION_SLOT)
@@ -109,9 +159,39 @@ class _PrepareContextModule:
         return frame
 
 
+def _historical_messages(
+    session: SessionLike,
+    current_turn_message: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], bool]:
+    """返回排除掉"当轮已落库用户消息"之后的 session.messages，以及是否排除了。
+
+    Issue #306：用户消息现在会在 before_turn 拿到 session 之后立刻落库
+    （_PersistPendingUserMessageModule），本模块运行时它已经是
+    session.messages 的最后一条。本模块的 pending/token 统计语义是"历史 +
+    当轮尚未计入的新消息"，如果不排除就会把同一条消息算两次、让 pending
+    比早落库之前多 1、token 估算也多算一份——不是"表现不变"，是把同一条消息
+    数了两遍。这里显式排除它，让触发条件在同样的历史规模下与早落库之前完全
+    一致（新增测试
+    test_memory_context_guard_trigger_turn_unchanged_by_early_persist 验证了
+    这一点）。
+    """
+    messages = list(getattr(session, "messages", []))
+    if (
+        current_turn_message is not None
+        and messages
+        and messages[-1] is current_turn_message
+    ):
+        return messages[:-1], True
+    return messages, False
+
+
 class _MemoryContextGuardModule:
     slot = "before_turn.memory_context_guard"
-    requires = ("before_turn.acquire_session", _SESSION_SLOT)
+    requires = (
+        "before_turn.acquire_session",
+        "before_turn.persist_user",
+        _SESSION_SLOT,
+    )
     produces = (_CTX_SLOT,)
 
     def __init__(
@@ -133,13 +213,20 @@ class _MemoryContextGuardModule:
         if bool((state.msg.metadata or {}).get("skip_memory_context_guard")):
             return frame
         session = cast(SessionLike, frame.slots[_SESSION_SLOT])
-        messages = list(getattr(session, "messages", []))
+        messages, current_turn_persisted = _historical_messages(
+            session, state.persisted_user_message
+        )
         last = _clamp_last_consolidated(
             getattr(session, "last_consolidated", 0),
             len(messages),
         )
         pending = len(messages) - last
-        input_tokens = _estimate_session_input_tokens(session, state.msg.content, last)
+        input_tokens = _estimate_session_input_tokens(
+            session,
+            state.msg.content,
+            last,
+            current_turn_already_persisted=current_turn_persisted,
+        )
         token_pressure = (
             self._input_token_threshold > 0
             and input_tokens >= self._input_token_threshold
@@ -166,13 +253,17 @@ class _MemoryContextGuardModule:
                     raise MemoryConsolidationFailedError(
                         "记忆整理没有可处理的历史或未产生进展，已停止发送超限上下文。"
                     )
+                refreshed_messages, refreshed_current_turn_persisted = (
+                    _historical_messages(session, state.persisted_user_message)
+                )
                 input_tokens = _estimate_session_input_tokens(
                     session,
                     state.msg.content,
                     _clamp_last_consolidated(
                         getattr(session, "last_consolidated", 0),
-                        len(getattr(session, "messages", [])),
+                        len(refreshed_messages),
                     ),
+                    current_turn_already_persisted=refreshed_current_turn_persisted,
                 )
                 if input_tokens >= self._input_token_threshold:
                     raise MemoryConsolidationFailedError(
@@ -299,10 +390,16 @@ def default_before_turn_modules(
     keep_count: int = 20,
     consolidator: MemoryConsolidator | None = None,
     input_token_threshold: int = 75000,
+    session_services: "SessionServices | None" = None,
     plugin_modules: BeforeTurnModules | None = None,
 ) -> BeforeTurnModules:
     builtins: BeforeTurnModules = [
         _AcquireSessionModule(session_manager),
+        *(
+            [_PersistPendingUserMessageModule(session_services)]
+            if session_services is not None
+            else []
+        ),
         _MemoryContextGuardModule(
             keep_count,
             consolidator,
@@ -337,8 +434,20 @@ def _estimate_session_input_tokens(
     session: SessionLike,
     current_content: str,
     last_consolidated: int,
+    *,
+    current_turn_already_persisted: bool = False,
 ) -> int:
-    """Estimate the next model input from unarchived history and current turn."""
+    """Estimate the next model input from unarchived history and current turn.
+
+    `last_consolidated` is computed by the caller against the *historical*
+    message count (current-turn message excluded, see `_historical_messages`).
+    `session.get_history()` still reads the real `session.messages`, so when
+    the current turn was already persisted (issue #306 早落库) it comes back
+    as the last history entry; drop it here and re-append the exact same
+    synthetic `current_content` message used before that persist moved
+    earlier, so the token estimate is byte-identical to the pre-#306 formula
+    for the same underlying history and current turn.
+    """
     try:
         history = session.get_history(
             max_messages=500,
@@ -346,6 +455,8 @@ def _estimate_session_input_tokens(
         )
     except TypeError:
         history = session.get_history(max_messages=500)
+    if current_turn_already_persisted and history and history[-1].get("role") == "user":
+        history = history[:-1]
     return estimate_messages_tokens(
         [*history, {"role": "user", "content": current_content}]
     )

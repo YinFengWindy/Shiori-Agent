@@ -441,3 +441,28 @@ class _PersistenceMixin:
                 raise RuntimeError("消息已更新但会话缓存无法同步")
             self._cache[clean_session_key] = loaded
             return loaded
+
+    async def update_persisted_message_fields(
+        self,
+        session: Session,
+        message: dict[str, Any],
+    ) -> None:
+        """Write back non-identity fields of an already-persisted message.
+
+        Issue #306: 用户消息在进入 reasoning 前就已经落库（拿到 `id`），
+        `llm_user_content` / `llm_context_frame` / 插件 `persist:user:*` 字段
+        只有在 reasoning 成功后才补得上。`_persist_messages` 只写入没有 `id`
+        的消息，之后单纯改内存里的 dict 永远到不了数据库；这里显式调用 store
+        层的 `update_message` 把最新的 `extra` 整体写回去。`message` 必须是
+        调用方已经原地补写过目标字段的同一个 dict（通常就是
+        `session.messages` 里的那个对象），这样 `_extract_extra` 才能拿到
+        完整、正确的最终状态，不会用不完整的字段覆盖数据库里已有的其它内容。
+        """
+        message_id = str(message.get("id") or "").strip()
+        if not message_id:
+            return
+        async with self._lock(session.key):
+            self._store.update_message(
+                message_id,
+                extra=self._extract_extra(message),
+            )

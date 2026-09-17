@@ -27,6 +27,7 @@ class _DummySession:
         self.messages: list[dict[str, object]] = []
         self.metadata: dict[str, object] = {}
         self.last_consolidated = 0
+        self.updated_at = datetime.now()
 
     def get_history(self, max_messages: int = 500) -> list[dict[str, object]]:
         return self.messages[-max_messages:]

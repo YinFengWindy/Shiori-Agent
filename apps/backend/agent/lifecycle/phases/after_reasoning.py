@@ -25,7 +25,7 @@ from agent.lifecycle.types import (
     TurnState,
 )
 from bus.event_bus import EventBus
-from bus.events import OutboundMessage
+from bus.events import InboundMessage, OutboundMessage
 
 if TYPE_CHECKING:
     from agent.looping.ports import LLMConfig, LLMServices
@@ -179,46 +179,34 @@ class _EmitAfterReasoningCtxModule:
         return frame
 
 
-async def persist_pending_user_message(
-    state: TurnState,
+def _record_user_message_side_effects(
+    *,
     session_services: "SessionServices",
-) -> dict[str, Any] | None:
-    """在进入 reasoning 前落库用户消息，返回持久化后的消息对象（省略时返回 None）。
+    session_key: str,
+) -> None:
+    """presence / relationship_runtime 的"记一次用户消息"副作用，与写入方式无关。
 
-    Issue #306：用户消息此前只在 AfterReasoning 的 persist_user 步骤落库，一旦
-    reasoning/回复阶段失败（格式非法、provider 报错、超出输入预算、回合取消）
-    pipeline 会提前返回、跳过整条 AfterReasoning 链，用户这句话就从历史里彻底
-    消失。这里把落库提前到调用 reasoner.run_turn() 之前：无论后续如何失败，
-    用户消息都已经落库；助手侧仍然只在成功生成回复后才提交（formal_role_reply
-    的 mood-gated 原子提交、以及非 formal 路径下 _AppendMessagesModule 的失败
-    回滚，都只覆盖助手消息，不会把这里落库的用户消息一并撤销）。
-
-    与 _PersistUserMessageModule 默认路径的唯一差异：这里拿不到 llm_user_content /
-    llm_context_frame（reasoner 还没跑出 prompt render 结果）和插件通过
-    persist:user:* 贡献的字段。reasoning 成功后 _PersistUserMessageModule 会
-    原地补写这些字段；缺失 llm_user_content 时 session.get_history() 按
-    content+media 重建，不是致命问题（desktop chat.send 的早落库路径
-    persist_desktop_user_message 已经是同样的取舍）。
-
-    通过 TurnState.persisted_user_message 做幂等标记：reasoner.run_turn() 内部的
-    安全重试循环可能对同一个 msg 多次进入 attempt，但本函数只在 pipeline 里对
-    每个 turn 调用一次，因此不会重复落库。
+    与 persist_pending_user_message() 和 _PersistUserMessageModule 的默认路径共用，
+    避免同一段逻辑在文件内出现第三次。
     """
-    msg = state.msg
-    raw_session = state.session
-    if raw_session is None:
-        raise RuntimeError("persist_pending_user_message requires TurnState.session")
-    session = cast("Session", raw_session)
-    omit_user_turn = bool((msg.metadata or {}).get("omit_user_turn"))
-    if omit_user_turn:
-        return None
-
     if session_services.presence:
-        session_services.presence.record_user_message(session.key)
+        session_services.presence.record_user_message(session_key)
     relationship_runtime = getattr(session_services, "relationship_runtime", None)
     if relationship_runtime is not None:
-        relationship_runtime.handle_user_message(session.key)
+        relationship_runtime.handle_user_message(session_key)
 
+
+def _build_user_message_kwargs(
+    *,
+    msg: InboundMessage,
+    session: "Session",
+) -> tuple[dict[str, object], str]:
+    """构造用户消息的落库 kwargs 与展示内容，返回 (kwargs, content)。
+
+    与 persist_pending_user_message() 和 _PersistUserMessageModule 的默认路径共用；
+    两处唯一的差异（是否带 llm_user_content / llm_context_frame / persist:user:*、
+    是立即写入还是走私有 draft）由调用方各自处理。
+    """
     user_kwargs: dict[str, object] = {
         "metadata": _build_synced_message_metadata(
             channel=msg.channel,
@@ -238,6 +226,53 @@ async def persist_pending_user_message(
         if isinstance(persisted_user_content, str)
         else msg.content
     )
+    return user_kwargs, user_content
+
+
+async def persist_pending_user_message(
+    state: TurnState,
+    session_services: "SessionServices",
+) -> dict[str, Any] | None:
+    """在 before_turn 拿到 session 之后立刻落库用户消息，返回持久化后的消息对象
+    （omit_user_turn 时返回 None）。
+
+    Issue #306：用户消息此前只在 AfterReasoning 的 persist_user 步骤落库。
+    reasoning/回复阶段的任何失败——格式非法（InvalidRoleReply）、provider 报错、
+    超出输入预算（不管是 reasoner 内部的 token 检查，还是 before_turn 的
+    _MemoryContextGuardModule，含它自己 abort 而不抛异常的路径）、
+    before_reasoning 窗口内的取消——都发生在 before_turn.acquire_session 之后，
+    此前全部会让用户这句话从历史里彻底消失。这里把落库放在 before_turn 链的
+    最前面（_PersistPendingUserMessageModule，紧跟在 acquire_session 之后）：
+    只要拿到了 session，用户消息就已经落库，后面无论哪一步失败都不会再丢。
+    助手侧仍然只在成功生成回复后才提交（formal_role_reply 的 mood-gated 原子
+    提交、以及非 formal 路径下 _AppendMessagesModule 的失败回滚，都只覆盖
+    助手消息，不会把这里落库的用户消息一并撤销）。
+
+    与 _PersistUserMessageModule 默认路径的唯一差异：这里拿不到 llm_user_content /
+    llm_context_frame（reasoner 还没跑出 prompt render 结果）和插件通过
+    persist:user:* 贡献的字段。reasoning 成功后 _PersistUserMessageModule 会
+    原地补写这些字段，并通过 SessionManager.update_persisted_message_fields()
+    把补写结果真正写回数据库（这条消息落库时已经拿到 id，
+    `_persist_messages` 只插入没有 id 的消息，单纯改内存 dict 到不了库）。
+
+    通过 TurnState.persisted_user_message 做幂等标记：reasoner.run_turn() 内部的
+    安全重试循环可能对同一个 msg 多次进入 attempt，但本函数只在 before_turn 里
+    对每个 turn 调用一次，因此不会重复落库。
+    """
+    msg = state.msg
+    raw_session = state.session
+    if raw_session is None:
+        raise RuntimeError("persist_pending_user_message requires TurnState.session")
+    session = cast("Session", raw_session)
+    omit_user_turn = bool((msg.metadata or {}).get("omit_user_turn"))
+    if omit_user_turn:
+        return None
+
+    _record_user_message_side_effects(
+        session_services=session_services, session_key=session.key
+    )
+    user_kwargs, user_content = _build_user_message_kwargs(msg=msg, session=session)
+    original_updated_at = session.updated_at
     session.add_message(
         "user",
         user_content,
@@ -253,6 +288,7 @@ async def persist_pending_user_message(
         session.messages[:] = [
             message for message in session.messages if message is not persisted_message
         ]
+        session.updated_at = original_updated_at
         raise
     return persisted_message
 
@@ -277,11 +313,13 @@ class _PersistUserMessageModule:
             return frame
         persisted_early = state.persisted_user_message
         if persisted_early is not None:
-            # 用户消息已经在 persist_pending_user_message() 落库（见
-            # PassiveTurnPipeline.run 在调用 reasoner.run_turn() 前的早落库步骤）。
+            # 用户消息已经在 persist_pending_user_message() 落库（见 before_turn 的
+            # _PersistPendingUserMessageModule，紧跟在 acquire_session 之后）。
             # 这里只原地补写 reasoning 成功后才可得的字段，不重复写入、也不把它
             # 拖进助手侧的私有 draft / mood-gated 原子提交——失败回滚只应撤销
-            # 助手消息，不应牵连已经落库的用户消息。
+            # 助手消息，不应牵连已经落库的用户消息。补写完还要显式写回数据库：
+            # 这条消息已经带着 id，_persist_messages 只插入没有 id 的消息，单纯
+            # 改内存 dict 到不了库。
             llm_user_content = ctx.context_retry.get("llm_user_content")
             if isinstance(llm_user_content, (str, list)):
                 persisted_early["llm_user_content"] = llm_user_content
@@ -289,20 +327,15 @@ class _PersistUserMessageModule:
             if isinstance(llm_context_frame, str) and llm_context_frame.strip():
                 persisted_early["llm_context_frame"] = llm_context_frame
             persisted_early.update(_collect_persist_user_slots(frame.slots))
+            if persisted_early.get("id"):
+                await self._session_services.session_manager.update_persisted_message_fields(
+                    session, persisted_early
+                )
             return frame
-        if self._session_services.presence:
-            self._session_services.presence.record_user_message(session.key)
-        relationship_runtime = getattr(
-            self._session_services, "relationship_runtime", None
+        _record_user_message_side_effects(
+            session_services=self._session_services, session_key=session.key
         )
-        if relationship_runtime is not None:
-            relationship_runtime.handle_user_message(session.key)
-        user_kwargs: dict[str, object] = {}
-        user_kwargs["metadata"] = _build_synced_message_metadata(
-            channel=msg.channel,
-            chat_id=msg.chat_id,
-            metadata=msg.metadata,
-        )
+        user_kwargs, user_content = _build_user_message_kwargs(msg=msg, session=session)
         llm_user_content = ctx.context_retry.get("llm_user_content")
         if isinstance(llm_user_content, (str, list)):
             user_kwargs["llm_user_content"] = llm_user_content
@@ -310,18 +343,6 @@ class _PersistUserMessageModule:
         if isinstance(llm_context_frame, str) and llm_context_frame.strip():
             user_kwargs["llm_context_frame"] = llm_context_frame
         user_kwargs.update(_collect_persist_user_slots(frame.slots))
-        user_kwargs.update(
-            _copy_conversation_message_fields(
-                metadata=cast(dict[str, Any] | None, msg.metadata),
-                session=session,
-            )
-        )
-        persisted_user_content = msg.metadata.get(_PERSISTED_USER_CONTENT_METADATA_KEY)
-        user_content = (
-            persisted_user_content
-            if isinstance(persisted_user_content, str)
-            else msg.content
-        )
         if "reply:state" in frame.slots:
             frame.slots["reply:messages"].append(
                 build_session_message(
