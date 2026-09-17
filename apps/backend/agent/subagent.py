@@ -20,7 +20,12 @@ import logging
 from typing import Any, Sequence
 
 from agent.provider import LLMProvider
-from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
+from agent.tool_hooks import (
+    FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
+    ToolExecutionRequest,
+    ToolExecutor,
+    is_finalize_denial,
+)
 from agent.tool_hooks.base import ToolHook
 from agent.tool_runtime import (
     append_assistant_tool_calls,
@@ -71,15 +76,6 @@ _FORCED_FINAL_SUMMARY_FALLBACK = (
     "这次后台任务已先停在当前进度。我已经完成了一部分关键步骤，"
     "但还有剩余工作未收束；下一次可从当前检查点继续推进。"
 )
-
-
-def _is_tool_loop_guard_denial(exec_result: object) -> bool:
-    traces = getattr(exec_result, "pre_hook_trace", ()) or ()
-    return any(
-        getattr(item, "decision", "") == "deny"
-        and str(getattr(item, "reason", "")).startswith("tool_loop_guard:")
-        for item in traces
-    )
 
 
 def _trim_tool_results(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -234,9 +230,9 @@ class SubAgent:
                     content=normalized,
                     tool_name=tc.name,
                 )
-                if _is_tool_loop_guard_denial(exec_result):
+                if is_finalize_denial(exec_result):
                     logger.warning(
-                        "[subagent] 插件截断重复工具调用 tool=%s，提前收尾",
+                        "[subagent] hook 截断重复工具调用 tool=%s，提前收尾",
                         tc.name,
                     )
                     self.last_exit_reason = "tool_loop"
@@ -244,7 +240,7 @@ class SubAgent:
                         append_tool_result(
                             messages,
                             tool_call_id=skipped.id,
-                            content="工具调用已因重复循环检测跳过。",
+                            content=FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
                             tool_name=skipped.name,
                         )
                     if self._mandatory_exit_tools:

@@ -17,7 +17,11 @@ from agent.lifecycle.types import (
     BeforeStepInput,
     BeforeToolCallCtx,
 )
-from agent.tool_hooks import ToolExecutionRequest
+from agent.tool_hooks import (
+    FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
+    ToolExecutionRequest,
+    is_finalize_denial,
+)
 from agent.tool_runtime import (
     append_assistant_tool_calls,
     append_tool_result,
@@ -28,15 +32,6 @@ from agent.tools.registry import ToolRegistry
 from agent.provider import ContextLengthError
 
 logger = logging.getLogger("agent.core.passive_turn")
-
-
-def _is_tool_loop_guard_denial(exec_result: object) -> bool:
-    traces = getattr(exec_result, "pre_hook_trace", ()) or ()
-    return any(
-        getattr(item, "decision", "") == "deny"
-        and str(getattr(item, "reason", "")).startswith("tool_loop_guard:")
-        for item in traces
-    )
 
 
 class _PassiveReasoningLoopMixin:
@@ -310,7 +305,7 @@ class _PassiveReasoningLoopMixin:
                             tool_name=tool_call.name,
                             arguments=tool_call.arguments,
                         )
-                        if _is_tool_loop_guard_denial(exec_result):
+                        if is_finalize_denial(exec_result):
                             result = str(exec_result.output)
                             append_tool_result(
                                 messages,
@@ -345,6 +340,7 @@ class _PassiveReasoningLoopMixin:
                                             "decision": item.decision,
                                             "reason": item.reason,
                                             "extra_message": item.extra_message,
+                                            "finalize": item.finalize,
                                         }
                                         for item in exec_result.pre_hook_trace
                                     ],
@@ -355,7 +351,7 @@ class _PassiveReasoningLoopMixin:
                                 append_tool_result(
                                     messages,
                                     tool_call_id=skipped.id,
-                                    content="工具调用已因重复循环检测跳过。",
+                                    content=FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
                                     tool_name=skipped.name,
                                 )
                             tool_chain.append(
@@ -558,6 +554,7 @@ class _PassiveReasoningLoopMixin:
                                     "decision": item.decision,
                                     "reason": item.reason,
                                     "extra_message": item.extra_message,
+                                    "finalize": item.finalize,
                                 }
                                 for item in exec_result.pre_hook_trace
                             ],
@@ -569,15 +566,16 @@ class _PassiveReasoningLoopMixin:
                                     "decision": item.decision,
                                     "reason": item.reason,
                                     "extra_message": item.extra_message,
+                                    "finalize": item.finalize,
                                 }
                                 for item in exec_result.post_hook_trace
                             ],
                             "result": normalized.preview(),
                         }
                     )
-                    if _is_tool_loop_guard_denial(exec_result):
+                    if is_finalize_denial(exec_result):
                         logger.warning(
-                            "[循环检测] 插件截断重复工具调用，进入收尾 (iteration=%d, tool=%s)",
+                            "[插件收尾] hook 截断重复工具调用，进入收尾 (iteration=%d, tool=%s)",
                             iteration + 1,
                             tool_call.name,
                         )
@@ -585,7 +583,7 @@ class _PassiveReasoningLoopMixin:
                             append_tool_result(
                                 messages,
                                 tool_call_id=skipped.id,
-                                content="工具调用已因重复循环检测跳过。",
+                                content=FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
                                 tool_name=skipped.name,
                             )
                         tool_chain.append(
