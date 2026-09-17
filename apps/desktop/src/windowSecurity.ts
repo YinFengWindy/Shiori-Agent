@@ -64,13 +64,20 @@ export function resolveRendererEntryUrl(
 /** Builds the CSP applied to the privileged renderer main frame. */
 export function buildDesktopContentSecurityPolicy(devServerUrl: string | undefined): string {
   const trustedDevUrl = validateRendererDevServerUrl(devServerUrl);
-  const mapHash = createHash("sha256").update(pluginUiImportMap).digest("base64");
-  const scriptSources = ["'self'", `${pluginUiScheme}:`, `'sha256-${mapHash}'`];
+  const scriptSources = ["'self'", `${pluginUiScheme}:`];
   const connectSources = ["'self'"];
   if (trustedDevUrl) {
     const url = new URL(trustedDevUrl);
+    // 开发环境用 'unsafe-inline' 放行 Vite 注入的内联 preamble 脚本；
+    // 按 CSP 规范，script-src 里只要出现 hash/nonce 来源，'unsafe-inline' 就会被整体忽略，
+    // 所以这里绝不能再加导入映射的 sha256 hash，否则会复现 preamble 检测失败、白屏的回归。
     scriptSources.push("'unsafe-inline'");
     connectSources.push(`ws://${url.host}`);
+  } else {
+    // 打包环境没有内联 preamble 脚本，改用导入映射内容的 sha256 hash 精确放行，
+    // 避免引入 'unsafe-inline' 扩大攻击面。
+    const mapHash = createHash("sha256").update(pluginUiImportMap).digest("base64");
+    scriptSources.push(`'sha256-${mapHash}'`);
   }
   return [
     "default-src 'self'",
