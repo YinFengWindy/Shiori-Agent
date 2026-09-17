@@ -26,7 +26,7 @@ class _ProjectionMixin:
         session_key: str,
         *,
         message_id: str,
-        thread_id: str = "",
+        thread_id: str,
         delivery_status: str,
         external_message_id: str = "",
     ) -> dict[str, Any] | None:

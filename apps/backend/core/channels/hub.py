@@ -144,7 +144,13 @@ class ChannelHub:
         delivery_status: str,
         external_message_id: str = "",
     ) -> dict[str, Any] | None:
-        """Writes delivery state to the role session after validating its source thread."""
+        """Writes delivery state to the message this outbound was committed as.
+
+        An outbound without a committed message id returns early without
+        touching or validating anything: there is no row to mark, so the
+        source-thread validation below never applies to it. Everything else
+        is validated against its source thread before the write.
+        """
         committed_message_id = str(message.committed_message_id or "").strip()
         if not committed_message_id:
             # 兜底/降级出站消息（如错误提示、重试失败通知）从未落库，没有对应的
