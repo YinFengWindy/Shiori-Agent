@@ -873,3 +873,97 @@ def test_subagent_loop_path_runs_mandatory_exit_with_closed_chain():
     assert "记录" in result
     assert len(tool.calls) == 2
     assert exit_tool.called == 1
+
+
+def _load_tool_loop_guard_kernel(
+    tmp_path: Path, *, plugin_configs: dict[str, dict[str, Any]] | None = None
+) -> PluginKernel:
+    plugin_dir = tmp_path / "tool_loop_guard"
+    stage_plugin_package(PLUGIN_DIR, plugin_dir)
+    kernel = PluginKernel(
+        [tmp_path],
+        services=HostServices(
+            event_bus=EventBus(), plugin_configs=plugin_configs or {}
+        ),
+    )
+    asyncio.run(kernel.load_all())
+    return kernel
+
+
+def test_repeat_limit_config_model_accepts_the_documented_floor(tmp_path):
+    """config_model 的 ge=2 约束延续了迁移前的硬编码下限：2 是合法值。"""
+    kernel = _load_tool_loop_guard_kernel(
+        tmp_path, plugin_configs={"tool_loop_guard": {"repeat_limit": 2}}
+    )
+
+    assert kernel.loaded_count == 1
+    assert kernel.states()[0]["state"] == "ACTIVE"
+    assert [h.name for h in kernel.tool_hooks] == [
+        "plugin:tool_loop_guard:detect_repeated_tool_call"
+    ]
+
+
+def test_repeat_limit_below_floor_is_rejected_with_a_diagnostic_not_coerced(tmp_path):
+    """#239：非法配置（< 2）现在必须在配置边界被拒绝并给出诊断，而不是像迁移前
+    那样被 ``max(2, int(raw_limit))`` 静默改写成默认值 3。"""
+    kernel = _load_tool_loop_guard_kernel(
+        tmp_path, plugin_configs={"tool_loop_guard": {"repeat_limit": 1}}
+    )
+
+    assert kernel.loaded_count == 0
+    state = kernel.states()[0]
+    assert state["state"] == "FAILED"
+    assert "repeat_limit" in state["error"]
+    assert kernel.tool_hooks == []
+
+
+def test_repeat_limit_unparseable_string_is_rejected_with_a_diagnostic_not_coerced(
+    tmp_path,
+):
+    """不可解析成整数的值同理：迁移前 ``except (TypeError, ValueError)`` 会
+    吞掉错误并退回默认值；现在交给 pydantic 在配置边界直接拒绝。
+
+    注意这不等于"任何非 int 类型都被拒绝"——pydantic 的 lax 模式会把
+    可解析的数字字符串（如 "5"）和整数值的 float（如 5.0）强制转换成 int，
+    这与迁移前 ``int(raw_limit)`` 的行为是一致的、有意保留的兼容性，见下面
+    ``test_repeat_limit_accepts_a_numeric_string_like_the_pre_migration_int_call``。
+    这里用 "abc" 这种真正无法解析成数字的字符串。
+    """
+    kernel = _load_tool_loop_guard_kernel(
+        tmp_path, plugin_configs={"tool_loop_guard": {"repeat_limit": "abc"}}
+    )
+
+    assert kernel.loaded_count == 0
+    state = kernel.states()[0]
+    assert state["state"] == "FAILED"
+    assert "repeat_limit" in state["error"]
+    assert kernel.tool_hooks == []
+
+
+def test_repeat_limit_accepts_a_numeric_string_like_the_pre_migration_int_call(
+    tmp_path,
+):
+    """延续性证明：pydantic 的 lax int 强转会接受 "5" 这样的数字字符串，跟迁移
+    前 ``max(2, int(raw_limit))`` 里 ``int("5") == 5`` 的行为完全一致——这是
+    有意保留的兼容性，不是校验没做严格的意外。"""
+    kernel = _load_tool_loop_guard_kernel(
+        tmp_path, plugin_configs={"tool_loop_guard": {"repeat_limit": "5"}}
+    )
+
+    assert kernel.loaded_count == 1
+    assert kernel.states()[0]["state"] == "ACTIVE"
+    assert [h.name for h in kernel.tool_hooks] == [
+        "plugin:tool_loop_guard:detect_repeated_tool_call"
+    ]
+
+
+def test_disabled_plugin_contributes_no_tool_hook(tmp_path):
+    """停用插件时（``[plugins.tool_loop_guard].enabled = false``），不应贡献
+    任何 pre-tool hook——回合完全不受循环保护约束。"""
+    kernel = _load_tool_loop_guard_kernel(
+        tmp_path, plugin_configs={"tool_loop_guard": {"enabled": False}}
+    )
+
+    assert kernel.loaded_count == 0
+    assert kernel.states()[0]["state"] == "DISABLED"
+    assert kernel.tool_hooks == []
