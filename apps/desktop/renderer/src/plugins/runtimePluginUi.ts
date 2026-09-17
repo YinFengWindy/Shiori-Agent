@@ -9,8 +9,8 @@ export type RuntimePluginUiHost = {
   loadCss: (url: string) => Promise<() => void>;
   register: (module: PluginUiModule) => void;
   unregister: (pluginId: string) => void;
-  succeeded?: (pluginId: string) => void;
-  failed: (pluginId: string, error: unknown) => void;
+  succeeded?: (entry: RuntimePluginUi) => void;
+  failed: (entry: RuntimePluginUi, error: unknown) => void;
 };
 
 /**

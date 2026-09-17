@@ -102,6 +102,13 @@ class RuntimePluginManagement:
                     "pending_renderer_kinds": (
                         state.get("pending_renderer_kinds", []) if state else []
                     ),
+                    # Opaque per-activation-attempt identity, echoed back in
+                    # ``plugins.activation.report`` so a stale report from a
+                    # disable/re-enable cycle's abandoned load cannot be
+                    # mistaken for the current handle (#262).
+                    "activation_token": (
+                        state.get("activation_token", "") if state else ""
+                    ),
                     # __contains__ 已随 #177 的死代码清理移除，改用 schema_for 判定
                     "has_config_schema": kernel.config_schemas.schema_for(plugin_id)
                     is not None,
@@ -183,15 +190,18 @@ class RuntimePluginManagement:
             )
         if not isinstance(ok, bool):
             raise RuntimeApplyError("runtime_invalid_request", "ok 必须是布尔值")
+        activation_token = str(payload.get("activation_token") or "")
         kernel = self._plugin_kernel()
         changed = False
         if kernel is not None:
             if ok:
-                changed = await kernel.confirm_renderer_entry(plugin_id, kind)
+                changed = await kernel.confirm_renderer_entry(
+                    plugin_id, kind, activation_token
+                )
             else:
                 reason = str(payload.get("reason") or "renderer 报告激活失败").strip()
                 changed = await kernel.fail_renderer_entry(
-                    plugin_id, kind, reason or "renderer 报告激活失败"
+                    plugin_id, kind, reason or "renderer 报告激活失败", activation_token
                 )
         return {"plugin_id": plugin_id, "kind": kind, "changed": changed}
 

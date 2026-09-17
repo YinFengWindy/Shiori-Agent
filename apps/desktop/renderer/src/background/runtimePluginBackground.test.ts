@@ -26,7 +26,7 @@ test("reports a plugin id through succeeded once its background entry registers 
   const load = createRuntimePluginBackgroundLoader({
     importModule: async () => ({ default: { pluginId: "demo", setup: () => {} } }),
     loadCss: async () => () => {},
-    succeeded: (pluginId) => succeeded.push(pluginId),
+    succeeded: (entry) => succeeded.push(entry.pluginId),
     failed: () => assert.fail("unexpected failure"),
   }, registry);
 
@@ -42,7 +42,7 @@ test("a malformed module removes its loaded CSS and is reported, not registered"
   const load = createRuntimePluginBackgroundLoader({
     importModule: async () => ({ default: { pluginId: "demo" /* no setup() */ } }),
     loadCss: async (url) => () => removed.push(url),
-    failed: (pluginId, error) => failures.push([pluginId, error]),
+    failed: (entry, error) => failures.push([entry.pluginId, error]),
   }, registry);
 
   await load([{ pluginId: "demo", entry: "demo.mjs", css: ["demo.css"] }]);
@@ -58,7 +58,7 @@ test("an entry whose identity does not match its admitted pluginId is refused", 
   const load = createRuntimePluginBackgroundLoader({
     importModule: async () => ({ default: { pluginId: "other", setup: () => {} } }),
     loadCss: async () => () => {},
-    failed: (pluginId, error) => failures.push([pluginId, error]),
+    failed: (entry, error) => failures.push([entry.pluginId, error]),
   }, registry);
 
   await load([{ pluginId: "demo", entry: "demo.mjs", css: [] }]);

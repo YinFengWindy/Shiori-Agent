@@ -19,6 +19,7 @@ describe("PluginManagementSection", () => {
     Object.defineProperty(window, "miraDesktop", {
       configurable: true,
       value: {
+        onEvent: () => () => undefined,
         invoke: async ({ method, payload }: { method: string; payload: Record<string, unknown> }) => {
           calls.push({ method, payload });
           if (method === "plugins.list") {
@@ -62,7 +63,7 @@ describe("PluginManagementSection", () => {
     const view = await mountTestComponent(null);
     Object.defineProperty(window, "miraDesktop", {
       configurable: true,
-      value: { invoke: async () => { throw new Error("backend offline"); } },
+      value: { onEvent: () => () => undefined, invoke: async () => { throw new Error("backend offline"); } },
     });
 
     try {
@@ -80,7 +81,7 @@ it("keeps the active switch and shows restart guidance after a refused hot toggl
   const calls: string[] = [];
   Object.defineProperty(window, "miraDesktop", {
     configurable: true,
-    value: { invoke: async ({ method }: { method: string }) => {
+    value: { onEvent: () => () => undefined, invoke: async ({ method }: { method: string }) => {
       calls.push(method);
       if (method === "plugins.list") return { id: "1", type: "response", method, error: null, payload: { plugins: [
         { id: "unsafe", candidate_id: "builtin/unsafe", directory: "builtin/unsafe", source: "builtin", can_toggle: true, diagnostic: null, name: "unsafe", version: "0.1", description: "", enabled: true, state: "ACTIVE", error: "", has_config_schema: false, supports_hot_unload: false },
@@ -114,7 +115,7 @@ it("renders each conflicting directory and disables every unsafe candidate", asy
   }));
   Object.defineProperty(window, "miraDesktop", {
     configurable: true,
-    value: { invoke: async ({ method }: { method: string }) => {
+    value: { onEvent: () => () => undefined, invoke: async ({ method }: { method: string }) => {
       calls.push(method);
       return { id: "1", type: "response", method, error: null, payload: { plugins: rows } };
     } },
@@ -143,6 +144,7 @@ it("requires explicit trust confirmation and then shows pending restart without 
   const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
   let trusted = false;
   Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
+    onEvent: () => () => undefined,
     invoke: async (request: { method: string; payload: Record<string, unknown> }) => {
       requests.push(request);
       if (request.method === "plugins.trust") trusted = true;

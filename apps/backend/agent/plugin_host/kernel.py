@@ -17,6 +17,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
+from uuid import uuid4
 
 from agent.plugin_host.capabilities import (
     BackgroundCapability,
@@ -333,9 +334,16 @@ class PluginKernel:
             await self._rollback_failed_load(handle, e)
             raise
         except Exception as e:
-            # Deliberately unconditional: a single plugin's setup() failure
-            # must never abort the whole load_all() sweep, on cold boot or a
-            # hot settings apply alike (#262 AC3 — "其他插件继续正常运行").
+            # Deliberately unconditional (#262): before this change, a hot
+            # settings apply constructed this kernel with ``strict=True``
+            # (``bootstrap/tools.py``'s ``strict=shared is not None``), and
+            # this branch re-raised here, which propagated out through
+            # ``load_all()`` -> ``CoreRuntime.start()`` -> ``AppRuntime.prepare()``
+            # and discarded the *entire* candidate generation over one
+            # plugin's failure — a real change to ``runtime.apply``'s
+            # atomicity contract, not the removal of a no-op. Now a single
+            # plugin's setup() failure never aborts the sweep, on cold boot
+            # or a hot apply alike (#262 AC3 — "其他插件继续正常运行").
             # ``self._strict`` still governs discovery-time builtin-manifest
             # validation (see ``discover()``/``discovery.py``), a distinct,
             # unrelated concern this branch no longer consults.
@@ -346,6 +354,12 @@ class PluginKernel:
         # Gates the Plugins page's displayed status, not the contributions
         # already registered above — see ``PluginHandle.pending_renderer_kinds``.
         handle.pending_renderer_kinds = _required_renderer_kinds(record)
+        # A fresh token per activation attempt, echoed back by
+        # ``plugins.activation.report`` (#262) so a report from an abandoned
+        # load attempt of a since-disabled-and-re-enabled plugin (a new
+        # handle, same plugin id) cannot be mistaken for one belonging to
+        # *this* handle — see ``_find_active_handle``.
+        handle.activation_token = uuid4().hex
         logger.info("插件已加载: %s", record.name)
 
     def _config_enabled(self, plugin_id: str) -> bool:
@@ -491,6 +505,7 @@ class PluginKernel:
         handle.instance = None
         handle.drainers.clear()
         handle.pending_renderer_kinds = frozenset()
+        handle.activation_token = ""
         # A rollback that could not fully dispose its own effects cannot
         # guarantee a clean slate for an immediate retry; RESTART_REQUIRED
         # marks that distinctly from a plain FAILED (#262 AC6 — "验证停用后
@@ -502,7 +517,9 @@ class PluginKernel:
 
     # ── 渲染入口激活汇总（#262） ────────────────────────────────────────────
 
-    def _find_active_handle(self, plugin_id: str) -> PluginHandle | None:
+    def _find_active_handle(
+        self, plugin_id: str, activation_token: str
+    ) -> PluginHandle | None:
         """Returns the current generation's ACTIVE handle for ``plugin_id``, if any.
 
         Used by both ``confirm_renderer_entry`` and ``fail_renderer_entry``:
@@ -510,13 +527,29 @@ class PluginKernel:
         ACTIVE (already FAILED, disabled, or belonging to a superseded
         generation) is stale and must be ignored rather than raising, since a
         renderer process cannot synchronously know the backend's current view.
+
+        ``activation_token`` closes a narrower race than plugin identity
+        alone can: disable-then-re-enable the *same* plugin id replaces this
+        handle with a fresh one (a new ``PluginKernel``/generation, see
+        ``bootstrap/tools.py``), but a renderer's abandoned load attempt from
+        the discarded handle can still resolve and report late. Matching
+        plugin id is not enough to reject that report — the id is identical —
+        so every ACTIVE handle mints a fresh ``activation_token`` (see
+        ``_load_one``) that the renderer must echo back; a mismatch is
+        treated exactly like "plugin not found".
         """
         for handle in self._handles.values():
-            if handle.plugin_id == plugin_id and handle.state is PluginState.ACTIVE:
+            if (
+                handle.plugin_id == plugin_id
+                and handle.state is PluginState.ACTIVE
+                and handle.activation_token == activation_token
+            ):
                 return handle
         return None
 
-    async def confirm_renderer_entry(self, plugin_id: str, kind: str) -> bool:
+    async def confirm_renderer_entry(
+        self, plugin_id: str, kind: str, activation_token: str
+    ) -> bool:
         """Marks one required renderer kind ready; idempotent and order-free.
 
         Backend contributions are already live once ``setup()`` returns (see
@@ -524,9 +557,9 @@ class PluginKernel:
         Plugins page stops showing the plugin as still activating once every
         declared ``ui``/``background`` entry has confirmed. Returns whether
         this call actually changed anything, so callers can skip a no-op
-        broadcast for a duplicate or unrequired confirmation.
+        broadcast for a duplicate, unrequired, or stale-generation confirmation.
         """
-        handle = self._find_active_handle(plugin_id)
+        handle = self._find_active_handle(plugin_id, activation_token)
         if handle is None or kind not in handle.pending_renderer_kinds:
             return False
         handle.pending_renderer_kinds = handle.pending_renderer_kinds - {kind}
@@ -534,7 +567,9 @@ class PluginKernel:
             logger.info("插件渲染入口全部就绪: %s", handle.record.name)
         return True
 
-    async def fail_renderer_entry(self, plugin_id: str, kind: str, reason: str) -> bool:
+    async def fail_renderer_entry(
+        self, plugin_id: str, kind: str, reason: str, activation_token: str
+    ) -> bool:
         """Rolls back an ACTIVE plugin whose renderer entry failed to load.
 
         Any declared kind can trigger this, including ``surface`` — it is
@@ -545,7 +580,7 @@ class PluginKernel:
         purge and the FAILED/RESTART_REQUIRED distinction are not
         reimplemented here.
         """
-        handle = self._find_active_handle(plugin_id)
+        handle = self._find_active_handle(plugin_id, activation_token)
         if handle is None:
             return False
         diagnostic = PluginDiagnostic(

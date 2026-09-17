@@ -151,8 +151,8 @@ it("attaches granted UI URLs to the same roster and serializes admission across 
   let started!: () => void;
   const admitting = new Promise<void>((resolve) => { started = resolve; });
   let reads = 0;
-  const uiEntry = { pluginId: "demo", kind: "ui" as const, entry: "shiori-plugin://plugin/token/ui/index.mjs", css: [] };
-  const backgroundEntry = { pluginId: "demo", kind: "background" as const, entry: "shiori-plugin://plugin/token/background/index.mjs", css: [] };
+  const uiEntry = { pluginId: "demo", kind: "ui" as const, entry: "shiori-plugin://plugin/token/ui/index.mjs", css: [], activationToken: "activation-token-1" };
+  const backgroundEntry = { pluginId: "demo", kind: "background" as const, entry: "shiori-plugin://plugin/token/background/index.mjs", css: [], activationToken: "activation-token-1" };
   class GatedResources extends PluginUiResources {
     override async admit(rows: unknown) {
       events.push(`admit ${reads}`);
@@ -179,8 +179,8 @@ it("attaches granted UI URLs to the same roster and serializes admission across 
   assert.deepEqual(result, { assets: [], value: { id: "request", type: "response", method: "plugins.list", error: null, payload: { plugins: [{
     id: "demo", revision: 1,
     // Each sibling field is the same admitted grant with its `kind` tag stripped.
-    renderer_ui: { pluginId: "demo", entry: "shiori-plugin://plugin/token/ui/index.mjs", css: [] },
-    renderer_background: { pluginId: "demo", entry: "shiori-plugin://plugin/token/background/index.mjs", css: [] },
+    renderer_ui: { pluginId: "demo", entry: "shiori-plugin://plugin/token/ui/index.mjs", css: [], activationToken: "activation-token-1" },
+    renderer_background: { pluginId: "demo", entry: "shiori-plugin://plugin/token/background/index.mjs", css: [], activationToken: "activation-token-1" },
     renderer_surface: undefined,
   }] } } });
 });

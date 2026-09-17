@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
 import { refreshPluginEnabledState } from "./pluginEnabledStateStore";
+import { pluginRuntimeChanged } from "./pluginRuntimeChanged";
 
 /**
  * Loads the plugin roster and lets the caller hot toggle one plugin at a
@@ -28,6 +29,20 @@ export function usePluginManagementController() {
   }, [client]);
 
   useEffect(() => { void reload(); }, [reload]);
+
+  // A backend-driven rollback (a renderer's own activation report flipping a
+  // plugin to FAILED, or another window's own load outcome) never came from
+  // this hook's own mutation, so `runMutation`'s post-action `reload()` never
+  // sees it — the page would otherwise keep showing a stale "激活中…"/ACTIVE
+  // row until the user manually navigates away and back (#262 AC3). Follows
+  // the same `pluginRuntimeChanged` roster-changed signal
+  // `background/main.ts`'s `PluginBackgroundHost` already subscribes to,
+  // rather than inventing a second one.
+  useEffect(() => {
+    return window.miraDesktop.onEvent((event) => {
+      if (pluginRuntimeChanged(event)) void reload();
+    });
+  }, [reload]);
 
   const runMutation = useCallback(async (pluginId: string, action: () => Promise<unknown>) => {
     setPendingIds((current) => new Set(current).add(pluginId));

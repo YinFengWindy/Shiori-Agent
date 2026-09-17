@@ -7,7 +7,7 @@ import { pluginSurfaceRegistry, type PluginSurfaceRegistry } from "./pluginSurfa
 export type RuntimePluginSurfaceHost = {
   importModule: (url: string) => Promise<{ default: unknown }>;
   loadCss: (url: string) => Promise<() => void>;
-  failed: (pluginId: string, error: unknown) => void;
+  failed: (entry: RuntimePluginUi, error: unknown) => void;
 };
 
 /** Rejects a malformed contribution, or one whose identity does not match its admitted package. */

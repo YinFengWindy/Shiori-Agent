@@ -197,6 +197,18 @@ async def test_list_preserves_renderer_declarations_as_data(tmp_path, monkeypatc
         await app.shutdown()
 
 
+def _without_activation_token(row: dict) -> dict:
+    """Drops ``activation_token`` before comparing two plugin rows for equality.
+
+    Every generation swap constructs a brand new ``PluginKernel`` (see
+    ``bootstrap/tools.py``), so even a plugin untouched by a given settings
+    change gets reloaded into it and mints a fresh token (#262) — that is
+    the whole point of the token being generation-scoped. Callers proving
+    "this plugin's row is otherwise unchanged across a swap" must exclude it.
+    """
+    return {key: value for key, value in row.items() if key != "activation_token"}
+
+
 def _declare_renderer_ui(tmp_path: Path, kinds: tuple[str, ...] = ("ui",)) -> None:
     """Appends a ``renderer:`` block declaring the given kinds to hello's manifest."""
     manifest = tmp_path / "plugin_dirs" / "hello" / "manifest.yaml"
@@ -223,11 +235,18 @@ async def test_activation_report_confirms_ready_and_clears_pending_kinds(
         hello = next(row for row in before.payload["plugins"] if row["id"] == "hello")
         assert hello["state"] == PluginState.ACTIVE.name
         assert sorted(hello["pending_renderer_kinds"]) == ["background", "ui"]
+        token = hello["activation_token"]
+        assert token
 
         confirmed = await _request(
             service,
             "plugins.activation.report",
-            {"plugin_id": "hello", "kind": "ui", "ok": True},
+            {
+                "plugin_id": "hello",
+                "kind": "ui",
+                "ok": True,
+                "activation_token": token,
+            },
         )
         assert confirmed.error is None, confirmed.error
         assert confirmed.payload == {
@@ -239,7 +258,12 @@ async def test_activation_report_confirms_ready_and_clears_pending_kinds(
         confirmed_again = await _request(
             service,
             "plugins.activation.report",
-            {"plugin_id": "hello", "kind": "background", "ok": True},
+            {
+                "plugin_id": "hello",
+                "kind": "background",
+                "ok": True,
+                "activation_token": token,
+            },
         )
         assert confirmed_again.payload["changed"] is True
 
@@ -267,10 +291,22 @@ async def test_activation_report_failure_rolls_back_and_republishes_roster(
     events = []
     service.add_event_listener(events.append)
     try:
+        before = await _request(service, "plugins.list")
+        token = next(row for row in before.payload["plugins"] if row["id"] == "hello")[
+            "activation_token"
+        ]
+        assert token
+
         failed = await _request(
             service,
             "plugins.activation.report",
-            {"plugin_id": "hello", "kind": "ui", "ok": False, "reason": "module threw"},
+            {
+                "plugin_id": "hello",
+                "kind": "ui",
+                "ok": False,
+                "reason": "module threw",
+                "activation_token": token,
+            },
         )
         assert failed.error is None, failed.error
         assert failed.payload == {"plugin_id": "hello", "kind": "ui", "changed": True}
@@ -322,6 +358,69 @@ async def test_activation_report_ignores_a_stale_or_unknown_plugin(
         after = await _request(service, "plugins.list")
         hello = next(row for row in after.payload["plugins"] if row["id"] == "hello")
         assert hello["state"] == PluginState.ACTIVE.name
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_activation_report_ignores_a_mismatched_activation_token(
+    tmp_path, monkeypatch
+):
+    """A report carrying a token that does not match the current handle's
+    (e.g. an abandoned load from a disable/re-enable cycle resolving late)
+    must not confirm or fail the current, healthy plugin (#262 cross-
+    generation staleness fix)."""
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    _declare_renderer_ui(tmp_path, ("ui",))
+    service, _, app = await _start_service(tmp_path)
+    events = []
+    service.add_event_listener(events.append)
+    try:
+        before = await _request(service, "plugins.list")
+        hello = next(row for row in before.payload["plugins"] if row["id"] == "hello")
+        assert hello["pending_renderer_kinds"] == ["ui"]
+
+        stale_confirm = await _request(
+            service,
+            "plugins.activation.report",
+            {
+                "plugin_id": "hello",
+                "kind": "ui",
+                "ok": True,
+                "activation_token": "not-the-real-token",
+            },
+        )
+        assert stale_confirm.payload == {
+            "plugin_id": "hello",
+            "kind": "ui",
+            "changed": False,
+        }
+
+        stale_failure = await _request(
+            service,
+            "plugins.activation.report",
+            {
+                "plugin_id": "hello",
+                "kind": "ui",
+                "ok": False,
+                "reason": "stale failure",
+                "activation_token": "not-the-real-token",
+            },
+        )
+        assert stale_failure.payload == {
+            "plugin_id": "hello",
+            "kind": "ui",
+            "changed": False,
+        }
+        assert not any(event["method"] == "runtime.applied" for event in events)
+
+        after = await _request(service, "plugins.list")
+        hello_after = next(
+            row for row in after.payload["plugins"] if row["id"] == "hello"
+        )
+        assert hello_after["state"] == PluginState.ACTIVE.name
+        assert hello_after["pending_renderer_kinds"] == ["ui"]
     finally:
         await service.aclose()
         await app.shutdown()
@@ -874,7 +973,9 @@ async def test_workspace_directory_changes_wait_for_application_restart(
             }
             by_id = {row["id"]: row for row in rows}
             for plugin_id in ("rpc_demo", "hello", "manual", "removed"):
-                assert by_id[plugin_id] == before_by_id[plugin_id]
+                assert _without_activation_token(by_id[plugin_id]) == (
+                    _without_activation_token(before_by_id[plugin_id])
+                )
             ping = await _request(service, "plugin.rpc_demo.ping", {"value": index})
             assert ping.error is None
             assert ping.payload == {"pong": index}

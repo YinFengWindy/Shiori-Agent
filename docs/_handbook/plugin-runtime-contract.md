@@ -109,7 +109,13 @@ activation. Cross-renderer rollback is implemented by #262: a renderer that fail
 to load an admitted `ui`/`background`/`surface` entry reports it through
 `plugins.activation.report`, which rolls the whole plugin back on the backend
 (`PluginKernel.fail_renderer_entry`) and republishes the roster so every other
-window's next `plugins.list()` tears down its own now-stale contribution.
+window's next `plugins.list()` tears down its own now-stale contribution. Every
+admitted entry (and `plugins.list()` row) carries an opaque `activation_token`
+minted fresh whenever a plugin's handle becomes `ACTIVE`; a renderer echoes it
+back with the report, and a mismatch is treated exactly like an unknown plugin.
+This closes a disable/re-enable race: an abandoned load from a since-discarded
+generation's handle cannot confirm or fail the plugin's *current* handle just
+because the plugin id is the same.
 
 The default exports retain the current contribution ABI:
 

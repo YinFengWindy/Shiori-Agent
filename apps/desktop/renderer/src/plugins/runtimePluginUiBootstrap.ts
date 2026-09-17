@@ -10,6 +10,7 @@ import { createRuntimePluginUiSynchronization } from "./runtimePluginUiSynchroni
 import { registerPluginUiSynchronization } from "./pluginEnabledStateStore";
 import { importRuntimePluginModule, loadRuntimePluginCss } from "./runtimePluginDomLoader";
 import { createPluginBridgeClient } from "./pluginBridgeClient";
+import { reportRuntimePluginActivation, reportRuntimePluginRendererLoadFailure } from "./runtimePluginActivationReporting";
 
 /** Installs shared React peers before evaluating any workspace plugin module. */
 export function initializeRuntimePluginUi() {
@@ -31,16 +32,13 @@ export function initializeRuntimePluginUi() {
       pluginChatImageActionsRegistry.unregister(pluginId);
     },
     // Tells the backend this window's `ui` entry is ready, clearing it from
-    // `pendingRendererKinds` (#262 AC1). A rejected report (stale/duplicate)
-    // is intentionally not surfaced here — see `reportActivation`'s contract.
-    succeeded: (pluginId) => { void pluginBridge.reportActivation(pluginId, "ui", { ok: true }).catch(() => undefined); },
-    failed: (pluginId, error) => {
-      console.error(`[plugin-ui] ${pluginId}`, error);
-      const message = error instanceof Error ? error.message : String(error);
-      window.miraDesktop.reportRendererDiagnostic({ kind: "error", message, details: { pluginId, event: "plugin-ui.load.failed", state: "FAILED", stage: "renderer" } });
-      // Rolls the whole plugin back on the backend so tools/RPC/background/
-      // surface contributions do not outlive a UI that failed to load (#262 AC2).
-      void pluginBridge.reportActivation(pluginId, "ui", { ok: false, reason: message }).catch(() => undefined);
+    // `pendingRendererKinds` (#262 AC1).
+    succeeded: (entry) => reportRuntimePluginActivation(pluginBridge, entry, "ui", { ok: true }),
+    // Rolls the whole plugin back on the backend so tools/RPC/background/
+    // surface contributions do not outlive a UI that failed to load (#262 AC2).
+    failed: (entry, error) => {
+      console.error(`[plugin-ui] ${entry.pluginId}`, error);
+      reportRuntimePluginRendererLoadFailure(pluginBridge, "plugin-ui.load.failed", entry, "ui", error);
     },
   }));
 }

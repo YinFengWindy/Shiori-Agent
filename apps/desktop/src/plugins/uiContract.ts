@@ -14,7 +14,20 @@ export const pluginUiImportMap = JSON.stringify({ imports: Object.fromEntries(
  * only the field name they travel under (`renderer_ui` / `renderer_background`
  * / `renderer_surface`, see `ipcRegistrations.ts`) tells them apart.
  */
-export type RuntimePluginUi = { pluginId: string; entry: string; css: string[]; error?: string };
+export type RuntimePluginUi = {
+  pluginId: string;
+  entry: string;
+  css: string[];
+  error?: string;
+  /**
+   * Opaque per-activation-attempt identity, echoed back by
+   * `plugins.activation.report` (#262). Shared by every kind a plugin
+   * declares — it identifies the backend handle, not the renderer entry —
+   * so a report about a since-superseded generation's abandoned load cannot
+   * be mistaken for one belonging to the plugin's current handle.
+   */
+  activationToken?: string;
+};
 
 /** The three renderer contribution points a plugin package may declare (`renderer_contract.py`). */
 export type PluginRendererKind = "ui" | "background" | "surface";

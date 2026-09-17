@@ -46,6 +46,9 @@ export class PluginUiResources {
       const renderer: Record<string, unknown> = row.renderer && typeof row.renderer === "object" ? row.renderer : {};
       const kinds = rendererKinds.filter((kind) => Boolean(renderer[kind]));
       if (kinds.length === 0) continue;
+      // Echoed back verbatim in `plugins.activation.report` (#262); shared by
+      // every kind, since it identifies the backend handle, not the entry.
+      const activationToken = typeof row.activation_token === "string" ? row.activation_token : undefined;
       let grant: Grant;
       try {
         if (typeof row.id !== "string" || typeof row.directory !== "string") throw new Error("Invalid renderer descriptor");
@@ -63,7 +66,7 @@ export class PluginUiResources {
         next.set(row.directory, grant);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        for (const kind of kinds) result.push({ pluginId: String(row.id), kind, entry: "", css: [], error: message });
+        for (const kind of kinds) result.push({ pluginId: String(row.id), kind, entry: "", css: [], error: message, activationToken });
         continue;
       }
       for (const kind of kinds) {
@@ -72,9 +75,9 @@ export class PluginUiResources {
           if (!descriptor || typeof descriptor.entry !== "string" || !Array.isArray(descriptor.css) || !descriptor.css.every((path: unknown) => typeof path === "string")) throw new Error("Invalid renderer descriptor");
           const css = descriptor.css as string[];
           const url = (path: string) => this.mintUrl(grant, path);
-          result.push({ pluginId: row.id, kind, entry: url(descriptor.entry), css: css.map(url) });
+          result.push({ pluginId: row.id, kind, entry: url(descriptor.entry), css: css.map(url), activationToken });
         } catch (error) {
-          result.push({ pluginId: String(row.id), kind, entry: "", css: [], error: error instanceof Error ? error.message : String(error) });
+          result.push({ pluginId: String(row.id), kind, entry: "", css: [], error: error instanceof Error ? error.message : String(error), activationToken });
         }
       }
     }

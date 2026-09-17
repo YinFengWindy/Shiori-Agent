@@ -74,8 +74,17 @@ export type PluginSetEnabledResult = {
   generation: number;
 };
 
-/** Outcome a renderer reports for one admitted `renderer.<kind>` entry (#262). */
-export type PluginActivationOutcome = { ok: true } | { ok: false; reason: string };
+/**
+ * Outcome a renderer reports for one admitted `renderer.<kind>` entry
+ * (#262). `activationToken` is the admitted entry's own
+ * `RuntimePluginUi.activationToken` (copied verbatim, not invented by the
+ * caller) — the backend rejects a report whose token does not match its
+ * current handle for that plugin, which is what makes an abandoned load
+ * from a disable/re-enable cycle harmless if it resolves late.
+ */
+export type PluginActivationOutcome =
+  | { ok: true; activationToken: string }
+  | { ok: false; reason: string; activationToken: string };
 
 function invokePluginPayload<T>(invoke: DesktopInvoke, method: string, payload: Record<string, unknown>, options?: { timeoutMs?: number }): Promise<T> {
   return invokeBridgePayload<T>(invoke, method, payload, PluginBridgeError, options);
@@ -183,6 +192,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         plugin_id: pluginId,
         kind,
         ok: outcome.ok,
+        activation_token: outcome.activationToken,
         ...(outcome.ok ? {} : { reason: outcome.reason }),
       });
     },

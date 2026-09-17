@@ -74,16 +74,20 @@ class PluginHandle:
     instance: Any = None
     drainers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     error: BaseException | None = None
-    # Required renderer contribution points (subset of {"ui", "background"})
-    # not yet confirmed ready by their owning renderer process (#262).
-    # Populated once, when the handle becomes ACTIVE; ``surface`` is
-    # deliberately excluded — a surface window only loads on demand, so it
-    # cannot gate initial activation without changing that existing lazy
-    # model (see kernel.py's ``_RENDERER_GATED_KINDS`` docstring). Backend
+    # Required renderer contribution points not yet confirmed ready by their
+    # owning renderer process (#262); populated once, when the handle becomes
+    # ACTIVE. Which kinds gate this — and why ``surface`` does not — is
+    # documented once at ``kernel.py``'s ``_RENDERER_GATED_KINDS``. Backend
     # contributions (tools/RPC/events) are already live the moment ``setup()``
     # returns, independent of this bookkeeping; it only gates what the
     # Plugins page displays as fully "ACTIVE" (AC1), never resource grants.
     pending_renderer_kinds: frozenset[str] = frozenset()
+    # Minted fresh every time this handle becomes ACTIVE (#262); a renderer
+    # echoes it back in ``plugins.activation.report`` so a stale report from
+    # a superseded load attempt of the same plugin id cannot be mistaken for
+    # one belonging to the current handle — see
+    # ``PluginKernel._find_active_handle``.
+    activation_token: str = ""
 
     @property
     def plugin_id(self) -> str:
@@ -133,5 +137,6 @@ class PluginHandle:
             "dir": str(self.record.plugin_dir),
             "error": str(self.error) if self.error else "",
             "pending_renderer_kinds": sorted(self.pending_renderer_kinds),
+            "activation_token": self.activation_token,
             "diagnostic": self._diagnostic(),
         }

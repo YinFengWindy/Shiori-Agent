@@ -6,6 +6,7 @@ import { createPluginBridgeClient } from "../plugins/pluginBridgeClient";
 import { importRuntimePluginModule, loadRuntimePluginCss } from "../plugins/runtimePluginDomLoader";
 import { loadRuntimePluginSurface } from "./runtimePluginSurface";
 import { bootstrapSurfaceWindow } from "./surfaceBootstrap";
+import { reportRuntimePluginRendererLoadFailure } from "../plugins/runtimePluginActivationReporting";
 import "../styles.css";
 
 const root = createRoot(document.getElementById("root") as HTMLElement);
@@ -29,19 +30,13 @@ async function loadOwnRuntimeSurface() {
   await loadRuntimePluginSurface(entry, {
     importModule: importRuntimePluginModule,
     loadCss: loadRuntimePluginCss,
-    failed: (pluginId, error) => {
-      console.error(`[surface] ${pluginId}`, error);
-      const message = error instanceof Error ? error.message : String(error);
-      window.miraDesktop.reportRendererDiagnostic({
-        kind: "error",
-        message,
-        details: { pluginId, event: "plugin-surface.load.failed", state: "FAILED", stage: "renderer" },
-      });
-      // A surface is not part of the initial activation gate (#262 kernel.py
-      // `_RENDERER_GATED_KINDS`), but its failure must still roll the whole
-      // plugin back — tools/RPC/UI/background must not outlive a surface
-      // that could not load (#262 AC2).
-      void pluginBridge.reportActivation(pluginId, "surface", { ok: false, reason: message }).catch(() => undefined);
+    // A surface is not part of the initial activation gate (#262 kernel.py
+    // `_RENDERER_GATED_KINDS`), but its failure must still roll the whole
+    // plugin back — tools/RPC/UI/background must not outlive a surface that
+    // could not load (#262 AC2).
+    failed: (failedEntry, error) => {
+      console.error(`[surface] ${failedEntry.pluginId}`, error);
+      reportRuntimePluginRendererLoadFailure(pluginBridge, "plugin-surface.load.failed", failedEntry, "surface", error);
     },
   });
 }

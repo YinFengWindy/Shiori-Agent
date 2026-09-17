@@ -43,10 +43,10 @@ describe("reportActivation (#262)", () => {
       calls.push(request);
       return { id: "1", type: "response", method: request.method, error: null, payload: {} };
     });
-    await client.reportActivation("demo", "ui", { ok: true });
+    await client.reportActivation("demo", "ui", { ok: true, activationToken: "token-1" });
     assert.deepEqual(calls, [{
       method: "plugins.activation.report",
-      payload: { plugin_id: "demo", kind: "ui", ok: true },
+      payload: { plugin_id: "demo", kind: "ui", ok: true, activation_token: "token-1" },
     }]);
   });
 
@@ -56,10 +56,10 @@ describe("reportActivation (#262)", () => {
       calls.push(request);
       return { id: "1", type: "response", method: request.method, error: null, payload: {} };
     });
-    await client.reportActivation("demo", "background", { ok: false, reason: "module threw" });
+    await client.reportActivation("demo", "background", { ok: false, reason: "module threw", activationToken: "token-1" });
     assert.deepEqual(calls, [{
       method: "plugins.activation.report",
-      payload: { plugin_id: "demo", kind: "background", ok: false, reason: "module threw" },
+      payload: { plugin_id: "demo", kind: "background", ok: false, activation_token: "token-1", reason: "module threw" },
     }]);
   });
 });

@@ -15,13 +15,15 @@ export type RuntimePluginModuleLoadHost<TModule> = {
   register: (module: TModule) => void;
   unregister: (pluginId: string) => void;
   /**
-   * Called once, immediately after a contribution registers successfully.
-   * Optional and additive — existing hosts that only care about failure
-   * (logging/diagnostics) are unaffected. The backend activation report
-   * (#262) is the only current consumer.
+   * Called once, immediately after a contribution registers successfully,
+   * with the admitted entry it loaded. Optional and additive — existing
+   * hosts that only care about failure (logging/diagnostics) are unaffected.
+   * Receives the whole entry, not just its `pluginId`, so a caller can echo
+   * back `entry.activationToken` in the backend activation report (#262) —
+   * the only current consumer of either callback.
    */
-  succeeded?: (pluginId: string) => void;
-  failed: (pluginId: string, error: unknown) => void;
+  succeeded?: (entry: RuntimePluginUi) => void;
+  failed: (entry: RuntimePluginUi, error: unknown) => void;
 };
 
 /**
@@ -49,12 +51,12 @@ export async function loadRuntimePluginModules<TModule>(
       const { default: module } = await host.importModule(entry.entry);
       host.validate(module, entry.pluginId);
       host.register(module);
-      host.succeeded?.(entry.pluginId);
+      host.succeeded?.(entry);
       dispose.push(() => { host.unregister(entry.pluginId); for (const remove of styles) remove(); });
     } catch (error) {
       host.unregister(entry.pluginId);
       for (const remove of styles) remove();
-      host.failed(entry.pluginId, error);
+      host.failed(entry, error);
     }
   }
   return () => { for (const remove of dispose) remove(); };
