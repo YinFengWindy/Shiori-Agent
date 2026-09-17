@@ -1301,3 +1301,286 @@ async def test_empty_startup_snapshot_does_not_rescan_new_packages(tmp_path):
     await successor.load_all()
     assert successor.discover() == []
     assert successor.loaded_count == 0
+
+
+# ── 跨进程激活事务汇总（issue #262） ────────────────────────────────────────
+
+
+def _write_renderer_gated_plugin(
+    directory: Path, plugin_id: str, *, renderer: str, capabilities: str = "[tools]"
+) -> None:
+    """Writes a plain (non package_contract) manifest declaring a renderer block.
+
+    The generic v2 manifest loader captures every top-level key into
+    ``PluginManifest.metadata`` (see ``manifest.py``'s ``_parse_manifest``)
+    without validating unknown keys, so a builtin-source test plugin can
+    declare ``renderer:`` and exercise ``PluginKernel``'s gating/rollback
+    without any of the package-contract trust/UNTRUSTED machinery a real
+    external package would need.
+    """
+    (directory / "backend").mkdir(parents=True)
+    (directory / "manifest.yaml").write_text(
+        f"api: 2\nid: {plugin_id}\ncapabilities: {capabilities}\n{renderer}",
+        encoding="utf-8",
+    )
+    (directory / "backend/plugin.py").write_text(
+        "from agent.tools.base import Tool\n\n\n"
+        "class DemoTool(Tool):\n"
+        f"    name = {plugin_id + '_tool'!r}\n"
+        "    description = 'demo'\n"
+        "    parameters = {'type': 'object', 'properties': {}}\n\n"
+        "    async def execute(self, **kwargs):\n"
+        "        return 'ok'\n\n\n"
+        "async def setup(ctx):\n"
+        "    ctx.tools.register(DemoTool())\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.asyncio
+async def test_activation_gate_clears_only_once_every_declared_kind_confirms(tmp_path):
+    tools = ToolRegistry()
+    _write_renderer_gated_plugin(
+        tmp_path / "gated",
+        "gated",
+        renderer="renderer:\n  ui: {entry: x}\n  background: {entry: y}\n",
+    )
+    kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
+    await kernel.load_all()
+    handle = kernel._handles[str((tmp_path / "gated").absolute())]
+    # Backend contributions are already live — AC1 only gates display.
+    assert handle.state is PluginState.ACTIVE
+    assert tools.get_tool("gated_tool") is not None
+    assert kernel.states()[0]["pending_renderer_kinds"] == ["background", "ui"]
+
+    token = handle.activation_token
+    # An unrequired/unknown kind or plugin id is a no-op, not an error.
+    assert await kernel.confirm_renderer_entry("gated", "surface", token) is False
+    assert await kernel.confirm_renderer_entry("no-such-plugin", "ui", token) is False
+    # A mismatched token is treated exactly like "plugin not found".
+    assert await kernel.confirm_renderer_entry("gated", "ui", "wrong-token") is False
+
+    assert await kernel.confirm_renderer_entry("gated", "ui", token) is True
+    assert kernel.states()[0]["pending_renderer_kinds"] == ["background"]
+    # A duplicate confirmation changes nothing and reports so.
+    assert await kernel.confirm_renderer_entry("gated", "ui", token) is False
+
+    assert await kernel.confirm_renderer_entry("gated", "background", token) is True
+    assert kernel.states()[0]["pending_renderer_kinds"] == []
+    assert handle.state is PluginState.ACTIVE
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_failed_renderer_entry_rolls_back_only_that_plugin(tmp_path):
+    tools = ToolRegistry()
+    _write_renderer_gated_plugin(
+        tmp_path / "flaky", "flaky", renderer="renderer:\n  ui: {entry: x}\n"
+    )
+    _write_renderer_gated_plugin(
+        tmp_path / "healthy", "healthy", renderer="renderer:\n  ui: {entry: x}\n"
+    )
+    kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
+    await kernel.load_all()
+    flaky = kernel._handles[str((tmp_path / "flaky").absolute())]
+    healthy = kernel._handles[str((tmp_path / "healthy").absolute())]
+    assert flaky.state is PluginState.ACTIVE
+    assert healthy.state is PluginState.ACTIVE
+
+    flaky_candidate_id = str((tmp_path / "flaky").absolute())
+    healthy_candidate_id = str((tmp_path / "healthy").absolute())
+    changed = await kernel.fail_renderer_entry(
+        "flaky", "ui", "module threw on import", flaky.activation_token
+    )
+    assert changed is True
+
+    # The failing plugin is rolled back completely: no tool, no leftover
+    # effect, no longer in the active-order aggregation (AC2/AC6).
+    assert flaky.state is PluginState.FAILED
+    assert flaky.effects.labels == []
+    assert tools.get_tool("flaky_tool") is None
+    assert flaky_candidate_id not in kernel._active_order
+    states_by_id = {row["id"]: row for row in kernel.states()}
+    assert states_by_id["flaky"]["diagnostic"] == {
+        "code": "renderer_ui_failed",
+        "stage": "ui",
+        "field": "renderer.ui.entry",
+        "reason": "module threw on import",
+        "path": "",
+        "state": "FAILED",
+    }
+
+    # The other, unrelated plugin is completely unaffected (AC3).
+    assert healthy.state is PluginState.ACTIVE
+    assert tools.get_tool("healthy_tool") is not None
+    assert healthy_candidate_id in kernel._active_order
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_failed_renderer_entry_accepts_surface_although_not_gated(tmp_path):
+    # `surface` never appears in `pending_renderer_kinds` (it loads on demand),
+    # but a surface failure must still roll the whole plugin back (AC2).
+    tools = ToolRegistry()
+    _write_renderer_gated_plugin(
+        tmp_path / "demo", "demo", renderer="renderer:\n  ui: {entry: x}\n"
+    )
+    kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
+    await kernel.load_all()
+    assert kernel.states()[0]["pending_renderer_kinds"] == ["ui"]
+    handle = kernel._handles[str((tmp_path / "demo").absolute())]
+
+    assert (
+        await kernel.fail_renderer_entry(
+            "demo", "surface", "window crashed", handle.activation_token
+        )
+        is True
+    )
+
+    assert handle.state is PluginState.FAILED
+    assert tools.get_tool("demo_tool") is None
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_stale_or_unknown_activation_reports_are_ignored(tmp_path):
+    _write_renderer_gated_plugin(
+        tmp_path / "demo",
+        "demo",
+        renderer="renderer:\n  ui: {entry: x}\n",
+        capabilities="[]",
+    )
+    kernel = make_kernel(
+        [tmp_path],
+        event_bus=EventBus(),
+        plugin_configs={"demo": {"enabled": False}},
+    )
+    await kernel.load_all()
+    handle = kernel._handles[str((tmp_path / "demo").absolute())]
+    assert handle.state is PluginState.DISABLED
+
+    # A report naming a plugin the kernel does not consider ACTIVE (disabled,
+    # never loaded, or belonging to a superseded generation) is stale and
+    # must not raise or mutate anything. The token is irrelevant here — the
+    # plugin isn't ACTIVE regardless of what token accompanies the report.
+    assert await kernel.confirm_renderer_entry("demo", "ui", "") is False
+    assert await kernel.fail_renderer_entry("demo", "ui", "irrelevant", "") is False
+    assert await kernel.fail_renderer_entry("never-existed", "ui", "n/a", "") is False
+    assert handle.state is PluginState.DISABLED
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_stale_report_from_a_superseded_generation_is_ignored(tmp_path):
+    """Reproduces the disable/re-enable race a plugin-id-only check misses:
+
+    enable P (G1, ui import in flight) -> disable P (G1 disposed) -> re-enable
+    P (G3, fresh handle, same plugin id, `pending_renderer_kinds={"ui"}`).
+    G1's abandoned load then resolves late and reports against the *new*
+    handle. Without a per-load token this would let a stale success silently
+    mark G3 fully ACTIVE without G3's UI ever loading (AC1), or a stale
+    failure roll back a healthy, just-re-enabled G3 plugin with a reason
+    string that belongs to the discarded G1 attempt (AC2). Every real
+    disable/re-enable constructs a brand new `PluginKernel` (a new
+    generation, see `bootstrap/tools.py`); two separate kernels here stand in
+    for G1 and G3 sharing the same plugin id and host services.
+    """
+    _write_renderer_gated_plugin(
+        tmp_path / "demo", "demo", renderer="renderer:\n  ui: {entry: x}\n"
+    )
+    tools = ToolRegistry()
+
+    # G1: loads, but nothing ever confirms its ui entry before it is disposed
+    # (the disable that discards this generation).
+    kernel_g1 = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
+    await kernel_g1.load_all()
+    stale_token = kernel_g1._handles[
+        str((tmp_path / "demo").absolute())
+    ].activation_token
+    await kernel_g1.terminate_all(force=True)
+
+    # G3: the re-enable — a fresh kernel, fresh handle, fresh token.
+    kernel_g3 = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
+    await kernel_g3.load_all()
+    fresh_handle = kernel_g3._handles[str((tmp_path / "demo").absolute())]
+    assert fresh_handle.activation_token != stale_token
+    assert fresh_handle.pending_renderer_kinds == {"ui"}
+
+    # G1's abandoned "ui ready" resolves late, echoing G1's token: ignored,
+    # G3 keeps waiting for its own confirmation (AC1).
+    changed = await kernel_g3.confirm_renderer_entry("demo", "ui", stale_token)
+    assert changed is False
+    assert fresh_handle.pending_renderer_kinds == {"ui"}
+    assert fresh_handle.state is PluginState.ACTIVE
+
+    # G1's abandoned failure also resolves late: ignored, G3 stays healthy
+    # rather than flipping FAILED over G1's stale reason (AC2).
+    changed = await kernel_g3.fail_renderer_entry(
+        "demo", "ui", "stale failure from a discarded attempt", stale_token
+    )
+    assert changed is False
+    assert fresh_handle.state is PluginState.ACTIVE
+    assert tools.get_tool("demo_tool") is not None
+
+    # G3's own, current-generation report still works normally.
+    changed = await kernel_g3.confirm_renderer_entry(
+        "demo", "ui", fresh_handle.activation_token
+    )
+    assert changed is True
+    assert fresh_handle.pending_renderer_kinds == frozenset()
+    await kernel_g3.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_failure_reports_for_the_same_plugin_clean_up_exactly_once(
+    tmp_path,
+):
+    """Two renderer processes (e.g. ui and background) can both fail near-
+    simultaneously; the resulting rollback must still be clean and single
+    (AC7 — "并发事件到达时的清理")."""
+    tools = ToolRegistry()
+    _write_renderer_gated_plugin(
+        tmp_path / "demo",
+        "demo",
+        renderer="renderer:\n  ui: {entry: x}\n  background: {entry: y}\n",
+    )
+    kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
+    await kernel.load_all()
+    handle = kernel._handles[str((tmp_path / "demo").absolute())]
+    assert handle.state is PluginState.ACTIVE
+
+    token = handle.activation_token
+    results = await asyncio.gather(
+        kernel.fail_renderer_entry("demo", "ui", "ui failed", token),
+        kernel.fail_renderer_entry("demo", "background", "background failed", token),
+    )
+    assert sorted(results) == [False, True]
+    assert handle.state is PluginState.FAILED
+    assert handle.effects.labels == []
+    assert tools.get_tool("demo_tool") is None
+    assert kernel._active_order == []
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_rollback_that_cannot_dispose_every_effect_requires_a_restart(tmp_path):
+    """A setup-time failure whose own rollback cannot fully dispose its
+    effects must not offer an unsafe immediate retry (RESTART_REQUIRED,
+    distinct from FAILED) — exercised through the same `_rollback_failed_load`
+    core `fail_renderer_entry` reuses."""
+    package = tmp_path / "unclean"
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: unclean\ncapabilities: []\n", encoding="utf-8"
+    )
+    (package / "backend/plugin.py").write_text(
+        "async def setup(ctx):\n"
+        "    ctx.effect('poison', lambda: (_ for _ in ()).throw(RuntimeError('stuck')))\n"
+        "    raise RuntimeError('setup failed after registering a bad effect')\n",
+        encoding="utf-8",
+    )
+    kernel = make_kernel([tmp_path], event_bus=EventBus())
+    await kernel.load_all()
+    handle = kernel._handles[str(package.absolute())]
+    assert handle.state is PluginState.RESTART_REQUIRED
+    await kernel.terminate_all(force=True)

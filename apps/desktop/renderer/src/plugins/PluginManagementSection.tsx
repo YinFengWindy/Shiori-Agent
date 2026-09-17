@@ -20,11 +20,24 @@ function PluginRow({
 }) {
   const hint = [plugin.id, plugin.version && `v${plugin.version}`, plugin.source === "workspace" ? "工作区" : "内置", plugin.description].filter(Boolean).join(" · ");
   const pendingTrust = plugin.trustPendingRestart && plugin.diagnostic?.code === "trust_required";
+  // Backend contributions are already live once setup() succeeds, but the
+  // Plugins page must not present the plugin as fully ACTIVE until every
+  // declared ui/background entry has confirmed (#262 AC1).
+  const activating = plugin.state === "ACTIVE" && plugin.pendingRendererKinds.length > 0;
+  const stateLabel = plugin.trustPendingRestart
+    ? "待重启"
+    : plugin.state === "UNTRUSTED"
+      ? "未信任"
+      : plugin.state === "RESTART_REQUIRED"
+        ? "需要重启"
+        : activating
+          ? "激活中…"
+          : plugin.state;
   return (
     <SettingsField label={plugin.name} hint={hint || undefined}>
       <div className="grid gap-2">
         <div className="flex items-center justify-end gap-3">
-          <span className="text-caption text-ink-muted">{plugin.trustPendingRestart ? "待重启" : plugin.state === "UNTRUSTED" ? "未信任" : plugin.state}</span>
+          <span className="text-caption text-ink-muted">{stateLabel}</span>
           {plugin.canTrust ? <button type="button" className={ghostButtonClass} disabled={pending} onClick={onTrust}>信任…</button> : null}
           {plugin.canToggle && plugin.supportsHotUnload === false ? <span className="text-caption text-ink-muted">更改需重启</span> : null}
           <SettingsToggleCard

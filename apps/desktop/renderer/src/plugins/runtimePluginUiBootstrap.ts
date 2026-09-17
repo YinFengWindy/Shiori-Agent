@@ -8,6 +8,9 @@ import { pluginUiRegistry } from "./pluginUiRegistry";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { createRuntimePluginUiSynchronization } from "./runtimePluginUiSynchronization";
 import { registerPluginUiSynchronization } from "./pluginEnabledStateStore";
+import { importRuntimePluginModule, loadRuntimePluginCss } from "./runtimePluginDomLoader";
+import { createPluginBridgeClient } from "./pluginBridgeClient";
+import { reportRuntimePluginActivation, reportRuntimePluginRendererLoadFailure } from "./runtimePluginActivationReporting";
 
 /** Installs shared React peers before evaluating any workspace plugin module. */
 export function initializeRuntimePluginUi() {
@@ -18,25 +21,24 @@ export function initializeRuntimePluginUi() {
   map.type = "importmap";
   map.textContent = pluginUiImportMap;
   document.head.append(map);
+  const pluginBridge = createPluginBridgeClient();
   registerPluginUiSynchronization(createRuntimePluginUiSynchronization({
-    importModule: (url) => import(/* @vite-ignore */ url),
-    loadCss: (url) => new Promise((resolve, reject) => {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = url;
-      link.onload = () => resolve(() => link.remove());
-      link.onerror = () => { link.remove(); reject(new Error(`Plugin CSS could not be loaded: ${url}`)); };
-      document.head.append(link);
-    }),
+    importModule: importRuntimePluginModule,
+    loadCss: loadRuntimePluginCss,
     register: (module) => applyPluginUiModules({ runtime: { default: module } }),
     unregister: (pluginId) => {
       pluginUiRegistry.unregisterPlugin(pluginId);
       pluginRoleSettingsRegistry.unregister(pluginId);
       pluginChatImageActionsRegistry.unregister(pluginId);
     },
-    failed: (pluginId, error) => {
-      console.error(`[plugin-ui] ${pluginId}`, error);
-      window.miraDesktop.reportRendererDiagnostic({ kind: "error", message: error instanceof Error ? error.message : String(error), details: { pluginId, event: "plugin-ui.load.failed", state: "FAILED", stage: "renderer" } });
+    // Tells the backend this window's `ui` entry is ready, clearing it from
+    // `pendingRendererKinds` (#262 AC1).
+    succeeded: (entry) => reportRuntimePluginActivation(pluginBridge, entry, "ui", { ok: true }),
+    // Rolls the whole plugin back on the backend so tools/RPC/background/
+    // surface contributions do not outlive a UI that failed to load (#262 AC2).
+    failed: (entry, error) => {
+      console.error(`[plugin-ui] ${entry.pluginId}`, error);
+      reportRuntimePluginRendererLoadFailure(pluginBridge, "plugin-ui.load.failed", entry, "ui", error);
     },
   }));
 }

@@ -151,13 +151,14 @@ it("attaches granted UI URLs to the same roster and serializes admission across 
   let started!: () => void;
   const admitting = new Promise<void>((resolve) => { started = resolve; });
   let reads = 0;
-  const entry = { pluginId: "demo", entry: "shiori-plugin://plugin/token/ui/index.mjs", css: [] };
+  const uiEntry = { pluginId: "demo", kind: "ui" as const, entry: "shiori-plugin://plugin/token/ui/index.mjs", css: [], activationToken: "activation-token-1" };
+  const backgroundEntry = { pluginId: "demo", kind: "background" as const, entry: "shiori-plugin://plugin/token/background/index.mjs", css: [], activationToken: "activation-token-1" };
   class GatedResources extends PluginUiResources {
     override async admit(rows: unknown) {
       events.push(`admit ${reads}`);
       assert.deepEqual(rows, [{ id: "demo", revision: reads }]);
       if (reads === 1) { started(); await gate; }
-      return [entry];
+      return [uiEntry, backgroundEntry];
     }
   }
   const ipc = setup({
@@ -175,7 +176,70 @@ it("attaches granted UI URLs to the same roster and serializes admission across 
   unblock();
   const [result] = await Promise.all([first, second]);
   assert.deepEqual(events, ["read 1", "admit 1", "read 2", "admit 2"]);
-  assert.deepEqual(result, { assets: [], value: { id: "request", type: "response", method: "plugins.list", error: null, payload: { plugins: [{ id: "demo", revision: 1, renderer_ui: entry }] } } });
+  assert.deepEqual(result, { assets: [], value: { id: "request", type: "response", method: "plugins.list", error: null, payload: { plugins: [{
+    id: "demo", revision: 1,
+    // Each sibling field is the same admitted grant with its `kind` tag stripped.
+    renderer_ui: { pluginId: "demo", entry: "shiori-plugin://plugin/token/ui/index.mjs", css: [], activationToken: "activation-token-1" },
+    renderer_background: { pluginId: "demo", entry: "shiori-plugin://plugin/token/background/index.mjs", css: [], activationToken: "activation-token-1" },
+    renderer_surface: undefined,
+  }] } } });
+});
+
+it("notifies onPluginDeactivated for exactly the plugin ids a fresh roster dropped (#262)", async () => {
+  const deactivated: string[] = [];
+  let roster: Array<{ id: string; enabled: boolean; state: string }> = [
+    { id: "alpha", enabled: true, state: "ACTIVE" },
+    { id: "beta", enabled: true, state: "ACTIVE" },
+  ];
+  const handlers = new Map<string, (event: never, ...args: never[]) => unknown>();
+  const host = {
+    handle: (channel: string, listener: unknown) => { handlers.set(channel, listener as (event: never, ...args: never[]) => unknown); },
+    on: () => undefined,
+    windowFromWebContents: () => null,
+    showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+    openExternal: async () => undefined,
+    logDiagnostic: () => undefined,
+    dragFileIcon: "drag-icon.png",
+    registerVoiceIpc: () => undefined,
+  } as unknown as DesktopIpcHost;
+  registerDesktopIpcHandlers(host, {
+    bridge: {
+      invoke: async ({ method }: { method: string }) => ({ id: "request", type: "response", method, error: null, payload: { plugins: roster } }),
+      isRunning: () => true, getLastError: () => null, restart: async () => undefined,
+    },
+    localAssets: { grantTrustedPayload: () => [], grantPath: () => null, resolveReference: () => null },
+    localAssetImportsRoot: "imports",
+    openLocalAttachment: async () => ({ ok: true }),
+    isPetWindow: () => false,
+    voiceRecorder: {},
+    voiceController: {},
+    voicePlayback: {},
+    onPluginDeactivated: (pluginId: string) => deactivated.push(pluginId),
+  } as unknown as RegisterDesktopIpcOptions);
+  const invokeHandler = handlers.get("desktop:invoke") as (event: unknown, ...args: unknown[]) => unknown;
+
+  await invokeHandler({ sender: {} }, { method: "plugins.list", payload: {} });
+  assert.deepEqual(deactivated, []);
+
+  // beta disabled, alpha still ACTIVE.
+  roster = [
+    { id: "alpha", enabled: true, state: "ACTIVE" },
+    { id: "beta", enabled: false, state: "DISABLED" },
+  ];
+  await invokeHandler({ sender: {} }, { method: "plugins.list", payload: {} });
+  assert.deepEqual(deactivated, ["beta"]);
+
+  // alpha rolled back by an activation-report failure (#262); beta stays disabled.
+  roster = [
+    { id: "alpha", enabled: true, state: "FAILED" },
+    { id: "beta", enabled: false, state: "DISABLED" },
+  ];
+  await invokeHandler({ sender: {} }, { method: "plugins.list", payload: {} });
+  assert.deepEqual(deactivated, ["beta", "alpha"]);
+
+  // A repeated identical roster must not re-fire for a plugin already gone.
+  await invokeHandler({ sender: {} }, { method: "plugins.list", payload: {} });
+  assert.deepEqual(deactivated, ["beta", "alpha"]);
 });
 
 describe("desktop ipc permission boundaries", () => {

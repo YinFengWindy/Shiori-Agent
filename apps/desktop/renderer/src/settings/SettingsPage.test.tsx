@@ -18,6 +18,7 @@ function stubPluginsListBridge(plugins: Array<Record<string, unknown>> = oneInst
   Object.defineProperty(window, "miraDesktop", {
     configurable: true,
     value: {
+      onEvent: () => () => undefined,
       invoke: async ({ method }: { method: string }) => {
         assert.equal(method, "plugins.list");
         return { id: "1", type: "response", method, error: null, payload: { plugins } };
@@ -72,6 +73,7 @@ test("the plugin route places every discovered row inside the settings scroll ar
   Object.defineProperty(window, "miraDesktop", {
     configurable: true,
     value: {
+      onEvent: () => () => undefined,
       invoke: async ({ method }: { method: string }) => {
         calls.push(method);
         assert.equal(method, "plugins.list");

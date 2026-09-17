@@ -1,6 +1,7 @@
 import { validateRuntimePluginUi } from "./runtimePluginUiValidation";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 import type { PluginUiModule } from "./pluginUiModuleContract";
+import { loadRuntimePluginModules } from "./runtimePluginModuleLoader";
 
 /** Loader boundaries keep module evaluation and CSS cleanup independently testable. */
 export type RuntimePluginUiHost = {
@@ -8,28 +9,19 @@ export type RuntimePluginUiHost = {
   loadCss: (url: string) => Promise<() => void>;
   register: (module: PluginUiModule) => void;
   unregister: (pluginId: string) => void;
-  failed: (pluginId: string, error: unknown) => void;
+  succeeded?: (entry: RuntimePluginUi) => void;
+  failed: (entry: RuntimePluginUi, error: unknown) => void;
 };
 
-/** Loads each admitted plugin independently and removes its partial UI on failure. */
+/**
+ * Loads each admitted plugin independently and removes its partial UI on
+ * failure. A thin wrapper over the shared `loadRuntimePluginModules` fixing
+ * `validate` to the UI ABI — its observable behaviour (load order, cleanup
+ * order, what gets reported) is unchanged from before that loader was
+ * extracted for `background` and `surface` to reuse.
+ */
 export async function loadRuntimePluginUi(entries: RuntimePluginUi[], host: RuntimePluginUiHost) {
-  const dispose: (() => void)[] = [];
-  for (const entry of entries) {
-    const styles: (() => void)[] = [];
-    try {
-      if (entry.error) throw new Error(entry.error);
-      for (const css of entry.css) styles.push(await host.loadCss(css));
-      const { default: module } = await host.importModule(entry.entry);
-      assertRuntimePluginUiModule(module, entry.pluginId);
-      host.register(module);
-      dispose.push(() => { host.unregister(entry.pluginId); for (const remove of styles) remove(); });
-    } catch (error) {
-      host.unregister(entry.pluginId);
-      for (const remove of styles) remove();
-      host.failed(entry.pluginId, error);
-    }
-  }
-  return () => { for (const remove of dispose) remove(); };
+  return loadRuntimePluginModules(entries, { ...host, validate: assertRuntimePluginUiModule });
 }
 
 /** Rejects malformed contributions before any registry mutation. */

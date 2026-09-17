@@ -13,11 +13,24 @@ test("ESM or CSS failure cleans only its plugin and preserves the original diagn
     loadCss: async (url) => () => { events.push(`remove ${url}`); },
     register: (module) => { events.push(`register ${module.pluginId}`); },
     unregister: (id) => { events.push(`unregister ${id}`); },
-    failed: (_id, error) => { events.push(error); },
+    failed: (_entry, error) => { events.push(error); },
   });
   assert.deepEqual(events, ["unregister bad", "remove bad.css", failure, "register good"]);
   dispose();
   assert.deepEqual(events.slice(-2), ["unregister good", "remove good.css"]);
+});
+
+test("reports the admitted entry through succeeded once it registers (#262)", async () => {
+  const succeeded: unknown[] = [];
+  await loadRuntimePluginUi([{ pluginId: "demo", entry: "demo", css: [], activationToken: "token-1" }], {
+    importModule: async () => ({ default: { pluginId: "demo" } }),
+    loadCss: async () => () => undefined,
+    register: () => undefined,
+    unregister: () => undefined,
+    succeeded: (entry) => succeeded.push(entry),
+    failed: () => assert.fail("unexpected failure"),
+  });
+  assert.deepEqual(succeeded, [{ pluginId: "demo", entry: "demo", css: [], activationToken: "token-1" }]);
 });
 
 test("stylesheet failure removes earlier styles and never evaluates the plugin", async () => {
@@ -29,7 +42,7 @@ test("stylesheet failure removes earlier styles and never evaluates the plugin",
     loadCss: async (url) => { if (url === "missing") throw failure; return () => { removed.push(url); }; },
     register: () => assert.fail("failed plugin must not register"),
     unregister: () => undefined,
-    failed: (_id, error) => { diagnostic = error; },
+    failed: (_entry, error) => { diagnostic = error; },
   });
   assert.deepEqual(removed, ["first"]);
   assert.equal(diagnostic, failure);

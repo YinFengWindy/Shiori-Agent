@@ -86,3 +86,69 @@ test("UI modified after backend activation is refused before the first main-proc
     assert.match(refused.error ?? "", /changed after approval/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("admit() grants ui, background and surface from one shared package snapshot, and refuses an untrusted plugin's declarations entirely", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shiori-ui-kinds-"));
+  try {
+    const directory = join(root, "plugins", "demo");
+    await mkdir(join(directory, "ui"), { recursive: true });
+    await mkdir(join(directory, "background"), { recursive: true });
+    await mkdir(join(directory, "surface"), { recursive: true });
+    const files = {
+      "ui/index.mjs": "export default { pluginId: 'demo' }",
+      "background/index.mjs": "export default { pluginId: 'demo' }",
+      "surface/index.mjs": "export default { pluginId: 'demo' }",
+      "style.css": ".demo {}",
+    };
+    for (const [path, content] of Object.entries(files)) await writeFile(join(directory, path), content, "utf8");
+    const content_hashes = Object.fromEntries(Object.entries(files).map(([path, content]) => [path, hash(content)]));
+    const renderer = {
+      ui: { entry: "ui/index.mjs", css: ["style.css"] },
+      background: { entry: "background/index.mjs", css: [] },
+      surface: { entry: "surface/index.mjs", css: ["style.css"] },
+    };
+    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, content_fingerprint: "approved", content_hashes, renderer };
+    const resources = new PluginUiResources(join(root, "plugins"));
+
+    const entries = await resources.admit([row]);
+    assert.deepEqual(entries.map((entry) => entry.kind).sort(), ["background", "surface", "ui"]);
+    for (const kind of ["ui", "background", "surface"]) {
+      const entry = entries.find((candidate) => candidate.kind === kind);
+      assert.ok(entry, `${kind} must have an entry`);
+      assert.equal(entry.error, undefined, `${kind} must be granted, not refused`);
+      assert.equal((await resources.load(entry.entry)).status, 200);
+    }
+    // The ui and surface grants share the same css asset and the same package token.
+    const ui = entries.find((e) => e.kind === "ui");
+    const surface = entries.find((e) => e.kind === "surface");
+    assert.ok(ui && surface);
+    assert.equal(ui.css[0], surface.css[0]);
+
+    // A row that fails the top-level trust gate (untrusted state) must not
+    // leak a grant for any of the three kinds, not just `ui`.
+    const untrusted = await resources.admit([{ ...row, state: "UNTRUSTED" }]);
+    assert.deepEqual(untrusted, []);
+    for (const entry of entries) assert.equal((await resources.load(entry.entry)).status, 403);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("a package-level admission failure reports an error for every declared kind, not only the first", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shiori-ui-kinds-fail-"));
+  try {
+    const outside = join(root, "outside-plugins", "demo");
+    await mkdir(outside, { recursive: true });
+    await mkdir(join(root, "plugins"), { recursive: true });
+    const row = {
+      id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE",
+      directory: outside, content_fingerprint: "approved", content_hashes: {},
+      renderer: { background: { entry: "index.mjs", css: [] }, surface: { entry: "index.mjs", css: [] } },
+    };
+    const resources = new PluginUiResources(join(root, "plugins"));
+    const entries = await resources.admit([row]);
+    assert.deepEqual(entries.map((entry) => entry.kind).sort(), ["background", "surface"]);
+    for (const entry of entries) {
+      assert.equal(entry.entry, "");
+      assert.match(entry.error ?? "", /escapes workspace plugins/);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

@@ -478,6 +478,11 @@ void app.whenReady().then(async () => {
     voiceController: activeVoiceController,
     voicePlayback: activeVoicePlayback,
     onVoiceSettingsChanged: reloadVoiceSettings,
+    // A plugin that just left the admitted-active roster (disabled, failed,
+    // or rolled back by an activation-report failure, #262) must not leave a
+    // desktop surface window behind — nothing else in this process is told
+    // the plugin stopped, so its window would otherwise sit there forever.
+    onPluginDeactivated: (pluginId) => activeDesktopSurfaces.destroyAllForPlugin(pluginId),
   });
   getOrCreateDesktopWindow();
   if (trayLifecycleEnabled) {

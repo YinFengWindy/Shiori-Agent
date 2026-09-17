@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { mountTestComponent } from "../shared/testing/domTestHarness";
 import { SurfaceRoot } from "./SurfaceRoot";
 import { PluginSurfaceRegistry, type PluginSurfaceComponentProps, type SurfaceHandle } from "./pluginSurfaceRegistry";
+import { loadRuntimePluginSurface } from "./runtimePluginSurface";
 
 const noopSurface: SurfaceHandle = {
   beginDrag() {}, endDrag() {}, setExtension() {}, setClickThrough() {},
@@ -32,6 +33,39 @@ test("mounts only the URL's plugin with its surface and scoped client", async ()
     assert.equal(seen[0].surface, noopSurface);
     assert.equal(typeof seen[0].client.call, "function");
     assert.deepEqual(errors, []);
+  } finally { await view.cleanup(); }
+});
+
+test("an external plugin's runtime-loaded surface mounts through the same registry a built-in module uses", async () => {
+  const registry = new PluginSurfaceRegistry();
+  await loadRuntimePluginSurface(
+    { pluginId: "external", entry: "entry.mjs", css: [] },
+    {
+      importModule: async () => ({ default: { pluginId: "external", surface: { component: () => <div>external surface</div> } } }),
+      loadCss: async () => () => {},
+      failed: () => assert.fail("unexpected failure"),
+    },
+    registry,
+  );
+  const view = await mountTestComponent(<SurfaceRoot search="?plugin=external&surface=main" surface={noopSurface} registry={registry} />, { windowGlobals: { miraDesktop: { onEvent: () => () => {} } } });
+  try {
+    assert.equal(view.container.textContent, "external surface");
+    assert.deepEqual(errors, []);
+  } finally { await view.cleanup(); }
+});
+
+test("an external plugin's runtime surface load failure renders the same missing-entry failure card, not a blank window", async () => {
+  const registry = new PluginSurfaceRegistry();
+  const failures: unknown[] = [];
+  await loadRuntimePluginSurface(
+    { pluginId: "external", entry: "entry.mjs", css: [], error: "Plugin package changed; restart the application to load its new code" },
+    { importModule: async () => assert.fail("must not import a declared-invalid entry"), loadCss: async () => assert.fail("must not load CSS"), failed: (pluginId, error) => failures.push([pluginId, error]) },
+    registry,
+  );
+  const view = await mountTestComponent(<SurfaceRoot search="?plugin=external&surface=main" surface={noopSurface} registry={registry} />, { windowGlobals: { miraDesktop: { onEvent: () => () => {} } } });
+  try {
+    assert.match(view.container.textContent ?? "", /插件 external 未提供桌面窗口/);
+    assert.equal(failures.length, 1);
   } finally { await view.cleanup(); }
 });
 
