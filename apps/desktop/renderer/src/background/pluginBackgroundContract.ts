@@ -19,8 +19,13 @@ export type PluginBackgroundContribution = {
   setup(ctx: BackgroundCtx): void | Promise<void>;
 };
 
-/** Narrows an unknown default export down to a well-formed PluginBackgroundContribution. */
-function isPluginBackgroundModule(value: unknown): value is PluginBackgroundContribution {
+/**
+ * Narrows an unknown default export down to a well-formed
+ * PluginBackgroundContribution. Exported so `runtimePluginBackground.ts` can
+ * apply the identical structural check to a runtime-loaded module, not a
+ * second hand-rolled copy of it.
+ */
+export function isPluginBackgroundModule(value: unknown): value is PluginBackgroundContribution {
   if (value === null || typeof value !== "object") return false;
   if (!("pluginId" in value) || typeof value.pluginId !== "string" || !value.pluginId) return false;
   return typeof (value as { setup?: unknown }).setup === "function";

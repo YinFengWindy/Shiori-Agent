@@ -18,7 +18,7 @@ ipcMain.handle("desktop:invoke", async (_event, request) => {
     renderer: { ui: { entry: "ui/dist/index.mjs", css: ["ui/dist/style.css"] } },
   }));
   const entries = await resources.admit(rows);
-  const plugins = rows.map((row) => ({ ...row, renderer_ui: entries.find((entry) => entry.pluginId === row.id) }));
+  const plugins = rows.map((row) => ({ ...row, renderer_ui: entries.find((entry) => entry.pluginId === row.id && entry.kind === "ui") }));
   return { assets: [], value: { id: "qa", type: "response", method: request.method, payload: { plugins }, error: null } };
 });
 ipcMain.on("desktop:renderer-diagnostic", () => undefined);

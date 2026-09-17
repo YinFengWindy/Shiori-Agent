@@ -14,8 +14,12 @@ export type PluginSurfaceModule = {
   surface: PluginSurfaceContribution;
 };
 
-/** Narrows an unknown default export without an unsafe cast. */
-function isPluginSurfaceModule(value: unknown): value is PluginSurfaceModule {
+/**
+ * Narrows an unknown default export without an unsafe cast. Exported so
+ * `runtimePluginSurface.ts` can apply the identical structural check to a
+ * runtime-loaded module, not a second hand-rolled copy of it.
+ */
+export function isPluginSurfaceModule(value: unknown): value is PluginSurfaceModule {
   if (value === null || typeof value !== "object") return false;
   if (!("pluginId" in value) || typeof value.pluginId !== "string" || !value.pluginId) return false;
   if (!("surface" in value) || value.surface === null || typeof value.surface !== "object") return false;

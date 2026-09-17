@@ -111,10 +111,24 @@ export function registerDesktopIpcHandlers(
     const invoke = async () => {
       const response = await bridge.invoke(await attributePluginCommunication(_event.sender, request));
       if (request.method === "plugins.list" && !response.error && pluginUiResources) {
+        // One admit() pass grants (or refuses) `ui`, `background` and `surface`
+        // together, tagged by kind; each sibling field below picks its own kind
+        // back out and drops the tag, so every consumer keeps the plain
+        // `RuntimePluginUi` shape it already expects.
         const entries = await pluginUiResources.admit(response.payload.plugins);
+        const grantFor = (pluginId: unknown, kind: "ui" | "background" | "surface") => {
+          const entry = entries.find((candidate) => candidate.pluginId === pluginId && candidate.kind === kind);
+          if (!entry) return undefined;
+          return entry.error === undefined
+            ? { pluginId: entry.pluginId, entry: entry.entry, css: entry.css }
+            : { pluginId: entry.pluginId, entry: entry.entry, css: entry.css, error: entry.error };
+        };
         if (Array.isArray(response.payload.plugins)) {
           response.payload.plugins = response.payload.plugins.map((plugin) => ({
-            ...plugin, renderer_ui: entries.find((entry) => entry.pluginId === plugin.id),
+            ...plugin,
+            renderer_ui: grantFor(plugin.id, "ui"),
+            renderer_background: grantFor(plugin.id, "background"),
+            renderer_surface: grantFor(plugin.id, "surface"),
           }));
         }
       }

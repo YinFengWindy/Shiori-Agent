@@ -3,10 +3,12 @@ import { pluginRuntimeChanged } from "../plugins/pluginRuntimeChanged";
 import "./pluginBackgroundModules";
 import { createPluginBridgeClient } from "../plugins/pluginBridgeClient";
 import { activePluginIds } from "../plugins/activePluginIds";
+import { importRuntimePluginModule, loadRuntimePluginCss } from "../plugins/runtimePluginDomLoader";
 import { reportBackgroundFailure } from "./backgroundDiagnostics";
 import { createBackgroundCtx } from "./pluginBackgroundCtx";
 import { PluginBackgroundHost } from "./pluginBackgroundHost";
 import { pluginBackgroundRegistry } from "./pluginBackgroundRegistry";
+import { createRuntimePluginBackgroundLoader } from "./runtimePluginBackground";
 
 /**
  * Entry point for `plugin-host.html`: the dedicated hidden renderer window
@@ -22,10 +24,25 @@ const invoke = window.miraDesktop.invoke;
 const onEvent = window.miraDesktop.onEvent;
 const pluginBridge = createPluginBridgeClient(invoke);
 
+// Loads an external plugin's runtime `renderer.background` entry (#213/#262)
+// into the exact same `pluginBackgroundRegistry` the build-time glob above
+// populates. Piggybacked on `listEnabledPluginIds` — the roster fetch that
+// already runs before every reconcile, at startup and on every
+// `subscribeRosterChanged` signal — so a newly admitted background entry is
+// registered in time for the very reconcile pass that would otherwise start it.
+const loadRuntimeBackground = createRuntimePluginBackgroundLoader({
+  importModule: importRuntimePluginModule,
+  loadCss: loadRuntimePluginCss,
+  failed(pluginId, error) {
+    reportBackgroundFailure(`${pluginId} 的运行时 background 模块加载`, error);
+  },
+});
+
 const host = new PluginBackgroundHost({
   registry: pluginBackgroundRegistry,
   async listEnabledPluginIds() {
     const plugins = await pluginBridge.listPlugins();
+    await loadRuntimeBackground(plugins.flatMap((plugin) => plugin.rendererBackground ? [plugin.rendererBackground] : []));
     return activePluginIds(plugins);
   },
   subscribeRosterChanged(listener) {

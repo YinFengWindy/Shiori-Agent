@@ -36,6 +36,10 @@ export type PluginSummary = {
   rendererError?: string;
   /** Main-process granted URLs; never inferred from a renderer-supplied directory. */
   rendererUi?: RuntimePluginUi;
+  /** Main-process granted URLs for this plugin's `plugin-host.html` background entry, if declared. */
+  rendererBackground?: RuntimePluginUi;
+  /** Main-process granted URLs for this plugin's `surface.html` desktop-surface entry, if declared. */
+  rendererSurface?: RuntimePluginUi;
   diagnostic: PluginDiagnostic | null;
   hasConfigSchema: boolean;
   /** Whether an active plugin can be replaced without restarting the process. */
@@ -114,6 +118,8 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         candidate_id: string; source: "builtin" | "workspace"; directory: string;
         can_toggle: boolean; diagnostic: PluginDiagnostic | null;
         renderer_ui?: RuntimePluginUi;
+        renderer_background?: RuntimePluginUi;
+        renderer_surface?: RuntimePluginUi;
         can_trust?: boolean; trust_fingerprint?: string | null; trust_directory?: string; trust_pending_restart?: boolean;
         enabled: boolean; state: string; error: string; has_config_schema: boolean; supports_hot_unload: boolean;
       }> }>(resolveInvoke(), "plugins.list", {});
@@ -131,6 +137,8 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         error: item.error,
         diagnostic: item.diagnostic,
         rendererUi: item.renderer_ui,
+        rendererBackground: item.renderer_background,
+        rendererSurface: item.renderer_surface,
         canTrust: item.can_trust,
         trustFingerprint: item.trust_fingerprint,
         trustDirectory: item.trust_directory,

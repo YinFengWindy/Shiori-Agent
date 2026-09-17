@@ -8,6 +8,7 @@ import { pluginUiRegistry } from "./pluginUiRegistry";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { createRuntimePluginUiSynchronization } from "./runtimePluginUiSynchronization";
 import { registerPluginUiSynchronization } from "./pluginEnabledStateStore";
+import { importRuntimePluginModule, loadRuntimePluginCss } from "./runtimePluginDomLoader";
 
 /** Installs shared React peers before evaluating any workspace plugin module. */
 export function initializeRuntimePluginUi() {
@@ -19,15 +20,8 @@ export function initializeRuntimePluginUi() {
   map.textContent = pluginUiImportMap;
   document.head.append(map);
   registerPluginUiSynchronization(createRuntimePluginUiSynchronization({
-    importModule: (url) => import(/* @vite-ignore */ url),
-    loadCss: (url) => new Promise((resolve, reject) => {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = url;
-      link.onload = () => resolve(() => link.remove());
-      link.onerror = () => { link.remove(); reject(new Error(`Plugin CSS could not be loaded: ${url}`)); };
-      document.head.append(link);
-    }),
+    importModule: importRuntimePluginModule,
+    loadCss: loadRuntimePluginCss,
     register: (module) => applyPluginUiModules({ runtime: { default: module } }),
     unregister: (pluginId) => {
       pluginUiRegistry.unregisterPlugin(pluginId);
