@@ -25,6 +25,18 @@ describe("getChatMessageMatchStrength", () => {
     assert.equal(getChatMessageMatchStrength({ role: "user", content: "hello" }, { id: "u", role: "user", content: "hello again" }), 0);
   });
 
+  it("does not treat an empty persisted reasoning_content as conflicting with local thinking (#300)", () => {
+    const current = { role: "assistant", content: "你好", reasoning_content: "让我想想怎么回复" };
+    // Persisted row omits reasoning_content entirely (proactive/interrupted/no-reasoning
+    // provider) and content is a continuation: this must still be treated as the same row.
+    assert.equal(getChatMessageMatchStrength(current, { id: "a", role: "assistant", content: "你好，最近如何" }), 1);
+    // Persisted row explicitly has an empty reasoning_content string: same as above.
+    assert.equal(getChatMessageMatchStrength(current, { id: "a", role: "assistant", content: "你好，最近如何", reasoning_content: "" }), 1);
+    // Persisted row has non-empty reasoning_content that conflicts with local thinking:
+    // this remains a genuine identity conflict and must not be merged.
+    assert.equal(getChatMessageMatchStrength(current, { id: "a", role: "assistant", content: "你好，最近如何", reasoning_content: "完全不同的思考" }), 0);
+  });
+
   it("preserves Thinking-first and tool-only streaming transitions with positive evidence", () => {
     assert.equal(getChatMessageMatchStrength({ role: "assistant", content: "", reasoning_content: "think" }, { id: "a", role: "assistant", content: "reply", reasoning_content: "thinking" }), 1);
     const tool_chain = [{ text: "", reasoning_content: "", calls: [{ call_id: "call-1", name: "lookup", status: "success", arguments: {}, final_arguments: {}, result: "done" }] }];

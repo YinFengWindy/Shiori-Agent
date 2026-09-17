@@ -110,6 +110,32 @@ describe("mergeSessionSummaryAndMessage", () => {
     assert.equal(merged.messages[0]?.content, "刚发出去的消息");
   });
 
+  it("merges a persisted reply with no reasoning_content into the streaming row that already showed thinking (#300)", () => {
+    const currentSession = createSession([
+      { id: "user-1", seq: 1, role: "user", content: "在吗" },
+      { role: "assistant", content: "在的", reasoning_content: "对方好像在等我回复", streaming: true },
+    ]);
+    const persistedReply: SessionMessage = {
+      id: "role:mira:2",
+      seq: 2,
+      role: "assistant",
+      content: "在的，刚看到消息",
+      reasoning_content: "",
+    };
+
+    const merged = mergeSessionSummaryAndMessage(currentSession, createSummary(), persistedReply);
+
+    // The persisted row must upgrade the existing streaming row, not append a
+    // second bubble for the same reply (issue #300).
+    assert.equal(merged.messages.length, 2);
+    assert.deepEqual(
+      merged.messages.map((message) => message.role),
+      ["user", "assistant"],
+    );
+    assert.equal(merged.messages[1]?.id, "role:mira:2");
+    assert.equal(merged.messages[1]?.content, "在的，刚看到消息");
+  });
+
   it("replaces the optimistic user turn with its persisted copy by client message id", () => {
     const currentSession = createSession([
       {
