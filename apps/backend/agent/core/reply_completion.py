@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 
 from agent.core.passive_support import estimate_messages_tokens
 from agent.core.reply_stream import RoleReplyStream
@@ -16,6 +17,13 @@ from agent.provider import (
 from core.roles.reply_state import InvalidRoleReply, parse_role_reply, role_reply_prompt
 
 logger = logging.getLogger(__name__)
+
+
+def _combine_shown_thinking(first: str | None, second: str | None) -> str | None:
+    """Concatenate thinking already streamed to the user, first attempt then correction."""
+    if first and second:
+        return first + second
+    return first or second
 
 
 async def complete_role_reply(
@@ -73,4 +81,12 @@ async def complete_role_reply(
         raise InvalidRoleReply("格式纠正不允许再次调用工具")
     reply = parse_role_reply(corrected.content or "", moods)
     await stream.finish(reply.content)
-    return corrected, corrected
+    # The user already saw the first attempt's thinking before the correction ran;
+    # the main response must carry both, in the order they were actually shown.
+    shown_thinking = _combine_shown_thinking(response.thinking, corrected.thinking)
+    main_response = (
+        corrected
+        if shown_thinking == corrected.thinking
+        else replace(corrected, thinking=shown_thinking)
+    )
+    return main_response, corrected
