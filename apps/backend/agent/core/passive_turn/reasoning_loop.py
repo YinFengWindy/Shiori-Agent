@@ -28,7 +28,7 @@ from agent.tool_runtime import (
 )
 from agent.tools.base import normalize_tool_result
 from agent.tools.registry import ToolRegistry
-from agent.provider import ContextLengthError
+from agent.provider import ContextLengthError, is_truncated_finish_reason
 
 logger = logging.getLogger("agent.core.passive_turn")
 
@@ -655,8 +655,10 @@ class _PassiveReasoningLoopMixin:
             # JSON，这条重试路径对角色回复和普通回复完全一致。
             if not response.content and response.thinking:
                 logger.warning(
-                    "[空回复重试] 第%d轮，content为空但thinking非空，触发一次重试",
+                    "[空回复重试] 第%d轮，content为空但thinking非空，触发一次重试 "
+                    "finish_reason=%s",
                     iteration + 1,
+                    response.finish_reason,
                 )
                 messages.append({"role": "assistant", "content": ""})
                 messages.append(
@@ -694,6 +696,27 @@ class _PassiveReasoningLoopMixin:
                     logger.info("[空回复重试] 重试成功，获得正常回复")
                 else:
                     logger.warning("[空回复重试] 重试仍为空，使用fallback")
+
+            if not response.content:
+                # 正文主调用空产出时区分「被 max_tokens 截断」与「模型确实没有
+                # 输出」：前者不该被误读成格式/解析问题（issue #304 的排查教训——
+                # 空 content 曾统一被下游当成"非法 JSON"上报，找错了方向）。
+                if is_truncated_finish_reason(response.finish_reason):
+                    logger.warning(
+                        "[正文为空] 第%d轮模型输出被截断（finish_reason=%s），"
+                        "回退为占位回复 model=%s",
+                        iteration + 1,
+                        response.finish_reason,
+                        self._llm_config.model,
+                    )
+                else:
+                    logger.warning(
+                        "[正文为空] 第%d轮模型未产出正文（finish_reason=%s），"
+                        "回退为占位回复 model=%s",
+                        iteration + 1,
+                        response.finish_reason,
+                        self._llm_config.model,
+                    )
 
             final_content = response.content or "（无响应）"
             role_reply: RoleReply | None = None

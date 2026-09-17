@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, cast
 from openai import AsyncOpenAI
 
+from core.common.llm_output_log import summarize_llm_output_for_log
+
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
 logger = logging.getLogger(__name__)
@@ -70,6 +72,36 @@ class LLMResponse:
     cache_prompt_tokens: int | None = None
     cache_hit_tokens: int | None = None
     total_tokens: int | None = None
+    # Raw finish_reason as reported by the API for this response (e.g.
+    # "stop", "length", "tool_calls"). Populated on both the streaming and
+    # non-streaming paths so callers can tell a `max_tokens` cutoff apart
+    # from a genuinely malformed/empty reply instead of the two looking
+    # identical (see `is_truncated_finish_reason`).
+    finish_reason: str | None = None
+
+
+# finish_reason values that mean "the API stopped us, not the model" - i.e.
+# a max_tokens cutoff. OpenAI-compatible APIs report this as "length".
+_TRUNCATED_FINISH_REASONS = frozenset({"length"})
+
+
+def is_truncated_finish_reason(finish_reason: str | None) -> bool:
+    """True when `finish_reason` indicates the response was cut off by the
+    token budget rather than ending naturally or via a parse/format defect.
+
+    Callers use this to label a truncated reply distinctly in logs instead
+    of letting it read as "malformed JSON" - the exact misdiagnosis that
+    made the 2026-09-17 qqbot dropped-message investigation slow (issue
+    #304): an empty `content` from a `max_tokens` cutoff and an empty
+    `content` from a genuine format failure produced the same downstream
+    `json.loads` error with no way to tell them apart.
+    """
+    return finish_reason in _TRUNCATED_FINISH_REASONS
+
+
+def _finish_reason_of(obj: Any) -> str | None:
+    value = _get_field(obj, "finish_reason")
+    return str(value) if value else None
 
 
 class ProviderStrategy:
@@ -291,16 +323,26 @@ class LLMProvider:
             ),
         )
         msg = resp.choices[0].message
+        finish_reason = _finish_reason_of(resp.choices[0])
 
         tool_calls = []
         if msg.tool_calls:
             for tc in msg.tool_calls:
-                tool_calls.append(
-                    ToolCall(
-                        id=tc.id,
-                        name=tc.function.name,
-                        arguments=json.loads(tc.function.arguments),
+                try:
+                    arguments = json.loads(tc.function.arguments)
+                except json.JSONDecodeError as exc:
+                    logger.warning(
+                        "[LLM工具参数解析失败] model=%s finish_reason=%s tool=%s err=%s "
+                        "raw=%s",
+                        model,
+                        finish_reason,
+                        tc.function.name,
+                        exc,
+                        summarize_llm_output_for_log(tc.function.arguments),
                     )
+                    raise
+                tool_calls.append(
+                    ToolCall(id=tc.id, name=tc.function.name, arguments=arguments)
                 )
 
         raw, thinking, provider_fields = strategy.extract_message(msg, msg.content)
@@ -320,6 +362,7 @@ class LLMProvider:
             cache_prompt_tokens=cache_prompt_tokens,
             cache_hit_tokens=cache_hit_tokens,
             total_tokens=total_tokens,
+            finish_reason=finish_reason,
         )
 
     async def _chat_streaming(
@@ -344,6 +387,7 @@ class LLMProvider:
         cache_prompt_tokens: int | None = None
         cache_hit_tokens: int | None = None
         total_tokens: int | None = None
+        finish_reason: str | None = None
 
         stream_iter = aiter(stream)
         while True:
@@ -366,6 +410,12 @@ class LLMProvider:
             if not choices:
                 continue
             choice = choices[0]
+            # The chunk carrying finish_reason often has an empty/absent
+            # delta (it's the terminal chunk), so this must run before the
+            # `delta is None` skip below or truncation goes unrecorded.
+            choice_finish_reason = _finish_reason_of(choice)
+            if choice_finish_reason is not None:
+                finish_reason = choice_finish_reason
             delta = getattr(choice, "delta", None)
             if delta is None:
                 continue
@@ -400,11 +450,24 @@ class LLMProvider:
         for idx in sorted(tool_call_chunks):
             item = tool_call_chunks[idx]
             raw_args = item.get("arguments", "") or "{}"
+            try:
+                arguments = json.loads(raw_args)
+            except json.JSONDecodeError as exc:
+                logger.warning(
+                    "[LLM工具参数解析失败] model=%s finish_reason=%s tool=%s err=%s "
+                    "raw=%s",
+                    kwargs.get("model"),
+                    finish_reason,
+                    item.get("name", ""),
+                    exc,
+                    summarize_llm_output_for_log(raw_args),
+                )
+                raise
             tool_calls.append(
                 ToolCall(
                     id=item.get("id", ""),
                     name=item.get("name", ""),
-                    arguments=json.loads(raw_args),
+                    arguments=arguments,
                 )
             )
 
@@ -428,6 +491,7 @@ class LLMProvider:
             cache_prompt_tokens=cache_prompt_tokens,
             cache_hit_tokens=cache_hit_tokens,
             total_tokens=total_tokens,
+            finish_reason=finish_reason,
         )
 
     async def _create_with_retry(

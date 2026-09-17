@@ -14,6 +14,7 @@ from agent.provider import (
     ContextLengthError,
     LLMProvider,
     _normalize_openai_base_url,
+    is_truncated_finish_reason,
 )
 from agent.tool_runtime import append_assistant_tool_calls
 
@@ -59,11 +60,12 @@ class _Response:
         tool_calls: list | None = None,
         reasoning_content: str | None = None,
         usage: object | None = None,
+        finish_reason: str | None = "stop",
     ) -> None:
         message = SimpleNamespace(content=content, tool_calls=tool_calls or [])
         if reasoning_content is not None:
             message.reasoning_content = reasoning_content
-        self.choices = [SimpleNamespace(message=message)]
+        self.choices = [SimpleNamespace(message=message, finish_reason=finish_reason)]
         self.usage = usage
 
 
@@ -73,6 +75,15 @@ class _ToolCall:
         self.function = SimpleNamespace(
             name=name, arguments=json.dumps(arguments, ensure_ascii=False)
         )
+
+
+class _RawToolCall:
+    """A tool call whose `arguments` is an arbitrary (possibly invalid or
+    truncated) raw string, for driving json.loads failure paths."""
+
+    def __init__(self, id: str, name: str, raw_arguments: str) -> None:
+        self.id = id
+        self.function = SimpleNamespace(name=name, arguments=raw_arguments)
 
 
 class _FakeClient:
@@ -639,3 +650,221 @@ async def test_deepseek_thinking_request_patches_dirty_history(
     )
 
     assert fake.calls[-1]["messages"][1]["reasoning_content"] == ""
+
+
+# --- issue #304: finish_reason visibility + parse-failure raw output logging ---
+
+
+@pytest.mark.asyncio
+async def test_non_streaming_chat_reports_truncation_finish_reason(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A `max_tokens` cutoff on the non-streaming path must surface on the
+    response so callers can tell it apart from a genuinely empty/malformed
+    reply instead of both looking identical."""
+    fake = _FakeClient([_Response(content="", finish_reason="length")])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    result = await provider.chat(messages=[], tools=[], model="m", max_tokens=10)
+
+    assert result.finish_reason == "length"
+    assert is_truncated_finish_reason(result.finish_reason) is True
+
+
+@pytest.mark.asyncio
+async def test_non_streaming_chat_reports_natural_stop_finish_reason(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    fake = _FakeClient([_Response(content="ok", finish_reason="stop")])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    result = await provider.chat(messages=[], tools=[], model="m", max_tokens=10)
+
+    assert result.finish_reason == "stop"
+    assert is_truncated_finish_reason(result.finish_reason) is False
+
+
+@pytest.mark.asyncio
+async def test_streaming_chat_reports_truncation_finish_reason_from_fake_stream(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Same signal, streaming path: a fake stream whose terminal chunk
+    carries finish_reason="length" on an otherwise-empty delta (the real
+    shape most OpenAI-compatible APIs use) must still be picked up - the
+    delta-is-None chunk cannot be skipped before finish_reason is read."""
+    stream = _FakeStream(
+        [
+            SimpleNamespace(
+                choices=[SimpleNamespace(delta=SimpleNamespace(content=""))]
+            ),
+            SimpleNamespace(
+                choices=[SimpleNamespace(delta=None, finish_reason="length")]
+            ),
+        ]
+    )
+    fake = _FakeClient([stream])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    result = await provider.chat(
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[],
+        model="m",
+        max_tokens=10,
+        on_content_delta=lambda chunk: _collect_delta([], chunk),
+    )
+
+    assert result.content is None
+    assert result.finish_reason == "length"
+    assert is_truncated_finish_reason(result.finish_reason) is True
+
+
+@pytest.mark.asyncio
+async def test_streaming_chat_reports_natural_stop_finish_reason_from_fake_stream(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    stream = _FakeStream(
+        [
+            SimpleNamespace(
+                choices=[SimpleNamespace(delta=SimpleNamespace(content="完整回复"))]
+            ),
+            SimpleNamespace(
+                choices=[SimpleNamespace(delta=None, finish_reason="stop")]
+            ),
+        ]
+    )
+    fake = _FakeClient([stream])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    result = await provider.chat(
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[],
+        model="m",
+        max_tokens=10,
+        on_content_delta=lambda chunk: _collect_delta([], chunk),
+    )
+
+    assert result.content == "完整回复"
+    assert result.finish_reason == "stop"
+    assert is_truncated_finish_reason(result.finish_reason) is False
+
+
+@pytest.mark.asyncio
+async def test_non_streaming_tool_call_parse_failure_logs_context_then_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    """A complete-but-malformed tool call payload (finish_reason="stop")
+    must log model/finish_reason/raw arguments before re-raising - the
+    existing raise-on-failure behaviour for tool call parsing is
+    unchanged, only now it leaves a diagnosable trail."""
+    fake = _FakeClient(
+        [
+            _Response(
+                content=None,
+                tool_calls=[_RawToolCall("1", "search", "{not valid json")],
+                finish_reason="stop",
+            )
+        ]
+    )
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(json.JSONDecodeError):
+            await provider.chat(
+                messages=[], tools=[{"type": "function"}], model="m", max_tokens=10
+            )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("finish_reason=stop" in message for message in messages)
+    assert any("model=m" in message for message in messages)
+    assert any("{not valid json" in message for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_streaming_tool_call_parse_failure_logs_truncation_context(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    """Same failure, streaming path: arguments cut off mid-JSON by a
+    max_tokens ceiling (finish_reason="length") must log that distinction
+    too before re-raising."""
+    stream = _FakeStream(
+        [
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    id="1",
+                                    function=SimpleNamespace(
+                                        name="search", arguments='{"q": "cut off'
+                                    ),
+                                )
+                            ],
+                        )
+                    )
+                ]
+            ),
+            SimpleNamespace(
+                choices=[SimpleNamespace(delta=None, finish_reason="length")]
+            ),
+        ]
+    )
+    fake = _FakeClient([stream])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(json.JSONDecodeError):
+            await provider.chat(
+                messages=[{"role": "user", "content": "hi"}],
+                tools=[{"type": "function"}],
+                model="m",
+                max_tokens=10,
+                on_content_delta=lambda chunk: _collect_delta([], chunk),
+            )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("finish_reason=length" in message for message in messages)
+    assert any('{"q": "cut off' in message for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_tool_call_parse_failure_log_redacts_and_caps_raw_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    """The raw arguments logged on a tool-call parse failure must not leak
+    credential-shaped substrings or flood the log with unbounded text."""
+    leaked_key = "sk-" + "b" * 40
+    raw_arguments = "{" + leaked_key + " " + "y" * 1000
+    fake = _FakeClient(
+        [
+            _Response(
+                content=None,
+                tool_calls=[_RawToolCall("1", "search", raw_arguments)],
+                finish_reason="stop",
+            )
+        ]
+    )
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(json.JSONDecodeError):
+            await provider.chat(
+                messages=[], tools=[{"type": "function"}], model="m", max_tokens=10
+            )
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert leaked_key not in logged
+    assert "REDACTED" in logged
+    assert raw_arguments not in logged
