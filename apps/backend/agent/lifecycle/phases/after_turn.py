@@ -267,6 +267,7 @@ class _DispatchOutboundModule:
                     thinking=outbound.thinking,
                     metadata=outbound.metadata,
                     media=outbound.media,
+                    committed_message_id=outbound.committed_message_id,
                 )
             )
         return frame

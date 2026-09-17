@@ -1599,6 +1599,55 @@ async def test_after_reasoning_collects_persist_and_outbound_slots():
 
 
 @pytest.mark.asyncio
+async def test_after_reasoning_carries_the_persisted_assistant_message_id_into_outbound(
+    tmp_path: Path,
+):
+    """Pins the load-bearing assumption behind #305's fix: after append_messages
+
+    actually commits the assistant reply, the outbound message it builds must
+    carry that exact row's id as ``committed_message_id``. Without this, every
+    delivery mark silently stops writing anywhere (mark_delivery treats a
+    missing id as "nothing to mark" and returns None) — a regression that
+    produces no error and fails no assertion unless something checks for the
+    id explicitly.
+
+    Uses a real SessionManager/SQLite store (not a mock) so the assertion
+    exercises the actual id-assignment mutation in
+    ``_persist_messages``/``msg.update(row)``, not a stand-in.
+    """
+    session_manager = SessionManager(tmp_path)
+    session_key = "telegram:123"
+    session = session_manager.get_or_create(session_key)
+    msg = _inbound()
+    state = TurnState(msg=msg, session_key=session_key, dispatch_outbound=True)
+    state.session = session
+    services = SimpleNamespace(
+        presence=None,
+        session_manager=session_manager,
+    )
+    turn_result = TurnRunResult(
+        reply="reply",
+        tool_chain=[],
+        tools_used=[],
+        thinking=None,
+        streamed=False,
+        context_retry={},
+    )
+    phase = Phase(
+        default_after_reasoning_modules(EventBus(), cast(Any, services)),
+        frame_factory=AfterReasoningFrame,
+    )
+
+    result = await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
+
+    persisted_assistant = next(
+        message for message in session.messages if message["role"] == "assistant"
+    )
+    assert persisted_assistant["id"]
+    assert result.outbound.committed_message_id == persisted_assistant["id"]
+
+
+@pytest.mark.asyncio
 async def test_after_reasoning_persists_delivered_media_without_resending_it():
     bus = EventBus()
 

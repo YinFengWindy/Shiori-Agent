@@ -79,16 +79,18 @@ class _SessionManager:
         )
         return session
 
-    def mark_latest_assistant_delivery(
+    def mark_message_delivery(
         self,
         session_key: str,
         *,
+        message_id: str,
         thread_id: str = "",
         delivery_status: str,
         external_message_id: str = "",
     ):
         payload = {
             "session_key": session_key,
+            "message_id": message_id,
             "thread_id": thread_id,
             "delivery_status": delivery_status,
             "external_message_id": external_message_id,
@@ -783,6 +785,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
                 "session_key_override": "role:mira",
                 "thread_id": "thread:mira:telegram:123",
             },
+            committed_message_id="role:mira:0",
         )
     )
     mod.send_thinking_block.assert_awaited_once()
@@ -820,6 +823,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert bus.outbound == []
     assert {
         "session_key": "role:mira",
+        "message_id": "role:mira:0",
         "thread_id": "thread:mira:telegram:123",
         "delivery_status": "sent",
         "external_message_id": "",
@@ -987,6 +991,7 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
                 "role_id": "mira",
                 "thread_id": "thread:mira:qq:gqq:100",
             },
+            committed_message_id="role:mira:0",
         )
     )
     assert channel._api.calls
@@ -1011,6 +1016,7 @@ async def test_qq_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert bus.outbound == []
     assert {
         "session_key": "role:mira",
+        "message_id": "role:mira:0",
         "thread_id": "thread:mira:qq:gqq:100",
         "delivery_status": "sent",
         "external_message_id": "",
@@ -1342,11 +1348,13 @@ async def test_qq_channel_records_failed_delivery_status(
                     "role_id": "mira",
                     "thread_id": "thread:mira:qq:1",
                 },
+                committed_message_id="role:mira:0",
             )
         )
 
     assert session_manager.delivery_updates[-1] == {
         "session_key": "role:mira",
+        "message_id": "role:mira:0",
         "thread_id": "thread:mira:qq:1",
         "delivery_status": "failed",
         "external_message_id": "",

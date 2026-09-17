@@ -85,6 +85,7 @@ def test_channel_hub_marks_delivery_by_role_session(tmp_path: Path) -> None:
         thread_id="thread:mira:telegram:123",
     )
     session_manager.save(session)
+    committed_message_id = str(session.messages[-1]["id"])
     hub = ChannelHub(service)
 
     updated = hub.mark_delivery(
@@ -97,6 +98,7 @@ def test_channel_hub_marks_delivery_by_role_session(tmp_path: Path) -> None:
                 "session_key_override": "role:mira",
                 "thread_id": str(routed.metadata["thread_id"]),
             },
+            committed_message_id=committed_message_id,
         ),
         default_channel="telegram",
         delivery_status="sent",
@@ -104,8 +106,140 @@ def test_channel_hub_marks_delivery_by_role_session(tmp_path: Path) -> None:
     )
 
     assert updated is not None
+    assert updated["id"] == committed_message_id
     assert updated["delivery_status"] == "sent"
     assert updated["external_message_id"] == "tg-1"
+
+
+def test_channel_hub_skips_delivery_mark_when_outbound_has_no_committed_message(
+    tmp_path: Path,
+) -> None:
+    """Regresses the #305 incident: a fallback outbound message built from reused
+
+    inbound metadata (no reference to any persisted row, e.g. the "处理消息时出错，
+    请稍后再试。" turn-failure notice) must never fall back to guessing "the
+    thread's latest assistant message" and must leave that unrelated, already
+    delivered message's bookkeeping untouched.
+    """
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    role = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="bound role",
+        system_prompt="you are mira",
+    ).role
+    _ = service.bindings.bind("telegram", "123", role.id, contact_id="u1")
+    routed = ChannelHub(service).route_inbound(
+        InboundMessage(
+            channel="telegram",
+            sender="u1",
+            chat_id="123",
+            content="hello",
+        )
+    )
+    thread_id = str(routed.metadata["thread_id"])
+    session = session_manager.get_or_create(routed.session_key)
+    # An unrelated, already-delivered proactive push sitting as the thread's
+    # latest assistant message when the failed turn's fallback fires later.
+    session.add_message("assistant", "unrelated proactive push", thread_id=thread_id)
+    session_manager.save(session)
+    unrelated_message_id = str(session.messages[-1]["id"])
+    hub = ChannelHub(service)
+    baseline = hub.mark_delivery(
+        OutboundMessage(
+            channel="telegram",
+            chat_id="123",
+            content="unrelated proactive push",
+            metadata={
+                "role_id": "mira",
+                "session_key_override": "role:mira",
+                "thread_id": thread_id,
+            },
+            committed_message_id=unrelated_message_id,
+        ),
+        default_channel="telegram",
+        delivery_status="sent",
+        external_message_id="tg-earlier",
+    )
+    assert baseline is not None
+    assert baseline["delivery_status"] == "sent"
+    assert baseline["external_message_id"] == "tg-earlier"
+
+    # A later turn fails; its control-path fallback reuses the inbound
+    # message's metadata (role_id/thread_id/session_key_override) but was
+    # never persisted, so it carries no committed_message_id.
+    fallback = OutboundMessage(
+        channel="telegram",
+        chat_id="123",
+        content="处理消息时出错，请稍后再试。",
+        metadata={
+            "role_id": "mira",
+            "session_key_override": "role:mira",
+            "thread_id": thread_id,
+        },
+    )
+
+    result = hub.mark_delivery(
+        fallback,
+        default_channel="telegram",
+        delivery_status="sent",
+        external_message_id="tg-inbound-id",
+    )
+
+    assert result is None
+    after = session_manager._store.get_message(unrelated_message_id)
+    assert after is not None
+    assert after["delivery_status"] == "sent"
+    assert after["external_message_id"] == "tg-earlier"
+
+
+def test_channel_hub_skips_delivery_mark_without_running_thread_validation(
+    tmp_path: Path,
+) -> None:
+    """The missing-committed-id early return must run before any thread checks.
+
+    A channel outbound's ``finally`` block calls ``mark_delivery`` unguarded by
+    a ``try``, so a ``ValueError`` raised from thread validation would escape
+    straight out of the send path. A fallback message with no
+    ``committed_message_id`` has nothing to mark regardless of whether its
+    metadata even carries a usable thread_id, so it must return ``None``
+    quietly instead of ever reaching those validations.
+    """
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    role = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="bound role",
+        system_prompt="you are mira",
+    ).role
+    _ = service.bindings.bind("telegram", "123", role.id, contact_id="u1")
+    hub = ChannelHub(service)
+
+    # No committed_message_id and no thread_id metadata at all: a full-blown
+    # thread validation would raise ValueError("出站消息缺少 thread_id"), but
+    # since there is nothing to mark, mark_delivery must short-circuit first.
+    result = hub.mark_delivery(
+        OutboundMessage(
+            channel="telegram",
+            chat_id="123",
+            content="处理消息时出错，请稍后再试。",
+            metadata={"role_id": role.id},
+        ),
+        default_channel="telegram",
+        delivery_status="sent",
+    )
+
+    assert result is None
 
 
 def test_channel_hub_marks_archived_external_messages_as_duplicates(

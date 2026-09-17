@@ -548,6 +548,10 @@ class PassiveTurnPipeline:
         if state.dispatch_outbound:
             metadata = dict(state.msg.metadata or {})
             metadata.update(outbound.metadata or {})
+            # No special-casing needed for the error/abort fallback paths that call
+            # this helper: their OutboundMessage never carries a committed_message_id
+            # (nothing was persisted), so it naturally stays unset here too, and
+            # mark_delivery skips writing a delivery mark for them downstream.
             _ = await self._outbound_port.dispatch(
                 OutboundDispatch(
                     channel=outbound.channel,
@@ -556,6 +560,7 @@ class PassiveTurnPipeline:
                     thinking=outbound.thinking,
                     metadata=metadata,
                     media=outbound.media,
+                    committed_message_id=outbound.committed_message_id,
                 )
             )
         return outbound

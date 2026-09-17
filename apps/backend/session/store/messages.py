@@ -489,51 +489,49 @@ class _MessageMixin:
             raise RuntimeError("消息媒体更新后无法重新读取")
         return updated
 
-    def update_latest_assistant_delivery(
+    def update_message_delivery(
         self,
-        session_key: str,
+        message_id: str,
         *,
-        thread_id: str = "",
+        session_key: str,
+        thread_id: str,
         delivery_status: str,
         external_message_id: str = "",
     ) -> dict[str, Any] | None:
-        clean_session_key = str(session_key or "").strip()
-        clean_thread_id = str(thread_id or "").strip()
+        """Writes delivery bookkeeping to exactly one message row.
+
+        This never guesses which row to touch: it refuses to write (returns
+        ``None``) unless ``message_id`` both exists and belongs to the
+        expected session/thread, so a stray or unset id can never tag an
+        unrelated message.
+
+        `session_key` and `thread_id` are required and compared
+        unconditionally, and both checks reject on mismatch rather than
+        falling through to a write. They deliberately carry no default: an
+        optional guard is one a caller can skip without noticing while still
+        reading the promise above, which is the exact shape of the bug this
+        method exists to prevent (#305).
+        """
+        clean_message_id = str(message_id or "").strip()
         clean_status = str(delivery_status or "").strip()
         clean_external_id = str(external_message_id or "").strip()
-        if not clean_session_key or not clean_status:
+        clean_session_key = str(session_key or "").strip()
+        clean_thread_id = str(thread_id or "").strip()
+        if not clean_message_id or not clean_status:
             return None
         with self._lock:
-            if clean_thread_id:
-                row = self._conn.execute(
-                    """
-                    SELECT id
-                    FROM messages
-                    WHERE session_key = ?
-                      AND role = 'assistant'
-                      AND thread_id = ?
-                    ORDER BY seq DESC
-                    LIMIT 1
-                    """,
-                    (clean_session_key, clean_thread_id),
-                ).fetchone()
-            else:
-                row = self._conn.execute(
-                    """
-                    SELECT id
-                    FROM messages
-                    WHERE session_key = ?
-                      AND role = 'assistant'
-                    ORDER BY seq DESC
-                    LIMIT 1
-                    """,
-                    (clean_session_key,),
-                ).fetchone()
-            if row is None:
-                return None
-            message_id = str(row["id"])
+            row = self._conn.execute(
+                "SELECT session_key, thread_id FROM messages WHERE id = ?",
+                (clean_message_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        if str(row["session_key"] or "") != clean_session_key:
+            return None
+        if str(row["thread_id"] or "") != clean_thread_id:
+            return None
         return self.update_message(
-            message_id,
+            clean_message_id,
             delivery_status=clean_status,
             external_message_id=clean_external_id or None,
         )

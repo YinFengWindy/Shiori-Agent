@@ -21,20 +21,33 @@ class _ProjectionMixin:
             if thread is not None:
                 self._conversation_projector.project_thread(thread)
 
-    def mark_latest_assistant_delivery(
+    def mark_message_delivery(
         self,
         session_key: str,
         *,
-        thread_id: str = "",
+        message_id: str,
+        thread_id: str,
         delivery_status: str,
         external_message_id: str = "",
     ) -> dict[str, Any] | None:
-        updated = self._store.update_latest_assistant_delivery(
-            session_key,
+        """Writes delivery bookkeeping to exactly the committed message it belongs to.
+
+        This never falls back to "the thread's newest assistant message": if
+        ``message_id`` is missing or does not belong to this session/thread,
+        nothing is written.
+        """
+        updated = self._store.update_message_delivery(
+            message_id,
+            session_key=session_key,
             thread_id=thread_id,
             delivery_status=delivery_status,
             external_message_id=external_message_id,
         )
+        return self._sync_cached_message_delivery(session_key, updated)
+
+    def _sync_cached_message_delivery(
+        self, session_key: str, updated: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
         if updated is None:
             return None
         session = self._cache.get(session_key)
