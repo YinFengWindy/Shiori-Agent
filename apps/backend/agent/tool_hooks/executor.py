@@ -51,11 +51,13 @@ class ToolExecutor:
 
         try:
             # pre_hook 是唯一允许改输入/直接 deny 的阶段。
-            denied_reason, current_arguments = await self._run_pre_hooks(
-                request=request,
-                current_arguments=current_arguments,
-                extra_messages=extra_messages,
-                traces=pre_trace,
+            denied_reason, denied_finalize, current_arguments = (
+                await self._run_pre_hooks(
+                    request=request,
+                    current_arguments=current_arguments,
+                    extra_messages=extra_messages,
+                    traces=pre_trace,
+                )
             )
         except HookExecutionError as exc:
             return ToolExecutionResult(
@@ -75,6 +77,7 @@ class ToolExecutor:
                 extra_messages=extra_messages,
                 pre_hook_trace=pre_trace,
                 post_hook_trace=post_trace,
+                finalize=denied_finalize,
             )
 
         try:
@@ -151,11 +154,13 @@ class ToolExecutor:
         extra_messages: list[str] = []
         pre_trace: list[HookTraceItem] = []
         try:
-            denied_reason, current_arguments = await self._run_pre_hooks(
-                request=request,
-                current_arguments=current_arguments,
-                extra_messages=extra_messages,
-                traces=pre_trace,
+            denied_reason, denied_finalize, current_arguments = (
+                await self._run_pre_hooks(
+                    request=request,
+                    current_arguments=current_arguments,
+                    extra_messages=extra_messages,
+                    traces=pre_trace,
+                )
             )
         except HookExecutionError as exc:
             return ToolExecutionResult(
@@ -172,6 +177,7 @@ class ToolExecutor:
                 final_arguments=dict(current_arguments),
                 extra_messages=extra_messages,
                 pre_hook_trace=pre_trace,
+                finalize=denied_finalize,
             )
         return ToolExecutionResult(
             status="success",
@@ -188,7 +194,7 @@ class ToolExecutor:
         current_arguments: dict[str, Any],
         extra_messages: list[str],
         traces: list[HookTraceItem],
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[str, bool, dict[str, Any]]:
         for hook in self._hooks:
             if hook.event != "pre_tool_use":
                 continue
@@ -226,12 +232,13 @@ class ToolExecutor:
                     decision=outcome.decision,
                     reason=outcome.reason,
                     extra_message=outcome.extra_message,
+                    finalize=outcome.finalize,
                 )
             )
             if outcome.decision == "deny":
                 reason = outcome.reason.strip() or "工具调用被拦截"
-                return reason, current_arguments
-        return "", current_arguments
+                return reason, outcome.finalize, current_arguments
+        return "", False, current_arguments
 
     async def _run_post_hooks(
         self,

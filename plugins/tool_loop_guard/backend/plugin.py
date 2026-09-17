@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Any, cast
 from agent.lifecycle.types import PreToolCtx
 from agent.tool_hooks import HookOutcome
 
+from .config import ToolLoopGuardConfig
+
 if TYPE_CHECKING:
     from agent.plugin_host.runtime_context import PluginRuntimeContext
 
-_DEFAULT_REPEAT_LIMIT = 3
-_DENY_PREFIX = "tool_loop_guard:"
 _EXCLUDED_TOOLS = frozenset({"task_output", "task_stop"})
 
 
@@ -43,10 +43,11 @@ class _ToolLoopGuard:
             return None
         return HookOutcome(
             decision="deny",
-            reason=(
-                f"{_DENY_PREFIX}连续重复调用工具 "
-                f"{state.repeat_count} 次，已截断并进入收尾。"
-            ),
+            reason=(f"连续重复调用工具 {state.repeat_count} 次，已截断并进入收尾。"),
+            # 结构化收尾意图（见 agent.tool_hooks.HookOutcome.finalize）：宿主
+            # 靠这个字段截断剩余批次并进入既有总结流程，不再靠 reason 前缀
+            # 猜插件身份——任何插件都能用同一个字段表达"该收尾了"。
+            finalize=True,
         )
 
     def _state_key(self, event: PreToolCtx) -> str:
@@ -91,14 +92,15 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     因此旧 self.context.config 恒为 None，repeat_limit 实际上永远是这里的硬编码默认值 3，
     用户在 [plugins.tool_loop_guard] 里配置的 repeat_limit 从未生效过。迁移到 v2 后
     ctx.config 读的是 PluginConfig(services.plugin_configs[id])，配置现在真的会生效
-    （见 tests/plugins/tool_loop_guard/test_plugin.py 的
+    （见 plugins/tool_loop_guard/tests/test_plugin.py 的
     test_repeat_limit_config_actually_takes_effect_after_v2_migration）。
     这是修正一个既有 bug，不是刻意的新行为，默认值仍是 3。
+
+    #239：manifest 现在声明了 config_model（``ToolLoopGuardConfig``），所以这里
+    不再需要 try/except 的临时兜底——非法配置（非整数、或 < 2）直接在这里
+    model_validate 失败并抛出，由插件加载诊断呈现，不再被静默改写为默认值
+    （与 novelai 的 ``NovelAIConfig.model_validate(ctx.config.as_dict())`` 用法一致）。
     """
-    raw_limit = ctx.config.get("repeat_limit", _DEFAULT_REPEAT_LIMIT)
-    try:
-        repeat_limit = max(2, int(raw_limit))
-    except (TypeError, ValueError):
-        repeat_limit = _DEFAULT_REPEAT_LIMIT
-    guard = _ToolLoopGuard(repeat_limit)
+    config = ToolLoopGuardConfig.model_validate(ctx.config.as_dict())
+    guard = _ToolLoopGuard(config.repeat_limit)
     ctx.tool_hooks.add_handler(guard.detect_repeated_tool_call)

@@ -5,7 +5,12 @@ from typing import Any
 
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.executor import ToolExecutor
-from agent.tool_hooks.types import HookContext, HookOutcome, ToolExecutionRequest
+from agent.tool_hooks.finalize import is_finalize_denial
+from agent.tool_hooks.types import (
+    HookContext,
+    HookOutcome,
+    ToolExecutionRequest,
+)
 
 
 class _SpyHook(ToolHook):
@@ -89,6 +94,67 @@ def test_tool_executor_denied_is_not_error() -> None:
 
     assert result.status == "denied"
     assert result.output == "blocked"
+    # 普通 deny：HookOutcome 没有设置 finalize，结果和 trace 都保持默认 False，
+    # 不能被误判为结构化收尾意图（#239 AC2）。
+    assert result.finalize is False
+    assert result.pre_hook_trace[0].finalize is False
+    assert is_finalize_denial(result) is False
+
+
+def test_tool_executor_deny_with_finalize_propagates_onto_result_and_trace() -> None:
+    """#239：任意 hook 都能用 HookOutcome.finalize 表达结构化收尾意图，
+    ToolExecutor 把它原样透传到 ToolExecutionResult 和 HookTraceItem 上，
+    而不是让宿主靠 reason 字符串前缀猜插件身份。"""
+    hook = _SpyHook(
+        name="plugin:budget_watchdog:enforce",
+        event="pre_tool_use",
+        outcome=HookOutcome(decision="deny", reason="预算耗尽", finalize=True),
+    )
+    executor = ToolExecutor([hook])
+
+    result = asyncio.run(
+        executor.execute(
+            ToolExecutionRequest(
+                call_id="c1",
+                tool_name="dummy",
+                arguments={"x": 1},
+                source="passive",
+            ),
+            _invoke,
+        )
+    )
+
+    assert result.status == "denied"
+    assert result.output == "预算耗尽"
+    assert result.finalize is True
+    assert result.pre_hook_trace[0].finalize is True
+    assert is_finalize_denial(result) is True
+
+
+def test_preflight_propagates_finalize_from_a_deny_outcome() -> None:
+    """``preflight`` 走的是 deferred/unlocked 工具那条分支，同样必须透传
+    finalize，宿主的截断判断在两条分支上一致。"""
+    hook = _SpyHook(
+        name="plugin:budget_watchdog:enforce",
+        event="pre_tool_use",
+        outcome=HookOutcome(decision="deny", reason="预算耗尽", finalize=True),
+    )
+    executor = ToolExecutor([hook])
+
+    result = asyncio.run(
+        executor.preflight(
+            ToolExecutionRequest(
+                call_id="c1",
+                tool_name="dummy",
+                arguments={"x": 1},
+                source="passive",
+            )
+        )
+    )
+
+    assert result.status == "denied"
+    assert result.finalize is True
+    assert is_finalize_denial(result) is True
 
 
 def test_tool_executor_post_hook_only_adds_extra_message() -> None:
