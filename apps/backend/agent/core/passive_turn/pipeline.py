@@ -12,6 +12,7 @@ from agent.lifecycle.phase import Phase
 from agent.lifecycle.phases.after_reasoning import (
     AfterReasoningFrame,
     default_after_reasoning_modules,
+    persist_pending_user_message,
 )
 from agent.lifecycle.phases.after_turn import AfterTurnFrame, default_after_turn_modules
 from agent.lifecycle.phases.before_reasoning import (
@@ -388,6 +389,15 @@ class PassiveTurnPipeline:
                 session = state.session
                 if session is None:
                     raise RuntimeError("Passive turn requires TurnState.session")
+                # 用户消息在进入 reasoning 之前先落库（issue #306）：格式非法、
+                # provider 报错、超出输入预算、回合取消等回复阶段失败都发生在
+                # 这一步之后，不会再导致用户这一轮消息从历史里消失。助手侧仍然
+                # 只在成功提交时落库，见 AfterReasoning 的 persist_asst /
+                # append_messages 与 formal_role_reply 的 mood-gated 原子提交。
+                with diagnostic_context(phase="persist_user_turn"):
+                    state.persisted_user_message = await persist_pending_user_message(
+                        state, self._session
+                    )
                 with diagnostic_context(phase="reasoner"):
                     turn_result = await self._reasoner.run_turn(
                         msg=msg,
@@ -410,6 +420,21 @@ class PassiveTurnPipeline:
                     )
                 )
             except MemoryConsolidationFailedError:
+                # before_turn 的 _MemoryContextGuardModule 在有粘滞的记忆整理失败
+                # 记录时，会在我们进入 reasoning 前的早落库步骤之前就抛出——此时
+                # state.persisted_user_message 还是 None。这里补一次同一个早落库
+                # 函数（幂等：persisted_user_message 非 None 说明是 reasoner 内部
+                # 超限触发的同名异常，早落库已经在调用 reasoner.run_turn() 前完成，
+                # 不需要也不应该再写一次），再让异常继续传播。session 由 before_turn
+                # 的 acquire_session 模块最先产出，因此即使异常来自 before_turn
+                # 自身，这里 session 也已经可用；持久化发生在 before_turn 整条链
+                # 已经跑完（失败）之后，不会影响 _MemoryContextGuardModule 自己的
+                # pending/token 计数（它统计 session.messages 时这条消息还不存在）。
+                if state.session is not None and state.persisted_user_message is None:
+                    with diagnostic_context(phase="persist_user_turn"):
+                        state.persisted_user_message = (
+                            await persist_pending_user_message(state, self._session)
+                        )
                 raise
             except Exception as exc:
                 logger.exception(

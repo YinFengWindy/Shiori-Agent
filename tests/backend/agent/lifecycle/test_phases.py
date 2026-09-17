@@ -1599,6 +1599,55 @@ async def test_after_reasoning_collects_persist_and_outbound_slots():
 
 
 @pytest.mark.asyncio
+async def test_after_reasoning_skips_duplicate_persist_for_already_persisted_user_message():
+    """Issue #306: persist_pending_user_message() 在 reasoning 前把用户消息落库后，
+    AfterReasoning 的 persist_user 步骤不应再写一条重复的用户消息——只应该原地
+    补写 llm_user_content 等 reasoning 成功后才可得的字段。"""
+    from agent.lifecycle.phases.after_reasoning import persist_pending_user_message
+
+    session = _DummySession("telegram:123")
+    msg = _inbound()
+    state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=True)
+    state.session = session
+    services = SimpleNamespace(
+        presence=Mock(),
+        session_manager=SimpleNamespace(append_messages=AsyncMock()),
+    )
+
+    # 模拟 PassiveTurnPipeline.run() 在调用 reasoner.run_turn() 前的早落库。
+    persisted = await persist_pending_user_message(state, cast(Any, services))
+    state.persisted_user_message = persisted
+    assert persisted is not None
+    assert len(session.messages) == 1
+    assert session.messages[0]["role"] == "user"
+    services.presence.record_user_message.assert_called_once_with("telegram:123")
+
+    turn_result = TurnRunResult(
+        reply="reply",
+        tool_chain=[],
+        tools_used=[],
+        thinking=None,
+        streamed=False,
+        context_retry={"llm_user_content": "rendered user turn"},
+    )
+    phase = Phase(
+        default_after_reasoning_modules(EventBus(), cast(Any, services)),
+        frame_factory=AfterReasoningFrame,
+    )
+
+    await phase.run(AfterReasoningInput(state=state, turn_result=turn_result))
+
+    # 没有重复写入：仍然只有一条 user + 一条 assistant。
+    assert len(session.messages) == 2
+    assert session.messages[0]["role"] == "user"
+    assert session.messages[1]["role"] == "assistant"
+    # reasoning 成功后原地补写 llm_user_content。
+    assert session.messages[0]["llm_user_content"] == "rendered user turn"
+    # presence 只在早落库阶段调用一次，AfterReasoning 不应重复调用。
+    services.presence.record_user_message.assert_called_once_with("telegram:123")
+
+
+@pytest.mark.asyncio
 async def test_after_reasoning_persists_delivered_media_without_resending_it():
     bus = EventBus()
 

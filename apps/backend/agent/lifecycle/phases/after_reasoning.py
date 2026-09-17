@@ -22,6 +22,7 @@ from agent.lifecycle.types import (
     AfterReasoningCtx,
     AfterReasoningInput,
     AfterReasoningResult,
+    TurnState,
 )
 from bus.event_bus import EventBus
 from bus.events import OutboundMessage
@@ -178,6 +179,84 @@ class _EmitAfterReasoningCtxModule:
         return frame
 
 
+async def persist_pending_user_message(
+    state: TurnState,
+    session_services: "SessionServices",
+) -> dict[str, Any] | None:
+    """在进入 reasoning 前落库用户消息，返回持久化后的消息对象（省略时返回 None）。
+
+    Issue #306：用户消息此前只在 AfterReasoning 的 persist_user 步骤落库，一旦
+    reasoning/回复阶段失败（格式非法、provider 报错、超出输入预算、回合取消）
+    pipeline 会提前返回、跳过整条 AfterReasoning 链，用户这句话就从历史里彻底
+    消失。这里把落库提前到调用 reasoner.run_turn() 之前：无论后续如何失败，
+    用户消息都已经落库；助手侧仍然只在成功生成回复后才提交（formal_role_reply
+    的 mood-gated 原子提交、以及非 formal 路径下 _AppendMessagesModule 的失败
+    回滚，都只覆盖助手消息，不会把这里落库的用户消息一并撤销）。
+
+    与 _PersistUserMessageModule 默认路径的唯一差异：这里拿不到 llm_user_content /
+    llm_context_frame（reasoner 还没跑出 prompt render 结果）和插件通过
+    persist:user:* 贡献的字段。reasoning 成功后 _PersistUserMessageModule 会
+    原地补写这些字段；缺失 llm_user_content 时 session.get_history() 按
+    content+media 重建，不是致命问题（desktop chat.send 的早落库路径
+    persist_desktop_user_message 已经是同样的取舍）。
+
+    通过 TurnState.persisted_user_message 做幂等标记：reasoner.run_turn() 内部的
+    安全重试循环可能对同一个 msg 多次进入 attempt，但本函数只在 pipeline 里对
+    每个 turn 调用一次，因此不会重复落库。
+    """
+    msg = state.msg
+    raw_session = state.session
+    if raw_session is None:
+        raise RuntimeError("persist_pending_user_message requires TurnState.session")
+    session = cast("Session", raw_session)
+    omit_user_turn = bool((msg.metadata or {}).get("omit_user_turn"))
+    if omit_user_turn:
+        return None
+
+    if session_services.presence:
+        session_services.presence.record_user_message(session.key)
+    relationship_runtime = getattr(session_services, "relationship_runtime", None)
+    if relationship_runtime is not None:
+        relationship_runtime.handle_user_message(session.key)
+
+    user_kwargs: dict[str, object] = {
+        "metadata": _build_synced_message_metadata(
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            metadata=msg.metadata,
+        )
+    }
+    user_kwargs.update(
+        _copy_conversation_message_fields(
+            metadata=cast(dict[str, Any] | None, msg.metadata),
+            session=session,
+        )
+    )
+    persisted_user_content = msg.metadata.get(_PERSISTED_USER_CONTENT_METADATA_KEY)
+    user_content = (
+        persisted_user_content
+        if isinstance(persisted_user_content, str)
+        else msg.content
+    )
+    session.add_message(
+        "user",
+        user_content,
+        media=msg.media if msg.media else None,
+        **user_kwargs,
+    )
+    persisted_message = session.messages[-1]
+    try:
+        await session_services.session_manager.append_messages(
+            session, [persisted_message]
+        )
+    except BaseException:
+        session.messages[:] = [
+            message for message in session.messages if message is not persisted_message
+        ]
+        raise
+    return persisted_message
+
+
 class _PersistUserMessageModule:
     slot = "after_reasoning.persist_user"
     requires = ("after_reasoning.emit", _CTX_SLOT)
@@ -195,6 +274,21 @@ class _PersistUserMessageModule:
         session = cast("Session", raw_session)
         omit_user_turn = bool((msg.metadata or {}).get("omit_user_turn"))
         if omit_user_turn:
+            return frame
+        persisted_early = state.persisted_user_message
+        if persisted_early is not None:
+            # 用户消息已经在 persist_pending_user_message() 落库（见
+            # PassiveTurnPipeline.run 在调用 reasoner.run_turn() 前的早落库步骤）。
+            # 这里只原地补写 reasoning 成功后才可得的字段，不重复写入、也不把它
+            # 拖进助手侧的私有 draft / mood-gated 原子提交——失败回滚只应撤销
+            # 助手消息，不应牵连已经落库的用户消息。
+            llm_user_content = ctx.context_retry.get("llm_user_content")
+            if isinstance(llm_user_content, (str, list)):
+                persisted_early["llm_user_content"] = llm_user_content
+            llm_context_frame = ctx.context_retry.get("llm_context_frame")
+            if isinstance(llm_context_frame, str) and llm_context_frame.strip():
+                persisted_early["llm_context_frame"] = llm_context_frame
+            persisted_early.update(_collect_persist_user_slots(frame.slots))
             return frame
         if self._session_services.presence:
             self._session_services.presence.record_user_message(session.key)

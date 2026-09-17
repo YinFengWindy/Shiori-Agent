@@ -32,7 +32,7 @@ async def test_pipeline_early_exit_emits_one_error_and_releases_desktop_turn(
     )
     pipeline = PassiveTurnPipeline(
         AgentCoreDeps(
-            session=SimpleNamespace(session_manager=session_manager),
+            session=SimpleNamespace(session_manager=session_manager, presence=None),
             context_store=SimpleNamespace(
                 prepare=AsyncMock(return_value=ContextBundle())
             ),
@@ -54,11 +54,26 @@ async def test_pipeline_early_exit_emits_one_error_and_releases_desktop_turn(
 
     class _Loop:
         async def process_direct(
-            self, content, *, session_key, channel, chat_id, **_kwargs
+            self,
+            content,
+            *,
+            session_key,
+            channel,
+            chat_id,
+            omit_user_turn: bool = False,
+            **_kwargs,
         ):
+            # 真实 process_direct 会把 omit_user_turn 写进 metadata（见
+            # agent/looping/core/processing.py），这里同样透传，否则新增的
+            # 早落库步骤会在这个只测 abort/provider-error 早退路径的 stub 里
+            # 误把 user 消息落库。
             outbound = await pipeline.run(
                 InboundMessage(
-                    channel=channel, sender="user", chat_id=chat_id, content=content
+                    channel=channel,
+                    sender="user",
+                    chat_id=chat_id,
+                    content=content,
+                    metadata={"omit_user_turn": True} if omit_user_turn else {},
                 ),
                 session_key,
                 dispatch_outbound=False,

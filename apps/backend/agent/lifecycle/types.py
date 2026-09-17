@@ -32,6 +32,11 @@ class TurnState:
     dispatch_outbound: bool
     session: SessionLike | None = None
     extra_metadata: dict[str, Any] = field(default_factory=_empty_metadata)
+    # 由 PassiveTurnPipeline.run() 在进入 reasoning 前落库的用户消息（见
+    # agent.lifecycle.phases.after_reasoning.persist_pending_user_message）。
+    # 非 None 时，AfterReasoning 的 persist_user 步骤跳过重复写入，只补写
+    # llm_user_content 等 reasoning 成功后才可得的字段。
+    persisted_user_message: dict[str, Any] | None = None
 
 
 @dataclass

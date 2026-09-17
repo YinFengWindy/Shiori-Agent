@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from types import SimpleNamespace
 from typing import cast
@@ -20,6 +21,7 @@ from bus.event_bus import EventBus
 from bus.events import InboundMessage
 from agent.lifecycle.types import BeforeReasoningCtx, BeforeTurnCtx
 from agent.lifecycle.phases.before_turn import MemoryConsolidationFailedError
+from core.roles.reply_state import InvalidRoleReply
 from session.manager import SessionManager
 
 
@@ -466,6 +468,203 @@ async def test_reasoner_exception_turn_returns_control_outbound():
     dispatch_port.dispatch.assert_awaited_once()
     dispatched = dispatch_port.dispatch.await_args.args[0]
     assert dispatched.content == "处理消息时出错，请稍后再试。"
+    # Issue #306: provider 报错（reasoner.run_turn 抛错）不应把用户这句话从历史里丢掉，
+    # 即使这一轮角色没能回复。用户消息在进入 reasoning 前已经落库。
+    assert len(session.messages) == 1
+    assert session.messages[0]["role"] == "user"
+    assert session.messages[0]["content"] == "hi"
+
+
+@pytest.mark.asyncio
+async def test_reasoner_memory_budget_failure_still_persists_user_message():
+    """Issue #306: reasoner.run_turn 内部因超出输入预算抛出
+    MemoryConsolidationFailedError 时，用户消息也不应从历史里消失。"""
+    session = _DummySession("telegram:123")
+    context_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
+    context = SimpleNamespace(
+        render=MagicMock(return_value=SimpleNamespace(system_prompt="p", messages=[])),
+    )
+    tools = SimpleNamespace(set_context=MagicMock())
+    reasoner = SimpleNamespace(
+        run_turn=AsyncMock(
+            side_effect=MemoryConsolidationFailedError(
+                "记忆整理后输入仍超过预算，已停止发送超限上下文。"
+            )
+        ),
+    )
+
+    agent_core = AgentCore(
+        AgentCoreDeps(
+            session=cast(
+                SessionServices,
+                SimpleNamespace(
+                    session_manager=SimpleNamespace(
+                        get_or_create=MagicMock(return_value=session),
+                        peek_next_message_id=MagicMock(return_value="telegram:123:0"),
+                        append_messages=AsyncMock(),
+                    ),
+                    presence=None,
+                ),
+            ),
+            context_store=cast(ContextStore, context_store),
+            context=cast(ContextBuilder, context),
+            tools=cast(ToolRegistry, tools),
+            reasoner=cast(Reasoner, reasoner),
+        )
+    )
+    msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
+
+    with pytest.raises(MemoryConsolidationFailedError):
+        await agent_core.process(msg, "telegram:123", dispatch_outbound=False)
+
+    assert len(session.messages) == 1
+    assert session.messages[0]["role"] == "user"
+    assert session.messages[0]["content"] == "hi"
+
+
+@pytest.mark.asyncio
+async def test_reasoner_cancelled_turn_still_persists_user_message():
+    """Issue #306: 回合被取消（reasoner.run_turn 抛 CancelledError）时，
+    用户消息也不应从历史里消失。"""
+    session = _DummySession("telegram:123")
+    context_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
+    context = SimpleNamespace(
+        render=MagicMock(return_value=SimpleNamespace(system_prompt="p", messages=[])),
+    )
+    tools = SimpleNamespace(set_context=MagicMock())
+    reasoner = SimpleNamespace(run_turn=AsyncMock(side_effect=asyncio.CancelledError()))
+
+    agent_core = AgentCore(
+        AgentCoreDeps(
+            session=cast(
+                SessionServices,
+                SimpleNamespace(
+                    session_manager=SimpleNamespace(
+                        get_or_create=MagicMock(return_value=session),
+                        peek_next_message_id=MagicMock(return_value="telegram:123:0"),
+                        append_messages=AsyncMock(),
+                    ),
+                    presence=None,
+                ),
+            ),
+            context_store=cast(ContextStore, context_store),
+            context=cast(ContextBuilder, context),
+            tools=cast(ToolRegistry, tools),
+            reasoner=cast(Reasoner, reasoner),
+        )
+    )
+    msg = InboundMessage(channel="telegram", sender="hua", chat_id="123", content="hi")
+
+    with pytest.raises(asyncio.CancelledError):
+        await agent_core.process(msg, "telegram:123", dispatch_outbound=False)
+
+    assert len(session.messages) == 1
+    assert session.messages[0]["role"] == "user"
+    assert session.messages[0]["content"] == "hi"
+
+
+@pytest.mark.asyncio
+async def test_invalid_role_reply_still_persists_user_message():
+    """Issue #306 复现原始事故：formal_role_reply 缺少已生成的心情/想法状态时
+    AfterReasoning 的 build_ctx 会抛 InvalidRoleReply（"格式非法"），此前会连带
+    丢掉用户这句话——用户早落库后不应再受影响。"""
+    session = _DummySession("role:mira")
+    context_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
+    context = SimpleNamespace(
+        render=MagicMock(return_value=SimpleNamespace(system_prompt="p", messages=[])),
+    )
+    tools = SimpleNamespace(set_context=MagicMock())
+    reasoner = SimpleNamespace(
+        run_turn=AsyncMock(
+            return_value=TurnRunResult(
+                reply="reply text",
+                context_retry={"formal_role_reply": True},
+                role_reply=None,
+            )
+        )
+    )
+
+    agent_core = AgentCore(
+        AgentCoreDeps(
+            session=cast(
+                SessionServices,
+                SimpleNamespace(
+                    session_manager=SimpleNamespace(
+                        get_or_create=MagicMock(return_value=session),
+                        peek_next_message_id=MagicMock(return_value="role:mira:0"),
+                        append_messages=AsyncMock(),
+                    ),
+                    presence=None,
+                ),
+            ),
+            context_store=cast(ContextStore, context_store),
+            context=cast(ContextBuilder, context),
+            tools=cast(ToolRegistry, tools),
+            reasoner=cast(Reasoner, reasoner),
+        )
+    )
+    msg = InboundMessage(
+        channel="qqbot",
+        sender="yinfeng",
+        chat_id="mira",
+        content="在开会捏，昨天12点睡的",
+    )
+
+    with pytest.raises(InvalidRoleReply):
+        await agent_core.process(msg, "role:mira", dispatch_outbound=False)
+
+    assert len(session.messages) == 1
+    assert session.messages[0]["role"] == "user"
+    assert session.messages[0]["content"] == "在开会捏，昨天12点睡的"
+
+
+@pytest.mark.asyncio
+async def test_omit_user_turn_skips_early_persist_on_provider_error():
+    """主动回复/调度任务等 omit_user_turn 回合不受早落库影响：provider 报错时
+    仍然不写入任何用户消息。"""
+    session = _DummySession("scheduler:job-1")
+    context_store = SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle()))
+    context = SimpleNamespace(
+        render=MagicMock(return_value=SimpleNamespace(system_prompt="p", messages=[])),
+    )
+    tools = SimpleNamespace(set_context=MagicMock())
+    reasoner = SimpleNamespace(
+        run_turn=AsyncMock(side_effect=RuntimeError("budget guard")),
+    )
+
+    agent_core = AgentCore(
+        AgentCoreDeps(
+            session=cast(
+                SessionServices,
+                SimpleNamespace(
+                    session_manager=SimpleNamespace(
+                        get_or_create=MagicMock(return_value=session),
+                        peek_next_message_id=MagicMock(
+                            return_value="scheduler:job-1:0"
+                        ),
+                        append_messages=AsyncMock(),
+                    ),
+                    presence=None,
+                ),
+            ),
+            context_store=cast(ContextStore, context_store),
+            context=cast(ContextBuilder, context),
+            tools=cast(ToolRegistry, tools),
+            reasoner=cast(Reasoner, reasoner),
+        )
+    )
+    msg = InboundMessage(
+        channel="cli",
+        sender="scheduler",
+        chat_id="job-1",
+        content="内部提示词",
+        metadata={"omit_user_turn": True},
+    )
+
+    out = await agent_core.process(msg, "scheduler:job-1", dispatch_outbound=False)
+
+    assert out.content == "处理消息时出错，请稍后再试。"
+    assert session.messages == []
 
 
 @pytest.mark.asyncio
@@ -515,6 +714,89 @@ async def test_memory_consolidation_failure_propagates_to_transport_error():
 
     context_store.prepare.assert_not_awaited()
     reasoner.run_turn.assert_not_awaited()
+    # Issue #306 gap #1：会话存在粘滞的记忆整理失败记录时，_MemoryContextGuardModule
+    # 会在 before_turn 阶段（早落库步骤之前）就抛出 MemoryConsolidationFailedError。
+    # 如果用户连发多条消息，在修复前这些消息会全部从历史里消失；这里验证用户这句
+    # 话仍然落库到了 session.messages 末尾。
+    assert len(session.messages) == 31
+    assert session.messages[-1]["role"] == "user"
+    assert session.messages[-1]["content"] == "hi"
+
+
+@pytest.mark.asyncio
+async def test_sticky_memory_consolidation_failure_does_not_double_count_guard_input():
+    """Issue #306 gap #1：早落库点必须放在 before_turn 整条链失败之后再执行，
+    不能提前到 _MemoryContextGuardModule 读取 session.messages/token 估算之前，
+    否则会把当轮用户消息计入 pending/token 统计，提前触发或改变记忆整理的
+    时机（工单范围外的行为变更）。这里跑两轮，断言守卫模块在每一轮读到的
+    pending 计数只包含"这一轮开始之前"的历史，不包含当轮刚落库的用户消息。"""
+    from agent.lifecycle.phases.before_turn import _MemoryContextGuardModule
+
+    seen_pending: list[int] = []
+    real_run = _MemoryContextGuardModule.run
+
+    async def _spy_run(self, frame):
+        state = frame.input
+        session = state.session or frame.slots.get("session:session")
+        if session is not None:
+            last = getattr(session, "last_consolidated", 0)
+            seen_pending.append(len(session.messages) - last)
+        return await real_run(self, frame)
+
+    session = _DummySession("role:mira")
+    session.messages = [{"role": "user", "content": f"u{i}"} for i in range(30)]
+    context_store = SimpleNamespace(prepare=AsyncMock())
+    reasoner = SimpleNamespace(run_turn=AsyncMock())
+
+    class _FailedConsolidator:
+        def request_memory_consolidation(self, session_key: str) -> None:
+            raise AssertionError("failed consolidation must not be rescheduled")
+
+        def get_memory_consolidation_failure(self, session_key: str) -> str | None:
+            return "provider timeout"
+
+    agent_core = AgentCore(
+        AgentCoreDeps(
+            session=cast(
+                SessionServices,
+                SimpleNamespace(
+                    session_manager=SimpleNamespace(
+                        get_or_create=MagicMock(return_value=session),
+                        peek_next_message_id=MagicMock(return_value="role:mira:30"),
+                        append_messages=AsyncMock(),
+                    ),
+                    presence=None,
+                ),
+            ),
+            context_store=cast(ContextStore, context_store),
+            context=cast(ContextBuilder, SimpleNamespace()),
+            tools=cast(ToolRegistry, SimpleNamespace()),
+            reasoner=cast(Reasoner, reasoner),
+            history_window=20,
+            memory_consolidator=_FailedConsolidator(),
+        )
+    )
+
+    original_run = _MemoryContextGuardModule.run
+    _MemoryContextGuardModule.run = _spy_run
+    try:
+        for index in range(2):
+            msg = InboundMessage(
+                channel="desktop",
+                sender="user",
+                chat_id="role:mira",
+                content=f"msg-{index}",
+            )
+            with pytest.raises(MemoryConsolidationFailedError):
+                await agent_core.process(msg, "role:mira", dispatch_outbound=False)
+    finally:
+        _MemoryContextGuardModule.run = original_run
+
+    # 第一轮进守卫时是 30 条历史（当轮消息还没落库）；第二轮进守卫时是 31 条
+    # （只多了第一轮结束后落库的那一条），而不是 32——说明当轮消息在守卫读取
+    # 之后才落库，没有被提前计入 pending。
+    assert seen_pending == [30, 31]
+    assert len(session.messages) == 32
 
 
 @pytest.mark.asyncio
@@ -572,3 +854,70 @@ async def test_after_turn_dispatch_exception_is_not_wrapped_by_control_outbound(
     assert session.messages[1]["role"] == "assistant"
     assert session.messages[1]["content"] == "ok"
     dispatch_port.dispatch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_failed_turn_user_message_keeps_seq_order_with_real_session_manager(
+    tmp_path,
+):
+    """Issue #306 端到端顺序验证：用一个真实 SessionManager（真实落盘 + seq
+    分配）跑三轮，中间一轮 reasoning 报错。失败回合的用户消息应该落库、且不
+    产生半条助手消息；随后一轮的 user/assistant 消息 seq 仍然严格递增，不会
+    因为落库时机提前而排到上一轮助手消息之前。"""
+    from agent.core.passive_turn.pipeline import PassiveTurnPipeline
+
+    session_manager = SessionManager(tmp_path)
+    reasoner = SimpleNamespace(
+        run_turn=AsyncMock(
+            side_effect=[
+                TurnRunResult(reply="第一轮回复", context_retry={}),
+                RuntimeError("provider down"),
+                TurnRunResult(reply="第三轮回复", context_retry={}),
+            ]
+        )
+    )
+    pipeline = PassiveTurnPipeline(
+        AgentCoreDeps(
+            session=cast(
+                SessionServices,
+                SimpleNamespace(session_manager=session_manager, presence=None),
+            ),
+            context_store=cast(
+                ContextStore,
+                SimpleNamespace(prepare=AsyncMock(return_value=ContextBundle())),
+            ),
+            context=cast(
+                ContextBuilder,
+                SimpleNamespace(
+                    render=MagicMock(
+                        return_value=SimpleNamespace(system_prompt="p", messages=[])
+                    )
+                ),
+            ),
+            tools=cast(ToolRegistry, SimpleNamespace(set_context=MagicMock())),
+            reasoner=cast(Reasoner, reasoner),
+            event_bus=EventBus(),
+        )
+    )
+
+    for content in ("第一句", "第二句会失败", "第三句"):
+        await pipeline.run(
+            InboundMessage(
+                channel="qqbot", sender="u", chat_id="mira", content=content
+            ),
+            "qqbot:mira",
+            dispatch_outbound=False,
+        )
+
+    session = session_manager.get_or_create("qqbot:mira")
+    roles_and_content = [(m["role"], m["content"]) for m in session.messages]
+    assert roles_and_content == [
+        ("user", "第一句"),
+        ("assistant", "第一轮回复"),
+        ("user", "第二句会失败"),
+        ("user", "第三句"),
+        ("assistant", "第三轮回复"),
+    ]
+    seqs = [m["seq"] for m in session.messages]
+    assert seqs == sorted(seqs)
+    assert len(set(seqs)) == len(seqs)

@@ -145,9 +145,11 @@ async def test_context_store_commit_persists_commits_and_dispatches():
     assert out.metadata["req_id"] == "r1"
     assert out.metadata["tools_used"] == ["noop"]
     assert out.metadata["streamed_reply"] is True
-    assert order == ["persist", "committed", "dispatch"]
+    # 用户消息在进入 reasoning 前已经单独落库（issue #306），因此
+    # append_messages 现在被调用两次：一次落库用户消息、一次落库助手回复。
+    assert order == ["persist", "persist", "committed", "dispatch"]
     presence.record_user_message.assert_called_once_with("telegram:123")
-    session_manager.append_messages.assert_awaited_once()
+    assert session_manager.append_messages.await_count == 2
     assert session.messages[-1]["content"] == "整理好了"
     assert session.messages[-1]["reasoning_content"] == "思考"
     metadata = session.messages[-1]["metadata"]
@@ -391,7 +393,9 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
     assert session.messages[1]["cited_memory_ids"] == ["mem_1"]
     assert session.messages[1]["media"] == [str(image)]
     presence.record_user_message.assert_called_once_with("telegram:456")
-    session_manager.append_messages.assert_awaited_once()
+    # 用户消息在进入 reasoning 前已经单独落库（issue #306），因此
+    # append_messages 现在被调用两次：一次落库用户消息、一次落库助手回复。
+    assert session_manager.append_messages.await_count == 2
 
     # 4. TurnCommitted 字段正确
     assert len(committed_events) == 1
@@ -410,8 +414,8 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
     assert tc.react_stats["iteration_count"] == 2
     assert tc.react_stats["turn_input_sum_tokens"] == 5000
 
-    # 5. 执行顺序: presence → persist → committed → dispatch
-    assert order == ["presence", "persist", "committed", "dispatch"]
+    # 5. 执行顺序: presence → persist(user, 早落库) → persist(assistant) → committed → dispatch
+    assert order == ["presence", "persist", "persist", "committed", "dispatch"]
 
     # 6. dispatch 实际发送
     dispatch_port.dispatch.assert_awaited_once()
