@@ -868,3 +868,109 @@ async def test_tool_call_parse_failure_log_redacts_and_caps_raw_arguments(
     assert leaked_key not in logged
     assert "REDACTED" in logged
     assert raw_arguments not in logged
+
+
+@pytest.mark.asyncio
+async def test_truncation_detection_is_case_insensitive_and_covers_max_tokens_alias(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """#304 two-axis review, round 2: some OpenAI-compatible gateways report
+    the cutoff as "MAX_TOKENS" (uppercase, and/or the "max_tokens" spelling
+    rather than OpenAI's own "length"). An un-casefolded, "length"-only
+    check would silently miss these and misdiagnose the exact truncation
+    this issue exists to make visible."""
+    fake = _FakeClient([_Response(content="", finish_reason="MAX_TOKENS")])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    result = await provider.chat(messages=[], tools=[], model="m", max_tokens=10)
+
+    assert is_truncated_finish_reason(result.finish_reason) is True
+
+
+@pytest.mark.asyncio
+async def test_truncation_detection_still_rejects_unrelated_finish_reasons(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    fake = _FakeClient([_Response(content="ok", finish_reason="TOOL_CALLS")])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    result = await provider.chat(messages=[], tools=[], model="m", max_tokens=10)
+
+    assert is_truncated_finish_reason(result.finish_reason) is False
+
+
+@pytest.mark.asyncio
+async def test_provider_level_warns_on_truncation_regardless_of_call_site(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    """AC1: the provider layer itself must mark a truncated response, not
+    just the couple of call sites (`fetch_role_mood`, the main-reply empty
+    check in `reasoning_loop.py`) that happen to check `finish_reason`.
+    Plenty of `LLMProvider.chat` callers (budget summaries, memory queries,
+    proactive messaging) never look at `finish_reason` at all; this is the
+    one line that still tells them something was cut off, regardless."""
+    fake = _FakeClient([_Response(content="部分回", finish_reason="length")])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    with caplog.at_level("WARNING"):
+        await provider.chat(messages=[], tools=[], model="my-model", max_tokens=10)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "model=my-model" in message and "finish_reason=length" in message
+        for message in messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_provider_level_does_not_warn_on_natural_stop(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    fake = _FakeClient([_Response(content="完整回复", finish_reason="stop")])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    with caplog.at_level("WARNING"):
+        await provider.chat(messages=[], tools=[], model="m", max_tokens=10)
+
+    assert caplog.records == []
+
+
+@pytest.mark.asyncio
+async def test_provider_level_warns_on_truncation_for_streaming_path_too(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    stream = _FakeStream(
+        [
+            SimpleNamespace(
+                choices=[SimpleNamespace(delta=SimpleNamespace(content="部分"))]
+            ),
+            SimpleNamespace(
+                choices=[SimpleNamespace(delta=None, finish_reason="length")]
+            ),
+        ]
+    )
+    fake = _FakeClient([stream])
+    monkeypatch.setattr("agent.provider.AsyncOpenAI", lambda **_: fake)
+    provider = LLMProvider(api_key="k")
+
+    with caplog.at_level("WARNING"):
+        await provider.chat(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            model="my-stream-model",
+            max_tokens=10,
+            on_content_delta=lambda chunk: _collect_delta([], chunk),
+        )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "model=my-stream-model" in message and "finish_reason=length" in message
+        for message in messages
+    )

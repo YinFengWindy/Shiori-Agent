@@ -93,15 +93,19 @@ async def test_fetch_role_mood_returns_none_when_thought_missing_first_person():
     assert reply is None
 
 
-async def test_fetch_role_mood_labels_truncation_distinctly_from_malformed_json(
+async def test_fetch_role_mood_labels_truncation_when_it_also_fails_to_parse(
     caplog,
 ):
     """Issue #304: a `max_tokens` cutoff (finish_reason="length") with an
     empty `content` used to fall straight into `json.loads("")`, producing
     the exact same `Expecting value` error as a genuinely malformed reply -
-    the misdiagnosis that slowed the 2026-09-17 qqbot investigation. The
-    truncation case must now be reported as truncation, not as a JSON
-    parse failure, and must never reach json.loads at all.
+    the misdiagnosis that slowed the 2026-09-17 qqbot investigation. This
+    case is truncated *and* fails to parse (empty content), so it must
+    still degrade to None, but the truncation must be logged distinctly
+    from - in addition to, not instead of - the generic parse-failure log
+    (two-axis review, round 2: an unconditional early return on truncation
+    changed observable behaviour for the case below where truncation and a
+    complete, valid JSON body coincide; only logging changed here).
     """
     provider = AsyncMock()
     provider.chat.return_value = LLMResponse(content="", finish_reason="length")
@@ -119,9 +123,35 @@ async def test_fetch_role_mood_labels_truncation_distinctly_from_malformed_json(
     assert any("截断" in message for message in messages)
     assert any("finish_reason=length" in message for message in messages)
     assert any("deepseek-v4-flash" in message for message in messages)
-    # Must not also emit a generic "获取失败" / json.loads-style message for
-    # the same call - truncation and parse failure are reported once, as
-    # one thing, not conflated.
+
+
+async def test_fetch_role_mood_still_parses_when_truncated_but_content_is_valid_json(
+    caplog,
+):
+    """The critical behaviour-preservation case: `finish_reason="length"`
+    does not necessarily mean `content` is broken - the API can cut off
+    trailing filler tokens after a complete JSON object. This must still
+    succeed with a fresh mood, exactly as before the truncation log was
+    added; the log is additive, not a new failure path."""
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(
+        content=mood_payload(), finish_reason="length"
+    )
+    with caplog.at_level("WARNING"):
+        reply = await fetch_role_mood(
+            provider=provider,
+            model="m",
+            max_tokens=300,
+            messages=[],
+            content="正文",
+            moods=("平静",),
+        )
+    assert reply is not None
+    assert reply.mood == "平静"
+    assert reply.thought == "我终于放心了。"
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("截断" in message for message in messages)
+    # Truncated-but-parsed-fine is not a failure - no generic failure log.
     assert not any("获取失败" in message for message in messages)
 
 
