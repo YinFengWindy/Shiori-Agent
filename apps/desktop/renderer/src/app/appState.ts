@@ -43,6 +43,14 @@ export type NavigationEntry = {
   view: AppMainView;
   activeRoleId: string;
   settingsSection: SettingsSectionId;
+  /**
+   * The active subtab of `settingsSection` at the moment this entry was
+   * recorded (issue #230 AC 4) — e.g. which plugin's config tab was open
+   * inside 「插件」. Empty string for a section with no subtabs recorded
+   * yet. Without this, back/forward could only restore which built-in
+   * section was open, not which of its subtabs.
+   */
+  settingsSubsection: string;
 };
 
 export type WorkspaceFeedback = {
@@ -92,6 +100,7 @@ export function navigationEntriesEqual(left: NavigationEntry, right: NavigationE
     viewsEqual(left.view, right.view)
     && left.activeRoleId === right.activeRoleId
     && left.settingsSection === right.settingsSection
+    && left.settingsSubsection === right.settingsSubsection
   );
 }
 

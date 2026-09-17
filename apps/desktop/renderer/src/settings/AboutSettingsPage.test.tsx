@@ -47,6 +47,30 @@ test("the visible update action checks, reports progress and installs only a rea
   } finally { await view.cleanup(); }
 });
 
+test("renders no heading of its own, and its first content block carries no top margin", async () => {
+  // The "关于" heading and its spacing are the shared SettingsSubsectionNav
+  // header's job when this component is mounted through SettingsPage (issue
+  // #230) — this component must neither render a competing heading nor
+  // stack its own top margin on top of the header's, which briefly
+  // regressed 「关于」 to more space under its title than every other
+  // section (issue #230 review).
+  const view = await mountTestComponent(null);
+  Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
+    updates: {
+      getState: async () => ({ revision: 0, currentVersion: "0.2.0", phase: "unsupported", latestVersion: null, progress: 0, error: null }),
+      onState: () => () => undefined,
+    },
+  } });
+  try {
+    await view.render(<AboutSettingsPage />);
+    assert.equal(view.container.querySelector("h2"), null);
+    const root = view.container.querySelector('[data-testid="about-settings"]')!;
+    const content = root.firstElementChild as HTMLElement;
+    assert.ok(content, "expected AboutSettingsPage to render content");
+    assert.equal(content.className.includes("mt-8"), false, "must not add its own top margin above the shared header's");
+  } finally { await view.cleanup(); }
+});
+
 test("failed status loading remains retryable", async () => {
   const view = await mountTestComponent(null);
   const api: DesktopUpdateApi = {

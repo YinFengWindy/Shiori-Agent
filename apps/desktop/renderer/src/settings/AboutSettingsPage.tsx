@@ -18,8 +18,14 @@ export function AboutSettingsPage() {
 
   return (
     <div data-testid="about-settings">
-      <h2 className="m-0 font-display text-headline text-ink">关于</h2>
-      <div className="mt-8 flex flex-wrap items-start justify-between gap-x-10 gap-y-6 pb-8">
+      {/* The "关于" heading is rendered by the shared SettingsSubsectionNav
+          header when this component is mounted through SettingsPage; kept
+          out of this component so that shared wrapper stays the single
+          place a section title renders (issue #230). No top margin here —
+          the header's own `mb-6` already provides the 24px gap under the
+          title, matching every other section; an extra `mt-8` on top of
+          that would give 关于 more space than everyone else. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-6 pb-8">
         <div className="flex min-w-0 shrink-0 items-center gap-4">
           <img src={new URL("../../../../../assets/shiori-app-icon.png", import.meta.url).href} alt="" className="h-16 w-16 shrink-0 object-contain" />
           <div className="min-w-0">

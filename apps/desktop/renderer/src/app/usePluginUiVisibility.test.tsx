@@ -49,6 +49,9 @@ describe("usePluginUiVisibility", () => {
       assert.ok(enabled.settingsSidebarSections.some((entry) => entry.id === pluginId));
       assert.equal(enabled.isSectionVisible(pluginId), true);
       assert.equal(enabled.resolveVisibleNavPage(pluginId)?.id, pluginId);
+      // issue #230: also exposed raw, for settings.subsection-level filtering
+      // that a whole-section id (isSectionVisible) cannot express.
+      assert.equal(enabled.isPluginEnabled(pluginId), true);
 
       await act(async () => { setPluginEnabledSnapshot([{ id: pluginId, enabled: false, state: "DISABLED" }]); });
 
@@ -57,6 +60,7 @@ describe("usePluginUiVisibility", () => {
       assert.ok(!disabled.settingsSidebarSections.some((entry) => entry.id === pluginId));
       assert.equal(disabled.isSectionVisible(pluginId), false);
       assert.equal(disabled.resolveVisibleNavPage(pluginId), undefined);
+      assert.equal(disabled.isPluginEnabled(pluginId), false);
     } finally {
       await view.cleanup();
       pluginUiRegistry.unregisterPlugin(pluginId);

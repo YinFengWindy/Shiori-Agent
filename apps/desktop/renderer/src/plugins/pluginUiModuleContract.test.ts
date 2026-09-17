@@ -27,7 +27,7 @@ function renderElement<TProps>(
 }
 
 describe("applyPluginUiModules", () => {
-  it("registers a schema-driven settings.section under the plugin's own id", () => {
+  it("registers a schema-driven settings.section as a subtab of the built-in 'plugins' section, not a top-level entry", () => {
     const registry = new PluginUiRegistry();
     const modules: Record<string, { default: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
@@ -37,9 +37,11 @@ describe("applyPluginUiModules", () => {
 
     applyPluginUiModules(modules, registry);
 
-    const entry = registry.getSettingsSection("demo");
-    assert.ok(entry, "expected a settings.section entry for the demo plugin");
-    assert.equal(entry?.kind, "standalone");
+    // issue #230: a plugin's settings.section no longer becomes its own
+    // top-level sidebar entry — it nests under "plugins" as a subtab.
+    assert.equal(registry.getSettingsSection("demo"), undefined);
+    const entry = registry.getSettingsSubsection("plugins", "demo");
+    assert.ok(entry, "expected a settings.subsection entry nested under 'plugins'");
     assert.equal(entry?.pluginId, "demo");
     assert.equal(entry?.label, "Demo");
   });
@@ -64,7 +66,7 @@ describe("applyPluginUiModules", () => {
     // spec: plugin UI only uses an injected client, never window/IPC
     // directly), so the registered Component is no longer the plugin's bare
     // function reference — it is a binder that renders it with a client.
-    const sectionComponent = registry.getSettingsSection("demo")?.Component;
+    const sectionComponent = registry.getSettingsSubsection("plugins", "demo")?.Component;
     const navComponent = registry.getNavPage("demo")?.Component;
     assert.ok(sectionComponent, "expected a settings.section Component");
     assert.ok(navComponent, "expected a nav.page Component");
@@ -93,7 +95,7 @@ describe("applyPluginUiModules", () => {
 
     applyPluginUiModules(modules, registry);
 
-    const sectionComponent = registry.getSettingsSection("demo")?.Component as never;
+    const sectionComponent = registry.getSettingsSubsection("plugins", "demo")?.Component as never;
     const navComponent = registry.getNavPage("demo")?.Component as never;
     const sectionProps = renderElement(sectionComponent, { subsectionId: "default" }).props;
     const navProps = renderElement(navComponent, { pageId: "demo" }).props;

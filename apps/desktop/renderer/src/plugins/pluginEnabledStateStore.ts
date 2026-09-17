@@ -1,5 +1,6 @@
 import { createPluginBridgeClient, type PluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
 import { activePluginIds } from "./activePluginIds";
+import { synchronizePluginSettingsAutoRegistration } from "./pluginSettingsAutoRegistration";
 import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 
 type Listener = () => void;
@@ -31,6 +32,11 @@ export function refreshPluginEnabledState(client: Pick<PluginBridgeClient, "list
   const refresh = refreshTail.then(async () => {
     const plugins = await client.listPlugins();
     const failures = await synchronizeUi?.(plugins.flatMap((plugin) => plugin.rendererUi ? [plugin.rendererUi] : []));
+    // Runs after synchronizeUi so every hand-written settings.section
+    // (build-time glob + runtime plugins) is already registered before a
+    // config-schema plugin without one is offered an auto-registered
+    // subtab — see pluginSettingsAutoRegistration.ts (issue #230 AC 5/6).
+    synchronizePluginSettingsAutoRegistration(plugins);
     const snapshot = plugins.map((plugin) => ({ ...plugin, rendererError: failures?.get(plugin.id) }));
     setPluginEnabledSnapshot(snapshot);
     return snapshot;

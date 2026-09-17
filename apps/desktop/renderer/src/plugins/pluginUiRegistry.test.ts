@@ -5,6 +5,7 @@ import {
   PluginUiRegistry,
   type NavPageEntry,
   type RoleAssetsPanelEntry,
+  type SettingsSubsectionEntry,
   type StandaloneSettingsSectionEntry,
 } from "./pluginUiRegistry.js";
 
@@ -18,6 +19,10 @@ function standaloneSection(id: string, pluginId?: string): StandaloneSettingsSec
     pluginId,
     Component: () => null,
   };
+}
+
+function subsection(parentId: string, id: string, pluginId?: string): SettingsSubsectionEntry {
+  return { slot: "settings.subsection", parentId, id, label: id, pluginId, Component: () => null };
 }
 
 function navPage(id: string, pluginId?: string): NavPageEntry {
@@ -71,6 +76,69 @@ describe("PluginUiRegistry", () => {
     assert.equal(registry.getSettingsSection("section-a"), undefined);
     assert.equal(registry.getNavPage("page-a"), undefined);
     assert.notEqual(registry.getNavPage("page-b"), undefined);
+  });
+});
+
+describe("PluginUiRegistry settings.subsection nesting (issue #230)", () => {
+  it("lists a parent's subtabs built-in-first, in registration order", () => {
+    const registry = new PluginUiRegistry();
+    registry.registerSettingsSubsection(subsection("plugins", "list"), "builtin");
+    registry.registerSettingsSubsection(subsection("plugins", "novelai", "novelai"));
+    registry.registerSettingsSubsection(subsection("plugins", "qqbot", "qqbot"));
+
+    assert.deepEqual(
+      registry.listSettingsSubsections("plugins").map((entry) => entry.id),
+      ["list", "novelai", "qqbot"],
+    );
+  });
+
+  it("does not leak a top-level entry into subsections, or a subsection into top-level listings", () => {
+    const registry = new PluginUiRegistry();
+    registry.registerSettingsSection(standaloneSection("plugins"), "builtin");
+    registry.registerSettingsSubsection(subsection("plugins", "novelai", "novelai"));
+
+    assert.deepEqual(registry.listSettingsSections().map((entry) => entry.id), ["plugins"]);
+    assert.equal(registry.getSettingsSection("novelai"), undefined);
+  });
+
+  it("skips a duplicate (parentId, id) pair instead of overwriting the first registration", () => {
+    const registry = new PluginUiRegistry();
+    registry.registerSettingsSubsection(subsection("plugins", "novelai", "novelai"));
+    registry.registerSettingsSubsection(subsection("plugins", "novelai", "intruder"));
+
+    const entries = registry.listSettingsSubsections("plugins");
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0]?.pluginId, "novelai");
+  });
+
+  it("filters subtabs by enabled state while always keeping the built-in one", () => {
+    const registry = new PluginUiRegistry();
+    registry.registerSettingsSubsection(subsection("plugins", "list"), "builtin");
+    registry.registerSettingsSubsection(subsection("plugins", "novelai", "novelai"));
+    registry.registerSettingsSubsection(subsection("plugins", "qqbot", "qqbot"));
+
+    const ids = registry.listSettingsSubsections("plugins", (pluginId) => pluginId === "novelai").map((entry) => entry.id);
+    assert.deepEqual(ids, ["list", "novelai"]);
+  });
+
+  it("removes a single subtab via unregisterSettingsSubsection without touching its siblings", () => {
+    const registry = new PluginUiRegistry();
+    registry.registerSettingsSubsection(subsection("plugins", "novelai", "novelai"));
+    registry.registerSettingsSubsection(subsection("plugins", "qqbot", "qqbot"));
+
+    registry.unregisterSettingsSubsection("plugins", "novelai");
+
+    assert.deepEqual(registry.listSettingsSubsections("plugins").map((entry) => entry.id), ["qqbot"]);
+  });
+
+  it("unregisterPlugin also takes a plugin's own settings.subsection with it", () => {
+    const registry = new PluginUiRegistry();
+    registry.registerSettingsSubsection(subsection("plugins", "novelai", "novelai"));
+    registry.registerSettingsSubsection(subsection("plugins", "qqbot", "qqbot"));
+
+    registry.unregisterPlugin("novelai");
+
+    assert.deepEqual(registry.listSettingsSubsections("plugins").map((entry) => entry.id), ["qqbot"]);
   });
 });
 

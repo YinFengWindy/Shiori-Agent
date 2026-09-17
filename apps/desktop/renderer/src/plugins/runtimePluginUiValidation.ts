@@ -36,14 +36,6 @@ export function validateRuntimePluginUi(value: unknown, pluginId: string) {
     label(section.label, "settingsSection");
     if (section.kind !== "schema" && section.kind !== "component") throw new Error("Invalid settingsSection kind");
     if (section.kind === "component") component(section.component, "settingsSection");
-    if (section.subsections !== undefined) {
-      if (!Array.isArray(section.subsections)) throw new Error("Invalid settingsSection subsections");
-      for (const item of section.subsections) {
-        const subsection = object(item);
-        label(subsection.id, "subsection.id");
-        label(subsection.label, "subsection");
-      }
-    }
   }
   if (module.roleAssets !== undefined) component(object(module.roleAssets).component, "roleAssets");
   if (module.chatImageActions !== undefined) component(module.chatImageActions, "chatImageActions");

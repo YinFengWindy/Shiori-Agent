@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, ArrowsClockwise, GearSix } from "@phosphor-icons/react";
 import { TitleBar } from "../shell/TitleBar";
 import { SettingsPage } from "../settings/SettingsPage";
+import { useSettingsSubsectionMemory } from "../settings/useSettingsSubsectionMemory";
 import type { useOnboardingController } from "./useOnboardingController";
 import { OnboardingModelStep } from "./OnboardingModelStep";
 import { OnboardingRoleStep } from "./OnboardingRoleStep";
@@ -10,6 +11,7 @@ import { cx } from "../shared/styles";
 
 const steps = [{ id: "model", label: "注册模型" }, { id: "role", label: "创建角色" }, { id: "workspace", label: "进入工作区" }] as const;
 const noop = () => undefined;
+const alwaysVisible = () => true;
 
 /** Standalone first-run screen; the workspace stays hidden until completion or dismissal. */
 export function OnboardingPage({ controller, windowMaximized }: {
@@ -17,6 +19,10 @@ export function OnboardingPage({ controller, windowMaximized }: {
   windowMaximized: boolean;
 }) {
   const [busy, setBusy] = useState(false);
+  // Onboarding's settings visit is its own isolated mount — not nested under
+  // the main app shell — so it owns its own subtab memory instead of
+  // sharing main.tsx's instance.
+  const settingsSubsectionMemory = useSettingsSubsectionMemory();
   const { progress, data, error, loading, settingsOpen } = controller;
   const step = progress?.step;
   const index = steps.findIndex((item) => item.id === step);
@@ -33,7 +39,16 @@ export function OnboardingPage({ controller, windowMaximized }: {
       {settingsOpen ? <>
         <div className="flex shrink-0 px-6 py-3"><button type="button" onClick={() => { controller.setSettingsOpen(false); void controller.refresh(); }}
           className="inline-flex items-center gap-2 rounded-md p-2 text-sm"><ArrowLeft size={18} />返回引导</button></div>
-        <div className="min-h-0 flex-1"><SettingsPage bridgeReady={Boolean(data)} section="models" /></div>
+        <div className="min-h-0 flex-1">
+          <SettingsPage
+            bridgeReady={Boolean(data)}
+            section="models"
+            isSectionVisible={alwaysVisible}
+            isPluginEnabled={alwaysVisible}
+            activeSubsections={settingsSubsectionMemory.activeSubsections}
+            onChangeSubsection={settingsSubsectionMemory.remember}
+          />
+        </div>
       </> : <main className="scrollbar-soft min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-8 sm:px-10">
         <div className="mx-auto w-full max-w-[680px]">
           <nav aria-label="首次设置进度" className="mb-9 flex flex-wrap gap-x-6 gap-y-3 text-xs text-ink-faint">

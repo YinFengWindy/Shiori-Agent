@@ -33,17 +33,22 @@ describe("appState", () => {
     assert.equal(getRoleIdFromSession(session), "mira");
   });
 
-  it("matches navigation entries only when view, role, and settings section all align", () => {
+  it("matches navigation entries only when view, role, settings section and subtab all align", () => {
     const baseEntry: NavigationEntry = {
       view: { kind: "role-detail", roleId: "mira" },
       activeRoleId: "mira",
       settingsSection: "models",
+      settingsSubsection: "catalog",
     };
 
     assert.equal(navigationEntriesEqual(baseEntry, baseEntry), true);
     assert.equal(navigationEntriesEqual(baseEntry, {
       ...baseEntry,
       settingsSection: "integrations",
+    }), false);
+    assert.equal(navigationEntriesEqual(baseEntry, {
+      ...baseEntry,
+      settingsSubsection: "other",
     }), false);
   });
 
@@ -52,6 +57,7 @@ describe("appState", () => {
       view: { kind: "plugin-page", pageId: "sample" },
       activeRoleId: "mira",
       settingsSection: "models",
+      settingsSubsection: "catalog",
     };
 
     assert.equal(navigationEntriesEqual(pluginPageEntry, { ...pluginPageEntry, view: { kind: "plugin-page", pageId: "sample" } }), true);
@@ -65,6 +71,7 @@ describe("appState", () => {
       view: { kind: "plugin-page", pageId: "demo" },
       activeRoleId: "mira",
       settingsSection: "models",
+      settingsSubsection: "catalog",
     };
 
     assert.deepEqual(cloneView(pluginEntry.view), { kind: "plugin-page", pageId: "demo" });

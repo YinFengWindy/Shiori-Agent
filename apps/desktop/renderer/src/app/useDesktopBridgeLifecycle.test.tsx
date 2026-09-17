@@ -38,7 +38,7 @@ async function mountLifecycle({ cancelling = false } = {}) {
       activeSessionRef.current = { ...current, messages: [...current.messages, { role: "error", content: message }] };
     },
     loadRolesFromBridge: async () => [], openRole: async () => true,
-    buildNavigationEntry: () => ({ view: { kind: "chat" }, activeRoleId: "mira", settingsSection: "models" }),
+    buildNavigationEntry: () => ({ view: { kind: "chat" }, activeRoleId: "mira", settingsSection: "models", settingsSubsection: "" }),
     pushNavigationEntry: ignore,
   };
   function Harness() {

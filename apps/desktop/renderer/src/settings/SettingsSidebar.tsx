@@ -17,10 +17,18 @@ export type BuiltinSettingsSectionId =
   | "about";
 
 /**
- * Identifies a settings.section registry entry. Sections are no longer an
- * exhaustive, hand-enumerated set — plugins register their own ids into
- * `pluginUiRegistry` at build time — so this also accepts any string.
- * `(string & {})` (rather than plain `string`) keeps compile-time literal
+ * Identifies a settings.section registry entry — today always one of the
+ * seven built-ins (issue #230: a plugin's own settings no longer registers
+ * a top-level section, it nests as a subtab under "plugins" instead, see
+ * `pluginUiRegistry`'s `SettingsSubsectionEntry`). This still accepts any
+ * string rather than narrowing to `BuiltinSettingsSectionId` because
+ * `PluginUiRegistry`'s `SettingsSectionEntry.id` is typed as a plain
+ * `string` (the registry has no compile-time way to know only builtins
+ * register there — that is a runtime invariant of how the registration
+ * call sites behave, not something the registry's own storage enforces);
+ * narrowing this alias without also narrowing the registry would just move
+ * the cast to every read site instead of removing it. `(string & {})`
+ * (rather than plain `string`) keeps compile-time literal
  * narrowing/autocomplete for the built-in ids instead of collapsing the
  * whole union down to `string`.
  */

@@ -84,7 +84,7 @@ function createHarness({
       setRoles: (next: React.SetStateAction<RoleRecord[]>) => { roles = apply(roles, next); },
       setActiveRoleId: (next: React.SetStateAction<string>) => { activeRoleId = apply(activeRoleId, next); },
       openRoleWorkspace: (view: Extract<AppMainView, { kind: "roles-list" | "role-create" | "role-detail" | "role-assets" }>) => { views.push(view); },
-      buildNavigationEntry: (view: AppMainView, roleId = "") => ({ view, activeRoleId: roleId, settingsSection: "models" as const }),
+      buildNavigationEntry: (view: AppMainView, roleId = "") => ({ view, activeRoleId: roleId, settingsSection: "models" as const, settingsSubsection: "" }),
       replaceNavigationEntry: (entry: NavigationEntry) => { navigationEntries.push(entry); },
       loadRolesFromBridge: async () => { refreshCount += 1; return loadedRoles; },
       openRole: async (roleId: string, role?: RoleRecord | null) => { openedRoles.push(roleId); openedSnapshots.push(role); return true; },
