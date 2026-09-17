@@ -35,10 +35,29 @@ async def fetch_role_mood(
     content is appended as an assistant turn before asking the mood question,
     so thought reflects the moment right after speaking, not before.
 
+    `max_tokens` is deliberately the caller's full turn budget, not a small
+    cap of its own, even though the output is one short `{mood, thought}`
+    object: in a role-backed session, `RoleAwareProvider.chat` overrides
+    `disable_thinking` to False no matter what this call passes, so thinking
+    stays on (it owns reasoning effort per role config, not per call - see
+    `core/roles/model_runtime.py`), and this call still burns through a full
+    reasoning chain before answering. A small cap here does not shorten that
+    chain; it just truncates it mid-thought and leaves `content` empty,
+    turning what should be a rare timeout/malformed-JSON degrade into the
+    common case (measured ~2/3 of calls at a 300-token cap). `max_tokens` is
+    an upper bound, not a reservation, so billing is unaffected by leaving it
+    generous.
+
     Any failure - transport error, timeout, malformed JSON, mood outside the
     catalog, malformed thought - returns None. Callers must degrade to last
     turn's mood and still deliver `content`; this call must never fail the
-    turn it belongs to.
+    turn it belongs to. The broad `except Exception` here is deliberate, not
+    an oversight: the issue's hard requirement is that this follow-up call
+    must never be able to drag down the turn it belongs to, and narrowing to
+    a specific exception family would risk exactly the kind of unhandled
+    failure this contract exists to avoid. `exc_info=True` keeps genuine code
+    defects (TypeError, AttributeError, ...) visible in logs with a
+    traceback instead of silently reading as "mood call failed, degraded".
     """
     mood_messages = [
         *messages,
@@ -61,7 +80,7 @@ async def fetch_role_mood(
         # anything the model echoed back under that key.
         return validate_role_reply({**payload, "content": content}, moods)
     except Exception as exc:
-        logger.warning("角色心情获取失败，本轮维持上一轮心情: %s", exc)
+        logger.warning("角色心情获取失败，本轮维持上一轮心情: %s", exc, exc_info=True)
         return None
 
 

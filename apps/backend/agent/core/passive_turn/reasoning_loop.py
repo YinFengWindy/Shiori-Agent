@@ -87,6 +87,14 @@ class _PassiveReasoningLoopMixin:
         react_total_tokens = 0
         react_total_tokens_seen = False
 
+        def _degraded_role_reply(content: str) -> RoleReply:
+            """Fall back to last turn's mood/thought when the mood call
+            failed or was skipped, for either the summary or final-reply
+            branch: content is always delivered, mood just doesn't move."""
+            return RoleReply(
+                content=content, mood=previous_mood, thought=previous_thought
+            )
+
         async def _summarize(
             *,
             reason: str,
@@ -109,9 +117,7 @@ class _PassiveReasoningLoopMixin:
             if reply_moods is not None and summary_role_reply is None:
                 # The mood call failed or was skipped: degrade to last turn's mood
                 # instead of failing this collapse/summary reply.
-                summary_role_reply = RoleReply(
-                    content=summary, mood=previous_mood, thought=previous_thought
-                )
+                summary_role_reply = _degraded_role_reply(summary)
             return summary, summary_role_reply, summary_role_reply_fresh
 
         disabled = set(disabled_tools or set())
@@ -746,11 +752,7 @@ class _PassiveReasoningLoopMixin:
                         "[心情获取降级] 第%d轮心情/想法获取失败，沿用上一轮心情",
                         iteration + 1,
                     )
-                    role_reply = RoleReply(
-                        content=final_content,
-                        mood=previous_mood,
-                        thought=previous_thought,
-                    )
+                    role_reply = _degraded_role_reply(final_content)
 
             logger.info(
                 "[LLM决策→回复] 第%d轮，共调用工具%d次: %s",
