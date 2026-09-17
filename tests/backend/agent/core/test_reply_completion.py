@@ -38,7 +38,7 @@ async def test_reasoning_mood_does_not_replace_missing_formal_output():
     response, correction = await run_completion(
         LLMResponse(content="纯文本", thinking="mood 平静"), provider
     )
-    assert response is correction
+    assert response.content == correction.content
     assert json.loads(response.content)["mood"] == "平静"
     request = provider.chat.call_args.kwargs
     assert request["tools"] == []
@@ -102,3 +102,32 @@ async def test_corrected_reply_never_repeats_already_spoken_content():
     )
     assert "".join(emitted) == "你好"
     assert "你好" in provider.chat.call_args.kwargs["messages"][-1]["content"]
+
+
+async def test_correction_preserves_first_attempt_thinking_when_correction_has_none():
+    """The main response must keep the first attempt's already-streamed thinking
+    even when the correction round produces none, so it is not silently dropped
+    from persistence (issue #300)."""
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(content=payload())
+    response, correction = await run_completion(
+        LLMResponse(content="纯文本", thinking="第一次的思考"), provider
+    )
+    assert response.thinking == "第一次的思考"
+    assert correction.thinking is None
+
+
+async def test_correction_concatenates_thinking_from_both_attempts_in_order():
+    """When both the first attempt and the correction stream thinking to the
+    user, the main response must expose both, first-attempt text first."""
+
+    async def chat(**kwargs):
+        return LLMResponse(content=payload(), thinking="纠正阶段的思考")
+
+    provider = AsyncMock()
+    provider.chat.side_effect = chat
+    response, correction = await run_completion(
+        LLMResponse(content="纯文本", thinking="第一次的思考"), provider
+    )
+    assert response.thinking == "第一次的思考纠正阶段的思考"
+    assert correction.thinking == "纠正阶段的思考"

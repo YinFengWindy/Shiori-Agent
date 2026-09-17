@@ -44,8 +44,12 @@ export function getChatMessageMatchStrength(current: SessionMessage, incoming: S
   if (current.role !== "assistant") {
     return content === incoming.content && thinking === String(incoming.reasoning_content ?? "") ? 1 : 0;
   }
-  return incoming.content.startsWith(content)
-    && String(incoming.reasoning_content ?? "").startsWith(thinking) ? 1 : 0;
+  // An empty persisted reasoning_content is a legitimate outcome (proactive replies,
+  // interrupted turns, providers that omit reasoning) and must not be read as a
+  // conflicting identity; only a non-empty value can disprove the match.
+  const incomingThinking = String(incoming.reasoning_content ?? "");
+  const thinkingMatches = !incomingThinking.trim() || incomingThinking.startsWith(thinking);
+  return incoming.content.startsWith(content) && thinkingMatches ? 1 : 0;
 }
 
 function toolCallIds(message: SessionMessage) {
