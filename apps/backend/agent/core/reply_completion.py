@@ -4,9 +4,10 @@ The formal reply's content is plain dialogue text: no JSON envelope, no
 format-correction retry (removed by #303 - unescaped quotes, newlines, and
 parenthetical asides used to break the old `{content, mood, thought}` JSON
 contract and cost the whole turn). Mood and thought are asked for afterward,
-in one `disable_thinking` call that reuses the reply's own message prefix
+in one separate follow-up call that reuses the reply's own message prefix
 plus the content just produced, so the model reflects on "how it felt having
-just said this" rather than deciding mood before speaking.
+just said this" rather than deciding mood before speaking. See
+`fetch_role_mood` for why that call still carries the full turn budget.
 """
 
 from __future__ import annotations
