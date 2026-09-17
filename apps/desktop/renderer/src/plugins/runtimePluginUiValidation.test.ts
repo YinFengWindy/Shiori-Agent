@@ -14,7 +14,6 @@ test("identity and all contribution shapes are validated, including wrapped Reac
     { navPage: { component } },
     { navPage: { component, label: "Demo", sidebar: 1 } },
     { settingsSection: { label: "Settings", kind: "invalid" } },
-    { settingsSection: { label: "Settings", kind: "schema", subsections: [{}] } },
     { chatImageActions: {} },
     { roleSettings: { Component: component, read: () => ({}), pluginId: "other" } },
     { roleSettings: { Component: component, read: () => ({}), storage: "runtime" } },

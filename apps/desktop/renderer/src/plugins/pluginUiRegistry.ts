@@ -53,6 +53,24 @@ export type StandaloneSettingsSectionEntry = {
 export type SettingsSectionEntry = EditorSettingsSectionEntry | StandaloneSettingsSectionEntry;
 
 /**
+ * A settings.section registered as a subtab of a built-in parent section
+ * (issue #230). Today the only parent is `"plugins"`: instead of a plugin's
+ * own settings surfacing as a top-level sidebar entry (issue #174's
+ * original shape), it becomes one subtab alongside "已安装" inside the
+ * 「插件」 section. Nesting is exactly one level — this entry cannot itself
+ * have subsections — matching the owner's decision that a second nesting
+ * level is out of scope.
+ */
+export type SettingsSubsectionEntry = {
+  slot: "settings.subsection";
+  parentId: string;
+  id: string;
+  label: string;
+  pluginId?: string;
+  Component: React.ComponentType<StandaloneSettingsSectionProps>;
+};
+
+/**
  * Props injected into a plugin-contributed full-page navigation surface.
  *
  * `activeRoleId` mirrors the shell's own "role currently open in chat"
@@ -196,6 +214,7 @@ export function isPluginContributionVisible(
  */
 class PluginUiRegistry {
   private readonly settingsSections = new Map<string, { origin: Origin; entry: SettingsSectionEntry }>();
+  private readonly settingsSubsections = new Map<string, Map<string, { origin: Origin; entry: SettingsSubsectionEntry }>>();
   private readonly navPages = new Map<string, { origin: Origin; entry: NavPageEntry }>();
   private readonly roleAssetsPanels = new Map<string, { origin: Origin; entry: RoleAssetsPanelEntry }>();
 
@@ -206,6 +225,34 @@ class PluginUiRegistry {
       return;
     }
     this.settingsSections.set(entry.id, { origin, entry });
+  }
+
+  /**
+   * Registers a settings.subsection entry under a parent settings.section
+   * (issue #230). A duplicate `(parentId, id)` pair is warned about and
+   * skipped rather than overwritten — this is the mechanism that makes a
+   * hand-written plugin settings.section win over the config-schema
+   * auto-registration in `pluginSettingsAutoRegistration.ts` (AC 6): the
+   * hand-written one is always registered first (build-time glob / runtime
+   * synchronizeUi both run before the roster refresh that drives
+   * auto-registration), so the later attempt hits this guard.
+   */
+  registerSettingsSubsection(entry: SettingsSubsectionEntry, origin: Origin = "plugin"): void {
+    let group = this.settingsSubsections.get(entry.parentId);
+    if (!group) {
+      group = new Map();
+      this.settingsSubsections.set(entry.parentId, group);
+    }
+    if (group.has(entry.id)) {
+      console.warn(`[pluginUiRegistry] settings.subsection id 重复 (parent=${entry.parentId})，已跳过: ${entry.id}`);
+      return;
+    }
+    group.set(entry.id, { origin, entry });
+  }
+
+  /** Removes one settings.subsection entry (used when a plugin loses its config schema or leaves the roster). */
+  unregisterSettingsSubsection(parentId: string, id: string): void {
+    this.settingsSubsections.get(parentId)?.delete(id);
   }
 
   /** Registers a nav.page entry; a duplicate id is warned about and skipped. */
@@ -230,6 +277,11 @@ class PluginUiRegistry {
   unregisterPlugin(pluginId: string): void {
     for (const [id, { entry }] of this.settingsSections) {
       if (entry.pluginId === pluginId) this.settingsSections.delete(id);
+    }
+    for (const group of this.settingsSubsections.values()) {
+      for (const [id, { entry }] of group) {
+        if (entry.pluginId === pluginId) group.delete(id);
+      }
     }
     for (const [id, { entry }] of this.navPages) {
       if (entry.pluginId === pluginId) this.navPages.delete(id);
@@ -258,8 +310,19 @@ class PluginUiRegistry {
     return this.listOrdered(this.roleAssetsPanels, isPluginEnabled);
   }
 
+  /** Lists a parent settings.section's registered subtabs, built-in-first, filtered the same way as any other slot. */
+  listSettingsSubsections(parentId: string, isPluginEnabled?: (pluginId: string) => boolean): SettingsSubsectionEntry[] {
+    const group = this.settingsSubsections.get(parentId);
+    if (!group) return [];
+    return this.listOrdered(group, isPluginEnabled);
+  }
+
   getSettingsSection(id: string): SettingsSectionEntry | undefined {
     return this.settingsSections.get(id)?.entry;
+  }
+
+  getSettingsSubsection(parentId: string, id: string): SettingsSubsectionEntry | undefined {
+    return this.settingsSubsections.get(parentId)?.get(id)?.entry;
   }
 
   getNavPage(id: string): NavPageEntry | undefined {

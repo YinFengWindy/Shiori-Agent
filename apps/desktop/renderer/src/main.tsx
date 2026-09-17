@@ -96,6 +96,11 @@ function App(): React.ReactElement {
   const [selectedChatBackground, setSelectedChatBackground] = useState("");
   const [roleForm, setRoleForm] = useState(createEmptyRoleForm);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("models");
+  // The last active subtab per settings section id (issue #230 AC 4), lifted
+  // here alongside `settingsSection` — see useNavigationHistory's
+  // `activeSettingsSubsections` doc comment for why this can't live as
+  // SettingsPage-local state anymore.
+  const [activeSettingsSubsections, setActiveSettingsSubsections] = useState<Record<string, string>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const chatLatestImageSidebar = useRightSidebarState({
     minWidth: chatLatestImageSidebarMinWidth,
@@ -216,6 +221,7 @@ function App(): React.ReactElement {
     replaceNavigationEntry,
     openChatView,
     openSettingsWorkspace,
+    updateSettingsSubsection,
     openRoleWorkspace,
     openPluginPage,
     navigateHistory,
@@ -223,10 +229,12 @@ function App(): React.ReactElement {
   } = useNavigationHistory({
     mainView,
     settingsSection,
+    activeSettingsSubsections,
     activeRoleIdRef,
     lastNonSettingsViewRef,
     roles,
     setSettingsSection,
+    setActiveSettingsSubsections,
     setSidebarAnimating: leftSidebar.setAnimating,
     setSidebarCollapsed: leftSidebar.setCollapsed,
     setSidebarWidth: leftSidebar.setWidth,
@@ -556,6 +564,8 @@ function App(): React.ReactElement {
       }}
       mainView={mainView}
       settingsSection={settingsSection}
+      activeSettingsSubsections={activeSettingsSubsections}
+      onChangeSettingsSubsection={updateSettingsSubsection}
       onBackToChat={() => openChatView()}
       onOpenSettingsSection={(section) => openSettingsWorkspace(section)}
       roleWorkspaceViewActive={roleWorkspaceViewActive}

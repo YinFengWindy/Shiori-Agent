@@ -157,7 +157,7 @@ const exampleUi: PluginUiModule = {
 export default exampleUi;
 ```
 
-已使用的插槽包括 `settings.section`（qqbot/novelai）、`nav.page`（story）、`role.assets`（desktop_pet）。角色设置与聊天图片动作也有独立贡献契约。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
+`settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子标签（与「已安装」并列），侧栏始终只有模型/频道/记忆/语音/高级/插件/关于七项。manifest 声明了 `config_model` 的插件（如 qqbot）无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单子标签，标签取自 `display_name`（缺省回退插件 id）；只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story）、`role.assets`（desktop_pet）。角色设置与聊天图片动作也有独立贡献契约。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
 
 `app.background` 在隐藏的 plugin-host renderer 运行，入口是 `background/index.ts` 的 `{ pluginId, setup(ctx) }`。桌宠已通过它拥有控制器、surface、托盘项与订阅。它的 `BackgroundCtx` 不是 Python 上下文：通过自己的 `effect`、`events`、`rpc`、`surfaces`、`tray`、`store` 管理资源。使用 `surface/` 入口渲染独立桌面窗口。
 

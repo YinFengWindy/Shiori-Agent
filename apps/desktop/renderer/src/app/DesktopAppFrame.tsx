@@ -55,6 +55,9 @@ type DesktopAppFrameProps = {
   sidebarState: SidebarViewState;
   mainView: AppMainView;
   settingsSection: SettingsSectionId;
+  /** The last active subtab per settings section id (issue #230 AC 4) — see `useNavigationHistory`. */
+  activeSettingsSubsections: Record<string, string>;
+  onChangeSettingsSubsection: (sectionId: string, subsectionId: string) => void;
   onBackToChat: () => void;
   onOpenSettingsSection: (section: SettingsSectionId) => void;
   roleWorkspaceViewActive: boolean;
@@ -181,6 +184,8 @@ export function DesktopAppFrame({
   sidebarState,
   mainView,
   settingsSection,
+  activeSettingsSubsections,
+  onChangeSettingsSubsection,
   onBackToChat,
   onOpenSettingsSection,
   roleWorkspaceViewActive,
@@ -300,7 +305,7 @@ export function DesktopAppFrame({
   // dispatch and keeps the (already very large) prop surface from growing further.
   // Visibility (hiding a disabled plugin's entries immediately, issue #174 AC 3)
   // is centralized in usePluginUiVisibility so it isn't recomputed per call site.
-  const { pluginNavPages, settingsSidebarSections, isSectionVisible, resolveVisibleNavPage } = usePluginUiVisibility();
+  const { pluginNavPages, settingsSidebarSections, isSectionVisible, resolveVisibleNavPage, isPluginEnabled } = usePluginUiVisibility();
   const activePluginNavPage = mainView.kind === "plugin-page"
     ? resolveVisibleNavPage(mainView.pageId)
     : undefined;
@@ -493,6 +498,9 @@ export function DesktopAppFrame({
               bridgeReady={bridgeReady}
               section={settingsSection}
               isSectionVisible={isSectionVisible}
+              isPluginEnabled={isPluginEnabled}
+              activeSubsections={activeSettingsSubsections}
+              onChangeSubsection={onChangeSettingsSubsection}
             />
           ) : null}
           {mainView.kind === "plugin-page" && activePluginNavPage ? (

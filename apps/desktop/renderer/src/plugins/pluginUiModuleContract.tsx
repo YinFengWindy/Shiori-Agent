@@ -3,7 +3,7 @@ import { PluginHostServicesProvider } from "./PluginHostServicesProvider";
 import { desktopPluginHostServices, type PluginHostServices } from "./pluginHostServices";
 import type React from "react";
 import { pluginChatImageActionsRegistry, pluginRoleSettingsRegistry, type PluginChatImageActionProps, type PluginRoleSettingsContribution } from "./pluginFeatureRegistry";
-import type { SettingsSubsection, StandaloneSettingsSectionProps } from "../settings/settingsPageTypes";
+import type { StandaloneSettingsSectionProps } from "../settings/settingsPageTypes";
 import { createPluginSchemaSettingsSection } from "./PluginSchemaSettingsSection";
 import { type PluginRpcClient } from "./pluginBridgeClient";
 import {
@@ -32,15 +32,15 @@ export type PluginNavPageSidebarComponentProps = PluginNavPageSidebarProps & { c
  */
 export type PluginSettingsSectionComponentProps = StandaloneSettingsSectionProps & { client: PluginRpcClient };
 
-/** One plugin's settings.section contribution: either a schema auto-form or a custom component. */
+/**
+ * One plugin's settings.section contribution: either a schema auto-form or
+ * a custom component. Registers as a single subtab under the built-in
+ * 「插件」 section (issue #230) — nesting is exactly one level, so this
+ * carries no `subsections` of its own.
+ */
 export type PluginSettingsSectionContribution =
-  | { kind: "schema"; label: string; subsections?: SettingsSubsection[] }
-  | {
-    kind: "component";
-    label: string;
-    subsections?: SettingsSubsection[];
-    component: React.ComponentType<PluginSettingsSectionComponentProps>;
-  };
+  | { kind: "schema"; label: string }
+  | { kind: "component"; label: string; component: React.ComponentType<PluginSettingsSectionComponentProps> };
 
 /**
  * Props a plugin-authored role.assets panel receives: the base slot props plus
@@ -125,13 +125,21 @@ export function applyPluginUiModules(
       pluginId, Component: uiModule.chatImageActions,
     });
     if (settingsSection) {
-      const id = pluginId;
-      registry.registerSettingsSection({
-        kind: "standalone",
-        slot: "settings.section",
-        id,
+      // Registers as a subtab of the built-in "plugins" section rather than
+      // a top-level settings.section (issue #230): a plugin's own settings
+      // surface lives inside 「插件」, alongside "已安装", instead of
+      // flattening the sidebar. This is also what makes a hand-written
+      // module win over `pluginSettingsAutoRegistration`'s config-schema
+      // auto-registration — this call always runs first (build-time glob /
+      // runtime synchronizeUi both resolve before the roster refresh that
+      // drives auto-registration), so a later auto-registration attempt for
+      // the same plugin id hits `registerSettingsSubsection`'s duplicate
+      // guard instead of overwriting this entry.
+      registry.registerSettingsSubsection({
+        slot: "settings.subsection",
+        parentId: "plugins",
+        id: pluginId,
         label: settingsSection.label,
-        subsections: settingsSection.subsections ?? [{ id: "default", label: settingsSection.label }],
         pluginId,
         Component: settingsSection.kind === "schema"
           ? createPluginSchemaSettingsSection(pluginId)

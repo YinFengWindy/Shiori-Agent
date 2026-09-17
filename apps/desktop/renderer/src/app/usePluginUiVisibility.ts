@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { isPluginContributionVisible, pluginUiRegistry, type NavPageEntry } from "../plugins/pluginUiRegistry";
 import { usePluginEnabledState } from "../plugins/usePluginEnabledState";
+import type { PluginEnabledPredicate } from "../plugins/pluginEnabledStateStore";
 import { listSettingsSidebarSections, type SettingsSectionId } from "../settings/SettingsSidebar";
 
 export type PluginUiVisibility = {
@@ -12,6 +13,13 @@ export type PluginUiVisibility = {
   isSectionVisible: (sectionId: SettingsSectionId) => boolean;
   /** Resolves a plugin-page's nav.page entry, but only while it is currently visible. */
   resolveVisibleNavPage: (pageId: string) => NavPageEntry | undefined;
+  /**
+   * The raw predicate, exposed for callers that need subtab-level filtering
+   * (issue #230 AC 3) — `isSectionVisible` only answers for a whole
+   * settings.section id and cannot express "which of 「插件」's own subtabs
+   * are visible right now".
+   */
+  isPluginEnabled: PluginEnabledPredicate;
 };
 
 /**
@@ -51,5 +59,5 @@ export function usePluginUiVisibility(): PluginUiVisibility {
     [isPluginEnabled],
   );
 
-  return { pluginNavPages, settingsSidebarSections, isSectionVisible, resolveVisibleNavPage };
+  return { pluginNavPages, settingsSidebarSections, isSectionVisible, resolveVisibleNavPage, isPluginEnabled };
 }
