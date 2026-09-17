@@ -2,14 +2,24 @@ import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
 import { loadRuntimePluginUi, type RuntimePluginUiHost } from "./runtimePluginUi";
 
 /**
- * Identifies a package for the disposal/reload diff below — deliberately
- * excludes `activationToken` (#262): the backend mints a fresh one on every
- * generation, including one where this plugin's code did not change at all,
- * so including it here would tear down and reimport every plugin's UI on
- * every unrelated settings apply instead of only on a real package change.
+ * Identifies a package for the disposal/reload diff below — everything in
+ * the admitted entry except `activationToken` (#262), which the backend
+ * mints fresh on every generation including ones where this plugin's code
+ * did not change at all. Including it would tear down and reimport every
+ * plugin's UI on every unrelated settings apply instead of only on a real
+ * package change.
+ *
+ * Written as an exclusion rather than a list of the fields to compare, so a
+ * field added to `RuntimePluginUi` later participates in the diff by
+ * default. The safe failure for an unknown new field is an extra reload; a
+ * field that silently stops being compared would leave stale code loaded
+ * with nothing to signal it.
  */
 function packageIdentity(entry: RuntimePluginUi): string {
-  return JSON.stringify({ pluginId: entry.pluginId, entry: entry.entry, css: entry.css, error: entry.error });
+  // `JSON.stringify` omits undefined-valued keys, so overriding is enough to
+  // drop the token while every other field — present and future — is carried
+  // through by the spread.
+  return JSON.stringify({ ...entry, activationToken: undefined });
 }
 
 /** Serializes roster changes so a stale import cannot republish a disabled plugin. */
