@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, cast
 from openai import AsyncOpenAI
 
+from core.common.llm_output_log import summarize_llm_output_for_log
+
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
 logger = logging.getLogger(__name__)
@@ -70,6 +72,91 @@ class LLMResponse:
     cache_prompt_tokens: int | None = None
     cache_hit_tokens: int | None = None
     total_tokens: int | None = None
+    # finish_reason as reported by the API for this response (e.g. "stop",
+    # "length", "tool_calls"), casefolded by `_finish_reason_of` so callers
+    # never have to worry about a gateway reporting "MAX_TOKENS" instead of
+    # OpenAI's own lowercase "length" (see `is_truncated_finish_reason`, and
+    # #304's two-axis review that caught this: some non-OpenAI-literal
+    # gateways report the cutoff in a different case, and an un-casefolded
+    # comparison would silently miss it - exactly the misdiagnosis this
+    # field exists to prevent). Populated on both the streaming and
+    # non-streaming paths so callers can tell a `max_tokens` cutoff apart
+    # from a genuinely malformed/empty reply instead of the two looking
+    # identical.
+    finish_reason: str | None = None
+
+
+# finish_reason values that mean "the API stopped us, not the model" - i.e.
+# a max_tokens cutoff. OpenAI itself reports this as "length"; some
+# OpenAI-compatible gateways instead report "max_tokens" (or an uppercase
+# variant of either) - compared casefolded below, so both forms and any
+# casing match.
+_TRUNCATED_FINISH_REASONS = frozenset({"length", "max_tokens"})
+
+
+def is_truncated_finish_reason(finish_reason: str | None) -> bool:
+    """True when `finish_reason` indicates the response was cut off by the
+    token budget rather than ending naturally or via a parse/format defect.
+
+    Callers use this to label a truncated reply distinctly in logs instead
+    of letting it read as "malformed JSON" - the exact misdiagnosis that
+    made the 2026-09-17 qqbot dropped-message investigation slow (issue
+    #304): an empty `content` from a `max_tokens` cutoff and an empty
+    `content` from a genuine format failure produced the same downstream
+    `json.loads` error with no way to tell them apart. Compares casefolded
+    so it still matches when `finish_reason` wasn't already normalized by
+    `_finish_reason_of` (e.g. a value set directly by a test or a future
+    call site).
+    """
+    if not finish_reason:
+        return False
+    return finish_reason.casefold() in _TRUNCATED_FINISH_REASONS
+
+
+def _finish_reason_of(obj: Any) -> str | None:
+    value = _get_field(obj, "finish_reason")
+    if not value:
+        return None
+    return str(value).strip().casefold()
+
+
+def _warn_if_truncated(
+    *, model: str | None, finish_reason: str | None, stream: bool
+) -> None:
+    """Provider-level truncation signal, independent of whatever a specific
+    call site does with the response.
+
+    Call-site logs (`fetch_role_mood`, the main-reply empty-content log in
+    `reasoning_loop.py`, tool-call argument parse failures right below) add
+    call-specific context, but plenty of `LLMProvider.chat` consumers - the
+    passive-turn budget summary, memory queries, proactive messaging - never
+    look at `finish_reason` at all. This one line, emitted once per
+    truncated response regardless of caller, is the AC1 "provider layer
+    itself marks truncation" requirement: every consumer gets at least this
+    even if it never checks `response.finish_reason` itself.
+
+    This deliberately stays at WARNING even though it can be noisy. Truncation
+    is *not* safely rare here: several auxiliary call sites cap output at
+    512-1024 tokens (passive-turn and subagent summaries, recent-context and
+    consolidation) while a role session forces thinking back on regardless of
+    what the call passes (see #310), and a reasoning chain alone routinely
+    runs longer than those caps. If this line turns out to fire constantly on
+    one of those paths, that is the signal working - it means that path has
+    been silently truncating all along - not a reason to lower the level.
+
+    Call sites that already label truncation with their own semantics still
+    do so; the resulting second line is intentional redundancy, because this
+    one records the raw provider fact and theirs records the consequence.
+    """
+    if not is_truncated_finish_reason(finish_reason):
+        return
+    logger.warning(
+        "[LLM响应被截断] model=%s finish_reason=%s stream=%s max_tokens 触发截断，"
+        "非格式/解析错误",
+        model,
+        finish_reason,
+        stream,
+    )
 
 
 class ProviderStrategy:
@@ -291,16 +378,27 @@ class LLMProvider:
             ),
         )
         msg = resp.choices[0].message
+        finish_reason = _finish_reason_of(resp.choices[0])
+        _warn_if_truncated(model=model, finish_reason=finish_reason, stream=False)
 
         tool_calls = []
         if msg.tool_calls:
             for tc in msg.tool_calls:
-                tool_calls.append(
-                    ToolCall(
-                        id=tc.id,
-                        name=tc.function.name,
-                        arguments=json.loads(tc.function.arguments),
+                try:
+                    arguments = json.loads(tc.function.arguments)
+                except json.JSONDecodeError as exc:
+                    logger.warning(
+                        "[LLM工具参数解析失败] model=%s finish_reason=%s tool=%s err=%s "
+                        "raw=%s",
+                        model,
+                        finish_reason,
+                        tc.function.name,
+                        exc,
+                        summarize_llm_output_for_log(tc.function.arguments),
                     )
+                    raise
+                tool_calls.append(
+                    ToolCall(id=tc.id, name=tc.function.name, arguments=arguments)
                 )
 
         raw, thinking, provider_fields = strategy.extract_message(msg, msg.content)
@@ -320,6 +418,7 @@ class LLMProvider:
             cache_prompt_tokens=cache_prompt_tokens,
             cache_hit_tokens=cache_hit_tokens,
             total_tokens=total_tokens,
+            finish_reason=finish_reason,
         )
 
     async def _chat_streaming(
@@ -344,6 +443,7 @@ class LLMProvider:
         cache_prompt_tokens: int | None = None
         cache_hit_tokens: int | None = None
         total_tokens: int | None = None
+        finish_reason: str | None = None
 
         stream_iter = aiter(stream)
         while True:
@@ -366,6 +466,19 @@ class LLMProvider:
             if not choices:
                 continue
             choice = choices[0]
+            # Read finish_reason before the `delta is None` skip below, not
+            # after: the real OpenAI SDK's terminal chunk carries a
+            # `ChoiceDelta(content=None)` rather than `delta=None`, so this
+            # ordering isn't defending against that specific shape. It's
+            # defending against not knowing every OpenAI-compatible
+            # gateway's terminal-chunk shape - some may send `delta=None`,
+            # an absent `delta` attribute, or an empty choices delta with no
+            # content fields at all. Reading finish_reason unconditionally,
+            # before anything that could `continue` past it, means none of
+            # those shapes can make truncation go unrecorded.
+            choice_finish_reason = _finish_reason_of(choice)
+            if choice_finish_reason is not None:
+                finish_reason = choice_finish_reason
             delta = getattr(choice, "delta", None)
             if delta is None:
                 continue
@@ -396,15 +509,32 @@ class LLMProvider:
                 if not tool_call_seen:
                     await on_content_delta({"content_delta": content_piece})
 
+        _warn_if_truncated(
+            model=kwargs.get("model"), finish_reason=finish_reason, stream=True
+        )
+
         tool_calls: list[ToolCall] = []
         for idx in sorted(tool_call_chunks):
             item = tool_call_chunks[idx]
             raw_args = item.get("arguments", "") or "{}"
+            try:
+                arguments = json.loads(raw_args)
+            except json.JSONDecodeError as exc:
+                logger.warning(
+                    "[LLM工具参数解析失败] model=%s finish_reason=%s tool=%s err=%s "
+                    "raw=%s",
+                    kwargs.get("model"),
+                    finish_reason,
+                    item.get("name", ""),
+                    exc,
+                    summarize_llm_output_for_log(raw_args),
+                )
+                raise
             tool_calls.append(
                 ToolCall(
                     id=item.get("id", ""),
                     name=item.get("name", ""),
-                    arguments=json.loads(raw_args),
+                    arguments=arguments,
                 )
             )
 
@@ -428,6 +558,7 @@ class LLMProvider:
             cache_prompt_tokens=cache_prompt_tokens,
             cache_hit_tokens=cache_hit_tokens,
             total_tokens=total_tokens,
+            finish_reason=finish_reason,
         )
 
     async def _create_with_retry(

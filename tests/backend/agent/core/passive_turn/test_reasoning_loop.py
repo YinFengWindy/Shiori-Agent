@@ -140,6 +140,74 @@ async def test_mood_fetch_failure_degrades_without_failing_delivery():
     assert result.metadata["role_reply_mood_fresh"] is False
 
 
+async def test_empty_main_reply_truncation_is_logged_distinctly_from_other_empty(
+    caplog,
+):
+    """Issue #304: the main reply call's `content` can come back empty with
+    no `thinking` either (never hits the "[空回复重试]" retry, which only
+    fires when thinking is non-empty), and used to fall straight to the
+    "（无响应）" placeholder with zero trace of why. A `max_tokens` cutoff
+    (finish_reason="length") must now be labelled as truncation, not left
+    indistinguishable from any other empty-content cause."""
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(content="", finish_reason="length")
+    with caplog.at_level("WARNING"):
+        result = await make_reasoner(provider, ToolRegistry()).run(
+            [{"role": "user", "content": "你好"}],
+        )
+    assert result.reply == "（无响应）"
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "截断" in message and "finish_reason=length" in message for message in messages
+    )
+
+
+async def test_empty_main_reply_without_truncation_is_logged_as_non_truncated(
+    caplog,
+):
+    provider = AsyncMock()
+    provider.chat.return_value = LLMResponse(content="", finish_reason="stop")
+    with caplog.at_level("WARNING"):
+        result = await make_reasoner(provider, ToolRegistry()).run(
+            [{"role": "user", "content": "你好"}],
+        )
+    assert result.reply == "（无响应）"
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "未产出正文" in message and "finish_reason=stop" in message
+        for message in messages
+    )
+    assert not any("截断" in message for message in messages)
+
+
+async def test_retry_exhausted_empty_reply_does_not_double_log_truncation(caplog):
+    """#304 two-axis review, round 2: when the retry after an empty-content-
+    but-thinking response also comes back empty, the retry-failure log and
+    the general empty-content log used to fire independently for the same
+    single failure - two warnings for one event. Only the retry-specific
+    one (which carries the retry attempt's own finish_reason) should fire."""
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(content="", thinking="在想", finish_reason="length"),
+        LLMResponse(content="", finish_reason="length"),
+    ]
+    with caplog.at_level("WARNING"):
+        result = await make_reasoner(provider, ToolRegistry()).run(
+            [{"role": "user", "content": "你好"}],
+        )
+    assert result.reply == "（无响应）"
+    warning_texts = [record.getMessage() for record in caplog.records]
+    truncation_labelled = [
+        message
+        for message in warning_texts
+        if "输出被截断" in message and "finish_reason=length" in message
+    ]
+    # Exactly one truncation-labelled empty-reply warning, not two, for
+    # this single failed-retry event.
+    assert len(truncation_labelled) == 1
+    assert "[空回复重试]" in truncation_labelled[0]
+
+
 async def test_mood_fetch_never_overwrites_main_response_thinking():
     """The mood call's own thinking (if any leaks through) must never replace
     the main call's `response.thinking`, which stays the only reasoning

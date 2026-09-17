@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 import re
 from typing import Any
+
+from core.common.llm_output_log import summarize_llm_output_for_log
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,7 +59,18 @@ def parse_response_json_payload(raw_text: str) -> dict[str, Any] | None:
         return None
     try:
         payload = json.loads(raw_text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        # Shaped like a JSON object (braces at both ends) but didn't parse -
+        # a genuine format failure, unlike the common case just above where
+        # there is no brace-wrapped payload at all (plain dialogue since
+        # #303, expected, not logged). Log the raw text so a failed round
+        # is still diagnosable; no model/finish_reason here since this
+        # module only ever sees the text, not the LLMResponse it came from.
+        logger.warning(
+            "结构化输出解析失败：疑似 JSON 对象但解析出错 err=%s raw=%s",
+            exc,
+            summarize_llm_output_for_log(raw_text),
+        )
         return None
     return payload if isinstance(payload, dict) else None
 

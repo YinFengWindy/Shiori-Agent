@@ -28,9 +28,16 @@ from agent.tool_runtime import (
 )
 from agent.tools.base import normalize_tool_result
 from agent.tools.registry import ToolRegistry
-from agent.provider import ContextLengthError
+from agent.provider import ContextLengthError, is_truncated_finish_reason
 
 logger = logging.getLogger("agent.core.passive_turn")
+
+
+def _empty_reply_label(finish_reason: str | None) -> str:
+    """Human-readable reason for an empty main-call reply, shared by the
+    retry-exhausted log and the general empty-content log so both describe
+    a `max_tokens` cutoff the same way instead of drifting independently."""
+    return "输出被截断" if is_truncated_finish_reason(finish_reason) else "未产出正文"
 
 
 class _PassiveReasoningLoopMixin:
@@ -653,10 +660,15 @@ class _PassiveReasoningLoopMixin:
             # 8. 没有 tool_calls 时，说明本轮得到最终回复。
             # 8a. 若 content 为空（模型只输出了 thinking），retry 一次；正文不再是
             # JSON，这条重试路径对角色回复和普通回复完全一致。
+            # 追踪重试是否已经打过"仍为空"的日志：避免下面 8b 的通用空正文日志
+            # 和这里的重试失败日志针对同一次失败重复打印两条 warning。
+            retry_exhausted_empty = False
             if not response.content and response.thinking:
                 logger.warning(
-                    "[空回复重试] 第%d轮，content为空但thinking非空，触发一次重试",
+                    "[空回复重试] 第%d轮，content为空但thinking非空，触发一次重试 "
+                    "finish_reason=%s",
                     iteration + 1,
+                    response.finish_reason,
                 )
                 messages.append({"role": "assistant", "content": ""})
                 messages.append(
@@ -693,7 +705,31 @@ class _PassiveReasoningLoopMixin:
                         streamed = True
                     logger.info("[空回复重试] 重试成功，获得正常回复")
                 else:
-                    logger.warning("[空回复重试] 重试仍为空，使用fallback")
+                    retry_exhausted_empty = True
+                    retry_label = _empty_reply_label(retry_response.finish_reason)
+                    logger.warning(
+                        "[空回复重试] 第%d轮重试仍为空，使用fallback"
+                        "（%s，finish_reason=%s） model=%s",
+                        iteration + 1,
+                        retry_label,
+                        retry_response.finish_reason,
+                        self._llm_config.model,
+                    )
+
+            if not response.content and not retry_exhausted_empty:
+                # 正文主调用空产出时区分「被 max_tokens 截断」与「模型确实没有
+                # 输出」：前者不该被误读成格式/解析问题（issue #304 的排查教训——
+                # 空 content 曾统一被下游当成"非法 JSON"上报，找错了方向）。重试
+                # 耗尽的情形已经在上面打过同样区分的日志，这里跳过避免重复。
+                label = _empty_reply_label(response.finish_reason)
+                logger.warning(
+                    "[正文为空] 第%d轮模型%s（finish_reason=%s），回退为占位回复 "
+                    "model=%s",
+                    iteration + 1,
+                    label,
+                    response.finish_reason,
+                    self._llm_config.model,
+                )
 
             final_content = response.content or "（无响应）"
             role_reply: RoleReply | None = None

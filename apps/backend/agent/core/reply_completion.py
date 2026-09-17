@@ -15,7 +15,8 @@ from __future__ import annotations
 import json
 import logging
 
-from agent.provider import LLMProvider
+from agent.provider import LLMProvider, LLMResponse, is_truncated_finish_reason
+from core.common.llm_output_log import summarize_llm_output_for_log
 from core.roles.reply_state import RoleReply, role_mood_prompt, validate_role_reply
 
 logger = logging.getLogger(__name__)
@@ -59,12 +60,28 @@ async def fetch_role_mood(
     failure this contract exists to avoid. `exc_info=True` keeps genuine code
     defects (TypeError, AttributeError, ...) visible in logs with a
     traceback instead of silently reading as "mood call failed, degraded".
+
+    A `max_tokens` cutoff is logged distinctly (issue #304): an empty
+    `content` from truncation and an empty `content` from a genuinely
+    malformed reply both used to surface as the same `Expecting value: line
+    1 column 1` `json.loads` error, which is exactly what misdirected the
+    2026-09-17 qqbot dropped-message investigation. This is a logging-only
+    change, not a new failure path: truncation is logged and the JSON parse
+    is still attempted afterward exactly as before, so a `finish_reason ==
+    "length"` response whose `content` happens to be complete, valid JSON
+    (the API cut off only trailing whitespace/tokens the model didn't need)
+    still parses and returns a fresh mood, same as pre-#304. Only a response
+    that is *both* truncated *and* fails to parse degrades to None - same
+    as any other malformed-JSON failure, just with the finish_reason logged
+    alongside the raw (redacted, length-capped) model output so a failed
+    round isn't unrecoverable after the fact.
     """
     mood_messages = [
         *messages,
         {"role": "assistant", "content": content},
         {"role": "user", "content": role_mood_prompt(moods)},
     ]
+    response: LLMResponse | None = None
     try:
         response = await provider.chat(
             messages=mood_messages,
@@ -74,6 +91,21 @@ async def fetch_role_mood(
             disable_thinking=True,
             response_format={"type": "json_object"},
         )
+        if is_truncated_finish_reason(response.finish_reason):
+            # Report truncation on its own terms so a downstream parse
+            # failure (if any) doesn't read as an unexplained format
+            # defect - but still attempt the parse: a max_tokens cutoff can
+            # land after a complete, valid JSON object (the API trimmed
+            # only trailing filler), and that case must still succeed with
+            # a fresh mood exactly as it would have before this log was
+            # added.
+            logger.warning(
+                "角色心情获取响应被截断（finish_reason=%s），model=%s raw=%s — "
+                "仍会尝试解析",
+                response.finish_reason,
+                model,
+                summarize_llm_output_for_log(response.content),
+            )
         payload = json.loads(response.content or "")
         if not isinstance(payload, dict):
             raise ValueError("心情响应不是 JSON 对象")
@@ -81,7 +113,16 @@ async def fetch_role_mood(
         # anything the model echoed back under that key.
         return validate_role_reply({**payload, "content": content}, moods)
     except Exception as exc:
-        logger.warning("角色心情获取失败，本轮维持上一轮心情: %s", exc, exc_info=True)
+        logger.warning(
+            "角色心情获取失败，本轮维持上一轮心情: %s model=%s finish_reason=%s raw=%s",
+            exc,
+            model,
+            response.finish_reason if response is not None else None,
+            summarize_llm_output_for_log(
+                response.content if response is not None else None
+            ),
+            exc_info=True,
+        )
         return None
 
 
