@@ -198,6 +198,50 @@ def test_channel_hub_skips_delivery_mark_when_outbound_has_no_committed_message(
     assert after["external_message_id"] == "tg-earlier"
 
 
+def test_channel_hub_skips_delivery_mark_without_running_thread_validation(
+    tmp_path: Path,
+) -> None:
+    """The missing-committed-id early return must run before any thread checks.
+
+    A channel outbound's ``finally`` block calls ``mark_delivery`` unguarded by
+    a ``try``, so a ``ValueError`` raised from thread validation would escape
+    straight out of the send path. A fallback message with no
+    ``committed_message_id`` has nothing to mark regardless of whether its
+    metadata even carries a usable thread_id, so it must return ``None``
+    quietly instead of ever reaching those validations.
+    """
+    session_manager = SessionManager(tmp_path)
+    service = RoleAggregateService.from_runtime(
+        workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
+        session_manager=session_manager,
+    )
+    role = service.create_role(
+        role_id="mira",
+        name="Mira",
+        description="bound role",
+        system_prompt="you are mira",
+    ).role
+    _ = service.bindings.bind("telegram", "123", role.id, contact_id="u1")
+    hub = ChannelHub(service)
+
+    # No committed_message_id and no thread_id metadata at all: a full-blown
+    # thread validation would raise ValueError("出站消息缺少 thread_id"), but
+    # since there is nothing to mark, mark_delivery must short-circuit first.
+    result = hub.mark_delivery(
+        OutboundMessage(
+            channel="telegram",
+            chat_id="123",
+            content="处理消息时出错，请稍后再试。",
+            metadata={"role_id": role.id},
+        ),
+        default_channel="telegram",
+        delivery_status="sent",
+    )
+
+    assert result is None
+
+
 def test_channel_hub_marks_archived_external_messages_as_duplicates(
     tmp_path: Path,
 ) -> None:

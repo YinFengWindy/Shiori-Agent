@@ -145,6 +145,15 @@ class ChannelHub:
         external_message_id: str = "",
     ) -> dict[str, Any] | None:
         """Writes delivery state to the role session after validating its source thread."""
+        committed_message_id = str(message.committed_message_id or "").strip()
+        if not committed_message_id:
+            # 兜底/降级出站消息（如错误提示、重试失败通知）从未落库，没有对应的
+            # 已提交消息可打标记；不能退化成"猜线程内最新一条 assistant 消息"，
+            # 否则会把投递状态错误地写到一条完全无关的历史消息上。
+            # 提前到所有 thread 校验之前：没有 id 就没什么可标记的，那些校验
+            # 不该对着一条从未落库的消息执行——调用方（渠道 outbound 的
+            # finally 块）没有 try 包裹，这里抛出的 ValueError 会直接冒泡。
+            return None
         metadata = message.metadata if isinstance(message.metadata, dict) else {}
         role_id = str(metadata.get("role_id") or "").strip()
         if not role_id:
@@ -170,12 +179,6 @@ class ChannelHub:
             or thread.external_thread_id != message.chat_id
         ):
             raise ValueError("出站消息 transport target 与 thread_id 不匹配")
-        committed_message_id = str(message.committed_message_id or "").strip()
-        if not committed_message_id:
-            # 兜底/降级出站消息（如错误提示、重试失败通知）从未落库，没有对应的
-            # 已提交消息可打标记；不能退化成"猜线程内最新一条 assistant 消息"，
-            # 否则会把投递状态错误地写到一条完全无关的历史消息上。
-            return None
         return self._service.sessions.mark_message_delivery(
             session_key,
             message_id=committed_message_id,

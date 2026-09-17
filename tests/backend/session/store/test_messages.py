@@ -79,6 +79,7 @@ def test_update_message_delivery_refuses_when_message_missing(tmp_path: Path):
             store.update_message_delivery(
                 "",
                 session_key="session",
+                thread_id="thread-1",
                 delivery_status="sent",
             )
             is None
@@ -87,6 +88,7 @@ def test_update_message_delivery_refuses_when_message_missing(tmp_path: Path):
             store.update_message_delivery(
                 "session:missing",
                 session_key="session",
+                thread_id="thread-1",
                 delivery_status="sent",
             )
             is None
@@ -110,6 +112,7 @@ def test_update_message_delivery_refuses_cross_thread_and_cross_session_writes(
             thread_id="thread-1",
         )
 
+        # Correct session_key, wrong thread_id: rejected.
         assert (
             store.update_message_delivery(
                 "session:0",
@@ -119,10 +122,28 @@ def test_update_message_delivery_refuses_cross_thread_and_cross_session_writes(
             )
             is None
         )
+        # Wrong session_key, correct thread_id: rejected.
         assert (
             store.update_message_delivery(
                 "session:0",
                 session_key="other-session",
+                thread_id="thread-1",
+                delivery_status="sent",
+            )
+            is None
+        )
+        # Correct session_key, but an empty thread_id (the caller failing to
+        # supply one) must not silently skip the thread comparison: the
+        # message's own thread_id ("thread-1") does not equal "", so this is
+        # still a mismatch and must be rejected rather than falling through
+        # to a write. This pins the unconditional comparison behavior added
+        # for #305 (session_key/thread_id used to default to "" and skip
+        # their check entirely when omitted).
+        assert (
+            store.update_message_delivery(
+                "session:0",
+                session_key="session",
+                thread_id="",
                 delivery_status="sent",
             )
             is None

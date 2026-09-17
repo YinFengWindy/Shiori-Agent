@@ -493,8 +493,8 @@ class _MessageMixin:
         self,
         message_id: str,
         *,
-        session_key: str = "",
-        thread_id: str = "",
+        session_key: str,
+        thread_id: str,
         delivery_status: str,
         external_message_id: str = "",
     ) -> dict[str, Any] | None:
@@ -504,6 +504,13 @@ class _MessageMixin:
         ``None``) unless ``message_id`` both exists and belongs to the
         expected session/thread, so a stray or unset id can never tag an
         unrelated message.
+
+        `session_key` and `thread_id` are required and compared
+        unconditionally, and both checks reject on mismatch rather than
+        falling through to a write. They deliberately carry no default: an
+        optional guard is one a caller can skip without noticing while still
+        reading the promise above, which is the exact shape of the bug this
+        method exists to prevent (#305).
         """
         clean_message_id = str(message_id or "").strip()
         clean_status = str(delivery_status or "").strip()
@@ -519,9 +526,9 @@ class _MessageMixin:
             ).fetchone()
         if row is None:
             return None
-        if clean_session_key and str(row["session_key"] or "") != clean_session_key:
+        if str(row["session_key"] or "") != clean_session_key:
             return None
-        if clean_thread_id and str(row["thread_id"] or "") != clean_thread_id:
+        if str(row["thread_id"] or "") != clean_thread_id:
             return None
         return self.update_message(
             clean_message_id,
