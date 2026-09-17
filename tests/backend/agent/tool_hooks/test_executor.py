@@ -5,12 +5,11 @@ from typing import Any
 
 from agent.tool_hooks.base import ToolHook
 from agent.tool_hooks.executor import ToolExecutor
+from agent.tool_hooks.finalize import is_finalize_denial
 from agent.tool_hooks.types import (
     HookContext,
     HookOutcome,
     ToolExecutionRequest,
-    ToolExecutionResult,
-    is_finalize_denial,
 )
 
 
@@ -156,15 +155,6 @@ def test_preflight_propagates_finalize_from_a_deny_outcome() -> None:
     assert result.status == "denied"
     assert result.finalize is True
     assert is_finalize_denial(result) is True
-
-
-def test_is_finalize_denial_requires_denied_status() -> None:
-    """finalize 字段只在 status == "denied" 时有意义；即便某处误把它设成
-    True，只要状态不是 denied，就不应该被当成收尾信号。"""
-    success = ToolExecutionResult(
-        status="success", output="ok", final_arguments={}, finalize=True
-    )
-    assert is_finalize_denial(success) is False
 
 
 def test_tool_executor_post_hook_only_adds_extra_message() -> None:

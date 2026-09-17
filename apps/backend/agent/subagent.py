@@ -21,9 +21,9 @@ from typing import Any, Sequence
 
 from agent.provider import LLMProvider
 from agent.tool_hooks import (
-    FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
     ToolExecutionRequest,
     ToolExecutor,
+    append_finalize_skipped_tool_results,
     is_finalize_denial,
 )
 from agent.tool_hooks.base import ToolHook
@@ -236,13 +236,9 @@ class SubAgent:
                         tc.name,
                     )
                     self.last_exit_reason = "tool_loop"
-                    for skipped in response.tool_calls[tool_batch_index + 1 :]:
-                        append_tool_result(
-                            messages,
-                            tool_call_id=skipped.id,
-                            content=FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
-                            tool_name=skipped.name,
-                        )
+                    append_finalize_skipped_tool_results(
+                        messages, response.tool_calls[tool_batch_index + 1 :]
+                    )
                     if self._mandatory_exit_tools:
                         await self._run_mandatory_exit(messages, tool_session_key)
                     return await self._summarize_incomplete_progress(

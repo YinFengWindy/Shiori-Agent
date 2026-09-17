@@ -917,9 +917,18 @@ def test_repeat_limit_below_floor_is_rejected_with_a_diagnostic_not_coerced(tmp_
     assert kernel.tool_hooks == []
 
 
-def test_repeat_limit_non_integer_is_rejected_with_a_diagnostic_not_coerced(tmp_path):
-    """非整数同理：迁移前 ``except (TypeError, ValueError)`` 会吞掉错误并退回
-    默认值；现在交给 pydantic 在配置边界直接拒绝。"""
+def test_repeat_limit_unparseable_string_is_rejected_with_a_diagnostic_not_coerced(
+    tmp_path,
+):
+    """不可解析成整数的值同理：迁移前 ``except (TypeError, ValueError)`` 会
+    吞掉错误并退回默认值；现在交给 pydantic 在配置边界直接拒绝。
+
+    注意这不等于"任何非 int 类型都被拒绝"——pydantic 的 lax 模式会把
+    可解析的数字字符串（如 "5"）和整数值的 float（如 5.0）强制转换成 int，
+    这与迁移前 ``int(raw_limit)`` 的行为是一致的、有意保留的兼容性，见下面
+    ``test_repeat_limit_accepts_a_numeric_string_like_the_pre_migration_int_call``。
+    这里用 "abc" 这种真正无法解析成数字的字符串。
+    """
     kernel = _load_tool_loop_guard_kernel(
         tmp_path, plugin_configs={"tool_loop_guard": {"repeat_limit": "abc"}}
     )
@@ -929,6 +938,23 @@ def test_repeat_limit_non_integer_is_rejected_with_a_diagnostic_not_coerced(tmp_
     assert state["state"] == "FAILED"
     assert "repeat_limit" in state["error"]
     assert kernel.tool_hooks == []
+
+
+def test_repeat_limit_accepts_a_numeric_string_like_the_pre_migration_int_call(
+    tmp_path,
+):
+    """延续性证明：pydantic 的 lax int 强转会接受 "5" 这样的数字字符串，跟迁移
+    前 ``max(2, int(raw_limit))`` 里 ``int("5") == 5`` 的行为完全一致——这是
+    有意保留的兼容性，不是校验没做严格的意外。"""
+    kernel = _load_tool_loop_guard_kernel(
+        tmp_path, plugin_configs={"tool_loop_guard": {"repeat_limit": "5"}}
+    )
+
+    assert kernel.loaded_count == 1
+    assert kernel.states()[0]["state"] == "ACTIVE"
+    assert [h.name for h in kernel.tool_hooks] == [
+        "plugin:tool_loop_guard:detect_repeated_tool_call"
+    ]
 
 
 def test_disabled_plugin_contributes_no_tool_hook(tmp_path):

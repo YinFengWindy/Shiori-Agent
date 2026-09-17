@@ -92,7 +92,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     因此旧 self.context.config 恒为 None，repeat_limit 实际上永远是这里的硬编码默认值 3，
     用户在 [plugins.tool_loop_guard] 里配置的 repeat_limit 从未生效过。迁移到 v2 后
     ctx.config 读的是 PluginConfig(services.plugin_configs[id])，配置现在真的会生效
-    （见 tests/plugins/tool_loop_guard/test_plugin.py 的
+    （见 plugins/tool_loop_guard/tests/test_plugin.py 的
     test_repeat_limit_config_actually_takes_effect_after_v2_migration）。
     这是修正一个既有 bug，不是刻意的新行为，默认值仍是 3。
 

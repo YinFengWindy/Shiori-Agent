@@ -55,6 +55,24 @@ class HookTraceItem:
     extra_message: str = ""
     finalize: bool = False
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serializes to the shape persisted into ``tool_chain`` calls.
+
+        Single source of truth for that field list: callers used to spell
+        out ``{"hook_name": item.hook_name, "event": item.event, ...}``
+        themselves at every call site, so a new field meant hunting down and
+        editing three separate literals in lockstep.
+        """
+        return {
+            "hook_name": self.hook_name,
+            "event": self.event,
+            "matched": self.matched,
+            "decision": self.decision,
+            "reason": self.reason,
+            "extra_message": self.extra_message,
+            "finalize": self.finalize,
+        }
+
 
 def _empty_str_list() -> list[str]:
     return []
@@ -79,20 +97,3 @@ class ToolExecutionResult:
     # 仅在 status == "denied" 时可能为 True：由拒绝该次调用的 pre_hook 的
     # HookOutcome.finalize 透传而来，见该字段的文档。
     finalize: bool = False
-
-
-# LLM 可见、非用户可见的通用收尾提示：任意 hook 触发结构化收尾意图时，
-# 同一批次里被跳过的后续 tool_call 都用这条统一文案回填 tool result，
-# 不再是仅描述"重复循环检测"这一种收尾原因的三份拷贝。
-FINALIZE_SKIPPED_TOOL_CALL_MESSAGE = "工具调用已跳过：本轮工具调用已提前收尾。"
-
-
-def is_finalize_denial(exec_result: "ToolExecutionResult") -> bool:
-    """True when a denied tool execution carries a structured finalize intent.
-
-    主推理循环与子 Agent 用这个共享判定替代过去按插件名/ reason 字符串前缀
-    做的嗅探（见 HookOutcome.finalize 的文档）：任何 hook、任何插件身份，
-    只要在 deny 时设置了 finalize=True，都会被当作"截断并收尾"；没有设置
-    该字段的普通 deny 保持原行为，不被误判。
-    """
-    return exec_result.status == "denied" and bool(exec_result.finalize)

@@ -351,15 +351,22 @@ class PluginKernel:
             )
 
     def _register_config_schema(self, handle: PluginHandle) -> None:
-        """Registers the manifest configuration model with scoped rollback."""
+        """Registers the manifest configuration model, tied to the handle's own lifetime.
+
+        Deliberately NOT a setup-rollback effect: a plugin whose ``setup()``
+        raises *because* its stored config is invalid (e.g. a value that now
+        fails a manifest-declared model constraint) must stay repairable
+        through ``plugin.config.set`` while FAILED — see
+        ``_rollback_failed_load``/``_dispose_handle`` for the corresponding
+        unregister. Registering it as a rollback effect would unregister the
+        schema the instant setup fails, turning ``plugin.config.set`` into
+        ``plugin_config_unsupported`` and leaving the value fixable only by
+        hand-editing the TOML file directly.
+        """
         model_cls = resolve_config_model(handle.record)
         if model_cls is None:
             return
         self.config_schemas.register(handle.plugin_id, model_cls)
-        handle.effects.add(
-            "config_schema",
-            lambda: self.config_schemas.unregister(handle.plugin_id),
-        )
 
     async def _setup_v2(self, handle: PluginHandle) -> None:
         module = sys.modules[handle.record.import_path]
@@ -511,6 +518,9 @@ class PluginKernel:
     async def _dispose_handle(self, handle: PluginHandle) -> list[Exception]:
         handle.state = PluginState.UNLOADING
         errors = await handle.effects.dispose_all()
+        # 配置 schema 的生命周期绑定在 handle 本身（真正被卸载/整代被处置时），
+        # 不是 setup 回滚 effect 的一部分：见 _register_config_schema 的文档。
+        self.config_schemas.unregister(handle.plugin_id)
         _purge_modules(handle.record.import_path)
         handle.contributions = type(handle.contributions)()
         handle.instance = None

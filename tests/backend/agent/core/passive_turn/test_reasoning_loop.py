@@ -30,7 +30,7 @@ class CounterTool(Tool):
         return "done"
 
 
-def make_reasoner(provider, tools, *, max_iterations=5):
+def make_reasoner(provider, tools, *, max_iterations=5, tool_search_enabled=False):
     return DefaultReasoner(
         llm=LLMServices(
             provider=cast(Any, provider), light_provider=cast(Any, provider)
@@ -38,7 +38,7 @@ def make_reasoner(provider, tools, *, max_iterations=5):
         llm_config=LLMConfig(max_iterations=max_iterations),
         tools=tools,
         discovery=ToolDiscoveryState(),
-        tool_search_enabled=False,
+        tool_search_enabled=tool_search_enabled,
         memory_window=40,
     )
 
@@ -236,6 +236,41 @@ async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_ba
     assert result.invocations[0].id == "c1"
     assert result.metadata["tool_chain"][0]["calls"][0]["status"] == "denied"
     # 没有第三次"正常继续"的 LLM 调用：第二次调用就是收尾总结。
+    assert provider.chat.await_count == 2
+    assert result.reply == "收尾总结"
+
+
+async def test_finalize_denial_from_a_different_plugin_identity_truncates_the_preflight_branch():
+    """同一份验收标准，覆盖另一条独立代码路径：deferred/unlocked 工具走的是
+    ``ToolExecutor.preflight``（reasoning_loop.py 里紧跟 "6.1 deferred 工具未
+    解锁" 那段），跟已执行工具的 ``execute`` 分支是两处完全独立的判断/截断
+    代码。只测过 execute 分支不能证明 preflight 分支也不再按插件身份判断——
+    这里用 tool_search_enabled=True + 一个未 always_on 的工具，逼 LLM 直接
+    调用一个尚未解锁的工具名，触发 preflight 分支。"""
+    tool = CounterTool()
+    tool.name = "hidden_tool"
+    tools = ToolRegistry()
+    tools.register(tool)  # 不带 always_on：在 visible_names 之外，走 preflight
+    provider = AsyncMock()
+    provider.chat.side_effect = [
+        LLMResponse(
+            content="",
+            tool_calls=[
+                ToolCall("c1", "hidden_tool", {}),
+                ToolCall("c2", "hidden_tool", {}),
+            ],
+        ),
+        LLMResponse(content="收尾总结"),
+    ]
+    reasoner = make_reasoner(provider, tools, tool_search_enabled=True)
+    reasoner.add_tool_hooks([_OtherPluginFinalizeHook()])
+
+    result = await reasoner.run([{"role": "user", "content": "test"}])
+
+    assert tool.calls == 0
+    assert len(result.invocations) == 1
+    assert result.invocations[0].id == "c1"
+    assert result.metadata["tool_chain"][0]["calls"][0]["status"] == "denied"
     assert provider.chat.await_count == 2
     assert result.reply == "收尾总结"
 

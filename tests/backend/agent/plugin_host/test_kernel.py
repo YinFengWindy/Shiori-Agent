@@ -886,6 +886,83 @@ async def test_unsafe_declaration_never_blocks_setup_failure_rollback(tmp_path):
     await kernel.terminate_all()
 
 
+def _write_needs_config_plugin(package: Path) -> None:
+    """A minimal v2 plugin whose ``setup()`` validates its own config model
+    and raises when the stored value fails it — the shape every plugin that
+    validates ``ctx.config`` in ``setup()`` shares (novelai, qqbot,
+    tool_loop_guard)."""
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 2\nid: needs_config\ncapabilities: [config]\n"
+        'config_model: "config:Config"\n',
+        encoding="utf-8",
+    )
+    (package / "backend/config.py").write_text(
+        "from pydantic import BaseModel, Field\n\n\n"
+        "class Config(BaseModel):\n"
+        "    limit: int = Field(default=3, ge=2)\n",
+        encoding="utf-8",
+    )
+    (package / "backend/plugin.py").write_text(
+        "from .config import Config\n\n\n"
+        "async def setup(ctx):\n"
+        "    Config.model_validate(ctx.config.as_dict())\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.asyncio
+async def test_config_schema_survives_a_setup_failure_caused_by_its_own_config(
+    tmp_path,
+):
+    """#239 修复：插件因为自己存量的配置非法而 setup() 失败时，config schema
+    必须继续留在 config_schemas 里。
+
+    修复前 schema 是作为 setup 回滚 effect 注册的：setup 一失败，
+    ``_rollback_failed_load`` 调 ``handle.effects.dispose_all()`` 就把它跟着
+    其它 effect 一起注销了，``plugin.config.get/set`` 立刻变回
+    plugin_config_unsupported——用户唯一的出路是手改配置文件。这个洞不是
+    tool_loop_guard 独有的：任何在 setup() 里校验自己 config_model 的插件
+    （novelai、qqbot）都有同样的问题，所以这里用一个最小化的通用插件复现，
+    不依赖任何具体插件的业务逻辑。
+    """
+    _write_needs_config_plugin(tmp_path / "needs_config")
+    kernel = make_kernel(
+        [tmp_path],
+        event_bus=EventBus(),
+        plugin_configs={"needs_config": {"limit": 1}},
+    )
+    await kernel.load_all()
+
+    assert kernel.states()[0]["state"] == "FAILED"
+    assert "limit" in kernel.states()[0]["error"]
+    assert kernel.config_schemas.schema_for("needs_config") is not None
+
+    await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_config_schema_is_unregistered_once_the_plugin_is_actually_disposed(
+    tmp_path,
+):
+    """schema 的生命周期绑定的是 handle 本身被处置的那一刻（unload /
+    terminate_all），而不是 setup 是否成功——这条测试覆盖 FAILED handle 被
+    真正处置后 schema 也必须清理，跟前一条"设置失败但暂不处置"互补，合起来
+    才是完整的生命周期证明。"""
+    _write_needs_config_plugin(tmp_path / "needs_config")
+    kernel = make_kernel(
+        [tmp_path],
+        event_bus=EventBus(),
+        plugin_configs={"needs_config": {"limit": 1}},
+    )
+    await kernel.load_all()
+    assert kernel.config_schemas.schema_for("needs_config") is not None
+
+    await kernel.terminate_all(force=True)
+
+    assert kernel.config_schemas.schema_for("needs_config") is None
+
+
 @pytest.mark.asyncio
 async def test_only_manifested_v2_entries_are_loaded(tmp_path):
     for name, manifest in [

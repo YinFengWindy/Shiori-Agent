@@ -18,8 +18,8 @@ from agent.lifecycle.types import (
     BeforeToolCallCtx,
 )
 from agent.tool_hooks import (
-    FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
     ToolExecutionRequest,
+    append_finalize_skipped_tool_results,
     is_finalize_denial,
 )
 from agent.tool_runtime import (
@@ -333,27 +333,16 @@ class _PassiveReasoningLoopMixin:
                                     "arguments": tool_call.arguments,
                                     "final_arguments": exec_result.final_arguments,
                                     "pre_hook_trace": [
-                                        {
-                                            "hook_name": item.hook_name,
-                                            "event": item.event,
-                                            "matched": item.matched,
-                                            "decision": item.decision,
-                                            "reason": item.reason,
-                                            "extra_message": item.extra_message,
-                                            "finalize": item.finalize,
-                                        }
+                                        item.to_dict()
                                         for item in exec_result.pre_hook_trace
                                     ],
                                     "result": result,
                                 }
                             )
-                            for skipped in response.tool_calls[tool_batch_index + 1 :]:
-                                append_tool_result(
-                                    messages,
-                                    tool_call_id=skipped.id,
-                                    content=FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
-                                    tool_name=skipped.name,
-                                )
+                            append_finalize_skipped_tool_results(
+                                messages,
+                                response.tool_calls[tool_batch_index + 1 :],
+                            )
                             tool_chain.append(
                                 {"text": response.content, "calls": iter_calls}
                             )
@@ -547,28 +536,10 @@ class _PassiveReasoningLoopMixin:
                             "arguments": tool_call.arguments,
                             "final_arguments": exec_result.final_arguments,
                             "pre_hook_trace": [
-                                {
-                                    "hook_name": item.hook_name,
-                                    "event": item.event,
-                                    "matched": item.matched,
-                                    "decision": item.decision,
-                                    "reason": item.reason,
-                                    "extra_message": item.extra_message,
-                                    "finalize": item.finalize,
-                                }
-                                for item in exec_result.pre_hook_trace
+                                item.to_dict() for item in exec_result.pre_hook_trace
                             ],
                             "post_hook_trace": [
-                                {
-                                    "hook_name": item.hook_name,
-                                    "event": item.event,
-                                    "matched": item.matched,
-                                    "decision": item.decision,
-                                    "reason": item.reason,
-                                    "extra_message": item.extra_message,
-                                    "finalize": item.finalize,
-                                }
-                                for item in exec_result.post_hook_trace
+                                item.to_dict() for item in exec_result.post_hook_trace
                             ],
                             "result": normalized.preview(),
                         }
@@ -579,13 +550,10 @@ class _PassiveReasoningLoopMixin:
                             iteration + 1,
                             tool_call.name,
                         )
-                        for skipped in response.tool_calls[tool_batch_index + 1 :]:
-                            append_tool_result(
-                                messages,
-                                tool_call_id=skipped.id,
-                                content=FINALIZE_SKIPPED_TOOL_CALL_MESSAGE,
-                                tool_name=skipped.name,
-                            )
+                        append_finalize_skipped_tool_results(
+                            messages,
+                            response.tool_calls[tool_batch_index + 1 :],
+                        )
                         tool_chain.append(
                             {"text": response.content, "calls": iter_calls}
                         )

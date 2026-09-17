@@ -16,24 +16,27 @@ from desktop_bridge.runtime.service import ReloadableDesktopService
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 _QQBOT_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "qqbot"
+_TOOL_LOOP_GUARD_PLUGIN_DIR = _REPOSITORY_ROOT / "plugins" / "tool_loop_guard"
 _HELLO_FIXTURE_DIR = _REPOSITORY_ROOT / "tests" / "fixtures" / "plugins" / "hello"
 _NULLABLE_FIXTURE_DIR = (
     _REPOSITORY_ROOT / "tests" / "fixtures" / "plugins" / "nullable_config"
 )
 
 
-def _config() -> str:
+def _config(*, extra: str = "") -> str:
     return (
         "[llm]\nregistrations = []\n"
         "\n[agent.maintenance]\nmemory_optimizer_enabled = false\n"
-        '\n[proactive]\nenabled = false\nprofile = "quiet"\n'
+        '\n[proactive]\nenabled = false\nprofile = "quiet"\n' + extra
     )
 
 
 def _stage_plugin_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stages qqbot (has ConfigModel), hello (has none) and a nullable-default model."""
+    """Stages qqbot (has ConfigModel), tool_loop_guard (has ConfigModel), hello (has
+    none) and a nullable-default model."""
     root = tmp_path / "plugin_dirs"
     shutil.copytree(_QQBOT_PLUGIN_DIR, root / "qqbot")
+    _ = stage_plugin_package(_TOOL_LOOP_GUARD_PLUGIN_DIR, root / "tool_loop_guard")
     _ = stage_plugin_package(_HELLO_FIXTURE_DIR, root / "hello")
     _ = stage_plugin_package(_NULLABLE_FIXTURE_DIR, root / "nullable_config")
     monkeypatch.setattr(
@@ -513,6 +516,145 @@ async def test_set_rejects_a_dotted_key_form_it_cannot_locate(tmp_path, monkeypa
         assert response.error.code == "plugin_config_unrepresentable"
         assert "点分键" in response.error.message
         assert path.read_text(encoding="utf-8") == before
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_get_returns_schema_and_default_repeat_limit_for_tool_loop_guard(
+    tmp_path, monkeypatch
+):
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, _, app = await _start_service(tmp_path)
+    try:
+        response = await _request(
+            service, "plugin.config.get", {"plugin_id": "tool_loop_guard"}
+        )
+
+        assert response.error is None, response.error
+        assert response.payload["schema"]["title"] == "ToolLoopGuardConfig"
+        # 未写入过配置：值来自模型默认值补全，迁移前后默认值都必须是 3。
+        assert response.payload["values"]["repeat_limit"] == 3
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_set_validates_and_persists_repeat_limit_for_tool_loop_guard(
+    tmp_path, monkeypatch
+):
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, path, app = await _start_service(tmp_path)
+    try:
+        response = await _request(
+            service,
+            "plugin.config.set",
+            {
+                "plugin_id": "tool_loop_guard",
+                "operation_id": "op-valid",
+                "values": {"repeat_limit": 5},
+            },
+        )
+
+        assert response.error is None, response.error
+        assert response.payload["values"]["repeat_limit"] == 5
+        assert "repeat_limit = 5" in path.read_text(encoding="utf-8")
+
+        after = await _request(
+            service, "plugin.config.get", {"plugin_id": "tool_loop_guard"}
+        )
+        assert after.payload["values"]["repeat_limit"] == 5
+    finally:
+        await service.aclose()
+        await app.shutdown()
+
+    restarted = load_config_text(path.read_text(encoding="utf-8"))
+    assert restarted.plugins["tool_loop_guard"]["repeat_limit"] == 5
+
+
+@pytest.mark.asyncio
+async def test_illegal_persisted_repeat_limit_fails_load_but_stays_repairable(
+    tmp_path, monkeypatch
+):
+    """#239 补漏：因为自己存量配置非法而 setup() 失败的插件，必须仍然能通过
+    plugin.config.set 修复。
+
+    修复前，config schema 是作为 setup 回滚 effect 注册的：setup 一失败就跟着
+    其它 effect 一起被回滚注销，plugin.config.get/set 立刻变回
+    plugin_config_unsupported——用户唯一的出路是手改 config.toml，而这正是
+    AC5（plugin.config.get/set 可读写、校验 repeat_limit）这条验收标准要保证
+    永远可用的通道。这个洞不是 tool_loop_guard 独有的：任何在 setup() 里校验
+    自己 config_model 的插件（novelai、qqbot）今天都有同样的问题。
+    """
+    _stage_plugin_dirs(tmp_path, monkeypatch)
+    service, path, app = await _start_service(
+        tmp_path, _config(extra="\n[plugins.tool_loop_guard]\nrepeat_limit = 1\n")
+    )
+    try:
+        kernel = app.core.plugin_manager
+        assert kernel is not None
+        state = next(
+            item for item in kernel.states() if item["id"] == "tool_loop_guard"
+        )
+        assert state["state"] == "FAILED"
+        assert "repeat_limit" in state["error"]
+
+        # Plugins 页面走的是 plugins.list，不是 kernel.states() 本身：确认
+        # FAILED 状态、诊断文案和"有配置表单"这三件事都真的传到了那个通道上，
+        # 而不只是内核内部知道。has_config_schema 尤其关键——它就是靠
+        # kernel.config_schemas.schema_for() 判定的，本 ticket 修复前它会在
+        # FAILED 后翻转成 False，配置入口会直接从页面上消失。
+        list_response = await _request(service, "plugins.list")
+        assert list_response.error is None, list_response.error
+        list_entry = next(
+            item
+            for item in list_response.payload["plugins"]
+            if item["id"] == "tool_loop_guard"
+        )
+        assert list_entry["state"] == "FAILED"
+        assert "repeat_limit" in list_entry["error"]
+        assert list_entry["has_config_schema"] is True
+
+        # 依然能读到 schema：FAILED 不等于"配置通道不可用"。
+        get_response = await _request(
+            service, "plugin.config.get", {"plugin_id": "tool_loop_guard"}
+        )
+        assert get_response.error is None, get_response.error
+        assert get_response.payload["schema"]["title"] == "ToolLoopGuardConfig"
+
+        # 用合法值修复：必须成功，而不是 plugin_config_unsupported。
+        set_response = await _request(
+            service,
+            "plugin.config.set",
+            {
+                "plugin_id": "tool_loop_guard",
+                "operation_id": "op-repair",
+                "values": {"repeat_limit": 5},
+            },
+        )
+        assert set_response.error is None, set_response.error
+        assert set_response.payload["values"]["repeat_limit"] == 5
+        assert "repeat_limit = 5" in path.read_text(encoding="utf-8")
+
+        # 修复后热应用重新加载：插件应当变回 ACTIVE，Plugins 页面同步反映。
+        after_kernel = app.core.plugin_manager
+        assert after_kernel is not None
+        after_state = next(
+            item for item in after_kernel.states() if item["id"] == "tool_loop_guard"
+        )
+        assert after_state["state"] == "ACTIVE"
+
+        after_list = await _request(service, "plugins.list")
+        assert after_list.error is None, after_list.error
+        after_entry = next(
+            item
+            for item in after_list.payload["plugins"]
+            if item["id"] == "tool_loop_guard"
+        )
+        assert after_entry["state"] == "ACTIVE"
+        assert after_entry["error"] == ""
     finally:
         await service.aclose()
         await app.shutdown()
