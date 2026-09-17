@@ -1,7 +1,6 @@
 """Successful role replies commit state with messages; failures keep prior state."""
 
 import asyncio
-import json
 import sqlite3
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -17,7 +16,7 @@ from agent.lifecycle.phases.after_reasoning import (
 from agent.lifecycle.types import AfterReasoningInput, TurnState
 from bus.event_bus import EventBus
 from bus.events import InboundMessage
-from core.roles.reply_state import InvalidRoleReply
+from core.roles.reply_state import InvalidRoleReply, RoleReply
 from session.manager import SessionManager, ConsolidationCommitRequest
 
 
@@ -30,13 +29,21 @@ def phase(manager):
     )
 
 
-def turn(session, *, mood="平静", thought="我终于放心了。", raw=None):
+def turn(
+    session,
+    *,
+    mood="平静",
+    thought="我终于放心了。",
+    content="你好",
+    role_reply=None,
+    mood_fresh=True,
+):
+    """Build the AfterReasoningInput a reasoner now hands off: plain content
+    plus an already-produced RoleReply, no JSON round-trip through content."""
     reply = (
-        raw
-        if raw is not None
-        else json.dumps(
-            {"content": "你好", "mood": mood, "thought": thought}, ensure_ascii=False
-        )
+        role_reply
+        if role_reply is not None
+        else RoleReply(content=content, mood=mood, thought=thought)
     )
     return AfterReasoningInput(
         state=TurnState(
@@ -48,7 +55,11 @@ def turn(session, *, mood="平静", thought="我终于放心了。", raw=None):
             session=session,
         ),
         turn_result=TurnRunResult(
-            reply=reply, thinking="mood 平静", context_retry={"formal_role_reply": True}
+            reply=reply.content,
+            thinking="mood 平静",
+            context_retry={"formal_role_reply": True},
+            role_reply=reply,
+            role_reply_mood_fresh=mood_fresh,
         ),
     )
 
@@ -96,11 +107,38 @@ async def test_two_turns_commit_correct_state_without_consolidation_and_survive_
     assert len(reloaded.messages) == 4
 
 
-async def test_thinking_mood_cannot_rescue_plain_formal_response(tmp_path):
+async def test_degraded_mood_call_keeps_previous_mood_and_still_delivers_content(
+    tmp_path,
+):
+    """When the reasoner's mood/thought call failed, it hands off a RoleReply
+    carrying last turn's mood/thought plus `role_reply_mood_fresh=False`.
+    Content must still be delivered, and session/message mood must stay
+    exactly at the previous turn's value instead of being overwritten."""
     manager = SessionManager(tmp_path)
     session = role_session(manager)
+    degraded = RoleReply(content="正文照常送达。", mood="害羞", thought="我在等你。")
+    result = await phase(manager).run(
+        turn(session, role_reply=degraded, mood_fresh=False)
+    )
+    assert result.outbound.content == "正文照常送达。"
+    assert session.messages[-1]["metadata"]["mood"] == "害羞"
+    assert session.messages[-1]["metadata"]["thought"] == "我在等你。"
+    assert session.metadata["current_mood"] == "害羞"
+    assert session.metadata["current_thought"] == "我在等你。"
+    # The degrade path must not even bump the timestamp: it is a no-op on
+    # session mood state, not a same-value rewrite.
+    assert session.metadata["current_thought_updated_at"] == "old"
+
+
+async def test_missing_role_reply_state_fails_the_turn_instead_of_guessing(tmp_path):
+    """A `formal_role_reply` turn without an attached RoleReply is a reasoner
+    bug, not something after_reasoning should paper over by re-parsing text."""
+    manager = SessionManager(tmp_path)
+    session = role_session(manager)
+    request = turn(session)
+    request.turn_result.role_reply = None
     with pytest.raises(InvalidRoleReply):
-        await phase(manager).run(turn(session, raw="哼，总算回我了。"))
+        await phase(manager).run(request)
     assert session.metadata["current_mood"] == "害羞"
     assert session.metadata["current_thought_updated_at"] == "old"
     assert session.messages == []
@@ -135,7 +173,7 @@ async def test_failed_append_rolls_back_turn_fields_but_preserves_independent_sn
 async def test_non_model_notification_does_not_infer_role_state(tmp_path):
     manager = SessionManager(tmp_path)
     session = role_session(manager)
-    request = turn(session, raw="后台任务完成。")
+    request = turn(session, content="后台任务完成。")
     request.turn_result.context_retry.clear()
     result = await phase(manager).run(request)
     assert result.outbound.content == "后台任务完成。"

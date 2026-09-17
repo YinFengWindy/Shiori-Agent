@@ -8,9 +8,8 @@ from typing import Any, Awaitable, Callable
 
 import agent.core.passive_support as support
 from agent.core.types import ReasonerResult
-from agent.core.reply_completion import complete_role_reply
-from agent.core.reply_stream import RoleReplyStream
-from core.roles.reply_state import InvalidRoleReply, parse_role_reply
+from agent.core.reply_completion import fetch_role_mood
+from core.roles.reply_state import RoleReply
 from agent.lifecycle.types import (
     AfterStepCtx,
     AfterToolResultCtx,
@@ -59,6 +58,8 @@ class _PassiveReasoningLoopMixin:
         tool_execution_context: dict[str, Any] | None = None,
         disabled_tools: set[str] | None = None,
         reply_moods: tuple[str, ...] | None = None,
+        previous_mood: str = "",
+        previous_thought: str = "",
     ) -> ReasonerResult:
         # 1. 初始化消息上下文、本轮工具轨迹。
         messages = initial_messages
@@ -80,25 +81,39 @@ class _PassiveReasoningLoopMixin:
         react_cache_seen = False
         react_total_tokens = 0
         react_total_tokens_seen = False
-        reply_stream = RoleReplyStream(on_content_delta) if reply_moods else None
+
+        def _degraded_role_reply(content: str) -> RoleReply:
+            """Fall back to last turn's mood/thought when the mood call
+            failed or was skipped, for either the summary or final-reply
+            branch: content is always delivered, mood just doesn't move."""
+            return RoleReply(
+                content=content, mood=previous_mood, thought=previous_thought
+            )
 
         async def _summarize(
             *,
             reason: str,
             summary_iteration: int,
-        ) -> str:
+        ) -> tuple[str, RoleReply | None, bool]:
             nonlocal react_total_tokens, react_total_tokens_seen
-            summary, summary_tokens = await self._summarize_incomplete_progress(
-                messages,
-                reason=reason,
-                iteration=summary_iteration,
-                tools_used=tools_used,
-                **({"reply_moods": reply_moods} if reply_moods else {}),
+            summary, summary_tokens, summary_role_reply = (
+                await self._summarize_incomplete_progress(
+                    messages,
+                    reason=reason,
+                    iteration=summary_iteration,
+                    tools_used=tools_used,
+                    **({"reply_moods": reply_moods} if reply_moods else {}),
+                )
             )
             if summary_tokens is not None:
                 react_total_tokens_seen = True
                 react_total_tokens += summary_tokens
-            return summary
+            summary_role_reply_fresh = summary_role_reply is not None
+            if reply_moods is not None and summary_role_reply is None:
+                # The mood call failed or was skipped: degrade to last turn's mood
+                # instead of failing this collapse/summary reply.
+                summary_role_reply = _degraded_role_reply(summary)
+            return summary, summary_role_reply, summary_role_reply_fresh
 
         disabled = set(disabled_tools or set())
         if self._tool_search_enabled:
@@ -138,9 +153,11 @@ class _PassiveReasoningLoopMixin:
                 )
             )
             if step_ctx.early_stop:
-                summary = await _summarize(
-                    reason="early_stop",
-                    summary_iteration=iteration + 1,
+                summary, summary_role_reply, summary_role_reply_fresh = (
+                    await _summarize(
+                        reason="early_stop",
+                        summary_iteration=iteration + 1,
+                    )
                 )
                 return self._build_result(
                     reply=(
@@ -158,6 +175,8 @@ class _PassiveReasoningLoopMixin:
                     total_tokens=react_total_tokens,
                     total_tokens_seen=react_total_tokens_seen,
                     tools_unlocked=tools_unlocked,
+                    role_reply=summary_role_reply,
+                    role_reply_mood_fresh=summary_role_reply_fresh,
                 )
             # 4. 调用 LLM，带上当前可见工具 schema。
             react_input_samples.append(step_ctx.input_tokens_estimate)
@@ -187,18 +206,13 @@ class _PassiveReasoningLoopMixin:
                 raise ContextLengthError(
                     "推理过程中追加工具结果后输入超过预算，已停止继续调用模型。"
                 )
-            if reply_stream is not None:
-                reply_stream.begin_attempt()
             response = await self._llm.provider.chat(
                 messages=messages,
                 tools=schemas,
                 model=self._llm_config.model,
                 max_tokens=self._llm_config.max_tokens,
                 tool_choice="auto",
-                on_content_delta=(
-                    reply_stream.push if reply_stream else on_content_delta
-                ),
-                **({"response_format": {"type": "json_object"}} if reply_moods else {}),
+                on_content_delta=on_content_delta,
             )
             if on_content_delta is not None and response.content:
                 streamed = True
@@ -211,15 +225,12 @@ class _PassiveReasoningLoopMixin:
                 react_total_tokens += response.total_tokens
 
             # 5. 模型返回 tool_calls 时，进入工具执行分支。
+            # 正文是纯文本后，调工具前的铺垫话和正式回复用的是同一条 content
+            # delta 通道，已经无法区分，因此不再据此判回合失败或清空 content：
+            # 铺垫话和非角色回复一样，正常进 tool_chain 并保留已经流出去的内容
+            # （issue #303 的防护移除；#286 引入时的前提——content delta 只可能
+            # 是解码后的正式 JSON 正文——已经不成立）。
             if response.tool_calls:
-                if reply_stream is not None and reply_stream.emitted:
-                    # A provider cannot turn already spoken final content into a tool call.
-                    raise InvalidRoleReply(
-                        "模型同时输出正式正文和工具调用，已停止当前回合"
-                    )
-                if reply_stream is not None:
-                    # Tool output is not final dialogue, even when it contains JSON text.
-                    response.content = ""
                 logger.info(
                     "[LLM决策→工具] 第%d轮，调用: %s",
                     iteration + 1,
@@ -346,9 +357,11 @@ class _PassiveReasoningLoopMixin:
                             tool_chain.append(
                                 {"text": response.content, "calls": iter_calls}
                             )
-                            summary = await _summarize(
-                                reason="tool_call_loop",
-                                summary_iteration=iteration + 1,
+                            summary, summary_role_reply, summary_role_reply_fresh = (
+                                await _summarize(
+                                    reason="tool_call_loop",
+                                    summary_iteration=iteration + 1,
+                                )
                             )
                             return self._build_result(
                                 reply=summary,
@@ -364,6 +377,8 @@ class _PassiveReasoningLoopMixin:
                                 total_tokens=react_total_tokens,
                                 total_tokens_seen=react_total_tokens_seen,
                                 tools_unlocked=tools_unlocked,
+                                role_reply=summary_role_reply,
+                                role_reply_mood_fresh=summary_role_reply_fresh,
                             )
                         logger.warning(
                             "[工具未解锁] LLM 尝试调用 '%s'，但该工具 schema 不可见，引导模型先 tool_search",
@@ -557,9 +572,11 @@ class _PassiveReasoningLoopMixin:
                         tool_chain.append(
                             {"text": response.content, "calls": iter_calls}
                         )
-                        summary = await _summarize(
-                            reason="tool_call_loop",
-                            summary_iteration=iteration + 1,
+                        summary, summary_role_reply, summary_role_reply_fresh = (
+                            await _summarize(
+                                reason="tool_call_loop",
+                                summary_iteration=iteration + 1,
+                            )
                         )
                         return self._build_result(
                             reply=summary,
@@ -575,6 +592,8 @@ class _PassiveReasoningLoopMixin:
                             total_tokens=react_total_tokens,
                             total_tokens_seen=react_total_tokens_seen,
                             tools_unlocked=tools_unlocked,
+                            role_reply=summary_role_reply,
+                            role_reply_mood_fresh=summary_role_reply_fresh,
                         )
 
                 # 7. 本轮工具执行完后，记录 tool_chain。
@@ -606,9 +625,11 @@ class _PassiveReasoningLoopMixin:
                         reason,
                         pressure_tokens,
                     )
-                    summary = await _summarize(
-                        reason=reason,
-                        summary_iteration=iteration + 1,
+                    summary, summary_role_reply, summary_role_reply_fresh = (
+                        await _summarize(
+                            reason=reason,
+                            summary_iteration=iteration + 1,
+                        )
                     )
                     return self._build_result(
                         reply=summary,
@@ -624,37 +645,15 @@ class _PassiveReasoningLoopMixin:
                         total_tokens=react_total_tokens,
                         total_tokens_seen=react_total_tokens_seen,
                         tools_unlocked=tools_unlocked,
+                        role_reply=summary_role_reply,
+                        role_reply_mood_fresh=summary_role_reply_fresh,
                     )
                 continue
 
             # 8. 没有 tool_calls 时，说明本轮得到最终回复。
-            # 8a. 若 content 为空（模型只输出了 thinking），retry 一次。
-            if reply_stream is not None and reply_moods is not None:
-                response, correction = await complete_role_reply(
-                    response,
-                    provider=self._llm.provider,
-                    model=self._llm_config.model,
-                    max_tokens=self._llm_config.max_tokens,
-                    messages=messages,
-                    moods=reply_moods,
-                    stream=reply_stream,
-                    input_token_threshold=int(
-                        getattr(self, "_memory_input_token_threshold", 0)
-                    ),
-                )
-                streamed = bool(reply_stream.emitted)
-                if correction is not None:
-                    react_input_samples.append(
-                        self._request_tokens_with_tools(messages, [])
-                    )
-                    if correction.cache_prompt_tokens is not None:
-                        react_cache_seen = True
-                        react_cache_prompt_tokens += correction.cache_prompt_tokens
-                        react_cache_hit_tokens += correction.cache_hit_tokens or 0
-                    if correction.total_tokens is not None:
-                        react_total_tokens_seen = True
-                        react_total_tokens += correction.total_tokens
-            elif not response.content and response.thinking:
+            # 8a. 若 content 为空（模型只输出了 thinking），retry 一次；正文不再是
+            # JSON，这条重试路径对角色回复和普通回复完全一致。
+            if not response.content and response.thinking:
                 logger.warning(
                     "[空回复重试] 第%d轮，content为空但thinking非空，触发一次重试",
                     iteration + 1,
@@ -696,6 +695,31 @@ class _PassiveReasoningLoopMixin:
                 else:
                     logger.warning("[空回复重试] 重试仍为空，使用fallback")
 
+            final_content = response.content or "（无响应）"
+            role_reply: RoleReply | None = None
+            role_reply_mood_fresh = False
+            if reply_moods is not None:
+                # 8b. 心情/想法通过一次独立、禁用 thinking 的追加调用获取：复用同一次
+                # 请求的消息前缀，并把刚产出的正文当作 assistant 消息带上，让 thought
+                # 反映“说完这句话时”的心情。该调用失败/超时/字段非法时一律降级为
+                # 沿用上一轮心情，不阻塞或影响正文投递，也不覆盖本轮的 response.thinking
+                # （唯一的 reasoning_content 来源仍是主调用）。
+                role_reply = await fetch_role_mood(
+                    provider=self._llm.provider,
+                    model=self._llm_config.model,
+                    max_tokens=self._llm_config.max_tokens,
+                    messages=messages,
+                    content=final_content,
+                    moods=reply_moods,
+                )
+                role_reply_mood_fresh = role_reply is not None
+                if role_reply is None:
+                    logger.warning(
+                        "[心情获取降级] 第%d轮心情/想法获取失败，沿用上一轮心情",
+                        iteration + 1,
+                    )
+                    role_reply = _degraded_role_reply(final_content)
+
             logger.info(
                 "[LLM决策→回复] 第%d轮，共调用工具%d次: %s",
                 iteration + 1,
@@ -703,12 +727,7 @@ class _PassiveReasoningLoopMixin:
                 tools_used if tools_used else "无",
             )
             messages.append({"role": "assistant", "content": response.content})
-            # 8b. AfterStep 模块链（最终回复分支）：通知观察者本轮推理结束。
-            final_content = (
-                parse_role_reply(response.content or "", reply_moods).content
-                if reply_moods is not None
-                else response.content or ""
-            )
+            # 8c. AfterStep 模块链（最终回复分支）：通知观察者本轮推理结束。
             _ = await self._after_step.run(
                 AfterStepCtx(
                     session_key=tool_event_session_key,
@@ -725,7 +744,7 @@ class _PassiveReasoningLoopMixin:
                 )
             )
             return self._build_result(
-                reply=response.content or "（无响应）",
+                reply=final_content,
                 tools_used=tools_used,
                 tool_chain=tool_chain,
                 visible_names=visible_names,
@@ -738,6 +757,8 @@ class _PassiveReasoningLoopMixin:
                 total_tokens=react_total_tokens,
                 total_tokens_seen=react_total_tokens_seen,
                 tools_unlocked=tools_unlocked,
+                role_reply=role_reply,
+                role_reply_mood_fresh=role_reply_mood_fresh,
             )
 
         # 9. 达到最大迭代次数后，生成不完整进展总结。
@@ -746,7 +767,7 @@ class _PassiveReasoningLoopMixin:
             iteration,
             tools_used if tools_used else "无",
         )
-        summary = await _summarize(
+        summary, summary_role_reply, summary_role_reply_fresh = await _summarize(
             reason="max_iterations",
             summary_iteration=iteration,
         )
@@ -764,4 +785,6 @@ class _PassiveReasoningLoopMixin:
             total_tokens=react_total_tokens,
             total_tokens_seen=react_total_tokens_seen,
             tools_unlocked=tools_unlocked,
+            role_reply=summary_role_reply,
+            role_reply_mood_fresh=summary_role_reply_fresh,
         )

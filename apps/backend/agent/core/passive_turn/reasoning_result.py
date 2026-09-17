@@ -7,9 +7,8 @@ from typing import Any
 
 import agent.core.passive_support as support
 from agent.core.types import LLMToolCall, ReasonerResult
-from agent.core.reply_completion import complete_role_reply
-from agent.core.reply_stream import RoleReplyStream
-from core.roles.reply_state import role_reply_prompt
+from agent.core.reply_completion import fetch_role_mood
+from core.roles.reply_state import RoleReply
 from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
 
 logger = logging.getLogger("agent.core.passive_turn")
@@ -93,23 +92,19 @@ class _PassiveReasoningResultMixin:
         iteration: int,
         tools_used: list[str],
         reply_moods: tuple[str, ...] | None = None,
-    ) -> tuple[str, int | None]:
-        # 1. 先构造收尾总结 prompt。
+    ) -> tuple[str, int | None, RoleReply | None]:
+        # 1. 先构造收尾总结 prompt；正文始终是纯文本，不再为 reply_moods 特判。
         summary_prompt = (
             f"[收尾原因] {reason}\n"
             f"[已执行轮次] {iteration}\n"
             f"[已调用工具] {', '.join(tools_used[-8:]) if tools_used else '无'}\n\n"
             + _INCOMPLETE_SUMMARY_PROMPT
         )
+        summary_messages = messages + [
+            support.build_context_hint_message("summary_request", summary_prompt)
+        ]
 
         if reply_moods:
-            summary_prompt = summary_prompt.replace("不要输出 JSON。", "")
-            summary_messages = messages + [
-                support.build_context_hint_message(
-                    "summary_request",
-                    summary_prompt + "\n" + role_reply_prompt(reply_moods),
-                )
-            ]
             threshold = int(getattr(self, "_memory_input_token_threshold", 0))
             from core.roles.reply_state import InvalidRoleReply
 
@@ -123,41 +118,31 @@ class _PassiveReasoningResultMixin:
                 tools=[],
                 model=self._llm_config.model,
                 max_tokens=self._llm_config.max_tokens,
-                response_format={"type": "json_object"},
             )
-            original_tokens = response.total_tokens
-            response, correction = await complete_role_reply(
-                response,
+            content = response.content or ""
+            # 心情/想法通过一次独立调用获取；失败时返回 None，由调用方降级为
+            # 沿用上一轮心情，绝不阻塞这段阶段性总结的投递。
+            role_reply = await fetch_role_mood(
                 provider=self._llm.provider,
                 model=self._llm_config.model,
                 max_tokens=self._llm_config.max_tokens,
                 messages=summary_messages,
+                content=content,
                 moods=reply_moods,
-                stream=RoleReplyStream(None),
-                input_token_threshold=threshold,
             )
-            total = (original_tokens or 0) + (
-                correction.total_tokens or 0 if correction else 0
-            )
-            return response.content or "", total or None
+            return content, response.total_tokens, role_reply
 
         # 2. 先尝试让模型给一段中文收尾总结。
         try:
             response = await self._llm.provider.chat(
-                messages=messages
-                + [
-                    support.build_context_hint_message(
-                        "summary_request",
-                        summary_prompt,
-                    )
-                ],
+                messages=summary_messages,
                 tools=[],
                 model=self._llm_config.model,
                 max_tokens=min(_SUMMARY_MAX_TOKENS, self._llm_config.max_tokens),
             )
             text = (response.content or "").strip()
             if text:
-                return text, response.total_tokens
+                return text, response.total_tokens, None
         except Exception as exc:
             logger.warning("生成预算收尾总结失败: %s", exc)
 
@@ -165,9 +150,13 @@ class _PassiveReasoningResultMixin:
         tool_text = "、".join(tools_used[-8:]) if tools_used else "无"
         done = f"已尝试 {iteration} 轮，调用工具 {len(tools_used)} 次（{tool_text}）。"
         return (
-            f"这次任务还没完全收束。{done}"
-            "我先停在当前进度，后续会继续基于已有工具结果补齐缺失信息并给你最终结论。"
-        ), None
+            (
+                f"这次任务还没完全收束。{done}"
+                "我先停在当前进度，后续会继续基于已有工具结果补齐缺失信息并给你最终结论。"
+            ),
+            None,
+            None,
+        )
 
     def _build_result(
         self,
@@ -185,6 +174,8 @@ class _PassiveReasoningResultMixin:
         total_tokens: int,
         total_tokens_seen: bool,
         tools_unlocked: list[str] | None = None,
+        role_reply: RoleReply | None = None,
+        role_reply_mood_fresh: bool = False,
     ) -> ReasonerResult:
         # 1. 先把 tool_chain 扁平化成 invocations。
         invocations: list[LLMToolCall] = []
@@ -230,6 +221,8 @@ class _PassiveReasoningResultMixin:
             "tool_chain": list(tool_chain),
             "visible_names": set(visible_names) if visible_names is not None else None,
             "react_stats": react_stats,
+            "role_reply": role_reply,
+            "role_reply_mood_fresh": role_reply_mood_fresh,
         }
 
         # 3. 最后返回标准 ReasonerResult。

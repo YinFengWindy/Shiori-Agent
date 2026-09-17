@@ -1,92 +1,88 @@
-"""One format correction inside the existing role turn, without tool replay."""
+"""Fetch a role's post-reply mood/thought without ever blocking delivery.
+
+The formal reply's content is plain dialogue text: no JSON envelope, no
+format-correction retry (removed by #303 - unescaped quotes, newlines, and
+parenthetical asides used to break the old `{content, mood, thought}` JSON
+contract and cost the whole turn). Mood and thought are asked for afterward,
+in one separate follow-up call that reuses the reply's own message prefix
+plus the content just produced, so the model reflects on "how it felt having
+just said this" rather than deciding mood before speaking. See
+`fetch_role_mood` for why that call still carries the full turn budget.
+"""
 
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import replace
 
-from agent.core.passive_support import estimate_messages_tokens
-from agent.core.reply_stream import RoleReplyStream
-from agent.provider import (
-    ContentSafetyError,
-    ContextLengthError,
-    LLMProvider,
-    LLMResponse,
-)
-from core.roles.reply_state import InvalidRoleReply, parse_role_reply, role_reply_prompt
+from agent.provider import LLMProvider
+from core.roles.reply_state import RoleReply, role_mood_prompt, validate_role_reply
 
 logger = logging.getLogger(__name__)
 
 
-def _combine_shown_thinking(first: str | None, second: str | None) -> str | None:
-    """Concatenate thinking already streamed to the user, first attempt then correction."""
-    if first and second:
-        return first + second
-    return first or second
-
-
-async def complete_role_reply(
-    response: LLMResponse,
+async def fetch_role_mood(
     *,
     provider: LLMProvider,
     model: str,
     max_tokens: int,
     messages: list[dict],
+    content: str,
     moods: tuple[str, ...],
-    stream: RoleReplyStream,
-    input_token_threshold: int,
-) -> tuple[LLMResponse, LLMResponse | None]:
-    """Validate formal output or correct it once, retaining any delivered prefix."""
-    try:
-        reply = parse_role_reply(response.content or "", moods)
-        await stream.finish(reply.content)
-        return response, None
-    except InvalidRoleReply as exc:
-        logger.warning("角色正式回复格式无效，尝试一次纠正: %s", exc)
-        instruction = (
-            f"上一份正式回复格式不正确：{exc}。只纠正最终回复，不要重新调用工具。\n"
-            + role_reply_prompt(moods)
-        )
-    if stream.emitted:
-        instruction += (
-            "\ncontent 必须原样保留以下已展示前缀，可以续写但不能改写："
-            + json.dumps(stream.emitted, ensure_ascii=False)
-        )
-    correction_messages = [
+) -> RoleReply | None:
+    """Return a validated mood/thought that followed `content`, or None.
+
+    `messages` is the exact prefix used to generate `content`; the produced
+    content is appended as an assistant turn before asking the mood question,
+    so thought reflects the moment right after speaking, not before.
+
+    `max_tokens` is deliberately the caller's full turn budget, not a small
+    cap of its own, even though the output is one short `{mood, thought}`
+    object: in a role-backed session, `RoleAwareProvider.chat` overrides
+    `disable_thinking` to False no matter what this call passes, so thinking
+    stays on (it owns reasoning effort per role config, not per call - see
+    `core/roles/model_runtime.py`), and this call still burns through a full
+    reasoning chain before answering. A small cap here does not shorten that
+    chain; it just truncates it mid-thought and leaves `content` empty,
+    turning what should be a rare timeout/malformed-JSON degrade into the
+    common case (measured ~2/3 of calls at a 300-token cap). `max_tokens` is
+    an upper bound, not a reservation, so billing is unaffected by leaving it
+    generous.
+
+    Any failure - transport error, timeout, malformed JSON, mood outside the
+    catalog, malformed thought - returns None. Callers must degrade to last
+    turn's mood and still deliver `content`; this call must never fail the
+    turn it belongs to. The broad `except Exception` here is deliberate, not
+    an oversight: the issue's hard requirement is that this follow-up call
+    must never be able to drag down the turn it belongs to, and narrowing to
+    a specific exception family would risk exactly the kind of unhandled
+    failure this contract exists to avoid. `exc_info=True` keeps genuine code
+    defects (TypeError, AttributeError, ...) visible in logs with a
+    traceback instead of silently reading as "mood call failed, degraded".
+    """
+    mood_messages = [
         *messages,
-        {"role": "assistant", "content": response.content or ""},
-        {"role": "user", "content": instruction},
+        {"role": "assistant", "content": content},
+        {"role": "user", "content": role_mood_prompt(moods)},
     ]
-    if (
-        input_token_threshold > 0
-        and estimate_messages_tokens(correction_messages) >= input_token_threshold
-    ):
-        # This is not ContextLengthError: retrying the outer turn would replay tools.
-        raise InvalidRoleReply("格式纠正超出当前回合输入预算，已停止")
-    stream.begin_attempt()
     try:
-        corrected = await provider.chat(
-            messages=correction_messages,
+        response = await provider.chat(
+            messages=mood_messages,
             tools=[],
             model=model,
             max_tokens=max_tokens,
+            disable_thinking=True,
             response_format={"type": "json_object"},
-            on_content_delta=stream.push,
         )
-    except (ContextLengthError, ContentSafetyError) as exc:
-        # A rejected correction must not trigger the outer context retry/tool loop.
-        raise InvalidRoleReply("角色回复格式纠正被模型拒绝，已停止当前回合") from exc
-    if corrected.tool_calls:
-        raise InvalidRoleReply("格式纠正不允许再次调用工具")
-    reply = parse_role_reply(corrected.content or "", moods)
-    await stream.finish(reply.content)
-    # The user already saw the first attempt's thinking before the correction ran;
-    # the main response must carry both, in the order they were actually shown.
-    shown_thinking = _combine_shown_thinking(response.thinking, corrected.thinking)
-    main_response = (
-        corrected
-        if shown_thinking == corrected.thinking
-        else replace(corrected, thinking=shown_thinking)
-    )
-    return main_response, corrected
+        payload = json.loads(response.content or "")
+        if not isinstance(payload, dict):
+            raise ValueError("心情响应不是 JSON 对象")
+        # Reuse the shared validator; our own `content` always wins over
+        # anything the model echoed back under that key.
+        return validate_role_reply({**payload, "content": content}, moods)
+    except Exception as exc:
+        logger.warning("角色心情获取失败，本轮维持上一轮心情: %s", exc, exc_info=True)
+        return None
+
+
+__all__ = ["fetch_role_mood"]

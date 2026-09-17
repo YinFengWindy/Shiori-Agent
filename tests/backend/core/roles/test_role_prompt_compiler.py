@@ -99,5 +99,8 @@ def test_formal_reply_contract_requires_explicit_runtime_context():
     assert "Mood Output Contract" not in RolePromptCompiler().compile(profile).content
     content = RolePromptCompiler().compile(profile, runtime_context={}).content
     assert "Mood Output Contract" in content
-    assert '"thought"' in content
+    # Content is plain dialogue now, not JSON: the contract must say so instead
+    # of documenting a `{content, mood, thought}` JSON structure (issue #303).
+    assert "JSON" in content
+    assert '"content"' not in content
     assert "平静" in content

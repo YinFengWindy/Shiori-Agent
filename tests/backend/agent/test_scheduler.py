@@ -65,9 +65,13 @@ async def test_recurring_desktop_delivery_persists_once_per_occurrence(tmp_path,
     sessions = SessionManager(tmp_path)
     event_bus = EventBus()
     provider = MagicMock()
+    # Passive replies are plain content now (#303): no JSON envelope. A
+    # follow-up mood/thought call still fires for this role-backed session,
+    # but its own malformed reply degrades quietly and must not affect the
+    # delivered content asserted below.
     provider.chat = AsyncMock(
         return_value=LLMResponse(
-            content='{"content":"scheduled reply","mood":"平静","thought":"我想按约定提醒你。"}',
+            content="scheduled reply",
             tool_calls=[],
         )
     )
@@ -159,7 +163,9 @@ async def test_recurring_desktop_delivery_persists_once_per_occurrence(tmp_path,
         assert "已发送" in result
     assert len(SessionManager(tmp_path).get_or_create("role:mira").messages) == 2
     if tier == "soft":
-        assert provider.chat.await_count == 2
+        # One passive turn per occurrence, each now making two calls: the
+        # plain-content reply plus its separate mood/thought follow-up (#303).
+        assert provider.chat.await_count == 4
     else:
         provider.chat.assert_not_awaited()
     await bridge.aclose()

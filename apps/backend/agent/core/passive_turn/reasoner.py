@@ -471,6 +471,8 @@ class DefaultReasoner(
                         if role_metadata.get("role_id")
                         else None
                     ),
+                    previous_mood=str(role_metadata.get("current_mood") or ""),
+                    previous_thought=str(role_metadata.get("current_thought") or ""),
                 )
                 tools_used = list(result.metadata.get("tools_used") or [])
                 tools_unlocked = list(result.metadata.get("tools_unlocked") or [])
@@ -521,6 +523,12 @@ class DefaultReasoner(
                     thinking=result.thinking,
                     streamed=result.streamed,
                     context_retry=retry_trace,
+                    # Kept off `context_retry`: that dict is snapshotted verbatim
+                    # into persisted message/outbound metadata (JSON-only).
+                    role_reply=result.metadata.get("role_reply"),
+                    role_reply_mood_fresh=bool(
+                        result.metadata.get("role_reply_mood_fresh")
+                    ),
                 )
             except ContentSafetyError:
                 if attempt < len(attempts) - 1:

@@ -10,11 +10,7 @@ from agent.core.passive_support import (
 )
 from session.manager.models import INTERRUPTED_TURN_METADATA_KEY, build_session_message
 from agent.core.response_parser import parse_response, ParsedResponse, ResponseMetadata
-from core.roles.reply_state import (
-    parse_role_reply,
-    role_mood_catalog,
-    reply_state_metadata,
-)
+from core.roles.reply_state import InvalidRoleReply, RoleReply, reply_state_metadata
 from agent.lifecycle.phase import (
     PhaseFrame,
     PhaseModule,
@@ -115,10 +111,13 @@ class _BuildAfterReasoningCtxModule:
         tool_chain = cast(list[dict[str, object]], turn_result.tool_chain)
         session = input.state.session
         if session is not None and turn_result.context_retry.get("formal_role_reply"):
-            reply = parse_role_reply(
-                raw_reply,
-                role_mood_catalog(session.metadata.get("role_runtime_config") or {}),
-            )
+            # The reasoner already produced content plus a validated (or
+            # degraded, previous-turn) RoleReply; no JSON parsing here. Kept
+            # off `context_retry`, which gets snapshotted verbatim into
+            # persisted JSON metadata further down.
+            if not isinstance(turn_result.role_reply, RoleReply):
+                raise InvalidRoleReply("角色回复缺少已生成的心情/想法状态")
+            reply = turn_result.role_reply
             parsed = ParsedResponse(
                 clean_text=reply.content,
                 metadata=ResponseMetadata(
@@ -350,11 +349,19 @@ class _AppendMessagesModule:
             relationship_runtime = getattr(
                 self._session_services, "relationship_runtime", None
             )
+            # Only a freshly fetched mood/thought bumps session mood state; a
+            # degraded reply (mood call failed) leaves last turn's mood and
+            # thought untouched instead of overwriting them with copies.
+            mood_fresh = bool(frame.input.turn_result.role_reply_mood_fresh)
             state_kwargs = {
                 "metadata_updates": {
                     **pending_metadata,
-                    **reply_state_metadata(
-                        reply, updated_at=str(pending_metadata["last_turn_ts"])
+                    **(
+                        reply_state_metadata(
+                            reply, updated_at=str(pending_metadata["last_turn_ts"])
+                        )
+                        if mood_fresh
+                        else {}
                     ),
                 },
                 "pending_messages": True,
