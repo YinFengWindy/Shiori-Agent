@@ -27,19 +27,19 @@ export function SettingsSubsectionNav({ label, subsections, currentSubsectionId,
         <nav className="mt-7 flex max-w-full gap-7 overflow-x-auto" aria-label="设置子区">
           {subsections.map((item) => (
             <button
-              // `focus:outline-none` opts this keyboard-reachable tab out of
-              // the global focus-ring treatment (styles.css's shared
-              // input/textarea/select:focus rule doesn't apply to a
-              // <button> anyway). Carried over verbatim from the pre-#230
-              // editor-only header this component replaces, not introduced
-              // here — the active tab's permanent `after:` underline is the
-              // only visible state indicator once this is removed, which is
-              // weaker than a focus ring for a keyboard user tabbing through
-              // an *inactive* button. Flagging rather than silently
-              // inheriting it, per this repo's rule that a focus opt-out
-              // needs its reasoning written down.
+              // No `focus:outline-none` here, unlike the pre-#230 editor-only
+              // header this component replaces. styles.css declares "keyboard
+              // focus stays visible; only pointer focus is quiet" via a global
+              // `:focus { outline: none }` + `:focus-visible { outline: 2px }`
+              // pair that does apply to a <button>. Tailwind's
+              // `focus:outline-none` compiles to `.focus\:outline-none:focus`,
+              // which outranks bare `:focus-visible` on specificity and so
+              // silently killed the keyboard focus ring on these tabs. Mouse
+              // users see no change either way; keyboard users tabbing to an
+              // *inactive* tab previously had no indicator at all, since the
+              // `after:` underline only marks the active one.
               className={cx(
-                "relative shrink-0 border-0 bg-transparent px-0 pb-2 text-body-sm transition focus:outline-none",
+                "relative shrink-0 border-0 bg-transparent px-0 pb-2 text-body-sm transition",
                 item.id === currentSubsectionId
                   ? "font-medium text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-accent"
                   : "text-ink-faint hover:text-ink-secondary",

@@ -51,15 +51,11 @@ export function SettingsPage({
   const visibleSubsections = entry ? getSettingsSubsections(entry.id, isPluginEnabled) : [];
   const currentSubsectionId = entry ? resolveSettingsSubsectionId(entry.id, activeSubsections, isPluginEnabled) : null;
 
-  // Issue #230 AC 3's fallback commit: `resolveSettingsSubsectionId` above
-  // already substitutes a visible subtab when the remembered one belongs to
-  // a plugin that just got disabled, but that alone only fixes what is
-  // *displayed* this render — without writing the fallback back into the
-  // record, the record keeps the disabled plugin's id, and re-enabling that
-  // plugin later in the same session would make the stale id valid again
-  // and silently snap the page back to it out from under the user. Guarded
-  // by the same equality check `onChangeSubsection`/`remember` already do,
-  // so this only ever fires when the resolved answer actually changed.
+  // Issue #230 AC 3's fallback commit. `useSettingsSubsectionMemory`'s doc
+  // comment explains why resolving alone is not enough; this is the caller
+  // half it names, because only this component knows the rendered section
+  // and its live `isPluginEnabled` filter. Equality-guarded, so it fires
+  // only when the resolved answer actually disagrees with the record.
   useEffect(() => {
     if (!entry || !currentSubsectionId) return;
     if (activeSubsections[entry.id] !== currentSubsectionId) {
