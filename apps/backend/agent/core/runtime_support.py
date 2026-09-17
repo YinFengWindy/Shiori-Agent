@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Protocol
 
 from agent.lifecycle.types import PromptRenderInput, PromptRenderResult
+from core.roles.reply_state import RoleReply
 
 logger = logging.getLogger("agent.tool_discovery")
 
@@ -125,6 +126,10 @@ class TurnRunResult:
     thinking: str | None = None
     streamed: bool = False
     context_retry: dict[str, object] = field(default_factory=dict)
+    # Kept outside `context_retry`: that dict gets snapshotted verbatim into
+    # persisted message/outbound metadata (JSON), so it must stay JSON-safe.
+    role_reply: RoleReply | None = None
+    role_reply_mood_fresh: bool = False
 
 
 class AgentLoopRunner(Protocol):

@@ -373,11 +373,17 @@ async def test_first_chat_seed_failure_reports_error_and_next_chat_retries(
             if fail_seed:
                 raise RuntimeError("seed provider unavailable")
             return LLMResponse(content="# 我是谁\n\n我是本地测试角色。")
+        if kwargs.get("disable_thinking"):
+            # The post-reply mood/thought follow-up call (#303): content is
+            # plain now, so only this separate call is JSON-shaped.
+            replies.append(kwargs["model"])
+            assert kwargs.get("response_format") == {"type": "json_object"}
+            return LLMResponse(
+                content='{"mood":"平静","thought":"我终于能和你说话了。"}'
+            )
         replies.append(kwargs["model"])
-        assert kwargs.get("response_format") == {"type": "json_object"}
-        return LLMResponse(
-            content='{"content":"你好。","mood":"平静","thought":"我终于能和你说话了。"}'
-        )
+        assert "response_format" not in kwargs
+        return LLMResponse(content="你好。")
 
     monkeypatch.setattr(LLMProvider, "chat", fake_chat)
     path = tmp_path / "config.toml"
