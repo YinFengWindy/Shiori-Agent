@@ -8,6 +8,7 @@ from typing import Any
 import agent.core.passive_support as support
 from agent.core.types import LLMToolCall, ReasonerResult
 from agent.core.reply_completion import fetch_role_mood
+from agent.core.reply_output import normalize_role_content
 from core.roles.reply_state import RoleReply
 from bus.events_lifecycle import ToolCallCompleted, ToolCallStarted
 
@@ -119,7 +120,7 @@ class _PassiveReasoningResultMixin:
                 model=self._llm_config.model,
                 max_tokens=self._llm_config.max_tokens,
             )
-            content = response.content or ""
+            content = normalize_role_content(response.content or "")
             # 心情/想法通过一次独立调用获取；失败时返回 None，由调用方降级为
             # 沿用上一轮心情，绝不阻塞这段阶段性总结的投递。
             role_reply = await fetch_role_mood(
