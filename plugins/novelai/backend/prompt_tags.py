@@ -62,12 +62,21 @@ class PromptTagStore:
         self._path = self._root / "prompt_tags.json"
         self.list_entries()
 
-    def _adopt_image(self, value: str) -> str:
+    def _adopt_image(self, value: str, *, preserve_missing: bool = False) -> str:
         if not value:
             return value
         source = Path(value)
         if not source.is_absolute():
             source = self._workspace / source
+        # Missing historical references stay visible for repair without disabling
+        # the tag catalog. An explicit upsert still requires a readable source.
+        if preserve_missing:
+            if source.resolve().is_relative_to((self._root / "references").resolve()):
+                return value
+            try:
+                source.stat()
+            except FileNotFoundError:
+                return value
         return str(copy_owned_asset(source, self._root / "references"))
 
     def list_entries(self) -> list[PromptTagEntry]:
@@ -83,18 +92,16 @@ class PromptTagStore:
         ids = [entry.id for entry in entries]
         if len(ids) != len(set(ids)):
             raise ValueError("提示词 tag ID 不能重复")
-        if any(
-            entry.image_path
-            and not Path(entry.image_path)
-            .resolve()
-            .is_relative_to((self._root / "references").resolve())
+        migrated_entries = [
+            replace(
+                entry,
+                image_path=self._adopt_image(entry.image_path, preserve_missing=True),
+            )
             for entry in entries
-        ):
-            entries = [
-                replace(entry, image_path=self._adopt_image(entry.image_path))
-                for entry in entries
-            ]
-            self._write(entries)
+        ]
+        if migrated_entries != entries:
+            self._write(migrated_entries)
+            entries = migrated_entries
         entries.sort(key=lambda item: (item.category.casefold(), item.name.casefold()))
         return entries
 
