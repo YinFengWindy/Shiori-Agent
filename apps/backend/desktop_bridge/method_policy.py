@@ -65,6 +65,19 @@ class MethodPolicy:
 _DEFAULT_POLICY = MethodPolicy()
 
 METHOD_POLICIES: dict[str, MethodPolicy] = {
+    **{
+        method: MethodPolicy(
+            concurrency=Concurrency.MUTATION,
+            admission_exempt=True,
+            handler=Handler.PLUGIN_MANAGEMENT,
+        )
+        for method in (
+            "plugins.install.preview",
+            "plugins.install.confirm",
+            "plugins.install.cancel",
+            "plugins.uninstall",
+        )
+    },
     "health": MethodPolicy(concurrency=Concurrency.READ_ONLY, admission_exempt=True),
     "runtime.status": MethodPolicy(
         concurrency=Concurrency.READ_ONLY,

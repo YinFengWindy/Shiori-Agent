@@ -163,6 +163,22 @@ class ReloadableDesktopService:
                     return self.plugin_management.list(payload)
                 if method == "plugins.trust":
                     return self.plugin_management.trust.confirm(payload)
+                if (
+                    method.startswith("plugins.install.")
+                    or method == "plugins.uninstall"
+                ):
+                    result = await self.plugin_management.packages.handle(
+                        method,
+                        payload,
+                        prepare_service=self._prepare,
+                        publish_service=self._publish,
+                    )
+                    # Also retire renderer/background/surface resources after a
+                    # successful hot disable in the uninstall transaction.
+                    await self._notify_applied(
+                        request_id, {**result, "generation": self.app.generation}
+                    )
+                    return result
                 if method == "plugins.activation.report":
                     result = await self.plugin_management.report_activation(payload)
                     if result["changed"]:

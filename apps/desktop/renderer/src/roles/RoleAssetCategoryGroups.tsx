@@ -10,7 +10,7 @@ import {
   moveRoleAssetToCategory,
 } from "./roleAssetCategories";
 import { deleteRoleAssetCategory } from "./roleAssetCategories";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 
 type RoleAssetCategoryGroupsProps = {
   role: RoleRecord | null;

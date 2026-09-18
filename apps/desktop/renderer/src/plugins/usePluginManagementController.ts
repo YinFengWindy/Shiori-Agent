@@ -74,5 +74,5 @@ export function usePluginManagementController() {
     setTrustCandidate(candidate);
   }, []);
 
-  return { plugins, error, pendingIds, setEnabled, reload, trustCandidate, requestTrust, confirmTrust, closeTrust: () => setTrustCandidate(null) };
+  return { plugins, error, pendingIds, setEnabled, reload, runMutation, trustCandidate, requestTrust, confirmTrust, closeTrust: () => setTrustCandidate(null) };
 }
