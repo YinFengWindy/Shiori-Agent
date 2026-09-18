@@ -12,32 +12,48 @@ before(async () => {
 });
 
 describe("PluginManagementSection", () => {
-  it("keeps icon actions together and requires selecting an external package before removal", async () => {
+  it("opens title-triggered details for builtin and external plugins with only install in the toolbar", async () => {
     resetPluginEnabledStateForTests();
     const view = await mountTestComponent(null);
     Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
       onEvent: () => () => undefined,
       invoke: async ({ method }: { method: string }) => ({ id: "r", type: "response", method, error: null, payload: { plugins: [
         { id: "builtin", candidate_id: "builtin/one", directory: "builtin/one", source: "builtin", name: "Builtin", version: "1.0.0", state: "ACTIVE", enabled: true, can_toggle: true },
-        { id: "external", candidate_id: "workspace/external", directory: "workspace/external", source: "workspace", name: "External", version: "1.0.0", state: "ACTIVE", enabled: true, can_toggle: true },
+        { id: "external", candidate_id: "workspace/external", directory: "workspace/external", source: "workspace", name: "External", version: "1.0.0", description: "An external plugin", state: "ACTIVE", enabled: true, can_toggle: true },
       ] } }),
     } });
     try {
       await view.render(<PluginManagementSection />);
       const toolbar = view.container.querySelector('[role="toolbar"]')!;
       const buttons = toolbar.querySelectorAll<HTMLButtonElement>("button");
-      assert.deepEqual(Array.from(buttons, (button) => button.getAttribute("aria-label")), ["安装插件 ZIP", "更新插件", "卸载插件"]);
+      assert.deepEqual(Array.from(buttons, (button) => button.getAttribute("aria-label")), ["安装插件 ZIP"]);
       assert.equal(buttons[0].disabled, false);
-      assert.equal(buttons[1].disabled, true);
-      assert.equal(buttons[2].disabled, true);
-      assert.equal(view.container.querySelector<HTMLInputElement>('[aria-label="选择 Builtin"]')?.disabled, true);
-      await act(async () => view.container.querySelector<HTMLInputElement>('[aria-label="选择 External"]')!.click());
-      assert.equal(buttons[1].disabled, false);
-      assert.equal(buttons[2].disabled, false);
-      await act(async () => buttons[2].click());
-      const dialog = document.querySelector('[role="dialog"]')!;
+      assert.equal(view.container.querySelector('input[type="radio"], details, summary'), null);
+      assert.equal(view.container.querySelector('.bg-accent-softer'), null);
+      assert.equal(document.querySelector('[role="dialog"]'), null);
+      const title = (name: string) => Array.from(view.container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === name)!;
+      assert.equal(title("Builtin").getAttribute("aria-haspopup"), "dialog");
+      await act(async () => { title("Builtin").focus(); title("Builtin").click(); });
+      let dialog = document.querySelector('[role="dialog"]')!;
+      assert.match(dialog.textContent ?? "", /builtin\/one/);
+      assert.doesNotMatch(dialog.textContent ?? "", /从 ZIP 更新|卸载插件/);
+      await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭插件详情"]')!.click());
+      await act(async () => { title("External").focus(); title("External").click(); });
+      dialog = document.querySelector('[role="dialog"]')!;
       assert.match(dialog.textContent ?? "", /External/);
-      assert.equal(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked, false);
+      assert.match(dialog.textContent ?? "", /An external plugin/);
+      assert.match(dialog.textContent ?? "", /workspace\/external/);
+      assert.equal(view.container.contains(dialog), false, "details must render in a portal");
+      const uninstall = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "卸载插件")!;
+      await act(async () => { uninstall.focus(); uninstall.click(); });
+      const confirmations = document.querySelectorAll('[role="dialog"]');
+      assert.equal(confirmations.length, 2, "uninstall needs its own confirmation above details");
+      const confirmation = confirmations[1];
+      assert.match(confirmation.textContent ?? "", /External/);
+      assert.equal(confirmation.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked, false);
+      await act(async () => Array.from(confirmation.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "取消")!.click());
+      assert.equal(document.querySelectorAll('[role="dialog"]').length, 1);
+      assert.equal(document.activeElement, uninstall, "cancel returns focus to the detail action");
     } finally { await view.cleanup(); resetPluginEnabledStateForTests(); }
   });
 
@@ -87,6 +103,66 @@ describe("PluginManagementSection", () => {
       await view.cleanup();
     }
   });
+
+  for (const operation of ["update", "uninstall"] as const) {
+    it(`keeps ${operation} confirmation separate and refreshes the open candidate after success`, async () => {
+      resetPluginEnabledStateForTests();
+      const view = await mountTestComponent(null);
+      const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
+      let pending = false;
+      Object.defineProperty(window, "miraDesktop", { configurable: true, value: {
+        onEvent: () => () => undefined,
+        pickFiles: async () => ["native-picked.zip"],
+        invoke: async (request: { method: string; payload: Record<string, unknown> }) => {
+          requests.push(request);
+          if (request.method === "plugins.install.preview") return { id: "r", type: "response", method: request.method, error: null, payload: {
+            token: "update-token", id: "external", name: "External", version: "2.0.0", previous_version: "1.0.0", action: "update", source_name: "native-picked.zip", directory: "workspace/external",
+          } };
+          if (request.method === "plugins.install.confirm" || request.method === "plugins.uninstall") pending = true;
+          return { id: "r", type: "response", method: request.method, error: null, payload: { plugins: [
+            { id: "external", candidate_id: "workspace/external", directory: "workspace/external", source: "workspace", name: "External", version: "1.0.0", state: "ACTIVE", enabled: true, can_toggle: !pending, pending_operation: pending ? operation : undefined, pending_version: pending ? "2.0.0" : undefined },
+          ] } };
+        },
+      } });
+      const button = (text: string) => {
+        const found = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((element) => element.textContent === text);
+        assert.ok(found, `missing button ${text}`);
+        return found;
+      };
+      try {
+        await view.render(<PluginManagementSection />);
+        await act(async () => button("External").click());
+        await act(async () => button(operation === "update" ? "从 ZIP 更新" : "卸载插件").click());
+        const confirmation = Array.from(document.querySelectorAll('[role="dialog"]')).at(-1)!;
+        assert.equal(document.querySelectorAll('[role="dialog"]').length, 2);
+        if (operation === "update") {
+          assert.match(confirmation.textContent ?? "", /可读写你的工作区、访问网络并执行任意前端代码/);
+          assert.match(confirmation.textContent ?? "", /1\.0\.0 → 2\.0\.0/);
+          assert.deepEqual(requests.find((request) => request.method === "plugins.install.preview")?.payload, { source: "native-picked.zip", candidate_id: "workspace/external" });
+          assert.equal(requests.some((request) => request.method === "plugins.install.confirm"), false);
+        } else {
+          assert.equal(confirmation.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked, false);
+          assert.equal(requests.some((request) => request.method === "plugins.uninstall"), false);
+        }
+        await act(async () => button(operation === "update" ? "信任并更新" : "卸载").click());
+        const detail = document.querySelector('[role="dialog"]')!;
+        assert.equal(document.querySelectorAll('[role="dialog"]').length, 1);
+        assert.ok(detail.contains(document.activeElement), "success keeps focus inside details after its action disappears");
+        assert.match(detail.textContent ?? "", /workspace\/external/);
+        assert.match(detail.textContent ?? "", /待重启/);
+        assert.doesNotMatch(detail.textContent ?? "", /从 ZIP 更新|卸载插件/);
+        if (operation === "update") {
+          assert.match(detail.textContent ?? "", /1\.0\.0 → 2\.0\.0/);
+          assert.deepEqual(requests.find((request) => request.method === "plugins.install.confirm")?.payload, { token: "update-token", trusted: true });
+        } else {
+          const payload = requests.find((request) => request.method === "plugins.uninstall")?.payload;
+          assert.equal(payload?.candidate_id, "workspace/external");
+          assert.equal(payload?.delete_data, false);
+          assert.equal(typeof payload?.operation_id, "string");
+        }
+      } finally { await view.cleanup(); resetPluginEnabledStateForTests(); }
+    });
+  }
 
   it("shows a load error with a retry action when plugins.list fails", async () => {
     const view = await mountTestComponent(null);
@@ -156,8 +232,15 @@ it("renders each conflicting directory and disables every unsafe candidate", asy
     for (const [index, toggle] of Array.from(toggles).entries()) {
       assert.equal(toggle.disabled, true);
       assert.equal(toggle.getAttribute("aria-checked"), "false");
-      assert.ok(view.container.textContent?.includes(`C:/plugins/root-${index}`));
+      assert.equal(view.container.textContent?.includes(`C:/plugins/root-${index}`), false);
       assert.ok(view.container.textContent?.includes(`diagnostic-${index}`));
+      const titles = view.container.querySelectorAll<HTMLButtonElement>('[aria-haspopup="dialog"]');
+      await act(async () => titles[index].click());
+      const dialog = document.querySelector('[role="dialog"]')!;
+      assert.ok(dialog.textContent?.includes(`C:/plugins/root-${index}`));
+      assert.ok(dialog.textContent?.includes(`diagnostic-${index}`));
+      if (index < 2) assert.doesNotMatch(dialog.textContent ?? "", /从 ZIP 更新|卸载插件/);
+      await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭插件详情"]')!.click());
     }
     assert.ok(view.container.textContent?.includes("内置"));
     assert.ok(view.container.textContent?.includes("工作区"));

@@ -3,7 +3,7 @@ import type React from "react";
 import { cx } from "../shared/styles";
 
 type SettingsFieldProps = {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
   layout?: "side" | "stack";
   children: React.ReactNode;

@@ -6,7 +6,7 @@ export function canManagePluginPackage(plugin: PluginSummary) {
     && !plugin.pendingOperation && !plugin.trustPendingRestart;
 }
 
-/** A missing/ineligible selection resolves to none; never silently targets another plugin. */
-export function selectedPluginPackage(plugins: readonly PluginSummary[] | null, candidateId: string | null) {
-  return plugins?.find((plugin) => plugin.candidateId === candidateId && canManagePluginPackage(plugin)) ?? null;
+/** Resolve details from the current roster, including candidates that cannot be modified. */
+export function pluginDetailsCandidate(plugins: readonly PluginSummary[] | null, candidateId: string | null) {
+  return plugins?.find((plugin) => plugin.candidateId === candidateId) ?? null;
 }
