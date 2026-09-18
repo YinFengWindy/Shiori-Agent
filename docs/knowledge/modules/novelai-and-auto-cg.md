@@ -22,7 +22,7 @@ related:
 
 `plugins/novelai/backend/` 拥有设置、请求模型、HTTP 客户端、提示词标签、持久化、`NovelAIService.generate()`、生图工具、自动 CG 与 RPC。`plugins/novelai/ui/` 拥有 Image Studio、提示词标签库与历史界面，经 `nav.page` / `settings.section` 注册页面与设置。
 
-手动 `generate_image` 工具和自动 CG 都应复用该服务，避免各自实现请求与错误处理。生成文件与元数据由插件写入 workspace 下的 `private_runtime/novelai/`；运行数据不应随插件停用或包升级删除。
+手动 `generate_image` 工具和自动 CG 都应复用该服务，避免各自实现请求与错误处理。生成文件与元数据由插件写入 workspace 下的 `plugin-data/novelai/generation/`；运行数据不应随插件停用或包升级删除。
 
 启停只由宿主管理的 `[plugins.novelai].enabled` 决定，插件配置表单与运行时设置不再声明第二个 `enabled`。插件停用后，宿主撤销工具、RPC 与事件订阅。服务仍检查 Token，角色自动 CG 偏好仍独立生效。
 
@@ -34,7 +34,9 @@ NovelAI 的业务代码、Logo、设置、聊天图片重生成和角色自动 C
 
 插件内核按依赖顺序加载、按反向依赖顺序卸载。缺失、禁用或失败的依赖使故事插件进入 `BLOCKED`，其页面和 RPC 不可用；恢复 NovelAI 后重新装配可恢复故事入口。运行时替换先等待旧插件接受的后台任务完成，桥接事件按所属注册表隔离，避免跨代重复转发。首次启用故事时恢复被中断的持久化任务；已有活跃前代时保留其执行权。
 
-素材页的一键生成差分及 `roles.differences.generate` 已移除。已有差分、素材分类和手动心情绑定保持可用。故事数据仍存于 workspace 的 `stories/`，NovelAI 运行数据仍存于 `private_runtime/novelai/`，启停不删除这些数据。
+素材页的一键生成差分及 `roles.differences.generate` 已移除。已有差分、素材分类和手动心情绑定保持可用。故事数据存于 workspace 的 `plugin-data/story/stories/`，NovelAI 运行数据存于 `plugin-data/novelai/generation/`，启停不删除这些数据。
+
+Story 采用的 CG 和会话消息媒体各有独立副本，分别随 Story 与会话内容保留；NovelAI 提示词参考图复制到自身的 `generation/references/`。旧生成目录的 JSONL 记录与元数据路径在迁移后指向新根，并保留旧输出身份用于会话副本的来源查找；请求快照随生成目录迁移。清理 NovelAI 数据不会让 Story 或聊天已有图片消失，但重新生成依赖的原始记录与请求也会被清理。共享 imports 不随 NovelAI 清理，已明确写回角色的素材仍归角色。
 
 `_migrate_legacy_novelai_config()` 仍由宿主在加载插件前升级旧配置。共享场景事件、角色存储、会话呈现与资产服务是宿主契约，插件可以复用；本次归位不等同于将全部宿主服务封装为独立 SDK。UI 通过注入的宿主服务访问角色列表、文件选择与事件，不直接使用 Electron 全局对象。
 

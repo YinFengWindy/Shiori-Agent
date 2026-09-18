@@ -17,6 +17,15 @@ from plugins.default_memory.backend.plugin import (
     _DefaultMemoryRecorder,
 )
 
+
+def test_missing_workspace_rejects_package_log_fallback(tmp_path):
+    from plugins.default_memory.backend.plugin import _data_path
+
+    with pytest.raises(RuntimeError, match="不能写入安装包"):
+        _data_path(plugin_dir=tmp_path, workspace=None)
+    assert not (tmp_path / ".data").exists()
+
+
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -159,7 +168,7 @@ async def test_setup_wires_before_turn_module_and_tool_result_event(
         "ContextPrepareRecordModule"
     ]
 
-    data_path = workspace / "observe" / "recall_inspector.jsonl"
+    data_path = workspace / "plugin-data" / "default_memory" / "recall_inspector.jsonl"
     _ = await bus.emit(
         AfterToolResultCtx(
             session_key="cli:1",
@@ -221,4 +230,6 @@ async def test_setup_still_wires_module_but_recorder_is_inactive_for_other_engin
             status="ok",
         )
     )
-    assert not (workspace / "observe" / "recall_inspector.jsonl").exists()
+    assert not (
+        workspace / "plugin-data" / "default_memory" / "recall_inspector.jsonl"
+    ).exists()

@@ -36,7 +36,9 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         logger.warning("observe 插件缺少 workspace，跳过加载")
         return
 
-    db_path = workspace / "observe" / "observe.db"
+    from .storage import prepare_storage
+
+    db_path = prepare_storage(workspace)
     writer = TraceWriter(db_path)
     writer_task = ctx.background.spawn(writer.run(), name="writer")
     await writer.wait_ready(writer_task)

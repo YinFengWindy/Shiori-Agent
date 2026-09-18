@@ -51,10 +51,16 @@ async def test_real_selected_engine_assembles_without_loading_the_other(
     config.memory.engine = engine
     workspace = tmp_path / "workspace"
     selected_db = (
-        workspace / "memory" / ("memory2.db" if engine == "default" else "akasha.db")
+        workspace
+        / "plugin-data"
+        / package
+        / ("memory2.db" if engine == "default" else "akasha.db")
     )
     other_db = (
-        workspace / "memory" / ("akasha.db" if engine == "default" else "memory2.db")
+        workspace
+        / "plugin-data"
+        / other
+        / ("akasha.db" if engine == "default" else "memory2.db")
     )
 
     storage = ensure_memory_plugin_storage(config, workspace)

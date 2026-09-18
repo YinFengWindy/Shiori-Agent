@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
+
+from infra.persistence.owned_assets import copy_owned_asset
+from .storage import storage_root
 
 _MAX_MATCHES = 5
 _ALLOWED_RATINGS = {"general", "sensitive", "adult"}
@@ -54,7 +57,18 @@ class PromptTagStore:
     """Persist and validate the workspace-owned prompt-tag catalog."""
 
     def __init__(self, workspace: Path) -> None:
-        self._path = workspace / "private_runtime" / "novelai" / "prompt_tags.json"
+        self._workspace = workspace
+        self._root = storage_root(workspace)
+        self._path = self._root / "prompt_tags.json"
+        self.list_entries()
+
+    def _adopt_image(self, value: str) -> str:
+        if not value:
+            return value
+        source = Path(value)
+        if not source.is_absolute():
+            source = self._workspace / source
+        return str(copy_owned_asset(source, self._root / "references"))
 
     def list_entries(self) -> list[PromptTagEntry]:
         """Load all catalog entries in stable name order."""
@@ -69,6 +83,18 @@ class PromptTagStore:
         ids = [entry.id for entry in entries]
         if len(ids) != len(set(ids)):
             raise ValueError("提示词 tag ID 不能重复")
+        if any(
+            entry.image_path
+            and not Path(entry.image_path)
+            .resolve()
+            .is_relative_to((self._root / "references").resolve())
+            for entry in entries
+        ):
+            entries = [
+                replace(entry, image_path=self._adopt_image(entry.image_path))
+                for entry in entries
+            ]
+            self._write(entries)
         entries.sort(key=lambda item: (item.category.casefold(), item.name.casefold()))
         return entries
 
@@ -77,6 +103,7 @@ class PromptTagStore:
 
         entry = self._parse_entry(payload)
         entries = [item for item in self.list_entries() if item.id != entry.id]
+        entry = replace(entry, image_path=self._adopt_image(entry.image_path))
         entries.append(entry)
         self._write(entries)
         return entry

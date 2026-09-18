@@ -20,6 +20,42 @@ from plugins.story.backend.repository import StoryRepository, payload_hash
 from plugins.story.backend.rpc import StorySimulationHandler
 
 
+@pytest.mark.asyncio
+async def test_existing_story_opens_workspace_relative_images_as_owned_copies(tmp_path):
+    from pathlib import Path
+    from core.roles.store import RoleStore
+
+    source = tmp_path / "legacy.png"
+    source.write_bytes(b"CG")
+    handler = StorySimulationHandler(workspace=tmp_path, role_store=RoleStore(tmp_path))
+    handler._catalog.create_entry(
+        story_id="story-1", title="story", request_id="create", payload_hash="hash"
+    )
+    repository = StoryRepository(handler._catalog.database_path("story-1"))
+    repository.create_story(
+        story_id="story-1",
+        title="story",
+        background="background",
+        role_snapshot={},
+        player_profile=StoryPlayerProfile("name", "appearance", "identity"),
+        story_date="2026-09-18",
+        time_band="上午",
+        opening_context={},
+    )
+    repository._connection.execute(
+        "UPDATE story_resources SET path = 'legacy.png', status = 'ready'"
+    )
+    repository.close()
+    try:
+        opened = handler._repository("story-1")
+        path = Path(opened.story_resources("story-1")[0]["path"])
+        source.unlink()
+        assert path.read_bytes() == b"CG"
+        assert path.is_relative_to(handler._catalog.root)
+    finally:
+        await handler.aclose()
+
+
 class OpeningDirector:
     """Small deterministic director for bridge-level Story tests."""
 

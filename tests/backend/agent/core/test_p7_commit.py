@@ -378,7 +378,9 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
 
     # 1. outbound 内容来自 meme 插件装饰后
     assert out.content == "原始回复"
-    assert out.media == [str(image)]
+    migrated_image = tmp_path / "plugin-data" / "meme" / "library" / "shy" / "001.png"
+    assert migrated_image.read_bytes() == image.read_bytes()
+    assert out.media == [str(migrated_image)]
     assert out.metadata["req_id"] == "r2"
     assert out.metadata["streamed_reply"] is True
 
@@ -389,7 +391,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
     assert session.messages[1]["content"] == "原始回复"
     assert session.messages[1]["reasoning_content"] == "思考"
     assert session.messages[1]["cited_memory_ids"] == ["mem_1"]
-    assert session.messages[1]["media"] == [str(image)]
+    assert session.messages[1]["media"] == [str(migrated_image)]
     presence.record_user_message.assert_called_once_with("telegram:456")
     session_manager.append_messages.assert_awaited_once()
 

@@ -54,6 +54,7 @@ class StorySimulationHandler:
         image_tool: Any | None = None,
     ) -> None:
         self._roles = role_store
+        self._workspace = workspace
         self._catalog = StoryCatalog(workspace)
         self._repositories: dict[str, StoryRepository] = {}
         self._director = director
@@ -637,7 +638,7 @@ class StorySimulationHandler:
         db_path = self._catalog.database_path(story_id)
         if not db_path.exists():
             raise StoryNotFoundError(f"Story database is missing: {story_id}")
-        repository = StoryRepository(db_path)
+        repository = StoryRepository(db_path, workspace=self._workspace)
         self._repositories[story_id] = repository
         return repository
 
@@ -647,7 +648,9 @@ class StorySimulationHandler:
         existing = self._repositories.get(story_id)
         if existing is not None:
             return existing
-        repository = StoryRepository(self._catalog.database_path(story_id))
+        repository = StoryRepository(
+            self._catalog.database_path(story_id), workspace=self._workspace
+        )
         self._repositories[story_id] = repository
         return repository
 

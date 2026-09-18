@@ -5,7 +5,7 @@ from pathlib import Path
 from session.store import SessionStore
 
 
-def test_fetch_session_messages_preserves_media_path(tmp_path: Path) -> None:
+def test_fetch_session_messages_preserves_owned_media_copy(tmp_path: Path) -> None:
     workspace = tmp_path / ".shiori" / "workspace"
     current_image = workspace / "private_runtime" / "novelai" / "output.png"
     current_image.parent.mkdir(parents=True)
@@ -23,7 +23,10 @@ def test_fetch_session_messages_preserves_media_path(tmp_path: Path) -> None:
 
     messages = store.fetch_session_messages("role:mira")
 
-    assert messages[0]["media"] == [str(current_image)]
+    copied = Path(messages[0]["media"][0])
+    assert copied != current_image
+    current_image.unlink()
+    assert copied.read_bytes() == b"png"
     store.close()
 
 

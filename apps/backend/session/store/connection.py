@@ -33,6 +33,9 @@ class _SessionConnection:
         self._closed = False
         self._has_fts = False
         self._init_schema()
+        from session.media_assets import adopt_persisted_media
+
+        adopt_persisted_media(self._conn, self._workspace)
 
     def __del__(self) -> None:
         if not self._closed:

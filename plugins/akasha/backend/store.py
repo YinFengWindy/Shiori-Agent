@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from infra.persistence.sqlite_lifecycle import open_owned_database
+
 import numpy as np
 
 from .core import (
@@ -185,11 +187,15 @@ class AkashaStore:
         # 1. 初始化 sidecar 数据库和 schema。
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        self._db = open_owned_database(self.db_path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._lock = threading.RLock()
         self._closed = False
-        self.ensure_schema()
+        try:
+            self.ensure_schema()
+        except BaseException:
+            self.close()
+            raise
 
     @property
     def db(self) -> sqlite3.Connection:

@@ -204,6 +204,9 @@ class _PersistenceMixin:
             last_consolidated=session.last_consolidated,
             next_seq=next_seq,
         )
+        for message, row in zip(session.messages, rows):
+            if row.get("media"):
+                message["media"] = row["media"]
 
     def _persist_messages(
         self, session: Session, messages: list[dict[str, Any]], *, commit: bool = True

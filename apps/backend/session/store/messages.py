@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from .common import _MESSAGE_SELECT_COLUMNS
+from session.media_assets import preserve_media
 
 
 class _MessageMixin:
@@ -58,6 +59,7 @@ class _MessageMixin:
             else None
         )
         extra_payload = json.dumps(extra or {}, ensure_ascii=False)
+        media = preserve_media(self._workspace, media) if media else media
         media_payload = json.dumps(list(media), ensure_ascii=False) if media else None
         with self._lock:
             self._conn.execute(
@@ -136,6 +138,8 @@ class _MessageMixin:
                     (session_key,),
                 )
                 for row in rows:
+                    if row.get("media"):
+                        row["media"] = preserve_media(self._workspace, row["media"])
                     tool_chain = row.get("tool_chain")
                     extra = row.get("extra")
                     self._conn.execute(
@@ -163,7 +167,8 @@ class _MessageMixin:
                             str(row.get("sender_role") or "") or None,
                             (
                                 json.dumps(
-                                    list(row.get("media") or []), ensure_ascii=False
+                                    list(row.get("media") or []),
+                                    ensure_ascii=False,
                                 )
                                 if row.get("media")
                                 else None
@@ -403,6 +408,7 @@ class _MessageMixin:
             set_parts.append("sender_role = ?")
             params.append(str(sender_role).strip() or None)
         if media is not None:
+            media = preserve_media(self._workspace, media)
             set_parts.append("media = ?")
             params.append(
                 json.dumps(list(media), ensure_ascii=False) if media else None
@@ -470,7 +476,7 @@ class _MessageMixin:
                     raise ValueError("media_index 超出消息媒体范围")
                 if str(media[media_index] or "") != expected_path:
                     raise ValueError("消息图片已发生变化，请刷新后重试")
-                media[media_index] = new_path
+                media[media_index] = preserve_media(self._workspace, [new_path])[0]
                 updated_at = datetime.now().astimezone().isoformat()
                 self._conn.execute(
                     "UPDATE messages SET media = ? WHERE id = ?",

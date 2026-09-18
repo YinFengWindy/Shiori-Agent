@@ -8,6 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
+from .storage import storage_root
+from session.media_assets import original_media_path
+
 from .models import (
     GeneratedImageRecord,
     NovelAIGenerationSource,
@@ -16,11 +19,11 @@ from .models import (
 
 
 class NovelAIStore:
-    """Persist generated images and metadata under private_runtime."""
+    """Persist generated images and metadata under the plugin-owned data root."""
 
     def __init__(self, workspace: Path) -> None:
         self._workspace = workspace
-        self._root = workspace / "private_runtime" / "novelai"
+        self._root = storage_root(workspace)
         self._outputs_root = self._root / "outputs"
         self._records_path = self._root / "records.jsonl"
         self._outputs_root.mkdir(parents=True, exist_ok=True)
@@ -93,16 +96,24 @@ class NovelAIStore:
     ) -> NovelAIGenerationSource | None:
         """Load the persisted record and exact request snapshot for one output path."""
 
-        target_path = self._canonical_path(output_path)
+        target_path = self._canonical_path(
+            original_media_path(self._workspace, output_path)
+        )
         if not target_path:
             return None
         for payload in reversed(self._read_record_payloads()):
             raw_output_paths = payload.get("output_paths")
             if not isinstance(raw_output_paths, list):
                 continue
-            for raw_output_path in raw_output_paths:
+            original_paths = payload.get("original_output_paths", raw_output_paths)
+            for index, raw_output_path in enumerate(raw_output_paths):
                 resolved_output_path = str(raw_output_path or "").strip()
-                if self._canonical_path(resolved_output_path) != target_path:
+                identities = [resolved_output_path]
+                if index < len(original_paths):
+                    identities.append(original_paths[index])
+                if not any(
+                    self._canonical_path(path) == target_path for path in identities
+                ):
                     continue
                 request_path = Path(resolved_output_path).parent / "request.json"
                 if not request_path.is_file():

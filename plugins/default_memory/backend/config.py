@@ -4,6 +4,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agent.plugin_host.data_migration import migrate_private_data
+
 from agent.plugin_host.local_config import resolve_local_config
 from typing import Any
 
@@ -108,7 +110,12 @@ def resolve_memory_db_path(
     default_config: DefaultMemoryConfig,
 ) -> Path:
     if not default_config.db_path:
-        return workspace / "memory" / "memory2.db"
+        return migrate_private_data(
+            workspace,
+            "default_memory",
+            "memory2.db",
+            workspace / "memory" / "memory2.db",
+        )
     path = Path(default_config.db_path)
     return path if path.is_absolute() else workspace / path
 

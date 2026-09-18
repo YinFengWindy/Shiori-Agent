@@ -49,10 +49,11 @@ def test_init_workspace_creates_expected_assets(tmp_path):
     assert registrations == []
     assert "[llm.vl]" not in config_text
     assert (workspace / "sessions.db").exists()
-    assert (workspace / "observe").is_dir()
+    assert not (workspace / "observe").exists()
+    assert not (workspace / "memes").exists()
     assert (workspace / "memory" / "consolidation_writes.db").exists()
     assert (workspace / "memory" / "journal").is_dir()
-    assert (workspace / "memory" / "memory2.db").exists()
+    assert (workspace / "plugin-data" / "default_memory" / "memory2.db").exists()
     assert json.loads((workspace / "mcp_servers.json").read_text(encoding="utf-8")) == {
         "servers": {}
     }

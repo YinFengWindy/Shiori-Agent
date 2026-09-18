@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import threading
 from pathlib import Path
+
+from infra.persistence.sqlite_lifecycle import open_owned_database
 
 from .common import SCHEMA, VEC_DIM, _emb_to_blob
 
@@ -24,9 +25,16 @@ class _StoreConnection:
     def __init__(self, db_path: str | Path, vec_dim: int = VEC_DIM) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        self._db = open_owned_database(self.db_path, check_same_thread=False)
         self._lock = threading.RLock()
         self._closed = False
+        try:
+            self._initialize(vec_dim)
+        except BaseException:
+            self.close()
+            raise
+
+    def _initialize(self, vec_dim: int) -> None:
         self._db.executescript(SCHEMA)
         self._db.commit()
 

@@ -22,6 +22,7 @@ else:
 add_project_roots_to_sys_path()
 
 from core.common.workspace import resolve_default_workspace
+from bootstrap.memory_plugins import load_memory_plugin_module
 
 
 def tokenize(text: str) -> set[str]:
@@ -49,7 +50,10 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = _build_parser().parse_args()
     workspace = args.workspace or resolve_default_workspace()
-    akasha_db = workspace / "memory" / "akasha.db"
+    owner = load_memory_plugin_module("akasha", "config")
+    akasha_db = owner.resolve_akasha_db_path(
+        workspace=workspace, akasha_config=owner.load_akasha_config(workspace=workspace)
+    )
     sessions_db = workspace / "sessions.db"
     if not akasha_db.exists():
         print(f"❌ {akasha_db} 不存在")

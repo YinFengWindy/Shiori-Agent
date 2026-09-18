@@ -175,6 +175,7 @@ async def test_regenerate_message_media_replaces_only_the_selected_slot(
     store = NovelAIStore(tmp_path)
     old_path = store._outputs_root / "2026-07-22" / "source-record" / "output-1.png"
     new_path = tmp_path / "new.png"
+    new_path.write_bytes(b"new image")
     _write_generation_source(store, old_path)
     session_key, message_id = _persist_message(manager, str(old_path))
     novelai_service = AsyncMock()
@@ -193,12 +194,16 @@ async def test_regenerate_message_media_replaces_only_the_selected_slot(
     assert payload["result"]["record_id"] == "new-record"
     assert payload["session"]["key"] == session_key
     assert payload["message"]["id"] == message_id
-    assert payload["message"]["media"] == [
-        str(old_path.with_name("before.png")),
-        str(new_path),
-    ]
+    from session.media_assets import original_media_path
+
+    copied_path = payload["message"]["media"][1]
+    assert payload["message"]["media"][0] == str(old_path.with_name("before.png"))
+    assert copied_path != str(new_path)
+    assert Path(copied_path).read_bytes() == b"new image"
+    assert original_media_path(tmp_path, copied_path) == str(new_path)
+    new_path.unlink()
     manager.invalidate(session_key)
-    assert manager.get_or_create(session_key).messages[-1]["media"][1] == str(new_path)
+    assert manager.get_or_create(session_key).messages[-1]["media"][1] == copied_path
 
 
 @pytest.mark.asyncio
@@ -224,7 +229,11 @@ async def test_regenerate_message_media_failure_preserves_old_media(
             {"session_key": session_key, "message_id": message_id, "media_index": 1}
         )
 
-    assert manager.get_or_create(session_key).messages[-1]["media"][1] == str(old_path)
+    from session.media_assets import original_media_path
+
+    current = manager.get_or_create(session_key).messages[-1]["media"][1]
+    assert original_media_path(tmp_path, current) == str(old_path)
+    assert Path(current).read_bytes() == b"old"
 
 
 @pytest.mark.asyncio
