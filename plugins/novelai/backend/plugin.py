@@ -17,9 +17,8 @@ from agent.lifecycle.types import (
     AfterReasoningCtx,
     AfterToolResultCtx,
 )
-from bus.events_lifecycle import SceneObservationCommitted
+from bus.events_lifecycle import RoleDeleted, SceneObservationCommitted
 from core.net.http import get_default_http_requester
-from core.roles.store import RoleStore
 
 from .auto_cg import AutoCgPolicy
 from .auto_cg_controller import AutoCgController
@@ -28,6 +27,7 @@ from .config import NovelAIConfig
 from .models import NovelAISettings
 from .prompt_tags import PromptTagStore
 from .rpc import NovelAIRpcHandlers
+from .role_state import NovelAIRoleState
 from .service import NovelAIService
 from .store import NovelAIStore
 from .tool import GenerateImageTool
@@ -102,7 +102,18 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     if workspace is None:
         raise RuntimeError("NovelAI 插件需要 workspace")
     settings = _load_settings(ctx)
-    role_store = RoleStore(workspace)
+    role_store = ctx.role_store
+    if role_store is None:
+        raise RuntimeError("NovelAI 插件需要 role_store")
+    role_state = NovelAIRoleState(role_store)
+    role_state.reconcile()
+    ctx.events.on(RoleDeleted, role_state.on_role_deleted)
+    ctx.effect(
+        "role_settings",
+        role_store.extensions.register(
+            "novelai", NovelAIRoleState.write_draft, NovelAIRoleState.project
+        ),
+    )
     novelai_store = NovelAIStore(workspace)
     prompt_tag_store = PromptTagStore(workspace)
     service = NovelAIService(
@@ -143,9 +154,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     # terminate 仍负责取消并等待已经启动的生成任务。
     ctx.effect("auto_cg_controller", auto_cg_controller.terminate)
     ctx.events.on(SceneObservationCommitted, auto_cg_controller.schedule)
-    ctx.scene_observations.request(
-        lambda role: bool(role.runtime_config.get("auto_scene_cg_enabled"))
-    )
+    ctx.scene_observations.request(lambda role: role_state.enabled(role.id))
 
     ctx.tool_hooks.add_handler(
         lambda event: auto_cg.guard(event.session_key, event.arguments),

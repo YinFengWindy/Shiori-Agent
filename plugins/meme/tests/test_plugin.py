@@ -49,7 +49,7 @@ def _write_meme_workspace(workspace: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    return image
+    return workspace / "plugin-data" / "meme" / "library" / "shy" / "001.png"
 
 
 @pytest_asyncio.fixture

@@ -12,6 +12,7 @@ from core.roles import RoleStore
 from plugins.desktop_pet.backend.pet_packages import RolePetPackageService
 from plugins.desktop_pet.backend import package_images
 from plugins.desktop_pet.backend.pet_state import RolePetStateStore
+from plugins.desktop_pet.backend.reconcile import PetStateReconciler
 
 
 def test_import_pet_package_accepts_a_single_wrapper_directory(
@@ -43,10 +44,61 @@ def test_import_pet_package_accepts_a_single_wrapper_directory(
     package = service.import_package(role.id, archive_path)
 
     assert package.id == "feibi"
-    assert (store.roles_dir / package.manifest_path).is_file()
+    assert (store.workspace / package.manifest_path).is_file()
     assert package.preview_path is not None
-    assert (store.roles_dir / package.preview_path).read_bytes() == b"preview"
+    assert (store.workspace / package.preview_path).read_bytes() == b"preview"
     assert package.actions == {"greeting": "waving"}
+
+
+def test_cleared_plugin_assets_can_reimport_same_package_without_reviving_backup(
+    tmp_path, monkeypatch
+):
+    import shutil
+
+    archive_path = tmp_path / "pet.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "pet.json",
+            json.dumps(
+                {
+                    "id": "pet",
+                    "displayName": "Pet",
+                    "description": "test",
+                    "spritesheetPath": "spritesheet.webp",
+                }
+            ),
+        )
+        archive.writestr("spritesheet.webp", b"new pet")
+    roles = RoleStore(tmp_path / "workspace")
+    role = roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    legacy = roles.assets_dir / "mira/pets/abandoned/spritesheet.webp"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"old interrupted import")
+    unrelated = roles.assets_dir / "mira/portrait.png"
+    unrelated.write_bytes(b"role portrait")
+    PetStateReconciler(roles).reconcile()
+    service = RolePetPackageService(roles)
+    monkeypatch.setattr(package_images, "validate_atlas", lambda _: None)
+    package = service.import_package(role.id, archive_path)
+    service.select_package(role.id, package.id)
+    RolePetStateStore(roles).set_enabled(role.id, True)
+    # Recreate a retained upgrade backup; its completed receipt must win.
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"retained backup")
+    shutil.rmtree(roles.workspace / "plugin-data/desktop_pet")
+    PetStateReconciler(roles).reconcile()
+    state = RolePetStateStore(roles).require_role(role.id)
+    assert state.pet_packages == []
+    assert state.selected_pet_package_id is None
+    assert not state.desktop_pet_enabled
+    replacement = RolePetPackageService(roles).import_package(role.id, archive_path)
+    assert replacement.id == package.id
+    assert (roles.workspace / replacement.spritesheet_path).read_bytes() == b"new pet"
+    PetStateReconciler(roles).reconcile()
+    assert unrelated.read_bytes() == b"role portrait"
+    assert not (
+        roles.workspace / "plugin-data/desktop_pet/pets-mira/abandoned"
+    ).exists()
 
 
 def test_import_pet_package_rejects_unknown_action_state(
@@ -128,7 +180,7 @@ def test_import_pet_package_accepts_a_package_without_preview(
     package = service.import_package(role.id, archive_path)
 
     assert package.preview_path is None
-    assert (store.roles_dir / package.manifest_path).is_file()
+    assert (store.workspace / package.manifest_path).is_file()
 
 
 def test_import_pet_package_uses_the_preview_image_format_for_its_extension(
@@ -162,7 +214,7 @@ def test_import_pet_package_uses_the_preview_image_format_for_its_extension(
 
     assert package.preview_path is not None
     assert package.preview_path.endswith("/preview.png")
-    assert (store.roles_dir / package.preview_path).read_bytes() == preview.getvalue()
+    assert (store.workspace / package.preview_path).read_bytes() == preview.getvalue()
 
 
 def test_selecting_a_pet_package_is_role_local_and_removal_clears_selection(
@@ -248,5 +300,5 @@ def test_concurrent_real_package_imports_keep_both_metadata_and_assets(tmp_path)
     state = RolePetStateStore(first).require_role("mira")
     assert {package.id for package in state.pet_packages} == {"first", "second"}
     assert all(
-        (first.roles_dir / package.spritesheet_path).is_file() for package in imported
+        (first.workspace / package.spritesheet_path).is_file() for package in imported
     )

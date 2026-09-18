@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from .assets import adopt_library_images
 from .errors import StoryNotFoundError
 from .models import utc_now
 
@@ -38,8 +39,13 @@ class StoryCatalog:
     """Own library discovery metadata without owning Story facts."""
 
     def __init__(self, workspace: Path) -> None:
-        self.root = workspace / "stories"
+        from agent.plugin_host.data_migration import migrate_private_data
+
+        self.root = migrate_private_data(
+            workspace, "story", "stories", workspace / "stories"
+        )
         self.root.mkdir(parents=True, exist_ok=True)
+        adopt_library_images(self.root, workspace)
         self.db_path = self.root / "catalog.db"
         self._connection = sqlite3.connect(
             str(self.db_path), check_same_thread=False, isolation_level=None

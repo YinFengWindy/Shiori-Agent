@@ -803,7 +803,7 @@ async def test_before_turn_kvcache_command(tmp_path):
     session_mgr = SimpleNamespace(get_or_create=lambda key: session)
     ctx_store = SimpleNamespace(prepare=AsyncMock())
 
-    db_path = tmp_path / "observe" / "observe.db"
+    db_path = tmp_path / "plugin-data" / "observe" / "observe.db"
     conn = open_observe_db(db_path)
     conn.execute(
         """INSERT INTO turns (source, session_key, user_msg, llm_output, ts,

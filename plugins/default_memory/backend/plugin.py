@@ -157,9 +157,16 @@ def _is_memory_engine(engine: object, name: str) -> bool:
 
 
 def _data_path(*, plugin_dir: Path, workspace: Path | None) -> Path:
-    if workspace is not None:
-        return workspace / "observe" / "recall_inspector.jsonl"
-    return plugin_dir / ".data" / "recall_turns.jsonl"
+    from agent.plugin_host.data_migration import migrate_private_data
+
+    if workspace is None:
+        raise RuntimeError("default_memory 插件需要 workspace，不能写入安装包")
+    source = workspace / "observe" / "recall_inspector.jsonl"
+    if not source.exists():
+        source = plugin_dir / ".data" / "recall_turns.jsonl"
+    return migrate_private_data(
+        workspace, "default_memory", "recall_inspector.jsonl", source
+    )
 
 
 def _now_iso() -> str:

@@ -1,4 +1,4 @@
-"""Role-owned Codex sprite package validation and import."""
+"""Plugin-owned Codex sprite package validation and import."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from core.roles.store import RoleStore
 
 from .models import RolePetPackage, RolePetState
 from .pet_state import RolePetStateStore
+from .storage import prepare_assets, role_asset_directory
 from . import package_archive, package_images
 from core.roles.models import now_iso
 
@@ -19,15 +20,17 @@ _FORMAT = "codex-sprite@1"
 
 
 class RolePetPackageService:
-    """Handles only complete, self-contained pet packages under a role asset root."""
+    """Handles only complete, self-contained pet packages under the plugin’s private asset root."""
 
     def __init__(self, role_store: RoleStore) -> None:
         self._role_store = role_store
+        prepare_assets(role_store)
         self._state = RolePetStateStore(role_store)
 
     def import_package(self, role_id: str, source: str | Path) -> RolePetPackage:
-        """Validates a ZIP first, then atomically promotes it into the role's pets directory."""
+        """Validates a ZIP first, then atomically promotes it into the plugin’s role-specific directory."""
         with self._role_store.lock:
+            prepare_assets(self._role_store)
             return self._import_package(role_id, source)
 
     def _import_package(self, role_id: str, source: str | Path) -> RolePetPackage:
@@ -101,7 +104,7 @@ class RolePetPackageService:
             except Exception:
                 shutil.rmtree(temporary, ignore_errors=True)
                 raise
-        root = destination.relative_to(self._role_store.roles_dir.resolve()).as_posix()
+        root = destination.relative_to(self._role_store.workspace.resolve()).as_posix()
         package = RolePetPackage(
             id=package_id,
             format=_FORMAT,
@@ -150,7 +153,7 @@ class RolePetPackageService:
                 or identifier in {".", ".."}
             ):
                 raise ValueError("桌宠包所属路径不安全")
-        root = self._role_store.assets_dir.resolve()
-        destination = (root / role_id / "pets" / package_id).resolve()
+        root = role_asset_directory(self._role_store.workspace, role_id).resolve()
+        destination = (root / package_id).resolve()
         destination.relative_to(root)
         return destination

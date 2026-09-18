@@ -10,6 +10,7 @@ import pytest
 from agent.plugin_host import HostServices, PluginKernel
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
+from core.roles.store import RoleStore
 from shiori_plugin_testkit.bridge import plugin_bridge_request
 from desktop_bridge.method_policy import Concurrency
 
@@ -49,6 +50,7 @@ def test_story_requires_active_novelai_and_unloads_before_it(
             event_bus=EventBus(),
             tool_registry=ToolRegistry(),
             workspace=tmp_path / "workspace",
+            role_store=RoleStore(tmp_path / "workspace"),
             plugin_configs={
                 "novelai": {"enabled": novelai_enabled},
                 "story": {"enabled": True},
@@ -77,7 +79,9 @@ def test_story_requires_active_novelai_and_unloads_before_it(
             await kernel.unload("novelai")
             assert kernel.rpc.resolve("plugin.story.list") is None
             assert kernel.rpc.resolve("plugin.novelai.generate") is None
-            assert (tmp_path / "workspace" / "stories").exists()
+            assert (
+                tmp_path / "workspace" / "plugin-data" / "story" / "stories"
+            ).exists()
         finally:
             await kernel.terminate_all()
 
@@ -92,7 +96,7 @@ async def test_novelai_toggle_blocks_and_restores_story_without_deleting_data(
     async with plugin_runtime(("novelai", "story")) as (service, _):
         response = await plugin_bridge_request(service, "plugin.story.list")
         assert response.error is None, response.error
-        saved = tmp_path / "stories" / "keep.txt"
+        saved = tmp_path / "plugin-data" / "story" / "stories" / "keep.txt"
         saved.write_text("existing story data", encoding="utf-8")
         response = await plugin_bridge_request(
             service, "plugin.story.get", {"story_id": "missing"}

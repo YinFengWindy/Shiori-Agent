@@ -31,6 +31,9 @@ def test_reconcile_keeps_newest_enabled_role_and_retries_failed_asset_cleanup(
                 f"assets/{role_id}/pets/pet/spritesheet.webp",
                 "today",
             )
+            sprite = roles.roles_dir / package.spritesheet_path
+            sprite.parent.mkdir(parents=True)
+            sprite.write_bytes(b"pet")
             data[role_id] = {
                 "pet_packages": [package.to_dict()],
                 "selected_pet_package_id": "pet",

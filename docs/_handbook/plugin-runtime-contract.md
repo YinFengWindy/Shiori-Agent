@@ -271,6 +271,20 @@ Inline/dotted TOML settings are normalized when necessary while preserving other
 configuration values. Uninstall always revokes the removed code's trust approval,
 independently of data retention; reinstall requires fresh explicit trust.
 
+Private-directory deletion is not a complete reset of role or device content.
+Opaque role namespaces in `roles/roles.json` are retained for atomic role saves;
+NovelAI and desktop_pet own their respective `plugin_data.<id>` schema. Reinstalling
+and reauthorizing that ID lets it read the retained role preferences. Complete
+plugin backups include its private directory, configuration table, applicable role
+namespace and `private_runtime/plugin-data-migrations/<id>/` receipts. Restore role
+namespaces by merging their role entries without overwriting unrelated state.
+Receipts survive data deletion so retained legacy sources cannot resurrect cleared
+data. Device-level Story localStorage preferences and desktop_pet's
+`userData/plugin-data/desktop_pet.json` require separate device backup. The
+workspace `recovery/shell_restore/` stores original user files and is protected
+from ordinary plugin-data deletion; explicit `AKASIC_RESTORE_DIR` and historical
+`~/restore` remain separately managed and are never reassigned or moved automatically.
+
 The bridge lifecycle methods are `plugins.install.preview` (`source`, optional
 `candidate_id` for updates), `plugins.install.confirm` (`token`, `trusted: true`),
 `plugins.install.cancel` (`token`), and `plugins.uninstall` (`candidate_id`,

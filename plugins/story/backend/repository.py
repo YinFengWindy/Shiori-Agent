@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
+from .assets import adopt_existing_images, adopt_image
 from .internal._json import dump, load
 from .internal._schema import SCHEMA
 from .errors import (
@@ -40,16 +41,22 @@ from .story_time import (
 class StoryRepository:
     """Own durable Story facts, turns, attempts, cues, idempotency, and outbox."""
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, *, workspace: Path | None = None) -> None:
         self.db_path = Path(db_path)
+        self._workspace = workspace
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(
             str(self.db_path), check_same_thread=False, isolation_level=None
         )
         self._connection.row_factory = sqlite3.Row
         self._lock = threading.RLock()
-        with self._lock:
-            self._connection.executescript(SCHEMA)
+        try:
+            with self._lock:
+                self._connection.executescript(SCHEMA)
+                adopt_existing_images(self._connection, self.db_path, self._workspace)
+        except BaseException:
+            self.close()
+            raise
 
     def close(self) -> None:
         """Close this Story database connection."""
@@ -303,7 +310,7 @@ class StoryRepository:
     def complete_resource(self, resource_id: str, path: str) -> dict[str, Any]:
         """Persist a successfully generated local asset path."""
 
-        clean_path = path.strip()
+        clean_path = adopt_image(self.db_path, path.strip(), self._workspace)
         if not clean_path:
             raise ValueError("资源路径不能为空")
         with self.transaction() as connection:

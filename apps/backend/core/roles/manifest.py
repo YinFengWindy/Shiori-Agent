@@ -85,6 +85,7 @@ class RoleManifestRepository:
             payload.update(version=MANIFEST_VERSION, roles=roles)
             if plugin_data is not None:
                 payload["plugin_data"] = plugin_data
+            payload, _ = migrate_manifest_payload(payload)
             atomic_save_json(self.manifest_path, payload, domain="roles")
 
     def _ensure_layout(self) -> None:

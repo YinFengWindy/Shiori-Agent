@@ -36,7 +36,7 @@ def _controller(
         role_id="mira",
         name="Mira",
         system_prompt="粉发少女",
-        runtime_config={"auto_scene_cg_enabled": True},
+        runtime_config={"test_scene_observation_requested": True},
     )
     sessions = SessionManager(tmp_path)
     sessions.open_role_session("mira", role_name="Mira")
@@ -46,7 +46,7 @@ def _controller(
         event_bus=event_bus,
         kv_store=SceneStateStore(tmp_path),
         needs_observation=lambda role: bool(
-            role.runtime_config.get("auto_scene_cg_enabled")
+            role.runtime_config.get("test_scene_observation_requested")
         )
         or role.proactive.enabled,
         light_provider=cast(Any, object()),
@@ -83,7 +83,7 @@ async def test_scene_task_prevents_retired_runtime_from_terminating_its_controll
         )
     await parent.release()
     await generation.retire()
-    await started.wait()
+    await asyncio.wait_for(started.wait(), timeout=1)
     core.stop.assert_not_awaited()
     finish.set()
     await asyncio.wait_for(generation.drained.wait(), timeout=1)

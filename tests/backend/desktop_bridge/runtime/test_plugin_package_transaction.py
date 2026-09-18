@@ -8,6 +8,7 @@ import pytest
 
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from agent.plugin_host.trust_store import PluginTrustStore
+from core.roles.store import RoleStore
 from desktop_bridge.runtime.plugin_package_transaction import (
     apply_pending_plugin_operations,
 )
@@ -156,6 +157,15 @@ async def test_uninstall_revokes_trust_and_honors_data_choice(
     data = env.workspace / "plugin-data/demo"
     data.mkdir(parents=True)
     (data / "kv.json").write_text('{"note":"keep"}', encoding="utf-8")
+    roles = RoleStore(env.workspace)
+    roles.extensions.update("demo", lambda state: state.update({"opaque": True}))
+    manifest = roles.manifest_path.read_bytes()
+    recovery = env.workspace / "recovery/shell_restore/original.txt"
+    recovery.parent.mkdir(parents=True)
+    recovery.write_text("user original", encoding="utf-8")
+    receipt = env.workspace / "private_runtime/plugin-data-migrations/demo/library.json"
+    receipt.parent.mkdir(parents=True)
+    receipt.write_text('{"status":"complete"}', encoding="utf-8")
     await env.packages.uninstall(
         {
             "candidate_id": str(env.target),
@@ -168,6 +178,9 @@ async def test_uninstall_revokes_trust_and_honors_data_choice(
     assert not env.target.exists()
     assert not PluginTrustStore(env.workspace).is_trusted(env.target, fingerprint)
     assert data.exists() is not delete_data
+    assert roles.manifest_path.read_bytes() == manifest
+    assert recovery.read_text(encoding="utf-8") == "user original"
+    assert receipt.read_text(encoding="utf-8") == '{"status":"complete"}'
     assert (
         "demo"
         in tomllib.loads(env.config.read_text(encoding="utf-8")).get("plugins", {})

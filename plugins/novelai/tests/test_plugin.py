@@ -18,6 +18,7 @@ from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from bus.events_lifecycle import SceneObservationCommitted
+from bus.events_lifecycle import RoleDeleted
 from core.roles.store import RoleStore
 from session.manager import SessionManager
 
@@ -77,6 +78,7 @@ def _services(
         event_bus=event_bus or EventBus(),
         tool_registry=tool_registry or ToolRegistry(),
         workspace=tmp_path,
+        role_store=RoleStore(tmp_path),
         session_manager=session_manager,
         plugin_configs=plugin_configs if plugin_configs is not None else _PLUGIN_CONFIG,
     )
@@ -248,7 +250,9 @@ def test_plugin_wires_scene_observations_to_automatic_cg(tmp_path: Path) -> None
         role_id="mira",
         name="Mira",
         system_prompt="粉色长发少女",
-        runtime_config={"auto_scene_cg_enabled": True},
+    )
+    RoleStore(tmp_path).extensions.update(
+        "novelai", lambda data: data.update({"mira": {"auto_scene_cg_enabled": True}})
     )
     sessions = SessionManager(tmp_path)
     sessions.open_role_session("mira", role_name="Mira")
@@ -332,7 +336,9 @@ def test_unload_unsubscribes_scene_observation_before_terminating_auto_cg(
         role_id="mira",
         name="Mira",
         system_prompt="粉发少女",
-        runtime_config={"auto_scene_cg_enabled": True},
+    )
+    RoleStore(tmp_path).extensions.update(
+        "novelai", lambda data: data.update({"mira": {"auto_scene_cg_enabled": True}})
     )
     sessions = SessionManager(tmp_path)
     sessions.open_role_session("mira", role_name="Mira")
@@ -393,3 +399,34 @@ def test_unload_unsubscribes_scene_observation_before_terminating_auto_cg(
 
     assert errors == []
     assert fake_tool.call_count == 1
+
+
+@pytest.mark.parametrize("deleted_while_disabled", [False, True])
+def test_role_preferences_are_pruned_on_live_delete_and_reenable(
+    tmp_path, deleted_while_disabled
+):
+    services = _services(tmp_path)
+    roles = services.role_store
+    assert roles is not None
+    for role_id in ("gone", "live"):
+        roles.create_role(role_id=role_id, name=role_id, system_prompt="test")
+    roles.extensions.update(
+        "novelai",
+        lambda data: data.update(
+            {
+                "gone": {"auto_scene_cg_enabled": True},
+                "live": {"auto_scene_cg_enabled": True},
+            }
+        ),
+    )
+    kernel = _load_novelai_plugin(services=services)
+    assert roles.extensions.project("live")["novelai"] == {"autoSceneCgEnabled": True}
+    if deleted_while_disabled:
+        asyncio.run(kernel.unload("novelai"))
+    roles.delete_role("gone")
+    asyncio.run(services.event_bus.observe(RoleDeleted("gone")))
+    if deleted_while_disabled:
+        kernel = _load_novelai_plugin(services=services)
+    assert roles.extensions.read("novelai") == {"live": {"auto_scene_cg_enabled": True}}
+    asyncio.run(kernel.unload("novelai"))
+    assert roles.extensions.project("live") == {}

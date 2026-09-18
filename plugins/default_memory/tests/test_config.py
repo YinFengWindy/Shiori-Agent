@@ -89,7 +89,7 @@ def test_default_memory_db_path_resolves_under_workspace(tmp_path: Path) -> None
     cfg = load_default_memory_config(plugin_dir=tmp_path)
 
     assert resolve_memory_db_path(workspace=tmp_path, default_config=cfg) == (
-        tmp_path / "memory" / "memory2.db"
+        tmp_path / "plugin-data" / "default_memory" / "memory2.db"
     )
 
 

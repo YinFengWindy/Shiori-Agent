@@ -53,6 +53,12 @@ class MemePromptModule:
         return frame
 
 
+def _private_catalog(workspace: Path) -> Path:
+    from agent.plugin_host.data_migration import migrate_private_data
+
+    return migrate_private_data(workspace, "meme", "library", workspace / "memes")
+
+
 class _MemeReactions:
     def __init__(
         self, workspace: Path, session_manager: "SessionManager | None"
@@ -60,7 +66,7 @@ class _MemeReactions:
         self._workspace = workspace
         self._session_manager = session_manager
         self._role_catalog = RoleReactionCatalog(
-            workspace, MemeCatalog(workspace / "memes")
+            workspace, MemeCatalog(_private_catalog(workspace))
         )
         self._role_decorator = RoleReactionDecorator(
             self._role_catalog,

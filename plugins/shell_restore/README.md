@@ -37,6 +37,8 @@
 [prefix...] mv -- <target1> <target2> ... <restore_dir>
 ```
 
-`restore_dir` 默认为 `~/restore`，可通过环境变量 `AKASIC_RESTORE_DIR` 覆盖。目录若不存在则在改写时自动创建。
+`restore_dir` 默认使用当前工作区的绝对路径 `recovery/shell_restore/`，仅在实际改写命令时创建。该目录保存用户原文件，独立于可清空的 `plugin-data/`；停用、卸载或勾选删除插件数据均保留它。不同工作区各自隔离。
+
+显式环境变量 `AKASIC_RESTORE_DIR` 继续优先，按原值使用；空值报错。历史 `~/restore` 不自动迁移、分配给某个工作区或删除，用户应单独备份和管理其内容。完整恢复备份须包含当前恢复目录，若设置了自定义路径则另行备份该路径。
 
 改写后的命令字典替换原 `arguments` 并继续执行，LLM 感知不到任何变化。

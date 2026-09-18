@@ -9,6 +9,43 @@ from session.manager import SessionManager
 from session.manager.models import build_session_message
 
 
+async def test_media_replacement_copies_assets_preserves_cache_and_rejects_stale_cas(
+    tmp_path,
+):
+    old = tmp_path / "old.png"
+    old.write_bytes(b"old")
+    new = tmp_path / "new.png"
+    new.write_bytes(b"new")
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("role:media")
+    session.add_message("assistant", "image", media=[str(old)])
+    manager.save(session)
+    message_id = session.messages[0]["id"]
+    expected = session.messages[0]["media"][0]
+    assert expected != str(old)
+    updated = await manager.replace_message_media(
+        session_key=session.key,
+        message_id=message_id,
+        media_index=0,
+        expected_path=expected,
+        new_path=str(new),
+    )
+    current = updated.messages[0]["media"][0]
+    assert current != str(new)
+    assert Path(current).read_bytes() == b"new"
+    with pytest.raises(ValueError, match="已发生变化"):
+        await manager.replace_message_media(
+            session_key=session.key,
+            message_id=message_id,
+            media_index=0,
+            expected_path=expected,
+            new_path=str(old),
+        )
+    assert manager.get_or_create(session.key).messages[0]["media"] == [current]
+    manager.invalidate(session.key)
+    assert manager.get_or_create(session.key).messages[0]["media"] == [current]
+
+
 def test_session_clear_persists_deleted_messages(tmp_path: Path):
     manager = SessionManager(tmp_path)
     session = manager.get_or_create("cli:1")

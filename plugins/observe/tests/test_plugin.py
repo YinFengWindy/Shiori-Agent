@@ -139,7 +139,8 @@ async def test_initialization_failure_rolls_back_and_can_reload(
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    db_path = workspace / "observe" / "observe.db"
+    db_path = workspace / "plugin-data" / "observe" / "observe.db"
+    db_path.parent.parent.mkdir(parents=True, exist_ok=True)
     if failure == "path_collision":
         _ = db_path.parent.write_text("occupied", encoding="utf-8")
         expected_error = repr(str(db_path.parent))
@@ -230,7 +231,7 @@ async def test_unload_persists_final_collector_flush(
     tasks = _observe_tasks()
     try:
         assert await kernel.load("observe")
-        db_path = workspace / "observe" / "observe.db"
+        db_path = workspace / "plugin-data" / "observe" / "observe.db"
         assert db_path.exists(), "setup must wait for database readiness"
         logging.getLogger("test.final_flush").error("last collected error")
         assert await kernel.unload("observe") == []
@@ -359,7 +360,7 @@ async def test_turn_committed_event_reaches_writer_and_is_persisted(
 
     _ = await bus.emit(_turn_committed())
 
-    db_path = workspace / "observe" / "observe.db"
+    db_path = workspace / "plugin-data" / "observe" / "observe.db"
     row_count = await _wait_for_turn_row(db_path)
     assert row_count == 1
 
@@ -376,7 +377,7 @@ async def test_retrieval_completed_event_translated_and_persisted(
     kernel, bus = _load_observe_kernel(tmp_path, workspace=workspace)
     await kernel.load_all()
 
-    db_path = workspace / "observe" / "observe.db"
+    db_path = workspace / "plugin-data" / "observe" / "observe.db"
     _ = await bus.emit(_retrieval_completed())
     row_count = await _wait_for_table_count(db_path, "rag_queries")
     assert row_count == 1
@@ -429,7 +430,7 @@ async def test_memory_written_event_translated_and_persisted(tmp_path: Path) -> 
     kernel, bus = _load_observe_kernel(tmp_path, workspace=workspace)
     await kernel.load_all()
 
-    db_path = workspace / "observe" / "observe.db"
+    db_path = workspace / "plugin-data" / "observe" / "observe.db"
     _ = await bus.emit(_memory_written())
     row_count = await _wait_for_table_count(db_path, "memory_writes")
     assert row_count == 1
@@ -471,7 +472,7 @@ async def test_unload_cancels_background_tasks_and_uninstalls_collector_cleanly(
     kernel, bus = _load_observe_kernel(tmp_path, workspace=workspace)
     await kernel.load_all()
     _ = await bus.emit(_turn_committed(session_key="cli:1"))
-    db_path = workspace / "observe" / "observe.db"
+    db_path = workspace / "plugin-data" / "observe" / "observe.db"
     _ = await _wait_for_turn_row(db_path)
 
     errors = await kernel.unload("observe")

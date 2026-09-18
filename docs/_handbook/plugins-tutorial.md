@@ -208,7 +208,22 @@ PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 通用 KV 位于 `agent/plugin_host/kv.py`，旧 `.kv.json` 的现存可恢复数据仍由 `plugin_data` 原子迁入工作区。旧 `workspace/plugins/<id>/kv.json` 优先于包内 `.kv.json`，统一原子迁入 `workspace/plugin-data/<id>/`。历史 `plugin_config.json` 迁移复用宿主静态 discovery，只为通过准入的内置 owner 处理数据；`CONFLICT`、`UNTRUSTED`、`BLOCKED` 保留来源且不导入。旧 workspace 中已有 manifest 的包不能作为其它 ID 的配置来源；没有 manifest 的旧数据目录按 ID 迁移。目录别名必须唯一且不与其它 ID 相撞；旧后端代码目录只按唯一包目录名归属。主 TOML 已提交的迁移凭证会独立补齐 workspace 完成标记，即使准入随后变更，也不会重读、导入或删除旧来源。有效来源从旧 workspace、当前包或旧 `apps/backend/plugins/<id>` 归档到该数据目录，并在持久化启动时一次性升级为主配置的 `[plugins.<id>]`；已有 v2 配置整表优先，仅含旧宿主 `enabled` 的表保留开关并导入参数。成功标记独立保存在数据目录，之后编辑、删键或删除整表都不会重新读取旧 JSON。旧源只在落盘成功后删除，未选中的候选保留；写入失败保留旧源并中止启动。default_memory / Akasha 的 `config.local.toml` 同样迁入各自数据目录，加载和初始化共用路径解析，默认值来自代码，运行时不向安装包写入。升级前已被安装器删除的数据无法恢复。
 
+插件私有文件统一复用 `agent.plugin_host.plugin_data.plugin_data_dir()`；历史独立数据由 `data_migration.migrate_private_data()` 在 owner 打开存储之前迁移。默认 memory2、Akasha 与 observe 数据库分别位于 `plugin-data/default_memory/memory2.db`、`plugin-data/akasha/akasha.db`、`plugin-data/observe/observe.db`。显式 `db_path` 保持不变；引擎、初始化、向量兼容性检查和管理脚本使用相同的 owning resolver。旧库仍被进程内 owner 使用时拒绝迁移并要求重启，避免准备新运行时代际时截断旧库的后续提交。
+
+SQLite 用 backup API 复制包含已提交 WAL 的一致快照，不能只复制 `.db` 主文件。目标发布前保存内容凭证；未确认的已有目标报冲突并保留双方。完成凭证位于 `private_runtime/plugin-data-migrations/<id>/`，独立于可删除的插件目录，因此清理插件数据后不会从旧位置复活状态。旧来源通常保留为升级备份，运行时不再向旧来源写入；确认备份和引用后可人工归档。桌宠旧 pet 子目录是例外：验证新素材并提交全部新引用后，由 owner 删除旧 pet 文件以维持包删除语义，不影响其他角色素材。不要删除迁移凭证来“修复”空数据。
+
+`default_memory/recall_inspector.jsonl` 和 observe 的 `.last_cleanup` 各归自己的插件数据根，不能整目录迁走旧 `observe/`。meme 私有旧图库迁到 `plugin-data/meme/library/`；共享 `common_emojis.json` 与角色素材仍属宿主，宿主初始化器不再预建插件图库或 observe 目录。
+
+NovelAI 生成记录、原始请求、输出图和提示词库存于 `plugin-data/novelai/generation/`；参考图在保存时复制到其中的 `references/`，共享 imports 仅作导入来源，不能被插件整目录删除。Story 数据库位于 `plugin-data/story/stories/`，每个故事采用的 CG 复制到该故事目录的 `assets/`。会话在持久化本地图片时复制到 `sessions/media/` 并保留原始来源；旧消息在打开会话库时以同一事务迁移引用。清理 NovelAI 的私有数据不删除已经成为故事或会话内容的副本。重新生成仍需 NovelAI 的原始生成记录和请求；清掉这些记录后，会话图片可查看，但不再具备重新生成来源。完整工作区备份同时保留 `sessions.db`、`sessions/media/` 与使用中的插件数据目录。
+
+
 External package authors: see [External Plugin Runtime Contract v1](plugin-runtime-contract.md)
 for the versioned distribution layout, compatibility gate, ESM/CSS requirements
 and independent build example. The tutorial's bundled source-plugin workflow
 continues to use the existing v2 path.
+
+角色级的桌宠状态与 NovelAI 自动 CG 偏好采用 `roles/roles.json` 顶层的 `plugin_data.desktop_pet`、`plugin_data.novelai` 不透明命名空间，插件拥有 schema，宿主只协调角色字段与插件草稿的单次原子提交。清单 v5 在角色投影前完成旧字段捕获与移除，即使插件停用也不会因普通角色保存丢失数据；已有命名空间优先。桌宠最终素材单独归 `plugin-data/desktop_pet/pets-<role_id>/`，旧路径在素材副本完成后再原子改写。插件重新启用会清理已删角色、无效包记录及孤儿 pet 文件；清空素材后的同名包可以重新导入。
+
+因此，仅备份 `plugin-data/<id>/` 不代表完整插件备份：还须保留主配置的对应插件表、对应角色命名空间和 `private_runtime/plugin-data-migrations/<id>/` 凭证；角色命名空间恢复时按角色合并，保留其他插件和角色字段。普通「同时删除插件数据」只清理私有目录与主配置插件表，保留角色命名空间、迁移凭证和设备偏好。清理 NovelAI 数据保留 Story 和会话各自持有的图片副本；清理 Story 自身数据会同时删除其故事及 CG。重新安装仍需对插件代码重新授权，授权后该插件可继续读取保留的角色偏好。
+
+Story 播放偏好保留为设备 renderer 的 `localStorage["shiori.story-preferences.v1"]`；桌宠位置/窗口状态保留在 Electron `userData/plugin-data/desktop_pet.json`。它们不随工作区迁移或清理，复制设备体验时另行备份。shell_restore 的新默认是工作区内受保护的 `recovery/shell_restore/`，保存的是用户原文件，不能随普通插件数据删除。显式 `AKASIC_RESTORE_DIR` 保持原值；旧 `~/restore` 不自动归属任何工作区，也不移动或删除，须独立备份和恢复。

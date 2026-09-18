@@ -21,12 +21,10 @@ _JSON_FILES: dict[str, object] = {
     "mcp_servers.json": {"servers": {}},
     "schedules.json": [],
     "proactive_sources.json": {"sources": []},
-    "memes/manifest.json": {"categories": {}},
     "roles/roles.json": {"version": 2, "roles": []},
 }
 
 _DIRECTORIES: tuple[str, ...] = (
-    "observe",
     "skills",
     "mcp",
     "roles/assets",

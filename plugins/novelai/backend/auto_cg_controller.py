@@ -10,6 +10,7 @@ from core.roles.store import RoleStore
 from core.common.runtime_tasks import create_runtime_task
 
 from .auto_cg import AutoCgPolicy
+from .role_state import NovelAIRoleState
 from .scene_prompt import prepare_scene_prompt
 from .tool import GenerateImageTool
 
@@ -77,7 +78,7 @@ class AutoCgController:
         session = self._session_manager.get_or_create(event.session_key)
         role_id = str(event.role_id or session.metadata.get("role_id") or "").strip()
         role = self._role_store.get_role(role_id) if role_id else None
-        if role is None or not bool(role.runtime_config.get("auto_scene_cg_enabled")):
+        if role is None or not NovelAIRoleState(self._role_store).enabled(role_id):
             return
         if "generate_image" in event.tools_used:
             return

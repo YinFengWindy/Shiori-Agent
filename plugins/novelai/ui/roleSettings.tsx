@@ -12,9 +12,9 @@ export function NovelAiRoleSettings({ values, onChange }: PluginRoleSettingsProp
   </div>;
 }
 
-/** Keeps the existing stored key so upgrading or disabling the plugin never loses role preferences. */
+/** The CG preference participates in the role editor’s atomic plugin draft save. */
 export const novelAiRoleSettings = {
-  read: (runtime) => ({ autoSceneCgEnabled: Boolean(runtime.auto_scene_cg_enabled) }),
-  write: (runtime, values) => ({ ...runtime, auto_scene_cg_enabled: Boolean(values.autoSceneCgEnabled) }),
+  storage: "plugin",
+  read: (state) => ({ autoSceneCgEnabled: state.autoSceneCgEnabled === true }),
   Component: NovelAiRoleSettings,
 } satisfies PluginRoleSettingsContribution;

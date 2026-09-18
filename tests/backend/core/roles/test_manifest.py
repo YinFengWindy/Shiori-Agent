@@ -18,6 +18,7 @@ def _legacy(path: Path):
                 "id": "mira",
                 "name": "Mira",
                 "system_prompt": "test",
+                "runtime_config": {"auto_scene_cg_enabled": True},
                 "pet_packages": [
                     {
                         "id": "pet",
@@ -59,9 +60,11 @@ def test_disabled_plugin_role_rewrite_captures_legacy_fields_before_projection(
     )
     assert saved["plugin_data"]["desktop_pet"]["mira"]["desktop_pet_enabled"] is True
     assert saved["plugin_data"]["other"] == {"opaque": 42}
+    assert saved["plugin_data"]["novelai"]["mira"]["auto_scene_cg_enabled"] is True
     assert saved["retained"] == {"marker": True}
     assert saved["roles"][0]["name"] == role.name
     assert "pet_packages" not in saved["roles"][0]
+    assert "auto_scene_cg_enabled" not in saved["roles"][0]["runtime_config"]
     before = repo.manifest_path.read_bytes()
     repo.load_payload()
     assert repo.manifest_path.read_bytes() == before
@@ -90,6 +93,8 @@ def test_migration_replace_failure_retains_recoverable_legacy_document(
         recovered["plugin_data"]["desktop_pet"]["mira"]["desktop_pet_enabled"] is True
     )
     assert "pet_packages" not in recovered["roles"][0]
+    assert recovered["plugin_data"]["novelai"]["mira"]["auto_scene_cg_enabled"] is True
+    assert "auto_scene_cg_enabled" not in recovered["roles"][0]["runtime_config"]
 
 
 def test_migration_preserves_an_already_captured_namespace(tmp_path):
@@ -105,3 +110,18 @@ def test_migration_preserves_an_already_captured_namespace(tmp_path):
         repo.load_payload()["plugin_data"]["desktop_pet"]
         == original["plugin_data"]["desktop_pet"]
     )
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_disabled_novelai_upgrade_survives_ordinary_role_save(tmp_path, enabled):
+    from core.roles.store import RoleStore
+
+    roles = RoleStore(tmp_path)
+    original = _legacy(roles.manifest_path)
+    original["version"] = 4
+    original["roles"][0]["runtime_config"]["auto_scene_cg_enabled"] = enabled
+    roles.manifest_path.write_text(json.dumps(original), encoding="utf-8")
+    roles.update_role("mira", name="Edited while plugin disabled")
+    saved = json.loads(roles.manifest_path.read_text(encoding="utf-8"))
+    assert saved["plugin_data"]["novelai"]["mira"]["auto_scene_cg_enabled"] is enabled
+    assert "auto_scene_cg_enabled" not in saved["roles"][0]["runtime_config"]

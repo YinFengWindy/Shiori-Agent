@@ -4,6 +4,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent.plugin_host.data_migration import migrate_private_data
+
 from agent.plugin_host.local_config import resolve_local_config
 from typing import cast
 
@@ -106,9 +108,11 @@ def resolve_akasha_db_path(
     workspace: Path,
     akasha_config: AkashaConfig,
 ) -> Path:
-    # 1. 默认落在 workspace/memory/akasha.db。
+    # 1. 默认私有库归插件目录，旧位置在打开连接前迁移。
     if not akasha_config.db_path:
-        return workspace / "memory" / "akasha.db"
+        return migrate_private_data(
+            workspace, "akasha", "akasha.db", workspace / "memory" / "akasha.db"
+        )
 
     # 2. 相对路径以 workspace 为根，绝对路径原样使用。
     path = Path(akasha_config.db_path)
