@@ -118,12 +118,12 @@ export async function lifecycle(app: PackagedApp, fixture: string) {
   assert.equal((await backendState(app)).saved, "retained-user-value");
   await app.screenshot("04-failed-update-retains-old");
   await app.evidence.add("corrupt-confirmed-update-rolls-back", row);
-  await app.page!.getByRole("radio", { name: "选择 external_demo", exact: true }).check();
-  await app.page!.getByRole("button", { name: "卸载插件", exact: true }).click();
+  await (await app.openDetails()).getByRole("button", { name: "卸载插件", exact: true }).click();
   const dialog = app.page!.getByRole("dialog", { name: "卸载插件", exact: true });
   assert.equal(await dialog.getByRole("checkbox").isChecked(), false);
   await dialog.getByRole("button", { name: "卸载", exact: true }).click();
   await dialog.waitFor({ state: "hidden" });
+  await app.closeDetails();
   await app.restart();
   await app.settings();
   assert.equal((await app.roster()).length, 0);

@@ -63,7 +63,7 @@ async function launch() {
   await page.getByRole("button", { name: "插件", exact: true }).click();
 }
 async function close() { await app?.close(); app = undefined; page = undefined; }
-function row() { return page!.getByText("manual_trust_qa", { exact: true }).locator("../.."); }
+function row() { return page!.getByRole("button", { name: "manual_trust_qa", exact: true }).locator("../../.."); }
 async function trust() {
   await row().getByRole("button", { name: "信任…", exact: true }).click();
   await page!.getByRole("dialog", { name: "信任插件" }).getByRole("button", { name: "确认信任", exact: true }).click();
@@ -95,7 +95,7 @@ try {
   await close();
 
   await launch();
-  await row().getByText("ACTIVE", { exact: true }).waitFor();
+  await row().locator('[role="switch"][aria-checked="true"]:enabled').waitFor();
   await page!.getByRole("button", { name: "手动信任验证", exact: true }).click();
   await page!.getByRole("button", { name: "点击计数 0", exact: true }).click();
   await page!.getByRole("button", { name: "点击计数 1", exact: true }).waitFor();

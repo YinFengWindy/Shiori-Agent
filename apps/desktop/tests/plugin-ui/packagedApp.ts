@@ -21,6 +21,7 @@ export class PackagedApp {
   app: ElectronApplication | undefined;
   page: Page | undefined;
   readonly errors: string[] = [];
+  readonly processErrors: string[] = [];
   constructor(readonly paths: { executable: string; workspace: string; profile: string }, readonly evidence: Evidence, readonly version: string) {}
 
   async launch() {
@@ -31,6 +32,7 @@ export class PackagedApp {
     delete env.SHIORI_RENDERER_DEV_SERVER_URL;
     delete env.ELECTRON_RUN_AS_NODE;
     this.app = await _electron.launch({ executablePath: this.paths.executable, env, timeout: 45_000 });
+    this.app.process().stderr?.on("data", (chunk: Buffer) => this.processErrors.push(chunk.toString("utf8")));
     const identity = await this.app.evaluate(({ app }) => ({ packaged: app.isPackaged, version: app.getVersion(), appPath: app.getAppPath(), resources: process.resourcesPath, workspace: process.env.SHIORI_DESKTOP_WORKSPACE, profile: app.getPath("userData"), electron: process.versions.electron }));
     assert.equal(identity.packaged, true);
     assert.equal(identity.version, this.version);
@@ -75,11 +77,24 @@ export class PackagedApp {
   async state(expected: string) {
     return eventually(() => this.roster(), (rows) => rows.length > 0 && rows.every((row) => row.state === expected && (expected !== "ACTIVE" || (Array.isArray(row.pending_renderer_kinds) && !row.pending_renderer_kinds.length))), `fixture ${expected}`);
   }
+  /** Open package actions through the production candidate details dialog. */
+  async openDetails() {
+    await this.page!.getByRole("button", { name: "external_demo", exact: true }).click();
+    const details = this.page!.getByRole("dialog", { name: "external_demo", exact: true });
+    await details.waitFor();
+    return details;
+  }
+  /** Nested confirmations restore details; dismiss it before acting on the page. */
+  async closeDetails() {
+    const details = this.page!.getByRole("dialog", { name: "external_demo", exact: true });
+    await details.getByRole("button", { name: "关闭插件详情", exact: true }).click();
+    await details.waitFor({ state: "hidden" });
+  }
   async choose(archive: string, update = false) {
     assert.ok(this.app);
     await this.app.evaluate(({ dialog }, path) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] }); }, archive);
-    if (update) await this.page!.getByRole("radio", { name: "选择 external_demo", exact: true }).check();
-    await this.page!.getByRole("button", { name: update ? "更新插件" : "安装插件 ZIP", exact: true }).click();
+    if (update) await (await this.openDetails()).getByRole("button", { name: "从 ZIP 更新", exact: true }).click();
+    else await this.page!.getByRole("button", { name: "安装插件 ZIP", exact: true }).click();
   }
   async install(archive: string, { update = false, confirm = true } = {}) {
     await this.choose(archive, update);
@@ -88,5 +103,6 @@ export class PackagedApp {
     await dialog.getByRole("button", { name: confirm ? (update ? "信任并更新" : "信任并安装") : "取消", exact: true }).click();
     await dialog.waitFor({ state: "hidden" });
     if (confirm) await eventually(() => this.roster(), (rows) => rows.some((row) => row.pending_operation === (update ? "update" : "install")), "queued package");
+    if (update) await this.closeDetails();
   }
 }

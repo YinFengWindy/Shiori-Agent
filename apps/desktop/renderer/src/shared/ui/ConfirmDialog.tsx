@@ -3,14 +3,16 @@ import { Dialog } from "@base-ui/react/dialog";
 import { dangerButtonClass, ghostButtonClass, primaryButtonClass } from "../styles";
 
 /** Accessible confirmation shell with a non-dismissable in-flight action. */
-export function ConfirmDialog({ open, title, description, confirmLabel, children, busy = false, busyLabel = "删除中...", cancelLabel = "取消", error = "", destructive = true, onClose, onConfirm }: {
+export function ConfirmDialog({ open, title, description, confirmLabel, children, busy = false, busyLabel = "删除中...", cancelLabel = "取消", error = "", destructive = true, finalFocus, onClose, onConfirm }: {
   open: boolean; title: string; description: string; confirmLabel: string; children?: ReactNode;
   busy?: boolean; busyLabel?: string; cancelLabel?: string; error?: string; destructive?: boolean; onClose: () => void; onConfirm: () => void;
+  /** Optional stable focus destination when a successful action removes its trigger. */
+  finalFocus?: Dialog.Popup.Props["finalFocus"];
 }) {
   return <Dialog.Root open={open} onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
     <Dialog.Portal>
       <Dialog.Backdrop className="confirm-dialog-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm" />
-      <Dialog.Popup className="confirm-dialog fixed left-1/2 top-1/2 z-50 grid w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-md border border-line bg-surface p-6 shadow-panel">
+      <Dialog.Popup finalFocus={finalFocus} className="confirm-dialog fixed left-1/2 top-1/2 z-50 grid w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-md border border-line bg-surface p-6 shadow-panel">
         <Dialog.Title className="font-display text-title font-semibold text-ink">{title}</Dialog.Title>
         {children}
         <Dialog.Description className="text-body text-ink-secondary">{description}</Dialog.Description>

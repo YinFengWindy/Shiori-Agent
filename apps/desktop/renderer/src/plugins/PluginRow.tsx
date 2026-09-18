@@ -1,6 +1,7 @@
+import { Dialog } from "@base-ui/react/dialog";
 import { SettingsField } from "../settings/SettingsField";
 import { SettingsToggleCard } from "../settings/SettingsToggleCard";
-import { cx, ghostButtonClass } from "../shared/styles";
+import { cx, ghostButtonClass, sidebarNavItemClass } from "../shared/styles";
 import type { PluginSummary } from "./pluginBridgeClient";
 
 /** One plugin row: identity, runtime state/diagnostics, and its enable switch. */
@@ -9,17 +10,13 @@ export function PluginRow({
   pending,
   onToggle,
   onTrust,
-  selectable,
-  selected,
-  onSelect,
+  onOpenDetails,
 }: {
   plugin: PluginSummary;
   pending: boolean;
   onToggle: (enabled: boolean) => void;
   onTrust: () => void;
-  selectable: boolean;
-  selected: boolean;
-  onSelect: () => void;
+  onOpenDetails: () => void;
 }) {
   const hint = [plugin.id, plugin.version && `v${plugin.version}`, plugin.source === "workspace" ? "工作区" : "内置", plugin.description].filter(Boolean).join(" · ");
   const pendingTrust = plugin.trustPendingRestart && plugin.diagnostic?.code === "trust_required";
@@ -37,15 +34,16 @@ export function PluginRow({
         ? "需要重启"
         : activating
           ? "激活中…"
-          : plugin.state;
+          : null;
   return (
-    <div className={cx("grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md px-3", selected && "bg-accent-softer")}>
-      <input type="radio" name="managed-plugin" className="mt-7 h-4 w-4 accent-accent" aria-label={`选择 ${plugin.name}`}
-        checked={selected} disabled={pending || !selectable} onChange={onSelect} />
-      <SettingsField label={plugin.name} hint={hint || undefined}>
+    <SettingsField label={
+      <Dialog.Trigger className={cx(sidebarNavItemClass, "-my-1 -ml-2 cursor-pointer px-2 py-1 text-left text-body font-medium text-ink hover:text-accent-text")} onClick={onOpenDetails}>
+        {plugin.name}
+      </Dialog.Trigger>
+    } hint={hint || undefined}>
       <div className="grid gap-2">
         <div className="flex items-center justify-end gap-3">
-          <span className="text-caption text-ink-muted">{stateLabel}</span>
+          {stateLabel ? <span className="text-caption text-ink-muted">{stateLabel}</span> : null}
           {plugin.canTrust ? <button type="button" className={ghostButtonClass} disabled={pending} onClick={onTrust}>信任…</button> : null}
           {plugin.canToggle && plugin.supportsHotUnload === false ? <span className="text-caption text-ink-muted">更改需重启</span> : null}
           <SettingsToggleCard
@@ -60,20 +58,8 @@ export function PluginRow({
         {plugin.pendingOperation === "update" ? <span className="text-body text-ink-secondary">{plugin.version} → {plugin.pendingVersion}</span> : null}
         {plugin.packageOperationError ? <span role="alert" className="break-words text-body text-danger-text">操作失败 · {plugin.packageOperationError}</span> : null}
         {plugin.rendererError ? <span className="break-words text-body text-danger-text">UI FAILED · {plugin.rendererError}</span> : null}
-        <details className="text-caption text-ink-muted">
-          <summary className="cursor-pointer">详情</summary>
-          <div className="mt-2 grid gap-1 break-all">
-            <span>{plugin.directory}</span>
-            {plugin.diagnostic && !pendingTrust ? <>
-              <span>{plugin.diagnostic.code} · {plugin.diagnostic.stage} · {plugin.diagnostic.field}</span>
-              <span>{plugin.diagnostic.reason}</span>
-              {plugin.diagnostic.path ? <span>{plugin.diagnostic.path}</span> : null}
-            </> : null}
-          </div>
-        </details>
       </div>
-      </SettingsField>
-    </div>
+    </SettingsField>
   );
 }
 

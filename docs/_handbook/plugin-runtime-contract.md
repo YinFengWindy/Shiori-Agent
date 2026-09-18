@@ -225,10 +225,16 @@ remain host-owned and cannot be overwritten or uninstalled through these actions
 
 ## Desktop ZIP installation, updates and removal (#216)
 
-Settings → Plugins groups the **安装插件 ZIP**, **更新插件**, and **卸载插件** icon
-buttons in one toolbar. Update/removal require selecting a unique workspace
-package; builtin, conflicting, pending, and uninstalled failed candidates cannot
-be selected for those actions. The native file picker stages ZIP files in
+Settings → Plugins keeps **安装插件 ZIP** in the toolbar. Each plugin title opens
+a separate details dialog, including builtin and conflicting directory candidates.
+The dialog shows the current candidate's identity, version, source, description,
+actual directory and diagnostics. **从 ZIP 更新** and **卸载插件** appear only in
+the details of a unique, installed workspace package; builtin, conflicting,
+pending, and uninstalled failed candidates cannot perform those actions.
+Update trust and uninstall confirmations remain separate nested dialogs; closing
+them returns to details, and closing details restores focus to the plugin title.
+Online update checks and updating all plugins are deferred until a distribution
+source exists (#323); there is no placeholder toolbar action. The native file picker stages ZIP files in
 `private_runtime/imports/plugin-packages/`; renderer-supplied arbitrary paths are
 not accepted. The picker permits at most 32 MiB compressed, while the shared ZIP
 validator retains its 4,096-member / 64 MiB uncompressed limits and root-manifest

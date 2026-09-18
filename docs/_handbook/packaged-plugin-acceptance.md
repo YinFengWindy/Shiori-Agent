@@ -192,3 +192,60 @@ No further desktop input was issued. Native post-restart four-entry interaction,
 hot toggle, update, and uninstall/reinstall observation remain unfinished. Their
 automated packaged coverage above is complete, but is not relabeled as human or
 native manual acceptance. #263 remains open pending that follow-up.
+
+### Main integration: plugin details management
+
+PR #322 head `6cc18af6` was integrated with main
+`f3a0f5fd2f8364e8b631ad380544f6d3638b3400` (#326–#328). The packaged runner now
+opens the `external_demo` title's details dialog, chooses **从 ZIP 更新** or
+**卸载插件**, and explicitly closes the restored details after the nested
+confirmation. It also retains Electron process stderr with the other run evidence.
+The production UI, runtime protocol and independent fixture were not changed for
+this adaptation. No native desktop control was resumed.
+
+Before building, the resolved runtime, PyInstaller work and integration output
+directories were verified to be children of the issue worktree. Only the desktop
+was rebuilt with `pnpm build:desktop`; the frozen Python runtime was reused.
+The unpacked production application was packaged from `apps/desktop` using:
+
+```powershell
+$env:SHIORI_RELEASE_OUTPUT = 'C:/Users/yufeng/.codex/worktrees/issue-263-packaged-plugin/Shiori/release/integration-installer'
+$env:SHIORI_RELEASE_VERSION = '0.3.0-rc.1'
+node node_modules/electron-builder/cli.js --projectDir . --config.directories.output=C:/Users/yufeng/.codex/worktrees/issue-263-packaged-plugin/Shiori/release/integration-installer --config.extraMetadata.version=0.3.0-rc.1 --win --x64 --dir --publish never
+```
+
+This preserves the standard asar and `afterPack` checks. It produces no new NSIS
+installer. The original `release/installer` candidate and run-5 evidence remain
+unchanged; this integration is identified separately:
+
+| Artifact under `release/integration-installer/win-unpacked/` | SHA-256 |
+| --- | --- |
+| `Shiori.exe` | `453463d263e2f13a0912e404088d8c93c732d230bd35b92db3e579018ede0cb4` |
+| `resources/app.asar` | `662e5b2f683f661985f4baa785b584ae99f125b1f048753af63278fa1b8671a4` |
+| `resources/runtime/shiori-runtime.exe` | `2d9c50e89e673e52260f709f643d12d520c8ad0280249c89b04391d2380d2928` |
+
+The complete automated integration run is
+`D:/Coding/Shiori-qa-263-iuvi8nxb/run-integration-2/results.json`: all 28 records
+passed, ending at 10:27:09 UTC on 2026-09-18. It verifies the real packaged entry,
+version `0.3.0-rc.1`, isolated profile/workspace, updated details controls, and the
+same lifecycle assertions as run-5. All six fixture ZIP hashes match run-5. The
+main-window page-error list is empty; `process-stderr.log` is retained. Command
+logs use the `integration-` prefix in the existing evidence directory.
+The `--dir` artifact has no `app-update.yml`; its automatic update check logs
+`ENOENT` for that metadata. This run does not validate updater distribution.
+
+The first attempt, `run-integration`, is retained as a failed run. Following
+resource replacement, the background RPC reported ticks 3/events 1 while its file
+stayed at ticks 2/events 0 and a `.tmp` file contained ticks 3. Persistence polling
+timed out. This suggests a file publication problem, but the original run did not
+capture process stderr, so no specific Windows sharing/rename error is proven.
+The same package and unchanged fixture passed the full second run after adding
+stderr capture, without relaxing assertions or modifying production storage.
+The intermittent first failure remains a limitation of this evidence.
+
+Integration validation passed: 12 plugin details/management/package-controller
+tests, `pnpm lint` (the existing hook warning only), `pnpm typecheck`, the runner's
+explicit TypeScript config, desktop build, packaged layout verification, and the
+complete second packaged run. No Python source or fixture change required a new
+backend build or Python test run. The native follow-up above remains unfinished
+under #263; this automated run does not complete it.

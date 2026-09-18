@@ -37,6 +37,7 @@ try {
 } finally {
   await app.close();
   await writeFile(resolve(output, "renderer-errors.json"), JSON.stringify(app.errors, null, 2), "utf8");
+  await writeFile(resolve(output, "process-stderr.log"), app.processErrors.join(""), "utf8");
 }
 assert.ok((await readFile(resolve(output, "results.json"), "utf8")).includes('"complete"'));
 console.log(`PASS packaged lifecycle. Evidence: ${output}`);
