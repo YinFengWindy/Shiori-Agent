@@ -6,6 +6,20 @@ import { tmpdir } from "node:os";
 import { ensureDesktopRuntimeConfig, resolveDesktopConfigPath, resolveDesktopRuntimePaths, resolveDesktopWorkspacePath } from "./runtimePaths.js";
 
 describe("resolveDesktopRuntimePaths", () => {
+  it("isolates an explicit workspace while retaining the real packaged runtime", () => {
+    const paths = resolveDesktopRuntimePaths({
+      packaged: true,
+      appPath: "C:/Shiori/resources/app.asar",
+      homePath: "C:/Users/real-user",
+      workspacePath: "D:/Shiori-QA/workspace",
+    });
+    assert.equal(paths.workspacePath, resolve("D:/Shiori-QA/workspace"));
+    assert.equal(paths.configPath, resolve("D:/Shiori-QA/workspace/config.toml"));
+    assert.equal(paths.bridge.executable, resolve("C:/Shiori/resources/runtime/shiori-runtime.exe"));
+    assert.deepEqual(paths.bridge.args, ["bridge", "--workspace", paths.workspacePath, "--config", paths.configPath]);
+    assert.throws(() => resolveDesktopRuntimePaths({ packaged: true, appPath: "app.asar", homePath: "real", workspacePath: " " }), /must not be empty/);
+  });
+
   it("keeps development runtime execution inside the repository while using the stable workspace", () => {
     const paths = resolveDesktopRuntimePaths({
       packaged: false,

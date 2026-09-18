@@ -1,10 +1,11 @@
+import { initializeRuntimePluginPeers } from "./runtimePluginPeers";
+
 /**
  * DOM primitives shared by every window that loads a runtime-admitted plugin
  * renderer entry (the main window's UI bootstrap, the plugin-host window's
  * background bootstrap, and a surface window's bootstrap). Each of those
- * windows is a separate Electron renderer process, so nothing here is a
- * singleton — it is the two DOM operations themselves that were duplicated,
- * not any state.
+ * windows is a separate Electron renderer process. Peer initialization is
+ * scoped to its document; all three loaders share the same import boundary.
  */
 
 /** Appends a `<link rel="stylesheet">` for a granted plugin CSS URL; resolves an undo function. */
@@ -21,5 +22,6 @@ export function loadRuntimePluginCss(url: string): Promise<() => void> {
 
 /** Dynamically imports a granted plugin ESM entry (a `shiori-plugin://` URL). */
 export function importRuntimePluginModule(url: string): Promise<{ default: unknown }> {
+  initializeRuntimePluginPeers();
   return import(/* @vite-ignore */ url);
 }

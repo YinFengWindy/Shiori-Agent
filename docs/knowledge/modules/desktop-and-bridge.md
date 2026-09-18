@@ -32,6 +32,8 @@ related:
 
 Windows packaged desktop uses an Electron-builder NSIS bundle with a PyInstaller onedir runtime under `resources/runtime`. The main process resolves packaged resources from `process.resourcesPath`, keeps the workspace and `config.toml` under `%USERPROFILE%\.shiori\workspace`, and starts the sidecar with explicit `bridge`, `--workspace`, and `--config` arguments. Release tags provide the application version and CI emits `SHA256SUMS.txt` alongside the installer; clean Windows installation, upgrade, uninstall, and feature smoke remain release-owner acceptance work.
 
+`SHIORI_DESKTOP_WORKSPACE` 可显式覆盖工作区与配置根；`SHIORI_DESKTOP_USER_DATA_DIR` 在单实例锁前选择设备 profile。真实打包版外部插件验收流程与自动化/桌面观察边界见 [打包版插件验收](../../_handbook/packaged-plugin-acceptance.md)。外部 renderer 的 React peers 在各自 UI、background、surface 文档内初始化，不能依赖主窗口曾先加载插件。
+
 应用更新由 Electron 主进程的 `DesktopUpdateController` 管理，启动检查与设置中的手动检查共用同一生命周期。安装版自动下载新版本，下载完成后保留系统通知，并可从“设置 → 关于”重启安装；开发模式只显示版本并禁用更新操作。`pnpm dev` 每次启动读取当前提交可追溯的最近一个本地 `v*` 版本 tag，通过 `SHIORI_DEV_VERSION` 传给主进程；没有版本 tag 时使用 `package.json` 版本，不会改写文件。远端新 tag 需先 fetch 到本地并重启 dev。安装包始终使用打包元数据版本。`DesktopApi.updates` 通过独立 IPC 传递带 revision 的状态快照和事件，避免初始读取覆盖更晚的下载事件。关于页不加载后端配置，即使 Python bridge 离线也能显示更新状态。
 
 桌宠语音的 Electron 主进程控制、隐藏 renderer 采集/播放与 Python provider 协调边界见 [桌宠语音交互](voice.md)。通用 `ipc.ts` 不拥有语音业务，语音 IPC 统一注册在 `apps/desktop/src/voice/ipc.ts`。

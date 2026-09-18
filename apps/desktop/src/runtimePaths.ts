@@ -24,6 +24,7 @@ type ResolveDesktopRuntimePathsOptions = {
   packaged: boolean;
   appPath: string;
   homePath: string;
+  workspacePath?: string;
   repositoryRoot?: string;
 };
 
@@ -32,9 +33,14 @@ export function resolveDesktopRuntimePaths({
   packaged,
   appPath,
   homePath,
+  workspacePath: requestedWorkspace,
   repositoryRoot = developmentRepositoryRoot,
 }: ResolveDesktopRuntimePathsOptions): DesktopRuntimePaths {
-  const workspacePath = resolveDesktopWorkspacePath(homePath);
+  if (requestedWorkspace !== undefined && !requestedWorkspace.trim()) {
+    throw new Error("SHIORI_DESKTOP_WORKSPACE must not be empty");
+  }
+  const workspacePath = requestedWorkspace === undefined
+    ? resolveDesktopWorkspacePath(homePath) : resolve(requestedWorkspace);
   const configPath = resolveDesktopConfigPath(workspacePath);
   if (!packaged) {
     const backendRoot = resolve(repositoryRoot, "apps", "backend");

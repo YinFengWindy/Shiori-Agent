@@ -18,47 +18,59 @@ function assertRuntimePluginBackgroundModule(value: unknown, pluginId: string): 
 }
 
 /**
- * Loads and registers every admitted external-plugin `app.background` entry
- * this window has not already handled, into the exact same
- * `PluginBackgroundRegistry` the build-time glob (`pluginBackgroundModules.ts`)
- * populates — so `PluginBackgroundHost` governs its run/stop lifecycle
- * exactly like a built-in module, through the same `BackgroundEffectScope`.
- *
- * Deliberately idempotent rather than diff-based like
- * `runtimePluginUiSynchronization`: `PluginUiResources.admit` refuses a
- * changed package identity until restart, so an admitted entry's code can
- * never change mid-session, and once it is registered (or its failure
- * reported) there is nothing left to reconsider. This also sidesteps a real
- * hazard a diff-based re-synchronization would introduce here: unregistering
- * a plugin the moment it disappears from the admitted roster (e.g. because it
- * was just disabled) would remove it from `pluginBackgroundRegistry` before
- * `PluginBackgroundHost.reconcile()` gets a chance to see it and tear down its
- * still-running `BackgroundEffectScope` — orphaning that scope forever, since
- * nothing would be left with a reference to it. Leaving a disabled plugin's
- * entry registered is exactly what already happens for a disabled built-in
- * plugin, and `PluginBackgroundHost` already handles that correctly.
- *
- * Returns the plugin ids this call newly registered or reported failed, for
- * tests; production callers do not need it.
+ * Keep immutable module registrations so the background owner can dispose them.
+ * Styles follow admission, while readiness is acknowledged for each new backend
+ * activation token even when the browser reuses already evaluated module code.
  */
 export function createRuntimePluginBackgroundLoader(
   host: RuntimePluginBackgroundHost,
   registry: PluginBackgroundRegistry = pluginBackgroundRegistry,
 ) {
-  const reported = new Set<string>();
+  const loaded = new Map<string, { token: string | undefined; dispose: () => void }>();
+  const failures = new Map<string, { token: string | undefined; error: unknown }>();
   return async (entries: RuntimePluginUi[]): Promise<string[]> => {
-    const pending = entries.filter((entry) => !registry.get(entry.pluginId) && !reported.has(entry.pluginId));
-    if (pending.length === 0) return [];
-    await loadRuntimePluginModules(pending, {
-      importModule: host.importModule,
-      loadCss: host.loadCss,
-      validate: assertRuntimePluginBackgroundModule,
-      register: (module) => registry.register({ slot: "app.background", pluginId: module.pluginId, setup: module.setup }),
-      // A background module, once registered, is never unregistered here — see above.
-      unregister: () => undefined,
-      succeeded: (entry) => host.succeeded?.(entry),
-      failed: (entry, error) => { reported.add(entry.pluginId); host.failed(entry, error); },
-    });
-    return pending.map((entry) => entry.pluginId);
+    const admitted = new Set(entries.map((entry) => entry.pluginId));
+    for (const [id, state] of loaded) {
+      if (!admitted.has(id)) { state.dispose(); loaded.delete(id); }
+    }
+    const handled: string[] = [];
+    for (const entry of entries) {
+      const previous = loaded.get(entry.pluginId);
+      if (previous) {
+        if (previous.token !== entry.activationToken) {
+          previous.token = entry.activationToken;
+          host.succeeded?.(entry);
+        }
+        continue;
+      }
+      const failure = failures.get(entry.pluginId);
+      if (failure) {
+        if (failure.token !== entry.activationToken) {
+          failure.token = entry.activationToken;
+          host.failed(entry, failure.error);
+        }
+        continue;
+      }
+      let succeeded = false;
+      const dispose = await loadRuntimePluginModules([entry], {
+        importModule: async (url) => {
+          const cached = registry.get(entry.pluginId);
+          return cached ? { default: { pluginId: cached.pluginId, setup: cached.setup } } : host.importModule(url);
+        },
+        loadCss: host.loadCss,
+        validate: assertRuntimePluginBackgroundModule,
+        register: (module) => {
+          if (!registry.get(module.pluginId)) registry.register({ slot: "app.background", pluginId: module.pluginId, setup: module.setup });
+        },
+        // Registration remains until host exit so reconcile can still tear down
+        // the old effect scope; this disposer only releases stylesheet nodes.
+        unregister: () => undefined,
+        succeeded: (entry) => { succeeded = true; host.succeeded?.(entry); },
+        failed: (entry, error) => { failures.set(entry.pluginId, { token: entry.activationToken, error }); host.failed(entry, error); },
+      });
+      if (succeeded) loaded.set(entry.pluginId, { token: entry.activationToken, dispose });
+      handled.push(entry.pluginId);
+    }
+    return handled;
   };
 }

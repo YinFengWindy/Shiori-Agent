@@ -65,10 +65,13 @@ import type {
 // Voice replies are played from a trusted hidden renderer without a DOM user gesture.
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
+// Select the profile before acquiring its single-instance lock.
+configureUserDataPath();
 const runtimePaths = resolveDesktopRuntimePaths({
   packaged: app.isPackaged,
   appPath: app.getAppPath(),
   homePath: app.getPath("home"),
+  workspacePath: process.env.SHIORI_DESKTOP_WORKSPACE,
 });
 const bridge = new DesktopBridgeClient(runtimePaths.bridge);
 // Backend reconnects inherit the same app session; new trust waits for a new app launch.
@@ -120,8 +123,6 @@ function configureUserDataPath(): void {
   mkdirSync(userDataDir, { recursive: true });
   app.setPath("userData", userDataDir);
 }
-
-configureUserDataPath();
 
 process.on("uncaughtException", (error) => {
   logDesktopDiagnostic({
