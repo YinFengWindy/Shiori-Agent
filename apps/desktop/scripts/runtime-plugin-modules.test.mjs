@@ -3,7 +3,11 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { collectHostBackendModules, collectPluginBackendModules } from "./runtime-plugin-modules.mjs";
+import {
+  collectHostBackendModules,
+  collectPluginBackendModules,
+  collectTopLevelPythonPackageRoots,
+} from "./runtime-plugin-modules.mjs";
 
 test("collectPluginBackendModules discovers namespace backends and nested packages", async () => {
   const directory = await mkdtemp(join(tmpdir(), "shiori-runtime-modules-"));
@@ -88,6 +92,32 @@ test("collectHostBackendModules enumerates implicit namespace subdirectories wit
       !modules.some((name) => name.includes("__pycache__") || name.includes("cache")),
       "__pycache__ 必须被排除",
     );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("collectTopLevelPythonPackageRoots reports nested .py files and ignores empty or __pycache__-only directories", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "shiori-runtime-toplevel-"));
+  try {
+    for (const relativePath of [
+      // 顶层目录本身没有 .py，只有几层之下才有 —— 仍然必须被报出来。
+      "agent/tools/deep/nested/module.py",
+      // 完全没有 .py 文件的目录不应被报出来。
+      "empty_dir/readme.txt",
+      // .py 文件全部藏在 __pycache__ 里，等价于“没有真正的 .py”。
+      "cache_only/__pycache__/module.py",
+      // 顶层目录本身就叫 __pycache__，永远不应被当成包根候选。
+      "__pycache__/module.py",
+    ]) {
+      const path = join(directory, relativePath);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "", "utf8");
+    }
+
+    const roots = await collectTopLevelPythonPackageRoots(directory);
+
+    assert.deepEqual(roots, ["agent"]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

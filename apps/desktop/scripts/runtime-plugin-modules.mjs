@@ -53,3 +53,23 @@ export async function collectHostBackendModules(backendRoot, packageRoots) {
   }
   return modules.sort();
 }
+
+/**
+ * 列出 root 下所有顶层目录中，递归含有至少一个 .py 文件（忽略 __pycache__）
+ * 的目录名。用于构建期兜底检查：如果 apps/backend 冒出一个没有登记进
+ * HOST_PACKAGE_ROOTS 的新顶层包，这里会把它报出来，而不是被静默漏收 ——
+ * 这是 agent.tools.* 那类问题（#315）在整包级别的重演。复用
+ * collectPythonModules 的递归遍历，避免第三次实现同样的目录扫描逻辑。
+ */
+export async function collectTopLevelPythonPackageRoots(root) {
+  const entries = await readdir(root, { withFileTypes: true });
+  const roots = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === "__pycache__") continue;
+    const modules = await collectPythonModules(join(root, entry.name), [entry.name]);
+    if (modules.length > 0) {
+      roots.push(entry.name);
+    }
+  }
+  return roots.sort();
+}
